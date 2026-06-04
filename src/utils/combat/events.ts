@@ -34,7 +34,9 @@ export type CombatEvent =
           buffName: string;
           duration: number | 'recurring';
       }
-    /** Phase 1: declared but intentionally unemitted — reserved for Phase 2's owner post-turn expiry. */
+    /** Emitted from each owner's Post Turn when a timed status decrements to 0
+     *  (statusEngine.decrementSide); actorId is the status carrier (attacker for
+     *  self buffs, enemy for enemy debuffs). */
     | { type: 'buff-expired'; actorId: string; round: number; buffName: string }
     | { type: 'debuff-applied'; targetId: string; round: number; buffName: string }
     | { type: 'debuff-resisted'; targetId: string; round: number; buffName: string }

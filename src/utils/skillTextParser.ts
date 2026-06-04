@@ -652,7 +652,7 @@ const CRIT_POWER_EXTEND_RE =
  */
 export function parseCritPowerExtend(
     text: string | null | undefined
-): { turns: number; condition: Condition } | null {
+): { turns: number; condition: Condition; scope: 'active' | 'inflicted' } | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     const m = CRIT_POWER_EXTEND_RE.exec(plain);
@@ -660,7 +660,13 @@ export function parseCritPowerExtend(
     const condition: Condition = /\ball(?:y|ies)\b[^.]*\binflict/i.test(plain)
         ? { subject: 'ally-inflicts-debuff', derivable: false }
         : { subject: 'self-crit', derivable: true };
-    return { turns: parseInt(m[1], 10), condition };
+    // "the newly applied <DoT> ... extended" → only THIS cast's freshly applied DoT
+    // grows (Valerian/Belladonna), not every standing entry. Matched against the
+    // extend clause text so it stays tight to the actual wording.
+    const scope: 'active' | 'inflicted' = /newly\s+applied|inflicted\s+corrosion/i.test(plain)
+        ? 'inflicted'
+        : 'active';
+    return { turns: parseInt(m[1], 10), condition, scope };
 }
 
 // Crocus: "when (an/another) ally inflicts a Damage Over Time (DoT) effect with a critical hit".

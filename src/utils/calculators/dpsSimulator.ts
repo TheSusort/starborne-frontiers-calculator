@@ -6,12 +6,13 @@ import {
     EnemyBaseClass,
     SecondaryDamage,
     SelectedGameBuff,
+    TeamActorInput,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import type { ActiveBuff } from '../combat/statusEngine';
 import { runCombat } from '../combat/engine';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
-import { selectFiringSkill, damageInputsFromSkill } from '../abilities/applyAbilities';
+import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
@@ -63,8 +64,16 @@ export interface DPSSimulationInput {
     allyChargePerRound?: number;
     /** Enemy base class, for the 'enemy-type' charge-gain condition. */
     enemyType?: EnemyBaseClass;
+    /** Attacker turn-order speed. Default 100. */
+    speed?: number;
+    /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
+    enemySpeed?: number;
     /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
     shipSkills?: ShipSkills;
+    /** Team ships as real speed-ordered actors (Phase 2). When present, their buffs enter
+     *  the sim HERE — keyed to their own turns. Do NOT also merge them into selfBuffs/
+     *  enemyDebuffs (no-double-count). */
+    teamActors?: TeamActorInput[];
 }
 
 export interface RoundData {
@@ -142,6 +151,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp = 0,
         allyChargePerRound,
         enemyType,
+        speed,
+        enemySpeed,
+        teamActors,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -157,8 +169,11 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         []
     );
     const shipSkills = input.shipSkills ?? flatInputToAbilities(input);
-    const chargedDamage = damageInputsFromSkill(selectFiringSkill(shipSkills, 'charged'));
-    const hasChargedSkill = chargeCount >= 1 && chargedDamage.multiplier > 0;
+    const chargedSkill = selectFiringSkill(shipSkills, 'charged');
+    // A charged skill "exists" when the slot carries ANY ability — damage or pure
+    // utility (buffs/debuffs). Utility charged skills bank charges and fire
+    // zero-damage charged turns whose statuses apply (spec: hasChargedSkill widening).
+    const hasChargedSkill = chargeCount >= 1 && (chargedSkill?.abilities.length ?? 0) > 0;
 
     const { rounds, rawTotals } = runCombat({
         attack,
@@ -184,6 +199,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp,
         allyChargePerRound,
         enemyType,
+        speed,
+        enemySpeed,
+        teamActors,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);

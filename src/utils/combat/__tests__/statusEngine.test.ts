@@ -23,7 +23,33 @@ function makeAccumBuff(
     };
 }
 
-// Adapter so the ported expectations stay identical to the old computeBuffTimeline ones.
+// The engine is now ACTION-FED: it no longer predicts the charge cadence. For the
+// ported timeline tests, the harness plays the attacker's cadence (the old
+// computeChargeSchedule logic) and notifies the engine via sourceFired each round.
+// NOTE: this helper is a faithful COPY of the engine's charge-banking rule — if the
+// banking rule in engine.ts changes, update this helper to match.
+// Decrement lives in the owner's Post Turn (decrementSide): we snapshot then decrement
+// BOTH sides at the end of the round — equivalent window to the old decrement-on-step
+// (same-turn decrement rule).
+const chargedRounds = (
+    chargeCount: number,
+    startCharged: boolean,
+    totalRounds: number
+): Set<number> => {
+    const out = new Set<number>();
+    if (chargeCount <= 0) return out;
+    let charges = startCharged ? chargeCount : 0;
+    for (let r = 1; r <= totalRounds; r++) {
+        if (charges >= chargeCount) {
+            out.add(r);
+            charges = 0;
+        } else {
+            charges += 1;
+        }
+    }
+    return out;
+};
+
 const runTimeline = (
     selfBuffs: SelectedGameBuff[],
     enemyDebuffs: SelectedGameBuff[],
@@ -31,14 +57,19 @@ const runTimeline = (
     startCharged: boolean,
     totalRounds: number
 ) => {
-    const eng = createStatusEngine({
-        selfBuffs,
-        enemyDebuffs,
-        chargeCount,
-        startCharged,
-        totalRounds,
+    const eng = createStatusEngine({ selfBuffs, enemyDebuffs });
+    const charged = chargedRounds(chargeCount, startCharged, totalRounds);
+    return Array.from({ length: totalRounds }, (_, i) => {
+        const r = i + 1;
+        eng.beginRound(r);
+        // The attacker fires its real slot this round; all scheduled buffs (self AND
+        // legacy/merged enemy) ride the attacker's cadence (action-fed legacy rule).
+        eng.sourceFired('attacker', charged.has(r) ? 'charge' : 'active', r);
+        const entry = { round: r, ...eng.snapshot() };
+        eng.decrementSide('self');
+        eng.decrementSide('enemy');
+        return entry;
     });
-    return Array.from({ length: totalRounds }, (_, i) => ({ round: i + 1, ...eng.step(i + 1) }));
 };
 
 describe('createStatusEngine (computeBuffTimeline parity)', () => {
@@ -113,10 +144,12 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
         expect(result[5].activeSelfBuffs).toEqual([{ buffName: 'Crit Power', turnsRemaining: 2 }]); // r6: reapplied
     });
 
-    it('enemy debuff uses source ship schedule, not current ship schedule', () => {
-        // Current ship (Los): startCharged=true, chargeCount=2 → Round 1 is charge
-        // Source ship (Judge): startCharged=false, chargeCount=2 → Round 1 is active
-        // Concentrate Fire (active, 1t) should fire based on Judge's schedule, so Round 1 is active for it
+    it('LEGACY RULE: enemy debuff ignores its source schedule and rides the attacker cadence', () => {
+        // CHANGED by the action-fed legacy rule: sourceChargeCount/sourceStartCharged are
+        // now IGNORED (superseded by real team turns in a later task). The team debuff rides
+        // the ATTACKER's real cadence. Current ship: startCharged=true, chargeCount=2 →
+        // charged on rounds 1,4. Concentrate Fire (skillSource 'active', 1t) fires only on
+        // the attacker's ACTIVE rounds (2,3), NOT round 1.
         const concentrateFire = makeBuff('Concentrate Fire', {
             skillSource: 'active',
             skillDuration: 1,
@@ -124,24 +157,24 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
             sourceStartCharged: false,
         });
         const result = runTimeline([], [concentrateFire], 2, true, 3);
-        // Round 1: charge for Los, but active for Judge → CF fires
-        expect(result[0].activeEnemyDebuffs).toEqual([
-            { buffName: 'Concentrate Fire', turnsRemaining: 1 },
-        ]);
-        // Round 2: active for Los, active for Judge → CF fires (re-applied after expiry)
+        // Round 1: attacker fires CHARGE → active-sourced CF does NOT fire (was: fired, on Judge's schedule)
+        expect(result[0].activeEnemyDebuffs).toEqual([]);
+        // Round 2: attacker fires ACTIVE → CF fires
         expect(result[1].activeEnemyDebuffs).toEqual([
             { buffName: 'Concentrate Fire', turnsRemaining: 1 },
         ]);
-        // Round 3: active for Los, charge for Judge (chargeCount=2, so round 3 is charge) → CF does NOT fire
-        expect(result[2].activeEnemyDebuffs).toEqual([]);
+        // Round 3: attacker fires ACTIVE → CF fires (re-applied after expiry)
+        expect(result[2].activeEnemyDebuffs).toEqual([
+            { buffName: 'Concentrate Fire', turnsRemaining: 1 },
+        ]);
     });
 
-    it('enemy debuff without source schedule falls back to current ship schedule', () => {
-        // No sourceChargeCount/sourceStartCharged → uses current ship's chargedSet
-        // Current ship: startCharged=true, chargeCount=2 → Round 1 is charge
+    it('enemy debuff with no source schedule rides the attacker cadence', () => {
+        // No sourceChargeCount/sourceStartCharged → always rode the current ship's cadence.
+        // Current ship: startCharged=true, chargeCount=2 → Round 1 is charge.
         const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
         const result = runTimeline([], [debuff], 2, true, 1);
-        // Round 1 is charge for current ship, active debuff does not fire
+        // Round 1 is charge for the attacker → the active-sourced debuff does not fire
         expect(result[0].activeEnemyDebuffs).toEqual([]);
     });
 
@@ -323,51 +356,25 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
         });
     });
 
-    it('throws when step is called out of sequence', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 2,
-            startCharged: false,
-            totalRounds: 3,
-        });
-        expect(eng.step(1)).toBeDefined();
+    it('throws when beginRound is called out of sequence', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
         // skipping round 2 → must throw with the expected-round message
-        expect(() => eng.step(3)).toThrow(/expected round 2/);
+        expect(() => eng.beginRound(3)).toThrow(/expected round 2/);
         // repeating a round → must throw with the expected-round message
-        const eng2 = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 2,
-            startCharged: false,
-            totalRounds: 3,
-        });
-        eng2.step(1);
-        expect(() => eng2.step(1)).toThrow(/expected round 2/);
+        const eng2 = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng2.beginRound(1);
+        expect(() => eng2.beginRound(1)).toThrow(/expected round 2/);
     });
 
-    it('throws when step is called beyond totalRounds', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 2,
-            startCharged: false,
-            totalRounds: 2,
-        });
-        eng.step(1);
-        eng.step(2);
-        // The charge schedule was computed for 2 rounds — round 3 must fail loudly.
-        expect(() => eng.step(3)).toThrow(/beyond totalRounds 2/);
+    it('throws when sourceFired targets a round other than the current one', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        expect(() => eng.sourceFired('attacker', 'active', 2)).toThrow(/engine is at round 1/);
     });
 
-    it('rejects applyTimedAbilityStatus before the first step (round 0)', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 0,
-            startCharged: false,
-            totalRounds: 2,
-        });
+    it('rejects applyTimedAbilityStatus before the first round (round 0)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const status = {
             payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 10 } },
             side: 'self' as const,
@@ -383,13 +390,7 @@ describe('createStatusEngine (computeBuffTimeline parity)', () => {
 
 describe('createStatusEngine — ability statuses (Task 6)', () => {
     it('timed ability status applied round 2 (duration 2) is visible rounds 2-3, gone round 4', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 0,
-            startCharged: false,
-            totalRounds: 5,
-        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const status: RegisteredAbilityStatus = {
             payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
             side: 'self',
@@ -400,30 +401,28 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
         };
         eng.registerAbilityStatuses([status]);
 
-        eng.step(1);
+        // Decrement now happens in the owner's Post Turn (decrementSide), not at round top.
+        eng.beginRound(1);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+        eng.decrementSide('self');
 
-        eng.step(2);
+        eng.beginRound(2);
         eng.applyTimedAbilityStatus(2, status);
         expect(eng.timedAbilityStatuses('self').map((s) => s.payload.buffName)).toEqual([
             'Attack Up',
         ]);
+        eng.decrementSide('self'); // 2 → 1
 
-        eng.step(3);
+        eng.beginRound(3);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1); // still within window
+        eng.decrementSide('self'); // 1 → 0 → expired
 
-        eng.step(4);
+        eng.beginRound(4);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0); // expired
     });
 
     it('tier precedence: a lower-tier ability status does not displace an applied higher tier', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 0,
-            startCharged: false,
-            totalRounds: 3,
-        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const tierTwo: RegisteredAbilityStatus = {
             payload: { buffName: 'Attack Up II', stacks: 1, parsedEffects: { attack: 40 } },
             side: 'self',
@@ -441,7 +440,7 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             kind: 'timed',
         };
         eng.registerAbilityStatuses([tierTwo, tierOne]);
-        eng.step(1);
+        eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, tierTwo);
         eng.applyTimedAbilityStatus(1, tierOne); // same family, lower tier → ignored
         const active = eng.timedAbilityStatuses('self');
@@ -449,18 +448,11 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
     });
 
     it('accumulating ability status stacks per-active and excludes from snapshot at 0', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 2,
-            startCharged: false,
-            totalRounds: 4,
-        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const accum: RegisteredAbilityStatus = {
             payload: { buffName: 'Momentum', stacks: 1, parsedEffects: { critDamage: 10 } },
             side: 'self',
             sourceSlot: 'active',
-            duration: 'recurring',
             conditions: [],
             kind: 'accumulating',
             maxStacks: 5,
@@ -479,32 +471,30 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             selfHpPct: 100,
             enemyHpPct: 100,
         };
-        // chargeCount=2, startCharged=false → active r1,r2, charged r3, active r4
-        eng.step(1);
+        // Attacker fires active r1,r2; charged r3; active r4 (per-active ticks on active).
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1);
         expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(1);
-        eng.step(2);
+        eng.beginRound(2);
+        eng.sourceFired('attacker', 'active', 2);
         expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
-        eng.step(3); // charged → no increment
+        eng.beginRound(3);
+        eng.sourceFired('attacker', 'charge', 3); // charged → no increment
         expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
-        const r4 = eng.step(4);
+        eng.beginRound(4);
+        eng.sourceFired('attacker', 'active', 4);
+        const r4 = eng.snapshot();
         expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(3);
         // It must NOT leak into the scheduled snapshot (engine appends it separately).
         expect(r4.activeSelfBuffs).toEqual([]);
     });
 
     it('aura ability status is included only when its conditions pass', () => {
-        const eng = createStatusEngine({
-            selfBuffs: [],
-            enemyDebuffs: [],
-            chargeCount: 0,
-            startCharged: false,
-            totalRounds: 2,
-        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         const aura: RegisteredAbilityStatus = {
             payload: { buffName: 'Focus', stacks: 1, parsedEffects: { crit: 15 } },
             side: 'self',
             sourceSlot: 'passive',
-            duration: 'recurring',
             conditions: [
                 {
                     subject: 'enemy-debuff',
@@ -516,6 +506,7 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             kind: 'aura',
         };
         eng.registerAbilityStatuses([aura]);
+        eng.beginRound(1);
         const ctx = (debuffCount: number): ConditionContext => ({
             selfBuffNames: [],
             selfDebuffNames: [],
@@ -528,8 +519,390 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             selfHpPct: 100,
             enemyHpPct: 100,
         });
-        eng.step(1);
         expect(eng.activeAbilityStatuses('self', ctx(0))).toHaveLength(0);
         expect(eng.activeAbilityStatuses('self', ctx(2))).toHaveLength(1);
+    });
+});
+
+describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
+    // Rule: a new application within a buff family (name minus the I/II/III tier suffix)
+    // wins only if (a) its tier is higher, or (b) same tier AND its duration > the existing
+    // entry's remaining turns. Otherwise it is blocked and the existing entry persists.
+    //
+    // Exercised on BOTH upsert sites: scheduled buffs (sourceFired → upsertBuff) and the
+    // attacker's own timed ability statuses (applyTimedAbilityStatus).
+
+    const timedAbility = (
+        buffName: string,
+        duration: number,
+        attack: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName, stacks: 1, parsedEffects: { attack } },
+        side: 'self',
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+    });
+
+    describe('scheduled sourceFired path (upsertBuff)', () => {
+        it('equal tier, existing remaining >= new duration → BLOCKED (existing untouched)', () => {
+            // Team source applies Attack Up III (dur 3) on round 1. Then the attacker source
+            // applies its own Attack Up III (dur 1) the same round. 1 <= 3 remaining → blocked.
+            const teamBuff = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 3 });
+            const attackerBuff = makeBuff('Attack Up III', {
+                skillSource: 'active',
+                skillDuration: 1,
+            });
+            const eng = createStatusEngine({
+                selfBuffs: [attackerBuff],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // applies dur 3
+            eng.sourceFired('attacker', 'active', 1); // dur 1, equal tier, 1 <= 3 → blocked
+            // Single entry retaining the team buff's window — NOT clobbered to 1.
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 3 },
+            ]);
+        });
+
+        it('equal tier, new duration > remaining → OVERWRITES (refresh)', () => {
+            // A 2-turn buff re-applied next round has 1 remaining → 2 > 1 → refreshes.
+            const buff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+            const eng = createStatusEngine({ selfBuffs: [buff], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.sourceFired('attacker', 'active', 1);
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up II', turnsRemaining: 2 },
+            ]);
+            eng.decrementSide('self'); // 2 → 1
+            eng.beginRound(2);
+            eng.sourceFired('attacker', 'active', 2); // 2 > 1 remaining → refresh
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up II', turnsRemaining: 2 },
+            ]);
+        });
+
+        it('higher tier → OVERWRITES regardless of remaining', () => {
+            const tierII = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 5 });
+            const tierIII = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 1 });
+            const eng = createStatusEngine({
+                selfBuffs: [tierIII],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [tierII], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // Attack Up II, dur 5
+            eng.sourceFired('attacker', 'active', 1); // Attack Up III, dur 1 — higher tier wins
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 1 },
+            ]);
+        });
+
+        it('lower tier → BLOCKED (existing higher tier stays)', () => {
+            const tierIII = makeBuff('Attack Up III', { skillSource: 'active', skillDuration: 2 });
+            const tierI = makeBuff('Attack Up I', { skillSource: 'active', skillDuration: 5 });
+            const eng = createStatusEngine({
+                selfBuffs: [tierI],
+                enemyDebuffs: [],
+                teamSources: [{ sourceId: 't1', selfBuffs: [tierIII], enemyDebuffs: [] }],
+            });
+            eng.beginRound(1);
+            eng.sourceFired('t1', 'active', 1); // Attack Up III, dur 2
+            eng.sourceFired('attacker', 'active', 1); // Attack Up I, dur 5 — lower tier, blocked
+            expect(eng.snapshot().activeSelfBuffs).toEqual([
+                { buffName: 'Attack Up III', turnsRemaining: 2 },
+            ]);
+        });
+    });
+
+    describe('applyTimedAbilityStatus path', () => {
+        it('equal tier, existing remaining >= new duration → BLOCKED (existing payload/identity untouched)', () => {
+            const longer = timedAbility('Attack Up III', 3, 50);
+            const shorter = timedAbility('Attack Up III', 1, 30);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([longer, shorter]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, longer); // dur 3
+            eng.applyTimedAbilityStatus(1, shorter); // dur 1, equal tier, 1 <= 3 → blocked
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            // Identity + payload of the longer (existing) status preserved.
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 3 });
+            expect(active[0].payload.parsedEffects).toEqual({ attack: 50 });
+        });
+
+        it('equal tier, new duration > remaining → OVERWRITES (refresh)', () => {
+            const status = timedAbility('Attack Up II', 2, 40);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([status]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, status);
+            eng.decrementSide('self'); // 2 → 1
+            eng.beginRound(2);
+            eng.applyTimedAbilityStatus(2, status); // 2 > 1 remaining → refresh
+            expect(eng.timedAbilityStatuses('self')[0].active).toEqual({
+                buffName: 'Attack Up II',
+                turnsRemaining: 2,
+            });
+        });
+
+        it('higher tier → OVERWRITES regardless of remaining', () => {
+            const tierII = timedAbility('Attack Up II', 5, 40);
+            const tierIII = timedAbility('Attack Up III', 1, 50);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([tierII, tierIII]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, tierII); // dur 5
+            eng.applyTimedAbilityStatus(1, tierIII); // higher tier, dur 1 → wins
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 1 });
+        });
+
+        it('lower tier → BLOCKED (existing higher tier stays)', () => {
+            const tierIII = timedAbility('Attack Up III', 2, 50);
+            const tierI = timedAbility('Attack Up', 5, 30);
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([tierIII, tierI]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, tierIII); // dur 2
+            eng.applyTimedAbilityStatus(1, tierI); // lower tier, dur 5 → blocked
+            const active = eng.timedAbilityStatuses('self');
+            expect(active).toHaveLength(1);
+            expect(active[0].active).toEqual({ buffName: 'Attack Up III', turnsRemaining: 2 });
+        });
+    });
+});
+
+describe('landsTimedEnemyApplication hook (Task 7)', () => {
+    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty', () => {
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('hook returning false skips the upsert and returns the buffName in resistedEnemy', () => {
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [debuff],
+            landsTimedEnemyApplication: (b) => b.buffName !== 'Def Down',
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        // The application was rejected → no status stored, buffName reported resisted.
+        expect(result).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
+    });
+
+    it('hook gates per-buff: lands one timed enemy debuff while rejecting another', () => {
+        const landed = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+        const rejected = makeBuff('Armor Break', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [landed, rejected],
+            landsTimedEnemyApplication: (b) => b.buffName === 'Def Down',
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: ['Armor Break'] });
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('a rejected re-application does NOT clear the existing in-window status (persistence)', () => {
+        // Land on round 1 (hook true), then reject the round-2 re-application (hook false):
+        // the round-1 status must persist its window, not be cleared by the rejected upsert.
+        const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 3 });
+        let lands = true;
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [debuff],
+            landsTimedEnemyApplication: () => lands,
+        });
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1); // lands → turnsRemaining 3
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 3 },
+        ]);
+        eng.decrementSide('enemy'); // 3 → 2
+
+        lands = false;
+        eng.beginRound(2);
+        const r2 = eng.sourceFired('attacker', 'active', 2); // rejected → must NOT clear
+        expect(r2).toEqual({ resistedEnemy: ['Def Down'] });
+        // The round-1 status still in window (turnsRemaining 2).
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('the hook does not gate self buffs — only timed enemy upserts', () => {
+        const selfBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [selfBuff],
+            enemyDebuffs: [],
+            landsTimedEnemyApplication: () => false, // would reject everything if it applied to self
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('attacker', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
+    });
+});
+
+describe('decrementSide (owner Post-Turn decrement)', () => {
+    it('decrements and expires a scheduled timed status, reporting its buffName', () => {
+        // chargeCount=0 → every round is active. Self buff fires each active round, 2t.
+        const buff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({ selfBuffs: [buff], enemyDebuffs: [] });
+        // round 1: attacker fires active → applies Atk Up at 2 turns (NO decrement at round top).
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1);
+        const r1 = eng.snapshot();
+        expect(r1.activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
+        // First owner Post-Turn: 2 → 1, not yet expired.
+        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+        // Second decrement: 1 → 0 → expired, reports the stored buffName.
+        expect(eng.decrementSide('self')).toEqual({ expired: ['Atk Up'] });
+        // Already gone → empty.
+        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+    });
+
+    it('the round step no longer decrements: a 1t buff applied round 1 is still present round 2 without decrementSide', () => {
+        const buff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
+        const eng = createStatusEngine({ selfBuffs: [buff], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1);
+        const r1 = eng.snapshot();
+        expect(r1.activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
+        // No decrementSide between rounds → the buff must survive into round 2's snapshot
+        // (re-applied this round too, but the point is beginRound/snapshot don't expire it).
+        eng.beginRound(2);
+        eng.sourceFired('attacker', 'active', 2);
+        const r2 = eng.snapshot();
+        expect(r2.activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
+    });
+
+    it('decrements each side independently', () => {
+        const selfBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
+        const enemyDebuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
+        const eng = createStatusEngine({ selfBuffs: [selfBuff], enemyDebuffs: [enemyDebuff] });
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1);
+        // Decrementing self does not touch the enemy map.
+        expect(eng.decrementSide('self')).toEqual({ expired: ['Atk Up'] });
+        expect(eng.decrementSide('enemy')).toEqual({ expired: ['Def Down'] });
+    });
+
+    it('decrements/expires a timed ability status and reports its expiry name', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const status: RegisteredAbilityStatus = {
+            payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+            side: 'self',
+            sourceSlot: 'active',
+            duration: 2,
+            conditions: [],
+            kind: 'timed',
+        };
+        eng.registerAbilityStatuses([status]);
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, status);
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        // 2 → 1
+        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        // 1 → 0 → expired, name reported.
+        expect(eng.decrementSide('self')).toEqual({ expired: ['Attack Up'] });
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+});
+
+describe('sourceFired source-keyed scheduling (teamSources)', () => {
+    it("a team source's timed self buff applies only when ITS id fires the matching slot", () => {
+        const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // 'attacker' firing the matching slot must NOT apply the team source's buff.
+        eng.sourceFired('attacker', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+        // The team source firing its matching slot applies it.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([
+            { buffName: 'Team Atk Up', turnsRemaining: 2 },
+        ]);
+    });
+
+    it("a team source's timed enemy debuff only fires on ITS matching slot", () => {
+        const teamDebuff = makeBuff('Team Def Down', { skillSource: 'charge', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [], enemyDebuffs: [teamDebuff] }],
+        });
+        eng.beginRound(1);
+        // Wrong slot (active) → no application.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
+        // Matching slot (charge) → applied.
+        eng.sourceFired('t1', 'charge', 1);
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Team Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('an unregistered sourceId no-ops (no application, empty resisted)', () => {
+        const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('unknown-ship', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+    });
+
+    it("the attacker's own timed buffs still apply on 'attacker' and not on a team id", () => {
+        const attackerBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [attackerBuff],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // Team id firing must not apply the attacker's scheduled buff.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+        eng.sourceFired('attacker', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
+    });
+
+    it("a team source's always-active buff joins the global always set (cadence-independent)", () => {
+        const alwaysBuff = makeBuff('Aura', {}); // no skillSource/duration → always-active
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [alwaysBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // No sourceFired needed — always-active buffs are in the snapshot from round top.
+        expect(eng.snapshot().activeSelfBuffs).toEqual([
+            { buffName: 'Aura', turnsRemaining: 'recurring' },
+        ]);
     });
 });

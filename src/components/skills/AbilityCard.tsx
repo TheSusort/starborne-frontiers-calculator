@@ -87,6 +87,11 @@ const DEBUFF_APPLICATION_OPTIONS = [
     { value: 'apply', label: 'Apply' },
 ];
 
+const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
+    { value: 'active', label: 'All active DoTs' },
+    { value: 'inflicted', label: 'Only DoTs from this cast' },
+];
+
 const ALL_BUFF_STATS = [
     'attack',
     'crit',
@@ -340,6 +345,18 @@ export const AbilityCard: React.FC<Props> = ({
                                 updateConfig({
                                     ...config,
                                     chanceFromCritPower: checked ? true : undefined,
+                                })
+                            }
+                        />
+                        <Select
+                            label="Scope"
+                            helpLabel="All active DoTs grow every standing Corrosion/Inferno; Only DoTs from this cast grow only the ones this skill applies this turn (e.g. Valerian's newly applied Corrosion)."
+                            value={config.scope ?? 'active'}
+                            options={EXTEND_DOT_SCOPE_OPTIONS}
+                            onChange={(value) =>
+                                updateConfig({
+                                    ...config,
+                                    scope: value as 'active' | 'inflicted',
                                 })
                             }
                         />

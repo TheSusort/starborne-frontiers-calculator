@@ -2283,13 +2283,27 @@ const DocumentationPage: React.FC = () => {
                                         from both sections are combined and applied as a single
                                         multiplier on corrosion and inferno damage.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         Buffs and debuffs only apply during the rounds they are
                                         actually active — timed buffs expire after their duration
                                         and charged-skill buffs only appear in rounds where the
                                         charge fires. Hover a round bar on the damage chart to see
                                         which buffs and debuffs are active that round and how many
                                         turns remain.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">Turn Order:</span> Each
+                                        simulated round, every ship acts once in descending Speed
+                                        order — higher Speed acts first, with team support ships
+                                        acting before the attacker on ties, and the enemy acting
+                                        last by default (enemy default speed 50). A faster support
+                                        applies its buffs before your attacker fires; a slower one
+                                        starts benefiting you the following round. Set each
+                                        ship&apos;s Speed in Combat Settings and on the
+                                        attacker&apos;s stats panel. Debuffs that land now persist
+                                        their full duration without re-rolling each round. Charged
+                                        skills without direct damage (pure utility) still fire on
+                                        their normal cadence and apply their effects.
                                     </p>
                                 </div>
 

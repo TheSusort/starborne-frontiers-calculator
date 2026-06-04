@@ -330,7 +330,12 @@ describe('buildShipAbilities', () => {
             slot(buildShipAbilities(s).slots, 'passive')!.abilities,
             'extend-dot'
         )!;
-        expect(ext.config).toEqual({ type: 'extend-dot', turns: 1, chanceFromCritPower: true });
+        expect(ext.config).toEqual({
+            type: 'extend-dot',
+            turns: 1,
+            chanceFromCritPower: true,
+            scope: 'inflicted',
+        });
         expect(ext.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
     });
 

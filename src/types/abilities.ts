@@ -125,7 +125,16 @@ export type AbilityConfig =
           duration?: number | 'recurring';
       }
     | { type: 'dot'; dotType: DoTType; tier: number; stacks: number; duration: number }
-    | { type: 'extend-dot'; turns: number; chanceFromCritPower?: boolean }
+    // `scope`: 'active'/undefined extends ALL standing DoT entries (Provider's
+    // "extends active Damage Over Time effects"; default + back-compat for stored
+    // configs). 'inflicted' extends ONLY the DoT entries this cast just applied
+    // (Valerian's "the newly applied Corrosion ... extended by 1 turn").
+    | {
+          type: 'extend-dot';
+          turns: number;
+          chanceFromCritPower?: boolean;
+          scope?: 'active' | 'inflicted';
+      }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.

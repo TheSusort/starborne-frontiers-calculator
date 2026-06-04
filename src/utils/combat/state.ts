@@ -39,10 +39,16 @@ export interface ActorStats {
 export interface CombatActor {
     id: string;
     side: 'player' | 'enemy';
+    /** Dispatch role in the Phase 2 turn loop. */
+    kind: 'attacker' | 'team' | 'enemy';
     stats: ActorStats;
     /** Remaining HP. Phase 1: meaningful for the enemy only (pool − cumulative damage, floored at 0 for HP%-derivation; the sim keeps hitting the dead dummy). */
     currentHp: number;
     turnMeter: number;
+    /** Banked charges toward this actor's charged skill (attacker + team). */
+    charges: number;
+    /** Charges required to fire this actor's charged skill; 0 = no charged skill. */
+    chargeCount: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -50,12 +56,21 @@ export interface CombatActor {
 }
 
 export function createActor(
-    partial: Pick<CombatActor, 'id' | 'side'> & { stats: ActorStats }
+    partial: Pick<CombatActor, 'id' | 'side' | 'kind'> & {
+        stats: ActorStats;
+        chargeCount?: number;
+        startCharged?: boolean;
+    }
 ): CombatActor {
+    // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
+    // stored on the actor — banked charges are the only mutable charge state.
+    const { chargeCount = 0, startCharged = false, ...rest } = partial;
     return {
-        ...partial,
+        ...rest,
         currentHp: partial.stats.hp,
         turnMeter: 0,
+        charges: startCharged ? chargeCount : 0,
+        chargeCount,
         corrosionEntries: [],
         infernoEntries: [],
         pendingBombs: [],
@@ -78,6 +93,9 @@ export const MAX_SELECTION_TICKS = 10000;
  * Callers must include at least one actor with speed > 0; otherwise no actor's
  * meter ever advances. The MAX_SELECTION_TICKS cap converts that all-zero-speed
  * hang into a debuggable error rather than an infinite loop.
+ *
+ * Reserved for future turn-meter manipulation phases; the Phase 2 round loop
+ * uses buildTurnQueue instead.
  */
 export function selectNextActor(actors: CombatActor[]): CombatActor {
     if (actors.length === 0) {
@@ -95,4 +113,40 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
         for (const a of actors) a.turnMeter += a.stats.speed;
     }
     return eligible().reduce((best, a) => (a.turnMeter > best.turnMeter ? a : best));
+}
+
+/**
+ * Phase 2 turn order: each game round every living actor acts exactly once,
+ * sorted by speed DESC. Tiebreak (game rule unknown — documented assumption):
+ * player side before enemy, then input order. With the calculator's input order
+ * (team 1..4, attacker, enemy) equal speeds yield team → attacker → enemy —
+ * buffers act before the attacker. NOTE: within the player side the tiebreak is
+ * purely input order — the CALLER must list team actors before the attacker to
+ * get the team-before-attacker default. Speed affects ORDER, not frequency
+ * (spec: "once per round, speed = order"); extra-turn effects are a later-phase seam.
+ */
+export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
+    return orderByTurnPriority(
+        actors.map((a) => ({ actor: a, speed: a.stats.speed, side: a.side }))
+    ).map((w) => w.actor);
+}
+
+/**
+ * Turn-order comparator core, shared by the engine (buildTurnQueue) and UI displays.
+ * Speed DESC; player side before enemy; then input order (caller lists team actors
+ * before the attacker for the team-first default). Returns a new array; does not
+ * mutate the input.
+ */
+export function orderByTurnPriority<T extends { speed: number; side: 'player' | 'enemy' }>(
+    items: T[]
+): T[] {
+    return [...items]
+        .map((item, i) => ({ item, i }))
+        .sort((x, y) => {
+            if (y.item.speed !== x.item.speed) return y.item.speed - x.item.speed;
+            const sideRank = (s: { side: 'player' | 'enemy' }) => (s.side === 'player' ? 0 : 1);
+            if (sideRank(x.item) !== sideRank(y.item)) return sideRank(x.item) - sideRank(y.item);
+            return x.i - y.i;
+        })
+        .map((x) => x.item);
 }

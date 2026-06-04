@@ -772,4 +772,45 @@ describe('dpsGoldenParity', () => {
             ],
         }),
     }));
+
+    // Scenario 17: team actor with real turns — fast support (speed 140) applies an
+    // active-slot 2-turn attack buff on each of its turns; a charge-slot defense-down
+    // debuff on its chargeCount-2 startCharged cadence (charged turns 1/4/7/10); enemy
+    // speed 50 (default). Locks the multi-actor round shape (team buffs re-timed onto
+    // real team turns). Round-1 trace: startCharged → the team's round-1 turn is CHARGED,
+    // so the CHARGE-slot debuff ('Team Defense Down') lands round 1; the ACTIVE-slot buff
+    // ('Team Attack Up') does NOT fire round 1 (no active turn) — it first applies round 2.
+    // Round-2 trace: team banks (charges 1), fires ACTIVE → 'Team Attack Up' applies; the
+    // round-1 charge debuff is still in its 2-turn window. (debuff lands every round it is
+    // attempted: hacking 250 vs security 100 → landing chance clamps to 1.0.)
+    snap('team actor re-timed buffs (multi-actor rounds)', () => ({
+        ...BASE,
+        teamActors: [
+            {
+                id: 'support-1',
+                speed: 140,
+                chargeCount: 2,
+                startCharged: true,
+                selfBuffs: [
+                    buff({
+                        id: 'ta1',
+                        buffName: 'Team Attack Up',
+                        parsedEffects: { attack: 20 },
+                        skillSource: 'active',
+                        skillDuration: 2,
+                    }),
+                ],
+                enemyDebuffs: [
+                    buff({
+                        id: 'td1',
+                        buffName: 'Team Defense Down',
+                        parsedEffects: { defense: -15 },
+                        skillSource: 'charge',
+                        skillDuration: 2,
+                    }),
+                ],
+            },
+        ],
+        shipSkills: damageSkills(150, 320),
+    }));
 });

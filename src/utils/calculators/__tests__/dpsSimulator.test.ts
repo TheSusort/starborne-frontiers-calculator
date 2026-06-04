@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
-import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
+import {
+    SelectedGameBuff,
+    ParsedBuffEffects,
+    DoTApplicationConfig,
+    TeamActorInput,
+} from '../../../types/calculator';
 import { Ability, Condition, ShipSkills } from '../../../types/abilities';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
@@ -136,7 +141,12 @@ describe('simulateDPS', () => {
             expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
         });
 
-        it('skips charging when an explicit charged damage ability has multiplier 0', () => {
+        // Phase 2 semantics: an explicit charged slot with a 0-multiplier damage ability
+        // now HAS an ability → the charged slot is non-empty → charged turns fire on cadence
+        // (dealing 0 direct damage). Previously this tested that such a ship stays on 'active'
+        // forever; that pre-Phase-2 behaviour was correct when hasChargedSkill required a
+        // positive multiplier, but the widened rule counts ANY ability in the charged slot.
+        it('an explicit 0-multiplier charged damage ability still fires charged turns (dealing 0)', () => {
             const shipSkills: ShipSkills = {
                 slots: [
                     {
@@ -173,7 +183,76 @@ describe('simulateDPS', () => {
                 rounds: 5,
                 shipSkills,
             });
-            expect(result.rounds.every((r) => r.action === 'active')).toBe(true);
+            // Phase 2 semantics change: the pre-Phase-2 rule (multiplier > 0) kept this
+            // ship on 'active' forever; the widened rule (ANY charged-slot ability)
+            // fires charged turns on cadence — round 4 is a charged turn dealing 0.
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[2].action).toBe('active');
+            expect(result.rounds[3].action).toBe('charged');
+            // 0-multiplier damage ability → no direct damage on the charged turn
+            expect(result.rounds[3].directDamage).toBe(0);
+        });
+
+        it('a damage-less charged skill still fires on cadence and applies its buffs', () => {
+            // Utility charged slot: only a buff ability, no damage. Phase 2: hasChargedSkill
+            // widens to "charged slot carries ANY ability", so the ship banks charges and
+            // fires charged turns; the buff ability applies on those turns.
+            const shipSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'active-dmg',
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100 },
+                            },
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            {
+                                id: 'charged-buff',
+                                type: 'buff',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Attack Up II',
+                                    stacks: 1,
+                                    isStackable: false,
+                                    parsedEffects: { attack: 20 },
+                                    duration: 1,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 2,
+                rounds: 4,
+                shipSkills,
+            });
+            // chargeCount=2 → active r1, active r2, charged r3, active r4
+            expect(result.rounds[0].action).toBe('active');
+            expect(result.rounds[1].action).toBe('active');
+            expect(result.rounds[2].action).toBe('charged');
+            // The buff ability applies on the charged turn
+            expect(
+                result.rounds[2].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
+            ).toBe(true);
+            // Duration 1 means it expires after the charged turn → not present on round 4
+            expect(
+                result.rounds[3].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
+            ).toBe(false);
         });
     });
 
@@ -258,6 +337,137 @@ describe('simulateDPS', () => {
             expect(result.rounds[1].action).toBe('active');
             expect(result.rounds[2].action).toBe('active');
             expect(result.rounds[3].action).toBe('charged');
+        });
+    });
+
+    describe('scheduled charge-slot buffs follow real bonus-charge cadence', () => {
+        // A charge aura on the ACTIVE slot accelerates the cadence: active rounds bank
+        // 1 (cadence) + 1 (bonus), capped at chargeCount=3, so charged fires on rounds
+        // 3/6/9 (the REAL cadence) instead of computeChargeSchedule's synthetic 4/8/12.
+        // A scheduled charge-slot self-buff must ride that REAL cadence (action-fed).
+        const skillsWithActiveCharge = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'active-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 150 },
+                        },
+                        {
+                            id: 'active-charge',
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'charge', amount: 1 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'charged-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 350 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('scheduled charge-slot buff follows the real bonus-charge cadence', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 9,
+                shipSkills: skillsWithActiveCharge(),
+                selfBuffs: [
+                    {
+                        id: 'b',
+                        buffName: 'Attack Up II',
+                        stacks: 1,
+                        isStackable: false,
+                        parsedEffects: { attack: 20 },
+                        skillSource: 'charge',
+                        skillDuration: 1,
+                    },
+                ],
+            });
+            // Real charged round 3 → buff present; synthetic round 4 → buff absent.
+            expect(result.rounds[2].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Attack Up II'
+            );
+            expect(result.rounds[3].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Attack Up II'
+            );
+        });
+    });
+
+    describe('actor speeds', () => {
+        const corrosionSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'd',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100 },
+                        },
+                        {
+                            id: 'c',
+                            type: 'dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 1,
+                                duration: 3,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        it('a faster enemy ticks DoTs before the attacker acts — first tick lands in round 2', () => {
+            // Enemy speed 150 > attacker 100: the enemy's round-1 turn precedes the
+            // attacker's first DoT application, so the first corrosion tick happens on
+            // the enemy's round-2 turn (using round-1's attacker context).
+            const result = simulateDPS({
+                ...baseInput,
+                enemySpeed: 150,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: corrosionSkills,
+            });
+            expect(result.rounds[0].corrosionDamage).toBe(0);
+            expect(result.rounds[1].corrosionDamage).toBeGreaterThan(0);
+        });
+
+        it('default speeds keep the slow-enemy ordering (round-1 tick present)', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: corrosionSkills,
+            });
+            expect(result.rounds[0].corrosionDamage).toBeGreaterThan(0);
         });
     });
 
@@ -729,8 +939,8 @@ describe('simulateDPS', () => {
             activeMultiplier: 100,
             chargedMultiplier: 200,
             chargeCount: 2,
-            activeDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
-            chargedDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
+            activeDoTs: [] as DoTApplicationConfig,
+            chargedDoTs: [] as DoTApplicationConfig,
             enemyDefense: 0,
             enemyHp: 10000,
             rounds: 6,
@@ -795,8 +1005,12 @@ describe('simulateDPS', () => {
             expect(round3Buffs.some((ab) => ab.buffName === 'Power Surge')).toBe(true);
         });
 
-        it('charge-scoped enemy debuff fires on the source ship charge rounds', () => {
-            // sourceChargeCount=2, sourceStartCharged=false → charge rounds are 3, 6
+        it('charge-scoped enemy debuff fires on the ATTACKER charge rounds (legacy rule; source schedule ignored)', () => {
+            // The fixture's sourceChargeCount=2/sourceStartCharged=false happens to
+            // COINCIDE with the attacker's own cadence (chargeCount 2 → charged rounds
+            // 3, 6) — intentional, confirming the attacker-cadence legacy rule yields
+            // the right rounds. Divergent cadences are probed in statusEngine.test.ts
+            // ("LEGACY RULE" tests).
             const chargeScopeDebuff: SelectedGameBuff = {
                 id: 'cs1',
                 buffName: 'Armor Pierce',
@@ -1686,6 +1900,87 @@ describe('simulateDPS', () => {
             expect(withExtend.summary.totalDamage).toBe(noExtend.summary.totalDamage);
         });
 
+        it("inflicted-scope extension grows ONLY this cast's newest Corrosion (Valerian)", () => {
+            // Attacker applies 1 Corrosion (3-turn duration) every round + a PASSIVE
+            // extend-dot {turns:1, scope:'inflicted', chanceFromCritPower:false} gated by a
+            // self-crit condition. crit 100 → the self-crit condition is always met, so the
+            // newest entry each round gets +1; older standing entries are untouched.
+            //
+            // Round structure (default speed): attacker applies, then enemy ticks+expires;
+            // activeDoTStates is read post-tick (post-expire). Entries tracked by application
+            // round A(r1), B(r2), C(r3). Apply at remainingRounds=3, +1 on the newest only,
+            // then expireStacks subtracts 1 at the enemy's turn:
+            //   R1: apply A(3) → extend A→4 → expire A→3.                  states: [A:3]
+            //   R2: apply B(3) → extend B→4 (A untouched=3) → expire A→2,B→3. states: [A:2, B:3]
+            //   R3: apply C(3) → extend C→4 (A=2,B=3 untouched) → expire A→1,B→2,C→3.
+            //                                                        states: [A:1, B:2, C:3]
+            const corrosion = dotAbility('cd', 'corrosion', 9, 3);
+            const inflictedExtend: Ability = {
+                id: 'ie',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, scope: 'inflicted' },
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                crit: 100,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                        { slot: 'passive', abilities: [inflictedExtend] },
+                    ],
+                },
+            });
+            const ticks = (i: number) =>
+                result.rounds[i].activeDoTStates
+                    .filter((s) => s.type === 'corrosion')
+                    .map((s) => s.ticksRemaining);
+            expect(ticks(0)).toEqual([3]);
+            expect(ticks(1)).toEqual([2, 3]);
+            expect(ticks(2)).toEqual([1, 2, 3]);
+        });
+
+        it('active-scope extension grows EVERY standing Corrosion each round (contrast)', () => {
+            // Same setup but scope 'active' (Provider semantics): every standing entry +1
+            // before the new one applies (Step 2.9, pre-application — so the just-applied
+            // entry is NOT extended this round but is each later round).
+            //   R1: extend(none) → apply A(3) → expire A→2.                states: [A:2]
+            //   R2: extend A→3 → apply B(3) → expire A→2,B→2.              states: [A:2, B:2]
+            //   R3: extend A→3,B→3 → apply C(3) → expire A→2,B→2,C→2.      states: [A:2, B:2, C:2]
+            const corrosion = dotAbility('cd', 'corrosion', 9, 3);
+            const activeExtend: Ability = {
+                id: 'ae',
+                type: 'extend-dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-crit', derivable: true }],
+                config: { type: 'extend-dot', turns: 1, scope: 'active' },
+            };
+            const result = simulateDPS({
+                ...baseInput,
+                crit: 100,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAbility('a', 100), corrosion] },
+                        { slot: 'passive', abilities: [activeExtend] },
+                    ],
+                },
+            });
+            const ticks = (i: number) =>
+                result.rounds[i].activeDoTStates
+                    .filter((s) => s.type === 'corrosion')
+                    .map((s) => s.ticksRemaining);
+            expect(ticks(0)).toEqual([2]);
+            expect(ticks(1)).toEqual([2, 2]);
+            expect(ticks(2)).toEqual([2, 2, 2]);
+        });
+
         it('detonate-dot consumes active Inferno and pays it out as detonation damage', () => {
             const inferno = dotAbility('id', 'inferno', 15, 3);
             const detonate: Ability = {
@@ -2381,6 +2676,567 @@ describe('simulateDPS', () => {
             // Supporter: base + bonus.
             const vsSupporter = simulateDPS({ ...base, enemyType: 'Supporter' });
             expect(vsSupporter.rounds[0].directDamage).toBe(28000);
+        });
+    });
+
+    describe('debuff landing persistence', () => {
+        // Phase 2 semantics: a TIMED enemy-side debuff draws the deterministic landing
+        // gate ONCE at the moment of application. Landed → it persists its FULL window
+        // with no further rolls (so it never blinks off mid-window). Resisted → the
+        // application is SKIPPED (no status stored, the existing one is NOT cleared),
+        // recorded in resistedEnemyDebuffs; a later re-application draws fresh.
+        //
+        // hacking 150 / security 100 (neutral affinity) → landing chance 0.5.
+        // The shared debuffLandingGate is a back-loaded fractional accumulator: at rate
+        // 0.5 the draw sequence is [resist, land, resist, land, resist, ...] (the first
+        // draw resists). The fixture has NO recurring enemy debuffs and NO DoTs, so the
+        // per-round recurring draw is skipped — the ONLY gate draws are the one timed
+        // APPLICATION event per round. The schedule is therefore trivially round-aligned:
+        //   R1 draw#1 → RESIST   R2 draw#2 → LAND   R3 draw#3 → RESIST
+        //   R4 draw#4 → LAND     R5 draw#5 → RESIST
+        const timedDebuffFixture = (rounds: number) => ({
+            attack: 15000,
+            crit: 0,
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 10000,
+            enemyHp: 5_000_000, // large pool so HP% never affects anything
+            rounds,
+            selfBuffs: [] as SelectedGameBuff[],
+            // Scheduled timed enemy debuff: active-sourced, 2-turn window, re-applied each
+            // active round. skillSource 'active' + numeric skillDuration → timed-scheduled,
+            // upserted via sourceFired and gated by the landing hook (Task 7).
+            enemyDebuffs: [
+                {
+                    id: 'armor-pierce',
+                    buffName: 'Armor Pierce',
+                    stacks: 1,
+                    parsedEffects: { defense: -20 },
+                    isStackable: false,
+                    skillSource: 'active' as const,
+                    skillDuration: 2,
+                    application: 'inflict' as const,
+                },
+            ] as SelectedGameBuff[],
+            hacking: 150,
+            enemySecurity: 100,
+        });
+
+        const hasDebuff = (round: { activeEnemyDebuffs: { buffName: string }[] }) =>
+            round.activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce');
+        const wasResisted = (round: { resistedEnemyDebuffs: { buffName: string }[] }) =>
+            round.resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce');
+
+        it('a landed timed debuff persists its full window; a resisted re-application does not clear it', () => {
+            const result = simulateDPS(timedDebuffFixture(5));
+
+            // Draw schedule (rate 0.5, one timed-application draw per round):
+            //  R1 #1 resist → not applied → resisted recorded, ABSENT from active.
+            //  R2 #2 LAND   → applied (turnsRemaining 2) → PRESENT.
+            //  R3 #3 resist → skipped (does NOT clear the R2 status, still in-window) →
+            //                 PERSISTENCE: PRESENT, and the resisted re-application recorded.
+            //                 Post-R3 decrement expires it (R2 status: 2 → 1 → 0).
+            //  R4 #4 LAND   → applied fresh (turnsRemaining 2) → PRESENT.
+            //  R5 #5 resist → skipped (R4 status still in-window) → PERSISTENCE: PRESENT,
+            //                 resisted re-application recorded.
+            expect(hasDebuff(result.rounds[0])).toBe(false); // R1
+            expect(hasDebuff(result.rounds[1])).toBe(true); // R2 landed
+            expect(hasDebuff(result.rounds[2])).toBe(true); // R3 persists (resisted re-app)
+            expect(hasDebuff(result.rounds[3])).toBe(true); // R4 landed fresh
+            expect(hasDebuff(result.rounds[4])).toBe(true); // R5 persists (resisted re-app)
+
+            // Resisted re-applications are recorded on the rounds where a draw resisted:
+            // R1 (no prior status), R3 and R5 (re-application while the window persists).
+            expect(wasResisted(result.rounds[0])).toBe(true); // R1
+            expect(wasResisted(result.rounds[1])).toBe(false); // R2 landed
+            expect(wasResisted(result.rounds[2])).toBe(true); // R3
+            expect(wasResisted(result.rounds[3])).toBe(false); // R4 landed
+            expect(wasResisted(result.rounds[4])).toBe(true); // R5
+
+            // The resisted entry carries the would-be duration (turnsRemaining 2).
+            const r1Resisted = result.rounds[0].resistedEnemyDebuffs.find(
+                (ab) => ab.buffName === 'Armor Pierce'
+            );
+            expect(r1Resisted?.turnsRemaining).toBe(2);
+        });
+
+        it('a debuff resisted at its only application never appears in any round', () => {
+            // Fire the timed debuff exactly ONCE, on round 1: a charged skill that starts
+            // charged with a chargeCount so high it never re-charges. The debuff is
+            // charge-sourced, so it is only attempted on the single round-1 charged turn.
+            // Draw #1 (rate 0.5) resists → the debuff never lands and never appears.
+            const result = simulateDPS({
+                attack: 15000,
+                crit: 0,
+                critDamage: 150,
+                defensePenetration: 0,
+                activeMultiplier: 100,
+                chargedMultiplier: 100,
+                chargeCount: 99, // never re-reaches the threshold after the round-1 charged turn
+                startCharged: true, // fire charged on round 1 only
+                enemyDefense: 10000,
+                enemyHp: 5_000_000,
+                rounds: 5,
+                selfBuffs: [] as SelectedGameBuff[],
+                enemyDebuffs: [
+                    {
+                        id: 'armor-pierce',
+                        buffName: 'Armor Pierce',
+                        stacks: 1,
+                        parsedEffects: { defense: -20 },
+                        isStackable: false,
+                        skillSource: 'charge' as const,
+                        skillDuration: 2,
+                        application: 'inflict' as const,
+                    },
+                ] as SelectedGameBuff[],
+                hacking: 150,
+                enemySecurity: 100,
+            });
+
+            // Round 1 is the only charged turn → the only application attempt → draw #1
+            // resists. The debuff never lands in any round, but is recorded resisted on R1.
+            expect(result.rounds[0].action).toBe('charged');
+            expect(result.rounds.slice(1).every((r) => r.action === 'active')).toBe(true);
+            expect(result.rounds.every((r) => !hasDebuff(r))).toBe(true);
+            expect(wasResisted(result.rounds[0])).toBe(true);
+            // No re-application on later rounds (charge-sourced, never re-fires) → no
+            // further resisted records either.
+            expect(result.rounds.slice(1).every((r) => !wasResisted(r))).toBe(true);
+        });
+    });
+
+    describe('teamActors', () => {
+        const damageSkills = (active: number, charged: number): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'da',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: active },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'dc',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: charged },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const teamInput = {
+            attack: 15000,
+            crit: 0, // deterministic: no crit so directDamage scales purely with the buff
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 100_000_000, // never dies — keep damage scaling linear
+            rounds: 8,
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            // No charged skill on the ATTACKER for the simple cases (chargeCount 0).
+            shipSkills: damageSkills(150, 320),
+            hacking: 250,
+            enemySecurity: 100,
+        };
+
+        const teamBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+            id: 'tb1',
+            buffName: 'Team Attack Up',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 20 },
+            skillSource: 'active' as const,
+            skillDuration: 2,
+            ...overrides,
+        });
+        const team = (overrides: Partial<TeamActorInput> = {}) => ({
+            id: 't1',
+            speed: 140,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [teamBuff()],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            ...overrides,
+        });
+
+        it('a faster team actor applies its active-slot buff before the attacker in round 1', () => {
+            // speed 140 > attacker 100: the team turn precedes the attacker's round-1 turn,
+            // so the buff is live for the round-1 hit.
+            const withTeam = simulateDPS({ ...teamInput, teamActors: [team()] });
+            const withoutTeam = simulateDPS({ ...teamInput });
+
+            expect(withTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Team Attack Up'
+            );
+            expect(withoutTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Team Attack Up'
+            );
+            // +20% attack → 1.2x direct damage in round 1.
+            expect(withTeam.rounds[0].directDamage).toBeCloseTo(
+                withoutTeam.rounds[0].directDamage * 1.2,
+                -1
+            );
+        });
+
+        it("a slower team actor's first buff benefits round 2", () => {
+            // speed 80 < attacker 100 (enemy default 50 still last): the round-1 attacker
+            // turn happens before the team turn → rounds[0] lacks the buff (damage matches
+            // the no-team run), rounds[1] has it.
+            const withTeam = simulateDPS({
+                ...teamInput,
+                teamActors: [team({ speed: 80 })],
+            });
+            const withoutTeam = simulateDPS({ ...teamInput });
+
+            expect(withTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Team Attack Up'
+            );
+            expect(withTeam.rounds[0].directDamage).toBe(withoutTeam.rounds[0].directDamage);
+            expect(withTeam.rounds[1].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Team Attack Up'
+            );
+            expect(withTeam.rounds[1].directDamage).toBeGreaterThan(
+                withoutTeam.rounds[1].directDamage
+            );
+        });
+
+        it("charge-slot team buffs land on the team actor's true charged turns", () => {
+            // team chargeCount 2, startCharged true → charges start at 2.
+            // r1: charges>=2 → CHARGED, reset 0; r2: bank 1; r3: bank 2; r4: charges>=2 →
+            // CHARGED, reset 0; r5: bank1; r6: bank2; r7: CHARGED. Charged turns 1,4,7.
+            const withTeam = simulateDPS({
+                ...teamInput,
+                teamActors: [
+                    team({
+                        speed: 140,
+                        chargeCount: 2,
+                        startCharged: true,
+                        selfBuffs: [teamBuff({ skillSource: 'charge', skillDuration: 1 })],
+                    }),
+                ],
+            });
+            const present = (i: number) =>
+                withTeam.rounds[i].activeSelfBuffs
+                    .map((b) => b.buffName)
+                    .includes('Team Attack Up');
+            expect(present(0)).toBe(true); // round 1 — charged
+            expect(present(1)).toBe(false); // round 2 — banking
+            expect(present(2)).toBe(false); // round 3 — banking
+            expect(present(3)).toBe(true); // round 4 — charged
+            expect(present(6)).toBe(true); // round 7 — charged
+        });
+
+        it('no-double-count: a buff passed via teamActors contributes exactly once', () => {
+            // run A: teamActors only (speed 140 → applies every round from round 1).
+            // run B: same buff merged into global selfBuffs only (identical shape: active,
+            // duration 2 → rides the attacker cadence, also applied every round from r1).
+            // Both apply once per round; round-2 directDamage must be EQUAL (no double-fold).
+            const runA = simulateDPS({ ...teamInput, teamActors: [team({ speed: 140 })] });
+            const runB = simulateDPS({ ...teamInput, selfBuffs: [teamBuff()] });
+            expect(runA.rounds[1].directDamage).toBe(runB.rounds[1].directDamage);
+        });
+
+        it('a slower team actor (speed 80) records resisted enemy debuffs in the SAME round row', () => {
+            // Slower team actor: speed 80 < attacker 100 > enemy 50.
+            // Turn order each round: attacker(100) → team(80) → enemy(50).
+            // The team applies a timed 2-turn inflicted enemy debuff at 50% landing:
+            //   hacking 150, enemySecurity 100 → landing chance 50%.
+            //
+            // No DoTs, no recurring enemy debuffs — the ONLY draws to the debuffLandingGate
+            // are the team's per-round application draws. Back-loaded accumulator at rate 0.5:
+            //   draw sequence: [resist, land, resist, land, resist, ...]
+            //
+            // Per-round visibility trace (slower team acts AFTER the attacker's snapshot):
+            //
+            //  Round 1 (r1):
+            //    Attacker snapshot → enemyMap empty → debuff absent from active.
+            //    Team fires → draw#1 → RESIST. attackerHasActed=true → pushed into live
+            //    resistedEnemyDebuffs row. Enemy post-turn → nothing to decrement.
+            //    → rounds[0].resistedEnemyDebuffs: contains debuff
+            //    → rounds[0].activeEnemyDebuffs:   does NOT contain debuff
+            //
+            //  Round 2 (r2):
+            //    Attacker snapshot → enemyMap still empty → debuff absent from active.
+            //    Team fires → draw#2 → LAND → upserted into enemyMap (turnsRemaining 2).
+            //    Enemy post-turn → decrements 2 → 1 (debuff remains).
+            //    → rounds[1].activeEnemyDebuffs:   does NOT contain debuff (upserted post-snapshot)
+            //    → rounds[1].resistedEnemyDebuffs: does NOT contain debuff (landed)
+            //
+            //  Round 3 (r3):
+            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
+            //    Team fires → draw#3 → RESIST → pushed into live resistedEnemyDebuffs.
+            //    Enemy post-turn → decrements 1 → 0 → expired (removed from map).
+            //    → rounds[2].activeEnemyDebuffs:   CONTAINS debuff (was in map at snapshot time)
+            //    → rounds[2].resistedEnemyDebuffs: contains debuff (slower-team resist, same round)
+            //
+            //  Round 4 (r4):
+            //    Attacker snapshot → enemyMap empty (debuff expired at end of r3).
+            //    Team fires → draw#4 → LAND → upserted (turnsRemaining 2).
+            //    Enemy post-turn → decrements 2 → 1.
+            //    → rounds[3].activeEnemyDebuffs:   does NOT contain debuff
+            //    → rounds[3].resistedEnemyDebuffs: does NOT contain debuff (landed)
+            //
+            //  Round 5 (r5):
+            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
+            //    Team fires → draw#5 → RESIST → pushed into live resistedEnemyDebuffs.
+            //    Enemy post-turn → decrements 1 → 0 → expired.
+            //    → rounds[4].activeEnemyDebuffs:   CONTAINS debuff
+            //    → rounds[4].resistedEnemyDebuffs: contains debuff
+
+            const timedEnemyDebuff: SelectedGameBuff = {
+                id: 'td1',
+                buffName: 'Armor Crack',
+                stacks: 1,
+                parsedEffects: { defense: -15 },
+                isStackable: false,
+                skillSource: 'active' as const,
+                skillDuration: 2,
+                application: 'inflict' as const,
+            };
+
+            const result = simulateDPS({
+                ...teamInput,
+                rounds: 5,
+                hacking: 150,
+                enemySecurity: 100,
+                teamActors: [
+                    {
+                        id: 't1',
+                        speed: 80, // slower than attacker (100), faster than enemy (50)
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [timedEnemyDebuff],
+                    },
+                ],
+            });
+
+            const hasActive = (i: number) =>
+                result.rounds[i].activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Crack');
+            const hasResisted = (i: number) =>
+                result.rounds[i].resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Crack');
+
+            // Round 1: resist; debuff not active (upsert skipped), resist recorded same round.
+            expect(hasActive(0)).toBe(false);
+            expect(hasResisted(0)).toBe(true);
+
+            // Round 2: land; debuff not visible this round (upserted after snapshot).
+            expect(hasActive(1)).toBe(false);
+            expect(hasResisted(1)).toBe(false);
+
+            // Round 3: resist re-application; debuff STILL active (persists from r2 land),
+            // AND resisted re-application recorded in the same round row.
+            expect(hasActive(2)).toBe(true);
+            expect(hasResisted(2)).toBe(true);
+
+            // Round 4: land; debuff not visible (re-upserted after snapshot, old window expired).
+            expect(hasActive(3)).toBe(false);
+            expect(hasResisted(3)).toBe(false);
+
+            // Round 5: resist re-application; debuff still active (from r4 land), resist recorded.
+            expect(hasActive(4)).toBe(true);
+            expect(hasResisted(4)).toBe(true);
+        });
+    });
+
+    describe('buff family overwrite rules', () => {
+        // Deterministic Thresh/Grif analogue (game-verified 2026-06-04):
+        //   Grif (team actor, speed 140 → acts before the attacker every round) grants
+        //   Attack Up III on his CHARGED skill (duration 3).
+        //   Thresh (attacker) grants himself Attack Up III on his own ACTIVE skill (duration 1).
+        // Same family, same tier: the new application wins only if it outlasts the remaining
+        // window. Thresh's 1-turn cast must NEVER clobber Grif's longer window, and the round
+        // they collide must fold exactly ONE 30% stack (not two).
+        const attackUpIII = (duration: number) => ({
+            id: `aiii-${duration}`,
+            type: 'buff' as const,
+            target: 'self' as const,
+            trigger: 'on-cast' as const,
+            conditions: [],
+            config: {
+                type: 'buff' as const,
+                buffName: 'Attack Up III',
+                parsedEffects: { attack: 30 },
+                stacks: 1,
+                isStackable: false,
+                duration,
+            },
+        });
+
+        // Attacker skills: a flat-damage active + the attacker's own Attack Up III (dur 1)
+        // active buff ability (Thresh's path). No charged skill (chargeCount 0).
+        const attackerSkills = (withOwnBuff: boolean): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 200 },
+                        },
+                        ...(withOwnBuff ? [attackUpIII(1)] : []),
+                    ],
+                },
+            ],
+        });
+
+        const base = {
+            attack: 15000,
+            crit: 0, // deterministic: directDamage scales purely with the buff fold
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 100_000_000, // never dies — keep damage scaling linear
+            rounds: 4,
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            hacking: 250,
+            enemySecurity: 100,
+        };
+
+        // Grif's team buff (Attack Up III). Helper lets us flip skillSource/cadence.
+        const grifBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+            id: 'grif-aiii',
+            buffName: 'Attack Up III',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 30 },
+            skillSource: 'active' as const,
+            skillDuration: 3,
+            ...overrides,
+        });
+
+        it('a same-tier 1-turn self buff never clobbers the team buff; collision folds ONE stack', () => {
+            // Grif re-applies Attack Up III (dur 3) on EVERY team turn (active slot, speed 140
+            // → before the attacker each round). The attacker re-applies its own Attack Up III
+            // (dur 1) every round (active slot). They collide every round.
+            //
+            // Trace (faster team applies into selfMap BEFORE the attacker's snapshot):
+            //   r1: team upserts AU III dur 3 → 3 remaining. Attacker snapshot sees it.
+            //       Attacker applies its own AU III dur 1: 1 <= 3 remaining, same tier → BLOCKED.
+            //       Fold sees the scheduled snapshot entry (one 30% stack) only. Post-turn 3→2.
+            //   r2: team upserts dur 3 (3 > 2 remaining → refresh). Snapshot 3. Attacker dur 1
+            //       blocked. One stack. Post-turn 3→2. (… repeats every round.)
+            // So the collision run must equal the control run (team buff only) in EVERY round —
+            // the attacker's 1-turn buff is always absorbed, contributing nothing extra.
+            const control = simulateDPS({
+                ...base,
+                shipSkills: attackerSkills(false),
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [grifBuff()],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+            const collision = simulateDPS({
+                ...base,
+                shipSkills: attackerSkills(true),
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [grifBuff()],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+
+            // Attack Up III present every round in the collision run.
+            for (const round of collision.rounds) {
+                expect(round.activeSelfBuffs.map((b) => b.buffName)).toContain('Attack Up III');
+            }
+            // Single 30% fold: collision === control in EVERY round (no double-count).
+            for (let i = 0; i < base.rounds; i++) {
+                expect(collision.rounds[i].directDamage).toBe(control.rounds[i].directDamage);
+            }
+        });
+
+        it('decay: a team buff applied ONCE keeps its full window despite a colliding 1-turn buff', () => {
+            // The user's exact decay scenario. Grif grants Attack Up III (dur 3) on his CHARGED
+            // skill, applied ONCE; a colliding 1-turn Attack Up III lands the SAME round only.
+            //
+            // To make the collision a true one-shot (so decay to absent is observable), the
+            // 1-turn buff is carried by a SECOND faster team actor whose charge fires only on
+            // round 1 — rather than the attacker's own active buff, which would re-apply every
+            // round and keep Attack Up III alive past Grif's window (that re-application case is
+            // covered by the first test). Both team actors are faster than the attacker, so
+            // both apply BEFORE the attacker's snapshot each round.
+            //
+            // Trace (team actors act before the attacker; attacker owner post-turn decrements
+            // self at round end):
+            //   r1: Grif charged → AU III dur 3 → 3 remaining. Collider charged → AU III dur 1:
+            //       1 <= 3 same tier → BLOCKED. Attacker snapshot sees AU III @3 (VISIBLE).
+            //       Post-turn 3→2.
+            //   r2: neither team source charges (banking). No application. Snapshot AU III @2
+            //       (VISIBLE). Post-turn 2→1.
+            //   r3: banking. Snapshot AU III @1 (VISIBLE). Post-turn 1→0 → EXPIRED.
+            //   r4: window elapsed; no re-application until each source's next charge (r5+).
+            //       Snapshot empty → ABSENT.
+            const result = simulateDPS({
+                ...base,
+                rounds: 4,
+                shipSkills: attackerSkills(false), // attacker carries NO own buff here
+                teamActors: [
+                    {
+                        id: 'grif',
+                        speed: 140,
+                        // chargeCount 4, startCharged true → charged turns at 1, 5, 9…
+                        // Within rounds 1-4 Grif fires charged ONLY on round 1.
+                        chargeCount: 4,
+                        startCharged: true,
+                        selfBuffs: [grifBuff({ skillSource: 'charge', skillDuration: 3 })],
+                        enemyDebuffs: [],
+                    },
+                    {
+                        id: 'collider',
+                        speed: 130, // still faster than the attacker (100)
+                        chargeCount: 4,
+                        startCharged: true, // charged only on round 1 within rounds 1-4
+                        selfBuffs: [grifBuff({ skillSource: 'charge', skillDuration: 1 })],
+                        enemyDebuffs: [],
+                    },
+                ],
+            });
+
+            const present = (i: number) =>
+                result.rounds[i].activeSelfBuffs.map((b) => b.buffName).includes('Attack Up III');
+            // r1: applied dur 3 (remaining 3) — present.
+            expect(present(0)).toBe(true);
+            // r2: remaining 2 — present (the 1-turn collision was blocked, did NOT shorten it).
+            expect(present(1)).toBe(true);
+            // r3: remaining 1 — present.
+            expect(present(2)).toBe(true);
+            // r4: window elapsed (expired at end of r3); no re-application until r5 — absent.
+            expect(present(3)).toBe(false);
         });
     });
 });

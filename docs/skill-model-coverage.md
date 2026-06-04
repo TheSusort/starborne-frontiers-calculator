@@ -3,6 +3,7 @@
 > Living document. Last audited **2026-06-03** on branch `feat/skill-ability-editor`.
 > Updated **2026-06-03** after the deterministic-crit + hard-gating ship (spec 2026-06-03-deterministic-crit-and-hard-gating-design.md).
 > Updated **2026-06-03** after the combat-engine Phase 1 ship (spec 2026-06-03-combat-engine-phase1-design.md).
+> Updated **2026-06-04** after the combat-engine Phase 2 ship (branch `feat/combat-engine-phase2`).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -120,7 +121,7 @@ buff/charge-aura), source it from firing + passive.
 
 ---
 
-## 5. Buff/debuff path: in-loop application semantics (combat engine Phase 1)
+## 5. Buff/debuff path: in-loop application semantics (combat engine Phase 1 + 2)
 
 - **Buff/debuff abilities flow directly into the combat engine** (`src/utils/combat/engine.ts`
   + `statusEngine.ts`). At engine creation, all buff/debuff abilities in `shipSkills.slots` are
@@ -144,12 +145,43 @@ buff/charge-aura), source it from firing + passive.
     `adjacent-ally`, `enemy-buff`) are neutralized to `always`, preserving the old static gate's
     "satisfiable in principle" semantics. Manual (non-derivable) thresholds keep literal gating
     (`abilityStatusGating.ts:liveGateConditions`).
-- **Per-round landing re-roll retained** for ALL debuffs in Phase 1: debuff ability statuses join
-  the same per-round `debuffLandingGate` re-roll as scheduled debuffs. Application-time roll-with-
-  persistence is a Phase 2 correctness item.
-- **Charge-cadence quirk retained:** the status engine's charge schedule (`computeChargeSchedule`)
-  does not know about bonus charges from `charge` abilities, while the engine's real action cadence
-  does (exactly as the old timeline diverged from the sim). Not fixed — noted.
+- **Debuff landing: application-time roll with persistence (Phase 2).** Timed debuffs roll once
+  at application; if the roll passes the debuff persists its full window without re-rolling each
+  round. If the roll fails the application is skipped entirely. Recurring/aura debuffs (and
+  accumulating stacks) keep a per-round roll — they re-enter the active set each round and must
+  land anew. This replaces the Phase-1 per-round re-roll for all timed debuffs.
+- **Same-family overwrite rule (game-verified 2026-06-04).** Within a buff family (the buff name
+  minus its `I`/`II`/`III` tier suffix), a new application overwrites the existing entry only if
+  (a) its tier is higher, or (b) the tier is equal AND the new cast's duration is longer than the
+  existing buff's remaining turns. Otherwise the application is skipped and the stronger/longer
+  buff persists. Enforced at BOTH `statusEngine.ts` upsert sites (`upsertBuff` for scheduled/team
+  buffs and `applyTimedAbilityStatus` for the attacker's own buff/debuff abilities) via the shared
+  `familyApplicationWins` helper. Same-source re-applications still refresh (after the post-turn
+  decrement a 2-turn buff has 1 remaining, and `2 > 1`). A landed-but-family-blocked application is
+  silently absorbed — it landed (the landing roll ran first), the stronger buff simply stays, and
+  it is NOT recorded as resisted nor folded into the round totals. (DoT families — Corrosion/
+  Inferno/Bomb — are exempt: each tier is its own entity and stacks independently.)
+- **Action-fed status engine — `computeChargeSchedule` retired (Phase 2).** The status engine
+  is now driven by real `sourceFired` action events rather than a synthetic charge schedule.
+  Scheduled charge-slot buffs follow the attacker's actual bonus-charge cadence (the old
+  invariant-4 quirk is fixed). Legacy merged-buff paths continue to ride the attacker's cadence;
+  per-buff `sourceChargeCount`/`sourceStartCharged` fields are deprecated.
+- **Once-per-round speed-ordered turns (Phase 2).** Each simulated round every ship acts once,
+  in descending Speed order. Ties: team ships act before the attacker; the attacker acts before
+  the enemy. Default speeds: attacker and team ships 100, enemy 50. Configurable via the Speed
+  inputs on the attacker's stats grid, each team-ship card, and Enemy Settings.
+- **Team ship buffs via `teamActors` (Phase 2).** Team support ships are registered as real
+  actors; their buff/debuff abilities are re-timed onto their actual turns within each round.
+  A faster support acts before the attacker and buffs apply in the same round; a slower support
+  (or one whose first charge is still building) benefits the attacker starting the next round.
+- **Owner Post-Turn decrement + `buff-expired` emission (Phase 2).** Status durations decrement
+  at the end of the owner's turn (Post Turn phase) rather than at the top of the following round.
+  DoTs tick at the start of the afflicted ship's (enemy's) turn. When a status reaches zero
+  duration the engine emits a `buff-expired` event. Same-turn applications are included in the
+  window — identical to Phase-1 semantics at default speeds.
+- **`hasChargedSkill` widened (Phase 2).** Charged skills whose abilities deal no direct damage
+  (pure utility: buffs, charge-grants, DoTs with no hit) are now recognised as charged skills.
+  They fire on their normal charge cadence and their effects are applied.
 - **Ability self-buffs visible to modifier gates:** after Phase 1, ability-sourced self-buff names
   (timed + aura currently active) and ability-sourced crit totals are included in `modifierCtx`
   (`selfBuffNames` + `effectiveCritRate`). This means a `modifier` ability gated on `self-buff X`
@@ -177,13 +209,19 @@ configure it and it looks like it works, but it does nothing".
 >   aura/accumulating: per-round effect inclusion; live-subject rule. Crocus/Nuqtu/APEX threshold
 >   buffs now switch on/off live.
 >
-> **Phase 2 pointers (not yet started):**
-> - Real actor turns: team ships and the enemy with speed/turn meter (Phase 2 combat engine).
-> - Application-time debuff landing with persistence (roll once on apply; persist or miss the full
->   window rather than re-rolling every round).
-> - Post-turn duration decrement on the owner (currently status engine decrements at the top of
->   the next round as a pre-turn step, equivalent but diverges once multiple actors are in play).
-> - Reactive triggers (`on-crit`, `on-attacked`, Phase 3).
+> **Shipped 2026-06-04 (combat-engine Phase 2, this branch — feat/combat-engine-phase2):**
+> - Real actor turns: team ships and the enemy with speed/turn meter — once-per-round,
+>   speed-ordered (team → attacker → enemy default; enemy default speed 50); configurable Speed
+>   inputs on the attacker stats grid, team-ship cards, and Enemy Settings.
+> - Application-time debuff landing with persistence: timed debuffs roll once on apply and
+>   persist (or miss) their full window; recurring/aura debuffs keep per-round rolls.
+> - Post-turn duration decrement on the owner: durations now decrement in each status owner's
+>   Post Turn phase; `buff-expired` emitted; DoTs tick at the start of the enemy's turn.
+> - `hasChargedSkill` widened to include charged skills with no direct damage (pure utility);
+>   `computeChargeSchedule` retired; status engine is now action-fed via `sourceFired`.
+>
+> **Phase 3 pointer (not yet started):**
+> - Reactive triggers (`on-crit`, `on-attacked`).
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
@@ -213,6 +251,7 @@ Flat inputs that interact with abilities but live outside `ShipSkills`: base sta
 (attack/crit/critDamage/defence/hp/hacking/defensePenetration), `chargeCount` +
 `startCharged` + `allyChargePerRound`, global `enemyType`, `enemyDefense`/`enemyHp`/
 `enemySecurity`, affinity modifiers (damage/crit cap/crit penalty), global
-attacker/enemy buff pickers, and team-ship buff/debuff contributions (scheduled with
-`sourceStartCharged`). Modifier abilities fold additively into the same percentage
-buckets as buffs.
+attacker/enemy buff pickers, and team-ship buff/debuff contributions (driven by
+`teamActors` — each team actor's real turn cadence via its own `speed`/`chargeCount`/
+`startCharged`; the per-buff `sourceStartCharged` fields are deprecated). Modifier
+abilities fold additively into the same percentage buckets as buffs.
