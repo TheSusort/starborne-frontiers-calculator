@@ -105,8 +105,9 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                     onSelect={onSelectShip}
                     variant="compact"
                 />
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-end justify-between gap-2">
                     <Input
+                        label="Config name"
                         value={config.name}
                         onChange={(e) => onUpdate('name', e.target.value)}
                         className="font-bold"
