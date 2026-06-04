@@ -425,19 +425,24 @@ export interface CombatEngineInput {
     hp: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
+    /** Attacker turn-order speed. Default 100. */
+    speed?: number;
+    /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
+    enemySpeed?: number;
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
 }
 
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round builds a turn queue
- * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (speed
- * 100) acts first and runs the full damage/buff/DoT-application pipeline, then the enemy
- * (Phase 2 default speed 50) takes its turn and ticks the DoT containers it carries
- * (DoTs tick at the start of the afflicted ship's turn). The round's RoundData row is
- * assembled after all turns. At default speeds the attacker always precedes the enemy,
- * so this is a byte-identical relocation of the old single-block round — events are
- * write-only taps that never read or change a sim value.
+ * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (default
+ * speed 100) runs the full damage/buff/DoT-application pipeline; the enemy (default
+ * speed 50) ticks the DoT containers it carries (DoTs tick at the start of the
+ * afflicted ship's turn). When enemySpeed > speed the order inverts — the enemy acts
+ * before the attacker, deferring round-1 DoT ticks to round 2. The round's RoundData
+ * row is assembled after all turns. At default speeds the attacker always precedes the
+ * enemy, making this a byte-identical relocation of the old single-block round —
+ * events are write-only taps that never read or change a sim value.
  */
 export function runCombat(input: CombatEngineInput): {
     rounds: RoundData[];
@@ -475,17 +480,22 @@ export function runCombat(input: CombatEngineInput): {
         hp,
         allyChargePerRound,
         enemyType,
+        speed,
+        enemySpeed,
         bus,
     } = input;
 
-    // Actors. The attacker (speed 100) takes the first turn each round; the enemy
-    // (Phase 2 default speed 50) takes the second turn and holds the DoT containers
-    // (previously loop-locals) it ticks on its turn.
+    // Actors. The attacker (default speed 100) takes the first turn each round; the enemy
+    // (default speed 50) takes the second turn and holds the DoT containers (previously
+    // loop-locals) it ticks on its turn. Speeds are configurable via the speed/enemySpeed
+    // inputs — a faster enemy (enemySpeed > attacker speed) inverts the turn order, which
+    // delays the first DoT tick to round 2 (the enemy acts before the attacker's first
+    // DoT application, so lastAttackerCtx is undefined on the enemy's round-1 turn).
     const attacker = createActor({
         id: 'attacker',
         side: 'player',
         kind: 'attacker',
-        stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: 100 },
+        stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: speed ?? 100 },
     });
     const enemy = createActor({
         id: 'enemy',
@@ -498,8 +508,7 @@ export function runCombat(input: CombatEngineInput): {
             defensePenetration: 0,
             defence: enemyDefense,
             hp: enemyHp,
-            // Phase 2 default enemy speed (acts last at default speeds); enemySpeed input arrives next task.
-            speed: 50,
+            speed: enemySpeed ?? 50,
         },
     });
 
@@ -1102,8 +1111,8 @@ export function runCombat(input: CombatEngineInput): {
                 }
 
                 // Hand the enemy's DoT-processing turn the round-scoped context it needs. With a
-                // faster enemy (future task) this becomes the PREVIOUS round's context, hence the
-                // carried `lastAttackerCtx`; at default speeds the attacker always precedes the enemy.
+                // faster enemy this is the PREVIOUS round's context, hence the carried
+                // `lastAttackerCtx`; at default speeds the attacker always precedes the enemy.
                 lastAttackerCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
             } else if (actor.kind === 'enemy') {
                 // ====================================================================

@@ -63,6 +63,10 @@ export interface DPSSimulationInput {
     allyChargePerRound?: number;
     /** Enemy base class, for the 'enemy-type' charge-gain condition. */
     enemyType?: EnemyBaseClass;
+    /** Attacker turn-order speed. Default 100. */
+    speed?: number;
+    /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
+    enemySpeed?: number;
     /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
     shipSkills?: ShipSkills;
 }
@@ -142,6 +146,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp = 0,
         allyChargePerRound,
         enemyType,
+        speed,
+        enemySpeed,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -184,6 +190,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         hp,
         allyChargePerRound,
         enemyType,
+        speed,
+        enemySpeed,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);

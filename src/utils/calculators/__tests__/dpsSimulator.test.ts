@@ -261,6 +261,65 @@ describe('simulateDPS', () => {
         });
     });
 
+    describe('actor speeds', () => {
+        const corrosionSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'd',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100 },
+                        },
+                        {
+                            id: 'c',
+                            type: 'dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 1,
+                                duration: 3,
+                            },
+                        },
+                    ],
+                },
+            ],
+        };
+
+        it('a faster enemy ticks DoTs before the attacker acts — first tick lands in round 2', () => {
+            // Enemy speed 150 > attacker 100: the enemy's round-1 turn precedes the
+            // attacker's first DoT application, so the first corrosion tick happens on
+            // the enemy's round-2 turn (using round-1's attacker context).
+            const result = simulateDPS({
+                ...baseInput,
+                enemySpeed: 150,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: corrosionSkills,
+            });
+            expect(result.rounds[0].corrosionDamage).toBe(0);
+            expect(result.rounds[1].corrosionDamage).toBeGreaterThan(0);
+        });
+
+        it('default speeds keep the slow-enemy ordering (round-1 tick present)', () => {
+            const result = simulateDPS({
+                ...baseInput,
+                rounds: 3,
+                enemyHp: 500000,
+                shipSkills: corrosionSkills,
+            });
+            expect(result.rounds[0].corrosionDamage).toBeGreaterThan(0);
+        });
+    });
+
     describe('corrosion', () => {
         it('accumulates stacks with expiry based on duration', () => {
             const result = simulateDPS({
