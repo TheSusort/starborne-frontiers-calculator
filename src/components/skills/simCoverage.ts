@@ -17,11 +17,12 @@ export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set([
  * Ability types the DPS sim sources from the FIRING skill only (active/charged).
  * Placed on the passive slot they are silent no-ops today — warn, don't block,
  * so real ship passives can still be documented ahead of sim support.
+ * `charge` is NOT in this set: passive charge auras are sourced into the charge
+ * cadence on active rounds (see src/utils/combat/engine.ts).
  * See docs/skill-model-coverage.md section 4 (slot sourcing).
  */
 export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
     'dot',
-    'charge',
     'detonate-dot',
     'accumulate-detonate',
     'additional-damage',
