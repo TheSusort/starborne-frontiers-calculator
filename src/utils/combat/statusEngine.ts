@@ -37,26 +37,31 @@ export interface AbilityStatusPayload {
     application?: 'inflict' | 'apply';
 }
 
-/**
- * A buff/debuff ability registered with the status engine for in-loop application.
- * `kind` classifies how it is gated and scheduled:
- *  - accumulating: registered into the accumulating maps; stacks accumulate per
- *    trigger (never gated); effect inclusion is aura-gated per round.
- *  - aura: recurring/passive; effect inclusion is gated per round against the round ctx.
- *  - timed: finite duration; gated AT APPLICATION when the source slot fires, then runs
- *    its full window unconditionally (familyKey/tier upsert shared with scheduled statuses).
- */
-export interface RegisteredAbilityStatus {
+interface AbilityStatusBase {
     payload: AbilityStatusPayload;
     side: 'self' | 'enemy';
     sourceSlot: SkillSlot;
-    duration: number | 'recurring' | undefined;
     /** Already live-gated by the caller (see abilityStatusGating.liveGateConditions). */
     conditions: Condition[];
-    kind: 'accumulating' | 'aura' | 'timed';
-    maxStacks?: number;
-    stackTrigger?: StackTrigger;
 }
+
+/**
+ * A buff/debuff ability registered with the status engine, discriminated by `kind`:
+ *  - accumulating: stacks accumulate per trigger (never gated); effect inclusion
+ *    is aura-gated per round.
+ *  - aura: recurring/passive; effect inclusion is gated per round against the round ctx.
+ *  - timed: finite duration; gated (incl. landing) AT APPLICATION when the source slot
+ *    fires, then runs its full window unconditionally (familyKey/tier upsert shared with
+ *    scheduled statuses). `duration` is guaranteed to be a number on this variant.
+ */
+export type RegisteredAbilityStatus =
+    | (AbilityStatusBase & { kind: 'timed'; duration: number })
+    | (AbilityStatusBase & { kind: 'aura' })
+    | (AbilityStatusBase & {
+          kind: 'accumulating';
+          stackTrigger: StackTrigger;
+          maxStacks?: number;
+      });
 
 /** An ability status active this round, paired with its payload for effect folding. */
 export interface ActiveAbilityStatus {
@@ -92,8 +97,12 @@ export interface StatusEngine {
     /** Register all buff/debuff abilities once at creation (classified by `kind`). */
     registerAbilityStatuses(statuses: RegisteredAbilityStatus[]): void;
     /** Apply a firing skill's TIMED ability status for this round; the engine passes
-     *  only those whose application gate passed. Reuses the familyKey/tier upsert. */
-    applyTimedAbilityStatus(round: number, status: RegisteredAbilityStatus): void;
+     *  only those whose application gate passed. Reuses the familyKey/tier upsert.
+     *  `status.duration` is guaranteed numeric by the timed variant — no runtime guard needed. */
+    applyTimedAbilityStatus(
+        round: number,
+        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>
+    ): void;
     /** Aura + accumulating ability statuses whose conditions pass `ctx` this round,
      *  with payloads, for effect folding and snapshot inclusion. */
     activeAbilityStatuses(side: 'self' | 'enemy', ctx: ConditionContext): ActiveAbilityStatus[];
@@ -235,8 +244,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     // Ability-sourced aura statuses (recurring/passive): held with their (already
     // live-gated) conditions; effect inclusion is re-evaluated per round.
-    const auraSelf: RegisteredAbilityStatus[] = [];
-    const auraEnemy: RegisteredAbilityStatus[] = [];
+    const auraSelf: Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] = [];
+    const auraEnemy: Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] = [];
 
     let lastRound = 0;
 
@@ -425,12 +434,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 const map = s.side === 'self' ? accumSelfMap : accumEnemyMap;
                 // Ability accumulating statuses join the accumulating machinery with a
                 // payload + (live-gated) conditions for per-round aura gating of effects.
+                // s.stackTrigger is non-optional on the accumulating variant — no ! needed.
                 map.set(s.payload.buffName, {
                     buffName: s.payload.buffName,
                     stacks: 0,
                     maxStacks: s.maxStacks,
                     rate: s.payload.stacks,
-                    trigger: s.stackTrigger!,
+                    trigger: s.stackTrigger,
                     payload: s.payload,
                     conditions: s.conditions,
                 });
@@ -442,7 +452,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
     };
 
-    const applyTimedAbilityStatus = (round: number, status: RegisteredAbilityStatus): void => {
+    const applyTimedAbilityStatus = (
+        round: number,
+        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>
+    ): void => {
         if (round < 1) {
             // lastRound initializes to 0, so the equality check alone would accept
             // round 0 before the first beginRound call. Rounds are 1-based.
@@ -455,7 +468,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 `StatusEngine.applyTimedAbilityStatus called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
-        if (typeof status.duration !== 'number') return;
+        // status.duration is guaranteed numeric by the timed variant — no runtime guard needed.
         const map = status.side === 'self' ? selfMap : enemyMap;
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
         const existing = map.get(familyKey);

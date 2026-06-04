@@ -631,8 +631,9 @@ export function runCombat(input: CombatEngineInput): {
     // Routing mirrors buffAbilitiesToSelectedBuffs: enemy/all-enemies → enemy side.
     const registeredAbilityStatuses: RegisteredAbilityStatus[] = [];
     // Timed ability statuses indexed by source slot, applied when that slot fires.
-    const timedSelfBySlot: RegisteredAbilityStatus[] = [];
-    const timedEnemyBySlot: RegisteredAbilityStatus[] = [];
+    // Narrowed to the timed variant — duration is guaranteed numeric on this type.
+    const timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
+    const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     for (const slot of shipSkills.slots) {
         for (const ability of slot.abilities) {
             const cfg = ability.config;
@@ -645,30 +646,39 @@ export function runCombat(input: CombatEngineInput): {
                 (cfg.duration === 'recurring' ||
                     cfg.duration === undefined ||
                     slot.slot === 'passive');
-            const kind: RegisteredAbilityStatus['kind'] = accumulating
-                ? 'accumulating'
-                : isAura
-                  ? 'aura'
-                  : 'timed';
-            const status: RegisteredAbilityStatus = {
-                payload: {
-                    buffName: cfg.buffName,
-                    stacks: cfg.stacks,
-                    parsedEffects: cfg.parsedEffects,
-                    ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
-                },
+            const payload: AbilityStatusPayload = {
+                buffName: cfg.buffName,
+                stacks: cfg.stacks,
+                parsedEffects: cfg.parsedEffects,
+                ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
+            };
+            // `as const` keeps the literal types (side, sourceSlot) so the spread into
+            // a union variant below doesn't widen them — runtime object is unchanged.
+            const base = {
+                payload,
                 side,
                 sourceSlot: slot.slot,
-                duration: cfg.duration,
                 conditions: liveGateConditions(ability.conditions),
-                kind,
-                maxStacks: cfg.maxStacks,
-                stackTrigger: cfg.stackTrigger,
-            };
-            registeredAbilityStatuses.push(status);
-            if (kind === 'timed') {
+            } as const;
+            let status: RegisteredAbilityStatus;
+            if (accumulating) {
+                // accumulating: stackTrigger is required and non-optional on this variant.
+                status = {
+                    ...base,
+                    kind: 'accumulating',
+                    stackTrigger: cfg.stackTrigger!,
+                    maxStacks: cfg.maxStacks,
+                };
+            } else if (isAura) {
+                status = { ...base, kind: 'aura' };
+            } else {
+                // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
+                // not recurring/undefined duration and not a passive slot). The classification
+                // branches above exhaustively exclude non-numeric durations from reaching this arm.
+                status = { ...base, kind: 'timed', duration: cfg.duration as number };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
+            registeredAbilityStatuses.push(status);
         }
     }
     statusEngine.registerAbilityStatuses(registeredAbilityStatuses);
@@ -935,10 +945,10 @@ export function runCombat(input: CombatEngineInput): {
                     if (landsTimedEnemyApplication(status.payload.application)) {
                         statusEngine.applyTimedAbilityStatus(r, status);
                     } else {
+                        // status.duration is guaranteed numeric by the timed variant.
                         resistedAbilityTimedEnemy.push({
                             buffName: status.payload.buffName,
-                            turnsRemaining:
-                                typeof status.duration === 'number' ? status.duration : 1,
+                            turnsRemaining: status.duration,
                         });
                         emitDebuffResisted(status.payload.buffName);
                     }
@@ -1016,7 +1026,7 @@ export function runCombat(input: CombatEngineInput): {
                         actorId: 'attacker',
                         round: r,
                         buffName: status.payload.buffName,
-                        duration: status.duration as number,
+                        duration: status.duration,
                     });
                 }
 

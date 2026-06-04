@@ -453,7 +453,6 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             payload: { buffName: 'Momentum', stacks: 1, parsedEffects: { critDamage: 10 } },
             side: 'self',
             sourceSlot: 'active',
-            duration: 'recurring',
             conditions: [],
             kind: 'accumulating',
             maxStacks: 5,
@@ -496,7 +495,6 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             payload: { buffName: 'Focus', stacks: 1, parsedEffects: { crit: 15 } },
             side: 'self',
             sourceSlot: 'passive',
-            duration: 'recurring',
             conditions: [
                 {
                     subject: 'enemy-debuff',
