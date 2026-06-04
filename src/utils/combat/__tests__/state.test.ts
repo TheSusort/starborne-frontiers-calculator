@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
     createActor,
     selectNextActor,
+    buildTurnQueue,
     ActorStats,
+    CombatActor,
     TURN_METER_THRESHOLD,
     MAX_SELECTION_TICKS,
 } from '../state';
@@ -19,17 +21,22 @@ const baseStats: ActorStats = {
 
 describe('createActor', () => {
     it('sets currentHp to stats.hp', () => {
-        const actor = createActor({ id: 'a', side: 'player', stats: { ...baseStats, hp: 30000 } });
+        const actor = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...baseStats, hp: 30000 },
+        });
         expect(actor.currentHp).toBe(30000);
     });
 
     it('sets turnMeter to 0', () => {
-        const actor = createActor({ id: 'a', side: 'player', stats: baseStats });
+        const actor = createActor({ id: 'a', side: 'player', kind: 'attacker', stats: baseStats });
         expect(actor.turnMeter).toBe(0);
     });
 
     it('initialises all DoT containers as empty arrays', () => {
-        const actor = createActor({ id: 'a', side: 'enemy', stats: baseStats });
+        const actor = createActor({ id: 'a', side: 'enemy', kind: 'enemy', stats: baseStats });
         expect(actor.corrosionEntries).toEqual([]);
         expect(actor.infernoEntries).toEqual([]);
         expect(actor.pendingBombs).toEqual([]);
@@ -37,9 +44,33 @@ describe('createActor', () => {
     });
 
     it('preserves id and side from input', () => {
-        const actor = createActor({ id: 'enemy', side: 'enemy', stats: baseStats });
+        const actor = createActor({ id: 'enemy', side: 'enemy', kind: 'enemy', stats: baseStats });
         expect(actor.id).toBe('enemy');
         expect(actor.side).toBe('enemy');
+    });
+
+    it('seeds charges from chargeCount when startCharged is true', () => {
+        const actor = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: baseStats,
+            chargeCount: 3,
+            startCharged: true,
+        });
+        expect(actor.charges).toBe(3);
+        expect(actor.chargeCount).toBe(3);
+    });
+
+    it('starts with 0 charges when startCharged is false or omitted', () => {
+        const actor = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: baseStats,
+            chargeCount: 3,
+        });
+        expect(actor.charges).toBe(0);
     });
 });
 
@@ -48,11 +79,13 @@ describe('selectNextActor', () => {
         const attacker = createActor({
             id: 'attacker',
             side: 'player',
+            kind: 'attacker',
             stats: { ...baseStats, speed: 100 },
         });
         const enemy = createActor({
             id: 'enemy',
             side: 'enemy',
+            kind: 'enemy',
             stats: { ...baseStats, speed: 0 },
         });
         const selected = selectNextActor([attacker, enemy]);
@@ -65,11 +98,13 @@ describe('selectNextActor', () => {
         const attacker = createActor({
             id: 'attacker',
             side: 'player',
+            kind: 'attacker',
             stats: { ...baseStats, speed: 100 },
         });
         const enemy = createActor({
             id: 'enemy',
             side: 'enemy',
+            kind: 'enemy',
             stats: { ...baseStats, speed: 0 },
         });
 
@@ -87,11 +122,13 @@ describe('selectNextActor', () => {
         const fast = createActor({
             id: 'fast',
             side: 'player',
+            kind: 'attacker',
             stats: { ...baseStats, speed: 200 },
         });
         const slow = createActor({
             id: 'slow',
             side: 'player',
+            kind: 'attacker',
             stats: { ...baseStats, speed: 100 },
         });
         const selected = selectNextActor([fast, slow]);
@@ -99,12 +136,74 @@ describe('selectNextActor', () => {
     });
 
     it('throws (not hangs) when every actor has speed 0', () => {
-        const a = createActor({ id: 'a', side: 'player', stats: { ...baseStats, speed: 0 } });
-        const b = createActor({ id: 'b', side: 'enemy', stats: { ...baseStats, speed: 0 } });
+        const a = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...baseStats, speed: 0 },
+        });
+        const b = createActor({
+            id: 'b',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: { ...baseStats, speed: 0 },
+        });
         expect(() => selectNextActor([a, b])).toThrow(new RegExp(`${MAX_SELECTION_TICKS} ticks`));
     });
 
     it('fails fast on an empty actor list', () => {
         expect(() => selectNextActor([])).toThrow(/must not be empty/);
+    });
+});
+
+describe('buildTurnQueue', () => {
+    const actor = (id: string, kind: CombatActor['kind'], speed: number): CombatActor =>
+        createActor({
+            id,
+            side: kind === 'enemy' ? 'enemy' : 'player',
+            kind,
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed,
+            },
+        });
+
+    it('orders by speed descending', () => {
+        const q = buildTurnQueue([
+            actor('attacker', 'attacker', 100),
+            actor('t1', 'team', 140),
+            actor('enemy', 'enemy', 120),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['t1', 'enemy', 'attacker']);
+    });
+
+    it('breaks ties: player side before enemy, then input order (team before attacker by list position)', () => {
+        const q = buildTurnQueue([
+            actor('t1', 'team', 100),
+            actor('t2', 'team', 100),
+            actor('attacker', 'attacker', 100),
+            actor('enemy', 'enemy', 100),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['t1', 't2', 'attacker', 'enemy']);
+    });
+
+    it('default speeds (team 100, attacker 100, enemy 50) yield team → attacker → enemy', () => {
+        const q = buildTurnQueue([
+            actor('t1', 'team', 100),
+            actor('attacker', 'attacker', 100),
+            actor('enemy', 'enemy', 50),
+        ]);
+        expect(q.map((a) => a.id)).toEqual(['t1', 'attacker', 'enemy']);
+    });
+
+    it('does not mutate the input array', () => {
+        const input = [actor('attacker', 'attacker', 100), actor('t1', 'team', 140)];
+        buildTurnQueue(input);
+        expect(input.map((a) => a.id)).toEqual(['attacker', 't1']);
     });
 });

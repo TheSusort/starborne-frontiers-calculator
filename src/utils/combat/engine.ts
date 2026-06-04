@@ -464,11 +464,13 @@ export function runCombat(input: CombatEngineInput): {
     const attacker = createActor({
         id: 'attacker',
         side: 'player',
+        kind: 'attacker',
         stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: 100 },
     });
     const enemy = createActor({
         id: 'enemy',
         side: 'enemy',
+        kind: 'enemy',
         stats: {
             attack: 0,
             crit: 0,
