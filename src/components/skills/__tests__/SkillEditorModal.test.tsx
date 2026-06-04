@@ -202,4 +202,25 @@ describe('SkillEditorModal', () => {
         );
         expect(screen.queryByText('Active Skill')).not.toBeInTheDocument();
     });
+
+    it('shows passive-slot warning when a firing-only ability is on the passive slot', () => {
+        const dotAbility: Ability = {
+            id: 'a2',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+        };
+        render(
+            <SkillEditorModal
+                isOpen
+                slot="passive"
+                skill={{ slot: 'passive', abilities: [dotAbility] }}
+                onChange={vi.fn()}
+                onClose={vi.fn()}
+            />
+        );
+        expect(screen.getByText(/not simulated on the passive slot/i)).toBeInTheDocument();
+    });
 });
