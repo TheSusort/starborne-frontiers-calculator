@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
-import { SelectedGameBuff, ParsedBuffEffects } from '../../../types/calculator';
+import {
+    SelectedGameBuff,
+    ParsedBuffEffects,
+    DoTApplicationConfig,
+    TeamActorInput,
+} from '../../../types/calculator';
 import { Ability, Condition, ShipSkills } from '../../../types/abilities';
 
 function makeAlwaysBuff(id: string, effects: ParsedBuffEffects): SelectedGameBuff {
@@ -934,8 +939,8 @@ describe('simulateDPS', () => {
             activeMultiplier: 100,
             chargedMultiplier: 200,
             chargeCount: 2,
-            activeDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
-            chargedDoTs: [] as import('../../../types/calculator').DoTApplicationConfig,
+            activeDoTs: [] as DoTApplicationConfig,
+            chargedDoTs: [] as DoTApplicationConfig,
             enemyDefense: 0,
             enemyHp: 10000,
             rounds: 6,
@@ -2718,6 +2723,255 @@ describe('simulateDPS', () => {
             // No re-application on later rounds (charge-sourced, never re-fires) → no
             // further resisted records either.
             expect(result.rounds.slice(1).every((r) => !wasResisted(r))).toBe(true);
+        });
+    });
+
+    describe('teamActors', () => {
+        const damageSkills = (active: number, charged: number): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'da',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: active },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'dc',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: charged },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const teamInput = {
+            attack: 15000,
+            crit: 0, // deterministic: no crit so directDamage scales purely with the buff
+            critDamage: 150,
+            defensePenetration: 0,
+            chargeCount: 0,
+            enemyDefense: 0,
+            enemyHp: 100_000_000, // never dies — keep damage scaling linear
+            rounds: 8,
+            selfBuffs: [] as SelectedGameBuff[],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            // No charged skill on the ATTACKER for the simple cases (chargeCount 0).
+            shipSkills: damageSkills(150, 320),
+            hacking: 250,
+            enemySecurity: 100,
+        };
+
+        const teamBuff = (overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+            id: 'tb1',
+            buffName: 'Team Attack Up',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { attack: 20 },
+            skillSource: 'active' as const,
+            skillDuration: 2,
+            ...overrides,
+        });
+        const team = (overrides: Partial<TeamActorInput> = {}) => ({
+            id: 't1',
+            speed: 140,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [teamBuff()],
+            enemyDebuffs: [] as SelectedGameBuff[],
+            ...overrides,
+        });
+
+        it('a faster team actor applies its active-slot buff before the attacker in round 1', () => {
+            // speed 140 > attacker 100: the team turn precedes the attacker's round-1 turn,
+            // so the buff is live for the round-1 hit.
+            const withTeam = simulateDPS({ ...teamInput, teamActors: [team()] });
+            const withoutTeam = simulateDPS({ ...teamInput });
+
+            expect(withTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Team Attack Up'
+            );
+            expect(withoutTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Team Attack Up'
+            );
+            // +20% attack → 1.2x direct damage in round 1.
+            expect(withTeam.rounds[0].directDamage).toBeCloseTo(
+                withoutTeam.rounds[0].directDamage * 1.2,
+                -1
+            );
+        });
+
+        it("a slower team actor's first buff benefits round 2", () => {
+            // speed 80 < attacker 100 (enemy default 50 still last): the round-1 attacker
+            // turn happens before the team turn → rounds[0] lacks the buff (damage matches
+            // the no-team run), rounds[1] has it.
+            const withTeam = simulateDPS({
+                ...teamInput,
+                teamActors: [team({ speed: 80 })],
+            });
+            const withoutTeam = simulateDPS({ ...teamInput });
+
+            expect(withTeam.rounds[0].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+                'Team Attack Up'
+            );
+            expect(withTeam.rounds[0].directDamage).toBe(withoutTeam.rounds[0].directDamage);
+            expect(withTeam.rounds[1].activeSelfBuffs.map((b) => b.buffName)).toContain(
+                'Team Attack Up'
+            );
+            expect(withTeam.rounds[1].directDamage).toBeGreaterThan(
+                withoutTeam.rounds[1].directDamage
+            );
+        });
+
+        it("charge-slot team buffs land on the team actor's true charged turns", () => {
+            // team chargeCount 2, startCharged true → charges start at 2.
+            // r1: charges>=2 → CHARGED, reset 0; r2: bank 1; r3: bank 2; r4: charges>=2 →
+            // CHARGED, reset 0; r5: bank1; r6: bank2; r7: CHARGED. Charged turns 1,4,7.
+            const withTeam = simulateDPS({
+                ...teamInput,
+                teamActors: [
+                    team({
+                        speed: 140,
+                        chargeCount: 2,
+                        startCharged: true,
+                        selfBuffs: [teamBuff({ skillSource: 'charge', skillDuration: 1 })],
+                    }),
+                ],
+            });
+            const present = (i: number) =>
+                withTeam.rounds[i].activeSelfBuffs
+                    .map((b) => b.buffName)
+                    .includes('Team Attack Up');
+            expect(present(0)).toBe(true); // round 1 — charged
+            expect(present(1)).toBe(false); // round 2 — banking
+            expect(present(2)).toBe(false); // round 3 — banking
+            expect(present(3)).toBe(true); // round 4 — charged
+            expect(present(6)).toBe(true); // round 7 — charged
+        });
+
+        it('no-double-count: a buff passed via teamActors contributes exactly once', () => {
+            // run A: teamActors only (speed 140 → applies every round from round 1).
+            // run B: same buff merged into global selfBuffs only (identical shape: active,
+            // duration 2 → rides the attacker cadence, also applied every round from r1).
+            // Both apply once per round; round-2 directDamage must be EQUAL (no double-fold).
+            const runA = simulateDPS({ ...teamInput, teamActors: [team({ speed: 140 })] });
+            const runB = simulateDPS({ ...teamInput, selfBuffs: [teamBuff()] });
+            expect(runA.rounds[1].directDamage).toBe(runB.rounds[1].directDamage);
+        });
+
+        it('a slower team actor (speed 80) records resisted enemy debuffs in the SAME round row', () => {
+            // Slower team actor: speed 80 < attacker 100 > enemy 50.
+            // Turn order each round: attacker(100) → team(80) → enemy(50).
+            // The team applies a timed 2-turn inflicted enemy debuff at 50% landing:
+            //   hacking 150, enemySecurity 100 → landing chance 50%.
+            //
+            // No DoTs, no recurring enemy debuffs — the ONLY draws to the debuffLandingGate
+            // are the team's per-round application draws. Back-loaded accumulator at rate 0.5:
+            //   draw sequence: [resist, land, resist, land, resist, ...]
+            //
+            // Per-round visibility trace (slower team acts AFTER the attacker's snapshot):
+            //
+            //  Round 1 (r1):
+            //    Attacker snapshot → enemyMap empty → debuff absent from active.
+            //    Team fires → draw#1 → RESIST. attackerHasActed=true → pushed into live
+            //    resistedEnemyDebuffs row. Enemy post-turn → nothing to decrement.
+            //    → rounds[0].resistedEnemyDebuffs: contains debuff
+            //    → rounds[0].activeEnemyDebuffs:   does NOT contain debuff
+            //
+            //  Round 2 (r2):
+            //    Attacker snapshot → enemyMap still empty → debuff absent from active.
+            //    Team fires → draw#2 → LAND → upserted into enemyMap (turnsRemaining 2).
+            //    Enemy post-turn → decrements 2 → 1 (debuff remains).
+            //    → rounds[1].activeEnemyDebuffs:   does NOT contain debuff (upserted post-snapshot)
+            //    → rounds[1].resistedEnemyDebuffs: does NOT contain debuff (landed)
+            //
+            //  Round 3 (r3):
+            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
+            //    Team fires → draw#3 → RESIST → pushed into live resistedEnemyDebuffs.
+            //    Enemy post-turn → decrements 1 → 0 → expired (removed from map).
+            //    → rounds[2].activeEnemyDebuffs:   CONTAINS debuff (was in map at snapshot time)
+            //    → rounds[2].resistedEnemyDebuffs: contains debuff (slower-team resist, same round)
+            //
+            //  Round 4 (r4):
+            //    Attacker snapshot → enemyMap empty (debuff expired at end of r3).
+            //    Team fires → draw#4 → LAND → upserted (turnsRemaining 2).
+            //    Enemy post-turn → decrements 2 → 1.
+            //    → rounds[3].activeEnemyDebuffs:   does NOT contain debuff
+            //    → rounds[3].resistedEnemyDebuffs: does NOT contain debuff (landed)
+            //
+            //  Round 5 (r5):
+            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
+            //    Team fires → draw#5 → RESIST → pushed into live resistedEnemyDebuffs.
+            //    Enemy post-turn → decrements 1 → 0 → expired.
+            //    → rounds[4].activeEnemyDebuffs:   CONTAINS debuff
+            //    → rounds[4].resistedEnemyDebuffs: contains debuff
+
+            const timedEnemyDebuff: SelectedGameBuff = {
+                id: 'td1',
+                buffName: 'Armor Crack',
+                stacks: 1,
+                parsedEffects: { defense: -15 },
+                isStackable: false,
+                skillSource: 'active' as const,
+                skillDuration: 2,
+                application: 'inflict' as const,
+            };
+
+            const result = simulateDPS({
+                ...teamInput,
+                rounds: 5,
+                hacking: 150,
+                enemySecurity: 100,
+                teamActors: [
+                    {
+                        id: 't1',
+                        speed: 80, // slower than attacker (100), faster than enemy (50)
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [timedEnemyDebuff],
+                    },
+                ],
+            });
+
+            const hasActive = (i: number) =>
+                result.rounds[i].activeEnemyDebuffs.some((ab) => ab.buffName === 'Armor Crack');
+            const hasResisted = (i: number) =>
+                result.rounds[i].resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Crack');
+
+            // Round 1: resist; debuff not active (upsert skipped), resist recorded same round.
+            expect(hasActive(0)).toBe(false);
+            expect(hasResisted(0)).toBe(true);
+
+            // Round 2: land; debuff not visible this round (upserted after snapshot).
+            expect(hasActive(1)).toBe(false);
+            expect(hasResisted(1)).toBe(false);
+
+            // Round 3: resist re-application; debuff STILL active (persists from r2 land),
+            // AND resisted re-application recorded in the same round row.
+            expect(hasActive(2)).toBe(true);
+            expect(hasResisted(2)).toBe(true);
+
+            // Round 4: land; debuff not visible (re-upserted after snapshot, old window expired).
+            expect(hasActive(3)).toBe(false);
+            expect(hasResisted(3)).toBe(false);
+
+            // Round 5: resist re-application; debuff still active (from r4 land), resist recorded.
+            expect(hasActive(4)).toBe(true);
+            expect(hasResisted(4)).toBe(true);
         });
     });
 });

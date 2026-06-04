@@ -675,3 +675,83 @@ describe('decrementSide (owner Post-Turn decrement)', () => {
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
     });
 });
+
+describe('sourceFired source-keyed scheduling (teamSources)', () => {
+    it("a team source's timed self buff applies only when ITS id fires the matching slot", () => {
+        const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // 'attacker' firing the matching slot must NOT apply the team source's buff.
+        eng.sourceFired('attacker', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+        // The team source firing its matching slot applies it.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([
+            { buffName: 'Team Atk Up', turnsRemaining: 2 },
+        ]);
+    });
+
+    it("a team source's timed enemy debuff only fires on ITS matching slot", () => {
+        const teamDebuff = makeBuff('Team Def Down', { skillSource: 'charge', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [], enemyDebuffs: [teamDebuff] }],
+        });
+        eng.beginRound(1);
+        // Wrong slot (active) → no application.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
+        // Matching slot (charge) → applied.
+        eng.sourceFired('t1', 'charge', 1);
+        expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+            { buffName: 'Team Def Down', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('an unregistered sourceId no-ops (no application, empty resisted)', () => {
+        const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [teamBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        const result = eng.sourceFired('unknown-ship', 'active', 1);
+        expect(result).toEqual({ resistedEnemy: [] });
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+    });
+
+    it("the attacker's own timed buffs still apply on 'attacker' and not on a team id", () => {
+        const attackerBuff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [attackerBuff],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // Team id firing must not apply the attacker's scheduled buff.
+        eng.sourceFired('t1', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([]);
+        eng.sourceFired('attacker', 'active', 1);
+        expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
+    });
+
+    it("a team source's always-active buff joins the global always set (cadence-independent)", () => {
+        const alwaysBuff = makeBuff('Aura', {}); // no skillSource/duration → always-active
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 't1', selfBuffs: [alwaysBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        // No sourceFired needed — always-active buffs are in the snapshot from round top.
+        expect(eng.snapshot().activeSelfBuffs).toEqual([
+            { buffName: 'Aura', turnsRemaining: 'recurring' },
+        ]);
+    });
+});

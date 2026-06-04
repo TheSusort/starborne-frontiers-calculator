@@ -6,6 +6,7 @@ import {
     DoTApplicationConfig,
     EnemyBaseClass,
     SelectedGameBuff,
+    TeamActorInput,
 } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { ConditionContext } from '../abilities/evaluateConditions';
@@ -59,6 +60,24 @@ function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff 
         isStackable: false,
         ...(payload.application ? { application: payload.application } : {}),
     };
+}
+
+// Synthesize resisted ActiveBuff rows from rejected TIMED enemy upsert names: each
+// carries its would-be duration (the buff's numeric skillDuration) and emits a
+// debuff-resisted tap. Shared by the attacker and team turns (both upsert timed enemy
+// debuffs through the status engine's landing hook). The `: 1` fallback is unreachable
+// today (only numeric-skillDuration buffs enter the timed resist path) — kept safe.
+function synthesizeResisted(
+    names: string[],
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>,
+    emitResisted: (buffName: string) => void
+): ActiveBuff[] {
+    return names.map((buffName) => {
+        emitResisted(buffName);
+        const lookup = enemyDebuffLookup.get(buffName) ?? [];
+        const dur = lookup.find((b) => typeof b.skillDuration === 'number')?.skillDuration;
+        return { buffName, turnsRemaining: typeof dur === 'number' ? dur : 1 };
+    });
 }
 
 function calculateBuffTotals(buffs: Buff[]) {
@@ -437,6 +456,10 @@ export interface CombatEngineInput {
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
+    /** Team ships as real speed-ordered actors (Phase 2). Their buff lists are keyed to
+     *  their own turns via the status engine's teamSources, NOT merged into selfBuffs/
+     *  enemyDebuffs (no-double-count). */
+    teamActors?: TeamActorInput[];
     // Rate/fold fields below (debuffLandingChance, selfDotModifier, defensePenetrationBuff)
     // are pre-derived by the adapter (simulateDPS) — pass the resolved values, not raw hacking.
     debuffLandingChance: number;
@@ -494,6 +517,7 @@ export function runCombat(input: CombatEngineInput): {
         numRounds,
         selfBuffs,
         enemyDebuffs,
+        teamActors = [],
         debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
@@ -538,6 +562,29 @@ export function runCombat(input: CombatEngineInput): {
         },
     });
 
+    // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
+    // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
+    // enemy via the status engine's per-source timed sets). Dummy combat stats keep the
+    // shared ActorStats shape; only `speed` (turn order) and chargeCount/startCharged matter.
+    const teamCombatActors = teamActors.map((t) =>
+        createActor({
+            id: t.id,
+            side: 'player',
+            kind: 'team',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: t.speed,
+            },
+            chargeCount: t.chargeCount,
+            startCharged: t.startCharged,
+        })
+    );
+
     // Deterministic event gates — replace Math.random / expected-value math so
     // identical inputs always produce identical output. Crit uses one gate PER
     // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
@@ -566,6 +613,12 @@ export function runCombat(input: CombatEngineInput): {
     const statusEngine = createStatusEngine({
         selfBuffs,
         enemyDebuffs,
+        // Team actors' buff lists keyed to their own turns (per-source timed sets).
+        teamSources: teamActors.map((t) => ({
+            sourceId: t.id,
+            selfBuffs: t.selfBuffs,
+            enemyDebuffs: t.enemyDebuffs,
+        })),
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
     });
 
@@ -622,13 +675,15 @@ export function runCombat(input: CombatEngineInput): {
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
     // into the underlying SelectedGameBuff effects.
+    // Include team-actor buffs: their snapshot entries (applied on team turns) must
+    // expand back to their underlying effects exactly like attacker-scheduled ones.
     const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of selfBuffs) {
+    for (const b of [...selfBuffs, ...teamActors.flatMap((t) => t.selfBuffs)]) {
         const existing = selfBuffLookup.get(b.buffName) ?? [];
         selfBuffLookup.set(b.buffName, [...existing, b]);
     }
     const enemyDebuffLookup = new Map<string, SelectedGameBuff[]>();
-    for (const b of enemyDebuffs) {
+    for (const b of [...enemyDebuffs, ...teamActors.flatMap((t) => t.enemyDebuffs)]) {
         const existing = enemyDebuffLookup.get(b.buffName) ?? [];
         enemyDebuffLookup.set(b.buffName, [...existing, b]);
     }
@@ -663,7 +718,9 @@ export function runCombat(input: CombatEngineInput): {
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
 
-        const queue = buildTurnQueue([attacker, enemy]); // [attacker, enemy] for now; team actors join later
+        // Team actors listed BEFORE the attacker so the input-order tiebreak yields
+        // team → attacker → enemy at equal speeds (buildTurnQueue requirement).
+        const queue = buildTurnQueue([...teamCombatActors, attacker, enemy]);
 
         // --- Round-scoped accumulators / row fields, shared by the turn blocks and the
         // post-round assembly. Numeric damage accumulators reset to 0 each round; the
@@ -684,6 +741,17 @@ export function runCombat(input: CombatEngineInput): {
         let activeSelfBuffsForRound!: ActiveBuff[];
         let landedEnemyDebuffs!: ActiveBuff[];
         let resistedEnemyDebuffs!: ActiveBuff[];
+        // Explicit flag used to split team-turn resisted entries into two destinations:
+        //  FASTER team actors (before the attacker) → teamResistedEnemyDebuffs, folded
+        //  into the row by the attacker block once it runs.
+        //  SLOWER team actors (after the attacker) → append directly to the live row
+        //  list (resistedEnemyDebuffs already assigned by the attacker block).
+        // Using a boolean flag instead of checking `resistedEnemyDebuffs !== undefined`
+        // makes the invariant explicit and immune to accidental `= []` initializations.
+        let attackerHasActed = false;
+        // Team-turn resisted enemy applications recorded BEFORE the attacker (faster team
+        // actors); folded into the row's resistedEnemyDebuffs by the attacker block.
+        const teamResistedEnemyDebuffs: ActiveBuff[] = [];
 
         for (const actor of queue) {
             bus?.emit({ type: 'turn-started', actorId: actor.id, round: r });
@@ -803,21 +871,10 @@ export function runCombat(input: CombatEngineInput): {
                 });
                 // Scheduled timed applications the landing hook rejected this round: synthesize
                 // a resisted ActiveBuff carrying the would-be duration (skillDuration) and emit.
-                const resistedScheduledTimed: ActiveBuff[] = resistedScheduledTimedNames.map(
-                    (buffName) => {
-                        emitDebuffResisted(buffName);
-                        const lookup = enemyDebuffLookup.get(buffName) ?? [];
-                        const dur = lookup.find(
-                            (b) => typeof b.skillDuration === 'number'
-                        )?.skillDuration;
-                        return {
-                            buffName,
-                            // The `: 1` arm is unreachable today: only buffs with numeric
-                            // skillDuration enter the timed resist path (statusEngine's
-                            // sourceFired guard) — kept as a safe fallback, not a semantic.
-                            turnsRemaining: typeof dur === 'number' ? dur : 1,
-                        };
-                    }
+                const resistedScheduledTimed: ActiveBuff[] = synthesizeResisted(
+                    resistedScheduledTimedNames,
+                    enemyDebuffLookup,
+                    emitDebuffResisted
                 );
                 // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
                 // accum first, then timed — matching the original snapshot() iteration order
@@ -929,6 +986,9 @@ export function runCombat(input: CombatEngineInput): {
                 ];
                 landedEnemyDebuffs = [...scheduledEnemy.landedEnemyDebuffs, ...landedAbilityEnemy];
                 resistedEnemyDebuffs = [
+                    // Team-turn resisted applications recorded BEFORE this attacker turn
+                    // (faster team actors) lead the row's resisted list.
+                    ...teamResistedEnemyDebuffs,
                     ...scheduledEnemy.resistedEnemyDebuffs,
                     ...resistedAbilityEnemy,
                 ];
@@ -1236,6 +1296,59 @@ export function runCombat(input: CombatEngineInput): {
                 // faster enemy this is the PREVIOUS round's context, hence the carried
                 // `lastAttackerCtx`; at default speeds the attacker always precedes the enemy.
                 lastAttackerCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
+                // Signal that the attacker block has completed for this round. Any SLOWER team
+                // actors that follow will append their resisted entries directly to the live
+                // resistedEnemyDebuffs row list (see the team-turn block above).
+                attackerHasActed = true;
+            } else if (actor.kind === 'team') {
+                // ====================================================================
+                // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
+                // job is to notify the status engine that ITS source fired this round so
+                // its timed buffs (keyed by this actor's id) upsert onto the maps. preTurn
+                // mirrors the attacker's charge cadence on the actor's OWN fields; bonus
+                // charges do not apply (team actors have no charge abilities). A FASTER
+                // team actor runs before the attacker's snapshot() → its buffs are visible
+                // this round; a SLOWER one upserts after → visible from the next round.
+                // ====================================================================
+                const teamHasCharged = actor.chargeCount > 0;
+                let teamAction: 'active' | 'charged';
+                if (teamHasCharged && actor.charges >= actor.chargeCount) {
+                    teamAction = 'charged';
+                    actor.charges = 0;
+                } else {
+                    teamAction = 'active';
+                    if (teamHasCharged) actor.charges += 1;
+                }
+
+                bus?.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
+
+                const { resistedEnemy } = statusEngine.sourceFired(
+                    actor.id,
+                    teamAction === 'charged' ? 'charge' : 'active',
+                    r
+                );
+                // Synthesize + record this team turn's resisted timed enemy applications
+                // (mirror the attacker's resisted-synthesis). A FASTER team actor (before
+                // the attacker) feeds teamResistedEnemyDebuffs, which the attacker block
+                // folds into the row. A SLOWER team actor (after the attacker) appends
+                // directly to the live row list.
+                const teamResisted = synthesizeResisted(resistedEnemy, enemyDebuffLookup, (n) =>
+                    bus?.emit({
+                        type: 'debuff-resisted',
+                        targetId: enemy.id,
+                        round: r,
+                        buffName: n,
+                    })
+                );
+                if (teamResisted.length > 0) {
+                    if (attackerHasActed) {
+                        // Slower team turn: attacker block already set resistedEnemyDebuffs.
+                        resistedEnemyDebuffs.push(...teamResisted);
+                    } else {
+                        // Faster team turn: attacker block hasn't run yet; stage here.
+                        teamResistedEnemyDebuffs.push(...teamResisted);
+                    }
+                }
             } else if (actor.kind === 'enemy') {
                 // ====================================================================
                 // ENEMY TURN — ticks the DoT containers it carries. DoTs tick at the

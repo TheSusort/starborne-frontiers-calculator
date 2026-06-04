@@ -215,3 +215,17 @@ export interface TeamShipConfig {
     enemyDebuffs: SelectedGameBuff[]; // parsed enemy debuffs  → merge into global enemyBuffs
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
 }
+
+/** A team ship as a real combat actor (Phase 2). Buff lists are the existing
+ *  parsed SelectedGameBuff shapes, re-timed onto this actor's real turns. */
+export interface TeamActorInput {
+    id: string;
+    /** Turn-order speed. Default 100. */
+    speed: number;
+    chargeCount: number;
+    startCharged: boolean;
+    /** Buffs granted to the attacker, keyed by skillSource to this actor's turns. */
+    selfBuffs: SelectedGameBuff[];
+    /** Debuffs inflicted on the enemy, keyed by skillSource to this actor's turns. */
+    enemyDebuffs: SelectedGameBuff[];
+}

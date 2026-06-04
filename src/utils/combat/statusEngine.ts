@@ -11,6 +11,16 @@ export interface ActiveBuff {
 export interface StatusEngineInput {
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
+    /** Team-actor scheduled sources (Phase 2 Task 8). Each source's TIMED entries key
+     *  off that source's own id (matched in sourceFired by sourceId), so they apply on
+     *  the team actor's real turns rather than the attacker's cadence. ALWAYS-ACTIVE and
+     *  ACCUMULATING entries from these sources join the same global always/accum sets as
+     *  the attacker's (see below — those are cadence-independent). */
+    teamSources?: {
+        sourceId: string;
+        selfBuffs: SelectedGameBuff[];
+        enemyDebuffs: SelectedGameBuff[];
+    }[];
     /** Landing decision for a TIMED enemy upsert, drawn ONCE at application time
      *  (Task 7). The engine owns the gate + affinity rule and threads it here. When
      *  it returns false the upsert is SKIPPED (no status stored, the existing one is
@@ -138,6 +148,14 @@ interface AccumulatingState {
     conditions?: Condition[];
 }
 
+/** Per-source timed buff/debuff sets used by `createStatusEngine` to route scheduled
+ *  timed upserts to the correct source turn. 'attacker' holds the legacy merged arrays'
+ *  timed entries; each team source holds its own. `sourceFired` looks the source up here. */
+interface TimedSourceSets {
+    timedSelf: SelectedGameBuff[];
+    timedEnemy: SelectedGameBuff[];
+}
+
 /**
  * Incremental, ACTION-FED status machine. The engine drives it per round:
  * `beginRound(r)` advances the counter and increments per-round accumulating
@@ -149,18 +167,46 @@ interface AccumulatingState {
  */
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
+    const teamSources = input.teamSources ?? [];
     // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
     // tests simple. The engine supplies the real hacking/affinity decision.
     const landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
-    const alwaysSelf = selfBuffs.filter((b) => !isAccumulating(b) && isAlwaysActive(b));
+    //
+    // ALWAYS-ACTIVE and ACCUMULATING entries are cadence-independent: an always-active
+    // buff is on every round regardless of whose turn applies it, and accumulating
+    // per-round stacks tick at round top (per-active/per-charge stay attacker-only — see
+    // sourceFired). So team-source always/accum entries join the SAME global sets as the
+    // attacker's. Only TIMED entries are scheduled per-source (keyed by sourceId in
+    // sourceFired) so they ride the team actor's real turns.
+    //
+    // teamAllSelf/teamAllEnemy hold ALL team-source buffs (both sides). The always/accum
+    // split is applied downstream when they are folded into the global sets.
+    const teamAllSelf = teamSources.flatMap((s) => s.selfBuffs);
+    const teamAllEnemy = teamSources.flatMap((s) => s.enemyDebuffs);
+    const alwaysSelf = [...selfBuffs, ...teamAllSelf].filter(
+        (b) => !isAccumulating(b) && isAlwaysActive(b)
+    );
     const timedSelf = selfBuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b));
-    const accumSelf = selfBuffs.filter(isAccumulating);
-    const alwaysEnemy = enemyDebuffs.filter((b) => !isAccumulating(b) && isAlwaysActive(b));
+    const accumSelf = [...selfBuffs, ...teamAllSelf].filter(isAccumulating);
+    const alwaysEnemy = [...enemyDebuffs, ...teamAllEnemy].filter(
+        (b) => !isAccumulating(b) && isAlwaysActive(b)
+    );
     const timedEnemy = enemyDebuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b));
-    const accumEnemy = enemyDebuffs.filter(isAccumulating);
+    const accumEnemy = [...enemyDebuffs, ...teamAllEnemy].filter(isAccumulating);
+
+    // Per-source TIMED sets. 'attacker' holds the legacy merged arrays' timed entries;
+    // each team source holds its own. sourceFired looks the firing source up here.
+    const timedBySource = new Map<string, TimedSourceSets>();
+    timedBySource.set('attacker', { timedSelf, timedEnemy });
+    for (const src of teamSources) {
+        timedBySource.set(src.sourceId, {
+            timedSelf: src.selfBuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b)),
+            timedEnemy: src.enemyDebuffs.filter((b) => !isAccumulating(b) && !isAlwaysActive(b)),
+        });
+    }
 
     // Build accumulating state maps — start at 0 stacks, increment each trigger
     const accumSelfMap = new Map<string, AccumulatingState>();
@@ -234,15 +280,16 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         });
     };
 
-    // sourceFired: a source actually fired a slot this round. For 'attacker' this
-    // increments per-active/per-charge accumulating stacks (BEFORE the timed upserts,
-    // preserving the old step() ordering) and upserts timed scheduled buffs whose
-    // skillSource matches the fired slot.
+    // sourceFired: a source actually fired a slot this round. It upserts that source's
+    // TIMED scheduled buffs whose skillSource matches the fired slot — 'attacker' draws
+    // from the legacy merged arrays, each team source from its own list (per-source maps
+    // built above). Per-active/per-charge accumulating stacks tick on the ATTACKER only
+    // (they track the attacker's cadence — team actors do not advance them); these run
+    // BEFORE the timed upserts, preserving the old step() ordering.
     //
-    // LEGACY RULE: in this task ALL scheduled buffs (merged manual + team arrays)
-    // ride the ATTACKER's real cadence. Per-buff sourceChargeCount/sourceStartCharged
-    // are IGNORED — superseded by real team turns in the teamActors task. Other
-    // sourceIds are a no-op for now (team actors arrive next).
+    // Per-buff sourceChargeCount/sourceStartCharged remain IGNORED — superseded by real
+    // team turns (the engine drives each team actor's real charge cadence and calls
+    // sourceFired with its own slot). An UNREGISTERED source id is a no-op.
     const sourceFired = (
         sourceId: string,
         slot: 'active' | 'charge',
@@ -253,35 +300,38 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
-        if (sourceId !== 'attacker') return { resistedEnemy: [] };
+        const sets = timedBySource.get(sourceId);
+        if (!sets) return { resistedEnemy: [] };
 
-        // Per-active/per-charge accumulating stacks tick on the matching slot.
-        const incrementSlot = (map: Map<string, AccumulatingState>) => {
-            for (const state of map.values()) {
-                const fires =
-                    (state.trigger === 'per-active' && slot === 'active') ||
-                    (state.trigger === 'per-charge' && slot === 'charge');
-                if (fires) {
-                    state.stacks =
-                        state.maxStacks !== undefined
-                            ? Math.min(state.stacks + state.rate, state.maxStacks)
-                            : state.stacks + state.rate;
+        // Per-active/per-charge accumulating stacks tick on the matching slot — ATTACKER
+        // only (these track the attacker's own cadence).
+        if (sourceId === 'attacker') {
+            const incrementSlot = (map: Map<string, AccumulatingState>) => {
+                for (const state of map.values()) {
+                    const fires =
+                        (state.trigger === 'per-active' && slot === 'active') ||
+                        (state.trigger === 'per-charge' && slot === 'charge');
+                    if (fires) {
+                        state.stacks =
+                            state.maxStacks !== undefined
+                                ? Math.min(state.stacks + state.rate, state.maxStacks)
+                                : state.stacks + state.rate;
+                    }
                 }
-            }
-        };
-        incrementSlot(accumSelfMap);
-        incrementSlot(accumEnemyMap);
+            };
+            incrementSlot(accumSelfMap);
+            incrementSlot(accumEnemyMap);
+        }
 
-        // Timed scheduled buffs whose skillSource matches the fired slot. Both self
-        // and enemy ride the attacker's cadence (legacy rule above).
-        for (const buff of timedSelf) {
+        // Timed scheduled buffs (this source's) whose skillSource matches the fired slot.
+        for (const buff of sets.timedSelf) {
             if (buff.skillSource === slot) upsertBuff(buff, selfMap);
         }
         // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
         // its buffName is collected so the engine can emit debuff-resisted + record it.
         const resistedEnemy: string[] = [];
-        for (const buff of timedEnemy) {
+        for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
             if (typeof buff.skillDuration !== 'number') continue;
             if (!landsTimedEnemyApplication(buff)) {

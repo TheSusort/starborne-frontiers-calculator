@@ -6,6 +6,7 @@ import {
     EnemyBaseClass,
     SecondaryDamage,
     SelectedGameBuff,
+    TeamActorInput,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import type { ActiveBuff } from '../combat/statusEngine';
@@ -69,6 +70,10 @@ export interface DPSSimulationInput {
     enemySpeed?: number;
     /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
     shipSkills?: ShipSkills;
+    /** Team ships as real speed-ordered actors (Phase 2). When present, their buffs enter
+     *  the sim HERE — keyed to their own turns. Do NOT also merge them into selfBuffs/
+     *  enemyDebuffs (no-double-count). */
+    teamActors?: TeamActorInput[];
 }
 
 export interface RoundData {
@@ -148,6 +153,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyType,
         speed,
         enemySpeed,
+        teamActors,
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
@@ -195,6 +201,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyType,
         speed,
         enemySpeed,
+        teamActors,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
