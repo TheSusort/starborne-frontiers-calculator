@@ -118,7 +118,9 @@ export interface AttackerTurnArgs {
     hp: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
-    bus?: CombatEventBus;
+    // Required (Phase 3): the engine always passes its internal bus (wrapping the optional
+    // external tap), so the attacker turn emits unconditionally.
+    bus: CombatEventBus;
     // Per-call round state.
     round: number;
     cumulativeDamage: number;
@@ -520,7 +522,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         }
     }
 
-    bus?.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
+    bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
     // Enemy HP% entering this round, derived from damage dealt so far. Floors at 0
     // once cumulative damage exceeds the pool (the sim keeps hitting the "dead" dummy).
@@ -535,12 +537,12 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
     const emitDebuffResisted = (buffName: string) =>
-        bus?.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
+        bus.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
     // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
     const emitDebuffApplied = (sourceId: string, buffName: string) =>
-        bus?.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
+        bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
 
     // Per-round buff totals from the status engine. The attacker notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
@@ -743,7 +745,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
         statusEngine.applyTimedAbilityStatus(r, status);
-        bus?.emit({
+        bus.emit({
             type: 'buff-applied',
             actorId: 'attacker',
             round: r,
@@ -943,7 +945,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
     // ability-performed: ONE event for the firing damage hit, full directDamage.
-    bus?.emit({
+    bus.emit({
         type: 'ability-performed',
         actorId: actor.id,
         targetId: enemy.id,
@@ -979,7 +981,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         infernoEntries,
         pendingBombs,
         emitBombDetonated: (stacks, damage) =>
-            bus?.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
+            bus.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
     });
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
@@ -1000,7 +1002,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
             infernoEntries,
             pendingBombs,
             emitDotApplied: (dotType, stacks) =>
-                bus?.emit({
+                bus.emit({
                     type: 'dot-applied',
                     sourceId: actor.id,
                     targetId: enemy.id,

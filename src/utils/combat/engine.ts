@@ -16,9 +16,16 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
-import { CombatEventBus } from './events';
+import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import { AttackerRoundCtx, AttackerTurnResult, runAttackerTurn } from './attackerTurn';
+import {
+    Intent,
+    MAX_INTENT_GENERATIONS,
+    executeIntent,
+    partitionReactiveAbilities,
+    registerReactiveListeners,
+} from './triggers';
 
 function tickDoTStacks(entries: ActiveDoTStack[], baseValue: number): number {
     return entries.reduce((sum, e) => sum + e.stacks * (e.tier / 100) * baseValue, 0);
@@ -183,7 +190,8 @@ export function runCombat(input: CombatEngineInput): {
         critDamage,
         defensePenetration,
         chargeCount,
-        shipSkills,
+        // shipSkills is intentionally NOT destructured here — the cast/reactive split below
+        // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
         enemyDefense,
         enemyHp,
         numRounds,
@@ -204,8 +212,33 @@ export function runCombat(input: CombatEngineInput): {
         enemyType,
         speed,
         enemySpeed,
-        bus,
+        bus: externalBus,
     } = input;
+
+    // Internal bus — always created (Phase 3). Reactive listeners attach here. When an
+    // external bus is provided it is a pure WRITE-ONLY tap: each emit fans out to the
+    // external bus FIRST (its listeners stay write-only, registered before the engine's
+    // own reactive listeners), then to the internal bus. Everything that flowed through
+    // `bus?` now flows through this unconditional `bus`.
+    const internalBus = createEventBus();
+    const bus: CombatEventBus = externalBus
+        ? {
+              on: internalBus.on,
+              emit: (e) => {
+                  externalBus.emit(e);
+                  internalBus.emit(e);
+              },
+          }
+        : internalBus;
+
+    // Cast/reactive split (Phase 3). Live-trigger buff/debuff/dot/charge abilities are
+    // EXCLUDED from every on-cast pipeline (the registration loop + runAttackerTurn) and
+    // instead registered as reactive listeners in slot/text order. Everything else stays
+    // on-cast — including any non-buff/debuff/dot/charge ability carrying a live trigger
+    // value (the executor only supports those four types).
+    const { castSkills: shipSkills, reactiveAbilities } = partitionReactiveAbilities(
+        input.shipSkills
+    );
 
     // Actors. The attacker (default speed 100) takes the first turn each round; the enemy
     // (default speed 50) takes the second turn and holds the DoT containers (previously
@@ -396,15 +429,21 @@ export function runCombat(input: CombatEngineInput): {
     // when the enemy acts before the attacker has EVER acted (faster-enemy round 1).
     let lastAttackerCtx: AttackerRoundCtx | undefined;
 
+    // --- Phase 3 reactive triggers ---
+    // Intent queue (FIFO). Reactive listeners enqueue follow-up executions; the engine
+    // drains them at the drain points. Pure listeners (enqueue only) keep the Phase 1
+    // contract — the executor is the only state mutator.
+    const intentQueue: Intent[] = [];
+    registerReactiveListeners({
+        bus,
+        reactiveAbilities,
+        enqueue: (intent) => intentQueue.push(intent),
+    });
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
-        // round-started: the canonical start-of-round trigger (Phase 3 Task 3). Fires
-        // once per round, before any turn-started of that round. Documented deviation from
-        // the Phase 1 contract's turn-started mapping: in a multi-actor round turn-started
-        // fires once per actor, so round-started is the reliable "start of round" signal.
-        bus?.emit({ type: 'round-started', round: r });
 
         // Team actors listed BEFORE the attacker so the input-order tiebreak yields
         // team → attacker → enemy at equal speeds (buildTurnQueue requirement).
@@ -432,8 +471,67 @@ export function runCombat(input: CombatEngineInput): {
         // teamResistedEnemyDebuffs staging).
         const pendingResisted: ActiveBuff[] = [];
 
+        // Drain the intent queue FIFO. Listeners may have enqueued during the emission
+        // that triggered this drain; executed intents may emit events (chaining) that
+        // enqueue MORE — those form the next generation. A generation is the batch
+        // present when a drain pass starts; the loop processes one generation per pass
+        // and stops when the queue is empty. MAX_INTENT_GENERATIONS converts a
+        // pathological self-feeding loop into a thrown error rather than a hang.
+        const drainIntents = (): void => {
+            let generation = 0;
+            while (intentQueue.length > 0) {
+                if (++generation > MAX_INTENT_GENERATIONS) {
+                    throw new Error(
+                        `combat round ${r}: intent queue exceeded MAX_INTENT_GENERATIONS ` +
+                            `(${MAX_INTENT_GENERATIONS}) — a reactive trigger is self-amplifying without bound`
+                    );
+                }
+                // Snapshot this generation's batch; new enqueues during execution run next pass.
+                const batch = intentQueue.splice(0, intentQueue.length);
+                for (const intent of batch) {
+                    executeIntent(intent, {
+                        round: r,
+                        attacker,
+                        enemy,
+                        statusEngine,
+                        bus,
+                        corrosionEntries,
+                        infernoEntries,
+                        pendingBombs,
+                        debuffLandingGate,
+                        debuffLandingChance,
+                        landsTimedEnemyApplication,
+                        affinityDisadvantage,
+                        enemyType,
+                        enemyHp,
+                        cumulativeDamage,
+                        effectiveAttack: lastAttackerCtx?.effectiveAttack,
+                        recordResisted: (resisted) => {
+                            const lastTurn = attackerTurns[attackerTurns.length - 1];
+                            // After an attacker turn this round → append to its resisted list;
+                            // before any → stage into pendingResisted (drained into the next
+                            // attacker turn's head), mirroring the Task-2 team-resist staging.
+                            if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
+                            else pendingResisted.push(resisted);
+                        },
+                    });
+                }
+            }
+        };
+
+        // round-started: the canonical start-of-round trigger (Phase 3). Fires once per
+        // round, before any turn-started of that round. Documented deviation from the
+        // Phase 1 contract's turn-started mapping: in a multi-actor round turn-started fires
+        // once per actor, so round-started is the reliable "start of round" signal. Emitted
+        // here (after the accumulator + drainIntents are in scope) so its start-of-round
+        // intents execute BEFORE any turn — no observable ordering change vs the old emit
+        // site (nothing between beginRound and here emits an event).
+        bus.emit({ type: 'round-started', round: r });
+        // Drain point (a): start-of-round intents execute before the first turn.
+        drainIntents();
+
         for (const actor of queue) {
-            bus?.emit({ type: 'turn-started', actorId: actor.id, round: r });
+            bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
 
             if (actor.kind === 'attacker') {
                 // ====================================================================
@@ -529,7 +627,7 @@ export function runCombat(input: CombatEngineInput): {
                     if (teamHasCharged) actor.charges += 1;
                 }
 
-                bus?.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
+                bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
 
                 const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
                     actor.id,
@@ -539,7 +637,7 @@ export function runCombat(input: CombatEngineInput): {
                 // Emit debuff-applied ONCE per landed timed enemy application (discrete-
                 // infliction event — Phase 3 retiming). sourceId = this team actor's id.
                 for (const buffName of appliedEnemy) {
-                    bus?.emit({
+                    bus.emit({
                         type: 'debuff-applied',
                         sourceId: actor.id,
                         targetId: enemy.id,
@@ -554,7 +652,7 @@ export function runCombat(input: CombatEngineInput): {
                 // turn) appends directly to the LAST attacker turn's resisted list — same
                 // observable order as the old attackerHasActed split.
                 const teamResisted = synthesizeResisted(resistedEnemy, enemyDebuffLookup, (n) =>
-                    bus?.emit({
+                    bus.emit({
                         type: 'debuff-resisted',
                         targetId: enemy.id,
                         round: r,
@@ -595,7 +693,7 @@ export function runCombat(input: CombatEngineInput): {
                         dotMult,
                         affinityMult,
                         emitTicked: (dotType, damage) =>
-                            bus?.emit({
+                            bus.emit({
                                 type: 'dot-ticked',
                                 targetId: enemy.id,
                                 round: r,
@@ -610,7 +708,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingBombs,
                         affinityMult,
                         emitBombDetonated: (stacks, damage) =>
-                            bus?.emit({
+                            bus.emit({
                                 type: 'bomb-detonated',
                                 actorId: attacker.id,
                                 round: r,
@@ -625,17 +723,24 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
 
+            // Drain point (b): follow-ups triggered by this actor's turn body run as
+            // "consecutive actions" within the turn — BEFORE the owner Post Turn, so any
+            // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
+            // below decrements it). A triggered effect therefore never boosts the hit that
+            // triggered it (the hit's damage was already computed in the turn body).
+            drainIntents();
+
             // Post Turn (combat-system.md section 4): the status CARRIER decrements.
             // Self statuses live on the attacker; enemy debuffs on the enemy. Team
             // actors carry no statuses in Phase 2 (their grants sit on the attacker).
             if (actor.kind === 'attacker' || actor.kind === 'enemy') {
                 const side = actor.kind === 'attacker' ? 'self' : 'enemy';
                 for (const buffName of statusEngine.decrementSide(side).expired) {
-                    bus?.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
+                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
             }
 
-            bus?.emit({ type: 'turn-ended', actorId: actor.id, round: r });
+            bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
         }
 
         // The row's attacker fields come from the LAST attacker turn this round. Rounds
@@ -663,7 +768,7 @@ export function runCombat(input: CombatEngineInput): {
         // turn's DoT ticks/bursts), update cumulative totals + enemy HP, emit hp-changed /
         // ship-destroyed, and push the RoundData row. Expressions unchanged — relocated. ---
         if (detonationDamage > 0) {
-            bus?.emit({
+            bus.emit({
                 type: 'dot-detonated',
                 targetId: enemy.id,
                 round: r,
@@ -686,7 +791,7 @@ export function runCombat(input: CombatEngineInput): {
         const newEnemyHpPctInt =
             enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - cumulativeDamage / enemyHp))) : 100;
         if (newEnemyHpPctInt !== lastEnemyHpPctInt) {
-            bus?.emit({
+            bus.emit({
                 type: 'hp-changed',
                 targetId: enemy.id,
                 round: r,
@@ -696,7 +801,7 @@ export function runCombat(input: CombatEngineInput): {
             lastEnemyHpPctInt = newEnemyHpPctInt;
         }
         if (!destroyedEmitted && enemy.currentHp <= 0) {
-            bus?.emit({ type: 'ship-destroyed', actorId: enemy.id, round: r });
+            bus.emit({ type: 'ship-destroyed', actorId: enemy.id, round: r });
             destroyedEmitted = true;
         }
 

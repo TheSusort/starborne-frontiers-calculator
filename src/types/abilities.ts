@@ -21,10 +21,19 @@ export type AbilityType =
 
 export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
 
+// NOTE on the live subset: `round-started` is the engine event key for the
+// `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
+// mapping — in a multi-actor round `turn-started` fires once per actor, so
+// `round-started` is the canonical "start of round" signal). See triggers.ts
+// (LIVE_TRIGGERS) for which values the Phase 3 engine consumes; the rest are
+// annotation-only (assume-active conditions, normal on-cast pipelines).
 export type AbilityTrigger =
     | 'on-cast'
     | 'start-of-round'
     | 'on-crit'
+    | 'on-debuff-inflicted'
+    | 'on-ally-debuff-inflicted'
+    | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
     | 'on-destroyed';
