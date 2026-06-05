@@ -20,7 +20,7 @@ import {
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
-import { AttackerRoundCtx, AttackerTurnResult, runAttackerTurn } from './attackerTurn';
+import { PlayerActorRuntime, PlayerRoundCtx, PlayerTurnResult, runPlayerTurn } from './playerTurn';
 import {
     Intent,
     MAX_INTENT_GENERATIONS,
@@ -234,7 +234,7 @@ export function runCombat(input: CombatEngineInput): {
         : internalBus;
 
     // Cast/reactive split (Phase 3). Live-trigger buff/debuff/dot/charge abilities are
-    // EXCLUDED from every on-cast pipeline (the registration loop + runAttackerTurn) and
+    // EXCLUDED from every on-cast pipeline (the registration loop + runPlayerTurn) and
     // instead registered as reactive listeners in slot/text order. Everything else stays
     // on-cast — including any non-buff/debuff/dot/charge ability carrying a live trigger
     // value (the executor only supports those four types).
@@ -418,6 +418,41 @@ export function runCombat(input: CombatEngineInput): {
         enemyDebuffLookup.set(b.buffName, [...existing, b]);
     }
 
+    // Attacker runtime — everything the focus actor's turns close over, built once.
+    // The attacker carries the top-level inputs, the global merged lookups, and the
+    // shared gates. Walked team runtimes (Task 4) come from TeamActorInput with their
+    // own gate instances and empty lookups. The engine core keys on runtime/actor ids.
+    const attackerRuntime: PlayerActorRuntime = {
+        actor: attacker,
+        focus: attacker.id === focusActorId,
+        castSkills: shipSkills,
+        reactiveAbilities,
+        timedSelfBySlot,
+        timedEnemyBySlot,
+        hasChargedSkill,
+        attack,
+        crit,
+        critDamage,
+        defensePenetration,
+        defence,
+        hp,
+        debuffLandingChance,
+        selfDotModifier,
+        defensePenetrationBuff,
+        affinityDamageModifier,
+        affinityCritCap,
+        affinityCritPenalty,
+        affinityDisadvantage,
+        allyChargePerRound,
+        activeCritGate,
+        chargedCritGate,
+        debuffLandingGate,
+        extendChanceGate,
+        landsTimedEnemyApplication,
+        selfBuffLookup,
+        enemyDebuffLookup,
+    };
+
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
     let totalDirectRaw = 0;
@@ -437,10 +472,10 @@ export function runCombat(input: CombatEngineInput): {
 
     const roundData: RoundData[] = [];
 
-    // Round-scoped context the enemy's DoT processing reads from the attacker's turn.
-    // Set at the end of every attacker turn (see AttackerRoundCtx). Only undefined
+    // Round-scoped context the enemy's DoT processing reads from the focus actor's turn.
+    // Set at the end of every focus-actor turn (see PlayerRoundCtx). Only undefined
     // when the enemy acts before the attacker has EVER acted (faster-enemy round 1).
-    let lastAttackerCtx: AttackerRoundCtx | undefined;
+    let lastAttackerCtx: PlayerRoundCtx | undefined;
 
     // --- Phase 3 reactive triggers ---
     // Intent queue (FIFO). Reactive listeners enqueue follow-up executions; the engine
@@ -476,9 +511,9 @@ export function runCombat(input: CombatEngineInput): {
             }
             return d;
         };
-        // Per-attacker-turn results; the post-round assembly reads the LAST one for the
+        // Per-focus-turn results; the post-round assembly reads the LAST one for the
         // row's attacker fields. Numeric damage totals are summed across all turns.
-        const attackerTurns: AttackerTurnResult[] = [];
+        const focusTurns: PlayerTurnResult[] = [];
         // Team-turn resisted enemy applications recorded BEFORE any attacker turn this
         // round (faster team actors). Drained into the FIRST subsequent attacker turn's
         // resistedEnemyDebuffs head; team turns AFTER an attacker turn append to the LAST
@@ -535,7 +570,7 @@ export function runCombat(input: CombatEngineInput): {
                             ),
                         effectiveAttack: lastAttackerCtx?.effectiveAttack,
                         recordResisted: (resisted) => {
-                            const lastTurn = attackerTurns[attackerTurns.length - 1];
+                            const lastTurn = focusTurns[focusTurns.length - 1];
                             // After an attacker turn this round → append to its resisted list;
                             // before any → stage into pendingResisted (drained into the next
                             // attacker turn's head), mirroring the Task-2 team-resist staging.
@@ -564,48 +599,23 @@ export function runCombat(input: CombatEngineInput): {
             if (actor.kind === 'attacker') {
                 // ====================================================================
                 // ATTACKER TURN — the full damage/buff/DoT-application pipeline lives
-                // in runAttackerTurn (attackerTurn.ts), minus the DoT-processing calls
+                // in runPlayerTurn (playerTurn.ts), minus the DoT-processing calls
                 // (tickDoTs / processBombs / processAccumulators) which run on the enemy
                 // turn. It returns everything the round's RoundData row needs from this
                 // turn; the numeric damage fields fold into the round accumulator below.
+                // The attacker's per-actor config/gates/stats are bundled in
+                // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                 // ====================================================================
-                const turn = runAttackerTurn({
-                    actor,
-                    attacker,
+                const turn = runPlayerTurn({
+                    runtime: attackerRuntime,
                     enemy,
                     statusEngine,
                     corrosionEntries,
                     infernoEntries,
                     pendingBombs,
                     pendingAccumulators,
-                    timedEnemyBySlot,
-                    timedSelfBySlot,
-                    selfBuffLookup,
-                    enemyDebuffLookup,
-                    activeCritGate,
-                    chargedCritGate,
-                    debuffLandingGate,
-                    extendChanceGate,
-                    landsTimedEnemyApplication,
-                    shipSkills,
-                    hasChargedSkill,
-                    chargeCount,
-                    attack,
-                    crit,
-                    critDamage,
-                    defensePenetration,
-                    defensePenetrationBuff,
                     enemyDefense,
                     enemyHp,
-                    selfDotModifier,
-                    debuffLandingChance,
-                    affinityDamageModifier,
-                    affinityCritCap,
-                    affinityCritPenalty,
-                    affinityDisadvantage,
-                    defence,
-                    hp,
-                    allyChargePerRound,
                     enemyType,
                     bus,
                     round: r,
@@ -620,12 +630,11 @@ export function runCombat(input: CombatEngineInput): {
                     pendingResisted.length = 0;
                 }
 
-                // Fold the attacker turn's numeric damage into the round accumulator.
+                // Fold the focus turn's numeric damage into the round accumulator.
                 // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
                 // accumulator bursts ran earlier this round — a plain assignment would
-                // clobber them. direct/secondary/conditional are single-attacker-turn
+                // clobber them. direct/secondary/conditional are single-focus-turn
                 // today; += keeps the 0..N-turn seam additive.
-                // focus-actor turns (a later task renames attackerTurns to focusTurns).
                 // Invariant (today): actor.id === focusActorId — the enemy-turn writes ticks
                 // into dmg(focusActorId), so both resolve to the same map entry.
                 const d = dmg(actor.id);
@@ -633,7 +642,7 @@ export function runCombat(input: CombatEngineInput): {
                 d.secondary += turn.secondaryDamage;
                 d.conditional += turn.conditionalDamage;
                 d.detonation += turn.detonationDamage;
-                attackerTurns.push(turn);
+                focusTurns.push(turn);
 
                 // Hand the enemy's DoT-processing turn the round-scoped context. With a
                 // faster enemy this is the PREVIOUS round's context, hence the carried
@@ -692,7 +701,7 @@ export function runCombat(input: CombatEngineInput): {
                     })
                 );
                 if (teamResisted.length > 0) {
-                    const lastTurn = attackerTurns[attackerTurns.length - 1];
+                    const lastTurn = focusTurns[focusTurns.length - 1];
                     if (lastTurn) {
                         // Slower team turn: append to the last attacker turn's resisted list.
                         lastTurn.resistedEnemyDebuffs.push(...teamResisted);
@@ -789,18 +798,18 @@ export function runCombat(input: CombatEngineInput): {
             bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
         }
 
-        // The row's attacker fields come from the LAST attacker turn this round. Rounds
-        // always have exactly one attacker turn today (the attacker is in every queue),
+        // The row's attacker fields come from the LAST focus turn this round. Rounds
+        // always have exactly one focus turn today (the attacker is in every queue),
         // so this reproduces the old definite-assignment provenance. The throw replaces
         // the implicit definite-assignment crash with an explicit one naming the Phase-3+
-        // seam: reactive triggers may APPEND extra attacker turns (read the last), but a
-        // round with ZERO attacker turns is impossible while the attacker is always queued.
-        if (!attackerTurns.length) {
+        // seam: reactive triggers may APPEND extra focus turns (read the last), but a
+        // round with ZERO focus turns is impossible while the focus actor is always queued.
+        if (!focusTurns.length) {
             throw new Error(
-                `combat round ${r} produced no attacker turn (Phase-3+ seam: extra turns append, zero turns impossible while the attacker is always queued)`
+                `combat round ${r} produced no focus actor turn (Phase-3+ seam: extra turns append, zero turns impossible while the focus actor is always queued)`
             );
         }
-        const lastAttackerTurn = attackerTurns[attackerTurns.length - 1];
+        const lastAttackerTurn = focusTurns[focusTurns.length - 1];
         const action = lastAttackerTurn.action;
         const roundCrit = lastAttackerTurn.roundCrit;
         const enemyHpPct = lastAttackerTurn.enemyHpPct;

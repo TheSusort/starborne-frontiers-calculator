@@ -58,7 +58,7 @@ function isReactiveAbility(ability: Ability): boolean {
 /**
  * Partition the input ShipSkills ONCE at setup into:
  *  - `castSkills`: everything except live-trigger buff/debuff/dot/charge abilities.
- *    Feeds every on-cast pipeline (status registration loop + runAttackerTurn).
+ *    Feeds every on-cast pipeline (status registration loop + runPlayerTurn).
  *  - `reactiveAbilities`: the excluded abilities, in slot/text order — fixed
  *    registration order = fixed execution order (determinism).
  */
