@@ -1,3 +1,20 @@
+/** Per-actor damage contributions within one round (spec: per-actor accounting —
+ *  the simulator-page seam). secondary/conditional are sub-buckets of direct
+ *  (mirroring rawTotals); corrosion/inferno/detonation are the enemy-turn channels
+ *  attributed to the entry's applier. */
+export interface ActorDamage {
+    direct: number;
+    secondary: number;
+    conditional: number;
+    corrosion: number;
+    inferno: number;
+    detonation: number;
+}
+
+export function emptyActorDamage(): ActorDamage {
+    return { direct: 0, secondary: 0, conditional: 0, corrosion: 0, inferno: 0, detonation: 0 };
+}
+
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down. */
 export interface ActiveDoTStack {
     stacks: number;

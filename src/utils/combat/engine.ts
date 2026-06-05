@@ -4,10 +4,12 @@ import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
     ActiveDoTStack,
+    ActorDamage,
     PendingAccumulator,
     PendingBomb,
     createActor,
     buildTurnQueue,
+    emptyActorDamage,
 } from './state';
 import {
     ActiveBuff,
@@ -269,6 +271,11 @@ export function runCombat(input: CombatEngineInput): {
         },
     });
 
+    // The reported actor. Internal for now — the DPS adapter's attacker. The engine core
+    // keys on this, never on the literal 'attacker' (end-state rule, spec). A later phase
+    // lifts this into CombatEngineInput once multi-actor damage rows are needed (YAGNI).
+    const focusActorId = 'attacker';
+
     // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
     // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
     // enemy via the status engine's per-source timed sets). Dummy combat stats keep the
@@ -456,17 +463,19 @@ export function runCombat(input: CombatEngineInput): {
         const queue = buildTurnQueue([...teamCombatActors, attacker, enemy]);
 
         // --- Round accumulator, shared by the turn blocks and the post-round assembly.
-        // Numeric damage fields accumulate (+=) across the round's turns; the enemy turn
-        // writes corrosion/inferno and folds bomb/accumulator bursts into detonation; each
-        // attacker turn contributes its row fields + detonate() portion as an
-        // AttackerTurnResult. Today every round has exactly one attacker turn (the attacker
-        // is in every queue); the loop tolerates 0..N for the Phase-3+ reactive seam.
-        let corrosionDamage = 0; // written by the enemy turn (below)
-        let infernoDamage = 0; // written by the enemy turn (below)
-        let detonationDamage = 0; // attacker detonate() portion + enemy bomb/accumulator bursts
-        let directDamage = 0; // summed across attacker turns
-        let secondaryDamage = 0; // summed across attacker turns
-        let conditionalDamage = 0; // summed across attacker turns
+        // Declared fresh each round (like the old scalar locals). Each actor writes into
+        // its own entry; the post-round assembly derives row fields from the focus entry.
+        // The helper `dmg(id)` lazily creates entries on first write — actors that never
+        // produce damage in a round simply have no entry, keeping the map sparse.
+        const roundDamage = new Map<string, ActorDamage>();
+        const dmg = (id: string): ActorDamage => {
+            let d = roundDamage.get(id);
+            if (!d) {
+                d = emptyActorDamage();
+                roundDamage.set(id, d);
+            }
+            return d;
+        };
         // Per-attacker-turn results; the post-round assembly reads the LAST one for the
         // row's attacker fields. Numeric damage totals are summed across all turns.
         const attackerTurns: AttackerTurnResult[] = [];
@@ -516,12 +525,14 @@ export function runCombat(input: CombatEngineInput): {
                         // enemy's HP AFTER the attacker's hit that just crit. This differs
                         // from the attacker turn's own gates, which deliberately use the
                         // entering-round HP (pre-existing convention, unchanged).
+                        // Map-sum: only the attacker entry exists today — equivalent to the
+                        // old scalar sum (direct + corrosion + inferno + detonation).
                         cumulativeDamage:
                             cumulativeDamage +
-                            directDamage +
-                            corrosionDamage +
-                            infernoDamage +
-                            detonationDamage,
+                            [...roundDamage.values()].reduce(
+                                (s, d) => s + d.direct + d.corrosion + d.inferno + d.detonation,
+                                0
+                            ),
                         effectiveAttack: lastAttackerCtx?.effectiveAttack,
                         recordResisted: (resisted) => {
                             const lastTurn = attackerTurns[attackerTurns.length - 1];
@@ -610,14 +621,16 @@ export function runCombat(input: CombatEngineInput): {
                 }
 
                 // Fold the attacker turn's numeric damage into the round accumulator.
-                // += (not =) on detonationDamage: with a FASTER enemy, the enemy's bomb/
+                // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
                 // accumulator bursts ran earlier this round — a plain assignment would
-                // clobber them. directDamage/secondaryDamage/conditionalDamage are
-                // single-attacker-turn today; += keeps the 0..N-turn seam additive.
-                directDamage += turn.directDamage;
-                secondaryDamage += turn.secondaryDamage;
-                conditionalDamage += turn.conditionalDamage;
-                detonationDamage += turn.detonationDamage;
+                // clobber them. direct/secondary/conditional are single-attacker-turn
+                // today; += keeps the 0..N-turn seam additive.
+                // focus-actor turns (a later task renames attackerTurns to focusTurns).
+                const d = dmg(actor.id);
+                d.direct += turn.directDamage;
+                d.secondary += turn.secondaryDamage;
+                d.conditional += turn.conditionalDamage;
+                d.detonation += turn.detonationDamage;
                 attackerTurns.push(turn);
 
                 // Hand the enemy's DoT-processing turn the round-scoped context. With a
@@ -718,10 +731,18 @@ export function runCombat(input: CombatEngineInput): {
                                 damage,
                             }),
                     });
-                    corrosionDamage = ticks.corrosionDamage;
-                    infernoDamage = ticks.infernoDamage;
+                    // Corrosion/inferno ticks are = (assign) into the focus entry — today
+                    // there is exactly one enemy turn per round, so assign is correct; the
+                    // old scalar locals were = for the same reason. Per-entry sourceId
+                    // attribution (when team DoTs land) arrives in a later task.
+                    const fd = dmg(focusActorId);
+                    fd.corrosion = ticks.corrosionDamage;
+                    fd.inferno = ticks.infernoDamage;
 
-                    detonationDamage += processBombs({
+                    // Bombs and accumulators are += into detonation: with a FASTER enemy,
+                    // the attacker's detonate() portion already ran earlier this round (the
+                    // attacker turn fold above used +=). The old scalar was also += here.
+                    fd.detonation += processBombs({
                         pendingBombs,
                         affinityMult,
                         emitBombDetonated: (stacks, damage) =>
@@ -733,7 +754,7 @@ export function runCombat(input: CombatEngineInput): {
                                 damage,
                             }),
                     });
-                    detonationDamage += processAccumulators({
+                    fd.detonation += processAccumulators({
                         pendingAccumulators,
                         directDamage: ctxDirect,
                     });
@@ -781,9 +802,19 @@ export function runCombat(input: CombatEngineInput): {
         const landedEnemyDebuffs = lastAttackerTurn.landedEnemyDebuffs;
         const resistedEnemyDebuffs = lastAttackerTurn.resistedEnemyDebuffs;
 
-        // --- Post-round assembly: total the round's damage (now including the enemy
-        // turn's DoT ticks/bursts), update cumulative totals + enemy HP, emit hp-changed /
-        // ship-destroyed, and push the RoundData row. Expressions unchanged — relocated. ---
+        // --- Post-round assembly: derive row fields from the FOCUS entry, total the
+        // round's damage (now including the enemy turn's DoT ticks/bursts), update
+        // cumulative totals + enemy HP, emit hp-changed / ship-destroyed, and push
+        // the RoundData row. Only the attacker entry exists today — semantically identical
+        // to the old scalar locals.
+        const focus = dmg(focusActorId);
+        // Row fields sourced from the focus entry. secondary/conditional go only to
+        // rawTotals (RoundData has no sub-bucket columns) so they're read inline below.
+        const directDamage = focus.direct;
+        const corrosionDamage = focus.corrosion;
+        const infernoDamage = focus.inferno;
+        const detonationDamage = focus.detonation;
+
         if (detonationDamage > 0) {
             bus.emit({
                 type: 'dot-detonated',
@@ -793,14 +824,14 @@ export function runCombat(input: CombatEngineInput): {
             });
         }
 
-        const totalRoundDamage = directDamage + corrosionDamage + infernoDamage + detonationDamage;
+        const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
         cumulativeDamage += totalRoundDamage;
-        totalDirectRaw += directDamage;
-        totalSecondaryRaw += secondaryDamage;
-        totalConditionalRaw += conditionalDamage;
-        totalCorrosionRaw += corrosionDamage;
-        totalInfernoRaw += infernoDamage;
-        totalDetonationRaw += detonationDamage;
+        totalDirectRaw += focus.direct;
+        totalSecondaryRaw += focus.secondary;
+        totalConditionalRaw += focus.conditional;
+        totalCorrosionRaw += focus.corrosion;
+        totalInfernoRaw += focus.inferno;
+        totalDetonationRaw += focus.detonation;
 
         // Track the enemy's remaining HP and emit hp-changed / ship-destroyed taps
         // (emission-only; the sim keeps hitting the dead dummy regardless).
