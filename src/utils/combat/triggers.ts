@@ -204,10 +204,13 @@ function payloadFromConfig(cfg: {
  * the ability's config type (the ONLY state mutator in the trigger machinery):
  *  - charge → cap-bumped attacker charges (no-op when chargeCount === 0).
  *  - buff (self) → timed application (duration ?? 1; reactive buffs bypass aura
- *    classification — their duration decides) + buff-applied.
+ *    classification — their duration decides) + buff-applied. NOTE: a persistent
+ *    stacking buffName (see persistentStackingBuffs) is routed inside statusEngine to
+ *    the persistent-stack map instead — it accumulates a stack and ignores duration.
  *  - debuff (enemy) → drain-time condition gate, then landing draw: landed →
  *    timed application + debuff-applied (chainable); resisted → resisted list +
- *    debuff-resisted.
+ *    debuff-resisted. NOTE: a persistent stacking buffName lands as an accumulating
+ *    stack (duration ?? 1 is irrelevant — statusEngine routes it persistent by name).
  *  - dot → landing draw, then append to the enemy DoT containers + dot-applied
  *    (chainable). Bombs need effectiveAttack; skipped with a note when undefined.
  *  - any other type → skipped silently (not-simulated follow-up payloads).

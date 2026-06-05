@@ -7,7 +7,7 @@ export const CURRENT_VERSION = '1.63.0';
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: you can now set a minimum (or maximum) Effective HP as a stat limit — handy when you care about overall survivability rather than tuning HP and Defense separately. Works as a soft limit or a hard requirement like any other stat.',
-    'Major DPS Calculator engine upgrade: ship skills are auto-parsed into an editable ability model, and the simulation now runs a real combat engine — speed-ordered turns for team ships and the enemy (with a per-config Turn Order strip), live conditional gates, application-time debuff landing with persistent windows, buff-family tier rules, charge cadences with passive auras, and reactive triggers (charge-on-inflict, crit-triggered effects, start-of-round buffs) firing from real combat events. Includes numerous accuracy fixes (Valerian, Hemlock, Oleander, Enforcer).',
+    'Major DPS Calculator engine upgrade: ship skills are auto-parsed into an editable ability model, and the simulation now runs a real combat engine — speed-ordered turns for team ships and the enemy (with a per-config Turn Order strip), live conditional gates, application-time debuff landing with persistent windows, buff-family tier rules, charge cadences with passive auras, and reactive triggers (charge-on-inflict, crit-triggered effects, start-of-round buffs) firing from real combat events. Includes numerous accuracy fixes (Valerian, Hemlock, Oleander, Enforcer, and persistent stacking debuffs like Defense Shred that climb per hit and never expire).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

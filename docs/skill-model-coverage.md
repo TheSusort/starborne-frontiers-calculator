@@ -230,6 +230,23 @@ buff/charge-aura), source it from firing + passive.
   union values with plain-language labels. Non-live triggers render a note "Not simulated —
   treated as assume-active". Changing the trigger on a buff/debuff/dot/charge ability is
   sufficient to route it through the reactive machinery.
+- **Persistent stacking statuses (game-verified 2026-06-05).** Four named statuses are NOT timed,
+  regardless of what the skill text says — each landed application adds a stack (capped at the
+  buff DB max) and the status persists until cleansed/consumed. Since cleanse, kills, and incoming
+  hits are not simulated, they are PERMANENT in-sim:
+  **Defense Shred** (max 20, -2% Defense/stack), **Blast** (max 4, +15% Outgoing/stack),
+  **Overload** (max 10, removed on-kill in-game → never in-sim), **Titanite Plating** (max 5, loses
+  a stack per incoming hit in-game → never in-sim). The **buff-name rule OVERRIDES the skill-text
+  duration** — Enforcer's "inflicts Defense Shred for 3 turns" persists and climbs in-game, so the
+  3-turn text is ignored. Both application doors (`statusEngine.applyTimedAbilityStatus` and the
+  scheduled `upsertBuff` path) route these by name into per-side persistent-stack maps before the
+  family-rule timed paths; they fold with effect × stacks and carry a `turnsRemaining: 'permanent'`
+  sentinel so the attacker-turn partition takes the no-re-roll fold (a landed persistent status is
+  never re-rolled per round — only NEW applications can be resisted, adding no stack). The list
+  lives in `src/constants/persistentStackingBuffs.ts` (NOT `buffs.ts`, which `fetch-buffs`
+  regenerates). **Defense Matrix stays TIMED** (its texts carry "for x turns") — deliberately
+  excluded. **Warding Screen** ("Stackable up to 4") is an OPEN QUESTION — unverified in-game,
+  deliberately absent until confirmed.
 
 ---
 

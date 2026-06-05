@@ -1,10 +1,14 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
+import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 
 export interface ActiveBuff {
     buffName: string;
-    turnsRemaining: number | 'recurring';
+    /** Numeric = timed window; 'recurring' = re-applied each round (always/aura/accum,
+     *  re-rolls landing per round); 'permanent' = persistent stacking status that landed
+     *  ONCE at application and must NOT be re-rolled per round (see persistentStackingBuffs). */
+    turnsRemaining: number | 'recurring' | 'permanent';
     stacks?: number; // defined for accumulating buffs; current stack count
 }
 
@@ -178,6 +182,18 @@ interface AccumulatingState {
     conditions?: Condition[];
 }
 
+/** Persistent stacking status state (game-verified 2026-06-05). These statuses land ONCE at
+ *  application, accumulate one stack per landed application (capped at maxStacks), and never
+ *  expire in-sim — see src/constants/persistentStackingBuffs.ts. `payload` is present only for
+ *  ability-sourced applications (folded via timedAbilityStatuses); scheduled applications carry
+ *  no payload (folded through snapshot()'s active lists + the buff lookup). */
+interface PersistentStackState {
+    buffName: string;
+    stacks: number;
+    maxStacks?: number;
+    payload?: AbilityStatusPayload;
+}
+
 /** Per-source timed buff/debuff sets used by `createStatusEngine` to route scheduled
  *  timed upserts to the correct source turn. 'attacker' holds the legacy merged arrays'
  *  timed entries; each team source holds its own. `sourceFired` looks the source up here. */
@@ -263,6 +279,43 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const selfMap = new Map<string, BuffState>();
     const enemyMap = new Map<string, BuffState>();
 
+    // Persistent stacking statuses (game-verified 2026-06-05). Routed by buff NAME before the
+    // family-rule timed paths: each landed application adds a stack (capped), the status never
+    // expires in-sim. Keyed by buffName (not familyKey — these names carry no Roman tier).
+    const persistentSelf = new Map<string, PersistentStackState>();
+    const persistentEnemy = new Map<string, PersistentStackState>();
+
+    // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
+    // on first application. `payload` is stored for ability-sourced applications and refreshed on
+    // each application (the effect is identical per stack; the fold multiplies effect × stacks).
+    const addPersistentStack = (
+        side: 'self' | 'enemy',
+        buffName: string,
+        applicationStacks: number,
+        payload?: AbilityStatusPayload
+    ): void => {
+        const map = side === 'self' ? persistentSelf : persistentEnemy;
+        const maxStacks = PERSISTENT_STACKING_BUFFS.get(buffName);
+        const existing = map.get(buffName);
+        if (existing) {
+            existing.stacks =
+                maxStacks !== undefined
+                    ? Math.min(existing.stacks + applicationStacks, maxStacks)
+                    : existing.stacks + applicationStacks;
+            if (payload) existing.payload = payload;
+            return;
+        }
+        map.set(buffName, {
+            buffName,
+            stacks:
+                maxStacks !== undefined
+                    ? Math.min(applicationStacks, maxStacks)
+                    : applicationStacks,
+            maxStacks,
+            payload,
+        });
+    };
+
     // Ability-sourced aura statuses (recurring/passive): held with their (already
     // live-gated) conditions; effect inclusion is re-evaluated per round.
     const auraSelf: Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] = [];
@@ -298,7 +351,16 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         incrementPerRound(accumEnemyMap);
     };
 
-    const upsertBuff = (buff: SelectedGameBuff, map: Map<string, BuffState>) => {
+    const upsertBuff = (buff: SelectedGameBuff, side: 'self' | 'enemy') => {
+        const map = side === 'self' ? selfMap : enemyMap;
+        // Persistent stacking statuses route by NAME before the family-rule timed path: this
+        // application landed (the landing hook already ran at the call site), so add a stack
+        // (capped) to the persistent map. The text skillDuration is intentionally ignored — the
+        // buff-name rule overrides it (game-verified 2026-06-05).
+        if (PERSISTENT_STACKING_BUFFS.has(buff.buffName)) {
+            addPersistentStack(side, buff.buffName, buff.stacks || 1);
+            return;
+        }
         if (typeof buff.skillDuration !== 'number') return;
         const { familyKey, tier } = deriveFamilyKey(buff.buffName);
         const existing = map.get(familyKey);
@@ -355,7 +417,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
         // Timed scheduled buffs (this source's) whose skillSource matches the fired slot.
         for (const buff of sets.timedSelf) {
-            if (buff.skillSource === slot) upsertBuff(buff, selfMap);
+            if (buff.skillSource === slot) upsertBuff(buff, 'self');
         }
         // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
@@ -368,15 +430,18 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const appliedEnemy: string[] = [];
         for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
-            if (typeof buff.skillDuration !== 'number') continue;
+            const isPersistent = PERSISTENT_STACKING_BUFFS.has(buff.buffName);
+            // Persistent statuses ignore skillDuration; non-persistent timed entries require a
+            // numeric duration to upsert a finite window.
+            if (!isPersistent && typeof buff.skillDuration !== 'number') continue;
             if (!landsTimedEnemyApplication(buff)) {
                 resistedEnemy.push(buff.buffName);
                 continue;
             }
             // Collect the name BEFORE the upsert (landed = passed the landing hook,
-            // regardless of family absorption inside upsertBuff).
+            // regardless of family absorption / persistent-cap absorption inside upsertBuff).
             appliedEnemy.push(buff.buffName);
-            upsertBuff(buff, enemyMap);
+            upsertBuff(buff, 'enemy');
         }
         return { resistedEnemy, appliedEnemy };
     };
@@ -409,6 +474,26 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 stacks: s.stacks,
             }));
 
+        // Scheduled-sourced persistent stacking statuses (no payload): included with the
+        // 'permanent' sentinel + stack count so the attacker-turn partition routes them to the
+        // no-re-roll fold (foldTimedEnemyDebuffs) and expandBuffs applies the stack override.
+        // Ability-sourced persistent statuses carry a payload and are excluded here — the engine
+        // appends them via timedAbilityStatuses (mirroring the timed-map exclusion below).
+        const selfPersistentSnap = [...persistentSelf.values()]
+            .filter((s) => !s.payload && s.stacks > 0)
+            .map((s) => ({
+                buffName: s.buffName,
+                turnsRemaining: 'permanent' as const,
+                stacks: s.stacks,
+            }));
+        const enemyPersistentSnap = [...persistentEnemy.values()]
+            .filter((s) => !s.payload && s.stacks > 0)
+            .map((s) => ({
+                buffName: s.buffName,
+                turnsRemaining: 'permanent' as const,
+                stacks: s.stacks,
+            }));
+
         // Timed scheduled statuses. Ability-sourced timed statuses (payload-carrying)
         // live in the same maps but are excluded here — the engine appends them via
         // timedAbilityStatuses after scheduled ones.
@@ -422,6 +507,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                         buffName: s.buffName,
                         turnsRemaining: s.turnsRemaining,
                     })),
+                ...selfPersistentSnap,
             ],
             activeEnemyDebuffs: [
                 ...enemyAlwaysSnap,
@@ -432,6 +518,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                         buffName: s.buffName,
                         turnsRemaining: s.turnsRemaining,
                     })),
+                ...enemyPersistentSnap,
             ],
         };
     };
@@ -497,6 +584,19 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 `StatusEngine.applyTimedAbilityStatus called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
+        // Persistent stacking statuses route by NAME before the family-rule timed path: this
+        // application landed (the landing roll/hook already ran at the caller's site), so add a
+        // stack (capped) and keep the payload for folding. The status.duration (text value) is
+        // intentionally ignored — the buff-name rule overrides it (game-verified 2026-06-05).
+        if (PERSISTENT_STACKING_BUFFS.has(status.payload.buffName)) {
+            addPersistentStack(
+                status.side,
+                status.payload.buffName,
+                status.payload.stacks || 1,
+                status.payload
+            );
+            return;
+        }
         // status.duration is guaranteed numeric by the timed variant — no runtime guard needed.
         const map = status.side === 'self' ? selfMap : enemyMap;
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
@@ -549,6 +649,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             out.push({
                 payload: s.payload,
                 active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
+            });
+        }
+        // Ability-sourced persistent stacking statuses (payload-carrying): folded exactly like
+        // landed timed statuses but with a stack multiplier and the 'permanent' sentinel (no
+        // expiry, no per-round re-roll). The fold multiplies effect × stacks via the payload.
+        const persistentMap = side === 'self' ? persistentSelf : persistentEnemy;
+        for (const s of persistentMap.values()) {
+            if (!s.payload) continue;
+            out.push({
+                payload: { ...s.payload, stacks: s.stacks },
+                active: { buffName: s.buffName, turnsRemaining: 'permanent', stacks: s.stacks },
             });
         }
         return out;

@@ -359,6 +359,9 @@ describe('Phase 3 reactive triggers', () => {
     // AFTER the first crit turn onward; crit 0 ⇒ never present. The crit
     // round's own directDamage is unaffected (lands after the hit).
     // ----------------------------------------------------------------------
+    // NOTE: a generic (non-persistent) buffName is used here so this scenario keeps testing the
+    // TIMED on-crit machinery. The real "Defense Shred" is now a persistent stacking status
+    // (game-verified 2026-06-05) and is covered separately below.
     const enforcerSkills = (): ShipSkills => ({
         slots: [
             {
@@ -374,7 +377,7 @@ describe('Phase 3 reactive triggers', () => {
                         trigger: 'on-crit',
                         config: {
                             type: 'debuff',
-                            buffName: 'Defense Shred',
+                            buffName: 'Timed Shred',
                             stacks: 1,
                             parsedEffects: { defense: -30 },
                             isStackable: false,
@@ -419,7 +422,7 @@ describe('Phase 3 reactive triggers', () => {
         const present = (rounds: typeof withCrit.result.rounds, n: number) =>
             rounds
                 .find((r) => r.round === n)!
-                .activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred');
+                .activeEnemyDebuffs.some((b) => b.buffName === 'Timed Shred');
 
         // crit 100 → every round crits → Shred applied after round 1's hit, active 2..3.
         expect(present(withCrit.result.rounds, 1)).toBe(false);
@@ -440,7 +443,7 @@ describe('Phase 3 reactive triggers', () => {
             })
         );
         for (const r of noCrit.result.rounds) {
-            expect(r.activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')).toBe(false);
+            expect(r.activeEnemyDebuffs.some((b) => b.buffName === 'Timed Shred')).toBe(false);
         }
     });
 
@@ -860,7 +863,7 @@ describe('Phase 3 reactive triggers', () => {
             })
         );
         for (const r of result.rounds) {
-            expect(r.activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')).toBe(false);
+            expect(r.activeEnemyDebuffs.some((b) => b.buffName === 'Timed Shred')).toBe(false);
         }
     });
 
@@ -941,5 +944,184 @@ describe('Phase 3 reactive triggers', () => {
                 false
             );
         }
+    });
+
+    // ----------------------------------------------------------------------
+    // Persistent stacking statuses (game-verified 2026-06-05). Defense Shred is a
+    // persistent stacking debuff: each landed application adds a stack (capped at
+    // the buff DB's 20), the buff-name rule OVERRIDES the skill text's "for x turns",
+    // and it never expires in-sim. These cover the Enforcer reactive shape, the
+    // no-re-roll invariant, and the on-cast (active-slot) application path.
+    // ----------------------------------------------------------------------
+
+    // Enforcer shape: on-crit passive enemy debuff named "Defense Shred" with a TEXT
+    // duration of 3 that MUST be ignored (the name routes it persistent). Stacks climb
+    // +1 per crit round, never expire, and grow effective defense reduction.
+    const persistentEnforcerSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } })],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-crit',
+                        config: {
+                            type: 'debuff',
+                            buffName: 'Defense Shred',
+                            stacks: 1,
+                            parsedEffects: { defense: -2 },
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 3, // text value — MUST be ignored (persists in-game)
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    it('persistent (test 4): Defense Shred climbs +1 per crit round, never expires, scales defense reduction', () => {
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: persistentEnforcerSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 50,
+                numRounds: 10,
+            })
+        );
+
+        const stacksAt = (n: number): number | undefined =>
+            result.rounds
+                .find((r) => r.round === n)!
+                .activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred')?.stacks;
+
+        // Identify crit rounds (the on-crit trigger fires on a crit; the inflicted Shred is
+        // visible from the FOLLOWING round). Stacks must form a non-decreasing sequence that
+        // strictly grows on rounds after a crit, and never drop (no expiry).
+        const seq = result.rounds.map((r) => stacksAt(r.round) ?? 0);
+        // Non-decreasing (never expires / never loses a stack).
+        for (let i = 1; i < seq.length; i++) {
+            expect(seq[i]).toBeGreaterThanOrEqual(seq[i - 1]);
+        }
+        // It grows beyond a single stack over 10 rounds at crit 50 (multiple crits land).
+        expect(Math.max(...seq)).toBeGreaterThan(1);
+        // Capped at the buff DB max of 20.
+        expect(Math.max(...seq)).toBeLessThanOrEqual(20);
+
+        // Stacking debuff is never expired (persistent → no buff-expired for it).
+        // (Defense Shred is enemy-side; it would emit nothing on expiry regardless, but assert
+        //  the active list never drops it once present.)
+        const firstPresent = result.rounds.findIndex((r) =>
+            r.activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')
+        );
+        expect(firstPresent).toBeGreaterThanOrEqual(0);
+        for (let i = firstPresent; i < result.rounds.length; i++) {
+            expect(
+                result.rounds[i].activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')
+            ).toBe(true);
+        }
+
+        // Effective defense reduction scales with stacks → directDamage on the LAST round
+        // (most stacks) strictly exceeds the round right after Shred first appears (1 stack).
+        const lastRound = result.rounds[result.rounds.length - 1];
+        const firstStackedRound = result.rounds[firstPresent];
+        expect(lastRound.directDamage).toBeGreaterThan(firstStackedRound.directDamage);
+    });
+
+    it('persistent (test 5): an already-landed persistent debuff is NOT re-rolled per round — it stays active even on rounds where a fresh application is resisted', () => {
+        // debuffLandingChance 0.5: a NEW application attempt may be resisted (legitimate — a
+        // resisted re-application adds no stack), but the ALREADY-LANDED persistent status must
+        // NOT itself be re-rolled each round (the snapshot/partition no-re-roll invariant). So on
+        // any round where a fresh application is resisted, the existing stacks remain active.
+        const { events, result } = collectEvents(
+            baseInput({
+                shipSkills: persistentEnforcerSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 100, // every round crits → an application is attempted each round
+                debuffLandingChance: 0.5,
+                numRounds: 10,
+            })
+        );
+
+        // Once present, it stays present every subsequent round (the existing status is never
+        // re-rolled away — only NEW applications can be resisted, and they add no stack).
+        const firstPresent = result.rounds.findIndex((r) =>
+            r.activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')
+        );
+        expect(firstPresent).toBeGreaterThanOrEqual(0);
+        for (let i = firstPresent; i < result.rounds.length; i++) {
+            expect(
+                result.rounds[i].activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')
+            ).toBe(true);
+        }
+
+        // On every round where a fresh application was resisted (after first landing), the
+        // already-landed status is STILL active — proving the existing status is not re-rolled.
+        const firstPresentRound = result.rounds[firstPresent].round;
+        const resistedRounds = events
+            .filter(
+                (e) =>
+                    e.type === 'debuff-resisted' &&
+                    (e as { buffName?: string }).buffName === 'Defense Shred' &&
+                    (e as { round?: number }).round! > firstPresentRound
+            )
+            .map((e) => (e as { round: number }).round);
+        for (const rn of resistedRounds) {
+            expect(
+                result.rounds
+                    .find((r) => r.round === rn)!
+                    .activeEnemyDebuffs.some((b) => b.buffName === 'Defense Shred')
+            ).toBe(true);
+        }
+    });
+
+    it('persistent (test 6): an active-slot (on-cast) persistent debuff adds +1 stack per cast', () => {
+        const onCastSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Defense Shred',
+                                stacks: 1,
+                                parsedEffects: { defense: -2 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 3, // ignored — persistent
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: onCastSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 0,
+                numRounds: 5,
+            })
+        );
+
+        // Active every round → one application per cast → stacks 1,2,3,4,5.
+        const seq = result.rounds.map(
+            (r) => r.activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred')?.stacks ?? 0
+        );
+        expect(seq).toEqual([1, 2, 3, 4, 5]);
     });
 });
