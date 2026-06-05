@@ -1046,6 +1046,21 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Stealth')).toBeUndefined();
     });
 
+    it('does NOT classify passive-voice "gets/was critically damaged" as on-crit (lookbehind verb set)', () => {
+        expect(
+            detectReactiveTrigger(
+                'When this Unit gets critically damaged, it gains <unit-skill>Stealth</unit-skill>.',
+                'Stealth'
+            )
+        ).toBeUndefined();
+        expect(
+            detectReactiveTrigger(
+                'If this Unit was critically damaged, it gains <unit-skill>Stealth</unit-skill>.',
+                'Stealth'
+            )
+        ).toBeUndefined();
+    });
+
     it('returns undefined for a non-reactive grant', () => {
         const text = 'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns.';
         expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();

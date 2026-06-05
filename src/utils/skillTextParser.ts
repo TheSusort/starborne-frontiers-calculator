@@ -625,10 +625,13 @@ export function detectGrantConditions(
 
 // Active-voice self-crit phrasing: "critically hits/hitting" or "critically damages/damaging".
 // Deliberately excludes the passive participles "hit"/"damaged" (so "is critically hit" and
-// "is critically damaged" do NOT match), and carries a negative lookbehind for the linking
-// verbs that introduce a passive clause as a second guard. This is STRICTER than
-// detectGrantConditions' self-crit rule (which uses /critically (?:hits|damag)/i and therefore
-// misclassifies the passive "is critically damaged" — see detectReactiveTrigger docs).
+// "is critically damaged" do NOT match). The negative lookbehind is a second guard against
+// copular/auxiliary passives whose verb form WOULD otherwise match the alternation — e.g.
+// "is/was/gets/getting critically damaging" style constructions; the verb set
+// (is|was|are|were|been|be|being|gets?|getting) covers the linking verbs that introduce a
+// passive clause. This is STRICTER than detectGrantConditions' self-crit rule (which uses
+// /critically (?:hits|damag)/i and therefore misclassifies the passive "is critically
+// damaged" — see detectReactiveTrigger docs).
 const ACTIVE_SELF_CRIT_RE =
     /(?<!\b(?:is|was|are|were|been|be|being|gets?|getting)\s)critically\s+(?:hits|hitting|damages|damaging)/i;
 const START_OF_ROUND_RE = /at the start of (?:the|each|every) round/i;
