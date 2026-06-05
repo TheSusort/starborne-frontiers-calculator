@@ -782,27 +782,27 @@ describe('dpsGoldenParity', () => {
     //   lands the round a crit occurs (and also emits debuff-applied → additional +1 charge).
     // chargeCount:3; BASE hacking/security → 100% landing chance; 10 rounds.
     // Charge accumulation trace (preTurn banking + reactive drains, capped at chargeCount=3):
-    //   Active non-crit: preTurn +1 banking + reactive +1 (Sensor Down debuff) = +2 net.
-    //   Active crit: preTurn +1 banking + reactive +1 (Sensor Down) + reactive +1 (Armor Breach) = +3, capped at 3.
-    //   Charged round: charges reset to 0 at preTurn; no debuffs inflicted → no reactive gain.
-    // Round sequence (charges shown AFTER the round ends):
-    //   r1 active(nc): 0→+1(preTurn)=1, debuff→+1=2. charges=2.
-    //   r2 active(crit): 2→+1(preTurn)=3 → fires charged? NO, preTurn checks BEFORE +1
-    //     re-reading: charges=2 < 3 → active; charges += 1 → 3; debuff→+1 capped=3; Armor Breach +1 capped=3. charges=3.
-    //   r3 charged: charges=3 >= 3 → charged; charges=0. No reactive. charges=0.
-    //   r4 active(nc): 0→+1=1; debuff→+1=2. charges=2. (active crit accumulator: after r2 crit reset to 0; r4 is 3rd active → acc=50 no crit)
-    //   r5 active(crit): 2→+1=3; debuff→+1 capped=3; Armor Breach +1 capped=3. charges=3.
-    //   r6 charged: charges=3 → charged; charges=0.
-    //   r7 active(nc): 0→+1=1; debuff→+1=2. charges=2.
-    //   r8 active(crit): 2→+1=3; debuff capped=3; Armor Breach capped=3. charges=3.
-    //   r9 charged: charged; charges=0.
-    //   r10 active(nc): 0→+1=1; debuff→+1=2. charges=2.
-    // Charged rounds: r3, r6, r9 (3 charged rounds in 10-round window — cadence locked).
-    // Active crit rounds: r2, r5, r8 (active-stream accumulator: crits on even active rounds).
-    // Armor Breach visible at r3 (turnsRemaining=1, from r2 crit drain); r4 Armor Breach expires.
-    //   Similarly r5 crit → Armor Breach visible at r6 (but r6 is charged, so activeEnemyDebuffs
-    //   still shows it since snapshot captures state ENTERING the round before the action fires);
-    //   r7 Armor Breach expires. r8 crit → Armor Breach visible at r9 (charged); r10 Armor Breach expires.
+    //   Active non-crit: preTurn +1 banking + reactive +1 (Sensor Down inflict) = +2 net.
+    //   Active crit: preTurn +1 + reactive +1 (Sensor Down) + chained +1 (Armor Breach) = capped 3.
+    //   Charged round: charges reset to 0 at preTurn; the damage-only charged slot inflicts no
+    //     debuff, BUT a charged-stream crit chains on-crit → Armor Breach → +1 reactive charge.
+    // Hand-verified round sequence (charges/didCrit shown as snapshotted, i.e. end of round):
+    //   r1 active(nc):   0+1 bank, +1 Sensor Down → charges=2.
+    //   r2 active(CRIT): 2+1=3 cap; Sensor Down + Armor Breach gains capped → charges=3.
+    //   r3 charged(nc):  3>=3 fires, reset 0; no inflictions → charges=0.
+    //   r4 active(nc):   +1 bank +1 Sensor Down → charges=2.
+    //   r5 active(CRIT): 2+1=3 cap → charges=3.
+    //   r6 charged(CRIT): reset 0; chargedCritGate fires → Armor Breach chained → charges=1.
+    //   r7 active(nc):   1+1 bank +1 Sensor Down → charges=3.
+    //   r8 charged(nc):  3>=3 fires, reset 0 → charges=0.
+    //   r9 active(CRIT): 0+1 bank +1 Sensor Down +1 Armor Breach → charges=3.
+    //   r10 charged(CRIT): reset 0; chargedCrit fires → Armor Breach chained → charges=1.
+    // Charged rounds: r3, r6, r8, r10 (4 in the 10-round window — cadence locked).
+    // Crit rounds: r2/r5/r9 (active stream, 50% accumulator over active rounds) and r6/r10
+    //   (charged stream — the two action streams draw from SEPARATE crit accumulators).
+    // Armor Breach (duration 2, applied at the post-turn drain of each crit round, enemy
+    //   post-turn decrements same round) is visible with turnsRemaining=1 the FOLLOWING
+    //   round: r3 (from r2), r6 (from r5), r7 (from r6), r10 (from r9).
     snap('reactive triggers (charge on inflict + crit-inflicted debuff)', () => {
         const shipSkills: ShipSkills = {
             slots: [
