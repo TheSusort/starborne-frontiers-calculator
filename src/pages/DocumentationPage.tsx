@@ -2291,7 +2291,7 @@ const DocumentationPage: React.FC = () => {
                                         which buffs and debuffs are active that round and how many
                                         turns remain.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Turn Order:</span> Each
                                         simulated round, every ship acts once in descending Speed
                                         order — higher Speed acts first, with team support ships
@@ -2305,7 +2305,7 @@ const DocumentationPage: React.FC = () => {
                                         skills without direct damage (pure utility) still fire on
                                         their normal cadence and apply their effects.
                                     </p>
-                                    <p className="text-theme-text mb-2">
+                                    <p className="text-theme-text">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
                                         Skill effects that react to combat events — crit-triggered
                                         debuff inflictions, charge gains on inflicting a debuff, and
