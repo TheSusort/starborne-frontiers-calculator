@@ -14,7 +14,9 @@ interface DPSBuffPanelProps {
 }
 
 function formatTurns(t: ActiveBuff['turnsRemaining']): string {
-    return t === 'recurring' ? '∞' : `${t}t`;
+    // 'recurring' = always-on aura; 'permanent' = persistent stacking status
+    // (Defense Shred et al.) — both render as unbounded.
+    return t === 'recurring' || t === 'permanent' ? '∞' : `${t}t`;
 }
 
 const DOT_NAMES: Record<DoTType, Record<number, string>> = {

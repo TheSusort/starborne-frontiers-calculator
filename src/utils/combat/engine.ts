@@ -377,6 +377,12 @@ export function runCombat(input: CombatEngineInput): {
                     maxStacks: cfg.maxStacks,
                 };
             } else if (isAura) {
+                // NOTE: persistent-stacking names (PERSISTENT_STACKING_BUFFS) should never
+                // reach the aura arm with current data — their cast applications either carry
+                // a stackTrigger (accumulating, climbs + caps there) or a reactive trigger
+                // (partitioned out before this loop; the executor routes them to the
+                // persistent map). If one ever lands here it would become a per-round
+                // re-rolled aura and silently lose persistence — see persistentStackingBuffs.ts.
                 status = { ...base, kind: 'aura' };
             } else {
                 // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
