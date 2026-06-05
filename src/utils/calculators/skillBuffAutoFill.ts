@@ -29,7 +29,10 @@ export function buildSkillBuffAutoFill(ship: Ship): SkillBuffAutoFill {
         ship.thirdPassiveSkillText,
     ]);
     return {
-        selfBuffs: toSelectedBuffs(effects.filter((e) => e.target === 'self')),
+        // selfBuffs = all PLAYER-SIDE effects (self/ally/all-allies). The legacy DPS picker
+        // path treats every entry here as player-side (unchanged); the builder reads each
+        // entry's effectTarget to route ally/all-allies grants to the right actors.
+        selfBuffs: toSelectedBuffs(effects.filter((e) => e.target !== 'enemy')),
         enemyDebuffs: toSelectedBuffs(
             effects.filter((e) => e.target === 'enemy'),
             sourceChargeCount,
@@ -74,6 +77,8 @@ function toSelectedBuffs(
             sourceStartCharged,
             stackTrigger,
             ...(effect.application !== undefined ? { application: effect.application } : {}),
+            // Carry the granular ally-scope so the builder can stamp the right ability target.
+            effectTarget: effect.target,
         });
     }
 

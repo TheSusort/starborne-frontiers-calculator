@@ -965,4 +965,39 @@ describe('buildShipAbilities', () => {
             expect(buff.trigger).toBe('on-bomb-detonated');
         });
     });
+
+    describe('parser ally-scope (team walk)', () => {
+        const namedBuff = (abilities: Ability[], name: string): Ability | undefined =>
+            abilities.find((a) => a.config.type === 'buff' && a.config.buffName === name);
+
+        it('all-allies grant produces a buff ability with target all-allies', () => {
+            const s = ship({
+                activeSkillText:
+                    'all allies gain <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('all-allies');
+        });
+
+        it('self gain produces a buff ability with target self', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('self');
+        });
+
+        it('single-ally grant produces a buff ability with target ally', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit grants the ally with the highest Attack <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('ally');
+        });
+    });
 });

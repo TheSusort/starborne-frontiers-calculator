@@ -919,7 +919,11 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 
 export interface SkillEffect {
     buffName: string;
-    target: 'self' | 'enemy';
+    // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
+    // chosen ally, 'all-allies' = every player actor. 'enemy' = enemy debuff. The combat engine
+    // routes 'ally'/'all-allies' grants from a walked team ship onto the right actors; for the
+    // attacker's own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    target: 'self' | 'ally' | 'all-allies' | 'enemy';
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
@@ -1038,6 +1042,31 @@ function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
     return found?.type === 'buff' ? 'self' : 'enemy';
 }
 
+// Single-ally phrasings: "the ally with/in …", "an ally", "an adjacent ally" (singular).
+// "all (adjacent) allies"/"allies" plural is handled by the all-allies branch first, so a
+// bare "allies" never reaches this — only a singular "ally" does.
+const SINGLE_ALLY_RE = /\bthe ally\b|\ban ally\b|\ban adjacent ally\b/i;
+// Ally-scoped (team-wide) grant phrasings: "all allies", bare plural "allies", "friendly …".
+const ALL_ALLIES_RE = /friendly|all allies|allies/i;
+
+/**
+ * Resolves the player-side ally-scope of a granted buff from its GRANTING CLAUSE, using the
+ * same masking-aware clause resolver (`resolveBuffClause`) as condition detection so "Inc."/
+ * "Out." abbreviation periods don't break sentence splitting. Returns:
+ *  - 'ally' for single-ally phrasings ("the ally with the highest Attack")
+ *  - 'all-allies' for team-wide phrasings ("all allies"/"allies"/"friendly units")
+ *  - 'self' otherwise ("This Unit gains/grants …", or a receiver-less self-anchored grant)
+ *
+ * For the attacker's own sim 'self' and 'all-allies' are equivalent (both fold onto the
+ * attacker's side); the distinction only matters when the engine walks a team ship's grants.
+ */
+function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' | 'all-allies' {
+    const clause = resolveBuffClause(skillText, buffName).toLowerCase();
+    if (SINGLE_ALLY_RE.test(clause)) return 'ally';
+    if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
+    return 'self';
+}
+
 /**
  * Maps a verb to how a debuff lands: "inflict" forms are resistible, "apply" forms are
  * guaranteed. Only meaningful for enemy debuffs; returns undefined for self-buff verbs.
@@ -1067,9 +1096,13 @@ export function parseSkillEffects(
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
 
-        // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed)
-        const target = verbToTarget(verb, buffName);
-        const application = target === 'enemy' ? verbToApplication(verb) : undefined;
+        // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
+        // Player-side grants get ally-scope granularity from the granting clause (team walk);
+        // enemy debuffs stay 'enemy'.
+        const side = verbToTarget(verb, buffName);
+        const target: SkillEffect['target'] =
+            side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
+        const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
         const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';

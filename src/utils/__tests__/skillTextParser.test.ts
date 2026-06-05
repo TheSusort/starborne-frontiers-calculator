@@ -204,6 +204,74 @@ describe('parseSkillEffects', () => {
         ).toEqual([{ buffName: 'Hacking Up III', target: 'self', duration: 2, source: 'active' }]);
     });
 
+    it('classifies "all allies gain Attack Up" as all-allies target', () => {
+        expect(
+            parseSkillEffects(
+                'all allies gain <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Attack Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('classifies "allies gain X" (unscoped plural) as all-allies', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit grants allies <unit-skill>Defense Up II</unit-skill> for 1 turn',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Defense Up II', target: 'all-allies', duration: 1, source: 'active' },
+        ]);
+    });
+
+    it('classifies "friendly units gain X" as all-allies', () => {
+        expect(
+            parseSkillEffects(
+                'Friendly units gain <unit-skill>Crit Power Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Crit Power Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('classifies "This Unit gains Attack Up" as self', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([{ buffName: 'Attack Up III', target: 'self', duration: 2, source: 'active' }]);
+    });
+
+    it('classifies "the ally with the highest Attack gains X" as ally', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit grants the ally with the highest Attack <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([{ buffName: 'Attack Up III', target: 'ally', duration: 2, source: 'active' }]);
+    });
+
+    it('keeps enemy-targeted debuffs enemy', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            {
+                buffName: 'Defense Down II',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
+        ]);
+    });
+
     it('assigns source field from argument', () => {
         const result = parseSkillEffects(
             'This Unit gains <unit-skill>Defense Up II</unit-skill> for 1 turn',
@@ -359,21 +427,23 @@ describe('parseSkillEffects', () => {
         ).toEqual([]);
     });
 
-    it('parses "granted" (passive voice) as a self-targeting buff', () => {
+    it('parses "granted" (passive voice) as a player-side buff with all-allies scope', () => {
         const result = parseSkillEffects(
             '(All) allies are granted <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-skill>Speed Up III</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toHaveLength(2);
+        // "(All) allies are granted …" is genuinely team-wide, so each grant carries all-allies
+        // scope (previously collapsed to 'self' under the binary self/enemy parser).
         expect(result[0]).toMatchObject({
             buffName: 'Attack Up III',
-            target: 'self',
+            target: 'all-allies',
             duration: 2,
             source: 'active',
         });
         expect(result[1]).toMatchObject({
             buffName: 'Speed Up III',
-            target: 'self',
+            target: 'all-allies',
             duration: 2,
             source: 'active',
         });

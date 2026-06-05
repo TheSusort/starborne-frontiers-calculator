@@ -123,6 +123,8 @@ export interface SelectedGameBuff {
     stackTrigger?: StackTrigger;
     // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
     application?: 'inflict' | 'apply';
+    /** Parser ally-scope (team walk): granular target of the granting clause; absent on manual picks. */
+    effectTarget?: 'self' | 'ally' | 'all-allies' | 'enemy';
 }
 
 export interface DPSShipConfig {

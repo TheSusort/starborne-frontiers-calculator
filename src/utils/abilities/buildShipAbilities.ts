@@ -902,7 +902,10 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
-    for (const buff of selfBuffs) mergeBuff(buff, 'self');
+    // Player-side grants carry their parser ally-scope (self/ally/all-allies) so the engine
+    // routes a walked team ship's grants correctly. Defaults to 'self' for round-trip buffs
+    // that predate the effectTarget field (e.g. manual picks converted via abilityToSelectedBuff).
+    for (const buff of selfBuffs) mergeBuff(buff, buff.effectTarget ?? 'self');
     // Accumulate-and-detonate effects (e.g. Echoing Burst) are represented by their own
     // accumulate-detonate ability from abilitiesFromText — skip the inert debuff card so
     // the effect isn't double-listed in the editor.
