@@ -775,22 +775,34 @@ describe('dpsGoldenParity', () => {
 
     // Scenario 18: reactive triggers — on-debuff-inflicted charge + on-crit-inflicted debuff.
     // Active slot: damage + timed enemy debuff (inflict, duration 2) applied every cast.
+    // Charged slot: damage (multiplier 300) — provides hasChargedSkill=true so reactively-
+    //   gained charges are actually spent on real charged rounds.
     // Passive slot: charge {trigger:'on-debuff-inflicted'} gains +1 every debuff-applied event
     //   from the attacker; timed enemy debuff {trigger:'on-crit', defense:-30, duration 2}
     //   lands the round a crit occurs (and also emits debuff-applied → additional +1 charge).
-    // No charged slot — hasChargedSkill=false; charges accumulate on attacker.charges (cap=3)
-    // from reactive triggers only (no preTurn banking). All rounds are active.
-    // crit:50 → deterministic accumulator fires on every 2nd active round (rounds 2,4,6,8,10);
-    // BASE hacking/security → 100% landing chance; chargeCount:3; 10 rounds.
-    // Charge accumulation trace (no banking, triggers only, capped at chargeCount=3):
-    //   Non-crit active: +1 (active debuff) per round.
-    //   Crit active:     +1 (active debuff) +1 (on-crit debuff) = +2 (often hits cap 3).
-    // Round sequence: r1 active(nc,1), r2 active(crit,3), r3 active(nc,3), r4 active(crit,3),
-    //   r5 active(nc,3), r6 active(crit,3), r7 active(nc,3), r8 active(crit,3),
-    //   r9 active(nc,3), r10 active(crit,3).
-    // Defense-down 'Armor Breach' (-30%) first in activeEnemyDebuffs at r3 (applied
-    // end-of-r2 drain; Post-Turn decrements it to turnsRemaining=1; visible r3, expires after r3).
-    // directDamage shows defense-down effect on rounds 3,5,7,9 (Armor Breach active).
+    // chargeCount:3; BASE hacking/security → 100% landing chance; 10 rounds.
+    // Charge accumulation trace (preTurn banking + reactive drains, capped at chargeCount=3):
+    //   Active non-crit: preTurn +1 banking + reactive +1 (Sensor Down debuff) = +2 net.
+    //   Active crit: preTurn +1 banking + reactive +1 (Sensor Down) + reactive +1 (Armor Breach) = +3, capped at 3.
+    //   Charged round: charges reset to 0 at preTurn; no debuffs inflicted → no reactive gain.
+    // Round sequence (charges shown AFTER the round ends):
+    //   r1 active(nc): 0→+1(preTurn)=1, debuff→+1=2. charges=2.
+    //   r2 active(crit): 2→+1(preTurn)=3 → fires charged? NO, preTurn checks BEFORE +1
+    //     re-reading: charges=2 < 3 → active; charges += 1 → 3; debuff→+1 capped=3; Armor Breach +1 capped=3. charges=3.
+    //   r3 charged: charges=3 >= 3 → charged; charges=0. No reactive. charges=0.
+    //   r4 active(nc): 0→+1=1; debuff→+1=2. charges=2. (active crit accumulator: after r2 crit reset to 0; r4 is 3rd active → acc=50 no crit)
+    //   r5 active(crit): 2→+1=3; debuff→+1 capped=3; Armor Breach +1 capped=3. charges=3.
+    //   r6 charged: charges=3 → charged; charges=0.
+    //   r7 active(nc): 0→+1=1; debuff→+1=2. charges=2.
+    //   r8 active(crit): 2→+1=3; debuff capped=3; Armor Breach capped=3. charges=3.
+    //   r9 charged: charged; charges=0.
+    //   r10 active(nc): 0→+1=1; debuff→+1=2. charges=2.
+    // Charged rounds: r3, r6, r9 (3 charged rounds in 10-round window — cadence locked).
+    // Active crit rounds: r2, r5, r8 (active-stream accumulator: crits on even active rounds).
+    // Armor Breach visible at r3 (turnsRemaining=1, from r2 crit drain); r4 Armor Breach expires.
+    //   Similarly r5 crit → Armor Breach visible at r6 (but r6 is charged, so activeEnemyDebuffs
+    //   still shows it since snapshot captures state ENTERING the round before the action fires);
+    //   r7 Armor Breach expires. r8 crit → Armor Breach visible at r9 (charged); r10 Armor Breach expires.
     snap('reactive triggers (charge on inflict + crit-inflicted debuff)', () => {
         const shipSkills: ShipSkills = {
             slots: [
@@ -811,6 +823,12 @@ describe('dpsGoldenParity', () => {
                                 duration: 2,
                             },
                         }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 300 } }),
                     ],
                 },
                 {
