@@ -80,14 +80,19 @@ export interface StatusEngine {
      *  per-team-actor cadence); team actor ids carry their own timed sets via
      *  `teamSources`; unregistered ids no-op. Applies timed scheduled buffs keyed
      *  to (sourceId, slot) and increments per-active/per-charge accumulating
-     *  stacks when sourceId === 'attacker'. Returns the buffNames of any TIMED enemy
-     *  upserts the landing hook rejected this call (`resistedEnemy`), so the engine
-     *  can emit debuff-resisted and record them in the round's resisted list. */
+     *  stacks when sourceId === 'attacker'. Returns:
+     *  - `resistedEnemy`: buffNames of TIMED enemy upserts the landing hook rejected
+     *    (so the engine can emit debuff-resisted and record them in the resisted list).
+     *  - `appliedEnemy`: buffNames of TIMED enemy upserts that LANDED this call,
+     *    collected BEFORE the family-rule upsert (so family-absorbed applications
+     *    still count as inflicted — the unit did inflict; family absorption is an
+     *    internal map rule). The engine emits `debuff-applied` once per name here
+     *    (the discrete-infliction event, Phase 3 retiming). */
     sourceFired(
         sourceId: string,
         slot: 'active' | 'charge',
         round: number
-    ): { resistedEnemy: string[] };
+    ): { resistedEnemy: string[]; appliedEnemy: string[] };
     /** The round's active lists (was step()'s return). Pure read. */
     snapshot(): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
     /** Owner Post-Turn: decrement ALL timed statuses on this side — including ones
@@ -319,14 +324,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sourceId: string,
         slot: 'active' | 'charge',
         round: number
-    ): { resistedEnemy: string[] } => {
+    ): { resistedEnemy: string[]; appliedEnemy: string[] } => {
         if (round !== lastRound) {
             throw new Error(
                 `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
         const sets = timedBySource.get(sourceId);
-        if (!sets) return { resistedEnemy: [] };
+        if (!sets) return { resistedEnemy: [], appliedEnemy: [] };
 
         // Per-active/per-charge accumulating stacks tick on the matching slot — ATTACKER
         // only (these track the attacker's own cadence).
@@ -355,7 +360,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
         // its buffName is collected so the engine can emit debuff-resisted + record it.
+        // A landed application's buffName is collected BEFORE the family-rule upsert so
+        // family-absorbed applications still count as inflicted (the unit did inflict; the
+        // family rule is an internal map rule). The engine emits `debuff-applied` once per
+        // name in appliedEnemy (the discrete-infliction event — Phase 3 retiming).
         const resistedEnemy: string[] = [];
+        const appliedEnemy: string[] = [];
         for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
             if (typeof buff.skillDuration !== 'number') continue;
@@ -363,9 +373,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 resistedEnemy.push(buff.buffName);
                 continue;
             }
+            // Collect the name BEFORE the upsert (landed = passed the landing hook,
+            // regardless of family absorption inside upsertBuff).
+            appliedEnemy.push(buff.buffName);
             upsertBuff(buff, enemyMap);
         }
-        return { resistedEnemy };
+        return { resistedEnemy, appliedEnemy };
     };
 
     // snapshot: the round's active lists (was step()'s return). Pure read.

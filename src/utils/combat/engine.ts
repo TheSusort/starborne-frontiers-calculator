@@ -38,11 +38,22 @@ function expireStacks(entries: ActiveDoTStack[]): void {
 }
 
 // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
-function processBombs(args: { pendingBombs: PendingBomb[]; affinityMult: number }): number {
+// `emitBombDetonated` is called once per burst (per detonating bomb entry) so Phase 3
+// reactive triggers can observe each burst's actorId, round, stacks, and damage.
+function processBombs(args: {
+    pendingBombs: PendingBomb[];
+    affinityMult: number;
+    emitBombDetonated?: (stacks: number, damage: number) => void;
+}): number {
     let bombBurst = 0;
     for (let i = args.pendingBombs.length - 1; i >= 0; i--) {
         args.pendingBombs[i].countdown -= 1;
         if (args.pendingBombs[i].countdown <= 0) {
+            const burstDamage =
+                args.pendingBombs[i].stacks *
+                args.pendingBombs[i].damagePerStack *
+                args.affinityMult;
+            args.emitBombDetonated?.(args.pendingBombs[i].stacks, burstDamage);
             bombBurst += args.pendingBombs[i].stacks * args.pendingBombs[i].damagePerStack;
             args.pendingBombs.splice(i, 1);
         }
@@ -389,6 +400,11 @@ export function runCombat(input: CombatEngineInput): {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
+        // round-started: the canonical start-of-round trigger (Phase 3 Task 3). Fires
+        // once per round, before any turn-started of that round. Documented deviation from
+        // the Phase 1 contract's turn-started mapping: in a multi-actor round turn-started
+        // fires once per actor, so round-started is the reliable "start of round" signal.
+        bus?.emit({ type: 'round-started', round: r });
 
         // Team actors listed BEFORE the attacker so the input-order tiebreak yields
         // team → attacker → enemy at equal speeds (buildTurnQueue requirement).
@@ -515,11 +531,22 @@ export function runCombat(input: CombatEngineInput): {
 
                 bus?.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
 
-                const { resistedEnemy } = statusEngine.sourceFired(
+                const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
                     actor.id,
                     teamAction === 'charged' ? 'charge' : 'active',
                     r
                 );
+                // Emit debuff-applied ONCE per landed timed enemy application (discrete-
+                // infliction event — Phase 3 retiming). sourceId = this team actor's id.
+                for (const buffName of appliedEnemy) {
+                    bus?.emit({
+                        type: 'debuff-applied',
+                        sourceId: actor.id,
+                        targetId: enemy.id,
+                        round: r,
+                        buffName,
+                    });
+                }
                 // Synthesize + record this team turn's resisted timed enemy applications
                 // (mirror the attacker's resisted-synthesis). A FASTER team actor (before
                 // any attacker turn) stages into pendingResisted, drained into the next
@@ -579,7 +606,18 @@ export function runCombat(input: CombatEngineInput): {
                     corrosionDamage = ticks.corrosionDamage;
                     infernoDamage = ticks.infernoDamage;
 
-                    detonationDamage += processBombs({ pendingBombs, affinityMult });
+                    detonationDamage += processBombs({
+                        pendingBombs,
+                        affinityMult,
+                        emitBombDetonated: (stacks, damage) =>
+                            bus?.emit({
+                                type: 'bomb-detonated',
+                                actorId: attacker.id,
+                                round: r,
+                                stacks,
+                                damage,
+                            }),
+                    });
                     detonationDamage += processAccumulators({
                         pendingAccumulators,
                         directDamage: ctxDirect,

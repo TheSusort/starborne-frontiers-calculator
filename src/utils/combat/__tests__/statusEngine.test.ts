@@ -678,12 +678,12 @@ describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
 });
 
 describe('landsTimedEnemyApplication hook (Task 7)', () => {
-    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty', () => {
+    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty, appliedEnemy has the name', () => {
         const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: ['Def Down'] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);
@@ -699,7 +699,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
         // The application was rejected → no status stored, buffName reported resisted.
-        expect(result).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(result).toEqual({ resistedEnemy: ['Def Down'], appliedEnemy: [] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
     });
 
@@ -713,7 +713,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: ['Armor Break'] });
+        expect(result).toEqual({ resistedEnemy: ['Armor Break'], appliedEnemy: ['Def Down'] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);
@@ -739,7 +739,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         lands = false;
         eng.beginRound(2);
         const r2 = eng.sourceFired('attacker', 'active', 2); // rejected → must NOT clear
-        expect(r2).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(r2).toEqual({ resistedEnemy: ['Def Down'], appliedEnemy: [] });
         // The round-1 status still in window (turnsRemaining 2).
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
@@ -755,7 +755,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [] });
         expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
     });
 });
@@ -864,7 +864,7 @@ describe('sourceFired source-keyed scheduling (teamSources)', () => {
         ]);
     });
 
-    it('an unregistered sourceId no-ops (no application, empty resisted)', () => {
+    it('an unregistered sourceId no-ops (no application, empty resisted and appliedEnemy)', () => {
         const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
         const eng = createStatusEngine({
             selfBuffs: [],
@@ -873,7 +873,7 @@ describe('sourceFired source-keyed scheduling (teamSources)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('unknown-ship', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [] });
         expect(eng.snapshot().activeSelfBuffs).toEqual([]);
     });
 

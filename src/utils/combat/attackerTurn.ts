@@ -196,13 +196,15 @@ function resolveSelfBuffTotals(args: {
 // the hacking-vs-security landing roll. The roll is a LAZY getter (`roundDebuffLanded`)
 // so the single per-round gate draw is taken only when a non-'apply' recurring debuff is
 // present (and is memoized across all round consumers — recurring fold + DoT landing).
+// NOTE: no `debuff-applied` is emitted here (Phase 3 retiming: recurring/aura per-round
+// re-applications are NOT discrete inflictions — only `debuff-resisted` fires on miss,
+// unchanged from Phase 1).
 function resolveEnemyDebuffs(args: {
     activeEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
     affinityDisadvantage: boolean;
     roundDebuffLanded: () => boolean;
     emitResisted: (buffName: string) => void;
-    emitApplied: (buffName: string) => void;
 }): {
     roundEnemyDebuffs: SelectedGameBuff[];
     landedEnemyDebuffs: ActiveBuff[];
@@ -225,7 +227,6 @@ function resolveEnemyDebuffs(args: {
             return [];
         }
         landedEnemyDebuffs.push(ab);
-        args.emitApplied(ab.buffName);
         return expandBuffs(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs };
@@ -234,20 +235,17 @@ function resolveEnemyDebuffs(args: {
 // Per-round fold for TIMED scheduled enemy statuses currently in the status map. They
 // drew their landing roll ONCE at application (status-engine hook) and persist their full
 // window with no re-roll, so here they are unconditionally landed: expand their effects
-// and report them as landed. No gate draw, no resist partition. NOTE: emitApplied fires
-// every round the status is ACTIVE (matching the pre-Phase-2 per-round semantics of
-// `debuff-applied`), not just on the first-landing round — revisit if a listener ever
-// needs first-application-only (e.g. a `debuff-persisted` distinction in Phase 3).
+// and report them as landed. No gate draw, no resist partition, NO `debuff-applied`
+// emission (Phase 3 retiming: discrete-infliction-only; the emission moved to the
+// sourceFired/applyTimedAbilityStatus application sites).
 function foldTimedEnemyDebuffs(args: {
     timedEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
-    emitApplied: (buffName: string) => void;
 }): { roundEnemyDebuffs: SelectedGameBuff[]; landedEnemyDebuffs: ActiveBuff[] } {
     const landedEnemyDebuffs: ActiveBuff[] = [];
     const roundEnemyDebuffs = args.timedEnemyDebuffs.flatMap((ab) => {
         const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
         landedEnemyDebuffs.push(ab);
-        args.emitApplied(ab.buffName);
         return expandBuffs(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs };
@@ -345,6 +343,8 @@ function chargeGainFromSkill(args: {
 // damage at once, scaled by powerPct. Done BEFORE this round's new DoTs apply, so a skill
 // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
 // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
+// `emitBombDetonated` is called for the bomb branch when the payout is non-zero, carrying
+// total stacks and damage so Phase 3 reactive triggers can respond (Phase 3 Task 3).
 function detonate(args: {
     gatedSkill: Skill | undefined;
     effectiveAttack: number;
@@ -354,6 +354,7 @@ function detonate(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
+    emitBombDetonated?: (stacks: number, damage: number) => void;
 }): number {
     let detonationDamage = 0;
     for (const det of detonationsFromSkill(args.gatedSkill)) {
@@ -381,10 +382,15 @@ function detonate(args: {
                 pct;
             args.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
-            detonationDamage +=
+            const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
+            const payout =
                 args.pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
                 args.affinityMult *
                 pct;
+            if (payout > 0) {
+                args.emitBombDetonated?.(totalStacks, payout);
+            }
+            detonationDamage += payout;
             args.pendingBombs.length = 0;
         }
     }
@@ -528,6 +534,14 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // read the wrong flag — not representable from skill text today.
     const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
 
+    const emitDebuffResisted = (buffName: string) =>
+        bus?.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
+    // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
+    // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
+    // or for every round a standing timed status is active — only at the infliction site.
+    const emitDebuffApplied = (sourceId: string, buffName: string) =>
+        bus?.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
+
     // Per-round buff totals from the status engine. The attacker notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
     // buffs key off the actual cadence, not a predicted schedule), then we read
@@ -535,11 +549,13 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // (statusEngine.decrementSide, called after this actor's turn block).
     // sourceFired returns the buffNames of any TIMED enemy applications the
     // landing hook rejected this round (drawn once at application — Task 7).
-    const { resistedEnemy: resistedScheduledTimedNames } = statusEngine.sourceFired(
-        'attacker',
-        action === 'charged' ? 'charge' : 'active',
-        r
-    );
+    const { resistedEnemy: resistedScheduledTimedNames, appliedEnemy: appliedScheduledTimedNames } =
+        statusEngine.sourceFired('attacker', action === 'charged' ? 'charge' : 'active', r);
+    // Emit debuff-applied ONCE per landed timed enemy application (discrete-infliction event).
+    // This is the attacker's scheduled timed debuffs path. The ability timed path emits below.
+    for (const buffName of appliedScheduledTimedNames) {
+        emitDebuffApplied('attacker', buffName);
+    }
     const entry = statusEngine.snapshot();
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
@@ -571,11 +587,6 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         return roundDebuffLandedValue;
     };
 
-    const emitDebuffResisted = (buffName: string) =>
-        bus?.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
-    const emitDebuffApplied = (buffName: string) =>
-        bus?.emit({ type: 'debuff-applied', targetId: enemy.id, round: r, buffName });
-
     // Partition the scheduled-status snapshot. TIMED scheduled statuses (numeric
     // turnsRemaining) already drew their landing roll at application — fold them
     // unconditionally. RECURRING/always/accumulating statuses ('recurring') are
@@ -592,12 +603,13 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         affinityDisadvantage,
         roundDebuffLanded,
         emitResisted: emitDebuffResisted,
-        emitApplied: emitDebuffApplied,
+        // No emitApplied: recurring/aura per-round re-applications are NOT discrete inflictions.
     });
     const timedScheduledEnemy = foldTimedEnemyDebuffs({
         timedEnemyDebuffs: timedEnemySnap,
         enemyDebuffLookup,
-        emitApplied: emitDebuffApplied,
+        // No emitApplied: timed debuffs already emitted debuff-applied at application time
+        // (sourceFired appliedEnemy path). Per-round re-emission removed (Phase 3 retiming).
     });
     // Scheduled timed applications the landing hook rejected this round: synthesize
     // a resisted ActiveBuff carrying the would-be duration (skillDuration) and emit.
@@ -655,12 +667,15 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // ONCE here (Task 7): 'apply' → lands unless affinity-disadvantaged (no draw);
     // otherwise draws the hacking-vs-security gate. Resisted → the apply is SKIPPED
     // (no status stored), recorded resisted with its would-be duration, and emitted.
+    // Landed → emit debuff-applied ONCE at this infliction site (Phase 3 retiming).
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
         if (landsTimedEnemyApplication(status.payload.application)) {
             statusEngine.applyTimedAbilityStatus(r, status);
+            // Discrete infliction event — emit ONCE at this application site.
+            emitDebuffApplied('attacker', status.payload.buffName);
         } else {
             // status.duration is guaranteed numeric by the timed variant.
             resistedAbilityTimedEnemy.push({
@@ -681,13 +696,15 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     const landedAbilityEnemy: ActiveBuff[] = [];
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
     const abilityEnemyEffects: SelectedGameBuff[] = [];
-    // Timed ability statuses: unconditionally landed (gated at application).
+    // Timed ability statuses: unconditionally landed (gated at application in the timed
+    // loop above). NO debuff-applied here — already emitted at the application site above
+    // (Phase 3 retiming: discrete-infliction-only, not per-round while the window is active).
     for (const s of timedAbilityEnemy) {
         landedAbilityEnemy.push(s.active);
         abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));
-        emitDebuffApplied(s.payload.buffName);
     }
-    // Aura/accumulating ability statuses: per-round landing re-roll.
+    // Aura/accumulating ability statuses: per-round landing re-roll. No debuff-applied
+    // (recurring/aura re-applications are NOT discrete inflictions — Phase 3 retiming).
     for (const s of recurringAbilityEnemy) {
         const sb = payloadToSelectedBuff(s.payload);
         const isApply = sb.application === 'apply';
@@ -699,7 +716,6 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         }
         landedAbilityEnemy.push(s.active);
         abilityEnemyEffects.push(sb);
-        emitDebuffApplied(s.payload.buffName);
     }
 
     // Combined landed enemy debuffs (scheduled + ability) drive modifiers and counts.
@@ -962,6 +978,8 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         corrosionEntries,
         infernoEntries,
         pendingBombs,
+        emitBombDetonated: (stacks, damage) =>
+            bus?.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
     });
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
@@ -984,6 +1002,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
             emitDotApplied: (dotType, stacks) =>
                 bus?.emit({
                     type: 'dot-applied',
+                    sourceId: actor.id,
                     targetId: enemy.id,
                     round: r,
                     dotType,
