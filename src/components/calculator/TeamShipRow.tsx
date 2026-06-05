@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
-import { TeamShipConfig, SelectedGameBuff } from '../../types/calculator';
+import { TeamShipConfig, SelectedGameBuff, CombatStatBlock } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { Button } from '../ui/Button';
@@ -18,7 +18,7 @@ import { SkillSlotList } from '../skills/SkillSlotList';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import { GameBuffPicker } from './GameBuffPicker';
 
-type TeamShipStats = NonNullable<TeamShipConfig['stats']>;
+type TeamShipStats = CombatStatBlock;
 
 interface TeamShipRowProps {
     config: TeamShipConfig;
@@ -186,6 +186,29 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                                         Math.max(0, parseInt(e.target.value) || 0)
                                     )
                                 }
+                            />
+                            <Input
+                                label="Defense"
+                                type="number"
+                                min="0"
+                                value={config.stats.defence}
+                                onChange={(e) =>
+                                    updateStat(
+                                        'defence',
+                                        Math.max(0, parseInt(e.target.value) || 0)
+                                    )
+                                }
+                                helpLabel="source stat for Defense-based damage"
+                            />
+                            <Input
+                                label="HP"
+                                type="number"
+                                min="0"
+                                value={config.stats.hp}
+                                onChange={(e) =>
+                                    updateStat('hp', Math.max(0, parseInt(e.target.value) || 0))
+                                }
+                                helpLabel="source stat for HP-based damage"
                             />
                         </div>
                     )}

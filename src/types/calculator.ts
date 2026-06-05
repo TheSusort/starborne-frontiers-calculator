@@ -218,6 +218,18 @@ export type HealerConfigUpdateableField =
     | 'critDamage'
     | 'healModifier';
 
+/** Shared stat block for walked team actors — covers every stat that influences damage,
+ *  debuff landing, and secondary (Defense/HP-based) damage calculations. */
+export interface CombatStatBlock {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    hacking: number;
+    defence: number; // source stat for Defense-based secondary damage
+    hp: number; // source stat for HP-based secondary damage
+}
+
 export interface TeamShipConfig {
     id: string;
     shipId?: string;
@@ -229,15 +241,7 @@ export interface TeamShipConfig {
     /** Walked skills for this team actor (auto-filled on ship pick; editable per slot). */
     shipSkills?: ShipSkills;
     /** Combat stats for the walked team actor (auto-filled from the ship; editable). */
-    stats?: {
-        attack: number;
-        crit: number;
-        critDamage: number;
-        defensePenetration: number;
-        hacking: number;
-        defence: number;
-        hp: number;
-    };
+    stats?: CombatStatBlock;
     /** Affinity for the walked team actor — vs the enemy affinity yields its own modifiers. */
     affinity?: AffinityName;
 }
@@ -261,15 +265,7 @@ export interface TeamActorInput {
     shipSkills?: ShipSkills;
     /** Combat stats for a walked team actor (auto-filled from the ship; required when
      *  shipSkills is present so its damage/DoT ticks scale with its OWN attack). */
-    stats?: {
-        attack: number;
-        crit: number;
-        critDamage: number;
-        defensePenetration: number;
-        hacking: number;
-        defence: number;
-        hp: number;
-    };
+    stats?: CombatStatBlock;
     /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
      *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
     affinity?: AffinityName;

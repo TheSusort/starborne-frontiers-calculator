@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
-import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
+import { SelectedGameBuff, TeamActorInput, CombatStatBlock } from '../../../types/calculator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
 
@@ -100,7 +100,7 @@ const allyChargeAbility = (amount: number, id = 'ac'): Ability => ({
     config: { type: 'charge', amount },
 });
 
-const teamStats = (overrides: Partial<NonNullable<TeamActorInput['stats']>> = {}) => ({
+const teamStats = (overrides: Partial<CombatStatBlock> = {}) => ({
     attack: 15000,
     crit: 0,
     critDamage: 150,

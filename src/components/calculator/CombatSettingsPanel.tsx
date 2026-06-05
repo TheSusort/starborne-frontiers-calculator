@@ -4,7 +4,12 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
-import { SelectedGameBuff, TeamShipConfig, EnemyBaseClass } from '../../types/calculator';
+import {
+    SelectedGameBuff,
+    TeamShipConfig,
+    EnemyBaseClass,
+    CombatStatBlock,
+} from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName, Ship } from '../../types/ship';
 import { GameBuffPicker } from './GameBuffPicker';
@@ -38,7 +43,7 @@ interface CombatSettingsPanelProps {
     onTeamShipChargeCountChange: (id: string, chargeCount: number) => void;
     onTeamShipBuffsChange: (id: string, buffs: SelectedGameBuff[]) => void;
     onTeamShipEnemyDebuffsChange: (id: string, debuffs: SelectedGameBuff[]) => void;
-    onTeamShipStatsChange: (id: string, stats: NonNullable<TeamShipConfig['stats']>) => void;
+    onTeamShipStatsChange: (id: string, stats: CombatStatBlock) => void;
     onTeamShipAffinityChange: (id: string, affinity: AffinityName) => void;
     onTeamShipShipSkillsChange: (id: string, shipSkills: ShipSkills) => void;
     enemyType?: EnemyBaseClass;
