@@ -143,7 +143,9 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 ## Damage accounting
 
 - Round damage accumulates **per actor**: a map `actorId → { direct, secondary,
-  conditional, corrosion, inferno, detonation }` (the simulator-page seam). DoT ticks and
+  conditional, corrosion, inferno, detonation }` (the simulator-page seam; the map keeps
+  `secondary`/`conditional` as distinct buckets that the API prose rolls into the direct
+  class — mirroring today's rawTotals split). DoT ticks and
   bomb/accumulator bursts attribute to the entry's `sourceId` (the applier), processed on
   the enemy turn as today. Aggregates derive from the map: the focus actor's entry feeds
   the existing RoundData damage fields; `RoundData.teamDamage` = the summed non-focus
