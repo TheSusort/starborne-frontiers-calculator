@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { TeamShipConfig, SelectedGameBuff } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
+import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
@@ -14,12 +15,14 @@ import { ShipSelector } from '../ship/ShipSelector';
 import { ShipSkillList } from '../ship/ShipSkillList';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
+import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
 import { GameBuffPicker } from './GameBuffPicker';
 
 type TeamShipStats = NonNullable<TeamShipConfig['stats']>;
 
 interface TeamShipRowProps {
     config: TeamShipConfig;
+    enemyAffinity: AffinityName;
     onRemove: () => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
@@ -34,6 +37,7 @@ interface TeamShipRowProps {
 
 export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     config,
+    enemyAffinity,
     onRemove,
     onSelectShip,
     onStartChargedChange,
@@ -49,6 +53,14 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
     const [skillRefOpen, setSkillRefOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+
+    const affinityMatchup = getAffinityMatchup(config.affinity, enemyAffinity);
+    const affinityBadge =
+        affinityMatchup === 'advantage' ? (
+            <span className="text-xs font-medium text-green-400">Advantage</span>
+        ) : affinityMatchup === 'disadvantage' ? (
+            <span className="text-xs font-medium text-red-400">Disadvantage</span>
+        ) : null;
 
     useEffect(() => {
         if (!selectedShip) setSkillRefOpen(false);
@@ -202,18 +214,16 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
 
                     {/* Affinity */}
                     <div>
-                        <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
-                            Affinity
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                                Affinity
+                            </span>
+                            {affinityBadge}
                         </div>
                         <Select
                             value={config.affinity ?? 'antimatter'}
                             onChange={(v) => onAffinityChange(v as AffinityName)}
-                            options={[
-                                { value: 'antimatter', label: 'Antimatter' },
-                                { value: 'thermal', label: 'Thermal' },
-                                { value: 'chemical', label: 'Chemical' },
-                                { value: 'electric', label: 'Electric' },
-                            ]}
+                            options={AFFINITY_OPTIONS}
                             className="w-full"
                         />
                     </div>

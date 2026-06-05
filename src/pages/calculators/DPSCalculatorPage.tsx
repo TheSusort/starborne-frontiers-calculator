@@ -55,26 +55,33 @@ const DPSCalculatorPage: React.FC = () => {
         ).final;
     };
 
+    // Shared combat-stat extraction from a resolved final-stats object.
+    // Single source of truth for the magic defaults (hacking ?? 200, speed ?? 100, etc.)
+    // so selectShipForConfig and selectShipForTeamSlot can never silently diverge.
+    const combatStatsFromShip = (final: ReturnType<typeof shipFinalStats>) => ({
+        attack: Math.round(final.attack),
+        crit: Math.round(final.crit),
+        critDamage: Math.round(final.critDamage),
+        defensePenetration: Math.round(final.defensePenetration || 0),
+        hacking: Math.round(final.hacking ?? 200),
+        defence: Math.round(final.defence ?? 0),
+        hp: Math.round(final.hp ?? 0),
+        speed: Math.round(final.speed ?? 100),
+    });
+
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                const final = shipFinalStats(ship);
+                const stats = combatStatsFromShip(shipFinalStats(ship));
                 return {
                     configs: [
                         {
                             id: '1',
                             shipId: ship.id,
                             name: ship.name,
-                            attack: Math.round(final.attack),
-                            crit: Math.round(final.crit),
-                            critDamage: Math.round(final.critDamage),
-                            defensePenetration: Math.round(final.defensePenetration || 0),
-                            hacking: Math.round(final.hacking ?? 200),
-                            defence: Math.round(final.defence ?? 0),
-                            hp: Math.round(final.hp ?? 0),
-                            speed: Math.round(final.speed ?? 100),
+                            ...stats,
                             allyChargePerRound: 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             affinity: ship.affinity,
@@ -369,7 +376,7 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const final = shipFinalStats(ship);
+        const stats = combatStatsFromShip(shipFinalStats(ship));
 
         setConfigs((prev) =>
             prev.map((c) => {
@@ -378,14 +385,7 @@ const DPSCalculatorPage: React.FC = () => {
                     ...c,
                     shipId: ship.id,
                     name: ship.name,
-                    attack: Math.round(final.attack),
-                    crit: Math.round(final.crit),
-                    critDamage: Math.round(final.critDamage),
-                    defensePenetration: Math.round(final.defensePenetration || 0),
-                    hacking: Math.round(final.hacking ?? 200),
-                    defence: Math.round(final.defence ?? 0),
-                    hp: Math.round(final.hp ?? 0),
-                    speed: Math.round(final.speed ?? 100),
+                    ...stats,
                     allyChargePerRound: c.allyChargePerRound ?? 0,
                     // Reset (not carry over) when the new ship has no charge metadata —
                     // a stale threshold from the previous ship would mis-pace the sim.
@@ -444,7 +444,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.secondPassiveSkillText,
             ship.thirdPassiveSkillText,
         ]);
-        const final = shipFinalStats(ship);
+        const { speed, ...combatStats } = combatStatsFromShip(shipFinalStats(ship));
         setTeamShips((prev) =>
             prev.map((t) => {
                 if (t.id !== id) return t;
@@ -452,18 +452,10 @@ const DPSCalculatorPage: React.FC = () => {
                     ...t,
                     shipId: ship.id,
                     startCharged,
-                    speed: Math.round(final.speed ?? 100),
+                    speed,
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     shipSkills: buildShipAbilities(ship),
-                    stats: {
-                        attack: Math.round(final.attack),
-                        crit: Math.round(final.crit),
-                        critDamage: Math.round(final.critDamage),
-                        defensePenetration: Math.round(final.defensePenetration || 0),
-                        hacking: Math.round(final.hacking ?? 200),
-                        defence: Math.round(final.defence ?? 0),
-                        hp: Math.round(final.hp ?? 0),
-                    },
+                    stats: combatStats,
                     affinity: ship.affinity,
                     // Walked skills supersede auto-fill stamping; clear any prior auto-filled
                     // entries while preserving the user's manual extras.

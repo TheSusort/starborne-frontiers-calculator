@@ -198,6 +198,7 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                             <TeamShipRow
                                 key={ts.id}
                                 config={ts}
+                                enemyAffinity={enemyAffinity}
                                 onRemove={() => onRemoveTeamShip(ts.id)}
                                 onSelectShip={(ship) => onSelectTeamShip(ts.id, ship)}
                                 onStartChargedChange={(checked) =>
