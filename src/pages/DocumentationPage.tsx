@@ -2305,6 +2305,18 @@ const DocumentationPage: React.FC = () => {
                                         skills without direct damage (pure utility) still fire on
                                         their normal cadence and apply their effects.
                                     </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Reactive Triggers:</span>{' '}
+                                        Skill effects that react to combat events — crit-triggered
+                                        debuff inflictions, charge gains on inflicting a debuff, and
+                                        start-of-round self-buffs — now fire from real combat events
+                                        rather than being approximated as always-on conditions. The{' '}
+                                        <span className="text-primary">Trigger</span> field in each
+                                        ability&apos;s editor controls which event activates it.
+                                        Triggers the simulator cannot derive (when attacked, ally
+                                        destroyed, etc.) are treated as assume-active, preserving
+                                        the existing manual-condition behavior.
+                                    </p>
                                 </div>
 
                                 <div className="card">

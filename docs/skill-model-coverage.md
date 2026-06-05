@@ -4,6 +4,7 @@
 > Updated **2026-06-03** after the deterministic-crit + hard-gating ship (spec 2026-06-03-deterministic-crit-and-hard-gating-design.md).
 > Updated **2026-06-03** after the combat-engine Phase 1 ship (spec 2026-06-03-combat-engine-phase1-design.md).
 > Updated **2026-06-04** after the combat-engine Phase 2 ship (branch `feat/combat-engine-phase2`).
+> Updated **2026-06-05** after the combat-engine Phase 3 ship (branch `feat/combat-engine-phase3`).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -85,7 +86,7 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 
 | Field | Status |
 |---|---|
-| `Ability.trigger` | Model has 6 values (`on-cast`, `start-of-round`, `on-crit`, `on-attacked`, `on-ally-destroyed`, `on-destroyed`); parser only emits `on-cast`; **editor never exposes it; sim never reads it**. The reactive-event seam. |
+| `Ability.trigger` | Model now has 9 values (union extended in Phase 3: `on-cast`, `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`, `on-bomb-detonated`, `on-attacked`, `on-ally-destroyed`, `on-destroyed`); parser emits all live triggers (see §5); **editor exposes a Trigger select**; sim routes the five live triggers through the reactive machinery; non-live triggers remain annotation-only (assume-active). |
 | `Ability.target` | Editor exposes 5 values; sim only distinguishes self-vs-enemy when routing buff/debuff conversion. `ally`/`all-allies`/`all-enemies` have no distinct sim meaning (all-allies modifiers fold into self — correct for single-ship DPS). |
 | `modifier.isMultiplicative` | Deliberate no-op, documented in `applyAbilities.ts:38-40`; hidden in editor. |
 | `modifier.channel` `outgoingHeal` / `incomingDamage` | No DPS bucket — silently dropped (`applyAbilities.ts:68`). |
@@ -187,6 +188,46 @@ buff/charge-aura), source it from firing + passive.
   (`selfBuffNames` + `effectiveCritRate`). This means a `modifier` ability gated on `self-buff X`
   will correctly see a buff X that was applied by another ability in the same cast. Locked by
   golden scenario 15.
+- **Reactive triggers (Phase 3).** The live trigger set and their event keys:
+  - `start-of-round` → `round-started` (emitted at the round boundary, before any turn). Self-buffs
+    with "at the start of the round" phrasing (Valkyrie and ~12 other occurrences) emit their
+    timed windows here; real duration windows instead of the prior passive-aura approximation.
+  - `on-crit` → `ability-performed` with `didCrit && actorId === attacker`. Fires **once per crit
+    turn**, not per hit — multi-hit skills aggregate; the engine's `roundCrit` is decided once per
+    attacker action stream. Covers crit-inflicted debuffs (Enforcer's Defense Shred) and
+    crit-triggered self-buffs (Wusheng stealth).
+  - `on-debuff-inflicted` → `debuff-applied` / `dot-applied` with `sourceId === attacker`. Each
+    discrete infliction event: a landed timed debuff application or a landed DoT config entry
+    applied by the attacker that turn. A cast landing 2 debuffs = 2 events. Family-blocked-but-
+    landed applications count (the stronger buff persisted, but the unit did inflict).
+    Recurring/aura per-round folds do **not** count — standing effects are not infliction events.
+    Per-standing scaling is preserved and untouched for "per buff/debuff ON the target" texts
+    (Nuqtu/Rhodium).
+  - `on-ally-debuff-inflicted` → `debuff-applied` with `sourceId` = a team actor (landed timed
+    debuff applications on the team actor's turn). Requires `teamActors` to be configured;
+    without it, ally-triggers never fire. Team DoT lists are deferred — only team timed debuff
+    applications are derivable this phase. Covers Oleander charge-on-ally-inflict.
+  - `on-bomb-detonated` → `bomb-detonated` (emitted per burst on countdown expiry and from
+    skill-driven detonations). Covers Lingshe stealth, enemy charge removal, Echoing Burst
+    repairs — all currently not-simulated types; the trigger is wired but DPS-neutral today.
+  - Non-live triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) are **annotation-only**:
+    abilities with these triggers behave as today (normal on-cast pipeline, manual assume-active
+    conditions). The engine cannot derive them until Phase 4.
+- **Intent/drain semantics (Phase 3).** Reactive listeners push intents onto the engine's queue;
+  the engine drains after `round-started` (start-of-round intents execute before any turn) and
+  after each actor's turn body before Post Turn. A triggered effect never boosts the action that
+  triggered it (e.g. Enforcer's crit-inflicted Defense Shred is active the following round).
+  Triggered ability executions emit events, enabling chaining (a triggered debuff infliction can
+  feed an `on-debuff-inflicted` charge listener in the same drain). A `MAX_INTENT_GENERATIONS = 10`
+  backstop converts a pathological loop into a thrown error rather than a hang.
+- **Charge-on-inflict fix (Phase 3, game-verified 2026-06-04).** Hemlock-style "gains 1 charge
+  after it inflicts a debuff" is now `on-debuff-inflicted` with a flat +1 per infliction event,
+  not the previous `enemy-debuff` count condition that scaled per standing debuff (too fast).
+  Per-standing scaling is preserved for "per buff/debuff ON the target" texts.
+- **Editor Trigger select (Phase 3).** `AbilityCard` gains a Trigger `Select` listing all nine
+  union values with plain-language labels. Non-live triggers render a note "Not simulated —
+  treated as assume-active". Changing the trigger on a buff/debuff/dot/charge ability is
+  sufficient to route it through the reactive machinery.
 
 ---
 
@@ -220,8 +261,22 @@ configure it and it looks like it works, but it does nothing".
 > - `hasChargedSkill` widened to include charged skills with no direct damage (pure utility);
 >   `computeChargeSchedule` retired; status engine is now action-fed via `sourceFired`.
 >
-> **Phase 3 pointer (not yet started):**
-> - Reactive triggers (`on-crit`, `on-attacked`).
+> **Shipped 2026-06-05 (combat-engine Phase 3, this branch — feat/combat-engine-phase3):**
+> - Reactive trigger machinery: bus listeners + engine-owned intent queue; drain after
+>   `round-started` and after each actor's turn body before Post Turn.
+> - Live trigger set: `start-of-round`, `on-crit`, `on-debuff-inflicted`,
+>   `on-ally-debuff-inflicted`, `on-bomb-detonated` (see §5 above).
+> - Parser auto-classification: Hemlock/Oleander charge-on-inflict fixed to per-infliction event;
+>   Enforcer/Wusheng crit-triggered debuffs/buffs; Valkyrie + ~12 others start-of-round self-buffs;
+>   Lingshe bomb-detonate reactives. Non-live reactive phrasings untouched.
+> - `debuff-applied` retimed to discrete infliction events only (`sourceId` added); recurring/aura
+>   per-round folds stop emitting it. `dot-applied` gains `sourceId`. New `round-started` and
+>   `bomb-detonated` events.
+> - Editor Trigger select on `AbilityCard` with non-live trigger notes.
+>
+> **Phase 4 pointer (not yet started):**
+> - Enemy offensive actions, `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
+>   targeting/taunt/stealth, multi-enemy, heal/shield/cleanse/control consumption, self-HP realism.
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
@@ -237,10 +292,12 @@ configure it and it looks like it works, but it does nothing".
 4. **Self HP-threshold realism** — `selfHpPct` is still fixed at 100. A declining
    self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
    self-execute-style gates meaningful.
-5. **`trigger` field** — reactive events (`on-crit`, `on-attacked`, …) need an event
-   dispatch inside the round loop. Largest lift; prerequisite for cleanse/control
-   modeling and the future combat sim. Until then, keep modeling reactives as manual
-   condition toggles.
+5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3)* — five live triggers
+   (`start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
+   `on-bomb-detonated`) are fully consumed via the reactive machinery. Three non-derivable
+   triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) remain annotation-only
+   (assume-active manual conditions) until Phase 4 brings enemy offensive actions and
+   ship-death modeling.
 6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
 
 ---
