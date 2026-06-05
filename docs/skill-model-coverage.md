@@ -195,7 +195,11 @@ buff/charge-aura), source it from firing + passive.
   - `on-crit` → `ability-performed` with `didCrit && actorId === attacker`. Fires **once per crit
     turn**, not per hit — multi-hit skills aggregate; the engine's `roundCrit` is decided once per
     attacker action stream. Covers crit-inflicted debuffs (Enforcer's Defense Shred) and
-    crit-triggered self-buffs (Wusheng stealth).
+    crit-triggered self-buffs (Wusheng stealth). **Known divergence (user-accepted 2026-06-05):**
+    in-game each hit of a multi-hit skill crit-checks individually, so a 3-hit attacker at 50%
+    crit averages ~1.5 on-crit events per turn in-game vs ~0.5 here — the trigger FREQUENCY
+    undercounts for multi-hit ships (damage itself averages out via the deterministic schedule).
+    See backlog item 7.
   - `on-debuff-inflicted` → `debuff-applied` / `dot-applied` with `sourceId === attacker`. Each
     discrete infliction event: a landed timed debuff application or a landed DoT config entry
     applied by the attacker that turn. A cast landing 2 debuffs = 2 events. Family-blocked-but-
@@ -318,6 +322,12 @@ configure it and it looks like it works, but it does nothing".
    (assume-active manual conditions) until Phase 4 brings enemy offensive actions and
    ship-death modeling.
 6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
+7. **Per-hit crit checks for multi-hit skills** — in-game each hit crit-checks individually
+   (user-confirmed 2026-06-05); the sim decides one `roundCrit` per action stream. Damage
+   averages out, but on-crit trigger frequency undercounts for multi-hit ships (Enforcer's
+   3–4 hits → ~3× fewer Defense Shred stacks than in-game at 50% crit). Would need per-hit
+   crit accumulator draws + per-hit `ability-performed` events; touches the damage math's
+   crit multiplier aggregation. Deliberately accepted for Phase 3.
 
 ---
 
