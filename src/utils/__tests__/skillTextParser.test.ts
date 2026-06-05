@@ -1061,6 +1061,16 @@ describe('detectReactiveTrigger', () => {
         ).toBeUndefined();
     });
 
+    it('classifies on-crit when a LATER active crit phrasing follows an earlier passive one in the same clause', () => {
+        // The old single negative-lookbehind regex used `.test`, which stops at the FIRST
+        // match — so an earlier passive ("is critically damaged") would shadow a later active
+        // ("critically damages") and wrongly return undefined. The match-and-verify scan checks
+        // every occurrence, so the later active phrasing still classifies as on-crit.
+        const text =
+            'If this Unit is critically damaged and then critically damages an enemy, it gains <unit-skill>Stealth</unit-skill>.';
+        expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-crit');
+    });
+
     it('returns undefined for a non-reactive grant', () => {
         const text = 'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns.';
         expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();

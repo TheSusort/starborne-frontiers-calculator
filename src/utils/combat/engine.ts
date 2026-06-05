@@ -509,7 +509,19 @@ export function runCombat(input: CombatEngineInput): {
                         landsTimedEnemyApplication,
                         enemyType,
                         enemyHp,
-                        cumulativeDamage,
+                        // Drain-time HP% includes this round's damage SO FAR (the round
+                        // accumulators below are folded into cumulativeDamage only at
+                        // post-round assembly): a follow-up reacts to the state its trigger
+                        // created — e.g. an on-crit follow-up gated on enemy HP% sees the
+                        // enemy's HP AFTER the attacker's hit that just crit. This differs
+                        // from the attacker turn's own gates, which deliberately use the
+                        // entering-round HP (pre-existing convention, unchanged).
+                        cumulativeDamage:
+                            cumulativeDamage +
+                            directDamage +
+                            corrosionDamage +
+                            infernoDamage +
+                            detonationDamage,
                         effectiveAttack: lastAttackerCtx?.effectiveAttack,
                         recordResisted: (resisted) => {
                             const lastTurn = attackerTurns[attackerTurns.length - 1];

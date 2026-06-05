@@ -1,5 +1,6 @@
 import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
 import { EnemyBaseClass, ParsedBuffEffects } from '../../types/calculator';
+import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import { liveGateConditions } from './abilityStatusGating';
@@ -120,6 +121,9 @@ export function registerReactiveListeners(args: {
                     // defensively (the enemy never inflicts debuffs in-sim today).
                     if (e.sourceId !== 'attacker' && e.sourceId !== 'enemy') enqueue(intent);
                 });
+                // FUTURE: when team DoT lists ship (team-skill-walk spec), also subscribe to
+                // 'dot-applied' here — today no dot-applied with a team sourceId is ever emitted
+                // (both emission sites use 'attacker'), so an ally DoT infliction cannot occur.
                 break;
             case 'start-of-round':
                 bus.on('round-started', () => enqueue(intent));
@@ -215,9 +219,24 @@ function payloadFromConfig(cfg: {
  *    (chainable). Bombs need effectiveAttack; skipped with a note when undefined.
  *  - any other type → skipped silently (not-simulated follow-up payloads).
  * Intents that emit events (debuff/dot) chain through the listeners again.
+ *
+ * Condition gating applies to ALL four branches, not just debuff: reclassified
+ * start-of-round buffs carry real co-gates (Sustainer `self-debuff eq 0`,
+ * Asphyxiator `enemy-debuff gte 3`, Nayra `ally-on-team`), and a gated charge/dot
+ * follow-up must respect its gate too. The gate is built ONCE against the drain
+ * context (CURRENT engine state) and evaluated up front. A failed gate is a silent
+ * skip — NOT a resist (a condition-gated skip mirrors the cast path's "application
+ * skipped" semantics; no resisted record is produced).
  */
 export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     const cfg = intent.ability.config;
+
+    // Drain-time condition gate against CURRENT engine state — one gate for every
+    // branch. liveGateConditions neutralizes non-derivable-on-non-live subjects to
+    // 'always'; manual conditions keep literal gating (manualCount). A failed gate
+    // is a silent skip (no resisted record).
+    const gateConditions = liveGateConditions(intent.ability.conditions);
+    if (!conditionsMet(gateConditions, buildDrainContext(ctx))) return;
 
     if (cfg.type === 'charge') {
         // Attacker-only charge gain, capped as on the cast path.
@@ -237,7 +256,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             payload: payloadFromConfig(cfg),
             side: 'self',
             sourceSlot: intent.sourceSlot,
-            conditions: liveGateConditions(intent.ability.conditions),
+            conditions: gateConditions,
             kind: 'timed',
             duration,
         };
@@ -253,14 +272,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'debuff') {
-        // Drain-time condition gate against CURRENT engine state.
-        const gateCtx = buildDrainContext(ctx);
-        if (!conditionsMet(liveGateConditions(intent.ability.conditions), gateCtx)) return;
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
             payload: payloadFromConfig(cfg),
             side: 'enemy',
             sourceSlot: intent.sourceSlot,
-            conditions: liveGateConditions(intent.ability.conditions),
+            conditions: gateConditions,
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
         };
@@ -275,7 +291,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 buffName: cfg.buffName,
             });
         } else {
-            ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining: status.duration });
+            // A persistent-stacking name (would have landed as a never-expiring stack)
+            // surfaces its resisted display row as 'permanent', not its turn count.
+            const turnsRemaining: ActiveBuff['turnsRemaining'] = PERSISTENT_STACKING_BUFFS.has(
+                cfg.buffName
+            )
+                ? 'permanent'
+                : status.duration;
+            ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
             ctx.bus.emit({
                 type: 'debuff-resisted',
                 targetId: ctx.enemy.id,

@@ -484,12 +484,32 @@ function countGateCondition(clause: string): Condition | null {
  * whole skill text (leaking gates from unrelated sentences). Mask the space after the
  * abbreviation period with a non-whitespace marker so the split skips it, then restore.
  */
+/**
+ * Splits `text` into sentences at '.'/';' + whitespace boundaries, keeping the punctuation on
+ * the preceding sentence and dropping the boundary whitespace. Lookbehind-free: Safari < 16.4
+ * lacks RegExp lookbehind and the production browserslist (`>0.2%`) includes iOS Safari 15.x,
+ * so the previous `split(/(?<=[.;])\s+/)` would throw at parse time on those browsers. This is
+ * byte-equivalent to that split.
+ */
+function splitSentences(text: string): string[] {
+    const out: string[] = [];
+    const re = /[.;]\s+/g;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+        out.push(text.slice(start, m.index + 1));
+        start = m.index + m[0].length;
+    }
+    if (start < text.length) out.push(text.slice(start));
+    return out;
+}
+
 function resolveBuffClause(skillText: string, buffName: string): string {
     const ABBR_MARK = '\u0001';
     const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
-    const sentences = plain.split(/(?<=[.;])\s+/);
+    const sentences = splitSentences(plain);
     const clauseMasked = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? plain;
     return clauseMasked.split(ABBR_MARK).join(' ');
 }
@@ -625,15 +645,29 @@ export function detectGrantConditions(
 
 // Active-voice self-crit phrasing: "critically hits/hitting" or "critically damages/damaging".
 // Deliberately excludes the passive participles "hit"/"damaged" (so "is critically hit" and
-// "is critically damaged" do NOT match). The negative lookbehind is a second guard against
-// copular/auxiliary passives whose verb form WOULD otherwise match the alternation — e.g.
-// "is/was/gets/getting critically damaging" style constructions; the verb set
-// (is|was|are|were|been|be|being|gets?|getting) covers the linking verbs that introduce a
-// passive clause. This is STRICTER than detectGrantConditions' self-crit rule (which uses
-// /critically (?:hits|damag)/i and therefore misclassifies the passive "is critically
-// damaged" — see detectReactiveTrigger docs).
-const ACTIVE_SELF_CRIT_RE =
-    /(?<!\b(?:is|was|are|were|been|be|being|gets?|getting)\s)critically\s+(?:hits|hitting|damages|damaging)/i;
+// "is critically damaged" do NOT match). A second guard rejects copular/auxiliary passives
+// whose verb form WOULD otherwise match the alternation — e.g. "is/was/gets/getting critically
+// damaging" style constructions; the verb set (is|was|are|were|been|be|being|gets?|getting)
+// covers the linking verbs that introduce a passive clause. This is STRICTER than
+// detectGrantConditions' self-crit rule (which uses /critically (?:hits|damag)/i and therefore
+// misclassifies the passive "is critically damaged" — see detectReactiveTrigger docs).
+//
+// Lookbehind-free implementation (Safari < 16.4 lacks RegExp lookbehind and the production
+// browserslist includes iOS Safari 15.x): a global core regex scans ALL occurrences and a
+// prefix check verifies each is not preceded by a passive linking verb. This is actually more
+// correct than the old single lookbehind regex, which — because `.test` only finds the first
+// match — would have missed a later active occurrence when an earlier one was passive; here a
+// later active phrasing still classifies even if an earlier phrasing was passive.
+const ACTIVE_SELF_CRIT_CORE = /critically\s+(?:hits|hitting|damages|damaging)/gi;
+const PASSIVE_LINKING_VERB_PREFIX = /\b(?:is|was|are|were|been|be|being|gets?|getting)\s+$/i;
+function matchesActiveSelfCrit(text: string): boolean {
+    ACTIVE_SELF_CRIT_CORE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = ACTIVE_SELF_CRIT_CORE.exec(text)) !== null) {
+        if (!PASSIVE_LINKING_VERB_PREFIX.test(text.slice(0, m.index))) return true;
+    }
+    return false;
+}
 const START_OF_ROUND_RE = /at the start of (?:the|each|every) round/i;
 const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
 
@@ -661,7 +695,7 @@ export function detectReactiveTrigger(
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
     const clause = resolveBuffClause(skillText, buffName);
-    if (ACTIVE_SELF_CRIT_RE.test(clause)) return 'on-crit';
+    if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
     return undefined;

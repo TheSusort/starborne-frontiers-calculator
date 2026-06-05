@@ -1124,4 +1124,295 @@ describe('Phase 3 reactive triggers', () => {
         );
         expect(seq).toEqual([1, 2, 3, 4, 5]);
     });
+
+    // ----------------------------------------------------------------------
+    // Fix B — condition gating on a reclassified start-of-round BUFF. Before the
+    // fix only the debuff branch gated executeIntent; the buff/charge/dot branches
+    // executed unconditionally, so a start-of-round buff carrying a real co-gate
+    // (Asphyxiator shape: enemy-debuff gte N) ignored its gate entirely. With the
+    // fix the buff branch honors its gate against the drain context.
+    //
+    // Drain-snapshot trace (verified): the start-of-round buff drains at drain point
+    // (a), BEFORE any turn. buildDrainContext's enemy-debuff count comes from
+    // statusEngine.snapshot().activeEnemyDebuffs, which counts SCHEDULED (input
+    // enemyDebuffs) statuses — recurring ones are visible immediately — but EXCLUDES
+    // ability-sourced (payload-carrying) timed debuffs. So this test seeds the
+    // standing count via the scheduled enemyDebuffs input (the count the drain sees):
+    //   - gte 2 with TWO standing recurring enemy debuffs ⇒ gate passes ⇒ buff present.
+    //   - gte 2 with ONE standing recurring enemy debuff ⇒ count 1 < 2 ⇒ gate fails ⇒
+    //     buff absent (before the fix it would have applied regardless).
+    // ----------------------------------------------------------------------
+    const gatedStartOfRoundBuffSkills = (threshold: number): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } })],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'start-of-round',
+                        conditions: [
+                            {
+                                subject: 'enemy-debuff',
+                                derivable: true,
+                                countComparator: 'gte',
+                                countThreshold: threshold,
+                            },
+                        ],
+                        config: {
+                            type: 'buff',
+                            buffName: 'Gated Attack Up',
+                            stacks: 1,
+                            parsedEffects: { attack: 30 },
+                            isStackable: false,
+                            duration: 1,
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    const recurringEnemyDebuff = (id: string, buffName: string): SelectedGameBuff => ({
+        id,
+        buffName,
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: { defense: -10 },
+        skillSource: 'active',
+        skillDuration: 'recurring',
+    });
+
+    it('fix B: start-of-round self buff applies when its enemy-debuff gte 2 gate is met (two standing debuffs)', () => {
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: gatedStartOfRoundBuffSkills(2),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 0,
+                enemyDebuffs: [
+                    recurringEnemyDebuff('e1', 'Def Down'),
+                    recurringEnemyDebuff('e2', 'Speed Down'),
+                ],
+                numRounds: 3,
+            })
+        );
+        const present = (n: number) =>
+            result.rounds
+                .find((r) => r.round === n)!
+                .activeSelfBuffs.some((b) => b.buffName === 'Gated Attack Up');
+        // Count 2 ≥ 2 each round's drain ⇒ gate passes ⇒ buff present every round.
+        expect(present(1)).toBe(true);
+        expect(present(2)).toBe(true);
+        expect(present(3)).toBe(true);
+    });
+
+    it('fix B: start-of-round self buff is GATED OUT when its enemy-debuff gte 2 gate fails (one standing debuff) — before the fix it applied unconditionally', () => {
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: gatedStartOfRoundBuffSkills(2),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 0,
+                enemyDebuffs: [recurringEnemyDebuff('e1', 'Def Down')],
+                numRounds: 3,
+            })
+        );
+        // Count 1 < 2 ⇒ gate fails on every drain ⇒ buff NEVER applies (the bug: the buff
+        // branch ignored the gate and would apply it regardless).
+        for (const round of result.rounds) {
+            expect(round.activeSelfBuffs.some((b) => b.buffName === 'Gated Attack Up')).toBe(false);
+        }
+    });
+
+    // A charge follow-up whose manual condition genuinely fails (derivable:false,
+    // manualCount:0 → evaluateCondition returns 0 → conditionMet's count>0 is false).
+    // liveGateConditions passes manual conditions through untouched, so the gate stays
+    // literal. Before Fix B the charge branch ignored conditions entirely and banked +1.
+    it('fix B: a charge follow-up with a failing manual condition grants nothing', () => {
+        const gatedChargeSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        timedEnemyDebuff('Def Down'),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            // Manual gate that never passes (count 0).
+                            conditions: [
+                                { subject: 'self-buff', derivable: false, manualCount: 0 },
+                            ],
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { result } = collectEvents(
+            baseInput({ shipSkills: gatedChargeSkills(), numRounds: 8 })
+        );
+        // The trigger fires (a debuff lands each cast) but the gate blocks the charge gain,
+        // so cadence is plain +1/active banking ⇒ charged every 4th round (NOT every 3rd).
+        expect(result.rounds.map((r) => r.action)).toEqual([
+            'active',
+            'active',
+            'active',
+            'charged',
+            'active',
+            'active',
+            'active',
+            'charged',
+        ]);
+    });
+
+    // ----------------------------------------------------------------------
+    // Fix C — drain-time HP% includes THIS round's damage so far. An on-crit timed
+    // enemy debuff gated on enemy HP% below 50 where the triggering hit itself crosses
+    // the threshold. enemyHp 30000; one crit hit deals ~18.5k ≈ 62% of it.
+    //
+    // Round-1 trace (verified): entering HP% = 100 (> 50). The on-crit drain runs at
+    // drain point (b), AFTER the attacker's hit. WITH the fix cumulativeDamage at the
+    // drain includes round 1's directDamage (~18.5k) ⇒ post-hit HP% ≈ 38 (< 50) ⇒ the
+    // gate passes ⇒ the timed debuff applies on round 1's drain ⇒ visible from round 2
+    // (same-turn decrement, identical to the scenario-6 on-crit timing).
+    // WITHOUT the fix the drain read the entering-round cumulativeDamage (0) ⇒ HP% 100
+    // (> 50) ⇒ the gate failed on round 1; the debuff would only appear from round 3
+    // (round 2's entering HP% 38 passes, visible round 3). Asserting round-1 ABSENT and
+    // round-2 PRESENT pins the post-hit semantics: it is the crit round's OWN hit that
+    // crosses the threshold and triggers the application.
+    // ----------------------------------------------------------------------
+    it('fix C: on-crit HP-gated debuff applies when the triggering hit crosses the HP threshold (drain sees post-hit HP)', () => {
+        const hpGatedSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            conditions: [
+                                {
+                                    subject: 'hp-threshold',
+                                    derivable: true,
+                                    hpComparator: 'below',
+                                    hpPercent: 50,
+                                    hpSubject: 'enemy',
+                                },
+                            ],
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Below50 Shred',
+                                stacks: 1,
+                                parsedEffects: { defense: -20 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: hpGatedSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 100, // every active turn crits → the on-crit trigger fires
+                enemyHp: 30000, // one crit hit (~18.5k) takes the enemy below 50% HP
+                numRounds: 4,
+            })
+        );
+
+        const present = (n: number) =>
+            result.rounds
+                .find((r) => r.round === n)!
+                .activeEnemyDebuffs.some((b) => b.buffName === 'Below50 Shred');
+        // Round 1: the crit hit crosses 50% → applied on round 1's drain → not yet visible
+        // round 1 (same-turn decrement), visible from round 2. WITHOUT the fix the round-1
+        // drain saw 100% HP and the debuff would only appear from round 3.
+        expect(present(1)).toBe(false);
+        expect(present(2)).toBe(true);
+    });
+
+    // ----------------------------------------------------------------------
+    // Fix D — a resisted persistent-stacking status surfaces its display row with
+    // turnsRemaining 'permanent' (not its skill-text turn count). Defense Shred at
+    // debuffLandingChance 0 always resists; the resisted row must read 'permanent'.
+    // ----------------------------------------------------------------------
+    it('fix D: a resisted persistent-stacking debuff shows turnsRemaining "permanent" in resistedEnemyDebuffs', () => {
+        const resistedPersistentSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Defense Shred',
+                                stacks: 1,
+                                parsedEffects: { defense: -2 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 3, // text value — irrelevant; persistent name wins
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { result } = collectEvents(
+            baseInput({
+                shipSkills: resistedPersistentSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 100, // trigger fires every round
+                debuffLandingChance: 0, // always resisted
+                numRounds: 3,
+            })
+        );
+
+        const resistedRow = result.rounds
+            .flatMap((r) => r.resistedEnemyDebuffs)
+            .find((b) => b.buffName === 'Defense Shred');
+        expect(resistedRow).toBeDefined();
+        expect(resistedRow!.turnsRemaining).toBe('permanent');
+    });
 });
