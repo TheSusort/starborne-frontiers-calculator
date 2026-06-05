@@ -116,6 +116,9 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 - Team direct/secondary/conditional damage folds into a round-level `teamDamage`
   accumulator → reduces enemy HP for gates/HP%/destruction events; never enters the
   attacker's damage fields or summary DPS.
+- Destruction stays emission-only: if team damage alone drops the enemy to 0 HP, the
+  `ship-destroyed` tap fires (once) and the sim keeps hitting the dead dummy to
+  `numRounds`, exactly as today — no termination-path change.
 - **Charge grants:** an `ally`/`all-allies`-targeted charge ability (Hermes) bumps **every
   player actor's** charges, capped per actor at its own `chargeCount`; `self`-targeted
   charge gains bump the owner. `allyChargePerRound` stays as the coexisting manual
