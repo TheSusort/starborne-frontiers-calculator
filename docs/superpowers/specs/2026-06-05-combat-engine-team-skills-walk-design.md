@@ -182,9 +182,10 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 ## Reactive parity
 
 - `partitionReactiveAbilities` runs per walked actor; reactive registration order is
-  **team order (input order), then attacker, then slot/text order within each actor** —
-  fixed registration order = fixed execution order. (Note: registration order is
-  input-list order for determinism, independent of speed-based turn order.)
+  **focus/attacker first, then team actors in input order, then slot/text order within
+  each actor** (implementation choice during Task 6; cross-owner order only affects
+  multi-owner runs where any fixed order is deterministic) — fixed registration order =
+  fixed execution order.
 - Listener guards generalize per owner:
   - `on-crit` → `ability-performed` with `didCrit && actorId === owner`
   - `on-debuff-inflicted` → `debuff-applied`/`dot-applied` with `sourceId === owner`

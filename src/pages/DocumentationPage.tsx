@@ -2305,7 +2305,7 @@ const DocumentationPage: React.FC = () => {
                                         skills without direct damage (pure utility) still fire on
                                         their normal cadence and apply their effects.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
                                         Skill effects that react to combat events — crit-triggered
                                         debuff inflictions, charge gains on inflicting a debuff, and
@@ -2316,6 +2316,27 @@ const DocumentationPage: React.FC = () => {
                                         Triggers the simulator cannot derive (when attacked, ally
                                         destroyed, etc.) are treated as assume-active, preserving
                                         the existing manual-condition behavior.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">Team Ships:</span> Pick a
+                                        ship into any of the four team slots and its real skills are
+                                        parsed and simulated — the same full ability editor as the
+                                        attacker opens on each team card, with combat stats (attack,
+                                        crit rate, crit damage, defense penetration, hacking) and an
+                                        affinity selector auto-filled from the ship&apos;s data and
+                                        fully editable. Team ships deal real damage shown separately
+                                        as <span className="text-primary">Team damage</span> — it
+                                        reduces the enemy&apos;s HP (so HP-threshold gates fire at
+                                        the right round) without being added to the attacker&apos;s
+                                        DPS totals, keeping the comparison between attacker
+                                        configurations meaningful. Team ships apply their own DoTs
+                                        and debuffs on their actual turns using their own stats and
+                                        affinity, fire their own reactive triggers (crit-triggered
+                                        effects, charge-on-inflict, start-of-round buffs), and grant
+                                        ally-wide buffs and charge gains to the whole team —
+                                        including the attacker. The buff and debuff pickers on team
+                                        cards are manual extras only, for effects not covered by the
+                                        ship&apos;s parsed skills.
                                     </p>
                                 </div>
 
