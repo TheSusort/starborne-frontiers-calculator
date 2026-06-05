@@ -1042,12 +1042,13 @@ function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
     return found?.type === 'buff' ? 'self' : 'enemy';
 }
 
-// Single-ally phrasings: "the ally with/in …", "an ally", "an adjacent ally" (singular).
+// Single-ally phrasings: "the ally with/in …", "the other ally", "an ally", "an adjacent ally" (singular).
 // "all (adjacent) allies"/"allies" plural is handled by the all-allies branch first, so a
 // bare "allies" never reaches this — only a singular "ally" does.
-const SINGLE_ALLY_RE = /\bthe ally\b|\ban ally\b|\ban adjacent ally\b/i;
-// Ally-scoped (team-wide) grant phrasings: "all allies", bare plural "allies", "friendly …".
-const ALL_ALLIES_RE = /friendly|all allies|allies/i;
+const SINGLE_ALLY_RE = /\bthe (?:other )?ally\b|\ban ally\b|\ban adjacent ally\b/i;
+// Ally-scoped (team-wide) grant phrasings: bare plural "allies" (subsumes "all allies"), "friendly …".
+// Note: bare "allies" subsumes "all allies", so the explicit "all allies" alternative is omitted.
+const ALL_ALLIES_RE = /friendly|allies/i;
 
 // Strips trigger/condition sub-clauses from a resolved (single-sentence) grant clause so an
 // ally reference INSIDE a condition ("after an ally is critically repaired", "when an ally is
@@ -1065,6 +1066,8 @@ function stripConditionClauses(clause: string): string {
     // Leading "When/After/While/If … ," — only when it precedes the rest via a comma.
     out = out.replace(/^\s*(?:when|after|while|if)\b[^,]*,\s*/i, '');
     // Trailing " when/after/while/if …" condition (to end of clause).
+    // LOSSY: a post-condition receiver clause is destroyed here; the default-self fallback covers
+    // the live corpus. A future "if …, all allies gain X" phrasing would need receiver-aware stripping.
     out = out.replace(/\s+\b(?:when|after|while|if)\b.*$/i, '');
     return out;
 }

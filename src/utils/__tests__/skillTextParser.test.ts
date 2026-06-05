@@ -255,6 +255,18 @@ describe('parseSkillEffects', () => {
         ).toEqual([{ buffName: 'Attack Up III', target: 'ally', duration: 2, source: 'active' }]);
     });
 
+    it('classifies "the other ally with …" as ally (forward-proofing "the other ally" heal/buff form)', () => {
+        // Corpus uses "the other ally with the lowest current health percentage" for heals/triggers
+        // (e.g. Yorn passive). This test locks the buff-grant variant so SINGLE_ALLY_RE's
+        // "the (?:other )?ally" branch is covered and can't regress silently.
+        expect(
+            parseSkillEffects(
+                'This Unit grants the other ally with the lowest HP <unit-skill>Defense Up II</unit-skill> for 2 turns',
+                'passive1'
+            )
+        ).toEqual([{ buffName: 'Defense Up II', target: 'ally', duration: 2, source: 'passive1' }]);
+    });
+
     it('classifies "grants them 1 stack" as ally (Howler — receiver from context)', () => {
         expect(
             parseSkillEffects(
