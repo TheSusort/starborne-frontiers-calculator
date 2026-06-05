@@ -474,17 +474,17 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
         // Attacker fires active r1,r2; charged r3; active r4 (per-active ticks on active).
         eng.beginRound(1);
         eng.sourceFired('attacker', 'active', 1);
-        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(1);
+        expect(eng.activeAbilityStatuses('self', () => baseCtx)[0].active.stacks).toBe(1);
         eng.beginRound(2);
         eng.sourceFired('attacker', 'active', 2);
-        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        expect(eng.activeAbilityStatuses('self', () => baseCtx)[0].active.stacks).toBe(2);
         eng.beginRound(3);
         eng.sourceFired('attacker', 'charge', 3); // charged → no increment
-        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(2);
+        expect(eng.activeAbilityStatuses('self', () => baseCtx)[0].active.stacks).toBe(2);
         eng.beginRound(4);
         eng.sourceFired('attacker', 'active', 4);
         const r4 = eng.snapshot();
-        expect(eng.activeAbilityStatuses('self', baseCtx)[0].active.stacks).toBe(3);
+        expect(eng.activeAbilityStatuses('self', () => baseCtx)[0].active.stacks).toBe(3);
         // It must NOT leak into the scheduled snapshot (engine appends it separately).
         expect(r4.activeSelfBuffs).toEqual([]);
     });
@@ -519,8 +519,8 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
             selfHpPct: 100,
             enemyHpPct: 100,
         });
-        expect(eng.activeAbilityStatuses('self', ctx(0))).toHaveLength(0);
-        expect(eng.activeAbilityStatuses('self', ctx(2))).toHaveLength(1);
+        expect(eng.activeAbilityStatuses('self', () => ctx(0))).toHaveLength(0);
+        expect(eng.activeAbilityStatuses('self', () => ctx(2))).toHaveLength(1);
     });
 });
 
@@ -1090,12 +1090,12 @@ describe('per-actor player sides', () => {
         // Round 2: second per-round increment fires
         se.beginRound(2);
         // team-1 sees 2 stacks (incremented twice by beginRound)
-        const team1Active = se.activeAbilityStatuses('self', baseCtx, 'team-1');
+        const team1Active = se.activeAbilityStatuses('self', () => baseCtx, 'team-1');
         expect(team1Active).toHaveLength(1);
         expect(team1Active[0].active.stacks).toBe(2);
         expect(team1Active[0].payload.buffName).toBe('TeamMomentum');
         // attacker sees nothing for this buff — store isolation upheld
-        const attackerActive = se.activeAbilityStatuses('self', baseCtx, 'attacker');
+        const attackerActive = se.activeAbilityStatuses('self', () => baseCtx, 'attacker');
         expect(attackerActive.find((s) => s.payload.buffName === 'TeamMomentum')).toBeUndefined();
     });
 
@@ -1126,12 +1126,12 @@ describe('per-actor player sides', () => {
         se.registerAbilityStatuses([auraStatus], 'team-1');
         se.beginRound(1);
         // team-1 sees the aura
-        const team1Active = se.activeAbilityStatuses('self', baseCtx, 'team-1');
+        const team1Active = se.activeAbilityStatuses('self', () => baseCtx, 'team-1');
         expect(team1Active).toHaveLength(1);
         expect(team1Active[0].payload.buffName).toBe('TeamAura');
         expect(team1Active[0].active.turnsRemaining).toBe('recurring');
         // attacker sees nothing — aura store isolation upheld
-        const attackerActive = se.activeAbilityStatuses('self', baseCtx, 'attacker');
+        const attackerActive = se.activeAbilityStatuses('self', () => baseCtx, 'attacker');
         expect(attackerActive.find((s) => s.payload.buffName === 'TeamAura')).toBeUndefined();
     });
 });

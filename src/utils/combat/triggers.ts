@@ -173,20 +173,66 @@ export interface IntentExecContext {
  *  the enemyHpPct derived from cumulative damage. Drain has no per-hit crit outcome,
  *  so crit-gated conditions are evaluated with effectiveCritRate 0 (treated as
  *  not-crit at drain time). */
-function buildDrainContext(ctx: IntentExecContext) {
-    const snap = ctx.statusEngine.snapshot();
+/**
+ * Build a ConditionContext for ONE player actor (`ownerId`) from the status engine + the shared
+ * enemy state. Reused by the drain-time gate (buildDrainContext) and by the player-turn aura/accum
+ * resolver (Task 5: an ally-cast aura sitting on a recipient is gated by its CASTER's context —
+ * the resolver maps casterId → this ctx). The `selfBuffNames` come from that owner's snapshot, so
+ * each actor's gate reads ITS OWN active buffs + the shared enemy state. `effectiveCritRate`
+ * defaults to 0 (drain-time has no per-round crit folding); callers with a per-round crit rate
+ * pass it explicitly.
+ *
+ * `includeAbilitySelfNames` (Task 5) additionally pulls the owner's ABILITY-SOURCED self statuses
+ * (timed + persistent, which snapshot() excludes because they carry payloads) into the gate's
+ * selfBuffNames — mirroring the player-turn's local `priorAbilitySelfNames`. The player-turn
+ * caster-ctx resolver sets it so a FOREIGN caster's ability self-buffs (e.g. a team ship's
+ * self-granted gate buff) are visible to its own aura's gate. The drain path leaves it false
+ * (the executor is attacker-only and the drain gate's snapshot-only behaviour is golden-locked).
+ */
+export function buildActorConditionContext(
+    statusEngine: StatusEngine,
+    ownerId: string,
+    shared: {
+        corrosionEntryCount: number;
+        infernoEntryCount: number;
+        bombCount: number;
+        enemyType?: EnemyBaseClass;
+        enemyHpPct: number;
+        effectiveCritRate?: number;
+        includeAbilitySelfNames?: boolean;
+    }
+) {
+    const snap = statusEngine.snapshot(ownerId);
     const selfBuffNames = snap.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
-    const enemyHpPct =
-        ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
+    if (shared.includeAbilitySelfNames) {
+        // Ability-sourced self statuses are payload-carrying → excluded from snapshot(); add their
+        // names so a caster's self-granted gate buffs are visible to its own aura/accum gate.
+        for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
+            selfBuffNames.push(s.active.buffName);
+        }
+    }
     return buildRoundContext({
         selfBuffNames,
         landedEnemyDebuffCount: snap.activeEnemyDebuffs.length,
+        corrosionEntryCount: shared.corrosionEntryCount,
+        infernoEntryCount: shared.infernoEntryCount,
+        bombCount: shared.bombCount,
+        effectiveCritRate: shared.effectiveCritRate ?? 0,
+        enemyType: shared.enemyType,
+        enemyHpPct: shared.enemyHpPct,
+    });
+}
+
+function buildDrainContext(ctx: IntentExecContext) {
+    const enemyHpPct =
+        ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
+    // Drain-time gate reads the ATTACKER's snapshot (the executor is attacker-only until Task 6).
+    return buildActorConditionContext(ctx.statusEngine, 'attacker', {
         corrosionEntryCount: ctx.corrosionEntries.length,
         infernoEntryCount: ctx.infernoEntries.length,
         bombCount: ctx.pendingBombs.length,
-        effectiveCritRate: 0,
         enemyType: ctx.enemyType,
         enemyHpPct,
     });

@@ -30,23 +30,59 @@ import {
 } from './triggers';
 
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
-// and register them under that owner's status-engine side. Returns the timed-by-slot lists
-// (applied when that owner's slot fires). Extracted from the attacker's inline loop (Task 4)
-// with ZERO behavioural change: the attacker calls it with ownerId 'attacker' at the same
-// setup point; walked team actors call it with their own id afterward (input order).
+// and register them under the correct status-engine recipients. Returns the timed-by-slot
+// lists (applied when that caster's slot fires). Extracted from the attacker's inline loop
+// (Task 4); Task 5 makes the routing real (see below).
+//
 // Classification (spec): accumulating (stackTrigger && isStackable) → accumulating maps,
 // effect inclusion aura-gated; aura (recurring/undefined duration OR passive slot) → per-round
-// effect gate; timed (finite duration) → gated at application. Routing mirrors
-// buffAbilitiesToSelectedBuffs: enemy/all-enemies → enemy side, everything else → self.
+// effect gate; timed (finite duration) → gated at application.
+//
+// TARGET ROUTING (Task 5): the binary side computation becomes recipient routing —
+//   enemy/all-enemies → 'enemy' side (recipients ignored, enemy maps are singular);
+//   self              → recipients [casterId] (the owner only);
+//   ally/all-allies   → recipients = ALL player ids (`playerIds`, a FIXED source order
+//                       [focusActorId, ...team ids in input order] — independent of which
+//                       actor cast, so application order is deterministic).
+// `casterId` (== this caster's ownerId) is stamped on every status so its gate evaluates
+// against the caster's ctx even when the status lives on another recipient.
+//
+// AURA/ACCUMULATING fan-out: the engine fans these out by calling
+// statusEngine.registerAbilityStatuses(...) ONCE PER RECIPIENT (keeping the statusEngine API
+// stable). Each recipient gets its own per-owner aura/accum store entry carrying the same
+// casterId. Timed statuses are NOT registered here — they apply lazily per recipient via
+// applyTimedAbilityStatus at the firing site (playerTurn loops `status.recipients`).
+//
+// KNOWN APPROXIMATION (documented, not fixed this task): a team-cast all-allies ACCUMULATING
+// status registered onto the attacker's store ticks per-active/per-charge on the ATTACKER's
+// cadence (sourceFired increments only the 'attacker' map for per-slot triggers). Per-caster
+// cadence tracking is out of scope here; per-round increments tick every owner's map already.
+//
+// Zero-churn: for an attacker-only run playerIds = ['attacker'], so self and ally/all-allies
+// both yield recipients ['attacker'] and casterId 'attacker' — identical to the pre-Task-5
+// owner-routing (one registration onto the attacker's store).
 function registerActorAbilityStatuses(
     castSkills: ShipSkills,
     statusEngine: ReturnType<typeof createStatusEngine>,
-    ownerId: string
+    ownerId: string,
+    playerIds: string[]
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
     timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
 } {
-    const registeredAbilityStatuses: RegisteredAbilityStatus[] = [];
+    // Aura/accumulating statuses to register, grouped per RECIPIENT owner id (the engine fans
+    // them out with one registerAbilityStatuses call per recipient). Timed statuses are applied
+    // lazily and tracked via timedSelfBySlot/timedEnemyBySlot — they carry recipients on the
+    // status object for the per-recipient application loop in playerTurn.
+    const byRecipient = new Map<string, RegisteredAbilityStatus[]>();
+    const pushFor = (rid: string, status: RegisteredAbilityStatus) => {
+        let list = byRecipient.get(rid);
+        if (!list) {
+            list = [];
+            byRecipient.set(rid, list);
+        }
+        list.push(status);
+    };
     const timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
     for (const slot of castSkills.slots) {
@@ -55,6 +91,15 @@ function registerActorAbilityStatuses(
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             const side: 'self' | 'enemy' =
                 ability.target === 'enemy' || ability.target === 'all-enemies' ? 'enemy' : 'self';
+            // Player-side recipients (self vs ally/all-allies). Enemy-side statuses ignore this
+            // (recipients are only consulted on the self side). Self → caster only; ally/all-allies
+            // → every player actor (fixed source order). `playerIds` already includes the caster.
+            const recipients: string[] =
+                side === 'enemy'
+                    ? ['attacker'] // unused for enemy side; kept non-empty for shape consistency
+                    : ability.target === 'ally' || ability.target === 'all-allies'
+                      ? playerIds
+                      : [ownerId];
             const accumulating = !!cfg.stackTrigger && cfg.isStackable;
             const isAura =
                 !accumulating &&
@@ -69,11 +114,14 @@ function registerActorAbilityStatuses(
             };
             // `as const` keeps the literal types (side, sourceSlot) so the spread into
             // a union variant below doesn't widen them — runtime object is unchanged.
+            // casterId/recipients (Task 5) carry the ally-routing decision on the status.
             const base = {
                 payload,
                 side,
                 sourceSlot: slot.slot,
                 conditions: liveGateConditions(ability.conditions),
+                casterId: ownerId,
+                recipients,
             } as const;
             let status: RegisteredAbilityStatus;
             if (accumulating) {
@@ -99,10 +147,29 @@ function registerActorAbilityStatuses(
                 status = { ...base, kind: 'timed', duration: cfg.duration as number };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
-            registeredAbilityStatuses.push(status);
+            // Enemy-side statuses register once (singular enemy maps); self-side aura/accum fan
+            // out to every recipient store. Timed statuses are applied lazily (per recipient) at
+            // the firing site, so we only group the NON-timed statuses for registration here —
+            // but enemy timed statuses also flow through registerAbilityStatuses as before (it
+            // ignores timed — they apply via applyTimedAbilityStatus). Keep the historical
+            // behaviour by registering every status under each recipient (registerAbilityStatuses
+            // only stores aura/accumulating internally; timed are no-ops there).
+            if (side === 'enemy') {
+                // Enemy side: single registration (recipientId irrelevant — enemy maps singular).
+                pushFor('enemy', status);
+            } else {
+                // `recipients` is the locally-computed list (always defined) — use it directly
+                // rather than status.recipients (typed optional through the union).
+                for (const rid of recipients) pushFor(rid, status);
+            }
         }
     }
-    statusEngine.registerAbilityStatuses(registeredAbilityStatuses, ownerId);
+    // Fan out: one registerAbilityStatuses call per recipient owner (statusEngine API stable).
+    // Enemy-side statuses were grouped under the sentinel key 'enemy'; their ownerId argument is
+    // irrelevant (registerAbilityStatuses routes enemy-side statuses to the singular enemy maps).
+    for (const [rid, statuses] of byRecipient) {
+        statusEngine.registerAbilityStatuses(statuses, rid === 'enemy' ? ownerId : rid);
+    }
     return { timedSelfBySlot, timedEnemyBySlot };
 }
 
@@ -394,6 +461,15 @@ export function runCombat(input: CombatEngineInput): {
     // lifts this into CombatEngineInput once multi-actor damage rows are needed (YAGNI).
     const focusActorId = 'attacker';
 
+    // The full player-id universe for ally-target routing (Task 5): the focus actor FIRST,
+    // then every team actor in INPUT ORDER. This order is FIXED (independent of which actor
+    // casts an ally buff) so per-recipient application order is deterministic across the run.
+    // For an attacker-only run this is just ['attacker'] → ally/all-allies collapse to the
+    // owner, exactly as before Task 5 (zero churn). NOTE: it lists EVERY team actor (walked or
+    // legacy) — a legacy team actor carries no walked statuses, but it is still a valid ally
+    // recipient of another actor's all-allies buff (status maps are lazy-created per owner).
+    const playerIds = [focusActorId, ...teamActors.map((t) => t.id)];
+
     // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
     // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
     // enemy via the status engine's per-source timed sets). Dummy combat stats keep the
@@ -461,7 +537,8 @@ export function runCombat(input: CombatEngineInput): {
     const { timedSelfBySlot, timedEnemyBySlot } = registerActorAbilityStatuses(
         shipSkills,
         statusEngine,
-        'attacker'
+        'attacker',
+        playerIds
     );
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
@@ -535,7 +612,12 @@ export function runCombat(input: CombatEngineInput): {
             partitionReactiveAbilities(w.shipSkills);
         // Register this walked actor's cast buff/debuff abilities under its own owner id
         // (AFTER the attacker — zero-churn ordering for the attacker-only path).
-        const teamTimed = registerActorAbilityStatuses(teamCastSkills, statusEngine, t.id);
+        const teamTimed = registerActorAbilityStatuses(
+            teamCastSkills,
+            statusEngine,
+            t.id,
+            playerIds
+        );
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
         // rolls are isolated from the attacker's deterministic schedule.
@@ -586,6 +668,23 @@ export function runCombat(input: CombatEngineInput): {
     // Whether ANY walked team actor exists — controls whether RoundData.teamDamage is set
     // (undefined preserves the legacy/attacker-only RoundData shape; goldens stay locked).
     const hasWalkedTeam = teamRuntimeById.size > 0;
+
+    // All player actors (attacker + team turn-order carriers) — the universe ally-charge grants
+    // bump. Built once. Used by grantAllyCharges below (passed into every runPlayerTurn call).
+    const allPlayerActors = [attacker, ...teamCombatActors];
+
+    // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
+    // its OWN chargeCount, skipping chargeCount 0 (no charge skill → nothing to bank). Called
+    // from a caster's active-round charge step (runPlayerTurn). For an attacker-only run this
+    // loops the sole attacker → identical net charge to the pre-Task-5 own-only path (no team
+    // actors means no ally-targeted charge abilities reach this either). `allyChargePerRound`
+    // (the manual attacker-side input) is unchanged and applied separately in runPlayerTurn.
+    const grantAllyCharges = (amount: number): void => {
+        for (const a of allPlayerActors) {
+            if (a.chargeCount <= 0) continue;
+            a.charges = Math.min(a.charges + amount, a.chargeCount);
+        }
+    };
 
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
@@ -769,6 +868,7 @@ export function runCombat(input: CombatEngineInput): {
                     // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
                     // reflects all players' damage so far (gates/HP% column react to it).
                     enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                    grantAllyCharges,
                 });
 
                 // Drain any team-turn resisted entries staged BEFORE this attacker turn
@@ -816,6 +916,7 @@ export function runCombat(input: CombatEngineInput): {
                     bus,
                     round: r,
                     enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                    grantAllyCharges,
                 });
 
                 // Fold the team turn's damage into ITS OWN map entry (post-round assembly

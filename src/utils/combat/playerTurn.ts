@@ -36,7 +36,7 @@ import {
 } from './statusEngine';
 import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
-import type { ReactiveAbility } from './triggers';
+import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -139,6 +139,13 @@ export interface PlayerTurnArgs {
      *  enemyHpPct (the value hp-threshold gates and the HP% column react to). Renamed from
      *  `cumulativeDamage` (Task 4): it now includes team damage, not just the focus actor's. */
     enemyHpDecline: number;
+    /** Grant `amount` charges to EVERY player actor (Task 5 ally-charge routing). Supplied by
+     *  the engine, which loops all player actors (incl. this caster) bumping
+     *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
+     *  banking). Called from the CASTER's active-round charge step (mirrors own gains). Optional
+     *  so statusEngine/standalone callers without a team need not supply it — when absent the
+     *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
+    grantAllyCharges?: (amount: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -342,10 +349,18 @@ function chargeGainFromSkill(args: {
     gatedSkill: Skill | undefined;
     ctxFor: Map<string, ConditionContext>;
     fallbackCtx: ConditionContext;
+    /** Which charge abilities to sum (Task 5 ally routing):
+     *  - 'own'  → self-targeted (and anything not ally/all-allies) → bumps the caster only.
+     *  - 'ally' → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
+     *  For attacker-only runs the 'ally' total still routes through grantAllyCharges, which
+     *  loops the sole attacker → identical net charge to the pre-Task-5 single 'own' sum. */
+    targetFilter: 'own' | 'ally';
 }): number {
     let gain = 0;
     for (const ability of chargeAbilitiesFromSkill(args.gatedSkill)) {
         if (ability.config.type !== 'charge') continue;
+        const isAlly = ability.target === 'ally' || ability.target === 'all-allies';
+        if (args.targetFilter === 'ally' ? !isAlly : isAlly) continue;
         const primary = ability.conditions[0];
         const scale =
             !primary || primary.countComparator != null
@@ -502,6 +517,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         bus,
         round: r,
         enemyHpDecline,
+        grantAllyCharges,
     } = args;
 
     const {
@@ -721,6 +737,39 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
+    // Caster-ctx resolver (Task 5): activeAbilityStatuses gates each aura/accum against ITS
+    // CASTER's context. For the acting actor's OWN statuses (casterId === actor.id) the resolver
+    // returns the local round ctx — byte-identical to the pre-Task-5 single-ctx call, so the
+    // attacker-only path (where every casterId is the attacker) is zero-churn. For a FOREIGN
+    // caster (an ally-cast aura sitting on this actor's side) it builds that caster's ctx from
+    // its own snapshot + the shared enemy state, MEMOIZED per caster for this turn (cheap: one
+    // snapshot read per distinct foreign caster). effectiveCritRate is 0 for foreign casters
+    // (the per-round crit fold is local-only). The foreign ctx is independent of which local ctx
+    // is passed, so one memo serves both the enemy-side (preDebuff) and self-side (postDebuff)
+    // resolvers below.
+    const foreignCtxMemo = new Map<string, ConditionContext>();
+    const foreignCasterCtx = (casterId: string): ConditionContext => {
+        let c = foreignCtxMemo.get(casterId);
+        if (!c) {
+            c = buildActorConditionContext(statusEngine, casterId, {
+                corrosionEntryCount: corrosionEntries.length,
+                infernoEntryCount: infernoEntries.length,
+                bombCount: pendingBombs.length,
+                enemyType,
+                enemyHpPct,
+                // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
+                // gate buffs) so its own aura's gate sees them — matches the local priorAbilitySelfNames.
+                includeAbilitySelfNames: true,
+            });
+            foreignCtxMemo.set(casterId, c);
+        }
+        return c;
+    };
+    const resolveCtx =
+        (localCtx: ConditionContext) =>
+        (casterId: string): ConditionContext =>
+            casterId === actor.id ? localCtx : foreignCasterCtx(casterId);
+
     // Enemy-side ability statuses active this round, split by kind (Task 7):
     //  - TIMED (timedAbilityStatuses): already gated at application above; they
     //    persist their window unconditionally → folded WITHOUT a landing re-roll.
@@ -729,7 +778,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id);
     const recurringAbilityEnemy = statusEngine.activeAbilityStatuses(
         'enemy',
-        preDebuffGateCtx,
+        resolveCtx(preDebuffGateCtx),
         actor.id
     );
     const landedAbilityEnemy: ActiveBuff[] = [];
@@ -780,15 +829,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
+        // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
+        // acting runtime — postDebuffGateCtx IS the caster's context). Once it passes, the status
+        // is applied to EVERY recipient (Task 5): self → [caster]; ally/all-allies → all players.
+        // The status lives on each recipient (decrements at the recipient's Post Turn; family +
+        // persistent rules run per recipient side because applyTimedAbilityStatus threads
+        // recipientId). buff-applied emits ONCE PER RECIPIENT with the recipient's actorId.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
-        statusEngine.applyTimedAbilityStatus(r, status, actor.id);
-        bus.emit({
-            type: 'buff-applied',
-            actorId: actor.id,
-            round: r,
-            buffName: status.payload.buffName,
-            duration: status.duration,
-        });
+        // recipients is set by the engine helper for every timed-by-slot status; default to
+        // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
+        for (const rid of status.recipients ?? [actor.id]) {
+            statusEngine.applyTimedAbilityStatus(r, status, rid);
+            bus.emit({
+                type: 'buff-applied',
+                actorId: rid,
+                round: r,
+                buffName: status.payload.buffName,
+                duration: status.duration,
+            });
+        }
     }
 
     // (e) Effective self ability statuses this round (timed in-window + auras +
@@ -796,7 +855,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // exactly where scheduled buffs fold (toSimBuffs semantics).
     const selfAbilityStatuses: ActiveAbilityStatus[] = [
         ...statusEngine.timedAbilityStatuses('self', actor.id),
-        ...statusEngine.activeAbilityStatuses('self', postDebuffGateCtx, actor.id),
+        ...statusEngine.activeAbilityStatuses('self', resolveCtx(postDebuffGateCtx), actor.id),
     ];
     const abilitySelfEffects = selfAbilityStatuses.map((s) => payloadToSelectedBuff(s.payload));
     const abilitySelfTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
@@ -948,17 +1007,38 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // added here and the total is capped at chargeCount, since charges never
     // exceed what the charged skill requires.
     if (hasChargedSkill && action === 'active') {
+        // OWN charge gains: self-targeted (and unscoped) charge abilities from the firing skill
+        // + the always-active passive slot. Bumps the caster only, capped at its own chargeCount.
         const bonusCharges =
-            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx }) +
+            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'own' }) +
             chargeGainFromSkill({
                 gatedSkill: gatedPassive,
                 ctxFor: passiveCtxFor,
                 fallbackCtx: ctx,
+                targetFilter: 'own',
             });
         actor.charges = Math.min(
             actor.charges + bonusCharges + (allyChargePerRound ?? 0),
             chargeCount
         );
+    }
+    // ALLY charge gains (Task 5): ally/all-allies-targeted charge abilities bump EVERY player
+    // actor (incl. this caster), each capped at its OWN chargeCount. Gated by the CASTER's
+    // active-round state (mirrors own gains — charge abilities fire on active turns); recipients
+    // receive regardless of their own action state. Applied at the SAME sequence point as own
+    // gains. Independent of hasChargedSkill: a caster with no charged skill of its own can still
+    // grant charges to allies (Hermes pattern). The engine supplies grantAllyCharges, which
+    // performs the per-actor cap-bump; absent (standalone callers) → no-op.
+    if (action === 'active' && grantAllyCharges) {
+        const allyCharges =
+            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'ally' }) +
+            chargeGainFromSkill({
+                gatedSkill: gatedPassive,
+                ctxFor: passiveCtxFor,
+                fallbackCtx: ctx,
+                targetFilter: 'ally',
+            });
+        if (allyCharges > 0) grantAllyCharges(allyCharges);
     }
 
     const preCritDamage =

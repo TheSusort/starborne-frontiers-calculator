@@ -75,6 +75,31 @@ const selfBuffAbility = (
 const neutralSelfBuff = (buffName: string, duration: number, id = 'sb'): Ability =>
     selfBuffAbility(buffName, duration, { attack: 0 }, id);
 
+/** An ally-targeted timed buff (target 'all-allies') — Task 5 routes it to every player actor. */
+const allyBuffAbility = (
+    buffName: string,
+    duration: number,
+    parsedEffects: Record<string, number>,
+    id = 'ab'
+): Ability => ({
+    id,
+    type: 'buff',
+    target: 'all-allies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'buff', buffName, parsedEffects, stacks: 1, isStackable: false, duration },
+});
+
+/** An ally-targeted charge ability (target 'all-allies') — Task 5 bumps every player actor. */
+const allyChargeAbility = (amount: number, id = 'ac'): Ability => ({
+    id,
+    type: 'charge',
+    target: 'all-allies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'charge', amount },
+});
+
 const teamStats = (overrides: Partial<NonNullable<TeamActorInput['stats']>> = {}) => ({
     attack: 15000,
     crit: 0,
@@ -449,5 +474,301 @@ describe('walked team actors (Task 4)', () => {
         const withLegacy = simulateDPS(baseInput({ teamActors: [legacyTeam], rounds: 4 }));
         expect(withLegacy.rounds.every((r) => r.teamDamage === undefined)).toBe(true);
         expect(withLegacy.summary.teamTotalDamage).toBeUndefined();
+    });
+});
+
+describe('ally-target routing (Task 5)', () => {
+    // 1. A team `all-allies` buff lands on the attacker AND on the team ship itself.
+    it('a team all-allies Attack Up buffs both the attacker and the team ship', () => {
+        // Team (speed 140, acts first) carries an all-allies Attack Up + its own damage ability.
+        // Round 2: the buff (applied round 1) is live for both actors → attacker direct AND team
+        // direct are higher than the same setup with a self-only (no-attacker-reach) buff.
+        const withAllyBuff = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            allyBuffAbility('Team Attack Up', 4, { attack: 25 }, 'tab'),
+                            damageAbility(100, 'tad'),
+                        ],
+                    },
+                ],
+            },
+            { id: 'tally', stats: teamStats({ attack: 15000 }) }
+        );
+        // Control: identical kit but the buff is SELF-only → never reaches the attacker.
+        const withSelfBuff = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            selfBuffAbility('Team Attack Up', 4, { attack: 25 }, 'tsb'),
+                            damageAbility(100, 'tad'),
+                        ],
+                    },
+                ],
+            },
+            { id: 'tally', stats: teamStats({ attack: 15000 }) }
+        );
+
+        const ally = simulateDPS(baseInput({ teamActors: [withAllyBuff], rounds: 3 }));
+        const selfOnly = simulateDPS(baseInput({ teamActors: [withSelfBuff], rounds: 3 }));
+
+        // Attacker direct (row directDamage): buffed only when the buff reaches the attacker.
+        expect(ally.rounds[1].directDamage).toBeGreaterThan(selfOnly.rounds[1].directDamage);
+        // Team damage: buffed in BOTH (the team always gets its own buff), but the all-allies
+        // variant's team total is at least as large (same buff on the team in both cases) —
+        // assert team damage is positive in both as a sanity floor, and the attacker delta is
+        // the discriminating signal above.
+        expect((ally.rounds[1].teamDamage ?? 0) > 0).toBe(true);
+        expect((selfOnly.rounds[1].teamDamage ?? 0) > 0).toBe(true);
+
+        // Family rule sanity: across two more rounds the attacker buff is a single application
+        // (no duplication). The buff appears at most once in the attacker's active list.
+        const dupCount = ally.rounds[1].activeSelfBuffs.filter(
+            (b) => b.buffName === 'Team Attack Up'
+        ).length;
+        expect(dupCount).toBe(1);
+    });
+
+    // 2. A team `self` buff stays on the caster — attacker direct UNCHANGED.
+    it('a team self-only buff buffs the team but leaves attacker direct exactly unchanged', () => {
+        const teamSelf = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            selfBuffAbility('Self Attack Up', 4, { attack: 25 }, 'tsb'),
+                            damageAbility(100, 'tad'),
+                        ],
+                    },
+                ],
+            },
+            { id: 'tself', stats: teamStats({ attack: 15000 }) }
+        );
+        // Same team but with NO self-buff (just damage) — attacker direct should be identical
+        // either way, since the self-buff never reaches the attacker.
+        const teamNoBuff = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [damageAbility(100, 'tad')] }] },
+            { id: 'tself', stats: teamStats({ attack: 15000 }) }
+        );
+
+        const withSelf = simulateDPS(baseInput({ teamActors: [teamSelf], rounds: 3 }));
+        const withNone = simulateDPS(baseInput({ teamActors: [teamNoBuff], rounds: 3 }));
+
+        // Attacker direct EXACTLY equal across all rounds (self-buff confined to the caster).
+        expect(withSelf.rounds.map((r) => r.directDamage)).toEqual(
+            withNone.rounds.map((r) => r.directDamage)
+        );
+        // But the team's own damage IS buffed by its self-buff.
+        expect(withSelf.summary.teamTotalDamage ?? 0).toBeGreaterThan(
+            withNone.summary.teamTotalDamage ?? 0
+        );
+    });
+
+    // 3. An attacker `all-allies` buff reaches the team ship's gate.
+    it("an attacker all-allies buff satisfies a team ship's self-buff gate", () => {
+        // Attacker (FASTER here, speed via default 100 but team slowed to 80) carries an
+        // all-allies Marker buff; the team has a damage ability gated on self-buff 'Marker'.
+        // Attacker acts first → applies Marker to all players → team's gate passes round 1.
+        const marker = 'Marker';
+        const attackerSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        damageAbility(100, 'abase'),
+                        allyBuffAbility(marker, 5, { attack: 0 }, 'amk'),
+                    ],
+                },
+            ],
+        };
+        const gatedTeamDamage: Ability = {
+            id: 'tgd',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'self-buff', derivable: true, buffName: marker }],
+            config: { type: 'damage', multiplier: 100 },
+        };
+        // Attacker faster (team speed 80 < attacker 100): Marker exists before the team's gate.
+        const teamSlow = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [gatedTeamDamage] }] },
+            { id: 'tmk', speed: 80, stats: teamStats({ attack: 15000 }) }
+        );
+        const fastAttacker = simulateDPS(
+            baseInput({ shipSkills: attackerSkills, teamActors: [teamSlow], rounds: 3 })
+        );
+        // Team damage flows because the attacker's all-allies buff reached the team.
+        expect(fastAttacker.rounds.every((r) => (r.teamDamage ?? 0) > 0)).toBe(true);
+
+        // Reverse timing: team FASTER (140) acts before the attacker → round 1 gate fails
+        // (Marker not yet applied), so round-1 teamDamage is 0; from round 2 it flows.
+        const teamFast = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [gatedTeamDamage] }] },
+            { id: 'tmk', speed: 140, stats: teamStats({ attack: 15000 }) }
+        );
+        const fastTeam = simulateDPS(
+            baseInput({ shipSkills: attackerSkills, teamActors: [teamFast], rounds: 3 })
+        );
+        expect(fastTeam.rounds[0].teamDamage ?? 0).toBe(0);
+        expect(fastTeam.rounds[1].teamDamage ?? 0).toBeGreaterThan(0);
+    });
+
+    // 4. Ally charge grant accelerates EVERY player actor's charged cadence, capped per actor.
+    it('a team all-allies charge granter accelerates both the attacker and a second team ship', () => {
+        // Granter: a team ship whose active slot grants +1 charge to all allies each turn.
+        // It has chargeCount 0 (never charges itself, skips the grant-to-self overflow).
+        const granter = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [allyChargeAbility(1, 'gac')] }] },
+            { id: 'tgrant', speed: 150, chargeCount: 0 }
+        );
+        // Second team ship: chargeCount 2, a charged damage ability — its cadence should speed up.
+        const charged2: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [damageAbility(50, 'c2a')] },
+                { slot: 'charged', abilities: [damageAbility(300, 'c2c')] },
+            ],
+        };
+        const second = walkedTeam(charged2, {
+            id: 'tcharged',
+            speed: 130,
+            chargeCount: 2,
+            stats: teamStats({ attack: 15000 }),
+        });
+
+        // Attacker: chargeCount 3, a charged damage ability.
+        const attackerCharged: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [damageAbility(50, 'aa')] },
+                { slot: 'charged', abilities: [damageAbility(400, 'ac')] },
+            ],
+        };
+
+        const withGranter = simulateDPS(
+            baseInput({
+                shipSkills: attackerCharged,
+                chargeCount: 3,
+                teamActors: [granter, second],
+                rounds: 8,
+            })
+        );
+        const withoutGranter = simulateDPS(
+            baseInput({
+                shipSkills: attackerCharged,
+                chargeCount: 3,
+                teamActors: [
+                    // Same second ship, but the granter grants nothing (self-only charge → no reach).
+                    walkedTeam(
+                        { slots: [{ slot: 'active', abilities: [] }] },
+                        { id: 'tgrant', speed: 150, chargeCount: 0 }
+                    ),
+                    second,
+                ],
+                rounds: 8,
+            })
+        );
+
+        // The attacker's first charged round (largest directDamage) arrives EARLIER with the granter.
+        const firstChargedRound = (rounds: { directDamage: number }[]): number =>
+            rounds.findIndex((r) => r.directDamage > rounds[0].directDamage * 2);
+        expect(firstChargedRound(withGranter.rounds)).toBeGreaterThanOrEqual(0);
+        expect(firstChargedRound(withGranter.rounds)).toBeLessThan(
+            firstChargedRound(withoutGranter.rounds)
+        );
+        // The second team ship's cadence also accelerates → larger cumulative team damage.
+        expect(withGranter.summary.teamTotalDamage ?? 0).toBeGreaterThan(
+            withoutGranter.summary.teamTotalDamage ?? 0
+        );
+    });
+
+    // 5. `buff-applied` emits once per player recipient on an all-allies application.
+    it('an all-allies application emits one buff-applied per player recipient', () => {
+        const bus = createEventBus();
+        const applied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Broadcast') applied.push(e);
+        });
+        const team = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [allyBuffAbility('Broadcast', 2, { attack: 0 }, 'bc')],
+                    },
+                ],
+            },
+            { id: 'tbroad' }
+        );
+        // One team + attacker = 2 player recipients → 2 emissions per team application.
+        simulateDPS(baseInput({ teamActors: [team], rounds: 1, bus }));
+        const recipients = new Set(applied.map((e) => e.actorId));
+        expect(recipients).toEqual(new Set(['attacker', 'tbroad']));
+        // Round 1: exactly one application by the team → exactly 2 emissions.
+        expect(applied.filter((e) => e.round === 1).length).toBe(2);
+    });
+
+    // 6. Caster-gated aura folds into the ATTACKER only when the CASTER satisfies the gate.
+    it('a team all-allies aura gated on a caster-only buff folds into the attacker via the caster ctx', () => {
+        const casterOnly = 'CasterOnly';
+        const auraGated: Ability = {
+            id: 'aura',
+            type: 'buff',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            // duration undefined → classified as aura (recurring). Gated on a self-buff only the
+            // caster grants itself.
+            conditions: [{ subject: 'self-buff', derivable: true, buffName: casterOnly }],
+            config: {
+                type: 'buff',
+                buffName: 'Aura Attack Up',
+                parsedEffects: { attack: 30 },
+                stacks: 1,
+                isStackable: false,
+            },
+        };
+        // (a) Positive: the team grants ITSELF CasterOnly, then the aura. The aura's gate reads
+        // the CASTER's ctx (which has CasterOnly) → folds into the attacker's totals.
+        const teamWithGate = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [neutralSelfBuff(casterOnly, 5, 'co'), auraGated],
+                    },
+                ],
+            },
+            { id: 'taura', stats: teamStats({ attack: 15000 }) }
+        );
+        // (b) Negative: same aura but the caster never grants CasterOnly → gate fails → no fold.
+        const teamNoGate = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [auraGated] }] },
+            { id: 'taura', stats: teamStats({ attack: 15000 }) }
+        );
+
+        const withGate = simulateDPS(baseInput({ teamActors: [teamWithGate], rounds: 3 }));
+        const noGate = simulateDPS(baseInput({ teamActors: [teamNoGate], rounds: 3 }));
+
+        // Attacker direct is buffed in the positive case (aura folds into the attacker) and
+        // unbuffed in the negative case.
+        expect(withGate.rounds[1].directDamage).toBeGreaterThan(noGate.rounds[1].directDamage);
+        // Negative case: attacker direct equals a plain no-aura-team baseline (no fold anywhere).
+        const plain = simulateDPS(
+            baseInput({
+                teamActors: [
+                    walkedTeam(
+                        { slots: [{ slot: 'active', abilities: [] }] },
+                        { id: 'taura', stats: teamStats({ attack: 15000 }) }
+                    ),
+                ],
+                rounds: 3,
+            })
+        );
+        expect(noGate.rounds.map((r) => r.directDamage)).toEqual(
+            plain.rounds.map((r) => r.directDamage)
+        );
     });
 });

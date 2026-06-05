@@ -47,6 +47,20 @@ interface AbilityStatusBase {
     sourceSlot: SkillSlot;
     /** Already live-gated by the caller (see abilityStatusGating.liveGateConditions). */
     conditions: Condition[];
+    /** The actor that CAST this ability (Task 5 ally routing). Conditions evaluate against the
+     *  caster's context even when the status lives on a different recipient (an ally-cast aura's
+     *  gate is the caster's). The ENGINE always sets this (casterId = the registering owner);
+     *  it is OPTIONAL only so the statusEngine's own unit-test fixtures need not restate it —
+     *  read sites default it to 'attacker'. Historical/attacker-only statuses are casterId
+     *  'attacker' → identical to today (the resolver returns the local ctx for the caster). */
+    casterId?: string;
+    /** Player-side RECIPIENTS that receive this status (Task 5 ally routing): `self` → [casterId];
+     *  `ally`/`all-allies` → every player actor id (fixed source order). Enemy-side statuses ignore
+     *  this (enemy maps are singular). The ENGINE always sets this on the timed-by-slot statuses it
+     *  threads into playerTurn (the per-recipient application loop reads it); OPTIONAL only so the
+     *  statusEngine unit-test fixtures need not restate it. For attacker-only runs this is always
+     *  ['attacker'] → zero churn vs the pre-Task-5 owner-routing. */
+    recipients?: string[];
 }
 
 /**
@@ -123,12 +137,15 @@ export interface StatusEngine {
         status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>,
         recipientId?: string
     ): void;
-    /** Aura + accumulating ability statuses whose conditions pass `ctx` this round,
-     *  with payloads, for effect folding and snapshot inclusion.
-     *  `ownerId` selects the player-side carrier; defaults to 'attacker'. */
+    /** Aura + accumulating ability statuses whose conditions pass THIS ROUND, with payloads,
+     *  for effect folding and snapshot inclusion. `ownerId` selects the player-side carrier
+     *  (defaults to 'attacker'). Each status's gate evaluates against ITS CASTER's context —
+     *  `resolveCtx(casterId)` returns the ConditionContext for that caster (Task 5: an ally-cast
+     *  aura sitting on a recipient is still gated by the caster's buffs/state). For attacker-only
+     *  runs every casterId is 'attacker' and the resolver returns the local ctx → zero churn. */
     activeAbilityStatuses(
         side: 'self' | 'enemy',
-        ctx: ConditionContext,
+        resolveCtx: (casterId: string) => ConditionContext,
         ownerId?: string
     ): ActiveAbilityStatus[];
     /** Timed ability statuses currently in the maps (payload-carrying), for effect folding.
@@ -196,6 +213,9 @@ interface AccumulatingState {
     /** Present for ability-sourced accumulating statuses (payload + aura-gate conditions). */
     payload?: AbilityStatusPayload;
     conditions?: Condition[];
+    /** The caster of an ability-sourced accumulating status — its gate evaluates against the
+     *  caster's ctx (Task 5). Undefined for scheduled accum entries (no conditions → no gate). */
+    casterId?: string;
 }
 
 /** Persistent stacking status state (game-verified 2026-06-05). These statuses land ONCE at
@@ -692,6 +712,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     trigger: s.stackTrigger,
                     payload: s.payload,
                     conditions: s.conditions,
+                    casterId: s.casterId,
                 });
             } else if (s.kind === 'aura') {
                 // Self-side auras are per-owner; enemy auras remain in the singular list.
@@ -754,22 +775,27 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     const activeAbilityStatuses = (
         side: 'self' | 'enemy',
-        ctx: ConditionContext,
+        resolveCtx: (casterId: string) => ConditionContext,
         ownerId = 'attacker'
     ): ActiveAbilityStatus[] => {
         const out: ActiveAbilityStatus[] = [];
-        // Auras: effect included only when their (live-gated) conditions pass this round.
+        // Auras: effect included only when their (live-gated) conditions pass this round, gated
+        // against the CASTER's ctx (Task 5: an ally-cast aura sitting on this recipient owner is
+        // still gated by the caster's buffs/state — resolveCtx maps casterId → that ctx).
         // Self-side auras are per-owner — only the requested owner's list is read so a team
         // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
         const auraList = side === 'self' ? (auraSelfMaps.get(ownerId) ?? []) : auraEnemy;
         for (const a of auraList) {
-            if (!conditionsMet(a.conditions, ctx)) continue;
+            // casterId defaults to 'attacker' (the engine always sets it; only unit-test
+            // fixtures omit it) so the resolver returns the local ctx in the attacker-only path.
+            if (!conditionsMet(a.conditions, resolveCtx(a.casterId ?? 'attacker'))) continue;
             out.push({
                 payload: a.payload,
                 active: { buffName: a.payload.buffName, turnsRemaining: 'recurring' },
             });
         }
-        // Accumulating ability statuses: included when stacks > 0 AND conditions pass.
+        // Accumulating ability statuses: included when stacks > 0 AND conditions pass (gated
+        // against the caster's ctx, same as auras).
         // Self-side accumulating statuses are per-owner — read the requested owner's map.
         const accumMap =
             side === 'self'
@@ -778,7 +804,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const s of accumMap.values()) {
             if (!s.payload) continue;
             if (s.stacks <= 0) continue;
-            if (s.conditions && !conditionsMet(s.conditions, ctx)) continue;
+            // s.casterId is present for ability-sourced accumulating statuses; scheduled accum
+            // entries carry no conditions so the gate is skipped (and they have no casterId).
+            if (s.conditions && !conditionsMet(s.conditions, resolveCtx(s.casterId ?? 'attacker')))
+                continue;
             out.push({
                 payload: { ...s.payload, stacks: s.stacks },
                 active: { buffName: s.buffName, turnsRemaining: 'recurring', stacks: s.stacks },
