@@ -7,6 +7,7 @@ import {
     Condition,
     ModifierChannel,
     SkillSlot,
+    LIVE_TRIGGERS,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { Select } from '../ui/Select';
@@ -15,7 +16,6 @@ import { Checkbox } from '../ui/Checkbox';
 import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
-import { LIVE_TRIGGERS } from '../../utils/combat/triggers';
 import {
     NOT_SIMULATED_TYPES,
     PASSIVE_NOOP_TYPES,

@@ -209,7 +209,9 @@ buff/charge-aura), source it from firing + passive.
     applications are derivable this phase. Covers Oleander charge-on-ally-inflict.
   - `on-bomb-detonated` → `bomb-detonated` (emitted per burst on countdown expiry and from
     skill-driven detonations). Covers Lingshe stealth, enemy charge removal, Echoing Burst
-    repairs — all currently not-simulated types; the trigger is wired but DPS-neutral today.
+    repairs. The machinery supports any buff/debuff/dot/charge follow-up from this trigger;
+    it is DPS-neutral today only because the currently-classified ships' payloads all happen
+    to be not-simulated types (stealth / charge removal / repair).
   - Non-live triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) are **annotation-only**:
     abilities with these triggers behave as today (normal on-cast pipeline, manual assume-active
     conditions). The engine cannot derive them until Phase 4.

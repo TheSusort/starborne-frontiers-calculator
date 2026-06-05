@@ -24,8 +24,8 @@ export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enem
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
 // mapping — in a multi-actor round `turn-started` fires once per actor, so
-// `round-started` is the canonical "start of round" signal). See triggers.ts
-// (LIVE_TRIGGERS) for which values the Phase 3 engine consumes; the rest are
+// `round-started` is the canonical "start of round" signal). See LIVE_TRIGGERS
+// below for which values the Phase 3 engine consumes; the rest are
 // annotation-only (assume-active conditions, normal on-cast pipelines).
 export type AbilityTrigger =
     | 'on-cast'
@@ -37,6 +37,23 @@ export type AbilityTrigger =
     | 'on-attacked'
     | 'on-ally-destroyed'
     | 'on-destroyed';
+
+/**
+ * Triggers the Phase 3 combat engine consumes via listeners (the machinery lives
+ * in src/utils/combat/triggers.ts). Everything else (on-attacked,
+ * on-ally-destroyed, on-destroyed) is annotation-only: those abilities stay in
+ * the normal on-cast pipelines with manual assume-active conditions. Defined
+ * here next to AbilityTrigger (not in the engine module) so UI consumers — e.g.
+ * the editor's Trigger select note — don't pull the combat engine's module
+ * graph in for one constant.
+ */
+export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
+    'start-of-round',
+    'on-crit',
+    'on-debuff-inflicted',
+    'on-ally-debuff-inflicted',
+    'on-bomb-detonated',
+]);
 
 export type ConditionSubject =
     | 'always'

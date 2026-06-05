@@ -1,4 +1,4 @@
-import { Ability, AbilityTrigger, ShipSkills, SkillSlot } from '../../types/abilities';
+import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
 import { EnemyBaseClass, ParsedBuffEffects } from '../../types/calculator';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
@@ -12,20 +12,12 @@ import {
     StatusEngine,
 } from './statusEngine';
 
-/**
- * Triggers the Phase 3 engine consumes via listeners. Everything else
- * (on-attacked, on-ally-destroyed, on-destroyed) is annotation-only: those
- * abilities stay in the normal on-cast pipelines with manual assume-active
- * conditions. `start-of-round` maps onto the `round-started` event (one per
- * round, before any turn — see the AbilityTrigger doc note).
- */
-export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
-    'start-of-round',
-    'on-crit',
-    'on-debuff-inflicted',
-    'on-ally-debuff-inflicted',
-    'on-bomb-detonated',
-]);
+/** The trigger values the engine consumes — defined next to AbilityTrigger in
+ *  types/abilities.ts (so UI consumers don't import the engine for one constant)
+ *  and re-exported here for the machinery's callers. `start-of-round` maps onto
+ *  the `round-started` event (one per round, before any turn — see the
+ *  AbilityTrigger doc note). */
+export { LIVE_TRIGGERS };
 
 /** Safety backstop far above any real follow-up chain — not a tuned value. A
  *  drain that fans out more than this many generations is a pathological loop;
@@ -37,6 +29,9 @@ export const MAX_INTENT_GENERATIONS = 10;
  *  type carrying a live trigger stays on the on-cast path (not-simulated follow-up
  *  payloads — e.g. control/cleanse from a bomb-detonate reactive). */
 export type ReactiveAbilityType = 'buff' | 'debuff' | 'dot' | 'charge';
+
+/** Runtime mirror of ReactiveAbilityType for the partition check. */
+const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = ['buff', 'debuff', 'dot', 'charge'];
 
 /** A reactive ability registered as a listener, paired with its source slot
  *  (for parity with the timed-status sourceSlot bookkeeping). */
@@ -56,8 +51,7 @@ export interface Intent {
  *  else stays on the on-cast path. */
 function isReactiveAbility(ability: Ability): boolean {
     if (!LIVE_TRIGGERS.has(ability.trigger)) return false;
-    const t = ability.config.type;
-    return t === 'buff' || t === 'debuff' || t === 'dot' || t === 'charge';
+    return (REACTIVE_ABILITY_TYPES as readonly string[]).includes(ability.config.type);
 }
 
 /**
