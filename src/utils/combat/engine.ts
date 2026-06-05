@@ -809,7 +809,7 @@ export function runCombat(input: CombatEngineInput): {
                         infernoEntries,
                         pendingBombs,
                         runtimes: runtimesById,
-                        allPlayerActors,
+                        grantAllyCharges,
                         playerIds,
                         lastTurnCtxByActor,
                         enemyType,

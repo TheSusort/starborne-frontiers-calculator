@@ -183,10 +183,10 @@ export interface IntentExecContext {
      *  executor resolves the intent's owner from this map for per-owner landing gates,
      *  charge caps, etc. A missing owner is a bug (throws — see executeIntent). */
     runtimes: Map<string, PlayerActorRuntime>;
-    /** Every player actor (attacker + team turn-order carriers) — ally-charge follow-ups
-     *  loop this set (per-actor caps; skip chargeCount 0). Same list the engine threads to
-     *  grantAllyCharges. */
-    allPlayerActors: CombatActor[];
+    /** Delegate for ally-charge grants — the engine's own `grantAllyCharges` closure, threaded
+     *  here so the executor does not need to re-implement the per-actor cap loop. The closure
+     *  already iterates `allPlayerActors` with the correct chargeCount guard. */
+    grantAllyCharges: (amount: number) => void;
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
@@ -343,10 +343,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY player actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
-            for (const a of ctx.allPlayerActors) {
-                if (a.chargeCount <= 0) continue;
-                a.charges = Math.min(a.charges + cfg.amount, a.chargeCount);
-            }
+            ctx.grantAllyCharges(cfg.amount);
             return;
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
@@ -366,17 +363,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
                 ? ctx.playerIds
                 : [intent.ownerId];
+        // The status object is identical for every recipient — hoist it above the loop.
+        // Only the applyTimedAbilityStatus recipientId argument varies per iteration.
+        const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            payload: payloadFromConfig(cfg),
+            side: 'self',
+            sourceSlot: intent.sourceSlot,
+            conditions: gateConditions,
+            casterId: intent.ownerId,
+            recipients,
+            kind: 'timed',
+            duration,
+        };
         for (const rid of recipients) {
-            const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
-                payload: payloadFromConfig(cfg),
-                side: 'self',
-                sourceSlot: intent.sourceSlot,
-                conditions: gateConditions,
-                casterId: intent.ownerId,
-                recipients,
-                kind: 'timed',
-                duration,
-            };
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             ctx.bus.emit({
                 type: 'buff-applied',
