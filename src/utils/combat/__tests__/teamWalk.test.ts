@@ -772,3 +772,346 @@ describe('ally-target routing (Task 5)', () => {
         );
     });
 });
+
+// --- Reactive parity (Task 6) ----------------------------------------------
+// Reactive (live-trigger) buff/debuff/dot/charge abilities on a WALKED team ship register
+// their own listeners keyed to that owner's events; the executor routes the follow-up to
+// the owner's runtime (its charges, its landing gates, its sourceId). These tests drive the
+// full pipeline through simulateDPS and tap the bus where the sourceId is the load-bearing
+// assertion.
+
+/** A reactive charge ability on `self` for a given trigger (banks +amount when its event fires). */
+const reactiveChargeAbility = (
+    trigger: 'on-debuff-inflicted' | 'on-ally-debuff-inflicted' | 'on-crit',
+    amount: number,
+    id = 'rc'
+): Ability => ({
+    id,
+    type: 'charge',
+    target: 'self',
+    trigger,
+    conditions: [],
+    config: { type: 'charge', amount },
+});
+
+describe('reactive parity (Task 6)', () => {
+    // 1. Team Hemlock: a walked team ship banks +1 charge on its OWN debuff infliction
+    //    (on-debuff-inflicted), accelerating its charged-skill cadence. The charged-slot
+    //    all-allies buff is the observable signal (it buffs the attacker's damage when it
+    //    fires). With the reactive charge ability the team reaches its charged turn EARLIER.
+    it('a team on-debuff-inflicted charge ability accelerates the team charged cadence', () => {
+        const teamSkills = (withReactive: boolean): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        debuffAbility('Hemlock Down', 3, { defense: -10 }, 'hd'),
+                        ...(withReactive ? [reactiveChargeAbility('on-debuff-inflicted', 1)] : []),
+                    ],
+                },
+                {
+                    // Charged slot grants the attacker (all-allies) Attack Up — observable in the
+                    // attacker's directDamage once the team reaches a charged turn.
+                    slot: 'charged',
+                    abilities: [allyBuffAbility('Hemlock Boost', 3, { attack: 40 }, 'hb')],
+                },
+            ],
+        });
+        const mk = (withReactive: boolean) =>
+            simulateDPS(
+                baseInput({
+                    teamActors: [
+                        walkedTeam(teamSkills(withReactive), {
+                            id: 'themlock',
+                            speed: 140,
+                            chargeCount: 2,
+                            stats: teamStats({ attack: 15000 }),
+                        }),
+                    ],
+                    rounds: 6,
+                })
+            );
+        const withReactive = mk(true);
+        const control = mk(false);
+
+        // The attacker's directDamage jumps the round AFTER the team fires its charged buff.
+        // The first such jump arrives EARLIER with the reactive charge banking each round.
+        const firstBuffedRound = (rounds: { directDamage: number }[]): number =>
+            rounds.findIndex((r, i) => i > 0 && r.directDamage > rounds[0].directDamage);
+        const reactiveFlip = firstBuffedRound(withReactive.rounds);
+        const controlFlip = firstBuffedRound(control.rounds);
+        expect(reactiveFlip).toBeGreaterThanOrEqual(0);
+        expect(controlFlip).toBeGreaterThanOrEqual(0);
+        expect(reactiveFlip).toBeLessThan(controlFlip);
+    });
+
+    // 2. Team on-crit: a team ship (crit 100 → always crits) carries an on-crit enemy-debuff
+    //    (Defense Shred-like). The attacker NEVER crits (crit 0), proving the trigger keys on
+    //    the TEAM's crit, not the attacker's. The debuff lands from round 1's team crit and is
+    //    active the attacker's NEXT turn (drain semantics) → attacker damage rises from round 2.
+    it('a team on-crit enemy-debuff fires on the team crit (not the attacker crit) and raises attacker damage', () => {
+        const bus = createEventBus();
+        const applied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
+        bus.on('debuff-applied', (e) => {
+            if (e.buffName === 'Crit Shred') applied.push(e);
+        });
+        const onCritDebuff: Ability = {
+            id: 'ocd',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-crit',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Crit Shred',
+                parsedEffects: { defense: -40 },
+                stacks: 1,
+                isStackable: false,
+                application: 'inflict',
+                duration: 5,
+            },
+        };
+        // Team always crits (crit 100); has a damage ability (so it performs a crit) + the
+        // on-crit debuff. enemyDefense set so the debuff measurably lowers it.
+        const team = (withReactive: boolean) =>
+            walkedTeam(
+                {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                damageAbility(50, 'tdmg'),
+                                ...(withReactive ? [onCritDebuff] : []),
+                            ],
+                        },
+                    ],
+                },
+                {
+                    id: 'tcrit',
+                    speed: 140,
+                    stats: teamStats({ attack: 15000, crit: 100, hacking: 250 }),
+                }
+            );
+        // Attacker crit 0 (never crits) → if the debuff fired it must be the team's crit.
+        const withReactive = simulateDPS(
+            baseInput({ enemyDefense: 30000, teamActors: [team(true)], rounds: 4, bus })
+        );
+        const control = simulateDPS(
+            baseInput({ enemyDefense: 30000, teamActors: [team(false)], rounds: 4 })
+        );
+
+        // Round 1 team crit applies the debuff; it is active the attacker's next turn → round 2
+        // attacker damage rises vs the no-reactive control.
+        expect(withReactive.rounds[1].directDamage).toBeGreaterThan(control.rounds[1].directDamage);
+        // The debuff-applied carries the TEAM's sourceId.
+        expect(applied.length).toBeGreaterThan(0);
+        expect(applied.every((e) => e.sourceId === 'tcrit')).toBe(true);
+    });
+
+    // 3a. Cross-actor: the ATTACKER inflicts a debuff → a team ship's on-ally-debuff-inflicted
+    //     charge ability (+1) fires, accelerating its charged cadence (observable via its
+    //     charged all-allies buff reaching the attacker EARLIER).
+    it('an attacker debuff infliction fires a team on-ally-debuff-inflicted charge ability', () => {
+        const attackerSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        damageAbility(100, 'abase'),
+                        debuffAbility('Attacker Mark', 3, { defense: -5 }, 'amk'),
+                    ],
+                },
+            ],
+        };
+        const teamSkills = (withReactive: boolean): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: withReactive
+                        ? [reactiveChargeAbility('on-ally-debuff-inflicted', 1)]
+                        : [],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [allyBuffAbility('Ally React Boost', 3, { attack: 40 }, 'arb')],
+                },
+            ],
+        });
+        const mk = (withReactive: boolean) =>
+            simulateDPS(
+                baseInput({
+                    shipSkills: attackerSkills,
+                    teamActors: [
+                        walkedTeam(teamSkills(withReactive), {
+                            id: 'tallyreact',
+                            // SLOWER than the attacker so the attacker's infliction happens first.
+                            speed: 80,
+                            chargeCount: 2,
+                            stats: teamStats({ attack: 15000 }),
+                        }),
+                    ],
+                    rounds: 6,
+                })
+            );
+        const withReactive = mk(true);
+        const control = mk(false);
+
+        const firstBuffedRound = (rounds: { directDamage: number }[]): number =>
+            rounds.findIndex((r, i) => i > 0 && r.directDamage > rounds[0].directDamage);
+        const reactiveFlip = firstBuffedRound(withReactive.rounds);
+        const controlFlip = firstBuffedRound(control.rounds);
+        expect(reactiveFlip).toBeGreaterThanOrEqual(0);
+        expect(reactiveFlip).toBeLessThan(controlFlip);
+    });
+
+    // 3b. Reverse: a TEAM infliction → the ATTACKER's on-ally-debuff-inflicted charge ability
+    //     fires. Attacker chargeCount 3 + a charged damage ability → its charged round arrives
+    //     EARLIER than a control where the team inflicts nothing.
+    it('a team debuff infliction fires the attacker on-ally-debuff-inflicted charge ability', () => {
+        const attackerSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [damageAbility(50, 'aa')] },
+                { slot: 'charged', abilities: [damageAbility(400, 'ac')] },
+            ],
+        };
+        // The reactive charge ability lives on the ATTACKER.
+        attackerSkills.slots[0].abilities.push(
+            reactiveChargeAbility('on-ally-debuff-inflicted', 1, 'arc')
+        );
+
+        const withTeamInflict = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [debuffAbility('Team Mark', 3, { defense: -5 }, 'tmk')],
+                    },
+                ],
+            },
+            { id: 'tinflict', speed: 140, stats: teamStats({ attack: 15000 }) }
+        );
+        // Control: same team but inflicts nothing (no debuff) → attacker's ally listener never fires.
+        const noInflict = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [] }] },
+            { id: 'tinflict', speed: 140, stats: teamStats({ attack: 15000 }) }
+        );
+
+        const withReactive = simulateDPS(
+            baseInput({
+                shipSkills: attackerSkills,
+                chargeCount: 3,
+                teamActors: [withTeamInflict],
+                rounds: 8,
+            })
+        );
+        const control = simulateDPS(
+            baseInput({
+                shipSkills: attackerSkills,
+                chargeCount: 3,
+                teamActors: [noInflict],
+                rounds: 8,
+            })
+        );
+
+        // The attacker's first charged round (directDamage > 2× the active hit) arrives earlier
+        // when the team's inflictions feed the attacker's ally-charge listener.
+        const firstChargedRound = (rounds: { directDamage: number }[]): number =>
+            rounds.findIndex((r) => r.directDamage > rounds[0].directDamage * 2);
+        expect(firstChargedRound(withReactive.rounds)).toBeGreaterThanOrEqual(0);
+        expect(firstChargedRound(withReactive.rounds)).toBeLessThan(
+            firstChargedRound(control.rounds)
+        );
+    });
+
+    // 4. Team DoT feeds the attacker's on-ally-debuff-inflicted listener (dot-applied with the
+    //    team sourceId is now subscribed — resolves the Task-4 FUTURE seam). Attacker charge
+    //    cadence accelerates vs a control where the team applies no DoT.
+    it('a team DoT application fires the attacker on-ally-debuff-inflicted listener (dot-applied seam)', () => {
+        const attackerSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [damageAbility(50, 'aa')] },
+                { slot: 'charged', abilities: [damageAbility(400, 'ac')] },
+            ],
+        };
+        attackerSkills.slots[0].abilities.push(
+            reactiveChargeAbility('on-ally-debuff-inflicted', 1, 'arc')
+        );
+
+        const teamDot = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [dotAbility('corrosion', 6, 1, 4, 'tdot')] }] },
+            { id: 'tdotsrc', speed: 140, stats: teamStats({ attack: 15000, hacking: 250 }) }
+        );
+        const noDot = walkedTeam(
+            { slots: [{ slot: 'active', abilities: [] }] },
+            { id: 'tdotsrc', speed: 140, stats: teamStats({ attack: 15000, hacking: 250 }) }
+        );
+
+        const withReactive = simulateDPS(
+            baseInput({
+                shipSkills: attackerSkills,
+                chargeCount: 3,
+                teamActors: [teamDot],
+                rounds: 8,
+            })
+        );
+        const control = simulateDPS(
+            baseInput({
+                shipSkills: attackerSkills,
+                chargeCount: 3,
+                teamActors: [noDot],
+                rounds: 8,
+            })
+        );
+
+        const firstChargedRound = (rounds: { directDamage: number }[]): number =>
+            rounds.findIndex((r) => r.directDamage > rounds[0].directDamage * 2);
+        expect(firstChargedRound(withReactive.rounds)).toBeGreaterThanOrEqual(0);
+        expect(firstChargedRound(withReactive.rounds)).toBeLessThan(
+            firstChargedRound(control.rounds)
+        );
+    });
+
+    // 5. start-of-round on a team ship: a team start-of-round self-buff (timed Attack Up) +
+    //    damage ability → its teamDamage reflects the buff from round 1 (start-of-round drains
+    //    BEFORE any turn this round).
+    it('a team start-of-round self-buff is live for the team from round 1', () => {
+        const startBuff: Ability = {
+            id: 'sob',
+            type: 'buff',
+            target: 'self',
+            trigger: 'start-of-round',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Round Start Power',
+                parsedEffects: { attack: 30 },
+                stacks: 1,
+                isStackable: false,
+                duration: 1,
+            },
+        };
+        const team = (withBuff: boolean) =>
+            walkedTeam(
+                {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                damageAbility(100, 'tdmg'),
+                                ...(withBuff ? [startBuff] : []),
+                            ],
+                        },
+                    ],
+                },
+                { id: 'tstart', speed: 140, stats: teamStats({ attack: 15000 }) }
+            );
+        const withBuff = simulateDPS(baseInput({ teamActors: [team(true)], rounds: 3 }));
+        const control = simulateDPS(baseInput({ teamActors: [team(false)], rounds: 3 }));
+
+        // Round 1: start-of-round drains before the team's turn → the team's damage already
+        // reflects the buff. teamDamage strictly higher than the no-buff control from round 1.
+        expect(withBuff.rounds[0].teamDamage ?? 0).toBeGreaterThan(
+            control.rounds[0].teamDamage ?? 0
+        );
+    });
+});

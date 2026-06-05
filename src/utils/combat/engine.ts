@@ -721,11 +721,32 @@ export function runCombat(input: CombatEngineInput): {
     // drains them at the drain points. Pure listeners (enqueue only) keep the Phase 1
     // contract — the executor is the only state mutator.
     const intentQueue: Intent[] = [];
+    // Per-owner reactive listeners (Task 6): the FOCUS/attacker owner FIRST (zero-churn —
+    // its listeners enqueue in the historical order), then every walked team owner in input
+    // order. Each owner's guards key on its OWN events; the executor routes the follow-up to
+    // the owner's runtime. A legacy team actor (no walk) has no reactive abilities → omitted.
+    const reactivePerOwner: { ownerId: string; reactiveAbilities: typeof reactiveAbilities }[] = [
+        { ownerId: 'attacker', reactiveAbilities },
+        ...teamActors
+            .filter((t) => teamRuntimeById.has(t.id))
+            .map((t) => ({
+                ownerId: t.id,
+                reactiveAbilities: teamRuntimeById.get(t.id)!.reactiveAbilities,
+            })),
+    ];
     registerReactiveListeners({
         bus,
-        reactiveAbilities,
+        perOwner: reactivePerOwner,
         enqueue: (intent) => intentQueue.push(intent),
+        enemyId: enemy.id,
     });
+
+    // Owner-routed executor context (Task 6): the executor resolves an intent's owner runtime
+    // from this map for per-owner landing gates, charge caps, sourceId, bomb effective-attack.
+    const runtimesById = new Map<string, PlayerActorRuntime>([
+        ['attacker', attackerRuntime],
+        ...teamRuntimeById,
+    ]);
 
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
@@ -780,16 +801,17 @@ export function runCombat(input: CombatEngineInput): {
                 for (const intent of batch) {
                     executeIntent(intent, {
                         round: r,
-                        attacker,
                         enemy,
+                        enemyId: enemy.id,
                         statusEngine,
                         bus,
                         corrosionEntries,
                         infernoEntries,
                         pendingBombs,
-                        debuffLandingGate,
-                        debuffLandingChance,
-                        landsTimedEnemyApplication,
+                        runtimes: runtimesById,
+                        allPlayerActors,
+                        playerIds,
+                        lastTurnCtxByActor,
                         enemyType,
                         enemyHp,
                         // Drain-time HP% includes this round's damage SO FAR (the round
@@ -809,12 +831,10 @@ export function runCombat(input: CombatEngineInput): {
                                 (s, d) => s + d.direct + d.corrosion + d.inferno + d.detonation,
                                 0
                             ),
-                        // Drain-time bomb damagePerStack uses the FOCUS actor's effective
-                        // attack (the executor is attacker-only until Task 6).
-                        effectiveAttack: lastTurnCtxByActor.get(focusActorId)?.effectiveAttack,
-                        // Focus actor's affinity multiplier — snapshotted onto a pushed bomb
-                        // entry for its per-entry burst (executor is attacker-only until Task 6).
-                        affinityMult: 1 + affinityDamageModifier / 100,
+                        // Bomb damagePerStack/affinity now resolve per OWNER inside the executor
+                        // (lastTurnCtxByActor.get(intent.ownerId)) — no global effectiveAttack/
+                        // affinityMult here. The focus actor's entry resolves identically to the
+                        // pre-Task-6 path (its lastTurnCtx feeds the same value).
                         recordResisted: (resisted) => {
                             const lastTurn = focusTurns[focusTurns.length - 1];
                             // After an attacker turn this round → append to its resisted list;

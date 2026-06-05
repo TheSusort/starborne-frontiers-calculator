@@ -12,6 +12,9 @@ import {
     RegisteredAbilityStatus,
     StatusEngine,
 } from './statusEngine';
+// Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
+// imports buildActorConditionContext/ReactiveAbility from this module.
+import type { PlayerActorRuntime, PlayerRoundCtx } from './playerTurn';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -41,10 +44,15 @@ export interface ReactiveAbility {
     sourceSlot: SkillSlot;
 }
 
-/** A queued follow-up execution. Listeners push these; the engine drains them. */
+/** A queued follow-up execution. Listeners push these; the engine drains them.
+ *  `ownerId` (Task 6) is the player actor whose reactive ability fired — the executor
+ *  routes charge/buff/debuff/dot follow-ups against THIS owner's runtime (its charges,
+ *  its landing gates, its sourceId, its last-turn ctx for bombs). For an attacker-only
+ *  run every Intent carries ownerId 'attacker' → identical routing to pre-Task-6. */
 export interface Intent {
     ability: Ability;
     sourceSlot: SkillSlot;
+    ownerId: string;
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
@@ -84,84 +92,111 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
 }
 
 /**
- * Register each reactive ability as a bus listener, in slot/text order. Listener
- * bodies are PURE (Phase 1 contract): they only `enqueue` an intent — never mutate
- * combat state. Match guards per trigger:
- *  - on-crit → ability-performed with didCrit && actorId === 'attacker'
- *  - on-debuff-inflicted → debuff-applied | dot-applied with sourceId === 'attacker'
- *  - on-ally-debuff-inflicted → debuff-applied with sourceId not attacker/enemy
- *  - start-of-round → round-started
- *  - on-bomb-detonated → bomb-detonated
+ * Register each player owner's reactive abilities as bus listeners. Listener bodies are
+ * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
+ * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
+ *  - on-crit → ability-performed with `didCrit && actorId === ownerId`
+ *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
+ *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied with `sourceId !== ownerId &&
+ *    sourceId !== enemyId` (any OTHER player's infliction is an ally-infliction from this
+ *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
+ *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
+ *  - on-bomb-detonated → bomb-detonated (global)
+ *
+ * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
+ * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
+ * already in slot/text order from partitionReactiveAbilities). Fixed registration order = fixed
+ * listener-fire order = fixed intent-enqueue order. Attacker-first preserves the exact
+ * intent-enqueue order an attacker-only fixture had before Task 6 (one owner registered first =
+ * today's listener order). NOTE: the spec prose says "team order, then attacker"; we deliberately
+ * register the FOCUS owner FIRST instead — that is the zero-churn choice for the attacker-only
+ * goldens (attacker listeners must enqueue in their historical order), and the relative order
+ * across DIFFERENT owners only affects multi-owner fixtures, where any fixed order is correct.
  */
 export function registerReactiveListeners(args: {
     bus: CombatEventBus;
-    reactiveAbilities: ReactiveAbility[];
+    perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
     enqueue: (intent: Intent) => void;
+    enemyId: string;
 }): void {
-    const { bus, reactiveAbilities, enqueue } = args;
-    for (const ra of reactiveAbilities) {
-        const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot };
-        switch (ra.ability.trigger) {
-            case 'on-crit':
-                bus.on('ability-performed', (e) => {
-                    if (e.didCrit && e.actorId === 'attacker') enqueue(intent);
-                });
-                break;
-            case 'on-debuff-inflicted':
-                bus.on('debuff-applied', (e) => {
-                    if (e.sourceId === 'attacker') enqueue(intent);
-                });
-                bus.on('dot-applied', (e) => {
-                    if (e.sourceId === 'attacker') enqueue(intent);
-                });
-                break;
-            case 'on-ally-debuff-inflicted':
-                bus.on('debuff-applied', (e) => {
-                    // Ally = a team actor's infliction. Exclude the attacker AND the enemy
-                    // defensively (the enemy never inflicts debuffs in-sim today).
-                    if (e.sourceId !== 'attacker' && e.sourceId !== 'enemy') enqueue(intent);
-                });
-                // FUTURE: when team DoT lists ship (team-skill-walk spec), also subscribe to
-                // 'dot-applied' here — today no dot-applied with a team sourceId is ever emitted
-                // (both emission sites use 'attacker'), so an ally DoT infliction cannot occur.
-                break;
-            case 'start-of-round':
-                bus.on('round-started', () => enqueue(intent));
-                break;
-            case 'on-bomb-detonated':
-                bus.on('bomb-detonated', () => enqueue(intent));
-                break;
-            default:
-                // Non-live triggers are never registered (filtered at partition time).
-                break;
+    const { bus, perOwner, enqueue, enemyId } = args;
+    for (const { ownerId, reactiveAbilities } of perOwner) {
+        for (const ra of reactiveAbilities) {
+            const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
+            switch (ra.ability.trigger) {
+                case 'on-crit':
+                    bus.on('ability-performed', (e) => {
+                        if (e.didCrit && e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-debuff-inflicted':
+                    bus.on('debuff-applied', (e) => {
+                        if (e.sourceId === ownerId) enqueue(intent);
+                    });
+                    bus.on('dot-applied', (e) => {
+                        if (e.sourceId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-debuff-inflicted':
+                    bus.on('debuff-applied', (e) => {
+                        // Ally = ANY OTHER player's infliction. Exclude this owner (own
+                        // inflictions go to on-debuff-inflicted) AND the enemy.
+                        if (e.sourceId !== ownerId && e.sourceId !== enemyId) enqueue(intent);
+                    });
+                    bus.on('dot-applied', (e) => {
+                        // Team DoT applications now emit dot-applied with the team sourceId
+                        // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
+                        // this listener exactly as an ally debuff does.
+                        if (e.sourceId !== ownerId && e.sourceId !== enemyId) enqueue(intent);
+                    });
+                    break;
+                case 'start-of-round':
+                    bus.on('round-started', () => enqueue(intent));
+                    break;
+                case 'on-bomb-detonated':
+                    bus.on('bomb-detonated', () => enqueue(intent));
+                    break;
+                default:
+                    // Non-live triggers are never registered (filtered at partition time).
+                    break;
+            }
         }
     }
 }
 
 /** Drain-time engine context the executor reads + mutates. State mutation happens
- *  ONLY here (Phase 1 contract: listeners enqueue, the executor mutates). */
+ *  ONLY here (Phase 1 contract: listeners enqueue, the executor mutates). OWNER-ROUTED
+ *  (Task 6): per-intent owner-specific values (charges, landing gates, sourceId, bomb
+ *  effective-attack/affinity) come from `runtimes.get(intent.ownerId)` and
+ *  `lastTurnCtxByActor.get(intent.ownerId)` — NOT from a single attacker. */
 export interface IntentExecContext {
     round: number;
-    attacker: CombatActor;
     enemy: CombatActor;
+    enemyId: string;
     statusEngine: StatusEngine;
     bus: CombatEventBus;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
-    debuffLandingGate: (rate: number) => boolean;
-    debuffLandingChance: number;
-    landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
+    /** Player actor runtimes keyed by owner id ('attacker' + every walked team id). The
+     *  executor resolves the intent's owner from this map for per-owner landing gates,
+     *  charge caps, etc. A missing owner is a bug (throws — see executeIntent). */
+    runtimes: Map<string, PlayerActorRuntime>;
+    /** Every player actor (attacker + team turn-order carriers) — ally-charge follow-ups
+     *  loop this set (per-actor caps; skip chargeCount 0). Same list the engine threads to
+     *  grantAllyCharges. */
+    allPlayerActors: CombatActor[];
+    /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
+     *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
+    playerIds: string[];
+    /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
+     *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
+    lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
     enemyType?: EnemyBaseClass;
     enemyHp: number;
     /** Damage dealt to the enemy so far (drives the drain-time enemyHpPct). */
     cumulativeDamage: number;
-    /** Last attacker turn's effective attack — needed for bomb damagePerStack. Undefined
-     *  before any attacker turn this run (a faster enemy, round 1) → bombs are skipped. */
-    effectiveAttack?: number;
-    /** Affinity multiplier of the inflicting actor (attacker today — the executor is
-     *  attacker-only until Task 6), snapshotted onto a pushed bomb entry for its burst. */
-    affinityMult: number;
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
     recordResisted: (resisted: ActiveBuff) => void;
@@ -226,11 +261,16 @@ export function buildActorConditionContext(
     });
 }
 
-function buildDrainContext(ctx: IntentExecContext) {
+function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
     const enemyHpPct =
         ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
-    // Drain-time gate reads the ATTACKER's snapshot (the executor is attacker-only until Task 6).
-    return buildActorConditionContext(ctx.statusEngine, 'attacker', {
+    // Owner-aware drain gate (Task 6): self-buff names come from the OWNER's snapshot so each
+    // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
+    // `includeAbilitySelfNames` stays FALSE for ALL owners at drain time — the drain path is
+    // snapshot-only (golden-locked behaviour for the attacker; the cast-path/drain-path
+    // self-buff-visibility asymmetry now applies uniformly per owner, by design). For an
+    // attacker-only run ownerId is 'attacker' → byte-identical to the pre-Task-6 drain gate.
+    return buildActorConditionContext(ctx.statusEngine, ownerId, {
         corrosionEntryCount: ctx.corrosionEntries.length,
         infernoEntryCount: ctx.infernoEntries.length,
         bombCount: ctx.pendingBombs.length,
@@ -281,20 +321,37 @@ function payloadFromConfig(cfg: {
 export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     const cfg = intent.ability.config;
 
-    // Drain-time condition gate against CURRENT engine state — one gate for every
-    // branch. liveGateConditions neutralizes non-derivable-on-non-live subjects to
-    // 'always'; manual conditions keep literal gating (manualCount). A failed gate
-    // is a silent skip (no resisted record).
+    // Resolve the firing owner's runtime (its charges, landing gates, sourceId, last-turn
+    // ctx). A missing owner is impossible (the engine builds the map from the exact owner ids
+    // it registered listeners for) — throw naming the bug rather than silently misrouting.
+    const owner = ctx.runtimes.get(intent.ownerId);
+    if (!owner) {
+        throw new Error(
+            `executeIntent: no runtime for intent ownerId '${intent.ownerId}' — the reactive ` +
+                `listener registration and the runtimes map are out of sync`
+        );
+    }
+
+    // Drain-time condition gate against CURRENT engine state — one gate for every branch,
+    // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
+    // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
+    // (manualCount). A failed gate is a silent skip (no resisted record).
     const gateConditions = liveGateConditions(intent.ability.conditions);
-    if (!conditionsMet(gateConditions, buildDrainContext(ctx))) return;
+    if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
-        // Attacker-only charge gain, capped as on the cast path.
-        if (ctx.attacker.chargeCount === 0) return;
-        ctx.attacker.charges = Math.min(
-            ctx.attacker.charges + cfg.amount,
-            ctx.attacker.chargeCount
-        );
+        // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
+        // EVERY player actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
+        if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
+            for (const a of ctx.allPlayerActors) {
+                if (a.chargeCount <= 0) continue;
+                a.charges = Math.min(a.charges + cfg.amount, a.chargeCount);
+            }
+            return;
+        }
+        // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
+        if (owner.actor.chargeCount === 0) return;
+        owner.actor.charges = Math.min(owner.actor.charges + cfg.amount, owner.actor.chargeCount);
         return;
     }
 
@@ -302,22 +359,33 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
-        const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
-            payload: payloadFromConfig(cfg),
-            side: 'self',
-            sourceSlot: intent.sourceSlot,
-            conditions: gateConditions,
-            kind: 'timed',
-            duration,
-        };
-        ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status);
-        ctx.bus.emit({
-            type: 'buff-applied',
-            actorId: 'attacker',
-            round: ctx.round,
-            buffName: cfg.buffName,
-            duration,
-        });
+        // Recipients per the Task-5 target rule: self → [ownerId]; ally/all-allies → every
+        // player id (the FIXED playerIds order). The status carries casterId = ownerId so its
+        // gate evaluates against the caster's ctx even when it lives on another recipient.
+        const recipients: string[] =
+            intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
+                ? ctx.playerIds
+                : [intent.ownerId];
+        for (const rid of recipients) {
+            const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+                payload: payloadFromConfig(cfg),
+                side: 'self',
+                sourceSlot: intent.sourceSlot,
+                conditions: gateConditions,
+                casterId: intent.ownerId,
+                recipients,
+                kind: 'timed',
+                duration,
+            };
+            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
+            ctx.bus.emit({
+                type: 'buff-applied',
+                actorId: rid,
+                round: ctx.round,
+                buffName: cfg.buffName,
+                duration,
+            });
+        }
         return;
     }
 
@@ -330,12 +398,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
         };
-        if (ctx.landsTimedEnemyApplication(cfg.application)) {
+        // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
+        // NOT a global one — a team ship's debuff lands at ITS landing chance.
+        if (owner.landsTimedEnemyApplication(cfg.application)) {
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status);
-            // Discrete infliction event — sourceId 'attacker' so the application is chainable.
+            // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({
                 type: 'debuff-applied',
-                sourceId: 'attacker',
+                sourceId: intent.ownerId,
                 targetId: ctx.enemy.id,
                 round: ctx.round,
                 buffName: cfg.buffName,
@@ -361,42 +431,46 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
-        // One landing draw at execution (deterministic queue order).
-        if (!ctx.debuffLandingGate(ctx.debuffLandingChance)) return;
-        // TODO(Task 6): the executor is attacker-only today, so reactive DoT applications are
-        // stamped sourceId 'attacker'. Task 6 generalizes reactive abilities per owner — the
-        // sourceId (and the affinity/effectiveAttack snapshot) must then come from the owner.
+        // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
+        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
+        if (!owner.debuffLandingGate(owner.debuffLandingChance)) return;
+        // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
+        // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
+        // the owner's last-turn effective attack + affinity.
         if (cfg.dotType === 'corrosion') {
             ctx.corrosionEntries.push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
-                sourceId: 'attacker',
+                sourceId: intent.ownerId,
             });
         } else if (cfg.dotType === 'inferno') {
             ctx.infernoEntries.push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
-                sourceId: 'attacker',
+                sourceId: intent.ownerId,
             });
         } else if (cfg.dotType === 'bomb') {
-            // Bomb damagePerStack needs the attacker's effective attack. Before any
-            // attacker turn this run (faster enemy, round 1) there is no ctx — skip.
-            if (ctx.effectiveAttack === undefined) return;
+            // Bomb damagePerStack needs the OWNER's effective attack. Before the owner's first
+            // turn this run (faster enemy, round 1) there is no ctx — skip (same guard as today,
+            // now per owner). Affinity comes from the owner's last-turn ctx too.
+            const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+            if (ownerCtx === undefined) return;
             ctx.pendingBombs.push({
                 countdown: Math.max(1, cfg.duration),
-                damagePerStack: ctx.effectiveAttack * (cfg.tier / 100),
+                damagePerStack: ownerCtx.effectiveAttack * (cfg.tier / 100),
                 stacks: cfg.stacks,
                 tier: cfg.tier,
-                sourceId: 'attacker',
-                affinityMult: ctx.affinityMult,
+                sourceId: intent.ownerId,
+                affinityMult: ownerCtx.affinityMult,
             });
         }
-        // Discrete infliction event — sourceId 'attacker' so the application is chainable.
+        // Discrete infliction event — sourceId = the owner so the application is chainable
+        // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners (Task 6 seam).
         ctx.bus.emit({
             type: 'dot-applied',
-            sourceId: 'attacker',
+            sourceId: intent.ownerId,
             targetId: ctx.enemy.id,
             round: ctx.round,
             dotType: cfg.dotType,
