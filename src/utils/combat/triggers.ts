@@ -182,9 +182,10 @@ export interface IntentExecContext {
  * defaults to 0 (drain-time has no per-round crit folding); callers with a per-round crit rate
  * pass it explicitly.
  *
- * `includeAbilitySelfNames` (Task 5) additionally pulls the owner's ABILITY-SOURCED self statuses
- * (timed + persistent, which snapshot() excludes because they carry payloads) into the gate's
- * selfBuffNames — mirroring the player-turn's local `priorAbilitySelfNames`. The player-turn
+ * `includeAbilitySelfNames` (Task 5) additionally pulls the owner's ABILITY-SOURCED timed self
+ * statuses (snapshot() excludes these because they carry payloads) into the gate's selfBuffNames.
+ * Timed-only is deliberate: it mirrors the local `priorAbilitySelfNames` in playerTurn.ts, which
+ * also collects timed statuses and not persistent ones. The player-turn
  * caster-ctx resolver sets it so a FOREIGN caster's ability self-buffs (e.g. a team ship's
  * self-granted gate buff) are visible to its own aura's gate. The drain path leaves it false
  * (the executor is attacker-only and the drain gate's snapshot-only behaviour is golden-locked).

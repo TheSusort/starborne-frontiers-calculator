@@ -96,7 +96,7 @@ function registerActorAbilityStatuses(
             // → every player actor (fixed source order). `playerIds` already includes the caster.
             const recipients: string[] =
                 side === 'enemy'
-                    ? ['attacker'] // unused for enemy side; kept non-empty for shape consistency
+                    ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
                     : ability.target === 'ally' || ability.target === 'all-allies'
                       ? playerIds
                       : [ownerId];
