@@ -678,12 +678,12 @@ describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
 });
 
 describe('landsTimedEnemyApplication hook (Task 7)', () => {
-    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty', () => {
+    it('default (no hook): every timed enemy upsert lands and resistedEnemy is empty, appliedEnemy has the name', () => {
         const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: ['Def Down'] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);
@@ -699,7 +699,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
         // The application was rejected → no status stored, buffName reported resisted.
-        expect(result).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(result).toEqual({ resistedEnemy: ['Def Down'], appliedEnemy: [] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([]);
     });
 
@@ -713,7 +713,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: ['Armor Break'] });
+        expect(result).toEqual({ resistedEnemy: ['Armor Break'], appliedEnemy: ['Def Down'] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);
@@ -739,7 +739,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         lands = false;
         eng.beginRound(2);
         const r2 = eng.sourceFired('attacker', 'active', 2); // rejected → must NOT clear
-        expect(r2).toEqual({ resistedEnemy: ['Def Down'] });
+        expect(r2).toEqual({ resistedEnemy: ['Def Down'], appliedEnemy: [] });
         // The round-1 status still in window (turnsRemaining 2).
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
@@ -755,7 +755,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [] });
         expect(eng.snapshot().activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
     });
 });
@@ -864,7 +864,7 @@ describe('sourceFired source-keyed scheduling (teamSources)', () => {
         ]);
     });
 
-    it('an unregistered sourceId no-ops (no application, empty resisted)', () => {
+    it('an unregistered sourceId no-ops (no application, empty resisted and appliedEnemy)', () => {
         const teamBuff = makeBuff('Team Atk Up', { skillSource: 'active', skillDuration: 2 });
         const eng = createStatusEngine({
             selfBuffs: [],
@@ -873,7 +873,7 @@ describe('sourceFired source-keyed scheduling (teamSources)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('unknown-ship', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [] });
         expect(eng.snapshot().activeSelfBuffs).toEqual([]);
     });
 
@@ -904,5 +904,115 @@ describe('sourceFired source-keyed scheduling (teamSources)', () => {
         expect(eng.snapshot().activeSelfBuffs).toEqual([
             { buffName: 'Aura', turnsRemaining: 'recurring' },
         ]);
+    });
+});
+
+describe('createStatusEngine — persistent stacking statuses (game-verified 2026-06-05)', () => {
+    // A timed-shaped ability status whose buffName is a PERSISTENT_STACKING_BUFFS name.
+    // The text duration (2 here) MUST be ignored — the name routes it to the persistent map.
+    const persistentDebuff = (stacks = 1): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: {
+            buffName: 'Defense Shred',
+            stacks,
+            parsedEffects: { defense: -2 },
+            application: 'inflict',
+        },
+        side: 'enemy',
+        sourceSlot: 'active',
+        duration: 2, // text duration — must be IGNORED for persistent names
+        conditions: [],
+        kind: 'timed',
+    });
+
+    it('three applications of a persistent debuff accumulate to 3 stacks', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        for (let r = 1; r <= 3; r++) {
+            eng.beginRound(r);
+            eng.applyTimedAbilityStatus(r, persistentDebuff());
+        }
+        const shred = eng
+            .timedAbilityStatuses('enemy')
+            .find((s) => s.active.buffName === 'Defense Shred');
+        expect(shred).toBeDefined();
+        expect(shred!.active.stacks).toBe(3);
+        // Folded payload carries the stack count so effect × stacks folds downstream.
+        expect(shred!.payload.stacks).toBe(3);
+        // Sentinel marks it as no-expiry/no-re-roll.
+        expect(shred!.active.turnsRemaining).toBe('permanent');
+    });
+
+    it('respects the buff DB max stack cap (Defense Shred → 20)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        for (let r = 1; r <= 22; r++) {
+            eng.beginRound(r);
+            eng.applyTimedAbilityStatus(r, persistentDebuff());
+        }
+        const shred = eng
+            .timedAbilityStatuses('enemy')
+            .find((s) => s.active.buffName === 'Defense Shred');
+        expect(shred!.active.stacks).toBe(20);
+    });
+
+    it('persistent entry survives decrementSide across rounds and never expires', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, persistentDebuff());
+        for (let r = 2; r <= 6; r++) {
+            const { expired } = eng.decrementSide('enemy');
+            expect(expired).toEqual([]);
+            eng.beginRound(r);
+        }
+        const shred = eng
+            .timedAbilityStatuses('enemy')
+            .find((s) => s.active.buffName === 'Defense Shred');
+        expect(shred).toBeDefined();
+        expect(shred!.active.stacks).toBe(1);
+    });
+
+    it('scheduled path (upsertBuff via sourceFired) climbs stacks per application round', () => {
+        // A scheduled (non-payload) enemy debuff whose name is persistent. skillDuration is the
+        // text value and must be ignored; skillSource 'active' so it fires each active round.
+        const scheduled = makeBuff('Defense Shred', {
+            skillSource: 'active',
+            skillDuration: 3,
+            parsedEffects: { defense: -2 },
+            stacks: 1,
+        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [scheduled] });
+        const stacksAt: number[] = [];
+        for (let r = 1; r <= 3; r++) {
+            eng.beginRound(r);
+            eng.sourceFired('attacker', 'active', r);
+            const snap = eng
+                .snapshot()
+                .activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred');
+            stacksAt.push(snap?.stacks ?? 0);
+            eng.decrementSide('enemy');
+        }
+        expect(stacksAt).toEqual([1, 2, 3]);
+        // Scheduled persistent entries carry the no-re-roll sentinel.
+        eng.beginRound(4);
+        eng.sourceFired('attacker', 'active', 4);
+        const snap = eng.snapshot().activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred');
+        expect(snap?.turnsRemaining).toBe('permanent');
+    });
+
+    it('scheduled persistent entry persists with no buff-expired across rounds', () => {
+        const scheduled = makeBuff('Defense Shred', {
+            skillSource: 'active',
+            skillDuration: 3,
+            parsedEffects: { defense: -2 },
+            stacks: 1,
+        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [scheduled] });
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1);
+        for (let r = 2; r <= 6; r++) {
+            const { expired } = eng.decrementSide('enemy');
+            expect(expired).toEqual([]);
+            eng.beginRound(r);
+        }
+        const snap = eng.snapshot().activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred');
+        expect(snap).toBeDefined();
     });
 });

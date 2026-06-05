@@ -38,6 +38,10 @@ export interface ChargeGain {
     derivable: boolean; // true → read sim state; false → use manualCount
     manualCount?: number; // used when !derivable (default 1)
     requiredEnemyType?: EnemyBaseClass; // only for condition 'enemy-type'
+    // Reactive event the charge gain fires on (set for inflict-driven charge gains).
+    // When present, the gain is per-event (+amount each fire) rather than a per-standing
+    // count condition, and `condition` is 'always'.
+    trigger?: 'on-debuff-inflicted' | 'on-ally-debuff-inflicted';
 }
 
 export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {

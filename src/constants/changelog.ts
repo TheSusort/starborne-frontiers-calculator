@@ -7,12 +7,7 @@ export const CURRENT_VERSION = '1.63.0';
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: you can now set a minimum (or maximum) Effective HP as a stat limit — handy when you care about overall survivability rather than tuning HP and Defense separately. Works as a soft limit or a hard requirement like any other stat.',
-    'Major DPS Calculator upgrade powered by skill-text parsing: ship skills are auto-parsed into editable abilities (damage, DoTs, buffs, debuffs, conditionals, charge mechanics) in a new ability editor, and the simulation models far more mechanics — conditional gates, deterministic crits, per-type debuff landing, declining enemy HP, detonations, and more.',
-    'DPS Calculator: charge gains on passive skills now feed the charged-skill cadence instead of being ignored — ships like Hermes, Asphodel, Hemlock, Oleander, and Cobalt reach their charged skill faster.',
-    "DPS Calculator: team support ships and the enemy now take real speed-ordered turns — team buffs land when the ship actually acts (set each ship's Speed in Combat Settings), debuffs that land persist their full duration, and charged skills without damage now fire and apply their effects.",
-    'DPS Calculator: a shorter same-tier buff no longer cuts a longer one short — when two ships apply the same buff (e.g. Attack Up III), the new copy only replaces it if it is a higher tier or lasts longer; otherwise the stronger/longer buff keeps its full duration.',
-    "DPS Calculator: each ship config now shows a Turn Order strip — the round's actor order (team ships, the attacker, and the enemy) sorted by speed, so you can see at a glance who acts first.",
-    "DPS Calculator: Valerian's crit extension now extends only the newly applied Corrosion, not every active DoT — matching the in-game wording.",
+    'Major DPS Calculator engine upgrade: ship skills are auto-parsed into an editable ability model, and the simulation now runs a real combat engine — speed-ordered turns for team ships and the enemy (with a per-config Turn Order strip), live conditional gates, application-time debuff landing with persistent windows, buff-family tier rules, charge cadences with passive auras, and reactive triggers (charge-on-inflict, crit-triggered effects, start-of-round buffs) firing from real combat events. Includes numerous accuracy fixes (Valerian, Hemlock, Oleander, Enforcer, and persistent stacking debuffs like Defense Shred that climb per hit and never expire).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

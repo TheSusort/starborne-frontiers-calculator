@@ -155,12 +155,20 @@ const DPSCalculatorPage: React.FC = () => {
     // Display-ready team actors for the per-config turn-order strip: resolved ship name
     // (fallback "Team N") + turn-order speed. Listed in team order so the shared
     // orderByTurnPriority tiebreak resolves team → attacker → enemy at equal speeds.
+    // Unconfigured placeholder slots (no ship picked AND no buffs/debuffs) contribute
+    // nothing to the sim, so they are hidden from the strip ("Team N" numbering keeps
+    // the slot index). The sim's teamActors list is intentionally NOT filtered — a
+    // do-nothing actor is behavior-neutral, and manual-buff-only slots must stay in.
     const teamTurnOrderActors = useMemo(
         () =>
-            teamShips.map((t, i) => ({
-                name: (t.shipId && getShipById(t.shipId)?.name) || `Team ${i + 1}`,
-                speed: t.speed,
-            })),
+            teamShips
+                .map((t, i) => ({
+                    name: (t.shipId && getShipById(t.shipId)?.name) || `Team ${i + 1}`,
+                    speed: t.speed,
+                    configured: !!t.shipId || t.buffs.length > 0 || t.enemyDebuffs.length > 0,
+                }))
+                .filter((t) => t.configured)
+                .map(({ name, speed }) => ({ name, speed })),
         [teamShips, getShipById]
     );
 

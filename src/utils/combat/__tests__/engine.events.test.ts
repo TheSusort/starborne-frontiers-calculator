@@ -71,6 +71,7 @@ const collect = (input: CombatEngineInput) => {
     const events: CombatEvent[] = [];
     // Tap every event type onto a single ordered log.
     const types: CombatEvent['type'][] = [
+        'round-started',
         'turn-started',
         'turn-ended',
         'skill-fired',
@@ -82,6 +83,7 @@ const collect = (input: CombatEngineInput) => {
         'dot-applied',
         'dot-ticked',
         'dot-detonated',
+        'bomb-detonated',
         'hp-changed',
         'ship-destroyed',
     ];
@@ -442,5 +444,466 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
 
     it('fast enemy (enemySpeed 150): the same debuff expires one round later (round 3, the +1 KNOWN-DIFF)', () => {
         expect(oneShotEnemyDebuff(150)).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 3 Task 3: retimed debuff-applied, sourceId, round-started, bomb-detonated
+// ---------------------------------------------------------------------------
+
+describe('Phase 3 Task 3 — event shape and timing', () => {
+    // Case 1: timed enemy debuff (3 rounds) emits debuff-applied ONCE (round of infliction)
+    // with sourceId 'attacker', not on every subsequent round it is active.
+    it('timed enemy debuff active 3 rounds emits debuff-applied ONCE on the infliction round, with sourceId', () => {
+        const debuff: SelectedGameBuff = {
+            id: 'd1',
+            buffName: 'Def Down',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -20 },
+            skillSource: 'charge',
+            skillDuration: 3,
+        };
+        const plainSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+            ],
+        });
+        // startCharged → round 1 is charged (debuff fires); chargeCount 99 → never charges
+        // again, so the debuff is applied exactly once (round 1), active rounds 1-3.
+        const { events } = collect(
+            baseInput({
+                shipSkills: plainSkills(),
+                enemyDebuffs: [debuff],
+                hasChargedSkill: true,
+                startCharged: true,
+                chargeCount: 99,
+                numRounds: 5,
+                debuffLandingChance: 1,
+            })
+        );
+
+        const applied = events.filter((e) => e.type === 'debuff-applied');
+        // Must emit exactly once (at infliction, round 1) — not per-round while active.
+        expect(applied).toHaveLength(1);
+        const e = applied[0];
+        if (e.type !== 'debuff-applied') throw new Error('unreachable');
+        expect(e.buffName).toBe('Def Down');
+        expect(e.round).toBe(1);
+        expect(e.targetId).toBe('enemy');
+        expect(e.sourceId).toBe('attacker');
+    });
+
+    // Case 2a: recurring/aura enemy debuff emits NO debuff-applied on miss;
+    // debuff-resisted still fires per round when it fails the landing roll.
+    it('recurring enemy debuff emits no debuff-applied; debuff-resisted still fires per round on miss', () => {
+        const recurringDebuff: SelectedGameBuff = {
+            id: 'd2',
+            buffName: 'Armor Break',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -15 },
+            application: 'apply',
+            // No skillSource → always-active / recurring per statusEngine.
+        };
+        const { events } = collect(
+            baseInput({
+                affinityDamageModifier: -25, // affinity disadvantage → 'apply' debuffs are always resisted
+                affinityCritCap: 75,
+                affinityCritPenalty: 25,
+                enemyDebuffs: [recurringDebuff],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                            ],
+                        },
+                    ],
+                },
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds: 3,
+            })
+        );
+
+        // No debuff-applied for recurring/aura debuffs (they are not discrete inflictions).
+        expect(events.filter((e) => e.type === 'debuff-applied')).toHaveLength(0);
+        // debuff-resisted fires every round (affinity disadvantage → always resisted).
+        const resisted = events.filter((e) => e.type === 'debuff-resisted');
+        expect(resisted.length).toBeGreaterThan(0);
+    });
+
+    // Case 2b: recurring/aura enemy debuff that LANDS every round still emits zero
+    // debuff-applied events — the landed-recurring path is not a discrete infliction.
+    // This exercises the retimed path: before Phase 3 the old code emitted debuff-applied
+    // per landed round; after retiming it must be silent even when the debuff lands.
+    it('recurring enemy debuff that lands every round emits ZERO debuff-applied events', () => {
+        const recurringDebuff: SelectedGameBuff = {
+            id: 'd2b',
+            buffName: 'Armor Break',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -15 },
+            application: 'apply',
+            // No skillSource → always-active / recurring per statusEngine.
+        };
+        const numRounds = 4;
+        const { events, result } = collect(
+            baseInput({
+                // No affinity disadvantage → 'apply' debuffs land every round.
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                enemyDebuffs: [recurringDebuff],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                            ],
+                        },
+                    ],
+                },
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds,
+            })
+        );
+
+        // Zero debuff-applied events — landed recurring is not a discrete infliction.
+        expect(events.filter((e) => e.type === 'debuff-applied')).toHaveLength(0);
+        // Zero debuff-resisted — it lands every round.
+        expect(events.filter((e) => e.type === 'debuff-resisted')).toHaveLength(0);
+        // Proof it landed: the debuff appears in activeEnemyDebuffs in every round.
+        for (let r = 1; r <= numRounds; r++) {
+            const round = result.rounds.find((rd) => rd.round === r)!;
+            expect(round.activeEnemyDebuffs.some((b) => b.buffName === 'Armor Break')).toBe(true);
+        }
+    });
+
+    // Case 3: dot-applied carries sourceId 'attacker'.
+    it('dot-applied carries sourceId "attacker"', () => {
+        const { events } = collect(baseInput({ numRounds: 3, debuffLandingChance: 1 }));
+        const dotApplied = events.filter((e) => e.type === 'dot-applied');
+        expect(dotApplied.length).toBeGreaterThan(0);
+        for (const e of dotApplied) {
+            if (e.type !== 'dot-applied') throw new Error('unreachable');
+            expect(e.sourceId).toBe('attacker');
+        }
+    });
+
+    // Case 4: round-started fires once per round, before any turn-started of that round.
+    it('round-started fires once per round before any turn-started in that round', () => {
+        const { events, result } = collect(baseInput());
+        const rounds = result.rounds.length;
+
+        const roundStarted = events.filter((e) => e.type === 'round-started');
+        // Exactly one per round.
+        expect(roundStarted).toHaveLength(rounds);
+        for (let r = 1; r <= rounds; r++) {
+            const e = roundStarted[r - 1];
+            if (e.type !== 'round-started') throw new Error('unreachable');
+            expect(e.round).toBe(r);
+        }
+
+        // round-started must immediately precede the first turn-started of its round.
+        for (let r = 1; r <= rounds; r++) {
+            const rsIdx = events.findIndex((e) => e.type === 'round-started' && e.round === r);
+            const firstTsIdx = events.findIndex(
+                (e) => e.type === 'turn-started' && 'round' in e && e.round === r
+            );
+            expect(rsIdx).toBeGreaterThanOrEqual(0);
+            expect(firstTsIdx).toBeGreaterThan(rsIdx);
+            // No turn-started for round r appears before the round-started for round r.
+            const turnsBefore = events
+                .slice(0, rsIdx)
+                .filter(
+                    (e) =>
+                        e.type === 'turn-started' &&
+                        'round' in e &&
+                        (e as { round: number }).round === r
+                );
+            expect(turnsBefore).toHaveLength(0);
+        }
+    });
+
+    // Case 5: bomb with countdown 2 emits bomb-detonated (actorId 'attacker', correct round,
+    // stacks > 0, damage > 0) when it bursts on the enemy turn.
+    it('bomb countdown 2 emits bomb-detonated (with actorId, round, stacks, damage > 0) on the enemy turn', () => {
+        // Build a ship skill that applies a Bomb DoT on the active skill with countdown 2.
+        // At default speeds: attacker acts round 1 (applies bomb), enemy acts round 1 (countdown-1=1),
+        // attacker acts round 2 (no new bomb — charge slot next), enemy acts round 2 (countdown-1=0 → detonates).
+        const bombSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'bomb',
+                                tier: 10,
+                                stacks: 2,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+            ],
+        });
+
+        const { events } = collect(
+            baseInput({
+                shipSkills: bombSkills(),
+                numRounds: 4,
+                debuffLandingChance: 1,
+            })
+        );
+
+        const bombDetonated = events.filter((e) => e.type === 'bomb-detonated');
+        expect(bombDetonated.length).toBeGreaterThan(0);
+        for (const e of bombDetonated) {
+            if (e.type !== 'bomb-detonated') throw new Error('unreachable');
+            expect(e.actorId).toBe('attacker');
+            expect(typeof e.round).toBe('number');
+            expect(e.stacks).toBeGreaterThan(0);
+            expect(e.damage).toBeGreaterThan(0);
+        }
+    });
+
+    // Case 6: a team actor's landed timed debuff emits debuff-applied with sourceId = team
+    // actor id, on every application round (not just the first).
+    it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId on every application round", () => {
+        const teamDebuff: SelectedGameBuff = {
+            id: 'td1',
+            buffName: 'Team Def Down',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -15 },
+            skillSource: 'active',
+            skillDuration: 3,
+        };
+        const plainSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+            ],
+        });
+        // Team actor 't1' fires active every round (chargeCount 0), speed 80 (acts between
+        // attacker at 100 and enemy at 50). The enemy's post-turn decrement fires after the
+        // team actor each round, so the remaining window after decrement is always 2.
+        // With skillDuration 3 and remaining 2, the family rule (3 > 2) always wins →
+        // the debuff re-inflicts every round and debuff-applied fires each time.
+        // 5 rounds × 1 active fire per round = 5 debuff-applied events total.
+        const { events } = collect(
+            baseInput({
+                shipSkills: plainSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds: 5,
+                debuffLandingChance: 1,
+                teamActors: [
+                    {
+                        id: 't1',
+                        speed: 80,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [teamDebuff],
+                    },
+                ],
+            })
+        );
+
+        const applied = events.filter(
+            (e) => e.type === 'debuff-applied' && e.buffName === 'Team Def Down'
+        );
+        // 5 rounds × 1 active fire per round → 5 debuff-applied events.
+        expect(applied).toHaveLength(5);
+        for (const e of applied) {
+            if (e.type !== 'debuff-applied') throw new Error('unreachable');
+            expect(e.sourceId).toBe('t1');
+            expect(e.targetId).toBe('enemy');
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Echoing Burst (accumulate-detonate) display in activeEnemyDebuffs
+// ---------------------------------------------------------------------------
+
+describe('accumulate-detonate display in activeEnemyDebuffs', () => {
+    // A ship with an active-slot accumulate-detonate ability (turns 2, pct 50).
+    // chargeCount 3, not startCharged → active rounds 1,2,3 then charged round 4.
+    // The accumulate-detonate ability fires ONLY on the active slot (debuff landing
+    // is gated by dotsLanded — always true in this fixture since debuffLandingChance=1).
+    const accSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ab({
+                        type: 'accumulate-detonate',
+                        config: { type: 'accumulate-detonate', turns: 2, pct: 50 },
+                    }),
+                ],
+            },
+            {
+                slot: 'charged',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 300 } })],
+            },
+        ],
+    });
+
+    const run = (overrides: Partial<CombatEngineInput> = {}) => {
+        idCounter = 0;
+        return runCombat({
+            attack: 15000,
+            crit: 50,
+            critDamage: 150,
+            defensePenetration: 10,
+            chargeCount: 3,
+            shipSkills: accSkills(),
+            enemyDefense: 8000,
+            enemyHp: 400000,
+            numRounds: 8,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: true,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 6000,
+            hp: 30000,
+            ...overrides,
+        });
+    };
+
+    it('Echoing Burst appears in activeEnemyDebuffs with turnsRemaining 2 on the application round', () => {
+        const { rounds } = run();
+        // Round 1: active slot fires, accumulator applied (turns=2 → roundsRemaining=2).
+        // activeEnemyDebuffs should include {buffName:'Echoing Burst', turnsRemaining:2}.
+        const r1 = rounds.find((r) => r.round === 1)!;
+        expect(r1.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+            ])
+        );
+    });
+
+    it('Echoing Burst shows turnsRemaining 1 the round after application', () => {
+        const { rounds } = run();
+        // Round 2: enemy's processAccumulators decremented roundsRemaining 2→1. Active slot
+        // fires again, applies a new accumulator (turns=2). The surviving entry shows
+        // roundsRemaining=1; the new one shows roundsRemaining=2.
+        const r2 = rounds.find((r) => r.round === 2)!;
+        const burst = r2.activeEnemyDebuffs.filter((d) => d.buffName === 'Echoing Burst');
+        expect(burst).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 1 }),
+            ])
+        );
+    });
+
+    it('Echoing Burst is absent from activeEnemyDebuffs after it detonates (roundsRemaining reaches 0)', () => {
+        // chargeCount 3, not startCharged: rounds 1,2,3 active, round 4 charged.
+        // Round 1: accumulator applied (roundsRemaining=2). Enemy turn: 2→1.
+        // Round 2: active again, NEW accumulator (roundsRemaining=2). Enemy turn: round-1 entry 1→0 → detonates; round-2 entry 2→1.
+        // So after round 2's enemy turn, only the round-2 entry (roundsRemaining=1) survives.
+        // Round 3: active again, ANOTHER accumulator (roundsRemaining=2). Enemy turn: round-2 entry 1→0 → detonates; round-3 entry 2→1.
+        // etc. The pattern: each active round applies a new one (window=2), the previous one detonates on next enemy turn.
+        // Round 4: charged slot fires — NO accumulate-detonate ability on charged slot.
+        // After round 3's enemy turn, round-3 entry has roundsRemaining=1. On round 4's enemy turn, 1→0 → detonates.
+        // Round 4's activeEnemyDebuffs: round-3 entry still has roundsRemaining=1 AT THE ATTACKER TURN (before enemy tick).
+        // Round 5: active again. At start of round 5, round-3 entry detonated (gone). New accumulator applied.
+        // Let's verify round 4: the attacker turn fires charged, no new accumulator. The surviving entry
+        // from round 3 (roundsRemaining=1) should appear in round 4's activeEnemyDebuffs.
+        const { rounds } = run();
+        const r4 = rounds.find((r) => r.round === 4)!;
+        // Round 4 is charged — no new accumulator from the attacker turn.
+        // The round-3 entry (roundsRemaining=1) should still be present at attacker-turn time.
+        expect(r4.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 1 }),
+            ])
+        );
+        // Round 5 applies a new one (active again, roundsRemaining=2). Round-4 entry is gone.
+        const r5 = rounds.find((r) => r.round === 5)!;
+        expect(r5.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+            ])
+        );
+        // No roundsRemaining=1 on round 5 at attacker-turn time: only the round-4 entry
+        // could give that, but it detonated during round 4's enemy turn.
+        expect(
+            r5.activeEnemyDebuffs.some(
+                (d) => d.buffName === 'Echoing Burst' && d.turnsRemaining === 1
+            )
+        ).toBe(false);
+    });
+
+    it('re-application restarts the window (new entry shows turnsRemaining 2 each active round)', () => {
+        const { rounds } = run();
+        // Each active round should show at least one entry with turnsRemaining=2 (the newly applied one).
+        const activeRounds = rounds.filter((r) => r.action === 'active');
+        for (const rd of activeRounds) {
+            expect(rd.activeEnemyDebuffs).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+                ])
+            );
+        }
+    });
+
+    it('charged rounds (no accumulate-detonate ability) do NOT show turnsRemaining=2 (only surviving entries)', () => {
+        const { rounds } = run();
+        // Round 4 is charged. No new accumulator. The surviving entry from round 3
+        // (roundsRemaining=1 after the round-3 enemy tick) shows turnsRemaining=1, not 2.
+        const r4 = rounds.find((r) => r.round === 4)!;
+        expect(r4.action).toBe('charged');
+        expect(
+            r4.activeEnemyDebuffs.some(
+                (d) => d.buffName === 'Echoing Burst' && d.turnsRemaining === 2
+            )
+        ).toBe(false);
+    });
+
+    it('activeEnemyDebuffs Echoing Burst entries do not affect damage numbers (display-only)', () => {
+        // Verify the detonation damage is NOT affected by the presence of the display entries.
+        // Run once with the accumulate-detonate skill and check that damage totals match
+        // expectations (same as golden fixture: detonationDamage > 0 on rounds where detonate fires).
+        const { rounds } = run({ numRounds: 4 });
+        // Round 2 detonates the round-1 accumulator → detonationDamage > 0.
+        const r2 = rounds.find((r) => r.round === 2)!;
+        expect(r2.detonationDamage).toBeGreaterThan(0);
+        // Round 1 applied the accumulator, no detonation yet.
+        const r1 = rounds.find((r) => r.round === 1)!;
+        expect(r1.detonationDamage).toBe(0);
     });
 });

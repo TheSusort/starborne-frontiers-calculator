@@ -3,9 +3,11 @@ import {
     Ability,
     AbilityConfig,
     AbilityTarget,
+    AbilityTrigger,
     Condition,
     ModifierChannel,
     SkillSlot,
+    LIVE_TRIGGERS,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { Select } from '../ui/Select';
@@ -90,6 +92,18 @@ const DEBUFF_APPLICATION_OPTIONS = [
 const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
     { value: 'active', label: 'All active DoTs' },
     { value: 'inflicted', label: 'Only DoTs from this cast' },
+];
+
+const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
+    { value: 'on-cast', label: 'On cast (default)' },
+    { value: 'start-of-round', label: 'Start of round' },
+    { value: 'on-crit', label: 'On critical hit' },
+    { value: 'on-attacked', label: 'When attacked' },
+    { value: 'on-ally-destroyed', label: 'On ally destroyed' },
+    { value: 'on-destroyed', label: 'On destroyed' },
+    { value: 'on-debuff-inflicted', label: 'After inflicting a debuff' },
+    { value: 'on-ally-debuff-inflicted', label: 'After an ally inflicts a debuff' },
+    { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
 ];
 
 const ALL_BUFF_STATS = [
@@ -574,6 +588,27 @@ export const AbilityCard: React.FC<Props> = ({
                 options={TARGET_OPTIONS}
                 onChange={(value) => onChange({ ...ability, target: value as AbilityTarget })}
             />
+
+            {(ability.type === 'buff' ||
+                ability.type === 'debuff' ||
+                ability.type === 'dot' ||
+                ability.type === 'charge') && (
+                <>
+                    <Select
+                        label="Trigger"
+                        value={ability.trigger}
+                        options={TRIGGER_OPTIONS}
+                        onChange={(value) =>
+                            onChange({ ...ability, trigger: value as AbilityTrigger })
+                        }
+                    />
+                    {ability.trigger !== 'on-cast' && !LIVE_TRIGGERS.has(ability.trigger) && (
+                        <p className="text-xs text-theme-text-secondary">
+                            Not simulated — treated as assume-active
+                        </p>
+                    )}
+                </>
+            )}
 
             {renderBody()}
 

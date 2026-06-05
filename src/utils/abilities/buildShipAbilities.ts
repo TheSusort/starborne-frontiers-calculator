@@ -22,6 +22,7 @@ import {
     parseConditionalDamage,
     parseChargeGain,
     detectGrantConditions,
+    detectReactiveTrigger,
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
@@ -743,21 +744,26 @@ function abilitiesFromText(text: string): PositionedAbility[] {
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
+        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). They
+        // carry no gating condition — the trigger IS the gate (engine listens for the event).
+        const reactiveCharge = charge.trigger !== undefined;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'charge',
                 target: 'self',
-                trigger: 'on-cast',
-                conditions: [
-                    toCondition(
-                        charge.condition,
-                        charge.derivable,
-                        charge.manualCount,
-                        charge.requiredEnemyType,
-                        text
-                    ),
-                ],
+                trigger: reactiveCharge ? charge.trigger! : 'on-cast',
+                conditions: reactiveCharge
+                    ? []
+                    : [
+                          toCondition(
+                              charge.condition,
+                              charge.derivable,
+                              charge.manualCount,
+                              charge.requiredEnemyType,
+                              text
+                          ),
+                      ],
                 config: { type: 'charge', amount: charge.amount },
                 autoFilled: true,
             },
@@ -852,7 +858,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const rowText = getSkillRowForSlot(ship, slot)?.text ?? '';
         const dots = dotsForSlot(slot).map((entry) => {
             const pos = rowText.search(new RegExp(entry.type, 'i'));
-            return { ability: dotAbility(entry), pos: pos >= 0 ? pos : MAX_POS };
+            const ability = dotAbility(entry);
+            // Crit-inflicted DoT form ("When this Unit critically hits an enemy it inflicts
+            // Corrosion …"): route through the reactive machinery. Anchor on the DoT type name,
+            // matching the position search above.
+            const reactiveTrigger = rowText
+                ? detectReactiveTrigger(rowText, entry.type)
+                : undefined;
+            if (reactiveTrigger) ability.trigger = reactiveTrigger;
+            return { ability, pos: pos >= 0 ? pos : MAX_POS };
         });
         if (!dots.length) continue;
         pushToSlot(bySlot, slot, dots);
@@ -872,6 +886,16 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
         if (conditions.length) {
             ability.conditions = conditions;
+        }
+        // Reactive trigger (crit / start-of-round / bomb-detonate) detected on this buff's
+        // clause: route through the engine's trigger machinery instead of a gating condition.
+        // The trigger IS the gate, so drop the now-redundant self-crit condition (start-of-round
+        // and bomb-detonate phrasings produce no condition from detectGrantConditions). Any other
+        // conditions (e.g. an enemy-type co-gate) are preserved.
+        const reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
+        if (reactiveTrigger) {
+            ability.trigger = reactiveTrigger;
+            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
         }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).

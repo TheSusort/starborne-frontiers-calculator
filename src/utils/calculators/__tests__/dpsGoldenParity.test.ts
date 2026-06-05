@@ -773,6 +773,98 @@ describe('dpsGoldenParity', () => {
         }),
     }));
 
+    // Scenario 18: reactive triggers — on-debuff-inflicted charge + on-crit-inflicted debuff.
+    // Active slot: damage + timed enemy debuff (inflict, duration 2) applied every cast.
+    // Charged slot: damage (multiplier 300) — provides hasChargedSkill=true so reactively-
+    //   gained charges are actually spent on real charged rounds.
+    // Passive slot: charge {trigger:'on-debuff-inflicted'} gains +1 every debuff-applied event
+    //   from the attacker; timed enemy debuff {trigger:'on-crit', defense:-30, duration 2}
+    //   lands the round a crit occurs (and also emits debuff-applied → additional +1 charge).
+    // chargeCount:3; BASE hacking/security → 100% landing chance; 10 rounds.
+    // Charge accumulation trace (preTurn banking + reactive drains, capped at chargeCount=3):
+    //   Active non-crit: preTurn +1 banking + reactive +1 (Sensor Down inflict) = +2 net.
+    //   Active crit: preTurn +1 + reactive +1 (Sensor Down) + chained +1 (Armor Breach) = capped 3.
+    //   Charged round: charges reset to 0 at preTurn; the damage-only charged slot inflicts no
+    //     debuff, BUT a charged-stream crit chains on-crit → Armor Breach → +1 reactive charge.
+    // Hand-verified round sequence (charges/didCrit shown as snapshotted, i.e. end of round):
+    //   r1 active(nc):   0+1 bank, +1 Sensor Down → charges=2.
+    //   r2 active(CRIT): 2+1=3 cap; Sensor Down + Armor Breach gains capped → charges=3.
+    //   r3 charged(nc):  3>=3 fires, reset 0; no inflictions → charges=0.
+    //   r4 active(nc):   +1 bank +1 Sensor Down → charges=2.
+    //   r5 active(CRIT): 2+1=3 cap → charges=3.
+    //   r6 charged(CRIT): reset 0; chargedCritGate fires → Armor Breach chained → charges=1.
+    //   r7 active(nc):   1+1 bank +1 Sensor Down → charges=3.
+    //   r8 charged(nc):  3>=3 fires, reset 0 → charges=0.
+    //   r9 active(CRIT): 0+1 bank +1 Sensor Down +1 Armor Breach → charges=3.
+    //   r10 charged(CRIT): reset 0; chargedCrit fires → Armor Breach chained → charges=1.
+    // Charged rounds: r3, r6, r8, r10 (4 in the 10-round window — cadence locked).
+    // Crit rounds: r2/r5/r9 (active stream, 50% accumulator over active rounds) and r6/r10
+    //   (charged stream — the two action streams draw from SEPARATE crit accumulators).
+    // Armor Breach (duration 2, applied at the post-turn drain of each crit round, enemy
+    //   post-turn decrements same round) is visible with turnsRemaining=1 the FOLLOWING
+    //   round: r3 (from r2), r6 (from r5), r7 (from r6), r10 (from r9).
+    snap('reactive triggers (charge on inflict + crit-inflicted debuff)', () => {
+        const shipSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Sensor Down',
+                                parsedEffects: { defense: -20 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 300 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Armor Breach',
+                                parsedEffects: { defense: -30 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return {
+            ...BASE,
+            rounds: 10,
+            shipSkills,
+        };
+    });
+
     // Scenario 17: team actor with real turns — fast support (speed 140) applies an
     // active-slot 2-turn attack buff on each of its turns; a charge-slot defense-down
     // debuff on its chargeCount-2 startCharged cadence (charged turns 1/4/7/10); enemy

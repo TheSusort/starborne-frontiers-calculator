@@ -126,6 +126,136 @@ describe('AbilityCard', () => {
         });
     });
 
+    describe('Trigger select', () => {
+        const buffWithTrigger = (trigger: Ability['trigger']): Ability => ({
+            ...buffAbility,
+            trigger,
+        });
+
+        const debuffAbility: Ability = {
+            id: 'a3',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: '',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'inflict',
+            },
+        };
+
+        const dotAbility: Ability = {
+            id: 'a4',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+        };
+
+        const chargeAbility: Ability = {
+            id: 'a5',
+            type: 'charge',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        };
+
+        it('renders a Trigger select for buff abilities showing the current trigger label', () => {
+            render(
+                <AbilityCard
+                    ability={buffWithTrigger('on-crit')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            // The label element has aria-label="Trigger"
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
+            // The selected label text is visible in the trigger button
+            expect(screen.getByText('On critical hit')).toBeInTheDocument();
+        });
+
+        it('renders a Trigger select for debuff abilities', () => {
+            render(<AbilityCard ability={debuffAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
+        });
+
+        it('renders a Trigger select for dot abilities', () => {
+            render(<AbilityCard ability={dotAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
+        });
+
+        it('renders a Trigger select for charge abilities', () => {
+            render(<AbilityCard ability={chargeAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
+        });
+
+        it('does not render a Trigger select for damage abilities', () => {
+            render(<AbilityCard ability={damageAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByLabelText('Trigger')).not.toBeInTheDocument();
+        });
+
+        it('calls onChange with the new trigger when an option is selected', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={buffWithTrigger('on-cast')}
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            // Open the Trigger dropdown by clicking the button (id matches label's htmlFor)
+            fireEvent.click(screen.getByLabelText('Trigger'));
+            // Click the "On critical hit" option
+            fireEvent.click(screen.getByText('On critical hit'));
+            expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'on-crit' }));
+        });
+
+        it('shows a not-simulated note for a non-live, non-on-cast trigger', () => {
+            render(
+                <AbilityCard
+                    ability={buffWithTrigger('on-attacked')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(
+                screen.getByText(/not simulated — treated as assume-active/i)
+            ).toBeInTheDocument();
+        });
+
+        it('shows no note for a live trigger', () => {
+            render(
+                <AbilityCard
+                    ability={buffWithTrigger('on-crit')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(
+                screen.queryByText(/not simulated — treated as assume-active/i)
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows no note for the default on-cast trigger', () => {
+            render(
+                <AbilityCard
+                    ability={buffWithTrigger('on-cast')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(
+                screen.queryByText(/not simulated — treated as assume-active/i)
+            ).not.toBeInTheDocument();
+        });
+    });
+
     it('reconstructs picker value from config.buffName and shows selected buff', () => {
         const buffAbilityWithName: Ability = {
             ...buffAbility,

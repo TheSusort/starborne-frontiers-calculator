@@ -14,8 +14,8 @@ export interface AllowEntry {
 export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
-        rules: ['detonation', 'ungated-effect-with-trigger'],
-        reason: 'Countdown-reduction + crit-scaling Bomb detonation; "gains Stealth on detonating a Bomb" is reactive.',
+        rules: ['detonation'],
+        reason: 'Countdown-reduction + crit-scaling Bomb detonation (charged skill). The "gains Stealth on detonating a Bomb" passive now carries an on-bomb-detonated trigger (no longer ungated).',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────

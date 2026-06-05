@@ -700,7 +700,7 @@ describe('buildShipAbilities', () => {
         expect(abilityOfType(active!.abilities, 'dot')?.conditions).toEqual([]);
     });
 
-    it('attaches a self-crit condition to a crit-gated granted buff (Lionheart-style)', () => {
+    it('routes a crit-gated granted buff through the on-crit trigger (Lionheart-style)', () => {
         const s = ship({
             activeSkillText:
                 'This Unit deals 170% damage. If this critically hits, this Unit gains <unit-skill>Attack Up II</unit-skill> for 1 turn.',
@@ -708,7 +708,10 @@ describe('buildShipAbilities', () => {
         const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
         const buff = abilityOfType(active!.abilities, 'buff');
         expect(buff?.config).toMatchObject({ type: 'buff', buffName: 'Attack Up II' });
-        expect(buff?.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+        // Crit phrasing now routes through the engine's on-crit trigger (the trigger is the
+        // gate); the redundant self-crit condition is dropped.
+        expect(buff?.trigger).toBe('on-crit');
+        expect(buff?.conditions).toEqual([]);
     });
 
     it('attaches anyOf Taunt/Provoke conditions to a status-gated granted buff (Panon-style)', () => {
@@ -885,6 +888,81 @@ describe('buildShipAbilities', () => {
             expect(mod).toMatchObject({
                 config: { type: 'modifier', channel: 'defensePenetration', value: 20 },
             });
+        });
+    });
+
+    describe('reactive trigger reclassification', () => {
+        const namedBuff = (abilities: Ability[], name: string): Ability | undefined =>
+            abilities.find(
+                (a) =>
+                    (a.config.type === 'buff' || a.config.type === 'debuff') &&
+                    a.config.buffName === name
+            );
+
+        it('Hemlock passive charge: on-debuff-inflicted, no condition', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit <unit-aid>gains 1 charge</unit-aid> to its charged skill after it inflicts a <unit-aid>debuff</unit-aid>.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const charge = abilityOfType(passive.abilities, 'charge')!;
+            expect(charge.trigger).toBe('on-debuff-inflicted');
+            expect(charge.conditions).toEqual([]);
+            expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
+        });
+
+        it('Oleander passive charge: on-ally-debuff-inflicted, no condition', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    "When an ally inflicts a debuff, this Unit <unit-aid>adds 1 charge</unit-aid> to it's Charged Skill.",
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const charge = abilityOfType(passive.abilities, 'charge')!;
+            expect(charge.trigger).toBe('on-ally-debuff-inflicted');
+            expect(charge.conditions).toEqual([]);
+        });
+
+        it('Enforcer passive debuff: on-crit, no self-crit condition', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When this Unit critically hits an enemy it inflicts <unit-skill>Defense Shred</unit-skill> for 3 turns.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const debuff = namedBuff(passive.abilities, 'Defense Shred')!;
+            expect(debuff.trigger).toBe('on-crit');
+            expect(debuff.conditions).toEqual([]);
+        });
+
+        it('Wusheng passive buff: on-crit, no self-crit condition', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const buff = namedBuff(passive.abilities, 'Stealth')!;
+            expect(buff.trigger).toBe('on-crit');
+            expect(buff.conditions).toEqual([]);
+        });
+
+        it('Valkyrie passive buff: start-of-round, duration kept', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const buff = namedBuff(passive.abilities, 'Speed Up II')!;
+            expect(buff.trigger).toBe('start-of-round');
+            expect(buff.config).toMatchObject({ type: 'buff', duration: 1 });
+        });
+
+        it('Lingshe passive buff: on-bomb-detonated', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const buff = namedBuff(passive.abilities, 'Stealth')!;
+            expect(buff.trigger).toBe('on-bomb-detonated');
         });
     });
 });
