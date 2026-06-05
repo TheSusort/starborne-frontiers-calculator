@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { SelectedGameBuff, TeamShipConfig, EnemyBaseClass } from '../../types/calculator';
+import { ShipSkills } from '../../types/abilities';
 import { AffinityName, Ship } from '../../types/ship';
 import { GameBuffPicker } from './GameBuffPicker';
 import { TeamShipRow } from './TeamShipRow';
@@ -37,6 +38,9 @@ interface CombatSettingsPanelProps {
     onTeamShipChargeCountChange: (id: string, chargeCount: number) => void;
     onTeamShipBuffsChange: (id: string, buffs: SelectedGameBuff[]) => void;
     onTeamShipEnemyDebuffsChange: (id: string, debuffs: SelectedGameBuff[]) => void;
+    onTeamShipStatsChange: (id: string, stats: NonNullable<TeamShipConfig['stats']>) => void;
+    onTeamShipAffinityChange: (id: string, affinity: AffinityName) => void;
+    onTeamShipShipSkillsChange: (id: string, shipSkills: ShipSkills) => void;
     enemyType?: EnemyBaseClass;
     onEnemyTypeChange: (v: EnemyBaseClass | undefined) => void;
 }
@@ -69,6 +73,9 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
     onTeamShipChargeCountChange,
     onTeamShipBuffsChange,
     onTeamShipEnemyDebuffsChange,
+    onTeamShipStatsChange,
+    onTeamShipAffinityChange,
+    onTeamShipShipSkillsChange,
     enemyType,
     onEnemyTypeChange,
 }) => (
@@ -203,6 +210,13 @@ export const CombatSettingsPanel: React.FC<CombatSettingsPanelProps> = ({
                                 onBuffsChange={(buffs) => onTeamShipBuffsChange(ts.id, buffs)}
                                 onEnemyDebuffsChange={(debuffs) =>
                                     onTeamShipEnemyDebuffsChange(ts.id, debuffs)
+                                }
+                                onStatsChange={(stats) => onTeamShipStatsChange(ts.id, stats)}
+                                onAffinityChange={(affinity) =>
+                                    onTeamShipAffinityChange(ts.id, affinity)
+                                }
+                                onShipSkillsChange={(shipSkills) =>
+                                    onTeamShipShipSkillsChange(ts.id, shipSkills)
                                 }
                             />
                         ))}

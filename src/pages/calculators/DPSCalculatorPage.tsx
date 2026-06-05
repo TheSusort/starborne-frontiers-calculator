@@ -12,7 +12,6 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
 import {
     buildDefaultShipSkills,
@@ -181,6 +180,9 @@ const DPSCalculatorPage: React.FC = () => {
                 startCharged: t.startCharged,
                 selfBuffs: t.buffs,
                 enemyDebuffs: t.enemyDebuffs,
+                shipSkills: t.shipSkills,
+                stats: t.stats,
+                affinity: t.affinity,
             })),
         [teamShips]
     );
@@ -272,6 +274,7 @@ const DPSCalculatorPage: React.FC = () => {
                     enemySpeed,
                     teamActors,
                     rounds,
+                    enemyAffinity,
                     selfBuffs: attackerBuffs,
                     enemyDebuffs: enemyBuffs,
                     startCharged: config.startCharged,
@@ -434,7 +437,6 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForTeamSlot = (id: string, ship: Ship) => {
-        const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const startCharged = detectFullyCharged([
             ship.activeSkillText,
             ship.chargeSkillText,
@@ -452,8 +454,21 @@ const DPSCalculatorPage: React.FC = () => {
                     startCharged,
                     speed: Math.round(final.speed ?? 100),
                     chargeCount: ship.chargeSkillCharge ?? 0,
-                    buffs: mergeAutoFill(t.buffs, selfBuffs),
-                    enemyDebuffs: mergeAutoFill(t.enemyDebuffs, newEnemyDebuffs),
+                    shipSkills: buildShipAbilities(ship),
+                    stats: {
+                        attack: Math.round(final.attack),
+                        crit: Math.round(final.crit),
+                        critDamage: Math.round(final.critDamage),
+                        defensePenetration: Math.round(final.defensePenetration || 0),
+                        hacking: Math.round(final.hacking ?? 200),
+                        defence: Math.round(final.defence ?? 0),
+                        hp: Math.round(final.hp ?? 0),
+                    },
+                    affinity: ship.affinity,
+                    // Walked skills supersede auto-fill stamping; clear any prior auto-filled
+                    // entries while preserving the user's manual extras.
+                    buffs: t.buffs.filter((b) => !b.autoFilled),
+                    enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
                 };
             })
         );
@@ -528,6 +543,13 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipBuffsChange={(id, buffs) => updateTeamShip(id, { buffs })}
                         onTeamShipEnemyDebuffsChange={(id, debuffs) =>
                             updateTeamShip(id, { enemyDebuffs: debuffs })
+                        }
+                        onTeamShipStatsChange={(id, stats) => updateTeamShip(id, { stats })}
+                        onTeamShipAffinityChange={(id, affinity) =>
+                            updateTeamShip(id, { affinity })
+                        }
+                        onTeamShipShipSkillsChange={(id, shipSkills) =>
+                            updateTeamShip(id, { shipSkills })
                         }
                         enemyType={enemyType}
                         onEnemyTypeChange={setEnemyType}

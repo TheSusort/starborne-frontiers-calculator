@@ -221,11 +221,25 @@ export type HealerConfigUpdateableField =
 export interface TeamShipConfig {
     id: string;
     shipId?: string;
-    buffs: SelectedGameBuff[]; // parsed self/team buffs → merge into global attackerBuffs
-    enemyDebuffs: SelectedGameBuff[]; // parsed enemy debuffs  → merge into global enemyBuffs
+    buffs: SelectedGameBuff[]; // manual extra buffs granted to attacker → merge into global attackerBuffs
+    enemyDebuffs: SelectedGameBuff[]; // manual extra enemy debuffs → merge into global enemyBuffs
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
     speed: number; // turn-order speed; auto-filled from ship stats
     chargeCount: number; // charge threshold; auto-filled from skill rows
+    /** Walked skills for this team actor (auto-filled on ship pick; editable per slot). */
+    shipSkills?: ShipSkills;
+    /** Combat stats for the walked team actor (auto-filled from the ship; editable). */
+    stats?: {
+        attack: number;
+        crit: number;
+        critDamage: number;
+        defensePenetration: number;
+        hacking: number;
+        defence: number;
+        hp: number;
+    };
+    /** Affinity for the walked team actor — vs the enemy affinity yields its own modifiers. */
+    affinity?: AffinityName;
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing

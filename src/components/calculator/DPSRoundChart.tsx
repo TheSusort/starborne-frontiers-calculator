@@ -37,6 +37,13 @@ interface ChartDataPoint {
     [key: string]: number;
 }
 
+/** Per-ship dataKey for its cumulative team-damage overlay line. */
+const teamKey = (shipId: string) => `${shipId}__team`;
+
+/** True when any of the ship's rounds reports walked-team damage. */
+const hasTeamDamage = (ship: ShipSimResult): boolean =>
+    ship.result.rounds.some((r) => (r.teamDamage ?? 0) > 0);
+
 interface CustomTooltipProps {
     active?: boolean;
     payload?: Array<{
@@ -59,9 +66,13 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
 }) => {
     if (!active || !payload || !label) return null;
 
+    // Only the attacker cumulative series map into shipMap; the dashed team-damage overlay
+    // series (dataKey `${id}__team`) are surfaced as their own line inside each ship block,
+    // never folded into the attacker stack totals.
+    const attackerEntries = payload.filter((e) => shipMap.has(e.dataKey));
     const roundDamageFor = (dataKey: string) =>
         shipMap.get(dataKey)?.result.rounds[label - 1]?.totalRoundDamage ?? 0;
-    const sorted = [...payload].sort(
+    const sorted = [...attackerEntries].sort(
         (a, b) => roundDamageFor(b.dataKey) - roundDamageFor(a.dataKey)
     );
 
@@ -118,6 +129,11 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                                 )}
                             </div>
                         )}
+                        {roundData && (roundData.teamDamage ?? 0) > 0 && (
+                            <p className="text-xs pl-2" style={{ color: '#a78bfa' }}>
+                                Team damage: {(roundData.teamDamage ?? 0).toLocaleString()}
+                            </p>
+                        )}
                         <p className="text-xs text-theme-text-secondary pl-2">
                             Total: {entry.value.toLocaleString()}
                         </p>
@@ -145,12 +161,23 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
 
     if (ships.length === 0) return null;
 
+    // Ships whose sim included walked team actors get a separate (non-stacked) cumulative
+    // team-damage overlay line — kept out of the attacker's cumulative series entirely.
+    const teamShips = ships.filter(hasTeamDamage);
+    const teamCumulative = new Map<string, number>();
+
     const chartData: ChartDataPoint[] = [];
     for (let r = 1; r <= rounds; r++) {
         const point: ChartDataPoint = { round: r };
         ships.forEach((ship) => {
             const roundData = ship.result.rounds[r - 1];
             point[ship.id] = roundData ? roundData.cumulativeDamage : 0;
+        });
+        teamShips.forEach((ship) => {
+            const roundData = ship.result.rounds[r - 1];
+            const running = (teamCumulative.get(ship.id) ?? 0) + (roundData?.teamDamage ?? 0);
+            teamCumulative.set(ship.id, running);
+            point[teamKey(ship.id)] = running;
         });
         chartData.push(point);
     }
@@ -235,13 +262,39 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
                                 />
                             );
                         })}
+                        {teamShips.map((ship) => {
+                            const i = ships.findIndex((s) => s.id === ship.id);
+                            const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                            return (
+                                <Line
+                                    key={teamKey(ship.id)}
+                                    type="monotone"
+                                    dataKey={teamKey(ship.id)}
+                                    name={`${ship.name} — team damage`}
+                                    stroke={color}
+                                    strokeDasharray="5 4"
+                                    {...chartLineDefaults(color)}
+                                    strokeWidth={1.5}
+                                    dot={false}
+                                />
+                            );
+                        })}
                     </LineChart>
                 </BaseChart>
                 <ChartLegend
-                    items={ships.map((ship, i) => ({
-                        label: ship.name,
-                        color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
-                    }))}
+                    items={[
+                        ...ships.map((ship, i) => ({
+                            label: ship.name,
+                            color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                        })),
+                        ...teamShips.map((ship) => {
+                            const i = ships.findIndex((s) => s.id === ship.id);
+                            return {
+                                label: `${ship.name} — team damage`,
+                                color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                            };
+                        }),
+                    ]}
                 />
             </div>
             <DPSBuffPanel
