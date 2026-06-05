@@ -531,7 +531,7 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
-    it('Howler active: self buff (Attack Up III) coexists with active damage', () => {
+    it('Howler active: team buff (Attack Up III) coexists with active damage', () => {
         const s = ship({
             activeSkillText:
                 'This Unit grants <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-damage>repairs 90%</unit-damage> of its Attack.',
@@ -542,9 +542,13 @@ describe('buildShipAbilities', () => {
         expect(active).toBeDefined();
 
         const buff = abilityOfType(active!.abilities, 'buff');
+        // CHANGED (verb-aware routing fix): Howler's "This Unit grants Attack Up III" is a
+        // receiver-less BESTOWING grant → all-allies (the locked routing rule), not self. The
+        // attacker still receives it (self folds into all-allies for the attacker's own sim); the
+        // distinction only matters when the engine walks Howler as a team ship.
         expect(buff).toMatchObject({
             type: 'buff',
-            target: 'self',
+            target: 'all-allies',
             trigger: 'on-cast',
             config: { type: 'buff', buffName: 'Attack Up III' },
             autoFilled: true,
