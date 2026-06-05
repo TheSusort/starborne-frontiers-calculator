@@ -583,6 +583,8 @@ export function runCombat(input: CombatEngineInput): {
         side: 'player',
         kind: 'attacker',
         stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: speed ?? 100 },
+        chargeCount,
+        startCharged,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -736,7 +738,6 @@ export function runCombat(input: CombatEngineInput): {
     }
 
     // All mutable state declared fresh on every call
-    let charges = startCharged ? chargeCount : 0;
     let cumulativeDamage = 0;
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
@@ -811,13 +812,13 @@ export function runCombat(input: CombatEngineInput): {
                 // ====================================================================
 
                 // --- preTurn: action selection + charge consumption (old lines 263-273) ---
-                if (hasChargedSkill && charges >= chargeCount) {
+                if (hasChargedSkill && attacker.charges >= chargeCount) {
                     action = 'charged';
-                    charges = 0;
+                    attacker.charges = 0;
                 } else {
                     action = 'active';
                     if (hasChargedSkill) {
-                        charges += 1;
+                        attacker.charges += 1;
                     }
                 }
 
@@ -1242,8 +1243,8 @@ export function runCombat(input: CombatEngineInput): {
                             ctxFor: passiveCtxFor,
                             fallbackCtx: ctx,
                         });
-                    charges = Math.min(
-                        charges + bonusCharges + (allyChargePerRound ?? 0),
+                    attacker.charges = Math.min(
+                        attacker.charges + bonusCharges + (allyChargePerRound ?? 0),
                         chargeCount
                     );
                 }
@@ -1522,7 +1523,7 @@ export function runCombat(input: CombatEngineInput): {
         roundData.push({
             round: r,
             action,
-            charges: Math.round(charges),
+            charges: Math.round(attacker.charges),
             chargeCount: hasChargedSkill ? chargeCount : 0,
             didCrit: roundCrit,
             enemyHpPct: Math.round(enemyHpPct),
