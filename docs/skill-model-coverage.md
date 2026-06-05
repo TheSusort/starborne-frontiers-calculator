@@ -309,7 +309,8 @@ buff/charge-aura), source it from firing + passive.
   burst lands in the caster's own `detonation` channel.
 
   **Parser ally-scope rules.** `SkillEffect.target` is now `'self' | 'ally' | 'all-allies'
-  | 'enemy' | 'all-enemies'` for buff abilities. Detection rules: "all allies / allies /
+  | 'enemy'` (the 5-member union with `all-enemies` is `AbilityTarget` in the ability
+  model, which the engine routes on). Detection rules: "all allies / allies /
   friendly units gain X" → `all-allies`; "the (other) ally with the highest …" → `ally`;
   "This Unit gains X" → `self`; unscoped grants → `all-allies`. The condition-clause
   non-leak rule: condition sub-clauses (introduced by "if", "when", "after", etc.) cannot
