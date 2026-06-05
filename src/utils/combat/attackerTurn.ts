@@ -548,7 +548,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // engine of its REAL fired slot this round (action-fed: scheduled timed
     // buffs key off the actual cadence, not a predicted schedule), then we read
     // the snapshot. No decrement here — that lives in each owner's Post Turn
-    // (statusEngine.decrementSide, called after this actor's turn block).
+    // (statusEngine.decrementPlayer/decrementEnemy, called after this actor's turn block).
     // sourceFired returns the buffNames of any TIMED enemy applications the
     // landing hook rejected this round (drawn once at application — Task 7).
     const { resistedEnemy: resistedScheduledTimedNames, appliedEnemy: appliedScheduledTimedNames } =

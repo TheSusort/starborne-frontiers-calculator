@@ -1056,4 +1056,82 @@ describe('per-actor player sides', () => {
         // Decrementing attacker expires the 1-turn buff
         expect(se.decrementPlayer('attacker').expired).toEqual(['Attack Up']);
     });
+
+    it('accumulating ability status registered under team-1 is isolated from attacker', () => {
+        // Register an ACCUMULATING ability status under 'team-1'. After two beginRounds
+        // (per-round stackTrigger), activeAbilityStatuses('self', ctx, 'team-1') must show
+        // stacks; ('self', ctx, 'attacker') must return nothing for this buff.
+        const accumStatus: RegisteredAbilityStatus = {
+            kind: 'accumulating',
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            stackTrigger: 'per-round',
+            maxStacks: 10,
+            payload: { buffName: 'TeamMomentum', stacks: 1, parsedEffects: { attack: 5 } },
+        };
+        const baseCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // Register under 'team-1' — must NOT bleed into the 'attacker' owner's map.
+        se.registerAbilityStatuses([accumStatus], 'team-1');
+        // Round 1: per-round increment fires
+        se.beginRound(1);
+        // Round 2: second per-round increment fires
+        se.beginRound(2);
+        // team-1 sees 2 stacks (incremented twice by beginRound)
+        const team1Active = se.activeAbilityStatuses('self', baseCtx, 'team-1');
+        expect(team1Active).toHaveLength(1);
+        expect(team1Active[0].active.stacks).toBe(2);
+        expect(team1Active[0].payload.buffName).toBe('TeamMomentum');
+        // attacker sees nothing for this buff — store isolation upheld
+        const attackerActive = se.activeAbilityStatuses('self', baseCtx, 'attacker');
+        expect(attackerActive.find((s) => s.payload.buffName === 'TeamMomentum')).toBeUndefined();
+    });
+
+    it('aura ability status registered under team-1 is isolated from attacker', () => {
+        // Register an AURA ability status under 'team-1'. activeAbilityStatuses('self', ctx,
+        // 'team-1') must include it; ('self', ctx, 'attacker') must not.
+        const auraStatus: RegisteredAbilityStatus = {
+            kind: 'aura',
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [], // unconditional — always passes
+            payload: { buffName: 'TeamAura', stacks: 1, parsedEffects: { defense: 10 } },
+        };
+        const baseCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // Register under 'team-1' — must NOT bleed into the 'attacker' aura list.
+        se.registerAbilityStatuses([auraStatus], 'team-1');
+        se.beginRound(1);
+        // team-1 sees the aura
+        const team1Active = se.activeAbilityStatuses('self', baseCtx, 'team-1');
+        expect(team1Active).toHaveLength(1);
+        expect(team1Active[0].payload.buffName).toBe('TeamAura');
+        expect(team1Active[0].active.turnsRemaining).toBe('recurring');
+        // attacker sees nothing — aura store isolation upheld
+        const attackerActive = se.activeAbilityStatuses('self', baseCtx, 'attacker');
+        expect(attackerActive.find((s) => s.payload.buffName === 'TeamAura')).toBeUndefined();
+    });
 });

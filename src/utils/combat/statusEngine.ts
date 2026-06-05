@@ -223,9 +223,9 @@ interface TimedSourceSets {
  * `beginRound(r)` advances the counter and increments per-round accumulating
  * stacks; `sourceFired(sourceId, slot, r)` applies timed scheduled buffs when a
  * source actually acts (and increments per-active/per-charge stacks for the
- * attacker); `snapshot()` reads the round's active lists; `decrementSide` runs
- * in each owner's Post Turn. It predicts nothing — cadences are reported, not
- * computed (the old computeChargeSchedule path is retired).
+ * attacker); `snapshot()` reads the round's active lists; `decrementPlayer` /
+ * `decrementEnemy` run in each owner's Post Turn. It predicts nothing — cadences
+ * are reported, not computed (the old computeChargeSchedule path is retired).
  */
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
@@ -270,10 +270,27 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         });
     }
 
-    // Build accumulating state maps — start at 0 stacks, increment each trigger
-    const accumSelfMap = new Map<string, AccumulatingState>();
+    // Per-owner player-side accumulating maps. `accumSelfMaps` is keyed by ownerId → (buffName →
+    // AccumulatingState), lazy-created on first write (mirroring selfMaps/persistentSelfMaps).
+    // Scheduled accumulating buffs seed the 'attacker' owner's map (legacy semantics: always-active
+    // and accumulating scheduled entries are cadence-independent attacker-owned grants). Later tasks
+    // can seed team-actor maps for team-sourced accumulating statuses.
+    const accumSelfMaps = new Map<string, Map<string, AccumulatingState>>();
+
+    // Lazy helper — mirrors getSelfMap/getPersistentSelf.
+    const getAccumSelf = (ownerId: string): Map<string, AccumulatingState> => {
+        let m = accumSelfMaps.get(ownerId);
+        if (!m) {
+            m = new Map();
+            accumSelfMaps.set(ownerId, m);
+        }
+        return m;
+    };
+
+    // Seed scheduled accumulating buffs into the 'attacker' owner (legacy semantics).
+    const attackerAccumSelf = getAccumSelf('attacker');
     for (const b of accumSelf) {
-        accumSelfMap.set(b.buffName, {
+        attackerAccumSelf.set(b.buffName, {
             buffName: b.buffName,
             stacks: 0,
             maxStacks: b.maxStacks,
@@ -281,6 +298,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             trigger: b.stackTrigger!,
         });
     }
+
     const accumEnemyMap = new Map<string, AccumulatingState>();
     for (const b of accumEnemy) {
         accumEnemyMap.set(b.buffName, {
@@ -357,7 +375,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     // Ability-sourced aura statuses (recurring/passive): held with their (already
     // live-gated) conditions; effect inclusion is re-evaluated per round.
-    const auraSelf: Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] = [];
+    // `auraSelfMaps` is per-owner (keyed by ownerId) so a team ship's aura is read only
+    // through its own ownerId and does not fold into the attacker's round totals.
+    // `auraEnemy` stays singular (enemy maps are never per-owner).
+    const auraSelfMaps = new Map<string, Extract<RegisteredAbilityStatus, { kind: 'aura' }>[]>();
+
+    // Lazy helper for aura lists — mirrors getAccumSelf.
+    const getAuraSelf = (ownerId: string): Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] => {
+        let list = auraSelfMaps.get(ownerId);
+        if (!list) {
+            list = [];
+            auraSelfMaps.set(ownerId, list);
+        }
+        return list;
+    };
+
     const auraEnemy: Extract<RegisteredAbilityStatus, { kind: 'aura' }>[] = [];
 
     let lastRound = 0;
@@ -374,8 +406,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
         lastRound = r;
 
-        // (Decrement+expire moved out to decrementSide, called from each owner's
-        //  Post Turn in the engine — see the StatusEngine.decrementSide doc comment.)
+        // (Decrement+expire moved out to decrementPlayer/decrementEnemy, called from each
+        //  owner's Post Turn in the engine.)
 
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
@@ -386,7 +418,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                         : state.stacks + state.rate;
             }
         };
-        incrementPerRound(accumSelfMap);
+        // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
+        // 'attacker' is seeded from scheduled buffs — team-actor accumulating ability statuses
+        // will appear under their own ownerId once registered. Behavior is identical for the
+        // attacker-only case.
+        for (const ownerAccum of accumSelfMaps.values()) {
+            incrementPerRound(ownerAccum);
+        }
         incrementPerRound(accumEnemyMap);
     };
 
@@ -438,7 +476,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (!sets) return { resistedEnemy: [], appliedEnemy: [] };
 
         // Per-active/per-charge accumulating stacks tick on the matching slot — ATTACKER
-        // only (these track the attacker's own cadence).
+        // only (these track the attacker's own cadence; later tasks may generalise this per
+        // team actor). Reads the 'attacker' owner's map; no-op if not yet populated.
         if (sourceId === 'attacker') {
             const incrementSlot = (map: Map<string, AccumulatingState>) => {
                 for (const state of map.values()) {
@@ -453,7 +492,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     }
                 }
             };
-            incrementSlot(accumSelfMap);
+            // Only increment the attacker's own accum map (legacy semantics).
+            const attackerAccum = accumSelfMaps.get('attacker');
+            if (attackerAccum) incrementSlot(attackerAccum);
             incrementSlot(accumEnemyMap);
         }
 
@@ -512,17 +553,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // Accumulating buffs: include only when stacks > 0. Ability-sourced accumulating
         // statuses (payload-carrying) are excluded here — the engine collects them via
         // activeAbilityStatuses and appends them to the round lists after scheduled ones.
-        // Accumulating scheduled buffs are attacker-owned.
-        const selfAccumSnap =
-            ownerId === 'attacker'
-                ? [...accumSelfMap.values()]
-                      .filter((s) => s.stacks > 0 && !s.payload)
-                      .map((s) => ({
-                          buffName: s.buffName,
-                          turnsRemaining: 'recurring' as const,
-                          stacks: s.stacks,
-                      }))
-                : [];
+        // Read the requested owner's accum map (scheduled entries live under 'attacker').
+        const ownerAccumSelf = accumSelfMaps.get(ownerId);
+        const selfAccumSnap = ownerAccumSelf
+            ? [...ownerAccumSelf.values()]
+                  .filter((s) => s.stacks > 0 && !s.payload)
+                  .map((s) => ({
+                      buffName: s.buffName,
+                      turnsRemaining: 'recurring' as const,
+                      stacks: s.stacks,
+                  }))
+            : [];
         const enemyAccumSnap = [...accumEnemyMap.values()]
             .filter((s) => s.stacks > 0 && !s.payload)
             .map((s) => ({
@@ -625,11 +666,18 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     // --- Ability-status API (Task 6) ---
 
-    const registerAbilityStatuses = (statuses: RegisteredAbilityStatus[]): void => {
+    const registerAbilityStatuses = (
+        statuses: RegisteredAbilityStatus[],
+        ownerId = 'attacker'
+    ): void => {
         // Registered AFTER scheduled entries so list-order parity is preserved.
+        // `ownerId` routes self-side statuses to the correct per-owner store so that a team
+        // ship's aura/accumulating effects don't fold into the attacker's reads and vice versa.
         for (const s of statuses) {
             if (s.kind === 'accumulating') {
-                const map = s.side === 'self' ? accumSelfMap : accumEnemyMap;
+                // Self-side accumulating statuses go into the given owner's map; enemy-side
+                // statuses stay in the singular accumEnemyMap (enemy maps are never per-owner).
+                const map = s.side === 'self' ? getAccumSelf(ownerId) : accumEnemyMap;
                 // Ability accumulating statuses join the accumulating machinery with a
                 // payload + (live-gated) conditions for per-round aura gating of effects.
                 // s.stackTrigger is non-optional on the accumulating variant — no ! needed.
@@ -643,7 +691,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     conditions: s.conditions,
                 });
             } else if (s.kind === 'aura') {
-                (s.side === 'self' ? auraSelf : auraEnemy).push(s);
+                // Self-side auras are per-owner; enemy auras remain in the singular list.
+                (s.side === 'self' ? getAuraSelf(ownerId) : auraEnemy).push(s);
             }
             // timed statuses are applied lazily via applyTimedAbilityStatus when their
             // source slot fires and the application gate passes.
@@ -702,11 +751,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     const activeAbilityStatuses = (
         side: 'self' | 'enemy',
-        ctx: ConditionContext
+        ctx: ConditionContext,
+        ownerId = 'attacker'
     ): ActiveAbilityStatus[] => {
         const out: ActiveAbilityStatus[] = [];
         // Auras: effect included only when their (live-gated) conditions pass this round.
-        for (const a of side === 'self' ? auraSelf : auraEnemy) {
+        // Self-side auras are per-owner — only the requested owner's list is read so a team
+        // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
+        const auraList = side === 'self' ? (auraSelfMaps.get(ownerId) ?? []) : auraEnemy;
+        for (const a of auraList) {
             if (!conditionsMet(a.conditions, ctx)) continue;
             out.push({
                 payload: a.payload,
@@ -714,7 +767,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             });
         }
         // Accumulating ability statuses: included when stacks > 0 AND conditions pass.
-        const accumMap = side === 'self' ? accumSelfMap : accumEnemyMap;
+        // Self-side accumulating statuses are per-owner — read the requested owner's map.
+        const accumMap =
+            side === 'self' ? (accumSelfMaps.get(ownerId) ?? new Map()) : accumEnemyMap;
         for (const s of accumMap.values()) {
             if (!s.payload) continue;
             if (s.stacks <= 0) continue;
