@@ -53,7 +53,7 @@ attacker fields become adapter sugar over the actor-list-first internals.
 | Question | Decision |
 |---|---|
 | Target routing | `ally`/`all-allies` (and unscoped grants) → **all player actors** (attacker + every team ship); `self` → **caster only**; all debuffs/DoTs → the enemy dummy. |
-| Ability types walked | **buff, debuff, dot, charge, damage** — all of them. |
+| Ability types walked | **buff, debuff, dot, charge, damage** (user-confirmed) — and since the pipeline is unified, the rest of the attacker pipeline's sim-consumed types (`additional-damage`, `modifier`, `extend-dot`, `detonate-dot`, `accumulate-detonate`) come with `runPlayerTurn` for free; restricting them would be extra work. Heal/shield/cleanse/purge/control stay not-simulated. |
 | Team damage reporting | Reduces enemy HP (HP-threshold gates + HP% column react) and shows as a separate per-round team-damage figure; summary DPS / `totalRoundDamage` / damage-type breakdown stay **attacker-only** (config comparison stays meaningful). |
 | Reactive triggers on team ships | **Full parity** — team ships' live-trigger abilities register listeners keyed to their own events. |
 | Architecture | **Generalize the player-actor pipeline**: `runAttackerTurn` → `runPlayerTurn(actor)`, one code path for any player actor; the attacker is just the reported one. |
@@ -81,8 +81,14 @@ interface TeamActorInput {
 - The adapter (`simulateDPS`) derives **per-actor** rates exactly as for the attacker:
   landing chance from that ship's hacking vs enemy security, DoT modifier from its own
   skills/buffs, affinity damage/crit modifiers from `affinity` vs the enemy affinity.
-- `RoundData` gains `teamDamage?: number` (the round's summed team direct + secondary +
-  conditional damage). `totalRoundDamage`/`cumulativeDamage` stay attacker-only.
+- `RoundData` gains `teamDamage?: number` — the round's summed **non-focus player damage
+  across all channels**: direct (incl. its secondary/conditional components), DoT ticks
+  from entries the team actor applied, and detonation bursts from its bombs/detonations.
+  `totalRoundDamage`/`cumulativeDamage` stay focus-actor-only (attacker, for the DPS
+  adapter). Attribution model: every point of enemy HP decline belongs to exactly one
+  source actor; the row's existing damage fields report the focus actor's share,
+  `teamDamage` is everything else — so `totalRoundDamage + teamDamage` = the round's HP
+  delta by construction.
 - **Enemy HP% derives from attacker + team cumulative damage.** The adapter's per-round
   assertion (damage totals == HP deltas) extends to include `teamDamage`.
 - `rawTotals` and the result summary gain an optional team total for display.
@@ -137,10 +143,12 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 ## Damage accounting
 
 - Round damage accumulates **per actor**: a map `actorId → { direct, secondary,
-  conditional, detonation }` (the simulator-page seam). Aggregates derive from it:
-  the focus actor's entry feeds the existing RoundData damage fields;
-  `RoundData.teamDamage` = the summed non-focus player entries. All of it reduces enemy
-  HP for gates/HP%/destruction events; only the focus entry reaches summary DPS.
+  conditional, corrosion, inferno, detonation }` (the simulator-page seam). DoT ticks and
+  bomb/accumulator bursts attribute to the entry's `sourceId` (the applier), processed on
+  the enemy turn as today. Aggregates derive from the map: the focus actor's entry feeds
+  the existing RoundData damage fields; `RoundData.teamDamage` = the summed non-focus
+  player entries across all channels. All of it reduces enemy HP for gates/HP%/destruction
+  events; only the focus entry reaches summary DPS and the damage-type breakdown.
 - Destruction stays emission-only: if team damage alone drops the enemy to 0 HP, the
   `ship-destroyed` tap fires (once) and the sim keeps hitting the dead dummy to
   `numRounds`, exactly as today — no termination-path change.
@@ -149,8 +157,10 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
   charge gains bump the owner. `allyChargePerRound` stays as the coexisting manual
   attacker-side input (not superseded — users without a configured Hermes keep it).
 - **Echoing Burst accumulators** gather attacker + team direct damage per round
-  (damage-taken semantics). Documented KNOWN-DIFF for any future fixture combining
-  accumulators with team damage (none of the 18 today).
+  (damage-taken semantics; accumulation is INPUT only — no double-count). The burst
+  OUTPUT lands in the `detonation` channel of the accumulator's caster. Documented
+  KNOWN-DIFF for any future fixture combining accumulators with team damage (none of
+  the 18 today).
 
 ## DoT applier contexts
 
@@ -246,7 +256,9 @@ emits real targets instead of stamping every player-side buff `'self'`:
   caster (the over-grant fix); unscoped grant → all players.
 - Team DoT: team inferno ticks scale with the TEAM ship's effective attack (not the
   attacker's); team corrosion/bomb land in the enemy containers and tick on the enemy turn;
-  `dot-applied` emits the team sourceId and feeds `on-ally-debuff-inflicted`.
+  `dot-applied` emits the team sourceId and feeds `on-ally-debuff-inflicted`; team-applied
+  ticks/bursts attribute to `teamDamage`, NOT the row's corrosion/inferno/detonation fields
+  (which stay focus-only).
 - Team damage: HP-threshold gate flips earlier with a damaging team ship; `teamDamage`
   reported per round; attacker totals/summary unchanged by team damage.
 - Ally charge grant: every player actor bumps, capped per actor; coexists with
