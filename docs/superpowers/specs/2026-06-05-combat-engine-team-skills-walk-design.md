@@ -27,6 +27,27 @@ Team ships are real speed-ordered actors (Phase 2) but their behavior is hand-st
 This spec makes team ships walk their actual parsed `ShipSkills` — the full-actor
 generalization the Phase 2 spec reserved as "its own later spec".
 
+## End-state direction (user-stated 2026-06-05 — design against this)
+
+The engine's destination is a **close-to-full combat simulator**: a common team where any
+actor can be swapped in as the one under evaluation. After the DPS calc, the engine extends
+to **healing** (focus a healer, consume heal abilities) and **defense** (incoming damage,
+needs Phase 4 enemy offense), and ultimately powers a **simulator page**: drop in a full
+team and get a meaningful per-round review of damage/healing/defense per ship.
+
+Two structural consequences for THIS increment (cheap now, expensive to retrofit):
+
+1. **The engine core must not know what an "attacker" is.** The reported ship is a *focus
+   actor* (internal `focusActorId`); `'attacker'` is just the id the DPS adapter passes.
+   New/touched engine code paths (row assembly, listener guards, executor routing) key on
+   the focus/owner id — no hardcoded `'attacker'` string comparisons in the core.
+2. **Per-actor accounting from day one.** Round damage accumulates per actor (a map
+   `actorId → contributions`), with aggregate fields derived from it. The future simulator
+   page reads the map; it does not re-plumb the round loop.
+
+The public DPS API keeps its attacker-flavored shape (compat constraint) — the flat
+attacker fields become adapter sugar over the actor-list-first internals.
+
 ## Decisions (user-confirmed during brainstorming)
 
 | Question | Decision |
@@ -99,7 +120,9 @@ statuses: timed/persistent maps, aura lists, accumulating maps, per owner.
 The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 
 - Stats, crit/landing/extend gates, skills, modifiers, and DoT/affinity multipliers come
-  from the actor. "Is this the reported attacker" controls only RoundData row contribution.
+  from the actor. `actor.id === focusActorId` controls only RoundData row contribution —
+  the engine core has no `'attacker'` string comparisons (end-state rule above); the DPS
+  adapter passes `focusActorId: 'attacker'`.
 - Team turns run the same body: status fold-in → gating → damage (own crit gates) →
   buff/debuff/DoT application → charge gains → `ability-performed` emission.
 - **Per-actor gate instances** (active-crit, charged-crit, debuff-landing, extend-chance):
@@ -113,9 +136,11 @@ The attacker pipeline (attackerTurn.ts, ~1070 lines) is parameterized by actor:
 
 ## Damage accounting
 
-- Team direct/secondary/conditional damage folds into a round-level `teamDamage`
-  accumulator → reduces enemy HP for gates/HP%/destruction events; never enters the
-  attacker's damage fields or summary DPS.
+- Round damage accumulates **per actor**: a map `actorId → { direct, secondary,
+  conditional, detonation }` (the simulator-page seam). Aggregates derive from it:
+  the focus actor's entry feeds the existing RoundData damage fields;
+  `RoundData.teamDamage` = the summed non-focus player entries. All of it reduces enemy
+  HP for gates/HP%/destruction events; only the focus entry reaches summary DPS.
 - Destruction stays emission-only: if team damage alone drops the enemy to 0 HP, the
   `ship-destroyed` tap fires (once) and the sim keeps hitting the dead dummy to
   `numRounds`, exactly as today — no termination-path change.
@@ -248,7 +273,9 @@ a DoT inflictor (e.g. Belladonna), a damage-heavy team ship.
 - Speed-buff effects on turn order: the queue keeps static input speeds — a received
   Speed Up does not reorder turns (documented limitation; turn-meter manipulation is a
   later phase).
-- Heal/shield/cleanse/purge/control consumption — still not-simulated for team ships too.
+- Heal/shield/cleanse/purge/control consumption — still not-simulated for team ships too
+  (they parse and flow through the per-actor pipeline unexecuted; the healing-calc
+  adoption plugs into `runPlayerTurn` later — see End-state direction).
 - Extra End-of-Round Actions (own increment; seam unchanged).
 - Multi-enemy, taunt/provoke/stealth targeting, PvP/PvE round limits.
 - Per-hit crit checks (backlog item 7 — unchanged divergence, now also applying to team
