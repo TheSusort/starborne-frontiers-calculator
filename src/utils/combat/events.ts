@@ -52,7 +52,7 @@ export type CombatEvent =
       }
     /** Emitted from each owner's Post Turn when a timed status decrements to 0
      *  (statusEngine.decrementPlayer/decrementEnemy); actorId is the status carrier
-     *  (attacker for self buffs, enemy for enemy debuffs). */
+     *  (the player actor carrying the buff for self buffs, enemy for enemy debuffs). */
     | { type: 'buff-expired'; actorId: string; round: number; buffName: string }
     /** Discrete infliction events ONLY — emitted once at the round of application.
      *  `sourceId` is the actor that inflicted the debuff (e.g. 'attacker' or a team

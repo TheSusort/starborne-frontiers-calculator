@@ -344,6 +344,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
     // on first application. `payload` is stored for ability-sourced applications and refreshed on
     // each application (the effect is identical per stack; the fold multiplies effect × stacks).
+    // NOTE: `ownerId` defaults to 'attacker' for backwards compatibility, but this silently routes
+    // the stack to the attacker's persistent map. Future multi-recipient callers (e.g. ally routing)
+    // MUST thread the actual recipient id explicitly — do NOT rely on the default.
     const addPersistentStack = (
         side: 'self' | 'enemy',
         buffName: string,
@@ -769,7 +772,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // Accumulating ability statuses: included when stacks > 0 AND conditions pass.
         // Self-side accumulating statuses are per-owner — read the requested owner's map.
         const accumMap =
-            side === 'self' ? (accumSelfMaps.get(ownerId) ?? new Map()) : accumEnemyMap;
+            side === 'self'
+                ? (accumSelfMaps.get(ownerId) ?? new Map<string, AccumulatingState>())
+                : accumEnemyMap;
         for (const s of accumMap.values()) {
             if (!s.payload) continue;
             if (s.stacks <= 0) continue;
