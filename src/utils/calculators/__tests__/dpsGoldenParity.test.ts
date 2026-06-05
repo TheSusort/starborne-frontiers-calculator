@@ -773,6 +773,80 @@ describe('dpsGoldenParity', () => {
         }),
     }));
 
+    // Scenario 18: reactive triggers — on-debuff-inflicted charge + on-crit-inflicted debuff.
+    // Active slot: damage + timed enemy debuff (inflict, duration 2) applied every cast.
+    // Passive slot: charge {trigger:'on-debuff-inflicted'} gains +1 every debuff-applied event
+    //   from the attacker; timed enemy debuff {trigger:'on-crit', defense:-30, duration 2}
+    //   lands the round a crit occurs (and also emits debuff-applied → additional +1 charge).
+    // No charged slot — hasChargedSkill=false; charges accumulate on attacker.charges (cap=3)
+    // from reactive triggers only (no preTurn banking). All rounds are active.
+    // crit:50 → deterministic accumulator fires on every 2nd active round (rounds 2,4,6,8,10);
+    // BASE hacking/security → 100% landing chance; chargeCount:3; 10 rounds.
+    // Charge accumulation trace (no banking, triggers only, capped at chargeCount=3):
+    //   Non-crit active: +1 (active debuff) per round.
+    //   Crit active:     +1 (active debuff) +1 (on-crit debuff) = +2 (often hits cap 3).
+    // Round sequence: r1 active(nc,1), r2 active(crit,3), r3 active(nc,3), r4 active(crit,3),
+    //   r5 active(nc,3), r6 active(crit,3), r7 active(nc,3), r8 active(crit,3),
+    //   r9 active(nc,3), r10 active(crit,3).
+    // Defense-down 'Armor Breach' (-30%) first in activeEnemyDebuffs at r3 (applied
+    // end-of-r2 drain; Post-Turn decrements it to turnsRemaining=1; visible r3, expires after r3).
+    // directDamage shows defense-down effect on rounds 3,5,7,9 (Armor Breach active).
+    snap('reactive triggers (charge on inflict + crit-inflicted debuff)', () => {
+        const shipSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Sensor Down',
+                                parsedEffects: { defense: -20 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Armor Breach',
+                                parsedEffects: { defense: -30 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return {
+            ...BASE,
+            rounds: 10,
+            shipSkills,
+        };
+    });
+
     // Scenario 17: team actor with real turns — fast support (speed 140) applies an
     // active-slot 2-turn attack buff on each of its turns; a charge-slot defense-down
     // debuff on its chargeCount-2 startCharged cadence (charged turns 1/4/7/10); enemy
