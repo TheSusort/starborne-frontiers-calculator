@@ -10,7 +10,7 @@ import {
     EnemyBaseClass,
     DoTType,
 } from '../types/calculator';
-import { Condition, ConditionSubject } from '../types/abilities';
+import { AbilityTrigger, Condition, ConditionSubject } from '../types/abilities';
 
 /**
  * Represents a parsed segment of skill text
@@ -351,8 +351,11 @@ function classifyChargeCondition(
         return { condition: 'always', derivable: false };
     if (p.includes('critically damag') || p.includes('critically hit'))
         return { condition: 'self-crit', derivable: true };
-    if (p.includes('inflict') && p.includes('debuff'))
-        return { condition: 'enemy-debuff', derivable: true };
+    // NOTE: the "inflict + debuff" charge phrasings (Hemlock self, Oleander ally) are handled
+    // upstream in parseChargeGain as per-event reactive triggers (on-debuff-inflicted /
+    // on-ally-debuff-inflicted), not as a per-standing enemy-debuff count condition. They never
+    // reach classifyChargeCondition. Any other "inflict … debuff" charge text that slips through
+    // falls to the always-true default below (a safe per-cast baseline).
     if (p.includes('stealth')) return { condition: 'enemy-buff', derivable: false };
     if (
         p.includes('buffs on the target') ||
@@ -469,23 +472,34 @@ function countGateCondition(clause: string): Condition | null {
  * Genuinely reactive conditions (when-attacked, below-X%-HP) are intentionally NOT
  * auto-classified — the user adds them in the editor. Reference data: docs/ship-skills.csv.
  */
-export function detectGrantConditions(
-    skillText: string | null | undefined,
-    buffName: string
-): Condition[] {
-    if (!skillText || !buffName) return [];
-    // Game buff names use the abbreviations "Inc." (Incoming) and "Out." (Outgoing) — e.g.
-    // "Inc. DoT Damage Up III". Their internal period would be read as a sentence boundary,
-    // splitting the name in half so the clause lookup fails and falls back to the whole
-    // skill text (leaking gates from unrelated sentences). Mask the space after the
-    // abbreviation period with a non-whitespace marker so the split skips it, then restore.
+/**
+ * Resolves the sentence/clause of `skillText` that mentions `buffName`, applying the
+ * "Inc."/"Out." abbreviation-period masking that keeps those buff-name periods from being
+ * read as sentence boundaries (a documented project pitfall — see below). Shared by
+ * `detectGrantConditions` and `detectReactiveTrigger` so the masking lives in ONE place.
+ *
+ * Game buff names use the abbreviations "Inc." (Incoming) and "Out." (Outgoing) — e.g.
+ * "Inc. DoT Damage Up III". Their internal period would otherwise be read as a sentence
+ * boundary, splitting the name in half so the clause lookup fails and falls back to the
+ * whole skill text (leaking gates from unrelated sentences). Mask the space after the
+ * abbreviation period with a non-whitespace marker so the split skips it, then restore.
+ */
+function resolveBuffClause(skillText: string, buffName: string): string {
     const ABBR_MARK = '\u0001';
     const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
     const sentences = plain.split(/(?<=[.;])\s+/);
     const clauseMasked = sentences.find((s) => s.toLowerCase().includes(maskedName)) ?? plain;
-    const clause = clauseMasked.split(ABBR_MARK).join(' ');
+    return clauseMasked.split(ABBR_MARK).join(' ');
+}
+
+export function detectGrantConditions(
+    skillText: string | null | undefined,
+    buffName: string
+): Condition[] {
+    if (!skillText || !buffName) return [];
+    const clause = resolveBuffClause(skillText, buffName);
     const low = clause.toLowerCase();
     // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
@@ -607,6 +621,47 @@ export function detectGrantConditions(
     }
 
     return [];
+}
+
+// Active-voice self-crit phrasing: "critically hits/hitting" or "critically damages/damaging".
+// Deliberately excludes the passive participles "hit"/"damaged" (so "is critically hit" and
+// "is critically damaged" do NOT match), and carries a negative lookbehind for the linking
+// verbs that introduce a passive clause as a second guard. This is STRICTER than
+// detectGrantConditions' self-crit rule (which uses /critically (?:hits|damag)/i and therefore
+// misclassifies the passive "is critically damaged" — see detectReactiveTrigger docs).
+const ACTIVE_SELF_CRIT_RE =
+    /(?<!\b(?:is|was|are|were|been|be|being|gets?|getting)\s)critically\s+(?:hits|hitting|damages|damaging)/i;
+const START_OF_ROUND_RE = /at the start of (?:the|each|every) round/i;
+const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
+
+/**
+ * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
+ * buff's own clause (using the SAME shared clause resolution + abbreviation masking as
+ * detectGrantConditions). Returns one of the derivable reactive triggers or undefined.
+ *
+ * Rules (on the buff's clause):
+ *  - active-voice crit phrasing → 'on-crit' (Enforcer "critically hits", Wusheng
+ *    "critically damaging"). Guarded against passive voice: "is critically hit" /
+ *    "is critically damaged" do NOT classify. NOTE: detectGrantConditions' self-crit rule
+ *    uses a looser regex and WOULD misclassify "is critically damaged" as a self-crit
+ *    condition; that legacy behaviour is left untouched (no ship text relies on it), but this
+ *    new trigger path is correct.
+ *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
+ *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
+ *
+ * Other reactive phrasings (when-attacked, ally-crit, on-kill, enemy-cleanse, …) are NOT
+ * derivable this phase and stay undefined (manual modelling). Reference data: docs/ship-skills.csv.
+ */
+export function detectReactiveTrigger(
+    skillText: string | null | undefined,
+    buffName: string
+): AbilityTrigger | undefined {
+    if (!skillText || !buffName) return undefined;
+    const clause = resolveBuffClause(skillText, buffName);
+    if (ACTIVE_SELF_CRIT_RE.test(clause)) return 'on-crit';
+    if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
+    if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
+    return undefined;
 }
 
 /**
@@ -772,6 +827,24 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     const raw = m[1].toLowerCase();
     const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
+
+    // Inflict-driven charge gains fire per debuff infliction (+amount each event), not per
+    // standing debuff. Ally-inflicts ("when an ally inflicts a debuff", Oleander) is checked
+    // FIRST since its text also matches the self-inflict phrasing; then the self-inflict form
+    // ("after it inflicts a debuff", Hemlock). Both emit 'always' + a reactive trigger so the
+    // engine listens for the event rather than scaling by an enemy-debuff count.
+    const low = plain.toLowerCase();
+    if (ALLY_INFLICTS_DEBUFF_RE.test(plain)) {
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-ally-debuff-inflicted',
+        };
+    }
+    if (low.includes('inflict') && low.includes('debuff')) {
+        return { amount, condition: 'always', derivable: true, trigger: 'on-debuff-inflicted' };
+    }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);
     return {

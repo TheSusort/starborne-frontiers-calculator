@@ -85,6 +85,10 @@ const ungatedEffects = (abilities: Ability[]) =>
         (a) =>
             (a.config.type === 'buff' || a.config.type === 'debuff') &&
             a.conditions.length === 0 &&
+            // A reactive trigger (on-crit / start-of-round / bomb-detonated / …) IS the gate —
+            // the parser routes these through the engine's trigger machinery instead of a
+            // condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie, Lingshe).
+            a.trigger === 'on-cast' &&
             // Recurring per-turn grants are unconditional by design (not a missing gate).
             a.config.duration !== 'recurring'
     );

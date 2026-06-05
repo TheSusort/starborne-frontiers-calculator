@@ -17,6 +17,7 @@ import {
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
+    detectReactiveTrigger,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -950,13 +951,25 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses debuff-infliction as enemy-debuff (derivable) — Hemlock', () => {
+    it('parses self debuff-infliction as on-debuff-inflicted trigger (no enemy-debuff condition) — Hemlock', () => {
         const text =
             'This Unit <unit-aid>gains 1 charge</unit-aid> to its charged skill after it inflicts a <unit-aid>debuff</unit-aid>.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
-            condition: 'enemy-debuff',
+            condition: 'always',
             derivable: true,
+            trigger: 'on-debuff-inflicted',
+        });
+    });
+
+    it('parses ally debuff-infliction as on-ally-debuff-inflicted trigger — Oleander', () => {
+        const text =
+            "When an ally inflicts a debuff, this Unit <unit-aid>adds 1 charge</unit-aid> to it's Charged Skill.";
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-ally-debuff-inflicted',
         });
     });
 
@@ -994,6 +1007,55 @@ describe('parseChargeGain', () => {
         ).toBeNull();
         expect(parseChargeGain('')).toBeNull();
         expect(parseChargeGain(null)).toBeNull();
+    });
+});
+
+describe('detectReactiveTrigger', () => {
+    it('classifies a crit-inflicted debuff as on-crit (no self-crit condition) — Enforcer', () => {
+        const text =
+            'When this Unit critically hits an enemy it inflicts <unit-skill>Defense Shred</unit-skill> for 3 turns.';
+        expect(detectReactiveTrigger(text, 'Defense Shred')).toBe('on-crit');
+    });
+
+    it('classifies a crit-damaging self-buff as on-crit — Wusheng', () => {
+        const text =
+            'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.';
+        expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-crit');
+    });
+
+    it('classifies a start-of-round self-buff as start-of-round — Valkyrie', () => {
+        const text =
+            'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.';
+        expect(detectReactiveTrigger(text, 'Speed Up II')).toBe('start-of-round');
+    });
+
+    it('classifies a bomb-detonate self-buff as on-bomb-detonated — Lingshe', () => {
+        const text =
+            'When this Unit detonates a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.';
+        expect(detectReactiveTrigger(text, 'Stealth')).toBe('on-bomb-detonated');
+    });
+
+    it('does NOT classify passive-voice "is critically damaged" as on-crit', () => {
+        const text =
+            'When this Unit is critically damaged, it gains <unit-skill>Stealth</unit-skill>.';
+        expect(detectReactiveTrigger(text, 'Stealth')).toBeUndefined();
+    });
+
+    it('does NOT classify passive-voice "is critically hit" as on-crit', () => {
+        const text = 'When this Unit is critically hit, it gains <unit-skill>Stealth</unit-skill>.';
+        expect(detectReactiveTrigger(text, 'Stealth')).toBeUndefined();
+    });
+
+    it('returns undefined for a non-reactive grant', () => {
+        const text = 'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns.';
+        expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();
+    });
+
+    it('scopes to the buff clause (does not leak a sibling sentence trigger)', () => {
+        const text =
+            'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns. When this Unit critically hits an enemy it inflicts <unit-skill>Defense Shred</unit-skill> for 3 turns.';
+        expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();
+        expect(detectReactiveTrigger(text, 'Defense Shred')).toBe('on-crit');
     });
 });
 
