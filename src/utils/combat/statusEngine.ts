@@ -97,27 +97,43 @@ export interface StatusEngine {
         slot: 'active' | 'charge',
         round: number
     ): { resistedEnemy: string[]; appliedEnemy: string[] };
-    /** The round's active lists (was step()'s return). Pure read. */
-    snapshot(): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
-    /** Owner Post-Turn: decrement ALL timed statuses on this side — including ones
-     *  applied earlier in this same turn (spec: same-turn decrement rule; skipping
-     *  same-turn applications would ADD a round). Returns expired buff names so the
-     *  engine can emit buff-expired. */
-    decrementSide(side: 'self' | 'enemy'): { expired: string[] };
+    /** The round's active lists (was step()'s return). Pure read.
+     *  `ownerId` selects which player-side carrier's maps to read; defaults to
+     *  'attacker' so all pre-Task-2 call sites remain unchanged. Always-active
+     *  and accumulating scheduled buffs are attacker-owned and always appear in
+     *  the 'attacker' snapshot (legacy semantics unchanged). */
+    snapshot(ownerId?: string): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] };
+    /** Owner Post-Turn: decrement ALL timed statuses on the named player-side carrier
+     *  — including ones applied earlier in this same turn (same-turn decrement rule).
+     *  Calling on an owner with no statuses (lazy-empty map) is a safe no-op.
+     *  Returns expired buff names so the engine can emit buff-expired. */
+    decrementPlayer(ownerId: string): { expired: string[] };
+    /** Owner Post-Turn (enemy side): decrement ALL timed enemy statuses. Returns
+     *  expired buff names so the engine can emit buff-expired. */
+    decrementEnemy(): { expired: string[] };
     /** Register all buff/debuff abilities once at creation (classified by `kind`). */
-    registerAbilityStatuses(statuses: RegisteredAbilityStatus[]): void;
+    registerAbilityStatuses(statuses: RegisteredAbilityStatus[], ownerId?: string): void;
     /** Apply a firing skill's TIMED ability status for this round; the engine passes
      *  only those whose application gate passed. Reuses the familyKey/tier upsert.
-     *  `status.duration` is guaranteed numeric by the timed variant — no runtime guard needed. */
+     *  `status.duration` is guaranteed numeric by the timed variant — no runtime guard needed.
+     *  `recipientId` selects which player-side carrier receives the status (defaults to
+     *  'attacker'); ignored for enemy-side statuses (enemy maps are singular). */
     applyTimedAbilityStatus(
         round: number,
-        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>
+        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>,
+        recipientId?: string
     ): void;
     /** Aura + accumulating ability statuses whose conditions pass `ctx` this round,
-     *  with payloads, for effect folding and snapshot inclusion. */
-    activeAbilityStatuses(side: 'self' | 'enemy', ctx: ConditionContext): ActiveAbilityStatus[];
-    /** Timed ability statuses currently in the maps (payload-carrying), for effect folding. */
-    timedAbilityStatuses(side: 'self' | 'enemy'): ActiveAbilityStatus[];
+     *  with payloads, for effect folding and snapshot inclusion.
+     *  `ownerId` selects the player-side carrier; defaults to 'attacker'. */
+    activeAbilityStatuses(
+        side: 'self' | 'enemy',
+        ctx: ConditionContext,
+        ownerId?: string
+    ): ActiveAbilityStatus[];
+    /** Timed ability statuses currently in the maps (payload-carrying), for effect folding.
+     *  `ownerId` selects the player-side carrier; defaults to 'attacker'. */
+    timedAbilityStatuses(side: 'self' | 'enemy', ownerId?: string): ActiveAbilityStatus[];
 }
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
@@ -276,14 +292,36 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         });
     }
 
-    const selfMap = new Map<string, BuffState>();
+    // Per-owner player-side timed maps. Keyed by ownerId (typically 'attacker' or a team
+    // actor id) → (familyKey → BuffState). Lazy-created on first write so touching an
+    // unknown owner (e.g. decrementPlayer on an empty team-slot) is always a safe no-op.
+    // Scheduled timed buffs from sourceFired ALWAYS go to the 'attacker' owner (legacy
+    // semantics: manual + team-picker buffs are granted to the attacker, not to the team
+    // actor — the team actor's sourceFired merely triggers the upsert into the attacker's map).
+    const selfMaps = new Map<string, Map<string, BuffState>>();
     const enemyMap = new Map<string, BuffState>();
 
-    // Persistent stacking statuses (game-verified 2026-06-05). Routed by buff NAME before the
-    // family-rule timed paths: each landed application adds a stack (capped), the status never
-    // expires in-sim. Keyed by buffName (not familyKey — these names carry no Roman tier).
-    const persistentSelf = new Map<string, PersistentStackState>();
+    // Per-owner player-side persistent-stacking maps. Same lazy-create semantics.
+    const persistentSelfMaps = new Map<string, Map<string, PersistentStackState>>();
     const persistentEnemy = new Map<string, PersistentStackState>();
+
+    // Helpers: lazily create a per-owner player-side map on first access.
+    const getSelfMap = (ownerId: string): Map<string, BuffState> => {
+        let m = selfMaps.get(ownerId);
+        if (!m) {
+            m = new Map();
+            selfMaps.set(ownerId, m);
+        }
+        return m;
+    };
+    const getPersistentSelf = (ownerId: string): Map<string, PersistentStackState> => {
+        let m = persistentSelfMaps.get(ownerId);
+        if (!m) {
+            m = new Map();
+            persistentSelfMaps.set(ownerId, m);
+        }
+        return m;
+    };
 
     // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
     // on first application. `payload` is stored for ability-sourced applications and refreshed on
@@ -292,9 +330,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         side: 'self' | 'enemy',
         buffName: string,
         applicationStacks: number,
-        payload?: AbilityStatusPayload
+        payload?: AbilityStatusPayload,
+        ownerId = 'attacker'
     ): void => {
-        const map = side === 'self' ? persistentSelf : persistentEnemy;
+        const map = side === 'self' ? getPersistentSelf(ownerId) : persistentEnemy;
         const maxStacks = PERSISTENT_STACKING_BUFFS.get(buffName);
         const existing = map.get(buffName);
         if (existing) {
@@ -351,8 +390,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         incrementPerRound(accumEnemyMap);
     };
 
+    // Scheduled timed upserts always target the 'attacker' owner on the self side
+    // (legacy semantics: team-source timed self buffs are grants to the attacker,
+    // not per-carrier statuses — that per-carrier semantics arrives in a later task).
     const upsertBuff = (buff: SelectedGameBuff, side: 'self' | 'enemy') => {
-        const map = side === 'self' ? selfMap : enemyMap;
+        const map = side === 'self' ? getSelfMap('attacker') : enemyMap;
         // Persistent stacking statuses route by NAME before the family-rule timed path: this
         // application landed (the landing hook already ran at the call site), so add a stack
         // (capped) to the persistent map. The text skillDuration is intentionally ignored — the
@@ -447,25 +489,40 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     // snapshot: the round's active lists (was step()'s return). Pure read.
-    const snapshot = (): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] } => {
+    // `ownerId` selects which player-side carrier's timed maps to include; defaults
+    // to 'attacker'. Always-active and accumulating scheduled buffs are attacker-owned
+    // and always appear in the 'attacker' snapshot regardless of `ownerId`.
+    const snapshot = (
+        ownerId = 'attacker'
+    ): { activeSelfBuffs: ActiveBuff[]; activeEnemyDebuffs: ActiveBuff[] } => {
         // Always-active buffs injected as 'recurring'.
-        // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects
-        const selfAlwaysSnap = [...new Map(alwaysSelf.map((b) => [b.buffName, b])).values()].map(
-            (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
-        );
+        // Deduplicate always-active by buffName so buffLookup expansion doesn't multiply effects.
+        // These are attacker-owned (cadence-independent scheduled grants) and appear only in
+        // the 'attacker' snapshot — not in per-team-actor snapshots.
+        const selfAlwaysSnap =
+            ownerId === 'attacker'
+                ? [...new Map(alwaysSelf.map((b) => [b.buffName, b])).values()].map((b) => ({
+                      buffName: b.buffName,
+                      turnsRemaining: 'recurring' as const,
+                  }))
+                : [];
         const enemyAlwaysSnap = [...new Map(alwaysEnemy.map((b) => [b.buffName, b])).values()].map(
             (b) => ({ buffName: b.buffName, turnsRemaining: 'recurring' as const })
         );
         // Accumulating buffs: include only when stacks > 0. Ability-sourced accumulating
         // statuses (payload-carrying) are excluded here — the engine collects them via
         // activeAbilityStatuses and appends them to the round lists after scheduled ones.
-        const selfAccumSnap = [...accumSelfMap.values()]
-            .filter((s) => s.stacks > 0 && !s.payload)
-            .map((s) => ({
-                buffName: s.buffName,
-                turnsRemaining: 'recurring' as const,
-                stacks: s.stacks,
-            }));
+        // Accumulating scheduled buffs are attacker-owned.
+        const selfAccumSnap =
+            ownerId === 'attacker'
+                ? [...accumSelfMap.values()]
+                      .filter((s) => s.stacks > 0 && !s.payload)
+                      .map((s) => ({
+                          buffName: s.buffName,
+                          turnsRemaining: 'recurring' as const,
+                          stacks: s.stacks,
+                      }))
+                : [];
         const enemyAccumSnap = [...accumEnemyMap.values()]
             .filter((s) => s.stacks > 0 && !s.payload)
             .map((s) => ({
@@ -479,13 +536,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // no-re-roll fold (foldTimedEnemyDebuffs) and expandBuffs applies the stack override.
         // Ability-sourced persistent statuses carry a payload and are excluded here — the engine
         // appends them via timedAbilityStatuses (mirroring the timed-map exclusion below).
-        const selfPersistentSnap = [...persistentSelf.values()]
-            .filter((s) => !s.payload && s.stacks > 0)
-            .map((s) => ({
-                buffName: s.buffName,
-                turnsRemaining: 'permanent' as const,
-                stacks: s.stacks,
-            }));
+        // Persistent self statuses are per-owner; read the requested owner's map.
+        const persistentSelf = persistentSelfMaps.get(ownerId);
+        const selfPersistentSnap = persistentSelf
+            ? [...persistentSelf.values()]
+                  .filter((s) => !s.payload && s.stacks > 0)
+                  .map((s) => ({
+                      buffName: s.buffName,
+                      turnsRemaining: 'permanent' as const,
+                      stacks: s.stacks,
+                  }))
+            : [];
         const enemyPersistentSnap = [...persistentEnemy.values()]
             .filter((s) => !s.payload && s.stacks > 0)
             .map((s) => ({
@@ -494,19 +555,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 stacks: s.stacks,
             }));
 
-        // Timed scheduled statuses. Ability-sourced timed statuses (payload-carrying)
-        // live in the same maps but are excluded here — the engine appends them via
-        // timedAbilityStatuses after scheduled ones.
+        // Timed scheduled statuses — read from the requested owner's map (lazy-empty = []).
+        // Ability-sourced timed statuses (payload-carrying) live in the same maps but are
+        // excluded here — the engine appends them via timedAbilityStatuses after scheduled ones.
+        const selfMap = selfMaps.get(ownerId);
         return {
             activeSelfBuffs: [
                 ...selfAlwaysSnap,
                 ...selfAccumSnap,
-                ...[...selfMap.values()]
-                    .filter((s) => !s.payload)
-                    .map((s) => ({
-                        buffName: s.buffName,
-                        turnsRemaining: s.turnsRemaining,
-                    })),
+                ...(selfMap
+                    ? [...selfMap.values()]
+                          .filter((s) => !s.payload)
+                          .map((s) => ({
+                              buffName: s.buffName,
+                              turnsRemaining: s.turnsRemaining,
+                          }))
+                    : []),
                 ...selfPersistentSnap,
             ],
             activeEnemyDebuffs: [
@@ -523,19 +587,37 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         };
     };
 
-    // Owner Post-Turn decrement: the status CARRIER decrements ALL its timed statuses
-    // by one turn, INCLUDING ones applied earlier in this same turn (same-turn decrement
-    // rule — skipping same-turn applications would ADD a round). Expired
+    // Owner Post-Turn decrement helpers. The status CARRIER decrements ALL its timed
+    // statuses by one turn, INCLUDING ones applied earlier in this same turn (same-turn
+    // decrement rule — skipping same-turn applications would ADD a round). Expired
     // statuses are removed and their stored buffName reported so the engine emits
-    // buff-expired. Ability-sourced timed statuses live in the same map and decrement here.
-    const decrementSide = (side: 'self' | 'enemy'): { expired: string[] } => {
-        const map = side === 'self' ? selfMap : enemyMap;
+    // buff-expired. Ability-sourced timed statuses live in the same maps and decrement here.
+
+    /** Decrement all timed statuses for the named player-side carrier. Calling on an owner
+     *  with no statuses (lazy-empty map) is a safe no-op. */
+    const decrementPlayer = (ownerId: string): { expired: string[] } => {
+        const map = selfMaps.get(ownerId);
         const expired: string[] = [];
-        for (const [key, s] of map) {
+        if (map) {
+            for (const [key, s] of map) {
+                s.turnsRemaining -= 1;
+                if (s.turnsRemaining <= 0) {
+                    expired.push(s.buffName);
+                    map.delete(key);
+                }
+            }
+        }
+        return { expired };
+    };
+
+    /** Decrement all timed enemy statuses. */
+    const decrementEnemy = (): { expired: string[] } => {
+        const expired: string[] = [];
+        for (const [key, s] of enemyMap) {
             s.turnsRemaining -= 1;
             if (s.turnsRemaining <= 0) {
                 expired.push(s.buffName);
-                map.delete(key);
+                enemyMap.delete(key);
             }
         }
         return { expired };
@@ -570,7 +652,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     const applyTimedAbilityStatus = (
         round: number,
-        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>
+        status: Extract<RegisteredAbilityStatus, { kind: 'timed' }>,
+        recipientId = 'attacker'
     ): void => {
         if (round < 1) {
             // lastRound initializes to 0, so the equality check alone would accept
@@ -588,17 +671,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // application landed (the landing roll/hook already ran at the caller's site), so add a
         // stack (capped) and keep the payload for folding. The status.duration (text value) is
         // intentionally ignored — the buff-name rule overrides it (game-verified 2026-06-05).
+        // Enemy-side statuses ignore recipientId (enemy maps are singular).
         if (PERSISTENT_STACKING_BUFFS.has(status.payload.buffName)) {
             addPersistentStack(
                 status.side,
                 status.payload.buffName,
                 status.payload.stacks || 1,
-                status.payload
+                status.payload,
+                status.side === 'self' ? recipientId : 'attacker'
             );
             return;
         }
         // status.duration is guaranteed numeric by the timed variant — no runtime guard needed.
-        const map = status.side === 'self' ? selfMap : enemyMap;
+        // Enemy-side statuses always go into the singular enemyMap (recipientId is irrelevant).
+        const map = status.side === 'self' ? getSelfMap(recipientId) : enemyMap;
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
         const existing = map.get(familyKey);
         // A landed-but-family-blocked application is silently absorbed: the landing roll
@@ -641,26 +727,39 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return out;
     };
 
-    const timedAbilityStatuses = (side: 'self' | 'enemy'): ActiveAbilityStatus[] => {
-        const map = side === 'self' ? selfMap : enemyMap;
+    const timedAbilityStatuses = (
+        side: 'self' | 'enemy',
+        ownerId = 'attacker'
+    ): ActiveAbilityStatus[] => {
+        // Enemy maps are singular; self maps are per-owner.
+        const map = side === 'self' ? selfMaps.get(ownerId) : enemyMap;
         const out: ActiveAbilityStatus[] = [];
-        for (const s of map.values()) {
-            if (!s.payload) continue;
-            out.push({
-                payload: s.payload,
-                active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
-            });
+        if (map) {
+            for (const s of map.values()) {
+                if (!s.payload) continue;
+                out.push({
+                    payload: s.payload,
+                    active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
+                });
+            }
         }
         // Ability-sourced persistent stacking statuses (payload-carrying): folded exactly like
         // landed timed statuses but with a stack multiplier and the 'permanent' sentinel (no
         // expiry, no per-round re-roll). The fold multiplies effect × stacks via the payload.
-        const persistentMap = side === 'self' ? persistentSelf : persistentEnemy;
-        for (const s of persistentMap.values()) {
-            if (!s.payload) continue;
-            out.push({
-                payload: { ...s.payload, stacks: s.stacks },
-                active: { buffName: s.buffName, turnsRemaining: 'permanent', stacks: s.stacks },
-            });
+        // Persistent self statuses are per-owner; persistent enemy is singular.
+        const persistentMap = side === 'self' ? persistentSelfMaps.get(ownerId) : persistentEnemy;
+        if (persistentMap) {
+            for (const s of persistentMap.values()) {
+                if (!s.payload) continue;
+                out.push({
+                    payload: { ...s.payload, stacks: s.stacks },
+                    active: {
+                        buffName: s.buffName,
+                        turnsRemaining: 'permanent',
+                        stacks: s.stacks,
+                    },
+                });
+            }
         }
         return out;
     };
@@ -669,7 +768,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         beginRound,
         sourceFired,
         snapshot,
-        decrementSide,
+        decrementPlayer,
+        decrementEnemy,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

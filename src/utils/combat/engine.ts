@@ -771,11 +771,17 @@ export function runCombat(input: CombatEngineInput): {
             drainIntents();
 
             // Post Turn (combat-system.md section 4): the status CARRIER decrements.
-            // Self statuses live on the attacker; enemy debuffs on the enemy. Team
-            // actors carry no statuses in Phase 2 (their grants sit on the attacker).
-            if (actor.kind === 'attacker' || actor.kind === 'enemy') {
-                const side = actor.kind === 'attacker' ? 'self' : 'enemy';
-                for (const buffName of statusEngine.decrementSide(side).expired) {
+            // Player-side actors call decrementPlayer(actor.id) — team actors have empty
+            // maps now and calling on an empty owner is a safe no-op. Enemy actors call
+            // decrementEnemy(). This wires ALL player-kind actors so that when team
+            // actors gain real status in a later task, decrement just works.
+            if (actor.kind === 'enemy') {
+                for (const buffName of statusEngine.decrementEnemy().expired) {
+                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
+                }
+            } else {
+                // 'attacker' and 'team' kinds: decrement this actor's player-side map.
+                for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
                     bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
             }

@@ -28,9 +28,9 @@ function makeAccumBuff(
 // computeChargeSchedule logic) and notifies the engine via sourceFired each round.
 // NOTE: this helper is a faithful COPY of the engine's charge-banking rule — if the
 // banking rule in engine.ts changes, update this helper to match.
-// Decrement lives in the owner's Post Turn (decrementSide): we snapshot then decrement
-// BOTH sides at the end of the round — equivalent window to the old decrement-on-step
-// (same-turn decrement rule).
+// Decrement lives in the owner's Post Turn (decrementPlayer/decrementEnemy): we snapshot
+// then decrement BOTH sides at the end of the round — equivalent window to the old
+// decrement-on-step (same-turn decrement rule).
 const chargedRounds = (
     chargeCount: number,
     startCharged: boolean,
@@ -66,8 +66,8 @@ const runTimeline = (
         // legacy/merged enemy) ride the attacker's cadence (action-fed legacy rule).
         eng.sourceFired('attacker', charged.has(r) ? 'charge' : 'active', r);
         const entry = { round: r, ...eng.snapshot() };
-        eng.decrementSide('self');
-        eng.decrementSide('enemy');
+        eng.decrementPlayer('attacker');
+        eng.decrementEnemy();
         return entry;
     });
 };
@@ -401,21 +401,21 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
         };
         eng.registerAbilityStatuses([status]);
 
-        // Decrement now happens in the owner's Post Turn (decrementSide), not at round top.
+        // Decrement now happens in the owner's Post Turn (decrementPlayer), not at round top.
         eng.beginRound(1);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
-        eng.decrementSide('self');
+        eng.decrementPlayer('attacker');
 
         eng.beginRound(2);
         eng.applyTimedAbilityStatus(2, status);
         expect(eng.timedAbilityStatuses('self').map((s) => s.payload.buffName)).toEqual([
             'Attack Up',
         ]);
-        eng.decrementSide('self'); // 2 → 1
+        eng.decrementPlayer('attacker'); // 2 → 1
 
         eng.beginRound(3);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1); // still within window
-        eng.decrementSide('self'); // 1 → 0 → expired
+        eng.decrementPlayer('attacker'); // 1 → 0 → expired
 
         eng.beginRound(4);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0); // expired
@@ -577,7 +577,7 @@ describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
             expect(eng.snapshot().activeSelfBuffs).toEqual([
                 { buffName: 'Attack Up II', turnsRemaining: 2 },
             ]);
-            eng.decrementSide('self'); // 2 → 1
+            eng.decrementPlayer('attacker'); // 2 → 1
             eng.beginRound(2);
             eng.sourceFired('attacker', 'active', 2); // 2 > 1 remaining → refresh
             expect(eng.snapshot().activeSelfBuffs).toEqual([
@@ -640,7 +640,7 @@ describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
             eng.registerAbilityStatuses([status]);
             eng.beginRound(1);
             eng.applyTimedAbilityStatus(1, status);
-            eng.decrementSide('self'); // 2 → 1
+            eng.decrementPlayer('attacker'); // 2 → 1
             eng.beginRound(2);
             eng.applyTimedAbilityStatus(2, status); // 2 > 1 remaining → refresh
             expect(eng.timedAbilityStatuses('self')[0].active).toEqual({
@@ -734,7 +734,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 3 },
         ]);
-        eng.decrementSide('enemy'); // 3 → 2
+        eng.decrementEnemy(); // 3 → 2
 
         lands = false;
         eng.beginRound(2);
@@ -760,7 +760,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
     });
 });
 
-describe('decrementSide (owner Post-Turn decrement)', () => {
+describe('decrementPlayer / decrementEnemy (owner Post-Turn decrement)', () => {
     it('decrements and expires a scheduled timed status, reporting its buffName', () => {
         // chargeCount=0 → every round is active. Self buff fires each active round, 2t.
         const buff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 2 });
@@ -771,21 +771,21 @@ describe('decrementSide (owner Post-Turn decrement)', () => {
         const r1 = eng.snapshot();
         expect(r1.activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 2 }]);
         // First owner Post-Turn: 2 → 1, not yet expired.
-        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: [] });
         // Second decrement: 1 → 0 → expired, reports the stored buffName.
-        expect(eng.decrementSide('self')).toEqual({ expired: ['Atk Up'] });
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: ['Atk Up'] });
         // Already gone → empty.
-        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: [] });
     });
 
-    it('the round step no longer decrements: a 1t buff applied round 1 is still present round 2 without decrementSide', () => {
+    it('the round step no longer decrements: a 1t buff applied round 1 is still present round 2 without decrementPlayer', () => {
         const buff = makeBuff('Atk Up', { skillSource: 'active', skillDuration: 1 });
         const eng = createStatusEngine({ selfBuffs: [buff], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.sourceFired('attacker', 'active', 1);
         const r1 = eng.snapshot();
         expect(r1.activeSelfBuffs).toEqual([{ buffName: 'Atk Up', turnsRemaining: 1 }]);
-        // No decrementSide between rounds → the buff must survive into round 2's snapshot
+        // No decrementPlayer between rounds → the buff must survive into round 2's snapshot
         // (re-applied this round too, but the point is beginRound/snapshot don't expire it).
         eng.beginRound(2);
         eng.sourceFired('attacker', 'active', 2);
@@ -799,9 +799,9 @@ describe('decrementSide (owner Post-Turn decrement)', () => {
         const eng = createStatusEngine({ selfBuffs: [selfBuff], enemyDebuffs: [enemyDebuff] });
         eng.beginRound(1);
         eng.sourceFired('attacker', 'active', 1);
-        // Decrementing self does not touch the enemy map.
-        expect(eng.decrementSide('self')).toEqual({ expired: ['Atk Up'] });
-        expect(eng.decrementSide('enemy')).toEqual({ expired: ['Def Down'] });
+        // Decrementing the attacker does not touch the enemy map.
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: ['Atk Up'] });
+        expect(eng.decrementEnemy()).toEqual({ expired: ['Def Down'] });
     });
 
     it('decrements/expires a timed ability status and reports its expiry name', () => {
@@ -819,10 +819,10 @@ describe('decrementSide (owner Post-Turn decrement)', () => {
         eng.applyTimedAbilityStatus(1, status);
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
         // 2 → 1
-        expect(eng.decrementSide('self')).toEqual({ expired: [] });
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: [] });
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
         // 1 → 0 → expired, name reported.
-        expect(eng.decrementSide('self')).toEqual({ expired: ['Attack Up'] });
+        expect(eng.decrementPlayer('attacker')).toEqual({ expired: ['Attack Up'] });
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
     });
 });
@@ -953,12 +953,12 @@ describe('createStatusEngine — persistent stacking statuses (game-verified 202
         expect(shred!.active.stacks).toBe(20);
     });
 
-    it('persistent entry survives decrementSide across rounds and never expires', () => {
+    it('persistent entry survives decrementEnemy across rounds and never expires', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
         eng.applyTimedAbilityStatus(1, persistentDebuff());
         for (let r = 2; r <= 6; r++) {
-            const { expired } = eng.decrementSide('enemy');
+            const { expired } = eng.decrementEnemy();
             expect(expired).toEqual([]);
             eng.beginRound(r);
         }
@@ -987,7 +987,7 @@ describe('createStatusEngine — persistent stacking statuses (game-verified 202
                 .snapshot()
                 .activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred');
             stacksAt.push(snap?.stacks ?? 0);
-            eng.decrementSide('enemy');
+            eng.decrementEnemy();
         }
         expect(stacksAt).toEqual([1, 2, 3]);
         // Scheduled persistent entries carry the no-re-roll sentinel.
@@ -1008,11 +1008,52 @@ describe('createStatusEngine — persistent stacking statuses (game-verified 202
         eng.beginRound(1);
         eng.sourceFired('attacker', 'active', 1);
         for (let r = 2; r <= 6; r++) {
-            const { expired } = eng.decrementSide('enemy');
+            const { expired } = eng.decrementEnemy();
             expect(expired).toEqual([]);
             eng.beginRound(r);
         }
         const snap = eng.snapshot().activeEnemyDebuffs.find((b) => b.buffName === 'Defense Shred');
         expect(snap).toBeDefined();
+    });
+});
+
+// Helper for the per-actor player-side tests. Returns a timed self-side
+// RegisteredAbilityStatus with empty conditions and a trivial parsedEffects.
+function timedSelfStatus(
+    buffName: string,
+    duration: number
+): Extract<RegisteredAbilityStatus, { kind: 'timed' }> {
+    return {
+        kind: 'timed',
+        side: 'self',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: {} },
+    };
+}
+
+describe('per-actor player sides', () => {
+    it('keeps owners isolated: a timed buff applied to team-1 is not in the attacker snapshot', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 2), 'team-1');
+        // team-1's timed buff is visible under team-1
+        expect(se.timedAbilityStatuses('self', 'team-1').map((b) => b.payload.buffName)).toEqual([
+            'Attack Up',
+        ]);
+        // attacker sees nothing
+        expect(se.timedAbilityStatuses('self', 'attacker')).toEqual([]);
+    });
+
+    it('decrements per carrier: team-1 post-turn does not age attacker buffs', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 1), 'attacker');
+        // Decrementing team-1 (empty owner) must not expire the attacker's buff
+        expect(se.decrementPlayer('team-1').expired).toEqual([]);
+        expect(se.timedAbilityStatuses('self', 'attacker')).toHaveLength(1);
+        // Decrementing attacker expires the 1-turn buff
+        expect(se.decrementPlayer('attacker').expired).toEqual(['Attack Up']);
     });
 });
