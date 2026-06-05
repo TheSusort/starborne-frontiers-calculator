@@ -29,8 +29,81 @@ import {
     registerReactiveListeners,
 } from './triggers';
 
-function tickDoTStacks(entries: ActiveDoTStack[], baseValue: number): number {
-    return entries.reduce((sum, e) => sum + e.stacks * (e.tier / 100) * baseValue, 0);
+// Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
+// and register them under that owner's status-engine side. Returns the timed-by-slot lists
+// (applied when that owner's slot fires). Extracted from the attacker's inline loop (Task 4)
+// with ZERO behavioural change: the attacker calls it with ownerId 'attacker' at the same
+// setup point; walked team actors call it with their own id afterward (input order).
+// Classification (spec): accumulating (stackTrigger && isStackable) → accumulating maps,
+// effect inclusion aura-gated; aura (recurring/undefined duration OR passive slot) → per-round
+// effect gate; timed (finite duration) → gated at application. Routing mirrors
+// buffAbilitiesToSelectedBuffs: enemy/all-enemies → enemy side, everything else → self.
+function registerActorAbilityStatuses(
+    castSkills: ShipSkills,
+    statusEngine: ReturnType<typeof createStatusEngine>,
+    ownerId: string
+): {
+    timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
+    timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
+} {
+    const registeredAbilityStatuses: RegisteredAbilityStatus[] = [];
+    const timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
+    const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
+    for (const slot of castSkills.slots) {
+        for (const ability of slot.abilities) {
+            const cfg = ability.config;
+            if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
+            const side: 'self' | 'enemy' =
+                ability.target === 'enemy' || ability.target === 'all-enemies' ? 'enemy' : 'self';
+            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
+            const isAura =
+                !accumulating &&
+                (cfg.duration === 'recurring' ||
+                    cfg.duration === undefined ||
+                    slot.slot === 'passive');
+            const payload: AbilityStatusPayload = {
+                buffName: cfg.buffName,
+                stacks: cfg.stacks,
+                parsedEffects: cfg.parsedEffects,
+                ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
+            };
+            // `as const` keeps the literal types (side, sourceSlot) so the spread into
+            // a union variant below doesn't widen them — runtime object is unchanged.
+            const base = {
+                payload,
+                side,
+                sourceSlot: slot.slot,
+                conditions: liveGateConditions(ability.conditions),
+            } as const;
+            let status: RegisteredAbilityStatus;
+            if (accumulating) {
+                // accumulating: stackTrigger is required and non-optional on this variant.
+                status = {
+                    ...base,
+                    kind: 'accumulating',
+                    stackTrigger: cfg.stackTrigger!,
+                    maxStacks: cfg.maxStacks,
+                };
+            } else if (isAura) {
+                // NOTE: persistent-stacking names (PERSISTENT_STACKING_BUFFS) should never
+                // reach the aura arm with current data — their cast applications either carry
+                // a stackTrigger (accumulating, climbs + caps there) or a reactive trigger
+                // (partitioned out before this loop; the executor routes them to the
+                // persistent map). If one ever lands here it would become a per-round
+                // re-rolled aura and silently lose persistence — see persistentStackingBuffs.ts.
+                status = { ...base, kind: 'aura' };
+            } else {
+                // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
+                // not recurring/undefined duration and not a passive slot). The classification
+                // branches above exhaustively exclude non-numeric durations from reaching this arm.
+                status = { ...base, kind: 'timed', duration: cfg.duration as number };
+                (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
+            }
+            registeredAbilityStatuses.push(status);
+        }
+    }
+    statusEngine.registerAbilityStatuses(registeredAbilityStatuses, ownerId);
+    return { timedSelfBySlot, timedEnemyBySlot };
 }
 
 function totalStacks(entries: ActiveDoTStack[]): number {
@@ -49,80 +122,123 @@ function expireStacks(entries: ActiveDoTStack[]): void {
 // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
 // `emitBombDetonated` is called once per burst (per detonating bomb entry) so Phase 3
 // reactive triggers can observe each burst's actorId, round, stacks, and damage.
+// Per-actor attribution (Task 4): each burst uses the APPLIER's affinityMult (snapshotted at
+// application) and is credited to that applier's detonation channel via `creditDetonation`.
+// `actorIdFor` supplies the bomb-detonated event's actorId (the applier).
 function processBombs(args: {
     pendingBombs: PendingBomb[];
-    affinityMult: number;
-    emitBombDetonated?: (stacks: number, damage: number) => void;
-}): number {
-    let bombBurst = 0;
+    emitBombDetonated?: (actorId: string, stacks: number, damage: number) => void;
+    creditDetonation: (sourceId: string, damage: number) => void;
+}): void {
     for (let i = args.pendingBombs.length - 1; i >= 0; i--) {
         args.pendingBombs[i].countdown -= 1;
         if (args.pendingBombs[i].countdown <= 0) {
-            const burstDamage =
-                args.pendingBombs[i].stacks *
-                args.pendingBombs[i].damagePerStack *
-                args.affinityMult;
-            args.emitBombDetonated?.(args.pendingBombs[i].stacks, burstDamage);
-            bombBurst += args.pendingBombs[i].stacks * args.pendingBombs[i].damagePerStack;
+            const bomb = args.pendingBombs[i];
+            const burstDamage = bomb.stacks * bomb.damagePerStack * bomb.affinityMult;
+            args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
+            args.creditDetonation(bomb.sourceId, burstDamage);
             args.pendingBombs.splice(i, 1);
         }
     }
-    return bombBurst * args.affinityMult;
 }
 
 // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
 // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
 // directDamage already includes affinity, so no extra affinity multiplier is applied.
+// Per-actor attribution (Task 4): the accumulation INPUT is the summed direct damage of ALL
+// players this round (spec: Echoing Burst gathers all players' direct); the OUTPUT burst is
+// credited to the accumulator's applier via `creditDetonation`.
 function processAccumulators(args: {
     pendingAccumulators: PendingAccumulator[];
-    directDamage: number;
-}): number {
-    let accumulatorBurst = 0;
+    allPlayersDirect: number;
+    creditDetonation: (sourceId: string, damage: number) => void;
+}): void {
     for (let i = args.pendingAccumulators.length - 1; i >= 0; i--) {
-        args.pendingAccumulators[i].accumulated += args.directDamage;
-        args.pendingAccumulators[i].roundsRemaining -= 1;
-        if (args.pendingAccumulators[i].roundsRemaining <= 0) {
-            accumulatorBurst +=
-                args.pendingAccumulators[i].accumulated * (args.pendingAccumulators[i].pct / 100);
+        const acc = args.pendingAccumulators[i];
+        acc.accumulated += args.allPlayersDirect;
+        acc.roundsRemaining -= 1;
+        if (acc.roundsRemaining <= 0) {
+            args.creditDetonation(acc.sourceId, acc.accumulated * (acc.pct / 100));
             args.pendingAccumulators.splice(i, 1);
         }
     }
-    return accumulatorBurst;
 }
 
 // Steps 4 & 5: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%) and
-// inferno (scales with the attacker's effective attack, no outgoing buff), then expire
-// both stack sets. Returns the two per-round tick totals.
+// inferno (scales with the APPLIER's effective attack, no outgoing buff), then expire both
+// stack sets. Per-actor attribution (Task 4): each entry ticks with its applier's ctx (looked
+// up via `ctxFor(entry.sourceId)`) — inferno uses the applier's effectiveAttack, both use the
+// applier's dotMult/affinityMult; corrosion stays enemy-HP-based. An entry whose applier has
+// no ctx yet (faster-enemy round 1) is skipped this tick (its applier acts later). Damage is
+// credited per applier via `credit`; the `dot-ticked` event carries the per-dotType SUMMED
+// damage (preserving the pre-Task-4 single-event-per-type emission). At attacker-only this
+// produces byte-identical totals (exactly one applier → same sums).
 function tickDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     enemyHp: number;
-    effectiveAttack: number;
-    dotMult: number;
-    affinityMult: number;
+    ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
     emitTicked: (dotType: 'corrosion' | 'inferno', damage: number) => void;
-}): { corrosionDamage: number; infernoDamage: number } {
+    credit: (sourceId: string, dotType: 'corrosion' | 'inferno', damage: number) => void;
+}): void {
     // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
     const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
-    const corrosionDamage =
-        tickDoTStacks(args.corrosionEntries, corrosionBaseHp) * args.dotMult * args.affinityMult;
-    if (corrosionDamage > 0) {
-        args.emitTicked('corrosion', corrosionDamage);
+    let corrosionSum = 0;
+    for (const e of args.corrosionEntries) {
+        const ctx = args.ctxFor(e.sourceId);
+        if (!ctx) continue; // applier has not acted yet this run (faster-enemy round 1)
+        const d = e.stacks * (e.tier / 100) * corrosionBaseHp * ctx.dotMult * ctx.affinityMult;
+        args.credit(e.sourceId, 'corrosion', d);
+        corrosionSum += d;
+    }
+    if (corrosionSum > 0) {
+        args.emitTicked('corrosion', corrosionSum);
     }
 
-    // Step 5: Tick inferno (scales with attacker's effective attack, no outgoing buff)
-    const infernoDamage =
-        tickDoTStacks(args.infernoEntries, args.effectiveAttack) * args.dotMult * args.affinityMult;
-    if (infernoDamage > 0) {
-        args.emitTicked('inferno', infernoDamage);
+    // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
+    let infernoSum = 0;
+    for (const e of args.infernoEntries) {
+        const ctx = args.ctxFor(e.sourceId);
+        if (!ctx) continue;
+        const d = e.stacks * (e.tier / 100) * ctx.effectiveAttack * ctx.dotMult * ctx.affinityMult;
+        args.credit(e.sourceId, 'inferno', d);
+        infernoSum += d;
+    }
+    if (infernoSum > 0) {
+        args.emitTicked('inferno', infernoSum);
     }
 
     // Expire DoT stacks after ticking
     expireStacks(args.corrosionEntries);
     expireStacks(args.infernoEntries);
-
-    return { corrosionDamage, infernoDamage };
 }
+
+/** A team actor input as the ENGINE consumes it: the public TeamActorInput plus an
+ *  optional `walk` bundle the adapter (simulateDPS) resolves when the actor carries
+ *  shipSkills. With `walk` the actor runs the full runPlayerTurn pipeline; without it it
+ *  stays the legacy scheduled-list source (byte-identical to pre-walk behaviour). The
+ *  walk's per-actor rates are pre-derived by the adapter (same shape as the attacker's). */
+export type TeamActorEngineInput = TeamActorInput & {
+    walk?: {
+        shipSkills: ShipSkills;
+        stats: {
+            attack: number;
+            crit: number;
+            critDamage: number;
+            defensePenetration: number;
+            hacking: number;
+            defence: number;
+            hp: number;
+        };
+        debuffLandingChance: number;
+        selfDotModifier: number;
+        defensePenetrationBuff: number;
+        affinityDamageModifier: number;
+        affinityCritCap: number;
+        affinityCritPenalty: number;
+        hasChargedSkill: boolean;
+    };
+};
 
 export interface CombatEngineInput {
     attack: number;
@@ -140,7 +256,7 @@ export interface CombatEngineInput {
     /** Team ships as real speed-ordered actors (Phase 2). Their buff lists are keyed to
      *  their own turns via the status engine's teamSources, NOT merged into selfBuffs/
      *  enemyDebuffs (no-double-count). */
-    teamActors?: TeamActorInput[];
+    teamActors?: TeamActorEngineInput[];
     // Rate/fold fields below (debuffLandingChance, selfDotModifier, defensePenetrationBuff)
     // are pre-derived by the adapter (simulateDPS) — pass the resolved values, not raw hacking.
     debuffLandingChance: number;
@@ -184,6 +300,8 @@ export function runCombat(input: CombatEngineInput): {
         cumulative: number;
         totalSecondary: number;
         totalConditional: number;
+        /** Total non-focus player (team) damage across all rounds — adapter summary. */
+        teamTotal: number;
     };
 } {
     const {
@@ -336,72 +454,15 @@ export function runCombat(input: CombatEngineInput): {
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
     });
 
-    // Register the attacker's own buff/debuff abilities for in-loop application with
-    // live condition gating (Task 6). These flow from ShipSkills directly — the page
-    // no longer feeds the converted SelectedGameBuff arrays into the sim (no-double-count).
-    // Classification (spec): accumulating (stackTrigger && isStackable) → accumulating
-    // maps, effect inclusion aura-gated; aura (recurring/undefined duration OR passive
-    // slot) → per-round effect gate; timed (finite duration) → gated at application.
-    // Routing mirrors buffAbilitiesToSelectedBuffs: enemy/all-enemies → enemy side.
-    const registeredAbilityStatuses: RegisteredAbilityStatus[] = [];
-    // Timed ability statuses indexed by source slot, applied when that slot fires.
-    // Narrowed to the timed variant — duration is guaranteed numeric on this type.
-    const timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
-    const timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[] = [];
-    for (const slot of shipSkills.slots) {
-        for (const ability of slot.abilities) {
-            const cfg = ability.config;
-            if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
-            const side: 'self' | 'enemy' =
-                ability.target === 'enemy' || ability.target === 'all-enemies' ? 'enemy' : 'self';
-            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
-            const isAura =
-                !accumulating &&
-                (cfg.duration === 'recurring' ||
-                    cfg.duration === undefined ||
-                    slot.slot === 'passive');
-            const payload: AbilityStatusPayload = {
-                buffName: cfg.buffName,
-                stacks: cfg.stacks,
-                parsedEffects: cfg.parsedEffects,
-                ...(cfg.type === 'debuff' ? { application: cfg.application } : {}),
-            };
-            // `as const` keeps the literal types (side, sourceSlot) so the spread into
-            // a union variant below doesn't widen them — runtime object is unchanged.
-            const base = {
-                payload,
-                side,
-                sourceSlot: slot.slot,
-                conditions: liveGateConditions(ability.conditions),
-            } as const;
-            let status: RegisteredAbilityStatus;
-            if (accumulating) {
-                // accumulating: stackTrigger is required and non-optional on this variant.
-                status = {
-                    ...base,
-                    kind: 'accumulating',
-                    stackTrigger: cfg.stackTrigger!,
-                    maxStacks: cfg.maxStacks,
-                };
-            } else if (isAura) {
-                // NOTE: persistent-stacking names (PERSISTENT_STACKING_BUFFS) should never
-                // reach the aura arm with current data — their cast applications either carry
-                // a stackTrigger (accumulating, climbs + caps there) or a reactive trigger
-                // (partitioned out before this loop; the executor routes them to the
-                // persistent map). If one ever lands here it would become a per-round
-                // re-rolled aura and silently lose persistence — see persistentStackingBuffs.ts.
-                status = { ...base, kind: 'aura' };
-            } else {
-                // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
-                // not recurring/undefined duration and not a passive slot). The classification
-                // branches above exhaustively exclude non-numeric durations from reaching this arm.
-                status = { ...base, kind: 'timed', duration: cfg.duration as number };
-                (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
-            }
-            registeredAbilityStatuses.push(status);
-        }
-    }
-    statusEngine.registerAbilityStatuses(registeredAbilityStatuses);
+    // Register the attacker's own buff/debuff abilities for in-loop application with live
+    // condition gating. These flow from ShipSkills directly — the page no longer feeds the
+    // converted SelectedGameBuff arrays into the sim (no-double-count). The attacker registers
+    // FIRST (zero-churn ordering gate); walked team actors register AFTER, in input order.
+    const { timedSelfBySlot, timedEnemyBySlot } = registerActorAbilityStatuses(
+        shipSkills,
+        statusEngine,
+        'attacker'
+    );
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
     // into the underlying SelectedGameBuff effects.
@@ -453,8 +514,85 @@ export function runCombat(input: CombatEngineInput): {
         enemyDebuffLookup,
     };
 
+    // Walked team runtimes (Task 4). For each team input with a `walk` bundle, build a
+    // PlayerActorRuntime so its real turns run the full runPlayerTurn pipeline. Each gets
+    // its OWN gate instances (determinism isolation — its draws never interleave with the
+    // attacker's or another team actor's), its own landing closure (its affinity disadvantage
+    // + its landing gate + its chance), stats from the walk bundle, focus=false, and EMPTY
+    // lookups (its walked statuses carry their effects in payloads — no scheduled-buff lookup
+    // expansion). Registration order: attacker first (above), then team actors in input order
+    // (the loop order here) — fixed order = determinism. The team combat actor (turn-order
+    // carrier) is matched by index to its input.
+    const teamRuntimeById = new Map<string, PlayerActorRuntime>();
+    teamActors.forEach((t, i) => {
+        if (!t.walk) return;
+        const w = t.walk;
+        const teamActor = teamCombatActors[i];
+        // Cast/reactive split per walked actor. Reactive abilities are PARTITIONED here but
+        // NOT registered as listeners this task — Task 6 registers them per owner. They are
+        // stored on the runtime so Task 6 can pick them up without re-partitioning.
+        const { castSkills: teamCastSkills, reactiveAbilities: teamReactive } =
+            partitionReactiveAbilities(w.shipSkills);
+        // Register this walked actor's cast buff/debuff abilities under its own owner id
+        // (AFTER the attacker — zero-churn ordering for the attacker-only path).
+        const teamTimed = registerActorAbilityStatuses(teamCastSkills, statusEngine, t.id);
+        const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
+        // Own gate instances — separate draw streams so a team actor's crit/landing/extend
+        // rolls are isolated from the attacker's deterministic schedule.
+        const teamActiveCritGate = makeRateGate();
+        const teamChargedCritGate = makeRateGate();
+        const teamDebuffLandingGate = makeRateGate();
+        const teamExtendChanceGate = makeRateGate();
+        const teamLandsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
+            application === 'apply'
+                ? !teamAffinityDisadvantage
+                : teamDebuffLandingGate(w.debuffLandingChance);
+        const runtime: PlayerActorRuntime = {
+            actor: teamActor,
+            focus: teamActor.id === focusActorId, // always false today (focus = attacker)
+            castSkills: teamCastSkills,
+            reactiveAbilities: teamReactive, // stored, NOT registered (Task 6)
+            timedSelfBySlot: teamTimed.timedSelfBySlot,
+            timedEnemyBySlot: teamTimed.timedEnemyBySlot,
+            hasChargedSkill: w.hasChargedSkill,
+            attack: w.stats.attack,
+            crit: w.stats.crit,
+            critDamage: w.stats.critDamage,
+            defensePenetration: w.stats.defensePenetration,
+            defence: w.stats.defence,
+            hp: w.stats.hp,
+            debuffLandingChance: w.debuffLandingChance,
+            selfDotModifier: w.selfDotModifier,
+            defensePenetrationBuff: w.defensePenetrationBuff,
+            affinityDamageModifier: w.affinityDamageModifier,
+            affinityCritCap: w.affinityCritCap,
+            affinityCritPenalty: w.affinityCritPenalty,
+            affinityDisadvantage: teamAffinityDisadvantage,
+            allyChargePerRound: undefined, // attacker-only manual input
+            activeCritGate: teamActiveCritGate,
+            chargedCritGate: teamChargedCritGate,
+            debuffLandingGate: teamDebuffLandingGate,
+            extendChanceGate: teamExtendChanceGate,
+            landsTimedEnemyApplication: teamLandsTimedEnemyApplication,
+            // Empty lookups: a walked actor's statuses carry their effects in payloads
+            // (timedAbilityStatuses / activeAbilityStatuses fold them) — there are no
+            // scheduled SelectedGameBuff names to expand for this actor's snapshot.
+            selfBuffLookup: new Map(),
+            enemyDebuffLookup: new Map(),
+        };
+        teamRuntimeById.set(t.id, runtime);
+    });
+
+    // Whether ANY walked team actor exists — controls whether RoundData.teamDamage is set
+    // (undefined preserves the legacy/attacker-only RoundData shape; goldens stay locked).
+    const hasWalkedTeam = teamRuntimeById.size > 0;
+
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
+    // Non-focus (team) cumulative damage. Enemy HP decline everywhere uses
+    // cumulativeDamage + cumulativeTeamDamage; the row/summary cumulativeDamage stays focus-only.
+    let cumulativeTeamDamage = 0;
+    let totalTeamRaw = 0;
     let totalDirectRaw = 0;
     let totalCorrosionRaw = 0;
     let totalInfernoRaw = 0;
@@ -472,10 +610,12 @@ export function runCombat(input: CombatEngineInput): {
 
     const roundData: RoundData[] = [];
 
-    // Round-scoped context the enemy's DoT processing reads from the focus actor's turn.
-    // Set at the end of every focus-actor turn (see PlayerRoundCtx). Only undefined
-    // when the enemy acts before the attacker has EVER acted (faster-enemy round 1).
-    let lastAttackerCtx: PlayerRoundCtx | undefined;
+    // Per-actor round-scoped context the enemy's DoT processing reads. Keyed by actor id;
+    // every player turn sets its entry after runPlayerTurn. A DoT entry's tick resolves the
+    // APPLIER's ctx (effectiveAttack for inferno; dotMult/affinityMult for both) via this map.
+    // The focus actor's ctx feeds the row exactly as the old single `lastAttackerCtx` did. An
+    // entry whose applier has not yet acted this run (faster-enemy round 1) has no ctx → skip.
+    const lastTurnCtxByActor = new Map<string, PlayerRoundCtx>();
 
     // --- Phase 3 reactive triggers ---
     // Intent queue (FIFO). Reactive listeners enqueue follow-up executions; the engine
@@ -560,15 +700,22 @@ export function runCombat(input: CombatEngineInput): {
                         // enemy's HP AFTER the attacker's hit that just crit. This differs
                         // from the attacker turn's own gates, which deliberately use the
                         // entering-round HP (pre-existing convention, unchanged).
-                        // Map-sum: only the attacker entry exists today — equivalent to the
-                        // old scalar sum (direct + corrosion + inferno + detonation).
+                        // Map-sum: enemy-HP decline is focus + team cumulative + this round's
+                        // map totals across ALL actors (the drain reacts to the enemy's true
+                        // remaining HP, not just the focus actor's contribution).
                         cumulativeDamage:
                             cumulativeDamage +
+                            cumulativeTeamDamage +
                             [...roundDamage.values()].reduce(
                                 (s, d) => s + d.direct + d.corrosion + d.inferno + d.detonation,
                                 0
                             ),
-                        effectiveAttack: lastAttackerCtx?.effectiveAttack,
+                        // Drain-time bomb damagePerStack uses the FOCUS actor's effective
+                        // attack (the executor is attacker-only until Task 6).
+                        effectiveAttack: lastTurnCtxByActor.get(focusActorId)?.effectiveAttack,
+                        // Focus actor's affinity multiplier — snapshotted onto a pushed bomb
+                        // entry for its per-entry burst (executor is attacker-only until Task 6).
+                        affinityMult: 1 + affinityDamageModifier / 100,
                         recordResisted: (resisted) => {
                             const lastTurn = focusTurns[focusTurns.length - 1];
                             // After an attacker turn this round → append to its resisted list;
@@ -619,7 +766,9 @@ export function runCombat(input: CombatEngineInput): {
                     enemyType,
                     bus,
                     round: r,
-                    cumulativeDamage,
+                    // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
+                    // reflects all players' damage so far (gates/HP% column react to it).
+                    enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
                 });
 
                 // Drain any team-turn resisted entries staged BEFORE this attacker turn
@@ -635,8 +784,6 @@ export function runCombat(input: CombatEngineInput): {
                 // accumulator bursts ran earlier this round — a plain assignment would
                 // clobber them. direct/secondary/conditional are single-focus-turn
                 // today; += keeps the 0..N-turn seam additive.
-                // Invariant (today): actor.id === focusActorId — the enemy-turn writes ticks
-                // into dmg(focusActorId), so both resolve to the same map entry.
                 const d = dmg(actor.id);
                 d.direct += turn.directDamage;
                 d.secondary += turn.secondaryDamage;
@@ -644,10 +791,59 @@ export function runCombat(input: CombatEngineInput): {
                 d.detonation += turn.detonationDamage;
                 focusTurns.push(turn);
 
-                // Hand the enemy's DoT-processing turn the round-scoped context. With a
-                // faster enemy this is the PREVIOUS round's context, hence the carried
-                // `lastAttackerCtx`; at default speeds the attacker always precedes the enemy.
-                lastAttackerCtx = turn.attackerCtx;
+                // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
+                lastTurnCtxByActor.set(actor.id, turn.turnCtx);
+            } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
+                // ====================================================================
+                // WALKED TEAM TURN — a real speed-ordered ally that runs the FULL
+                // runPlayerTurn pipeline (its own gates/stats/skills). Its damage reduces
+                // enemy HP but is reported separately (teamDamage); runPlayerTurn also calls
+                // statusEngine.sourceFired(actor.id, …) internally, so this actor's manual
+                // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
+                // the legacy sourceFired block below is fully superseded for walked actors.
+                // ====================================================================
+                const teamTurn = runPlayerTurn({
+                    runtime: teamRuntimeById.get(actor.id)!,
+                    enemy,
+                    statusEngine,
+                    corrosionEntries,
+                    infernoEntries,
+                    pendingBombs,
+                    pendingAccumulators,
+                    enemyDefense,
+                    enemyHp,
+                    enemyType,
+                    bus,
+                    round: r,
+                    enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                });
+
+                // Fold the team turn's damage into ITS OWN map entry (post-round assembly
+                // sums all non-focus entries into teamDamage). secondary/conditional are
+                // sub-buckets of direct (do NOT double-add) but kept distinct for the
+                // simulator-page seam.
+                const td = dmg(actor.id);
+                td.direct += teamTurn.directDamage;
+                td.secondary += teamTurn.secondaryDamage;
+                td.conditional += teamTurn.conditionalDamage;
+                td.detonation += teamTurn.detonationDamage;
+
+                // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
+                // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
+                // EXACTLY like the legacy team block: before any focus turn → pendingResisted;
+                // after → the last focus turn's list.
+                if (teamTurn.resistedEnemyDebuffs.length > 0) {
+                    const lastTurn = focusTurns[focusTurns.length - 1];
+                    if (lastTurn) {
+                        lastTurn.resistedEnemyDebuffs.push(...teamTurn.resistedEnemyDebuffs);
+                    } else {
+                        pendingResisted.push(...teamTurn.resistedEnemyDebuffs);
+                    }
+                }
+
+                // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
+                // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
+                lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
             } else if (actor.kind === 'team') {
                 // ====================================================================
                 // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
@@ -712,64 +908,64 @@ export function runCombat(input: CombatEngineInput): {
                 }
             } else if (actor.kind === 'enemy') {
                 // ====================================================================
-                // ENEMY TURN — ticks the DoT containers it carries. DoTs tick at the
-                // start of the afflicted ship's turn. At default speeds the attacker
-                // acted earlier THIS round (apply/detonate done, ctx set), so the enemy
-                // ticks with this round's context — same totals as the pre-restructure
-                // engine. lastAttackerCtx is undefined only when a faster enemy acts
-                // before the attacker's first turn (containers empty — skip).
+                // ENEMY TURN — ticks the DoT containers it carries, per-entry attributed
+                // to the entry's APPLIER. DoTs tick at the start of the afflicted ship's
+                // turn. At default speeds every player acted earlier THIS round (apply/
+                // detonate done, ctx set), so the enemy ticks with this round's contexts.
+                // An entry whose applier has no ctx yet (faster-enemy round 1) is skipped.
+                // Per-entry `+=` into dmg(sourceId): at attacker-only there is exactly one
+                // applier per round → identical totals to the old single-writer assignment.
                 // ====================================================================
-                if (lastAttackerCtx) {
-                    const {
-                        effectiveAttack,
-                        dotMult,
-                        affinityMult,
-                        directDamage: ctxDirect,
-                    } = lastAttackerCtx;
-                    const ticks = tickDoTs({
-                        corrosionEntries,
-                        infernoEntries,
-                        enemyHp,
-                        effectiveAttack,
-                        dotMult,
-                        affinityMult,
-                        emitTicked: (dotType, damage) =>
-                            bus.emit({
-                                type: 'dot-ticked',
-                                targetId: enemy.id,
-                                round: r,
-                                dotType,
-                                damage,
-                            }),
-                    });
-                    // Corrosion/inferno ticks are = (assign) into the focus entry — today
-                    // there is exactly one enemy turn per round, so assign is correct; the
-                    // old scalar locals were = for the same reason. Per-entry sourceId
-                    // attribution (when team DoTs land) arrives in a later task.
-                    const fd = dmg(focusActorId);
-                    fd.corrosion = ticks.corrosionDamage;
-                    fd.inferno = ticks.infernoDamage;
+                tickDoTs({
+                    corrosionEntries,
+                    infernoEntries,
+                    enemyHp,
+                    ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                    emitTicked: (dotType, damage) =>
+                        bus.emit({
+                            type: 'dot-ticked',
+                            targetId: enemy.id,
+                            round: r,
+                            dotType,
+                            damage,
+                        }),
+                    credit: (sourceId, dotType, damage) => {
+                        dmg(sourceId)[dotType] += damage;
+                    },
+                });
 
-                    // Bombs and accumulators are += into detonation: with a FASTER enemy,
-                    // the attacker's detonate() portion already ran earlier this round (the
-                    // attacker turn fold above used +=). The old scalar was also += here.
-                    fd.detonation += processBombs({
-                        pendingBombs,
-                        affinityMult,
-                        emitBombDetonated: (stacks, damage) =>
-                            bus.emit({
-                                type: 'bomb-detonated',
-                                actorId: attacker.id,
-                                round: r,
-                                stacks,
-                                damage,
-                            }),
-                    });
-                    fd.detonation += processAccumulators({
-                        pendingAccumulators,
-                        directDamage: ctxDirect,
-                    });
-                }
+                // Bombs: per-entry burst credited to the applier's detonation channel,
+                // using the applier's snapshotted affinityMult. bomb-detonated actorId is
+                // the applier (per-actor attribution).
+                processBombs({
+                    pendingBombs,
+                    emitBombDetonated: (actorId, stacks, damage) =>
+                        bus.emit({
+                            type: 'bomb-detonated',
+                            actorId,
+                            round: r,
+                            stacks,
+                            damage,
+                        }),
+                    creditDetonation: (sourceId, damage) => {
+                        dmg(sourceId).detonation += damage;
+                    },
+                });
+
+                // Accumulators: the gather INPUT is the summed direct damage of ALL players
+                // this round (spec: Echoing Burst gathers all players' direct); each burst is
+                // credited to its applier's detonation channel.
+                const allPlayersDirect = [...roundDamage.values()].reduce(
+                    (s, d) => s + d.direct,
+                    0
+                );
+                processAccumulators({
+                    pendingAccumulators,
+                    allPlayersDirect,
+                    creditDetonation: (sourceId, damage) => {
+                        dmg(sourceId).detonation += damage;
+                    },
+                });
             }
 
             // Drain point (b): follow-ups triggered by this actor's turn body run as
@@ -843,20 +1039,33 @@ export function runCombat(input: CombatEngineInput): {
 
         const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
         cumulativeDamage += totalRoundDamage;
+        // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
+        // and the damage-type breakdown (config comparison stays meaningful).
         totalDirectRaw += focus.direct;
-        // NOTE: reads the FOCUS entry only — when team actors gain secondary/conditional
-        // contributions, the assembly must iterate the full dmgMap or those sub-buckets are silently dropped.
         totalSecondaryRaw += focus.secondary;
         totalConditionalRaw += focus.conditional;
         totalCorrosionRaw += focus.corrosion;
         totalInfernoRaw += focus.inferno;
         totalDetonationRaw += focus.detonation;
 
+        // Team damage = Σ over all NON-focus actor entries of every channel (direct already
+        // includes its secondary/conditional sub-buckets, so they are NOT added separately).
+        // By construction totalRoundDamage + teamRoundDamage = the round's enemy-HP delta.
+        let teamRoundDamage = 0;
+        for (const [id, d] of roundDamage) {
+            if (id === focusActorId) continue;
+            teamRoundDamage += d.direct + d.corrosion + d.inferno + d.detonation;
+        }
+        cumulativeTeamDamage += teamRoundDamage;
+        totalTeamRaw += teamRoundDamage;
+
         // Track the enemy's remaining HP and emit hp-changed / ship-destroyed taps
-        // (emission-only; the sim keeps hitting the dead dummy regardless).
-        enemy.currentHp = Math.max(0, enemyHp - cumulativeDamage);
+        // (emission-only; the sim keeps hitting the dead dummy regardless). Enemy HP decline
+        // uses focus + team cumulative — team damage reduces enemy HP for gates/HP%/destruction.
+        const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+        enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);
         const newEnemyHpPctInt =
-            enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - cumulativeDamage / enemyHp))) : 100;
+            enemyHp > 0 ? Math.round(Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))) : 100;
         if (newEnemyHpPctInt !== lastEnemyHpPctInt) {
             bus.emit({
                 type: 'hp-changed',
@@ -886,6 +1095,9 @@ export function runCombat(input: CombatEngineInput): {
             detonationDamage: Math.round(detonationDamage),
             totalRoundDamage: Math.round(totalRoundDamage),
             cumulativeDamage: Math.round(cumulativeDamage),
+            // teamDamage set ONLY when walked team actors exist (undefined preserves the
+            // legacy/attacker-only RoundData shape — goldens stay byte-identical).
+            ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
@@ -927,6 +1139,7 @@ export function runCombat(input: CombatEngineInput): {
             cumulative: cumulativeDamage,
             totalSecondary: totalSecondaryRaw,
             totalConditional: totalConditionalRaw,
+            teamTotal: totalTeamRaw,
         },
     };
 }

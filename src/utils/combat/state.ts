@@ -15,11 +15,15 @@ export function emptyActorDamage(): ActorDamage {
     return { direct: 0, secondary: 0, conditional: 0, corrosion: 0, inferno: 0, detonation: 0 };
 }
 
-/** One applied DoT application (an "entry"): N stacks of one tier, ticking down. */
+/** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
+ *  `sourceId` is the applier (per-actor attribution — Task 4): inferno ticks resolve the
+ *  applier's current-round effective attack/dotMult/affinityMult, and the damage attributes
+ *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage). */
 export interface ActiveDoTStack {
     stacks: number;
     tier: number;
     remainingRounds: number;
+    sourceId: string;
 }
 
 export interface PendingBomb {
@@ -27,6 +31,11 @@ export interface PendingBomb {
     damagePerStack: number;
     stacks: number;
     tier: number;
+    /** The applier (per-actor attribution — Task 4). */
+    sourceId: string;
+    /** Affinity multiplier snapshotted at application from the applier's affinity matchup,
+     *  so the burst on detonation uses the APPLIER's affinity, not the focus actor's. */
+    affinityMult: number;
 }
 
 // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
@@ -35,6 +44,9 @@ export interface PendingAccumulator {
     roundsRemaining: number;
     pct: number;
     accumulated: number;
+    /** The applier (per-actor attribution — Task 4); the burst lands in this actor's
+     *  detonation channel. The accumulation INPUT gathers all players' direct damage. */
+    sourceId: string;
 }
 
 export interface ActorStats {

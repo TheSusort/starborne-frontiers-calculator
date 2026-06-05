@@ -159,6 +159,9 @@ export interface IntentExecContext {
     /** Last attacker turn's effective attack — needed for bomb damagePerStack. Undefined
      *  before any attacker turn this run (a faster enemy, round 1) → bombs are skipped. */
     effectiveAttack?: number;
+    /** Affinity multiplier of the inflicting actor (attacker today — the executor is
+     *  attacker-only until Task 6), snapshotted onto a pushed bomb entry for its burst. */
+    affinityMult: number;
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
     recordResisted: (resisted: ActiveBuff) => void;
@@ -313,17 +316,22 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
         // One landing draw at execution (deterministic queue order).
         if (!ctx.debuffLandingGate(ctx.debuffLandingChance)) return;
+        // TODO(Task 6): the executor is attacker-only today, so reactive DoT applications are
+        // stamped sourceId 'attacker'. Task 6 generalizes reactive abilities per owner — the
+        // sourceId (and the affinity/effectiveAttack snapshot) must then come from the owner.
         if (cfg.dotType === 'corrosion') {
             ctx.corrosionEntries.push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
+                sourceId: 'attacker',
             });
         } else if (cfg.dotType === 'inferno') {
             ctx.infernoEntries.push({
                 stacks: cfg.stacks,
                 tier: cfg.tier,
                 remainingRounds: cfg.duration,
+                sourceId: 'attacker',
             });
         } else if (cfg.dotType === 'bomb') {
             // Bomb damagePerStack needs the attacker's effective attack. Before any
@@ -334,6 +342,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 damagePerStack: ctx.effectiveAttack * (cfg.tier / 100),
                 stacks: cfg.stacks,
                 tier: cfg.tier,
+                sourceId: 'attacker',
+                affinityMult: ctx.affinityMult,
             });
         }
         // Discrete infliction event — sourceId 'attacker' so the application is chainable.

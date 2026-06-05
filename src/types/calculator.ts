@@ -238,4 +238,23 @@ export interface TeamActorInput {
     selfBuffs: SelectedGameBuff[];
     /** Debuffs inflicted on the enemy, keyed by skillSource to this actor's turns. */
     enemyDebuffs: SelectedGameBuff[];
+    /** When present, this actor WALKS its parsed skills through runPlayerTurn (Task 4):
+     *  its self-targeted buffs route to itself, enemy-targeted debuffs/DoTs to the enemy,
+     *  and its damage reduces enemy HP (reported separately as teamDamage). Without it the
+     *  actor stays a legacy scheduled-list source (byte-identical to pre-walk behaviour). */
+    shipSkills?: ShipSkills;
+    /** Combat stats for a walked team actor (auto-filled from the ship; required when
+     *  shipSkills is present so its damage/DoT ticks scale with its OWN attack). */
+    stats?: {
+        attack: number;
+        crit: number;
+        critDamage: number;
+        defensePenetration: number;
+        hacking: number;
+        defence: number;
+        hp: number;
+    };
+    /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
+     *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
+    affinity?: AffinityName;
 }

@@ -76,7 +76,7 @@ export interface PlayerTurnResult {
     secondaryDamage: number;
     conditionalDamage: number;
     detonationDamage: number; // the player-turn detonate() portion
-    attackerCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick
+    turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
 /** Everything one player actor's turns need. Built once at engine setup — the
@@ -140,7 +140,10 @@ export interface PlayerTurnArgs {
     bus: CombatEventBus;
     // Per-call round state.
     round: number;
-    cumulativeDamage: number;
+    /** Enemy HP decline so far (focus + team cumulative) — drives this turn's entering-round
+     *  enemyHpPct (the value hp-threshold gates and the HP% column react to). Renamed from
+     *  `cumulativeDamage` (Task 4): it now includes team damage, not just the focus actor's. */
+    enemyHpDecline: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -417,9 +420,13 @@ function detonate(args: {
 }
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
+// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution
+// (Task 4); bombs also snapshot the applier's `affinityMult` at application (used at burst).
 function applyNewDoTs(args: {
     dotsConfig: DoTApplicationConfig;
     effectiveAttack: number;
+    affinityMult: number;
+    sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -432,6 +439,7 @@ function applyNewDoTs(args: {
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
+                sourceId: args.sourceId,
             });
             args.emitDotApplied('corrosion', dot.stacks);
         } else if (dot.type === 'inferno') {
@@ -439,6 +447,7 @@ function applyNewDoTs(args: {
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
+                sourceId: args.sourceId,
             });
             args.emitDotApplied('inferno', dot.stacks);
         } else if (dot.type === 'bomb') {
@@ -447,6 +456,8 @@ function applyNewDoTs(args: {
                 damagePerStack: args.effectiveAttack * (dot.tier / 100),
                 stacks: dot.stacks,
                 tier: dot.tier,
+                sourceId: args.sourceId,
+                affinityMult: args.affinityMult,
             });
             args.emitDotApplied('bomb', dot.stacks);
         }
@@ -459,12 +470,14 @@ function applyNewDoTs(args: {
 function applyAccumulators(args: {
     gatedSkill: Skill | undefined;
     pendingAccumulators: PendingAccumulator[];
+    sourceId: string;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         args.pendingAccumulators.push({
             roundsRemaining: Math.max(1, acc.turns),
             pct: acc.pct,
             accumulated: 0,
+            sourceId: args.sourceId,
         });
     }
 }
@@ -493,7 +506,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         bus,
         round: r,
-        cumulativeDamage,
+        enemyHpDecline,
     } = args;
 
     const {
@@ -547,9 +560,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
-    // Enemy HP% entering this round, derived from damage dealt so far. Floors at 0
-    // once cumulative damage exceeds the pool (the sim keeps hitting the "dead" dummy).
-    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - cumulativeDamage / enemyHp)) : 100;
+    // Enemy HP% entering this round, derived from enemy HP decline so far (focus + team).
+    // Floors at 0 once decline exceeds the pool (the sim keeps hitting the "dead" dummy).
+    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
@@ -1027,6 +1040,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyNewDoTs({
             dotsConfig,
             effectiveAttack,
+            affinityMult,
+            sourceId: actor.id,
             corrosionEntries,
             infernoEntries,
             pendingBombs,
@@ -1061,7 +1076,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
 
     if (dotsLanded) {
-        applyAccumulators({ gatedSkill, pendingAccumulators });
+        applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
     // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
@@ -1076,10 +1091,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         landedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: acc.roundsRemaining });
     }
 
-    // Round-scoped context the enemy's DoT-processing turn needs. With a faster enemy
-    // the enemy reads the PREVIOUS round's context; at default speeds the attacker
-    // always precedes the enemy. The caller stores this as lastAttackerCtx.
-    const attackerCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
+    // Round-scoped context the enemy's DoT-processing turn needs (this actor's). With a
+    // faster enemy the enemy reads the PREVIOUS round's context; at default speeds the
+    // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
+    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
 
     return {
         action,
@@ -1094,6 +1109,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         secondaryDamage,
         conditionalDamage,
         detonationDamage,
-        attackerCtx,
+        turnCtx,
     };
 }
