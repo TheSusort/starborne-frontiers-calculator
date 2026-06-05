@@ -154,7 +154,6 @@ export interface IntentExecContext {
     debuffLandingGate: (rate: number) => boolean;
     debuffLandingChance: number;
     landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
-    affinityDisadvantage: boolean;
     enemyType?: EnemyBaseClass;
     enemyHp: number;
     /** Damage dealt to the enemy so far (drives the drain-time enemyHpPct). */
@@ -169,9 +168,10 @@ export interface IntentExecContext {
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
  *  drain-time snapshot (documented): self-buff names from the status engine, the
- *  current landed-debuff count approximation, DoT container lengths, a capped crit
- *  estimate (full base crit — drain has no per-hit crit outcome), enemyType, and
- *  the enemyHpPct derived from cumulative damage. */
+ *  current landed-debuff count approximation, DoT container lengths, enemyType, and
+ *  the enemyHpPct derived from cumulative damage. Drain has no per-hit crit outcome,
+ *  so crit-gated conditions are evaluated with effectiveCritRate 0 (treated as
+ *  not-crit at drain time). */
 function buildDrainContext(ctx: IntentExecContext) {
     const snap = ctx.statusEngine.snapshot();
     const selfBuffNames = snap.activeSelfBuffs

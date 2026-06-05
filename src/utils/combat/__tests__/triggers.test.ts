@@ -869,4 +869,77 @@ describe('Phase 3 reactive triggers', () => {
         expect(MAX_INTENT_GENERATIONS).toBeGreaterThan(0);
         expect(Number.isFinite(MAX_INTENT_GENERATIONS)).toBe(true);
     });
+
+    // ----------------------------------------------------------------------
+    // Scenario 14 — reactive enemy debuff resist path: a timed enemy debuff
+    // on-crit with debuffLandingChance 0 fires (crit 100) but is resisted.
+    // Asserts: (a) debuff-resisted event emitted; (b) the debuff appears in
+    // that round's resistedEnemyDebuffs; (c) never in activeEnemyDebuffs.
+    // At default speeds the drain runs after the attacker turn, so the resisted
+    // entry lands on the same round's resisted list.
+    // ----------------------------------------------------------------------
+    it('scenario 14: on-crit reactive debuff resisted at debuffLandingChance 0 — event, resisted list, never active', () => {
+        const resistSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-crit',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Reactive Shred',
+                                stacks: 1,
+                                parsedEffects: { defense: -20 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { events, result } = collectEvents(
+            baseInput({
+                shipSkills: resistSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                crit: 100, // trigger fires every round
+                debuffLandingChance: 0, // 0% landing → always resisted
+                numRounds: 4,
+            })
+        );
+
+        // (a) A debuff-resisted event is emitted for the reactive debuff each round.
+        const resistedEvents = events.filter(
+            (e) =>
+                e.type === 'debuff-resisted' &&
+                (e as { buffName?: string }).buffName === 'Reactive Shred'
+        );
+        expect(resistedEvents.length).toBeGreaterThan(0);
+
+        // (b) The debuff appears in each round's resistedEnemyDebuffs list.
+        for (const round of result.rounds) {
+            expect(round.resistedEnemyDebuffs.some((b) => b.buffName === 'Reactive Shred')).toBe(
+                true
+            );
+        }
+
+        // (c) It never appears in activeEnemyDebuffs.
+        for (const round of result.rounds) {
+            expect(round.activeEnemyDebuffs.some((b) => b.buffName === 'Reactive Shred')).toBe(
+                false
+            );
+        }
+    });
 });

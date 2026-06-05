@@ -501,7 +501,6 @@ export function runCombat(input: CombatEngineInput): {
                         debuffLandingGate,
                         debuffLandingChance,
                         landsTimedEnemyApplication,
-                        affinityDisadvantage,
                         enemyType,
                         enemyHp,
                         cumulativeDamage,
