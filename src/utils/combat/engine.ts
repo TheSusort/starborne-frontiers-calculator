@@ -626,6 +626,8 @@ export function runCombat(input: CombatEngineInput): {
                 // clobber them. direct/secondary/conditional are single-attacker-turn
                 // today; += keeps the 0..N-turn seam additive.
                 // focus-actor turns (a later task renames attackerTurns to focusTurns).
+                // Invariant (today): actor.id === focusActorId — the enemy-turn writes ticks
+                // into dmg(focusActorId), so both resolve to the same map entry.
                 const d = dmg(actor.id);
                 d.direct += turn.directDamage;
                 d.secondary += turn.secondaryDamage;
@@ -827,6 +829,8 @@ export function runCombat(input: CombatEngineInput): {
         const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
         cumulativeDamage += totalRoundDamage;
         totalDirectRaw += focus.direct;
+        // NOTE: reads the FOCUS entry only — when team actors gain secondary/conditional
+        // contributions, the assembly must iterate the full dmgMap or those sub-buckets are silently dropped.
         totalSecondaryRaw += focus.secondary;
         totalConditionalRaw += focus.conditional;
         totalCorrosionRaw += focus.corrosion;
