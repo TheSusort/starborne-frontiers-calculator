@@ -71,6 +71,10 @@ const selfBuffAbility = (
     config: { type: 'buff', buffName, parsedEffects, stacks: 1, isStackable: false, duration },
 });
 
+/** zero-effect: exercises the walk path without changing damage math */
+const neutralSelfBuff = (buffName: string, duration: number, id = 'sb'): Ability =>
+    selfBuffAbility(buffName, duration, { attack: 0 }, id);
+
 const teamStats = (overrides: Partial<NonNullable<TeamActorInput['stats']>> = {}) => ({
     attack: 15000,
     crit: 0,
@@ -244,8 +248,9 @@ describe('walked team actors (Task 4)', () => {
         // Team applies on round 1 (speed 140, before attacker) → ticks on the enemy turn r1.
         // No team damage ability → team direct is 0, so round-1 teamDamage == the inferno tick.
         expect(result.rounds[0].teamDamage ?? 0).toBeCloseTo(expectedTick, 0);
-        // teamDamage grows as more entries accumulate — strictly increasing across rounds 1..3.
-        expect(result.rounds[1].teamDamage ?? 0).toBeGreaterThan(result.rounds[0].teamDamage ?? 0);
+        // Round 2: two inferno entries are ticking (applied on turns 1 and 2), no team direct.
+        // teamDamage must be exactly 2 × the single-entry tick from round 1.
+        expect(result.rounds[1].teamDamage ?? 0).toBeCloseTo(2 * expectedTick, 0);
     });
 
     // 5. HP-delta complement: totalRoundDamage + teamDamage reconciles with the enemy HP decline.
@@ -324,7 +329,7 @@ describe('walked team actors (Task 4)', () => {
                 slots: [
                     {
                         slot: 'active',
-                        abilities: [selfBuffAbility('Walked Self Up', 2, { attack: 0 })],
+                        abilities: [neutralSelfBuff('Walked Self Up', 2)],
                     },
                 ],
             },
@@ -364,10 +369,7 @@ describe('walked team actors (Task 4)', () => {
             slots: [
                 {
                     slot: 'active',
-                    abilities: [
-                        damageAbility(100, 'ad'),
-                        selfBuffAbility(buffName, 3, { attack: 0 }, 'afm'),
-                    ],
+                    abilities: [damageAbility(100, 'ad'), neutralSelfBuff(buffName, 3, 'afm')],
                 },
             ],
         };
@@ -387,10 +389,7 @@ describe('walked team actors (Task 4)', () => {
                 slots: [
                     {
                         slot: 'active',
-                        abilities: [
-                            selfBuffAbility(buffName, 3, { attack: 0 }, 'tfm'),
-                            gatedTeamDamage,
-                        ],
+                        abilities: [neutralSelfBuff(buffName, 3, 'tfm'), gatedTeamDamage],
                     },
                 ],
             },

@@ -55,11 +55,6 @@ export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
     affinityMult: number;
-    /** The player turn's directDamage — consumed by processAccumulators. With a
-     *  FASTER enemy this is the PREVIOUS round's value (the accumulator gathers the
-     *  last direct hit dealt before its countdown step) — a documented approximation
-     *  in the fast-enemy KNOWN-DIFF; no golden fixture combines the two. */
-    directDamage: number;
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -1094,7 +1089,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Round-scoped context the enemy's DoT-processing turn needs (this actor's). With a
     // faster enemy the enemy reads the PREVIOUS round's context; at default speeds the
     // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
-    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
+    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult };
 
     return {
         action,
