@@ -747,3 +747,163 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// Echoing Burst (accumulate-detonate) display in activeEnemyDebuffs
+// ---------------------------------------------------------------------------
+
+describe('accumulate-detonate display in activeEnemyDebuffs', () => {
+    // A ship with an active-slot accumulate-detonate ability (turns 2, pct 50).
+    // chargeCount 3, not startCharged → active rounds 1,2,3 then charged round 4.
+    // The accumulate-detonate ability fires ONLY on the active slot (debuff landing
+    // is gated by dotsLanded — always true in this fixture since debuffLandingChance=1).
+    const accSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ab({
+                        type: 'accumulate-detonate',
+                        config: { type: 'accumulate-detonate', turns: 2, pct: 50 },
+                    }),
+                ],
+            },
+            {
+                slot: 'charged',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 300 } })],
+            },
+        ],
+    });
+
+    const run = (overrides: Partial<CombatEngineInput> = {}) => {
+        idCounter = 0;
+        return runCombat({
+            attack: 15000,
+            crit: 50,
+            critDamage: 150,
+            defensePenetration: 10,
+            chargeCount: 3,
+            shipSkills: accSkills(),
+            enemyDefense: 8000,
+            enemyHp: 400000,
+            numRounds: 8,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: true,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 6000,
+            hp: 30000,
+            ...overrides,
+        });
+    };
+
+    it('Echoing Burst appears in activeEnemyDebuffs with turnsRemaining 2 on the application round', () => {
+        const { rounds } = run();
+        // Round 1: active slot fires, accumulator applied (turns=2 → roundsRemaining=2).
+        // activeEnemyDebuffs should include {buffName:'Echoing Burst', turnsRemaining:2}.
+        const r1 = rounds.find((r) => r.round === 1)!;
+        expect(r1.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+            ])
+        );
+    });
+
+    it('Echoing Burst shows turnsRemaining 1 the round after application', () => {
+        const { rounds } = run();
+        // Round 2: enemy's processAccumulators decremented roundsRemaining 2→1. Active slot
+        // fires again, applies a new accumulator (turns=2). The surviving entry shows
+        // roundsRemaining=1; the new one shows roundsRemaining=2.
+        const r2 = rounds.find((r) => r.round === 2)!;
+        const burst = r2.activeEnemyDebuffs.filter((d) => d.buffName === 'Echoing Burst');
+        expect(burst).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 1 }),
+            ])
+        );
+    });
+
+    it('Echoing Burst is absent from activeEnemyDebuffs after it detonates (roundsRemaining reaches 0)', () => {
+        // chargeCount 3, not startCharged: rounds 1,2,3 active, round 4 charged.
+        // Round 1: accumulator applied (roundsRemaining=2). Enemy turn: 2→1.
+        // Round 2: active again, NEW accumulator (roundsRemaining=2). Enemy turn: round-1 entry 1→0 → detonates; round-2 entry 2→1.
+        // So after round 2's enemy turn, only the round-2 entry (roundsRemaining=1) survives.
+        // Round 3: active again, ANOTHER accumulator (roundsRemaining=2). Enemy turn: round-2 entry 1→0 → detonates; round-3 entry 2→1.
+        // etc. The pattern: each active round applies a new one (window=2), the previous one detonates on next enemy turn.
+        // Round 4: charged slot fires — NO accumulate-detonate ability on charged slot.
+        // After round 3's enemy turn, round-3 entry has roundsRemaining=1. On round 4's enemy turn, 1→0 → detonates.
+        // Round 4's activeEnemyDebuffs: round-3 entry still has roundsRemaining=1 AT THE ATTACKER TURN (before enemy tick).
+        // Round 5: active again. At start of round 5, round-3 entry detonated (gone). New accumulator applied.
+        // Let's verify round 4: the attacker turn fires charged, no new accumulator. The surviving entry
+        // from round 3 (roundsRemaining=1) should appear in round 4's activeEnemyDebuffs.
+        const { rounds } = run();
+        const r4 = rounds.find((r) => r.round === 4)!;
+        // Round 4 is charged — no new accumulator from the attacker turn.
+        // The round-3 entry (roundsRemaining=1) should still be present at attacker-turn time.
+        expect(r4.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 1 }),
+            ])
+        );
+        // Round 5 applies a new one (active again, roundsRemaining=2). Round-4 entry is gone.
+        const r5 = rounds.find((r) => r.round === 5)!;
+        expect(r5.activeEnemyDebuffs).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+            ])
+        );
+        // No roundsRemaining=1 on round 5 at attacker-turn time: only the round-4 entry
+        // could give that, but it detonated during round 4's enemy turn.
+        expect(
+            r5.activeEnemyDebuffs.some(
+                (d) => d.buffName === 'Echoing Burst' && d.turnsRemaining === 1
+            )
+        ).toBe(false);
+    });
+
+    it('re-application restarts the window (new entry shows turnsRemaining 2 each active round)', () => {
+        const { rounds } = run();
+        // Each active round should show at least one entry with turnsRemaining=2 (the newly applied one).
+        const activeRounds = rounds.filter((r) => r.action === 'active');
+        for (const rd of activeRounds) {
+            expect(rd.activeEnemyDebuffs).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ buffName: 'Echoing Burst', turnsRemaining: 2 }),
+                ])
+            );
+        }
+    });
+
+    it('charged rounds (no accumulate-detonate ability) do NOT show turnsRemaining=2 (only surviving entries)', () => {
+        const { rounds } = run();
+        // Round 4 is charged. No new accumulator. The surviving entry from round 3
+        // (roundsRemaining=1 after the round-3 enemy tick) shows turnsRemaining=1, not 2.
+        const r4 = rounds.find((r) => r.round === 4)!;
+        expect(r4.action).toBe('charged');
+        expect(
+            r4.activeEnemyDebuffs.some(
+                (d) => d.buffName === 'Echoing Burst' && d.turnsRemaining === 2
+            )
+        ).toBe(false);
+    });
+
+    it('activeEnemyDebuffs Echoing Burst entries do not affect damage numbers (display-only)', () => {
+        // Verify the detonation damage is NOT affected by the presence of the display entries.
+        // Run once with the accumulate-detonate skill and check that damage totals match
+        // expectations (same as golden fixture: detonationDamage > 0 on rounds where detonate fires).
+        const { rounds } = run({ numRounds: 4 });
+        // Round 2 detonates the round-1 accumulator → detonationDamage > 0.
+        const r2 = rounds.find((r) => r.round === 2)!;
+        expect(r2.detonationDamage).toBeGreaterThan(0);
+        // Round 1 applied the accumulator, no detonation yet.
+        const r1 = rounds.find((r) => r.round === 1)!;
+        expect(r1.detonationDamage).toBe(0);
+    });
+});

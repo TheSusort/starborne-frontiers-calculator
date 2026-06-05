@@ -1035,6 +1035,18 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         applyAccumulators({ gatedSkill, pendingAccumulators });
     }
 
+    // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
+    // such effect the parser emits; the ability config carries no name) in the round's
+    // debuff list with their countdown. Appended AFTER the gate contexts are built and
+    // after Step 3b, so they never feed enemy-debuff counts or any fold — the accumulator
+    // mechanics are entirely separate (pendingAccumulators on the enemy actor).
+    // Placement safety: all three buildRoundContext calls (preDebuffGateCtx, postDebuffGateCtx,
+    // modifierCtx) consumed landedEnemyDebuffs.length BEFORE this point; no subsequent fold
+    // reads the list after the return, so appending here is purely additive display data.
+    for (const acc of pendingAccumulators) {
+        landedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: acc.roundsRemaining });
+    }
+
     // Round-scoped context the enemy's DoT-processing turn needs. With a faster enemy
     // the enemy reads the PREVIOUS round's context; at default speeds the attacker
     // always precedes the enemy. The caller stores this as lastAttackerCtx.

@@ -1436,7 +1436,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1459,7 +1464,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1482,7 +1496,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1505,7 +1528,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1528,7 +1556,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1551,7 +1584,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1574,7 +1616,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1597,7 +1648,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1620,7 +1676,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1643,7 +1704,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1666,7 +1736,16 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 2,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
@@ -1689,7 +1768,12 @@ exports[`dpsGoldenParity > accumulate-detonate 1`] = `
       "activeBombCount": 0,
       "activeCorrosionStacks": 0,
       "activeDoTStates": [],
-      "activeEnemyDebuffs": [],
+      "activeEnemyDebuffs": [
+        {
+          "buffName": "Echoing Burst",
+          "turnsRemaining": 1,
+        },
+      ],
       "activeInfernoStacks": 0,
       "activeSelfBuffs": [],
       "appliedDoTs": [],
