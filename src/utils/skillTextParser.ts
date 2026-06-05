@@ -1049,6 +1049,26 @@ const SINGLE_ALLY_RE = /\bthe ally\b|\ban ally\b|\ban adjacent ally\b/i;
 // Ally-scoped (team-wide) grant phrasings: "all allies", bare plural "allies", "friendly …".
 const ALL_ALLIES_RE = /friendly|all allies|allies/i;
 
+// Strips trigger/condition sub-clauses from a resolved (single-sentence) grant clause so an
+// ally reference INSIDE a condition ("after an ally is critically repaired", "when an ally is
+// directly damaged, …") isn't mistaken for the buff's receiver. Two comma/clause-boundary
+// anchored forms, lookbehind-free (iOS Safari 15):
+//  - leading:  "When/After/While/If … , <receiver clause>"  → drop up to the first comma
+//  - trailing: "<receiver clause> when/after/while/if …"    → drop from the keyword onward
+// The receiver phrasing ("this Unit grants the ally X" / "X allies gain Y") survives, so a
+// genuine post-condition ally receiver (Provider: "…, this Unit grants the ally RoT III") is
+// still classified ally. The clause is the same one `resolveBuffClause` already split on
+// abbreviation-masked sentence boundaries, so "Inc."/"Out." periods never reach here as
+// boundaries; condition keywords are matched on word boundaries only.
+function stripConditionClauses(clause: string): string {
+    let out = clause;
+    // Leading "When/After/While/If … ," — only when it precedes the rest via a comma.
+    out = out.replace(/^\s*(?:when|after|while|if)\b[^,]*,\s*/i, '');
+    // Trailing " when/after/while/if …" condition (to end of clause).
+    out = out.replace(/\s+\b(?:when|after|while|if)\b.*$/i, '');
+    return out;
+}
+
 /**
  * Resolves the player-side ally-scope of a granted buff from its GRANTING CLAUSE, using the
  * same masking-aware clause resolver (`resolveBuffClause`) as condition detection so "Inc."/
@@ -1061,7 +1081,10 @@ const ALL_ALLIES_RE = /friendly|all allies|allies/i;
  * attacker's side); the distinction only matters when the engine walks a team ship's grants.
  */
 function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' | 'all-allies' {
-    const clause = resolveBuffClause(skillText, buffName).toLowerCase();
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
+    // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
+    const clause = stripConditionClauses(resolved);
     if (SINGLE_ALLY_RE.test(clause)) return 'ally';
     if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
     return 'self';

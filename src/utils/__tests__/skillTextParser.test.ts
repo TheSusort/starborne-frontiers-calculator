@@ -255,6 +255,64 @@ describe('parseSkillEffects', () => {
         ).toEqual([{ buffName: 'Attack Up III', target: 'ally', duration: 2, source: 'active' }]);
     });
 
+    it('classifies "grants them 1 stack" as ally (Howler — receiver from context)', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit <unit-aid>cleanses 1</unit-aid> debuff from an ally and grants them 1 stack of <unit-skill>Blast</unit-skill> when that ally crits an enemy',
+                'passive1'
+            )
+        ).toEqual([
+            {
+                buffName: 'Blast',
+                target: 'ally',
+                duration: 'recurring',
+                source: 'passive1',
+                stacks: 1,
+                stackTrigger: 'per-round',
+            },
+        ]);
+    });
+
+    it('classifies a trailing-condition self grant as self (Pallas — "an ally" is the trigger)', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns after an ally is critically repaired',
+                'passive1'
+            )
+        ).toEqual([{ buffName: 'Attack Up II', target: 'self', duration: 2, source: 'passive1' }]);
+    });
+
+    it('classifies a leading-condition self grant as self (Refine — "an ally" is the trigger)', () => {
+        expect(
+            parseSkillEffects(
+                'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn',
+                'passive1'
+            )
+        ).toEqual([
+            { buffName: 'Inc. Damage Down I', target: 'self', duration: 1, source: 'passive1' },
+        ]);
+    });
+
+    it('classifies a trailing-when self grant as self (AEGIS — "an ally" is the trigger)', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn when an ally within the Active pattern has their shield destroyed',
+                'passive1'
+            )
+        ).toEqual([{ buffName: 'Defense Up II', target: 'self', duration: 1, source: 'passive1' }]);
+    });
+
+    it('classifies a post-condition ally receiver as ally (condition strip preserves real receiver)', () => {
+        expect(
+            parseSkillEffects(
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns',
+                'passive1'
+            )
+        ).toEqual([
+            { buffName: 'Repair Over Time III', target: 'ally', duration: 2, source: 'passive1' },
+        ]);
+    });
+
     it('keeps enemy-targeted debuffs enemy', () => {
         expect(
             parseSkillEffects(
