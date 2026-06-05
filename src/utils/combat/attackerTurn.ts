@@ -502,7 +502,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // the enemy turn. Math is byte-identical; only the DoT block relocated.
     // ====================================================================
 
-    // --- preTurn: action selection + charge consumption (old lines 263-273) ---
+    // --- preTurn: action selection + charge consumption ---
     let action: 'active' | 'charged';
     if (hasChargedSkill && attacker.charges >= chargeCount) {
         action = 'charged';

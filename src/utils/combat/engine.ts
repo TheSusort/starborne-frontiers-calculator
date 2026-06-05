@@ -369,7 +369,7 @@ export function runCombat(input: CombatEngineInput): {
     let totalDetonationRaw = 0;
     let totalSecondaryRaw = 0;
     let totalConditionalRaw = 0;
-    // DoT containers live on the enemy actor (were loop-locals in runSinglePass).
+    // DoT containers live on the enemy actor (were loop-locals in the old single-pass loop).
     const corrosionEntries = enemy.corrosionEntries;
     const infernoEntries = enemy.infernoEntries;
     const pendingBombs = enemy.pendingBombs;
