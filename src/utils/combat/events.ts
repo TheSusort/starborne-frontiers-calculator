@@ -18,8 +18,9 @@ import { DoTType } from '../../types/calculator';
  *    debuff is active, nor for recurring/aura debuffs' per-round re-applications.
  *    `sourceId` identifies the actor that inflicted it.
  *  - `dot-applied`: carries `sourceId` identifying the inflicting actor.
- *  - `bomb-detonated`: emitted per bomb burst in `processBombs` (enemy turn) and in
- *    `detonate()`'s bomb branch (attacker turn). `actorId` is the attacker ('attacker').
+ *  - `bomb-detonated`: asymmetric paths — `processBombs` (enemy turn) emits one event
+ *    per pending bomb that detonates; `detonate()` bomb branch (attacker turn) emits one
+ *    aggregate event for all consumed bombs. `actorId` is 'attacker' in both paths.
  */
 export type CombatEvent =
     | { type: 'round-started'; round: number }
@@ -81,8 +82,14 @@ export type CombatEvent =
           damage: number;
       }
     | { type: 'dot-detonated'; targetId: string; round: number; damage: number }
-    /** Emitted per bomb burst (enemy-turn `processBombs` OR attacker-turn `detonate()`
-     *  bomb branch). `actorId` is the attacker. */
+    /** Emitted on each bomb burst, but the two paths are asymmetric:
+     *  - Enemy-turn `processBombs`: ONE event PER pending bomb entry that reaches
+     *    countdown 0. `damage` = stacks × damagePerStack × affinityMult (no skill pct).
+     *  - Attacker-turn `detonate()` bomb branch: ONE AGGREGATE event summing all
+     *    consumed bomb entries. `damage` = (Σ stacks × damagePerStack) × affinityMult × pct,
+     *    where pct is the detonation skill's power multiplier.
+     *  In both cases `damage` is the realized payout under that path's scaling, not a
+     *  normalized value. `actorId` is 'attacker' in both paths. */
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     | { type: 'ship-destroyed'; actorId: string; round: number };

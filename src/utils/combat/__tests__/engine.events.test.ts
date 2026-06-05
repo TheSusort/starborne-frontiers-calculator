@@ -499,7 +499,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         expect(e.sourceId).toBe('attacker');
     });
 
-    // Case 2: recurring/aura enemy debuff emits NO debuff-applied;
+    // Case 2a: recurring/aura enemy debuff emits NO debuff-applied on miss;
     // debuff-resisted still fires per round when it fails the landing roll.
     it('recurring enemy debuff emits no debuff-applied; debuff-resisted still fires per round on miss', () => {
         const recurringDebuff: SelectedGameBuff = {
@@ -538,6 +538,55 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         // debuff-resisted fires every round (affinity disadvantage → always resisted).
         const resisted = events.filter((e) => e.type === 'debuff-resisted');
         expect(resisted.length).toBeGreaterThan(0);
+    });
+
+    // Case 2b: recurring/aura enemy debuff that LANDS every round still emits zero
+    // debuff-applied events — the landed-recurring path is not a discrete infliction.
+    // This exercises the retimed path: before Phase 3 the old code emitted debuff-applied
+    // per landed round; after retiming it must be silent even when the debuff lands.
+    it('recurring enemy debuff that lands every round emits ZERO debuff-applied events', () => {
+        const recurringDebuff: SelectedGameBuff = {
+            id: 'd2b',
+            buffName: 'Armor Break',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -15 },
+            application: 'apply',
+            // No skillSource → always-active / recurring per statusEngine.
+        };
+        const numRounds = 4;
+        const { events, result } = collect(
+            baseInput({
+                // No affinity disadvantage → 'apply' debuffs land every round.
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                enemyDebuffs: [recurringDebuff],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                            ],
+                        },
+                    ],
+                },
+                hasChargedSkill: false,
+                chargeCount: 0,
+                numRounds,
+            })
+        );
+
+        // Zero debuff-applied events — landed recurring is not a discrete infliction.
+        expect(events.filter((e) => e.type === 'debuff-applied')).toHaveLength(0);
+        // Zero debuff-resisted — it lands every round.
+        expect(events.filter((e) => e.type === 'debuff-resisted')).toHaveLength(0);
+        // Proof it landed: the debuff appears in activeEnemyDebuffs in every round.
+        for (let r = 1; r <= numRounds; r++) {
+            const round = result.rounds.find((rd) => rd.round === r)!;
+            expect(round.activeEnemyDebuffs.some((b) => b.buffName === 'Armor Break')).toBe(true);
+        }
     });
 
     // Case 3: dot-applied carries sourceId 'attacker'.
@@ -639,8 +688,8 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
     });
 
     // Case 6: a team actor's landed timed debuff emits debuff-applied with sourceId = team
-    // actor id, on its application round only.
-    it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId, once", () => {
+    // actor id, on every application round (not just the first).
+    it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId on every application round", () => {
         const teamDebuff: SelectedGameBuff = {
             id: 'td1',
             buffName: 'Team Def Down',
@@ -660,9 +709,12 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 },
             ],
         });
-        // Team actor 't1' fires active every round (chargeCount 0). The debuff is applied on
-        // round 1 (first active fire). It stays active for 3 rounds; debuff-applied must only
-        // fire on the application round (round 1), not rounds 2-3.
+        // Team actor 't1' fires active every round (chargeCount 0), speed 80 (acts between
+        // attacker at 100 and enemy at 50). The enemy's post-turn decrement fires after the
+        // team actor each round, so the remaining window after decrement is always 2.
+        // With skillDuration 3 and remaining 2, the family rule (3 > 2) always wins →
+        // the debuff re-inflicts every round and debuff-applied fires each time.
+        // 5 rounds × 1 active fire per round = 5 debuff-applied events total.
         const { events } = collect(
             baseInput({
                 shipSkills: plainSkills(),
@@ -686,12 +738,8 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         const applied = events.filter(
             (e) => e.type === 'debuff-applied' && e.buffName === 'Team Def Down'
         );
-        // Applied 3-round debuff: emitted once on first infliction (round 1), then refreshed
-        // each active round (round 2, 3, ...). Each active round the team actor fires and the
-        // family-rule check determines if it re-applies. With a 3-round window and firing
-        // every round: after decrement to 2 remaining, new 3 > 2 → refreshes; so it's
-        // emitted on each active round. But crucially: sourceId must always be 't1'.
-        expect(applied.length).toBeGreaterThan(0);
+        // 5 rounds × 1 active fire per round → 5 debuff-applied events.
+        expect(applied).toHaveLength(5);
         for (const e of applied) {
             if (e.type !== 'debuff-applied') throw new Error('unreachable');
             expect(e.sourceId).toBe('t1');
