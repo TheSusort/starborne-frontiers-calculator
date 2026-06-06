@@ -101,9 +101,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    sourceId !== enemyId` (any OTHER player's infliction is an ally-infliction from this
  *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
  *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER player actor (ally crit-cast DoT)
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
- *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER player actor (ally crit-cast DoT)
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are

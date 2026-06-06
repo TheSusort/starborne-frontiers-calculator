@@ -212,5 +212,10 @@ describe('allyCritDot – Task 2: on-ally-crit-dot reactive listener', () => {
         // Scenario D: another player (team-1) WITHOUT viaCrit → no crit, skip → 0 additional.
         handBus.emit({ type: 'dot-applied', sourceId: 'team-1', ...baseEvent });
         expect(enqueued).toHaveLength(1);
+
+        // Scenario E: explicit viaCrit: false (the emission never sets this — it omits the
+        // field — but the falsy guard must treat both shapes identically) → 0 additional.
+        handBus.emit({ type: 'dot-applied', sourceId: 'team-1', viaCrit: false, ...baseEvent });
+        expect(enqueued).toHaveLength(1);
     });
 });
