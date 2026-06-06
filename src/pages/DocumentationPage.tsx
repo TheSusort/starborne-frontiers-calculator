@@ -2317,7 +2317,7 @@ const DocumentationPage: React.FC = () => {
                                         destroyed, etc.) are treated as assume-active, preserving
                                         the existing manual-condition behavior.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the
@@ -2343,6 +2343,21 @@ const DocumentationPage: React.FC = () => {
                                         team damage); because the enemy dies on that combined total,
                                         the kill mark sits on the dashed line at the round it
                                         empties the HP pool.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">
+                                            Multi-Hit Crits and Extra Actions:
+                                        </span>{' '}
+                                        Multi-hit skills (e.g. &quot;attacks three times&quot;)
+                                        crit-check each hit individually — on-crit follow-up effects
+                                        (such as crit-triggered debuffs) fire once per critting hit.
+                                        Ships with &quot;extra action&quot; passives (Nuqtu,
+                                        Sustainer, Liberator, Tygr, Tormenter) take a full
+                                        additional turn each round, re-entering the turn queue at
+                                        their Speed position. When an extra turn occurs, the round
+                                        tooltip shows a{' '}
+                                        <span className="font-semibold">+N extra turn</span> line
+                                        beneath the charge counter.
                                     </p>
                                 </div>
 
