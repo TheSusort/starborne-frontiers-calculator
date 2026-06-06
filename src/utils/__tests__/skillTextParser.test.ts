@@ -1051,6 +1051,57 @@ describe('parseAccumulateDetonate', () => {
     });
 });
 
+describe('parser false-positive guards', () => {
+    it('heal "additional X% of Max HP" is not secondary damage (Morao p2)', () => {
+        expect(
+            parseSecondaryDamage(
+                'This Unit <unit-damage>repairs 5%</unit-damage> of its Max HP every turn and, upon <unit-aid>Cleansing a</unit-aid> Debuff, repairs an additional <unit-damage>5%</unit-damage> of its Max HP while gaining <unit-skill>Defense Up II</unit-skill> for 2 turns.'
+            )
+        ).toBeNull();
+    });
+
+    it('on-resist proc is not secondary damage (Vindicator p2)', () => {
+        expect(
+            parseSecondaryDamage(
+                "This Unit has 20% Shield Penetration. At the start of combat, this Unit gains <unit-skill>Magnetized Shielding</unit-skill>.<br /><br />When this Unit resists a debuff infliction from an enemy, it deals <unit-damage>damage equal to 30%</unit-damage> of this Unit's max HP to that enemy."
+            )
+        ).toBeNull();
+    });
+
+    it('on-death proc is not secondary damage (Paracelsus p1)', () => {
+        expect(
+            parseSecondaryDamage(
+                'Upon being killed by direct Damage, this Unit deals <unit-damage>Damage equal to 50%</unit-damage> of its max HP.'
+            )
+        ).toBeNull();
+    });
+
+    it('burst-explosion reference is not an accumulate-detonate application (Valkyrie p1)', () => {
+        expect(
+            parseAccumulateDetonate(
+                'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+            )
+        ).toBeNull();
+    });
+
+    // Regression locks:
+    it('regression: defense secondary still parses (Chakara active)', () => {
+        expect(
+            parseSecondaryDamage(
+                'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.'
+            )
+        ).toEqual({ stat: 'defense', pct: 80 });
+    });
+
+    it('regression: Echoing Burst infliction still parses (Valkyrie charged)', () => {
+        expect(
+            parseAccumulateDetonate(
+                "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>, deals <unit-damage>240% damage</unit-damage>, and inflicts <unit-skill>Inc. Damage Up II</unit-skill> and <unit-skill>Echoing Burst</unit-skill> for 2 turns."
+            )
+        ).toEqual({ turns: 2, pct: 100 });
+    });
+});
+
 describe('parseNoCrit', () => {
     it('detects "deals N% damage that cannot critically hit"', () => {
         expect(
