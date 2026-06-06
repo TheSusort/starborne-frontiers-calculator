@@ -121,10 +121,10 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                             </p>
                         )}
                         {roundData?.extraTurns ? (
-                            <div className="text-xs text-theme-text-secondary pl-2">
+                            <p className="text-xs text-theme-text-secondary pl-2">
                                 +{roundData.extraTurns} extra turn
                                 {roundData.extraTurns > 1 ? 's' : ''}
-                            </div>
+                            </p>
                         ) : null}
                         {roundData && (
                             <p className="text-xs text-theme-text-secondary pl-2">

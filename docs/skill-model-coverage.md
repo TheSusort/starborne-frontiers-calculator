@@ -193,14 +193,13 @@ buff/charge-aura), source it from firing + passive.
   - `start-of-round` → `round-started` (emitted at the round boundary, before any turn). Self-buffs
     with "at the start of the round" phrasing (Valkyrie and ~12 other occurrences) emit their
     timed windows here; real duration windows instead of the prior passive-aura approximation.
-  - `on-crit` → `ability-performed` with `didCrit && actorId === attacker`. Fires **once per crit
-    turn**, not per hit — multi-hit skills aggregate; the engine's `roundCrit` is decided once per
-    attacker action stream. Covers crit-inflicted debuffs (Enforcer's Defense Shred) and
-    crit-triggered self-buffs (Wusheng stealth). **Known divergence (user-accepted 2026-06-05):**
-    in-game each hit of a multi-hit skill crit-checks individually, so a 3-hit attacker at 50%
-    crit averages ~1.5 on-crit events per turn in-game vs ~0.5 here — the trigger FREQUENCY
-    undercounts for multi-hit ships (damage itself averages out via the deterministic schedule).
-    See backlog item 7.
+  - `on-crit` → `ability-performed` where `actorId === owner`; enqueues once per CRITTING HIT
+    (the event's `critHits` field; falls back to the `didCrit` binary for events without it).
+    Covers crit-inflicted debuffs (Enforcer's Defense Shred) and crit-triggered self-buffs
+    (Wusheng stealth). **Shipped 2026-06-06:** per-hit crit draws — each hit of a multi-hit
+    skill crit-checks individually against the deterministic gate, so a 3-hit attacker at 50%
+    crit produces the in-game ~1.5 on-crit events per turn (the former once-per-turn
+    divergence is closed; see the extra-actions §5 entry).
   - `on-debuff-inflicted` → `debuff-applied` / `dot-applied` with `sourceId === attacker`. Each
     discrete infliction event: a landed timed debuff application or a landed DoT config entry
     applied by the attacker that turn. A cast landing 2 debuffs = 2 events. Family-blocked-but-
@@ -338,8 +337,6 @@ buff/charge-aura), source it from firing + passive.
     (see §6).
   - *Speed-buff turn reordering*: received Speed Up buffs do not reorder turns mid-round;
     the queue uses static input speeds (Phase 4 / turn-meter manipulation).
-  - *Per-hit crit divergence*: now also applies to team multi-hit ships (see backlog item
-    7 below).
 - **Extra actions (2026-06-06, branch `feat/combat-engine-extra-actions-per-hit-crit`).**
   Ships whose passive or charged text grants an extra action (Nuqtu, Sustainer, Tormenter,
   Liberator, Tygr) gain a full additional turn, re-inserted into the round's turn queue at
