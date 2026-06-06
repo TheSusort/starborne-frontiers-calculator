@@ -390,8 +390,9 @@ configure it and it looks like it works, but it does nothing".
 > - Team ships walk their parsed `ShipSkills` as full combat actors (see §5 "Team ShipSkills walk"
 >   block above).
 > - Parser ally-scope: `SkillEffect.target` granular for buff abilities; verb-aware receiver
->   detection (receiver-less "grants" → all-allies); condition-clause non-leak rule;
->   81 all-allies + 1 single-ally Howler identified.
+>   detection (receiver-less "grants" → all-allies); condition-clause non-leak rule.
+>   The `audit:skills` ally-scope pass parses each slot text in isolation (per-slot, not the
+>   refit-state combined build) so passive grants surface too: 85 all-allies + 2 single-ally.
 > - Per-actor status maps, condition contexts, gate instances, and DoT applier contexts.
 > - teamDamage attribution: per-actor damage map; `RoundData.teamDamage` + `summary.teamTotalDamage`;
 >   focus-actor summary fields unaffected.
@@ -442,6 +443,17 @@ configure it and it looks like it works, but it does nothing".
    actors faster than the attacker. Resolution: generalize aura inclusion per actor (medium
    cost; low user-visible impact today given few ships with `stackTrigger` + ally-scope).
    Documented in §5 known approximations; introduced 2026-06-05 (team walk).
+9. **Drain-time enemy-debuff counts exclude ability-sourced statuses** — `enemy-debuff gte N`
+   threshold gates (Asphyxiator etc.) read `landedEnemyDebuffCount` from
+   `snapshot().activeEnemyDebuffs` in `buildActorConditionContext` (`triggers.ts`), which omits
+   payload-carrying ABILITY-sourced enemy debuffs. So at drain time and for foreign-caster auras
+   the tally undercounts — ability-applied statuses don't increment the gate. Pre-dates the team
+   walk (`buildDrainContext` used this same snapshot count before the team-walk PR) and is
+   golden-locked: every hand-built drain fixture is anchored to this approximation. Resolution
+   would mirror the self-side `includeAbilitySelfNames` switch with an `includeAbilityEnemyNames`
+   analogue, but enabling it churns all locked drain goldens (medium cost; low user-visible impact
+   given how few ships gate on enemy-debuff counts via ability-sourced statuses).
+   Flagged by CodeRabbit on the team-walk PR; accepted as pre-existing Phase-3 drain semantics.
 
 ---
 

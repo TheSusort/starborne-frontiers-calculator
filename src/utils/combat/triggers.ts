@@ -224,6 +224,16 @@ export interface IntentExecContext {
  * caster-ctx resolver sets it so a FOREIGN caster's ability self-buffs (e.g. a team ship's
  * self-granted gate buff) are visible to its own aura's gate. The drain path leaves it false
  * (the executor is attacker-only and the drain gate's snapshot-only behaviour is golden-locked).
+ *
+ * KNOWN UNDERCOUNT (golden-locked, do not "fix" casually): `landedEnemyDebuffCount` comes from
+ * `snapshot().activeEnemyDebuffs`, which — symmetrically with the self-buff side above — EXCLUDES
+ * payload-carrying ABILITY-sourced enemy debuffs. So an `enemy-debuff gte N` threshold gate
+ * (Asphyxiator etc.) undercounts at drain time and for foreign-caster auras: ability-applied
+ * statuses don't increment the tally. This is intentional drain-time approximation that PRE-DATES
+ * the team walk — buildDrainContext used this same snapshot count before the team-walk PR, and the
+ * golden drain fixtures are hand-built around it. There is no `includeAbilityEnemyNames` analogue
+ * to the self-side switch because turning it on would change drain gating and churn every locked
+ * golden. Tracked as a backlog item in docs/skill-model-coverage.md §6.
  */
 export function buildActorConditionContext(
     statusEngine: StatusEngine,

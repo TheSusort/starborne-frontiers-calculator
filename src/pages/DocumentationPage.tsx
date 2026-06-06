@@ -2322,10 +2322,11 @@ const DocumentationPage: React.FC = () => {
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the
                                         attacker opens on each team card, with combat stats (attack,
-                                        crit rate, crit damage, defense penetration, hacking) and an
-                                        affinity selector auto-filled from the ship&apos;s data and
-                                        fully editable. Team ships deal real damage shown separately
-                                        as <span className="text-primary">Team damage</span> — it
+                                        crit rate, crit damage, defense penetration, hacking,
+                                        defense, HP) and an affinity selector auto-filled from the
+                                        ship&apos;s data and fully editable. Team ships deal real
+                                        damage shown separately as{' '}
+                                        <span className="text-primary">Team damage</span> — it
                                         reduces the enemy&apos;s HP (so HP-threshold gates fire at
                                         the right round) without being added to the attacker&apos;s
                                         DPS totals, keeping the comparison between attacker

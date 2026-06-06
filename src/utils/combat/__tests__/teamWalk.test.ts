@@ -452,6 +452,49 @@ describe('walked team actors (Task 4)', () => {
         expect(JSON.stringify(mk())).toBe(JSON.stringify(mk()));
     });
 
+    // 9b. A walked team ship's OWN manual enemy-debuff extra benefits the TEAM's own damage.
+    //     The team actor's damage fold expands the SHARED enemy-side scheduled debuffs (the
+    //     team's own manual enemyDebuffs list included) through the engine's enemyDebuffLookup.
+    //     A walked team runtime must carry the GLOBAL lookup, not an empty map — an empty map
+    //     silently zeroes the manual debuff's stat effects on the team's OWN turn.
+    it('a walked team ship benefits from its own manual enemy-debuff extra (global enemyDebuffLookup)', () => {
+        const manualDefenseDown: SelectedGameBuff = {
+            id: 'mdd',
+            buffName: 'Defense Down',
+            stacks: 1,
+            isStackable: false,
+            parsedEffects: { defense: -30 },
+            skillSource: 'active',
+            skillDuration: 5,
+        };
+        // Enemy has defense so a Defense Down measurably raises the team's direct damage.
+        const teamWithDebuff = walkedTeam(damageSkills(100), {
+            id: 'tdd',
+            selfBuffs: [],
+            enemyDebuffs: [manualDefenseDown],
+            stats: teamStats({ attack: 15000 }),
+        });
+        const teamNoDebuff = walkedTeam(damageSkills(100), {
+            id: 'tdd',
+            selfBuffs: [],
+            enemyDebuffs: [],
+            stats: teamStats({ attack: 15000 }),
+        });
+        const withDebuff = simulateDPS(
+            baseInput({ enemyDefense: 30000, teamActors: [teamWithDebuff], rounds: 4 })
+        );
+        const without = simulateDPS(
+            baseInput({ enemyDefense: 30000, teamActors: [teamNoDebuff], rounds: 4 })
+        );
+        // The team's own damage fold sees the manual Defense Down → higher teamDamage every round.
+        expect(withDebuff.summary.teamTotalDamage ?? 0).toBeGreaterThan(
+            without.summary.teamTotalDamage ?? 0
+        );
+        expect(withDebuff.rounds[0].teamDamage ?? 0).toBeGreaterThan(
+            without.rounds[0].teamDamage ?? 0
+        );
+    });
+
     // 10. Legacy parity: a team actor WITHOUT shipSkills → teamDamage undefined.
     it('a legacy team actor (no shipSkills) reports teamDamage undefined every round', () => {
         const legacyBuff: SelectedGameBuff = {

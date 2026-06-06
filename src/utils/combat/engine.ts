@@ -656,11 +656,18 @@ export function runCombat(input: CombatEngineInput): {
             debuffLandingGate: teamDebuffLandingGate,
             extendChanceGate: teamExtendChanceGate,
             landsTimedEnemyApplication: teamLandsTimedEnemyApplication,
-            // Empty lookups: a walked actor's statuses carry their effects in payloads
-            // (timedAbilityStatuses / activeAbilityStatuses fold them) — there are no
-            // scheduled SelectedGameBuff names to expand for this actor's snapshot.
+            // Lookup asymmetry by design:
+            //  - selfBuffLookup empty: scheduled SELF lists are attacker-granted (the attacker
+            //    runtime owns them). A walked actor's self snapshot carries only payload entries
+            //    (timedAbilityStatuses / activeAbilityStatuses fold those directly) — there are no
+            //    scheduled SelectedGameBuff self-names to expand for this actor.
+            //  - enemyDebuffLookup = the engine's GLOBAL map (global enemy picker + every team's
+            //    manual enemyDebuffs): the enemy-side scheduled debuffs are SHARED across all
+            //    player turns, so the team actor's own damage fold must expand them too. An empty
+            //    map here silently zeroes those stat effects on the team's own turn (the attacker
+            //    runtime holds the same global map, so attacker turns were already correct).
             selfBuffLookup: new Map(),
-            enemyDebuffLookup: new Map(),
+            enemyDebuffLookup,
         };
         teamRuntimeById.set(t.id, runtime);
     });

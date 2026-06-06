@@ -282,22 +282,20 @@ export function collectAllyScopes(): AllyScopeEntry[] {
     const ships = readShips();
     const entries: AllyScopeEntry[] = [];
     for (const ship of ships) {
-        const shipInput = {
-            refits: [],
-            activeSkillText: ship.slots.find((s) => s.slot === 'active')?.text,
-            chargeSkillText: ship.slots.find((s) => s.slot === 'charged')?.text,
-            firstPassiveSkillText: ship.slots.find((s) => s.slot === 'passive1')?.text,
-            secondPassiveSkillText: ship.slots.find((s) => s.slot === 'passive2')?.text,
-            thirdPassiveSkillText: ship.slots.find((s) => s.slot === 'passive3')?.text,
-        } as unknown as Ship;
-        const { slots } = buildShipAbilities(shipInput);
-        for (const s of slots) {
-            for (const a of s.abilities) {
+        // Parse each slot's text in ISOLATION (the `abilitiesFor` pattern — treats the text as the
+        // active slot) rather than building one Ship with refits:[] and a single buildShipAbilities
+        // call. Passive extraction is refit-state-driven, so the combined build skips passive
+        // columns whose refit isn't the active one — missing the ally grants those passives carry.
+        // The combat team-walk resolves the in-game active passive via getShipSkillRows(); for the
+        // audit we want the full picture of every slot's text, so each is parsed standalone and
+        // labeled with its CSV slot name.
+        for (const { slot, text } of ship.slots) {
+            for (const a of abilitiesFor(text)) {
                 if (a.config.type !== 'buff') continue;
                 if (a.target === 'ally' || a.target === 'all-allies') {
                     entries.push({
                         ship: ship.name,
-                        slot: s.slot,
+                        slot,
                         buffName: a.config.buffName,
                         target: a.target,
                     });
