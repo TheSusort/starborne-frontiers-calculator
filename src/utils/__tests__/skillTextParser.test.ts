@@ -1709,4 +1709,11 @@ describe('parseExtraAction', () => {
         expect(parseExtraAction('This Unit deals 150% damage.')).toBeNull();
         expect(parseExtraAction(null)).toBeNull();
     });
+
+    it('abbrev periods in the same sentence do not break clause scoping', () => {
+        const r = parseExtraAction(
+            'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
+        );
+        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+    });
 });

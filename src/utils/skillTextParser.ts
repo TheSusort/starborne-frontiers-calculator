@@ -504,9 +504,13 @@ function splitSentences(text: string): string[] {
     return out;
 }
 
+// Non-whitespace sentinel that replaces the space after an "Inc."/"Out." abbreviation period so
+// splitSentences does not treat it as a sentence boundary. Restored to a plain space after
+// splitting. Shared by resolveBuffClause and parseExtraAction.
+const ABBR_MARK = '\u0001';
+const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
+
 function resolveBuffClause(skillText: string, buffName: string): string {
-    const ABBR_MARK = '\u0001';
-    const maskAbbrev = (s: string) => s.replace(/\b(Inc|Out)\.\s/g, `$1.${ABBR_MARK}`);
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
     const sentences = splitSentences(plain);
@@ -899,12 +903,12 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
 // modeled). The user can still add the ability manually in the editor. Reference:
 // docs/ship-skills.csv (Sokol, Harvester, Tithonus).
 const EXTRA_ACTION_DISQUALIFY_RE =
-    /upon a kill|when an enemy dies|killing an enemy|allied unit is destroyed|ally is destroyed|purg/i;
+    /upon a kill|when an enemy dies|killing an enemy|allied unit is destroyed|ally is destroyed|\bpurg/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
 const EXTRA_ACTION_RE =
-    /\b(?:gains?|grants?|give)\s+(?:itself\s+)?(?:one|1|an?)\s+extra\s+(?:end\s+of\s+round\s+)?action\b/i;
+    /\b(?:gains?|grants?|gives?)\s+(?:itself\s+)?(?:one|1|an?)\s+extra\s+(?:end\s+of\s+round\s+)?action\b/i;
 
 // Tormenter: "If its HP is below 50%" — the unit's OWN HP (selfHpPct is fixed 100
 // under DPS assumptions, so this correctly never fires until defense modeling lands).
@@ -926,11 +930,15 @@ export interface ExtraActionParse {
  */
 export function parseExtraAction(text: string | null | undefined): ExtraActionParse | null {
     if (!text) return null;
-    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
-    if (!EXTRA_ACTION_RE.test(plain)) return null;
+    const rawPlain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    if (!EXTRA_ACTION_RE.test(rawPlain)) return null;
+    const plain = maskAbbrev(rawPlain);
     const sentence = splitSentences(plain).find((s) => EXTRA_ACTION_RE.test(s)) ?? plain;
     const parts = sentence.split(/,\s+and\s+/i);
-    const clause = parts.find((p) => EXTRA_ACTION_RE.test(p)) ?? sentence;
+    // Assumes at most one subclause matches the grant pattern (true for all current texts);
+    // if two matched, find() would take the first and oncePerRound could mis-scope.
+    const clauseMasked = parts.find((p) => EXTRA_ACTION_RE.test(p)) ?? sentence;
+    const clause = clauseMasked.split(ABBR_MARK).join(' ');
     if (EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
 
     const conditions: Condition[] = [];
