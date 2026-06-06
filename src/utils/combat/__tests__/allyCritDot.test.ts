@@ -219,3 +219,181 @@ describe('allyCritDot – Task 2: on-ally-crit-dot reactive listener', () => {
         expect(enqueued).toHaveLength(1);
     });
 });
+
+// ── Task 5: integration tests (engine-level) ──────────────────────────────────────────────────────
+//
+// Fixture: focus actor (attacker) with an `on-ally-crit-dot` passive reactive corrosion +
+// a plain damage active; ONE walked team actor whose active applies damage + corrosion and
+// whose crit is 100 (every cast crits → viaCrit: true on every team-applied dot-applied event).
+// Speed order: team (130) → attacker (100) → enemy (50). Both actors' debuffLandingChance = 1.0
+// (hacking 100, enemySecurity 0) so every DoT always lands. Corrosion tick formula:
+//   stacks × (tier/100) × min(enemyHp, 500_000) × dotMult × affinityMult
+// With tier=5, stacks=1, enemyHp=10_000_000 (stays ≫ 500_000), neutral affinity:
+//   1 × 0.05 × 500_000 × 1.0 × 1.0 = 25_000 per entry per tick.
+
+const TASK5_BASE: DPSSimulationInput = {
+    attack: 10000,
+    crit: 0, // focus actor does NOT crit — keeps its own dots out of viaCrit events
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    enemyDefense: 0,
+    enemyHp: 10_000_000,
+    rounds: 3,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    hacking: 100,
+    enemySecurity: 0,
+    defence: 0,
+    hp: 30000,
+    speed: 100,
+    enemySpeed: 50,
+};
+
+/** Focus shipSkills: plain damage active + on-ally-crit-dot reactive corrosion passive. */
+const focusSkillsT5 = (): ShipSkills => {
+    idCounter = 0;
+    return {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } })],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'dot',
+                        target: 'enemy',
+                        trigger: 'on-ally-crit-dot',
+                        config: {
+                            type: 'dot',
+                            dotType: 'corrosion',
+                            tier: 5,
+                            stacks: 1,
+                            duration: 2,
+                        },
+                    }),
+                ],
+            },
+        ],
+    };
+};
+
+/** Team actor entry whose active crit-cast applies a corrosion DoT. */
+const teamActorT5 = () => ({
+    id: 'team-1',
+    speed: 130, // acts BEFORE the focus actor (100) and enemy (50)
+    chargeCount: 0,
+    startCharged: false as const,
+    selfBuffs: [] as [],
+    enemyDebuffs: [] as [],
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active' as const,
+                abilities: [
+                    ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                    ab({
+                        type: 'dot',
+                        config: {
+                            type: 'dot',
+                            dotType: 'corrosion',
+                            tier: 5,
+                            stacks: 1,
+                            duration: 2,
+                        },
+                    }),
+                ],
+            },
+        ],
+    } as ShipSkills,
+    stats: {
+        attack: 10000,
+        crit: 100, // always crits → viaCrit: true on every team-applied dot-applied
+        critDamage: 100,
+        defensePenetration: 0,
+        hacking: 100,
+        defence: 0,
+        hp: 0,
+    },
+    // no affinity → neutral (no damage/crit modifier)
+});
+
+describe('allyCritDot – Task 5: engine integration tests', () => {
+    // ── Test 1: team crit=100 → focus corrosionDamage > 0 each round ─────────────────────────
+    it('team crit=100: focus corrosionDamage > 0 on every tick round (reactive corrosion lands and ticks)', () => {
+        idCounter = 0;
+        const result = simulateDPS({
+            ...TASK5_BASE,
+            shipSkills: focusSkillsT5(),
+            teamActors: [teamActorT5()],
+        });
+
+        // The enemy ticks each round (enemy speed 50, acts last).
+        // Focus-applied reactive corrosion (sourceId='attacker') ticks starting round 1.
+        // Each row's corrosionDamage must be > 0 (focus row attribution).
+        for (const row of result.rounds) {
+            expect(row.corrosionDamage).toBeGreaterThan(0);
+        }
+        // teamDamage must also include the team's own corrosion contribution
+        // (the team-applied DoT ticks with sourceId='team-1', credited to teamDamage).
+        for (const row of result.rounds) {
+            expect(row.teamDamage).toBeGreaterThan(0);
+        }
+    });
+
+    // ── Test 2: team crit=0 → no viaCrit → focus corrosionDamage === 0 every round ──────────
+    it('team crit=0: focus corrosionDamage stays 0 every round (reactive dot never fires without viaCrit)', () => {
+        idCounter = 0;
+        const teamNoСrit = {
+            ...teamActorT5(),
+            stats: { ...teamActorT5().stats, crit: 0, critDamage: 0 },
+        };
+        const result = simulateDPS({
+            ...TASK5_BASE,
+            shipSkills: focusSkillsT5(),
+            teamActors: [teamNoСrit],
+        });
+
+        // No viaCrit → reactive listener never fires → no focus-attributed corrosion.
+        for (const row of result.rounds) {
+            expect(row.corrosionDamage).toBe(0);
+        }
+        // The team's own non-crit corrosion still ticks (lands with debuffLandingChance=1.0)
+        // and is credited to teamDamage.
+        for (const row of result.rounds) {
+            expect(row.teamDamage).toBeGreaterThan(0);
+        }
+    });
+
+    // ── Test 3: per-event frequency — one team cast per round → one reactive dot per round ───
+    it('team crit=100, 3 rounds: exactly one focus-sourced dot-applied event per round (reactive fires once per qualifying team cast)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const focusDotApplied: Extract<CombatEvent, { type: 'dot-applied' }>[] = [];
+        bus.on('dot-applied', (e) => {
+            // Only collect executor-applied events attributed to the focus actor ('attacker').
+            // These are emitted by executeIntent and have no viaCrit (executor never sets it).
+            if (e.sourceId === 'attacker' && !('viaCrit' in e)) {
+                focusDotApplied.push(e);
+            }
+        });
+
+        simulateDPS({
+            ...TASK5_BASE,
+            shipSkills: focusSkillsT5(),
+            teamActors: [teamActorT5()],
+            bus,
+        });
+
+        // One qualifying team cast per round (team has no charge cadence, fires active every
+        // round, always crits) → exactly one reactive intent enqueued and executed per round.
+        expect(focusDotApplied).toHaveLength(3);
+        // Each event references the correct dot type.
+        for (const e of focusDotApplied) {
+            expect(e.dotType).toBe('corrosion');
+            expect(e.stacks).toBe(1);
+        }
+    });
+});
