@@ -1031,8 +1031,8 @@ describe('dpsGoldenParity', () => {
         };
     });
 
-    // Scenario 20: per-hit crits — 3-hit active at 50% crit with an on-crit-charged
-    // debuff follow-up. Locks the per-hit draw schedule, the blended crit multiplier,
+    // Scenario 20: per-hit crits — 3-hit active at 50% crit with an on-crit charge
+    // follow-up. Locks the per-hit draw schedule, the blended crit multiplier,
     // and per-critting-hit trigger frequency. Added with the per-hit-crit increment
     // (2026-06-06); hand-verified.
     snap('per-hit crits (multi-hit + on-crit follow-up)', () => ({
