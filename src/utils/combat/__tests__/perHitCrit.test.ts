@@ -147,7 +147,7 @@ describe('perHitCrit', () => {
         }
     });
 
-    // ── Test 6: on-crit triggers fire once PER CRITTING HIT ─────────────────
+    // ── Test 5: on-crit triggers fire once PER CRITTING HIT ─────────────────
     // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
     // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
     //
@@ -163,6 +163,7 @@ describe('perHitCrit', () => {
     //
     // Assertion: firstCharged < 4 → fails pre-fix (4 not < 4), passes post-fix (3 < 4).
     it('on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn)', () => {
+        idCounter = 0;
         const skills: ShipSkills = {
             slots: [
                 {
@@ -194,12 +195,13 @@ describe('perHitCrit', () => {
         expect(firstCharged).toBeDefined();
         // Post-fix: firstCharged=3 (< 4). Pre-fix: firstCharged=4 (not < 4 → FAIL).
         expect(firstCharged!).toBeLessThan(4);
+        expect(firstCharged).toBe(3);
         expect(
             result.rounds.map((rw) => `${rw.round}:${rw.action}:${rw.charges}`)
         ).toMatchSnapshot();
     });
 
-    // ── Test 5: single-hit 50% crit — events with didCrit carry critHits: 1 ─
+    // ── Test 6: single-hit 50% crit — events with didCrit carry critHits: 1 ─
     // Gate (rate=0.5, 1 draw per round):
     //   R1: acc=0.5 (no) → didCrit=false
     //   R2: acc=1.0 → fire, acc=0 → didCrit=true, critHits=1
