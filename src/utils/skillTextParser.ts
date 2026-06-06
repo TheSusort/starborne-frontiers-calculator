@@ -832,10 +832,18 @@ export function parseAccumulateDetonate(
         const idx = plain.indexOf(name);
         if (idx === -1) continue;
         // Reference guard: "When an Echoing Burst explodes …" describes an EXISTING
-        // burst detonating (a heal-on-burst reaction), not a fresh infliction.
-        const before = plain.slice(Math.max(0, plain.lastIndexOf('. ', idx) + 1), idx);
-        const after = plain.slice(idx + name.length, idx + name.length + 20);
-        if (/\bwhen(?:ever)?\b[^.]*$/.test(before) || /^\s*explodes/.test(after)) continue;
+        // burst detonating (a heal-on-burst reaction), not a fresh infliction. Scoped
+        // to the full when…<name>…explodes shape so a hypothetical CONDITIONAL
+        // infliction ("When X happens, inflicts Echoing Burst for 2 turns") still
+        // parses (CodeRabbit PR #86 narrowing).
+        const sentenceStart = Math.max(0, plain.lastIndexOf('. ', idx) + 1);
+        const sentenceEndRaw = plain.indexOf('. ', idx);
+        const sentence = plain.slice(
+            sentenceStart,
+            sentenceEndRaw === -1 ? plain.length : sentenceEndRaw
+        );
+        if (new RegExp(`\\bwhen(?:ever)?\\b[^.]*\\b${name}\\b[^.]*\\bexplodes?\\b`).test(sentence))
+            continue;
         // "for N turns" attaches to the named effect when present (default 2 turns).
         const m = /for\s+(\d+)\s+turns?/.exec(plain.slice(idx));
         return { turns: m ? parseInt(m[1], 10) : 2, pct };

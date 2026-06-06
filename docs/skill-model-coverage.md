@@ -255,8 +255,8 @@ buff/charge-aura), source it from firing + passive.
   after it inflicts a debuff" is now `on-debuff-inflicted` with a flat +1 per infliction event,
   not the previous `enemy-debuff` count condition that scaled per standing debuff (too fast).
   Per-standing scaling is preserved for "per buff/debuff ON the target" texts.
-- **Editor Trigger select (Phase 3).** `AbilityCard` gains a Trigger `Select` listing all nine
-  union values with plain-language labels. Non-live triggers render a note "Not simulated —
+- **Editor Trigger select (Phase 3; extended 2026-06-06).** `AbilityCard` gains a Trigger
+  `Select` listing all ten union values with plain-language labels. Non-live triggers render a note "Not simulated —
   treated as assume-active". Changing the trigger on a buff/debuff/dot/charge ability is
   sufficient to route it through the reactive machinery.
 - **Persistent stacking statuses (game-verified 2026-06-05).** Four named statuses are NOT timed,

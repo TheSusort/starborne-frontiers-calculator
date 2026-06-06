@@ -1100,6 +1100,16 @@ describe('parser false-positive guards', () => {
             )
         ).toEqual({ turns: 2, pct: 100 });
     });
+
+    it('a CONDITIONAL infliction ("When X happens, inflicts Echoing Burst") still parses', () => {
+        // No such ship text exists today — locks the guard's narrowness: only the full
+        // when…<name>…explodes reference shape is skipped, not any "when" lead-in.
+        expect(
+            parseAccumulateDetonate(
+                'When this Unit critically hits, it inflicts <unit-skill>Echoing Burst</unit-skill> for 2 turns.'
+            )
+        ).toEqual({ turns: 2, pct: 100 });
+    });
 });
 
 describe('parseNoCrit', () => {
