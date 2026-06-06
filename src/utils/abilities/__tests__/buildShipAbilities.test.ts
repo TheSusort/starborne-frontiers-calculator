@@ -1062,7 +1062,7 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    it('Crocus ally-crit-DoT passive parses as a reactive on-ally-crit-dot dot ability', () => {
+    it('Crocus passive: TAGGED text variant parses the reactive trigger + default duration', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,

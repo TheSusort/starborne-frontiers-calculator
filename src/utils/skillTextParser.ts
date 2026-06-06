@@ -201,7 +201,9 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of
     // its Max HP") or a clearly-reactive Phase-4 proc ("When this Unit resists …",
     // "Upon being killed …") is NOT on-cast secondary damage. Sentence-scoped so an
-    // earlier sentence's repair can't block a later legitimate secondary.
+    // earlier sentence's repair can't block a later legitimate secondary. NOTE: the
+    // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
+    // sufficient for the known texts, where the guard words are plain prose.
     const plainBefore = text.slice(0, match.index).replace(/<br\s*\/?>/gi, '. ');
     const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
     const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
