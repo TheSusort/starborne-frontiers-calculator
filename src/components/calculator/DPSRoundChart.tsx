@@ -98,6 +98,10 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                 const ship = shipMap.get(entry.dataKey);
                 const roundData = ship?.result.rounds[label - 1];
                 const roundDamage = roundData?.totalRoundDamage ?? 0;
+                // The dashed overlay's payload entry carries the combined (attacker + team)
+                // cumulative — when present, the block's Total reports the team effort, not
+                // the attacker-only line value (the enemy dies on the combined total).
+                const teamEntry = payload.find((e) => e.dataKey === teamKey(entry.dataKey));
                 return (
                     <div key={entry.dataKey} className="mb-1">
                         <p style={{ color: entry.color }} className="font-medium">
@@ -150,7 +154,8 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                             </p>
                         )}
                         <p className="text-xs text-theme-text-secondary pl-2">
-                            Total: {entry.value.toLocaleString()}
+                            Total{teamEntry ? ' (with team)' : ''}:{' '}
+                            {(teamEntry?.value ?? entry.value).toLocaleString()}
                         </p>
                     </div>
                 );
