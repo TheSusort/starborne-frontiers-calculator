@@ -19,6 +19,8 @@ import {
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
     gateFiringAbilities,
+    extraActionsFromSkill,
+    type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import {
     toSimBuffs,
@@ -71,6 +73,9 @@ export interface PlayerTurnResult {
     secondaryDamage: number;
     conditionalDamage: number;
     detonationDamage: number; // the player-turn detonate() portion
+    /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
+     *  re-insertion + the oncePerRound/backstop bookkeeping. */
+    extraActionGrants: ExtraActionGrant[];
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
@@ -1062,6 +1067,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (allyCharges > 0) grantAllyCharges(allyCharges);
     }
 
+    // Extra-action grants (game-verified: a full extra turn; the engine re-inserts
+    // this actor into the round's remaining queue by speed). Sourced from the FIRING
+    // skill + the always-active passive slot, both pre-gated by gateFiringAbilities.
+    const extraActionGrants = [
+        ...extraActionsFromSkill(gatedSkill),
+        ...extraActionsFromSkill(gatedPassive),
+    ];
+
     const preCritDamage =
         effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) + secondaryStatValue;
     // Blended per-hit crit multiplier: critHits of drawHits hits crit, each at the
@@ -1211,6 +1224,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         secondaryDamage,
         conditionalDamage,
         detonationDamage,
+        extraActionGrants,
         turnCtx,
     };
 }

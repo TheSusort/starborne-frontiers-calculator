@@ -207,6 +207,29 @@ export function gateFiringAbilities(
     return { gatedSkill: { ...skill, abilities: kept }, ctxFor };
 }
 
+/** An extra-action grant collected from a (pre-gated) skill. The engine re-inserts
+ *  the granting actor into the round's remaining turn queue once per descriptor,
+ *  enforcing oncePerRound per actor per round. */
+export interface ExtraActionGrant {
+    abilityId: string;
+    oncePerRound: boolean;
+}
+
+/** `extra-action` abilities on the skill that fire on cast. Conditions are already
+ *  hard-gated by gateFiringAbilities (failing entries were dropped); non-on-cast
+ *  triggers (annotation-only seams: on-kill/ally-destroyed texts are disqualified at
+ *  parse time, but a manually-configured one must not fire on cast) are skipped. */
+export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGrant[] {
+    if (!skill) return [];
+    const out: ExtraActionGrant[] = [];
+    for (const ability of skill.abilities) {
+        if (ability.config.type !== 'extra-action') continue;
+        if (ability.trigger !== 'on-cast') continue;
+        out.push({ abilityId: ability.id, oncePerRound: ability.config.oncePerRound });
+    }
+    return out;
+}
+
 /** `accumulate-detonate` abilities on the skill, as {turns, pct} pairs (e.g. Echoing Burst). */
 export function accumulatorsFromSkill(skill: Skill | undefined): { turns: number; pct: number }[] {
     if (!skill) return [];
