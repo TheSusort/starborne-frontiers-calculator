@@ -1004,4 +1004,49 @@ describe('buildShipAbilities', () => {
             expect(buff.target).toBe('ally');
         });
     });
+
+    describe('extra-action abilities from text', () => {
+        it('Liberator third passive: unconditional once-per-round extra action in passive slot', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+                chargeSkillCharge: 4,
+            });
+            const { slots } = buildShipAbilities(s);
+            const passive = slot(slots, 'passive');
+            expect(passive).toBeDefined();
+            const extraAction = abilityOfType(passive!.abilities, 'extra-action');
+            expect(extraAction).toMatchObject({
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'extra-action', oncePerRound: true },
+            });
+        });
+
+        it('Nuqtu charged: extra action gated on enemy having 3+ buffs', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>200% damage</unit-damage>, including additional Damage equal to <unit-damage>80%</unit-damage> of its Defense, and an extra 40% for each buff on the enemy. If the target has 3 or more buffs, this Unit grants itself 1 extra End Of Round Action.',
+                chargeSkillCharge: 4,
+            });
+            const { slots } = buildShipAbilities(s);
+            const charged = slot(slots, 'charged');
+            expect(charged).toBeDefined();
+            const extraAction = abilityOfType(charged!.abilities, 'extra-action');
+            expect(extraAction).toMatchObject({
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [
+                    {
+                        subject: 'enemy-buff',
+                        derivable: true,
+                        countComparator: 'gte',
+                        countThreshold: 3,
+                    },
+                ],
+                config: { type: 'extra-action', oncePerRound: false },
+            });
+        });
+    });
 });

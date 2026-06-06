@@ -892,6 +892,76 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     };
 }
 
+// --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
+
+// Phrasings we deliberately DO NOT parse (annotation-only seams): on-kill (the enemy's
+// death ends the sim), ally-destroyed (Phase 4 trigger), purge-count (purges are not
+// modeled). The user can still add the ability manually in the editor. Reference:
+// docs/ship-skills.csv (Sokol, Harvester, Tithonus).
+const EXTRA_ACTION_DISQUALIFY_RE =
+    /upon a kill|when an enemy dies|killing an enemy|allied unit is destroyed|ally is destroyed|purg/i;
+
+// "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
+// imperative "give one extra action". Lookbehind-free.
+const EXTRA_ACTION_RE =
+    /\b(?:gains?|grants?|give)\s+(?:itself\s+)?(?:one|1|an?)\s+extra\s+(?:end\s+of\s+round\s+)?action\b/i;
+
+// Tormenter: "If its HP is below 50%" — the unit's OWN HP (selfHpPct is fixed 100
+// under DPS assumptions, so this correctly never fires until defense modeling lands).
+const EXTRA_ACTION_SELF_HP_RE = /\b(?:its|this unit'?s?)\s+hp\s+is\s+below\s+(\d+)\s*%/i;
+
+export interface ExtraActionParse {
+    oncePerRound: boolean;
+    conditions: Condition[];
+}
+
+/**
+ * Parses an extra-action grant from skill text (game rule: a full extra turn,
+ * re-inserted into the round's turn queue by speed). Clause-scoped: condition and
+ * once-per-round detection run on the ", and "-subclause containing the match, so a
+ * disqualifying phrase in a DIFFERENT subclause (Liberator's "When an enemy dies, …,
+ * and once per round, this unit gains 1 extra action") can't suppress the grant.
+ * Returns null for the annotation-only phrasings (EXTRA_ACTION_DISQUALIFY_RE).
+ * Reference data: docs/ship-skills.csv.
+ */
+export function parseExtraAction(text: string | null | undefined): ExtraActionParse | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    if (!EXTRA_ACTION_RE.test(plain)) return null;
+    const sentence = splitSentences(plain).find((s) => EXTRA_ACTION_RE.test(s)) ?? plain;
+    const parts = sentence.split(/,\s+and\s+/i);
+    const clause = parts.find((p) => EXTRA_ACTION_RE.test(p)) ?? sentence;
+    if (EXTRA_ACTION_DISQUALIFY_RE.test(clause)) return null;
+
+    const conditions: Condition[] = [];
+    // Buff/debuff count gates: Nuqtu "If the target has 3 or more buffs" → enemy-buff
+    // gte 3; Sustainer "If this Unit has no debuffs" → self-debuff eq 0.
+    const countGate = countGateCondition(clause);
+    if (countGate) conditions.push(countGate);
+    const hpMatch = EXTRA_ACTION_SELF_HP_RE.exec(clause);
+    if (hpMatch) {
+        conditions.push({
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: parseInt(hpMatch[1], 10),
+            hpSubject: 'self',
+        });
+    }
+    // Tygr: "After damaging an enemy affected by Stasis" — approximated as
+    // enemy-has-any-debuff (enemy-debuff conditions are name-agnostic by design in
+    // evaluateCondition — a buffName is not a filter there).
+    if (/affected by stasis/i.test(clause)) {
+        conditions.push({
+            subject: 'enemy-debuff',
+            derivable: true,
+            countComparator: 'gte',
+            countThreshold: 1,
+        });
+    }
+    return { oncePerRound: /once per round/i.test(clause), conditions };
+}
+
 /**
  * Returns the heal percentage from the first <unit-damage>repairs X%</unit-damage> tag found.
  * Returns a float percentage (e.g. 15 for "repairs 15%"), or 0 if none found.

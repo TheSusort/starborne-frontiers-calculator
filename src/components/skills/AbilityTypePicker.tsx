@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',
+    'extra-action': 'Extra Action',
     heal: 'Heal',
     shield: 'Shield',
     cleanse: 'Cleanse',
@@ -39,7 +40,7 @@ const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
             'accumulate-detonate',
         ],
     },
-    { label: 'Charge', types: ['charge'] },
+    { label: 'Charge', types: ['charge', 'extra-action'] },
     {
         label: 'Utility',
         types: ['heal', 'shield', 'cleanse', 'purge', 'control'],

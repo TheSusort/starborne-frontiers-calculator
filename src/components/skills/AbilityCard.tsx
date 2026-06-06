@@ -46,6 +46,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',
+    'extra-action': 'Extra Action',
     heal: 'Heal',
     shield: 'Shield',
     cleanse: 'Cleanse',

@@ -38,6 +38,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'accumulate-detonate', turns: 2, pct: 100 };
         case 'charge':
             return { type: 'charge', amount: 1 };
+        case 'extra-action':
+            return { type: 'extra-action', oncePerRound: false };
         case 'heal':
             return { type: 'heal', pct: 10, basis: 'hp' };
         case 'shield':
@@ -62,6 +64,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'detonate-dot': 'enemy',
     'accumulate-detonate': 'enemy',
     charge: 'self',
+    'extra-action': 'self',
     heal: 'ally',
     shield: 'ally',
     cleanse: 'ally',
