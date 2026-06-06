@@ -195,6 +195,14 @@ describe('extraActions', () => {
     //
     // The extra turn is NOT un-buffed — round total is 2× the buffed single-turn
     // damage (40000), NOT 2× the base damage (20000) + 1× buffed (20000) = 30000.
+    //
+    // Two assertions prove two independent things:
+    //   • totalRoundDamage === 40000  → proves re-application: the buff IS active on
+    //     the extra turn (rules out "buff carries over from normal turn without expiry").
+    //   • buff-expired count === 2    → proves per-turn decrement: the 1-turn buff is
+    //     decremented (and thus emits buff-expired) ONCE per turn, not once per round.
+    //     A per-round-decrement engine would emit only 1 expiry per round even though
+    //     the buff was applied twice.
     it('1-turn self buff is re-applied (and active) on the extra turn', () => {
         const tickingSkillsWithExtra = (): ShipSkills => {
             idCounter = 0;
@@ -276,16 +284,34 @@ describe('extraActions', () => {
         // round total = 20000 (normal turn, buffed) + 20000 (extra turn, buffed) = 40000.
         // This PROVES the extra turn does NOT see a stale/expired buff — the buff is
         // freshly re-applied on the extra turn by the active slot firing again.
+        //
+        // Bus tap: count buff-expired events for "Attack Up" on 'attacker' in round 1.
+        // Per-turn decrement → buff decrements at post-turn of normal turn AND post-turn
+        // of extra turn → 2 expiry events per round.
+        // Per-round decrement (wrong) → only 1 expiry event per round even with 2 applies.
+        const busWithExtra = createEventBus();
+        let buffExpiredCountRound1 = 0;
+        busWithExtra.on('buff-expired', (e) => {
+            if (e.round === 1 && e.actorId === 'attacker' && e.buffName === 'Attack Up') {
+                buffExpiredCountRound1++;
+            }
+        });
         const withExtra = simulateDPS({
             ...BASE,
             rounds: 3,
             shipSkills: tickingSkillsWithExtra(),
+            bus: busWithExtra,
         });
         for (const round of withExtra.rounds) {
-            // 2 × buffed = 2 × 20000 = 40000 (NOT 2 × 10000 = 20000 which would mean
-            // neither turn was buffed, NOR 10000 + 20000 = 30000 mixed)
+            // Assertion 1 — re-application: 2 × buffed = 2 × 20000 = 40000
+            // (NOT 2 × 10000 = 20000 which would mean neither turn was buffed,
+            //  NOR 10000 + 20000 = 30000 mixed)
             expect(round.totalRoundDamage).toBe(40000);
             expect(round.extraTurns).toBe(1);
         }
+        // Assertion 2 — per-turn decrement: the 1-turn buff expired exactly twice in
+        // round 1 (once after the normal turn's post-turn, once after the extra turn's
+        // post-turn). A per-round-decrement engine would emit only 1 here.
+        expect(buffExpiredCountRound1).toBe(2);
     });
 });
