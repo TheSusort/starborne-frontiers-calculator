@@ -229,13 +229,13 @@ buff/charge-aura), source it from firing + passive.
        once per such event. This is the per-infliction-event rule: the trigger fires as many
        times as distinct DoT infliction events occur, not once per cast regardless of how many
        types land.
-    **Apply-time nuance (golden scenario 22):** Corrosion II is a debuff (not a bomb), so it
-    applies via `applyTimedAbilityStatus`. Its effective-attack snapshot is NOT required at
-    apply time — Corrosion ticks read the status engine ctx at tick time (enemy-HP-scaled, per
-    the applier's DoT modifier + affinity). This means the reactive corrosion fires correctly
-    even when the Crocus owner has not yet acted that round (no last-turn ctx). A BOMB-type
-    reactive DoT from an owner with no last-turn ctx IS skipped: bomb `damagePerStack` is
-    snapshotted from the applier's effective attack at application time.
+    **Apply-time nuance (golden scenario 22):** Corrosion is a DoT applied by pushing a
+    corrosion entry (the executor's dot branch in triggers.ts) — NO apply-time
+    effective-attack snapshot; corrosion ticks are enemy-HP-scaled and read the applier's
+    ctx (DoT modifier + affinity) at TICK time. This means the reactive corrosion fires
+    correctly even when the Crocus owner has not yet acted that round (no last-turn ctx).
+    A BOMB-type reactive DoT from an owner with no last-turn ctx IS skipped: bomb
+    `damagePerStack` snapshots the applier's effective attack at application time.
   - `on-bomb-detonated` → `bomb-detonated` (emitted per burst on countdown expiry and from
     skill-driven detonations). Covers Lingshe stealth, enemy charge removal, Echoing Burst
     repairs. The machinery supports any buff/debuff/dot/charge follow-up from this trigger;
