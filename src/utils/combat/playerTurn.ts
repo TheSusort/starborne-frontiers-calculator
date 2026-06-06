@@ -1168,6 +1168,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     round: r,
                     dotType,
                     stacks,
+                    ...(critHits > 0 ? { viaCrit: true } : {}),
                 }),
         });
     }

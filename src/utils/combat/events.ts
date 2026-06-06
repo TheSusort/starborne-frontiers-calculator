@@ -76,6 +76,9 @@ export type CombatEvent =
           round: number;
           dotType: DoTType;
           stacks: number;
+          /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
+           *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
+          viaCrit?: boolean;
       }
     | {
           type: 'dot-ticked';
