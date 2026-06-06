@@ -1,7 +1,7 @@
 # Healing-Calc Adoption — Design Spec
 
-**Date:** 2026-06-06
-**Status:** Approved by user (brainstorming 2026-06-06)
+**Date:** 2026-06-06 (revised same day at user review gate — see Revision history)
+**Status:** Approved by user (brainstorming 2026-06-06; revision approved 2026-06-06)
 **Baseline:** PR #86 merged (`ac28430a`). 22 DPS golden snapshots. ~1314 tests / 84 files.
 **Origin:** `docs/superpowers/handoffs/2026-06-06-healing-calc-handoff.md`, increment 1.
 
@@ -10,31 +10,49 @@
 Adopt the healing calculator onto the deterministic combat engine
 (`src/utils/combat/`), replacing the standalone expected-value model
 (`healingSimulator.ts`, statistical crit) with skill-parsed heal/shield/cleanse
-abilities running through the same single-pass engine the DPS calc uses. This is
-the second calculator on the engine, after DPS, on the road to the full
-simulator page (per-round damage/healing/defense per ship).
+abilities running through the same single-pass engine the DPS calc uses — and
+give the healer something real to heal against: a designated **heal target**
+under bombardment from a configurable list of **simple enemies** (Phase-4-lite
+enemy offense). Effective healing under pressure is the comparison metric; this
+separates healer archetypes (raw output vs defensive-buff kits vs shielders vs
+HoT sustain). This is the second calculator on the engine, after DPS, on the
+road to the full simulator page.
 
 ## Decisions made during brainstorming (user-confirmed)
 
-1. **Consumption model: raw healing output.** Mirror the DPS calc — report total
-   healing thrown per round, uncapped. No overheal modeling, no incoming-damage
-   stub, no enemy offense. Real consumption arrives with Phase 4.
-2. **Shields: in scope, separate bucket.** Parsed and simulated alongside heals,
-   reported as a distinct `shield` channel (shields don't benefit from heal
-   modifiers — mixing buckets would muddy comparisons).
+1. **Consumption model: enemy-pressure consumption** *(revised — supersedes the
+   initial "raw healing output" decision at the user review gate)*. A
+   designated target takes deterministic damage from a simple enemy list each
+   round; heals are capped by missing HP (overheal tracked); shields absorb.
+   Heals to recipients other than the tracked target remain raw output,
+   labeled as such.
+2. **Shields: in scope, separate bucket AND absorption.** Parsed and simulated
+   alongside heals, reported as a distinct `shield` channel, and consumed as an
+   absorption pool on the target (rule below).
 3. **Mechanics in scope:** HoT/Repair-Over-Time statuses, reactive heal triggers
    (Pallas/Howler/Valkyrie shapes), cleanse output **count**. **Deferred to
-   Phase 4:** revive/Cheat Death (6 texts — can't fire without death modeling),
-   debuff-consumption cleanse modeling, damage-reactive shields.
+   Phase 4:** revive/Cheat Death (target death is final here), enemy
+   skills/DoTs/debuffs, debuff-consumption cleanse modeling, damage-reactive
+   shields, whole-team intake.
 4. **Page fate: rebuild in the DPS-page image.** One focus healer + skill editor
-   + team actors. Legacy multi-healer comparison UI and `healingSimulator.ts` /
-   `healingCalculator.ts` / `parseSkillHeal` are removed. Saved configs cover
-   the compare workflow.
+   + team actors + heal-target slot + enemy list. Legacy multi-healer
+   comparison UI and `healingSimulator.ts` / `healingCalculator.ts` /
+   `parseSkillHeal` are removed. Saved configs cover the compare workflow.
 5. **Architecture: Approach A — one engine pass, separate public adapter.**
-   Heal/shield/cleanse consumption inside `runCombat`; a new
-   `simulateHealing(HealingSimulationInput) → HealingSimulationResult` adapter
-   mirrors `simulateDPS`'s discipline. The DPS public API
+   Heal/shield/cleanse consumption + enemy basic attacks inside `runCombat`; a
+   new `simulateHealing(HealingSimulationInput) → HealingSimulationResult`
+   adapter mirrors `simulateDPS`'s discipline. The DPS public API
    (`DPSSimulationInput`/`DPSSimulationResult`/`RoundData`) is untouched.
+6. **Intake model: one selected target ship.** All enemies bombard a single
+   designated target (any ship, including the healer itself for self-sustain
+   kits). Per-enemy targeting and whole-team AoE are Phase 4.
+7. **Death rule: dead is dead; sim continues.** Target HP floors at 0; no
+   heals land after death; rounds keep running (charts stay comparable);
+   result reports `destroyedRound`. Survival becomes a headline metric.
+8. **Shield rule (user-stated game rule): additive pool capped at the ship's
+   max HP.** Damage drains shield first, then HP. Pool persists until drained —
+   durations in shield texts attach to accompanying buffs, not the shield
+   itself (verify on the live checklist).
 
 ## Game-text reality (from `docs/ship-skills.csv` sweep)
 
@@ -78,8 +96,8 @@ simulator page (per-round damage/healing/defense per ship).
   `Shield equal to N% of …` → shield ability with the same basis resolution.
 - Target routing reuses the existing clause-target resolution: self / "that
   ally" / "the ally" / all allies. "Ally with the most missing health" routes
-  as `ally` (with raw output and no damage intake, lowest-HP targeting is
-  annotation only).
+  as `ally`; in the sim, single-recipient ally heals route to the tracked heal
+  target by default (it is the damaged one).
 - **HoT statuses:** "grants Repair Over Time II for 2 turns" already parses as
   a buff ability via the buff-name pipeline. New work is in
   `src/utils/calculators/buffParser.ts`: parse `N% Applying Unit HP%` into a
@@ -88,8 +106,9 @@ simulator page (per-round damage/healing/defense per ship).
 - **Reactive heal triggers** (trigger pipeline reuse):
   - Pallas "when this unit critically repairs an ally" → new live trigger
     `on-ally-critically-repaired`, fired from the new `heal-performed` event's
-    `critHits` (the existing `ally-critically-repaired` ConditionSubject stays
-    for manual/annotation use; the trigger makes it live).
+    `critHits`. The existing `ally-critically-repaired` ConditionSubject
+    **coexists** with the trigger: subject = manual/annotation gate, trigger =
+    live firing. Do not collapse them.
   - Howler cleanse-on-ally-crit → rides the existing ally-crit listener seams.
   - Valkyrie heal-on-burst → `on-bomb-detonated` (already live).
 - **Disqualify guards** (mirroring `EXTRA_ACTION_DISQUALIFY_RE`): keep
@@ -101,25 +120,56 @@ simulator page (per-round damage/healing/defense per ship).
   heal-subject exemption.
 - Legacy `parseSkillHeal` (flat % for the old page) is deleted with the page.
 
-## Section 2 — Engine consumption + public adapter
+## Section 2 — Engine: enemy pressure, consumption, adapter
+
+### Enemy model (Phase-4-lite)
+
+`HealingSimulationInput.enemies[]`: each enemy is `{ attack, crit, critDamage,
+speed }`. Enemies join the round turn queue as real actors at their speed (the
+queue machinery exists; enemies already take turns — that's when DoTs tick).
+On its turn, each enemy makes **one basic attack** against the designated
+target:
+
+- Damage = the existing attack-vs-defence formula using the **target's current
+  effective defence** (so Defense Up buffs from any kit reduce intake — the
+  archetype-comparison motivation).
+- Crit via a per-enemy deterministic rate gate (`makeRateGate`), fixed queue
+  order. Single hit per attack.
+- No enemy skills, DoTs, debuffs, or multi-hit — Phase 4.
+
+### Heal target + consumption
+
+- The **heal target** is a designated team-actor slot (any ship, including the
+  healer itself). Its kit walks normally (self-buffs and self-heals count
+  toward its survival). Its `currentHp` is live.
+- Heals to the target: `effective = min(rawHeal, maxHp − currentHp)`;
+  remainder = **overheal**, tracked per round. Dead target (HP 0) receives
+  nothing; sim continues; `destroyedRound` reported.
+- **Shield pool on the target:** additive, capped at max HP, drains before HP,
+  persists until drained (decisions 7–8).
+- Heals/shields to recipients other than the tracked target are raw output
+  (no HP tracking for them this increment), reported in the raw buckets.
+- Real target HP% retro-activates HP-threshold conditions ("below 50% HP"
+  gates) for the target's and healer's abilities where the subject is the
+  target; `selfHpPct` realism for non-target actors stays Phase 4.
 
 ### Per-actor healing map (`src/utils/combat/state.ts`)
 
 ```ts
 interface ActorHealing {
-    directHeal: number;   // heal abilities cast this round (incl. crit blend)
+    directHeal: number;   // heal abilities cast this round (raw, incl. crit blend)
     hotHeal: number;      // Repair Over Time ticks, attributed to the APPLIER
-    shield: number;       // shield abilities granted
+    shield: number;       // shield abilities granted (raw)
     cleanseCount: number; // cleanses cast (count, not amount)
+    effectiveHeal: number; // portion of directHeal+hotHeal consumed by the target
+    overheal: number;      // portion wasted (target at/near full or dead)
 }
 ```
 
 Mirrors `ActorDamage`; keyed per actor in the round loop exactly like the
 `roundDamage` map.
 
-### Consumption (`src/utils/combat/playerTurn.ts`)
-
-When a firing skill carries heal/shield/cleanse abilities:
+### Consumption math (`src/utils/combat/playerTurn.ts`)
 
 - Heal amount = `casterStat(basis) × pct% × critBlend × (1 + healModifier%) ×
   (1 + outgoingHeal%) × (1 + recipient incomingHeal%)`, summed across
@@ -128,13 +178,10 @@ When a firing skill carries heal/shield/cleanse abilities:
   machinery; blended multiplier `1 + (critHits/hits) × cd` — **never** the
   legacy statistical `critRate × critDamage` blend. `noCrit` heals skip draws.
 - Shield amount = `casterStat(basis) × pct%` only — no crit, no heal-modifier
-  channels (**documented assumption**: shields aren't repairs; verify in-game
-  during live verification).
+  channels (**documented assumption**: shields aren't repairs; named line on
+  the live-verification checklist).
 - Cleanse abilities increment `cleanseCount`.
 - `healModifier` joins `ActorStats` (already computed on ships' `final` stats).
-- Recipients need no new runtime machinery: with raw output they only matter
-  for `incomingHeal` amplification and `target-hp` basis, both resolvable from
-  actor stats.
 
 ### HoT ticking (`src/utils/combat/statusEngine.ts`)
 
@@ -142,7 +189,8 @@ A standing buff with `parsedEffects.hotPct` heals its holder each of the
 holder's turns for `applierEffectiveHp × hotPct% × stacks`. Applier context is
 resolved at TICK time — the corrosion rule (works when the applier hasn't acted
 yet that round). Attribution: HoT healing credits the **applier's** `hotHeal`
-(mirrors DoT `sourceId` attribution).
+(mirrors DoT `sourceId` attribution). HoT healing on the target is subject to
+the same effective/overheal split.
 
 ### Events + triggers (`events.ts`, `triggers.ts`)
 
@@ -160,7 +208,11 @@ interface HealingSimulationInput {
     // Healing-native mirror of DPSSimulationInput's discipline:
     // stats (hp/attack/defence/crit/critDamage/healModifier/speed/hacking),
     // chargeCount, startCharged, shipSkills, selfBuffs, teamActors, rounds, bus?
-    // NO enemyDefense/enemyHp — the adapter supplies the dummy enemy internally.
+    healTargetId: string;            // which actor the enemies bombard
+    enemies: SimpleEnemyInput[];     // { attack, crit, critDamage, speed }
+    // NO enemyDefense/enemyHp for offense math — the dummy enemy the DPS calc
+    // attacks is irrelevant here; heal triggers needing an enemy (on-crit
+    // attack heals) get a zero-offense dummy supplied internally.
 }
 
 interface HealingRoundData {
@@ -169,13 +221,19 @@ interface HealingRoundData {
     charges: number;
     chargeCount: number;
     didCrit: boolean;
-    directHeal: number;
-    hotHeal: number;
-    shield: number;
+    directHeal: number;          // raw
+    hotHeal: number;             // raw
+    shield: number;              // raw granted
     cleanseCount: number;
-    totalRoundHealing: number;   // directHeal + hotHeal (shield reported separately)
+    effectiveHealing: number;    // consumed by the target
+    overheal: number;
+    incomingDamage: number;      // enemy damage thrown at the target this round
+    shieldAbsorbed: number;
+    targetHpPct: number;         // ENTERING the round (mirrors enemyHpPct convention)
+    targetShieldPool: number;    // ENTERING the round
+    totalRoundHealing: number;   // directHeal + hotHeal (raw; shield separate)
     cumulativeHealing: number;
-    teamHealing?: number;        // non-focus actors' healing; only when team actors exist
+    teamHealing?: number;        // non-focus actors' raw healing; only when team actors exist
     activeSelfBuffs: ActiveBuff[];
     extraTurns?: number;
 }
@@ -183,29 +241,34 @@ interface HealingRoundData {
 interface HealingSimulationResult {
     rounds: HealingRoundData[];
     summary: {
-        totalHealing: number;
+        totalHealing: number;          // raw
         totalDirectHeal: number;
         totalHotHeal: number;
         totalShield: number;
         totalCleanses: number;
+        totalEffectiveHealing: number;
+        totalOverheal: number;
+        totalShieldAbsorbed: number;
+        totalIncomingDamage: number;
         avgHealingPerRound: number;
+        destroyedRound?: number;       // present only if the target died
         teamTotalHealing?: number;
     };
 }
 ```
 
 `simulateHealing()` wraps `runCombat` exactly as `simulateDPS` does: focus
-actor = the healer; a dummy enemy supplies cadence/trigger context (on-crit
-attack heals etc.). Whether `totalRoundHealing` folds `shield` in is settled
-here: it does NOT — shield is its own headline.
+actor = the healer; the heal target is one of the player actors; the enemy
+list maps to enemy actors. `totalRoundHealing` does NOT fold `shield` in —
+shield is its own headline.
 
 ### Golden-parity guarantee
 
-Engine-internal healing channels exist on every run but only the healing
-adapter reads them. `simulateDPS`, `DPSSimulationInput/Result`, `RoundData` are
-not modified. The 22 DPS golden snapshots must be **byte-identical** — the
-proof the engine extension is inert for damage runs. Zero churn tolerated; any
-diff is a bug in this increment.
+Engine-internal healing channels and enemy-offense handling exist on every run
+but: DPS runs construct zero-offense enemies and no heal target, so the
+extension is inert for damage runs. `simulateDPS`, `DPSSimulationInput/Result`,
+`RoundData` are not modified. The 22 DPS golden snapshots must be
+**byte-identical**. Zero churn tolerated; any diff is a bug in this increment.
 
 ## Section 3 — UI page, testing, cleanup
 
@@ -215,14 +278,20 @@ Mirrors the DPS page structure:
 
 - Config name + saved configs (same persistence pattern as the DPS page).
 - Ship selector modal (focus healer).
+- **Heal-target slot**: ship selector for the bombarded target (may equal the
+  healer).
+- **Enemy list editor**: add/remove rows of `attack / crit / crit damage /
+  speed` — `Input`s in a `card`; no ship selector needed.
 - Skill Editor: heal/shield/cleanse abilities become **editable** —
   `AbilityCard` gains `pct` input + `basis` select for heal/shield and `count`
   input for cleanse (today these types render label-only).
 - Team actor slots (team heals/HoTs/triggers contribute `teamHealing`).
 - Settings panel: rounds, buffs.
-- Results: summary `StatCard`s per bucket (direct / HoT / shield / cleanse,
-  team totals), per-round stacked bar chart over `BaseChart`, cumulative
-  healing line.
+- Results: headline `StatCard`s — effective healing, overheal %, shield
+  absorbed, **target survival** ("survived N rounds" / "destroyed round N"),
+  team totals. Centerpiece chart: **target HP + shield timeline** with
+  incoming damage and healing overlaid per round (`BaseChart`). Cumulative
+  effective-healing line for comparison across saved configs.
 - Uses existing UI primitives throughout (CLAUDE.md rules; no emojis in UI).
 
 **Deleted:** `HealerConfigCard`, `HealingBubbleChart`,
@@ -237,26 +306,35 @@ consumers).
 - Unit: parser heal/shield/cleanse extraction + disqualify guards; `buffParser`
   `hotPct`; engine consumption (crit-heal gates, HoT applier-context ticking,
   `incomingHeal`/`outgoingHeal` channels, all-allies summing, `target-hp`
-  basis); `on-ally-critically-repaired` trigger; adapter shape.
+  basis); enemy basic attacks (formula vs target defence, deterministic crit
+  gates, queue order); shield pool (additive, max-HP cap, drain order);
+  overheal split; death semantics (`destroyedRound`, no post-death heals);
+  `on-ally-critically-repaired` trigger; adapter shape.
 - **New healing golden suite** (`healingGoldenParity.test.ts`): hand-verified
   snapshots — plain heal cadence, charged heal, HoT, reactive trigger, team
-  healing. Same referee discipline: regenerate only by delete + re-run, never
-  `vitest -u`.
+  healing, pressure scenario (target damaged, overheal + shield absorption),
+  lethal-pressure scenario (target dies). Same referee discipline: regenerate
+  only by delete + re-run, never `vitest -u`.
 - DPS golden parity: 22 snapshots byte-identical (see Section 2).
 - Live verification with the user's 212-ship fleet (dev server :3002) at the
   end — handoff gotchas apply (config-name field is not a search box; Skill
-  Editor × deletes abilities; close modals with Escape).
+  Editor × deletes abilities; close modals with Escape). **Named checklist
+  items:** shields don't crit and ignore heal modifiers; shield pool is
+  additive capped at max HP with no expiry.
 
 ### Error handling
 
 - Unparseable heal texts emit no ability — audit visibility + manual editor
   fallback (same posture as the DPS parser).
-- The adapter applies defaults for missing optional context; no throws.
+- The adapter applies defaults for missing optional context; empty enemy list
+  is valid (degenerates to raw-output reporting: no intake, all heal raw,
+  overheal 0 against a full-HP target); no throws.
 
 ### Cleanup / docs
 
-- `docs/skill-model-coverage.md`: §5 gains the healing rules block; §6 items
-  closed/updated (item 6 heal/shield consumption ships).
+- `docs/skill-model-coverage.md`: §5 gains the healing rules block (incl. the
+  shield additive-pool rule); §6 items closed/updated (item 6 heal/shield
+  consumption ships).
 - `src/pages/DocumentationPage.tsx`: healing section rewritten.
 - Changelog: ONE evolving healing-calc entry in `UNRELEASED_CHANGES` (separate
   from the DPS entry; fold, don't append).
@@ -275,9 +353,21 @@ consumers).
 
 ## Out of scope (deferred)
 
-- Revive/Cheat Death (Phase 4 — needs death modeling).
-- Overheal/consumption, incoming-damage stub, real `selfHpPct` (Phase 4).
+- Revive/Cheat Death (target death is final this increment).
+- Enemy skills, DoTs, debuffs, multi-hit, per-enemy targeting, whole-team
+  intake (Phase 4).
+- Real `selfHpPct` for non-target actors (Phase 4).
 - Damage-reactive shields ("equal to N% of damage taken") (Phase 4).
 - Cleanse debuff-consumption modeling (Phase 4).
-- Lowest-HP ally targeting semantics (annotation only until consumption exists).
+- Lowest-HP ally targeting beyond default-to-target routing.
 - Healing display on the DPS page / simulator page (own increment).
+
+## Revision history
+
+- **2026-06-06 (initial):** raw-healing-output model approved; spec-reviewer
+  approved.
+- **2026-06-06 (user review gate):** user requested enemy pressure — heal
+  target (ship selector) + simple enemy list (attack/crit/critDamage/speed)
+  bombarding it. Decisions 1–2 revised to consumption + absorption; decisions
+  6–8 added (single target, dead-is-dead, additive shield pool capped at max
+  HP). Result/UI shapes extended accordingly.
