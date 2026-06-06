@@ -415,10 +415,16 @@ function detonate(args: {
             args.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
             const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
+            // Each bomb bursts with the APPLIER's affinity matchup, snapshotted at
+            // application (PendingBomb.affinityMult) — NOT the detonating actor's. A
+            // team-applied bomb detonated by the attacker's skill keeps the team's
+            // modifier, mirroring processBombs' per-entry handling on the enemy turn.
+            // Identical for attacker-only runs (every entry carries the attacker's mult).
             const payout =
-                args.pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
-                args.affinityMult *
-                pct;
+                args.pendingBombs.reduce(
+                    (sum, b) => sum + b.stacks * b.damagePerStack * b.affinityMult,
+                    0
+                ) * pct;
             if (payout > 0) {
                 args.emitBombDetonated?.(totalStacks, payout);
             }

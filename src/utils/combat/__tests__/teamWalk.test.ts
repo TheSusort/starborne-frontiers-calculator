@@ -1158,3 +1158,48 @@ describe('reactive parity (Task 6)', () => {
         );
     });
 });
+
+describe('per-applier bomb affinity at skill-driven detonation (PR #84 review)', () => {
+    // A bomb bursts with the APPLIER's affinity matchup snapshotted at application —
+    // not the detonating actor's. Team (thermal) applies vs a chemical enemy
+    // (advantage ×1.25); the NEUTRAL attacker detonates the pool the same round.
+    it("detonating an ally's bomb keeps the ally's affinity modifier", () => {
+        const bombTeam = walkedTeam(
+            {
+                slots: [{ slot: 'active', abilities: [dotAbility('bomb', 100, 2, 3, 'tbomb')] }],
+            },
+            { id: 'tbomb', speed: 140, affinity: 'thermal' }
+        );
+        const detonatorSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        damageAbility(0, 'noop'),
+                        {
+                            id: 'det',
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
+                        },
+                    ],
+                },
+            ],
+        };
+        const result = simulateDPS(
+            baseInput({
+                shipSkills: detonatorSkills,
+                teamActors: [bombTeam],
+                enemyAffinity: 'chemical', // team thermal → advantage 1.25; attacker default → neutral
+                rounds: 2,
+            })
+        );
+        // Round 1: team (speed 140) applies the bomb (damagePerStack = teamStats default
+        // attack 15000 × tier 100% = 15000, 2 stacks), then the attacker's detonate consumes
+        // the pool with the TEAM's 1.25 affinity: 2 × 15000 × 1.25 = 37500. The detonating
+        // actor's neutral modifier would (wrongly) give 30000.
+        expect(result.rounds[0].detonationDamage).toBeCloseTo(37500, 0);
+    });
+});

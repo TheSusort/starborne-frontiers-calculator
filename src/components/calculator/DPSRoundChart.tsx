@@ -149,7 +149,7 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                             </div>
                         )}
                         {roundData && (roundData.teamDamage ?? 0) > 0 && (
-                            <p className="text-xs pl-2" style={{ color: '#a78bfa' }}>
+                            <p className="text-xs pl-2 text-violet-400">
                                 Team damage: {(roundData.teamDamage ?? 0).toLocaleString()}
                             </p>
                         )}
