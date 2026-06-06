@@ -342,9 +342,26 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
                         })),
                         ...teamShips.map((ship) => {
                             const i = ships.findIndex((s) => s.id === ship.id);
+                            const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
                             return {
                                 label: `${ship.name} — with team`,
-                                color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
+                                color,
+                                // Dashed-line glyph mirrors the chart's "with team" overlay
+                                // (strokeDasharray="5 4"), distinguishing it from the solid
+                                // attacker dot.
+                                glyph: (
+                                    <svg width={18} height={8} aria-hidden="true">
+                                        <line
+                                            x1={0}
+                                            y1={4}
+                                            x2={18}
+                                            y2={4}
+                                            stroke={color}
+                                            strokeWidth={2}
+                                            strokeDasharray="5 4"
+                                        />
+                                    </svg>
+                                ),
                             };
                         }),
                     ]}

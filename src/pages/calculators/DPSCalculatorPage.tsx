@@ -27,7 +27,8 @@ import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTab
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
-import { CombatSettingsPanel } from '../../components/calculator/CombatSettingsPanel';
+import { EnemySettingsPanel } from '../../components/calculator/EnemySettingsPanel';
+import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -145,7 +146,8 @@ const DPSCalculatorPage: React.FC = () => {
         },
     ]);
     const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
-    const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
+    const [enemySettingsOpen, setEnemySettingsOpen] = useState(false);
+    const [teamOpen, setTeamOpen] = useState(false);
 
     useEffect(() => {
         if (shipInitialized.current) return;
@@ -502,17 +504,15 @@ const DPSCalculatorPage: React.FC = () => {
                 action={{ label: 'Add Ship', onClick: addConfig, variant: 'primary' }}
             >
                 <div className="space-y-6">
-                    <CombatSettingsPanel
-                        isOpen={combatSettingsOpen}
-                        onToggle={() => setCombatSettingsOpen((v) => !v)}
+                    <EnemySettingsPanel
+                        isOpen={enemySettingsOpen}
+                        onToggle={() => setEnemySettingsOpen((v) => !v)}
                         enemyDefense={enemyDefense}
                         onEnemyDefenseChange={setEnemyDefense}
                         enemyHp={enemyHp}
                         onEnemyHpChange={setEnemyHp}
                         rounds={rounds}
                         onRoundsChange={setRounds}
-                        attackerBuffs={attackerBuffs}
-                        onAttackerBuffsChange={setAttackerBuffs}
                         enemyBuffs={enemyBuffs}
                         onEnemyBuffsChange={setEnemyBuffs}
                         enemyAffinity={enemyAffinity}
@@ -521,6 +521,16 @@ const DPSCalculatorPage: React.FC = () => {
                         onEnemySecurityChange={setEnemySecurity}
                         enemySpeed={enemySpeed}
                         onEnemySpeedChange={setEnemySpeed}
+                        enemyType={enemyType}
+                        onEnemyTypeChange={setEnemyType}
+                    />
+
+                    <TeamPanel
+                        isOpen={teamOpen}
+                        onToggle={() => setTeamOpen((v) => !v)}
+                        attackerBuffs={attackerBuffs}
+                        onAttackerBuffsChange={setAttackerBuffs}
+                        enemyAffinity={enemyAffinity}
                         teamShips={teamShips}
                         onAddTeamShip={addTeamShip}
                         onRemoveTeamShip={removeTeamShip}
@@ -543,8 +553,6 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipShipSkillsChange={(id, shipSkills) =>
                             updateTeamShip(id, { shipSkills })
                         }
-                        enemyType={enemyType}
-                        onEnemyTypeChange={setEnemyType}
                     />
 
                     <div
