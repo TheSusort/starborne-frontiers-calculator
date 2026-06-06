@@ -672,8 +672,10 @@ function abilitiesFromText(text: string): PositionedAbility[] {
         });
     }
 
-    // Crocus: "when an ally crits with a DoT, inflict <DoT>" → a DoT gated by the manual,
-    // team-dependent ally-crit-dot condition (passive — represented for the editor, not simulated).
+    // Crocus: "when an ally crits with a DoT, inflict <DoT>" → routes through the reactive
+    // on-ally-crit-dot trigger machinery (live trigger; reactive partitioning is slot-agnostic
+    // so the passive slot is fine). The manual 'ally-crit-dot' ConditionSubject survives in the
+    // union for stored editor configs only (annotation-only, never simulated — no migration needed).
     if (parseAllyCritDot(text)) {
         for (const eff of parseSkillEffects(text, 'active')) {
             const info = DOT_TIER_MAP[eff.buffName];
@@ -684,8 +686,8 @@ function abilitiesFromText(text: string): PositionedAbility[] {
                     id: nextId(),
                     type: 'dot',
                     target: 'enemy',
-                    trigger: 'on-cast',
-                    conditions: [{ subject: 'ally-crit-dot', derivable: false }],
+                    trigger: 'on-ally-crit-dot',
+                    conditions: [],
                     config: {
                         type: 'dot',
                         dotType: info.type,

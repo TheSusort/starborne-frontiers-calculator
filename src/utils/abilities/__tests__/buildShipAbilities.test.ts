@@ -354,7 +354,7 @@ describe('buildShipAbilities', () => {
         expect(ext.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
     });
 
-    it('Crocus passive: ally-crit-DoT triggers a gated Corrosion II DoT', () => {
+    it('Crocus passive: ally-crit-DoT routes through the on-ally-crit-dot reactive trigger (conditions empty)', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
@@ -363,7 +363,8 @@ describe('buildShipAbilities', () => {
         });
         const dot = abilityOfType(slot(buildShipAbilities(s).slots, 'passive')!.abilities, 'dot')!;
         expect(dot.config).toMatchObject({ type: 'dot', dotType: 'corrosion' });
-        expect(dot.conditions).toEqual([{ subject: 'ally-crit-dot', derivable: false }]);
+        expect(dot.trigger).toBe('on-ally-crit-dot');
+        expect(dot.conditions).toEqual([]);
     });
 
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
@@ -1058,6 +1059,23 @@ describe('buildShipAbilities', () => {
                 ],
                 config: { type: 'extra-action', oncePerRound: false },
             });
+        });
+    });
+
+    it('Crocus ally-crit-DoT passive parses as a reactive on-ally-crit-dot dot ability', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit <unit-damage>repairs itself for 3%</unit-damage> of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
+        });
+        const skills = buildShipAbilities(s);
+        const passive = skills.slots.find((sl) => sl.slot === 'passive');
+        const dot = passive?.abilities.find((a) => a.type === 'dot');
+        expect(dot).toMatchObject({
+            trigger: 'on-ally-crit-dot',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', duration: 2 },
         });
     });
 });

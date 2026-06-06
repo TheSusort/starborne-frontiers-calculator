@@ -598,9 +598,13 @@ export const AbilityCard: React.FC<Props> = ({
                 </div>
             </div>
 
-            {slot === 'passive' && PASSIVE_NOOP_TYPES.has(ability.type) && (
-                <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
-            )}
+            {/* Reactive abilities fire through the trigger machinery regardless of slot, so
+                suppress the passive-noop warning when a live trigger is set. */}
+            {slot === 'passive' &&
+                PASSIVE_NOOP_TYPES.has(ability.type) &&
+                !LIVE_TRIGGERS.has(ability.trigger) && (
+                    <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
+                )}
 
             <Select
                 label="Target"
