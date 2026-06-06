@@ -971,6 +971,9 @@ export function runCombat(input: CombatEngineInput): {
                 // Extra-action grants from this turn re-insert the attacker into the
                 // remaining queue (full extra turn — charge cadence, post-turn
                 // decrement, and triggers all run again on the inserted iteration).
+                // The extra turn intentionally re-fires statusEngine.sourceFired too:
+                // re-applying timed buffs, adding persistent stacks, and ticking
+                // accumulators are all correct for a real second turn.
                 processExtraActionGrants(qi, actor, turn.extraActionGrants);
             } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
                 // ====================================================================
@@ -1267,6 +1270,9 @@ export function runCombat(input: CombatEngineInput): {
         roundData.push({
             round: r,
             action,
+            // END-OF-ROUND charge state: with extra turns (extraTurns >= 1) the cadence
+            // ran more than once this round, so this is NOT "charges going into the
+            // turn that produced `action`" — it's the live counter after all turns.
             charges: Math.round(attacker.charges),
             chargeCount: hasChargedSkill ? chargeCount : 0,
             didCrit: roundCrit,
