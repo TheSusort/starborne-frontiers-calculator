@@ -1064,4 +1064,38 @@ describe('dpsGoldenParity', () => {
             ],
         },
     }));
+
+    // Scenario 21: extra actions — Liberator-style once-per-round passive grant with
+    // a charged cadence (the extra turn ADVANCES the cadence: banks a charge on
+    // active turns, fires the charged skill when full — full-normal-turn rule).
+    // Added with the extra-actions increment (2026-06-06); hand-verified.
+    snap('extra action (once-per-round passive, charged cadence)', () => ({
+        ...BASE,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 250 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'extra-action',
+                            target: 'self',
+                            config: { type: 'extra-action', oncePerRound: true },
+                        }),
+                    ],
+                },
+            ],
+        },
+    }));
 });
