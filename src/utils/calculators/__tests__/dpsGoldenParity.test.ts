@@ -1098,4 +1098,107 @@ describe('dpsGoldenParity', () => {
             ],
         },
     }));
+
+    // Scenario 22: ally-crit-DoT reactive (Crocus) — the focus actor's passive
+    // corrosion fires when a walked team ally's crit-cast applies a DoT. Locks the
+    // viaCrit event flag, ally scoping, and executor dot attribution. Added with the
+    // ally-crit-dot increment (2026-06-06); hand-verified.
+    //
+    // Speed order: team (130) → attacker (100) → enemy (50). Team crit=100 so every
+    // team active cast crits → viaCrit: true on every team dot-applied → focus reactive
+    // listener enqueues one intent per team turn → drains (drain point b, after the team
+    // turn body) → executor applies focus-attributed corrosion entry (sourceId='attacker').
+    // Focus acts next → lastTurnCtxByActor.set('attacker', ctx). Enemy acts last → ticks
+    // corrosion: team-applied entries credit teamDamage; focus-applied entries credit
+    // the focus row's corrosionDamage. Each entry: 1 × 0.05 × 500_000 × 1.0 × 1.0 = 25_000.
+    //
+    // Round-1 focus corrosionDamage: 25_000 (one focus entry applied round 1, ticks once).
+    // Round-2 focus corrosionDamage: 50_000 (round-1 entry tick 2 + round-2 new entry tick 1).
+    // Round-3 focus corrosionDamage: 50_000 (round-1 entry expired; round-2 entry tick 2 +
+    //                                        round-3 new entry tick 1).
+    snap('ally-crit-DoT reactive (Crocus passive corrosion on team crit)', () => {
+        idCounter = 0;
+        const teamSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 1,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return {
+            ...BASE,
+            crit: 0, // focus does NOT crit — keeps trace unambiguous
+            critDamage: 0,
+            chargeCount: 0, // no charged skill on focus
+            rounds: 3,
+            speed: 100,
+            enemySpeed: 50,
+            hacking: 100,
+            enemySecurity: 0,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                config: { type: 'damage', multiplier: 150 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'dot',
+                                target: 'enemy',
+                                trigger: 'on-ally-crit-dot',
+                                config: {
+                                    type: 'dot',
+                                    dotType: 'corrosion',
+                                    tier: 5,
+                                    stacks: 1,
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            teamActors: [
+                {
+                    id: 'team-1',
+                    speed: 130, // acts BEFORE attacker (100) and enemy (50)
+                    chargeCount: 0,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    shipSkills: teamSkills,
+                    stats: {
+                        attack: 10000,
+                        crit: 100, // always crits → viaCrit: true on every dot-applied
+                        critDamage: 100,
+                        defensePenetration: 0,
+                        hacking: 100,
+                        defence: 0,
+                        hp: 0,
+                    },
+                    // no affinity → neutral modifiers
+                },
+            ],
+        };
+    });
 });

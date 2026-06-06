@@ -104,6 +104,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-destroyed', label: 'On destroyed' },
     { value: 'on-debuff-inflicted', label: 'After inflicting a debuff' },
     { value: 'on-ally-debuff-inflicted', label: 'After an ally inflicts a debuff' },
+    { value: 'on-ally-crit-dot', label: 'After an ally inflicts a DoT with a crit' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
 ];
 
@@ -597,9 +598,13 @@ export const AbilityCard: React.FC<Props> = ({
                 </div>
             </div>
 
-            {slot === 'passive' && PASSIVE_NOOP_TYPES.has(ability.type) && (
-                <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
-            )}
+            {/* Reactive abilities fire through the trigger machinery regardless of slot, so
+                suppress the passive-noop warning when a live trigger is set. */}
+            {slot === 'passive' &&
+                PASSIVE_NOOP_TYPES.has(ability.type) &&
+                !LIVE_TRIGGERS.has(ability.trigger) && (
+                    <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
+                )}
 
             <Select
                 label="Target"

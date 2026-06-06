@@ -124,6 +124,35 @@ describe('AbilityCard', () => {
                 screen.queryByText(/not simulated on the passive slot/i)
             ).not.toBeInTheDocument();
         });
+
+        it('does not warn when a passive dot uses the on-ally-crit-dot live trigger (reactive, fires through trigger machinery)', () => {
+            const reactiveDot: Ability = {
+                id: 'a5',
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'on-ally-crit-dot',
+                conditions: [],
+                config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+            };
+            render(
+                <AbilityCard
+                    ability={reactiveDot}
+                    slot="passive"
+                    onChange={() => {}}
+                    onRemove={() => {}}
+                />
+            );
+            expect(
+                screen.queryByText(/not simulated on the passive slot/i)
+            ).not.toBeInTheDocument();
+        });
+
+        it('still warns when a passive dot uses the on-cast trigger', () => {
+            render(
+                <AbilityCard ability={dot} slot="passive" onChange={() => {}} onRemove={() => {}} />
+            );
+            expect(screen.getByText(/not simulated on the passive slot/i)).toBeInTheDocument();
+        });
     });
 
     describe('Trigger select', () => {

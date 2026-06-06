@@ -103,4 +103,12 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['ungated-effect-with-trigger'],
         reason: '"while this Unit deals…" is simultaneity, not a gate.',
     },
+
+    // Burst-explosion reference — not an accumulate-detonate application.
+    {
+        ship: 'Valkyrie',
+        rules: ['accumulate-detonate'],
+        reason:
+            'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
+    },
 ];

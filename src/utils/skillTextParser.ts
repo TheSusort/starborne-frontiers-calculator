@@ -198,6 +198,18 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
     const match = pattern.exec(text);
     if (!match) return null;
+    // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of
+    // its Max HP") or a clearly-reactive Phase-4 proc ("When this Unit resists …",
+    // "Upon being killed …") is NOT on-cast secondary damage. Sentence-scoped so an
+    // earlier sentence's repair can't block a later legitimate secondary. NOTE: the
+    // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
+    // sufficient for the known texts, where the guard words are plain prose.
+    const plainBefore = text.slice(0, match.index).replace(/<br\s*\/?>/gi, '. ');
+    const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
+    const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
+    if (/\brepair/.test(sentencePrefix)) return null;
+    if (/\bresists?\b[^.]*\bdebuff|upon being killed|upon being destroyed/.test(sentencePrefix))
+        return null;
     const pct = parseFloat(match[1]);
     if (isNaN(pct)) return null;
     const stat: SecondaryDamageStat = match[2].toLowerCase().includes('hp') ? 'hp' : 'defense';
@@ -814,10 +826,24 @@ export function parseAccumulateDetonate(
     text: string | null | undefined
 ): { turns: number; pct: number } | null {
     if (!text) return null;
-    const plain = stripUnitTags(text).toLowerCase();
+    // Normalize <br> to '. ' for sentence-boundary detection before stripping tags.
+    const plain = stripUnitTags(text.replace(/<br\s*\/?>/gi, '. ')).toLowerCase();
     for (const [name, pct] of Object.entries(ACCUMULATE_DETONATE_EFFECTS)) {
         const idx = plain.indexOf(name);
         if (idx === -1) continue;
+        // Reference guard: "When an Echoing Burst explodes …" describes an EXISTING
+        // burst detonating (a heal-on-burst reaction), not a fresh infliction. Scoped
+        // to the full when…<name>…explodes shape so a hypothetical CONDITIONAL
+        // infliction ("When X happens, inflicts Echoing Burst for 2 turns") still
+        // parses (CodeRabbit PR #86 narrowing).
+        const sentenceStart = Math.max(0, plain.lastIndexOf('. ', idx) + 1);
+        const sentenceEndRaw = plain.indexOf('. ', idx);
+        const sentence = plain.slice(
+            sentenceStart,
+            sentenceEndRaw === -1 ? plain.length : sentenceEndRaw
+        );
+        if (new RegExp(`\\bwhen(?:ever)?\\b[^.]*\\b${name}\\b[^.]*\\bexplodes?\\b`).test(sentence))
+            continue;
         // "for N turns" attaches to the named effect when present (default 2 turns).
         const m = /for\s+(\d+)\s+turns?/.exec(plain.slice(idx));
         return { turns: m ? parseInt(m[1], 10) : 2, pct };
