@@ -310,12 +310,16 @@ buff/charge-aura), source it from firing + passive.
 
   **Parser ally-scope rules.** `SkillEffect.target` is now `'self' | 'ally' | 'all-allies'
   | 'enemy'` (the 5-member union with `all-enemies` is `AbilityTarget` in the ability
-  model, which the engine routes on). Detection rules: "all allies / allies /
-  friendly units gain X" → `all-allies`; "the (other) ally with the highest …" → `ally`;
-  "This Unit gains X" → `self`; unscoped grants → `all-allies`. The condition-clause
-  non-leak rule: condition sub-clauses (introduced by "if", "when", "after", etc.) cannot
-  promote a grant into ally scope — only the main-clause subject phrase does. This keeps
-  ships like Pallas/Refine/AEGIS on `self`. Audit identified 18 all-allies targets and
+  model, which the engine routes on). Detection is VERB-AWARE (live-verification fix
+  2026-06-05): receiving verbs ("gains/has") route by the SUBJECT — "all allies gain X"
+  → `all-allies`, "This Unit gains X" → `self`; the bestowing verb ("grants") routes by
+  the RECEIVER — "grants all allies / them X" → `all-allies`/`ally`, "grants itself X"
+  → `self` (Nuqtu), and **receiver-less "This Unit grants X" → `all-allies`** (the locked
+  routing rule: unspecified grants go to all players — Oleander-style support actives).
+  "the (other) ally with the highest …" → `ally`. The condition-clause non-leak rule:
+  condition sub-clauses (introduced by "if", "when", "after", etc.) are stripped before
+  receiver detection, so a trigger's "an ally" cannot fake a receiver (Pallas's "gains X
+  after an ally is critically repaired" stays `self`). Audit: 81 all-allies targets and
   1 single-ally target (Howler) across the corpus; attacker-only fixtures are unaffected
   (self and all-allies both fold onto the attacker's side when no team actors are walked).
 
@@ -385,8 +389,9 @@ configure it and it looks like it works, but it does nothing".
 > **Shipped 2026-06-05 (team ShipSkills walk — feat/combat-engine-team-skills-walk):**
 > - Team ships walk their parsed `ShipSkills` as full combat actors (see §5 "Team ShipSkills walk"
 >   block above).
-> - Parser ally-scope: `SkillEffect.target` granular for buff abilities; condition-clause non-leak
->   rule; 18 all-allies + 1 single-ally Howler identified.
+> - Parser ally-scope: `SkillEffect.target` granular for buff abilities; verb-aware receiver
+>   detection (receiver-less "grants" → all-allies); condition-clause non-leak rule;
+>   81 all-allies + 1 single-ally Howler identified.
 > - Per-actor status maps, condition contexts, gate instances, and DoT applier contexts.
 > - teamDamage attribution: per-actor damage map; `RoundData.teamDamage` + `summary.teamTotalDamage`;
 >   focus-actor summary fields unaffected.
