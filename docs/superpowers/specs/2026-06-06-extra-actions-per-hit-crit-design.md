@@ -70,9 +70,9 @@ pattern in `playerTurn.ts`). Scope here = a locking test, no engine code expecte
   - Tormenter: self-HP-below-50% condition.
   - Liberator: no condition; `oncePerRound: true`.
   - Tygr: enemy-has-Stasis (`statusEffectCondition`); `oncePerRound: true`.
-  - Sokol / Harvester / Tithonus: unmodeled triggers → the ability parses but is
-    annotation-only (consistent with existing no-op convention for `on-attacked`/
-    `on-ally-destroyed` etc.).
+  - Sokol / Harvester / Tithonus: unmodeled triggers → NOT auto-parsed
+    (`parseExtraAction` disqualifies these phrasings and returns null); the user can
+    still add the ability manually in the editor.
 - `buildShipAbilities` slots the ability with its position anchor; `auditSkills.ts`
   mirrors the detection (audit counts stay consistent).
 - Editor: `extra-action` shows in `SkillSlotList` like other ability types (read +
@@ -89,7 +89,7 @@ pattern in `playerTurn.ts`). Scope here = a locking test, no engine code expecte
 - The extra turn runs the same `runPlayerTurn(PlayerActorRuntime)` pipeline — full
   normal turn per verified rule 1. Post-turn decrement runs again (rule 3).
 - Caps: per-actor per-round `oncePerRound` enforcement for texts that say so; a global
-  backstop `MAX_EXTRA_ACTIONS_PER_ROUND` (throw, mirroring `MAX_INTENT_GENERATIONS`)
+  backstop `MAX_EXTRA_TURNS_PER_ROUND` (throw, mirroring `MAX_INTENT_GENERATIONS`)
   converts a pathological grant loop into an error. Chaining is naturally self-limited
   (charged-skill grants can't re-fire — charges were just consumed; passive grants are
   once-per-round), but the backstop guards future texts.

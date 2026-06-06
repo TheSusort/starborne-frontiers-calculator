@@ -355,8 +355,9 @@ buff/charge-aura), source it from firing + passive.
      crit accumulator slot; on-crit follow-up effects fire once per critting hit. Damage
      averages correctly; trigger frequency now matches the game.
   5. **On-crit follow-ups fire per critting hit** (not once per action stream). The engine
-     emits one `ability-performed(didCrit)` event per critting hit; reactive `on-crit`
-     listeners accumulate intents for each one, drained after the action stream completes.
+     emits ONE `ability-performed` event per cast carrying a `critHits` count (present only
+     when > 0; `didCrit` stays the any-hit binary); the reactive `on-crit` listener enqueues
+     one intent per critting hit from that count, drained after the action stream completes.
 
   **Tygr Stasis approximation.** Tygr's extra-action condition "if the enemy is affected
   by Stasis" is approximated as enemy-has-any-debuff (name-agnostic, same semantics as all

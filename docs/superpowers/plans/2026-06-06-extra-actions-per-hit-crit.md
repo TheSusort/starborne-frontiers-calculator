@@ -1213,7 +1213,7 @@ PR body: summarize the two mechanics, the verified game rules, the zero-churn go
 |---|---|---|
 | Per-hit crit draws | **NONE** | Single-hit: 1 draw + identical multiplier. Multi-hit fixtures: only scenario 3, which is noCrit (0 draws before and after). |
 | Blended crit multiplier | **NONE** | `1 + (critHits/hits)×cd` ≡ binary multiplier at hits=1. |
-| `critHits` event field | **NONE** in snapshots (events aren't snapshotted); engine.events.test assertion updates are test-code-only. |
+| `critHits` event field | **NONE** in snapshots | Events aren't snapshotted; `engine.events.test` assertion updates are test-code-only. |
 | on-crit per-critting-hit | **NONE** | Scenario 17's on-crit fixture is single-hit → critHits ≤ 1. |
 | Queue loop rewrite (for-of → indexed) | **NONE** | Behavior-identical for static queues. |
 | `RoundData.extraTurns` | **NONE** | Conditional spread — absent without extra turns (teamDamage pattern). |
