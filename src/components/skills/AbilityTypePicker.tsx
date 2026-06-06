@@ -40,7 +40,7 @@ const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
             'accumulate-detonate',
         ],
     },
-    { label: 'Charge', types: ['charge', 'extra-action'] },
+    { label: 'Charge & Turns', types: ['charge', 'extra-action'] },
     {
         label: 'Utility',
         types: ['heal', 'shield', 'cleanse', 'purge', 'control'],

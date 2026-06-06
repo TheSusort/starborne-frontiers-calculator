@@ -256,6 +256,46 @@ describe('AbilityCard', () => {
         });
     });
 
+    describe('extra-action ability', () => {
+        const extraActionAbility: Ability = {
+            id: 'a6',
+            type: 'extra-action',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'extra-action', oncePerRound: false },
+        };
+
+        it('renders the summary text for an extra-action ability', () => {
+            render(
+                <AbilityCard ability={extraActionAbility} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.getByText('+1 extra action')).toBeInTheDocument();
+        });
+
+        it('appends (once per round) to summary when oncePerRound is true', () => {
+            const ability: Ability = {
+                ...extraActionAbility,
+                config: { type: 'extra-action', oncePerRound: true },
+            };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByText('+1 extra action (once per round)')).toBeInTheDocument();
+        });
+
+        it('calls onChange with oncePerRound flipped when checkbox is toggled', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard ability={extraActionAbility} onChange={onChange} onRemove={vi.fn()} />
+            );
+            fireEvent.click(screen.getByLabelText('Once per round'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'extra-action', oncePerRound: true }),
+                })
+            );
+        });
+    });
+
     it('reconstructs picker value from config.buffName and shows selected buff', () => {
         const buffAbilityWithName: Ability = {
             ...buffAbility,
