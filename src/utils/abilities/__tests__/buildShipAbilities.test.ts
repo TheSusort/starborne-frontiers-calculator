@@ -1005,6 +1005,17 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    it('Chakara third passive: round-start damage proc parses as a passive damage ability', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
+        });
+        const skills = buildShipAbilities(s);
+        const passive = skills.slots.find((sl) => sl.slot === 'passive');
+        const dmg = passive?.abilities.find((a) => a.type === 'damage');
+        expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 60 } });
+    });
+
     describe('extra-action abilities from text', () => {
         it('Liberator third passive: unconditional once-per-round extra action in passive slot', () => {
             const s = ship({
