@@ -127,7 +127,12 @@ export function registerReactiveListeners(args: {
             switch (ra.ability.trigger) {
                 case 'on-crit':
                     bus.on('ability-performed', (e) => {
-                        if (e.didCrit && e.actorId === ownerId) enqueue(intent);
+                        if (e.actorId !== ownerId) return;
+                        // Per-critting-hit (game-verified): 2 of 3 hits crit → the
+                        // follow-up fires twice. Events without critHits fall back
+                        // to the didCrit binary (one enqueue).
+                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
+                        for (let i = 0; i < n; i++) enqueue(intent);
                     });
                     break;
                 case 'on-debuff-inflicted':

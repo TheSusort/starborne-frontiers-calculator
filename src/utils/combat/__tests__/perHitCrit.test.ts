@@ -147,6 +147,58 @@ describe('perHitCrit', () => {
         }
     });
 
+    // ── Test 6: on-crit triggers fire once PER CRITTING HIT ─────────────────
+    // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
+    // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
+    //
+    // Charge trace (WITH FIX — 3 on-crit enqueues per active turn):
+    //   NOTATION: preTurn banks +1; drain (after cast-path banking) fires 3 on-crit intents.
+    //   R1 preTurn: 0+1=1. Cast-path banking: bonusCharges=0 (charge ability is reactive/
+    //     partitioned out), charges=min(1+0,6)=1. Drain: +1+1+1=4. RoundData: active, charges=4.
+    //   R2 preTurn: 4+1=5. Cast-path: min(5+0,6)=5. Drain: +1→6, +1→cap 6, +1→cap 6. RoundData: active, charges=6.
+    //   R3 preTurn: 6>=6 → charged, charges=0. RoundData: charged, charges=0.  ← firstCharged=3
+    //
+    // Pre-fix (1 on-crit enqueue regardless of critHits):
+    //   R1: 0+1=1 drain→+1=2. R2: 2+1=3 drain→+1=4. R3: 4+1=5 drain→+1=6. R4: charged. ← firstCharged=4
+    //
+    // Assertion: firstCharged < 4 → fails pre-fix (4 not < 4), passes post-fix (3 < 4).
+    it('on-crit follow-up fires once PER CRITTING HIT (3-hit @100% crit → 3 enqueues/turn)', () => {
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            config: { type: 'damage', multiplier: 100, hits: 3 },
+                        }),
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-crit',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 300 } }),
+                    ],
+                },
+            ],
+        };
+        // rounds: 6 so the charged round is always captured regardless of timing.
+        const result = simulateDPS({ ...BASE, chargeCount: 6, rounds: 6, shipSkills: skills });
+        const firstCharged = result.rounds.find((rw) => rw.action === 'charged')?.round;
+        expect(firstCharged).toBeDefined();
+        // Post-fix: firstCharged=3 (< 4). Pre-fix: firstCharged=4 (not < 4 → FAIL).
+        expect(firstCharged!).toBeLessThan(4);
+        expect(
+            result.rounds.map((rw) => `${rw.round}:${rw.action}:${rw.charges}`)
+        ).toMatchSnapshot();
+    });
+
     // ── Test 5: single-hit 50% crit — events with didCrit carry critHits: 1 ─
     // Gate (rate=0.5, 1 draw per round):
     //   R1: acc=0.5 (no) → didCrit=false

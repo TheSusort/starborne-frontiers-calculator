@@ -928,6 +928,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // nothing (the gate does not advance — unchanged). Decided AFTER the modifier
     // fold-in so the draws use the final effective crit rate; modifierCtx above
     // deliberately keeps the probability-based estimate (see spec).
+    // KNOWN LIMITATION (mirrors the noCrit caveat at the damageNoCrit read): the draw
+    // count follows the UNGATED hit count — if the damage ability itself were
+    // conditionally gated off, the gate would still advance. Not representable from
+    // parser output today (gate conditions never land on active/charged damage).
     const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
     const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
     let critHits = 0;
@@ -935,6 +939,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (critGate(effectiveCrit / 100)) critHits += 1;
     }
     // Any-hit binary: feeds ctx self-crit gates, the RoundData row, and didCrit.
+    // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
+    // registerReactiveListeners in triggers.ts.
     const roundCrit = critHits > 0;
     const effectivePen =
         defensePenetration +
