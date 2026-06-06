@@ -905,4 +905,129 @@ describe('dpsGoldenParity', () => {
         ],
         shipSkills: damageSkills(150, 320),
     }));
+
+    // Scenario 19: walked team actor (full team-skills walk).
+    // An attacker (active + charged damage, chargeCount 3) + ONE WALKED team actor whose
+    // hand-built shipSkills exercise the whole walk: an all-allies timed buff (lands on the
+    // attacker AND the team itself), an enemy timed debuff (inflict), an inferno DoT, a
+    // damage ability (populates teamDamage), an on-debuff-inflicted reactive charge ability,
+    // and a charged-slot all-allies Crit Power Up buff. Non-default speeds: team 130 acts
+    // before the attacker (100); enemy 50. Team affinity 'thermal' vs enemyAffinity 'chemical'
+    // → ADVANTAGE (per-actor affinity derivation: +25% team damage, crit cap 100).
+    //
+    // Reactive charge cadence (team chargeCount 2): on each ACTIVE turn the team banks +1 and
+    // emits two infliction events — the timed Defense Down (debuff-applied) and the inferno
+    // (dot-applied) — each firing the on-debuff-inflicted listener for +1, so +2 reactive +
+    // +1 bank = +3, capped at chargeCount 2 → the team reaches charged on its turn 2 (round 2).
+    // A charged turn resets charges to 0; the charged slot inflicts no debuff/DoT, so it banks
+    // only the +1 the next active turn (plus reactive on the active turns). Expect charged team
+    // turns on rounds 2, 4, 6, 8, 10 — and Crit Power Up (duration 1) on the attacker exactly
+    // those rounds. The snapshot self-writes; verified round-by-round in the task report.
+    snap('walked team actor (full team-skills walk)', () => {
+        const teamSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        // all-allies timed buff → attacker + team itself.
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 20 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 2,
+                            },
+                        }),
+                        // enemy timed debuff (inflict).
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Defense Down',
+                                parsedEffects: { defense: -15 },
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                        // inferno DoT.
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 15,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                        // damage ability → teamDamage non-zero.
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        // reactive: +1 charge on each debuff/DoT infliction this actor lands.
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-debuff-inflicted',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        // charged-slot all-allies buff → Crit Power Up on the attacker the
+                        // rounds the team fires charged (duration 1).
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Crit Power Up',
+                                parsedEffects: { critDamage: 30 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 1,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return {
+            ...BASE,
+            rounds: 10,
+            speed: 100,
+            enemySpeed: 50,
+            enemyAffinity: 'chemical',
+            // Attacker: active + charged damage, chargeCount 3.
+            shipSkills: damageSkills(150, 300),
+            teamActors: [
+                {
+                    id: 'team-1',
+                    speed: 130, // acts before the attacker (100)
+                    chargeCount: 2,
+                    startCharged: false,
+                    selfBuffs: [],
+                    enemyDebuffs: [],
+                    shipSkills: teamSkills,
+                    stats: {
+                        attack: 12000,
+                        crit: 25,
+                        critDamage: 140,
+                        defensePenetration: 0,
+                        hacking: 220,
+                        defence: 0,
+                        hp: 0,
+                    },
+                    affinity: 'thermal',
+                },
+            ],
+        };
+    });
 });

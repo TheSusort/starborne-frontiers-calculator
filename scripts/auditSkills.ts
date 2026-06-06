@@ -266,8 +266,49 @@ export function collectFindings(): { findings: Finding[]; shipCount: number } {
     return { findings, shipCount: ships.length };
 }
 
+export interface AllyScopeEntry {
+    ship: string;
+    slot: string;
+    buffName: string;
+    target: 'ally' | 'all-allies';
+}
+
+/**
+ * Mirrors the parser ally-scope classification (team walk): every buff ability whose target
+ * the builder stamped as 'ally' or 'all-allies'. Routes through the SAME buildShipAbilities
+ * the engine uses, so this list is the authoritative view of which ships grant team-wide buffs.
+ */
+export function collectAllyScopes(): AllyScopeEntry[] {
+    const ships = readShips();
+    const entries: AllyScopeEntry[] = [];
+    for (const ship of ships) {
+        // Parse each slot's text in ISOLATION (the `abilitiesFor` pattern — treats the text as the
+        // active slot) rather than building one Ship with refits:[] and a single buildShipAbilities
+        // call. Passive extraction is refit-state-driven, so the combined build skips passive
+        // columns whose refit isn't the active one — missing the ally grants those passives carry.
+        // The combat team-walk resolves the in-game active passive via getShipSkillRows(); for the
+        // audit we want the full picture of every slot's text, so each is parsed standalone and
+        // labeled with its CSV slot name.
+        for (const { slot, text } of ship.slots) {
+            for (const a of abilitiesFor(text)) {
+                if (a.config.type !== 'buff') continue;
+                if (a.target === 'ally' || a.target === 'all-allies') {
+                    entries.push({
+                        ship: ship.name,
+                        slot,
+                        buffName: a.config.buffName,
+                        target: a.target,
+                    });
+                }
+            }
+        }
+    }
+    return entries;
+}
+
 function run() {
     const { findings, shipCount } = collectFindings();
+    const allyScopes = collectAllyScopes();
 
     // ─── Report ───────────────────────────────────────────────────────────────
     const byRule = new Map<string, Finding[]>();
@@ -295,9 +336,27 @@ function run() {
         md += `\n`;
     }
 
+    // Ally-scope (team walk): buff abilities the builder routed to a single ally or all allies.
+    const allAllies = allyScopes.filter((e) => e.target === 'all-allies');
+    const singleAlly = allyScopes.filter((e) => e.target === 'ally');
+    md += `## ally-scoped grants (team walk) — ${allyScopes.length}\n\n`;
+    md += `> Parser-classified player-side targets. all-allies = every player actor; ally = one chosen ally.\n\n`;
+    md += `### all-allies — ${allAllies.length}\n\n`;
+    for (const e of allAllies) {
+        md += `- **${e.ship}** · ${e.slot}: ${e.buffName}\n`;
+    }
+    md += `\n### ally (single) — ${singleAlly.length}\n\n`;
+    for (const e of singleAlly) {
+        md += `- **${e.ship}** · ${e.slot}: ${e.buffName}\n`;
+    }
+    md += `\n`;
+
     writeFileSync(OUT_PATH, md);
 
     console.log(`Audited ${shipCount} ships → ${findings.length} findings.`);
+    console.log(
+        `  ally-scoped grants: ${allAllies.length} all-allies, ${singleAlly.length} single-ally`
+    );
     for (const ruleId of sortedRules) {
         console.log(`  ${ruleId.padEnd(28)} ${byRule.get(ruleId)!.length}`);
     }

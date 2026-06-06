@@ -195,13 +195,250 @@ describe('parseSkillEffects', () => {
         ).toEqual([{ buffName: 'Attack Up III', target: 'self', duration: 1, source: 'passive1' }]);
     });
 
-    it('parses grants → self with duration', () => {
+    it('parses a receiver-less grant → all-allies (verb-aware routing rule)', () => {
+        // CHANGED (live-verification fix): "This Unit grants X" with NO explicit receiver is a
+        // BESTOWING verb that confers the buff on the team, not the caster. Previously misclassified
+        // 'self' because of the "This Unit" subject anchor; under the locked routing rule a
+        // receiver-less grant goes to all players. (Attacker-only sims fold self/all-allies, so the
+        // attacker still benefits — this only changes how the engine walks a team ship's grants.)
         expect(
             parseSkillEffects(
                 'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns',
                 'active'
             )
-        ).toEqual([{ buffName: 'Hacking Up III', target: 'self', duration: 2, source: 'active' }]);
+        ).toEqual([
+            { buffName: 'Hacking Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('routes Oleander charge form ("grants Hacking Up III … repairs its Max HP") to all-allies', () => {
+        // Live regression: team Oleander's "This Unit grants Hacking Up III for 2 turns and
+        // repairs 100% of its Max HP …" stayed on Oleander and never reached the attacker.
+        // Receiver-less grant → all-allies. The repair clause carries no unit-skill so only the
+        // buff is asserted here.
+        expect(
+            parseSkillEffects(
+                'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and repairs 100% of its Max HP, with an additional 8.5% repair for each debuffed enemy.',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Hacking Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('routes a multi-buff second-clause grant to all-allies per buff (Oleander charge)', () => {
+        // Oleander charge: "grants Repair Over Time II for 2 turns and, for 3 turns, grants both
+        // Out. DoT Damage Up II and Hit Mitigation." Two separate "grants" verbs, none with a
+        // receiver → every buff routes all-allies. The masked "Out." period must not split the
+        // sentence (resolveBuffClause masking) and the second grant's buffs must not inherit a
+        // (non-existent) receiver from the first.
+        expect(
+            parseSkillEffects(
+                'This Unit grants <unit-skill>Repair Over Time II</unit-skill> for 2 turns and, for 3 turns, grants both <unit-skill>Out. DoT Damage Up II</unit-skill> and <unit-skill>Hit Mitigation</unit-skill>.',
+                'charge'
+            )
+        ).toEqual([
+            {
+                buffName: 'Repair Over Time II',
+                target: 'all-allies',
+                duration: 2,
+                source: 'charge',
+            },
+            {
+                buffName: 'Out. DoT Damage Up II',
+                target: 'all-allies',
+                // NOTE: the "for 3 turns" sits BEFORE the second grant verb ("and, for 3 turns,
+                // grants both …") so the forward-only duration scanner doesn't attach it — duration
+                // is null here. That is an existing/orthogonal duration-parsing limitation; this
+                // test asserts SCOPE (all-allies per buff), so it documents the actual duration.
+                duration: null,
+                source: 'charge',
+            },
+            { buffName: 'Hit Mitigation', target: 'all-allies', duration: null, source: 'charge' },
+        ]);
+    });
+
+    it('routes a combined "itself and all adjacent allies" grant to all-allies (Tormenter)', () => {
+        // Tormenter: "grants Out. Damage Up I to itself and all adjacent allies for 1 turn." The
+        // receiver names BOTH itself and the team — team-wide wins, so "itself" must NOT short-circuit
+        // to self. (Was already all-allies before the verb-aware change via the "allies" match;
+        // this locks that the new self-receiver branch doesn't regress it.)
+        expect(
+            parseSkillEffects(
+                'This Unit deals 160% damage with a guaranteed critical hit and grants <unit-skill>Out. Damage Up I</unit-skill> to itself and all adjacent allies for 1 turn.',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Out. Damage Up I', target: 'all-allies', duration: 1, source: 'active' },
+        ]);
+    });
+
+    it('classifies "grants itself X" as self (Nuqtu — explicit self receiver)', () => {
+        // The one corpus "grants itself" form (Nuqtu's End Of Round Action). An explicit "itself"
+        // receiver pins a bestowing grant back to the caster, overriding the receiver-less default.
+        expect(
+            parseSkillEffects(
+                'This Unit grants itself <unit-skill>Overload III</unit-skill> for 2 turns',
+                'charge'
+            )
+        ).toEqual([{ buffName: 'Overload III', target: 'self', duration: 2, source: 'charge' }]);
+    });
+
+    it('classifies "all allies gain Attack Up" as all-allies target', () => {
+        expect(
+            parseSkillEffects(
+                'all allies gain <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Attack Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('classifies "allies gain X" (unscoped plural) as all-allies', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit grants allies <unit-skill>Defense Up II</unit-skill> for 1 turn',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Defense Up II', target: 'all-allies', duration: 1, source: 'active' },
+        ]);
+    });
+
+    it('classifies "friendly units gain X" as all-allies', () => {
+        expect(
+            parseSkillEffects(
+                'Friendly units gain <unit-skill>Crit Power Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            { buffName: 'Crit Power Up III', target: 'all-allies', duration: 2, source: 'active' },
+        ]);
+    });
+
+    it('classifies "This Unit gains Attack Up" as self', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([{ buffName: 'Attack Up III', target: 'self', duration: 2, source: 'active' }]);
+    });
+
+    it('classifies "the ally with the highest Attack gains X" as ally', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit grants the ally with the highest Attack <unit-skill>Attack Up III</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([{ buffName: 'Attack Up III', target: 'ally', duration: 2, source: 'active' }]);
+    });
+
+    it('classifies "the other ally with …" as ally (forward-proofing "the other ally" heal/buff form)', () => {
+        // Corpus uses "the other ally with the lowest current health percentage" for heals/triggers
+        // (e.g. Yorn passive). This test locks the buff-grant variant so SINGLE_ALLY_RE's
+        // "the (?:other )?ally" branch is covered and can't regress silently.
+        expect(
+            parseSkillEffects(
+                'This Unit grants the other ally with the lowest HP <unit-skill>Defense Up II</unit-skill> for 2 turns',
+                'passive1'
+            )
+        ).toEqual([{ buffName: 'Defense Up II', target: 'ally', duration: 2, source: 'passive1' }]);
+    });
+
+    it('classifies "grants them 1 stack" as ally (Howler — receiver from context)', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit <unit-aid>cleanses 1</unit-aid> debuff from an ally and grants them 1 stack of <unit-skill>Blast</unit-skill> when that ally crits an enemy',
+                'passive1'
+            )
+        ).toEqual([
+            {
+                buffName: 'Blast',
+                target: 'ally',
+                duration: 'recurring',
+                source: 'passive1',
+                stacks: 1,
+                stackTrigger: 'per-round',
+            },
+        ]);
+    });
+
+    it('classifies a trailing-condition self grant as self (Pallas — "an ally" is the trigger)', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns after an ally is critically repaired',
+                'passive1'
+            )
+        ).toEqual([{ buffName: 'Attack Up II', target: 'self', duration: 2, source: 'passive1' }]);
+    });
+
+    it('routes a leading-condition receiver-less grant to all-allies (Refine — judgment call)', () => {
+        // JUDGMENT CALL (verb-aware rule): the leading "When an ally is directly damaged," condition
+        // is stripped, leaving "this Unit grants Inc. Damage Down I for 1 turn" — a BESTOWING grant
+        // with NO explicit receiver → all-allies. The prior 'self' expectation was made under the
+        // old verb-blind rule (where 'ally' would have routed the buff AWAY from the caster entirely,
+        // hence the conservative self call). With grants→all-allies the caster ALSO receives it, which
+        // is strictly more accurate for a damage-reaction protective buff (Inc. Damage Down = reduced
+        // incoming damage) that plausibly shields the whole team. Per the locked routing rule.
+        expect(
+            parseSkillEffects(
+                'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn',
+                'passive1'
+            )
+        ).toEqual([
+            {
+                buffName: 'Inc. Damage Down I',
+                target: 'all-allies',
+                duration: 1,
+                source: 'passive1',
+            },
+        ]);
+    });
+
+    it('routes a trailing-when receiver-less grant to all-allies (AEGIS — judgment call)', () => {
+        // JUDGMENT CALL (verb-aware rule): the trailing "when an ally … has their shield destroyed"
+        // condition is stripped, leaving "this Unit grants Defense Up II for 1 turn" — a BESTOWING
+        // grant with NO explicit receiver → all-allies. Same reasoning as Refine: a protective
+        // Defense Up reacting to an ally event is strictly more accurately team-wide (caster
+        // included) than self-only under the old conservative call.
+        expect(
+            parseSkillEffects(
+                'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn when an ally within the Active pattern has their shield destroyed',
+                'passive1'
+            )
+        ).toEqual([
+            { buffName: 'Defense Up II', target: 'all-allies', duration: 1, source: 'passive1' },
+        ]);
+    });
+
+    it('classifies a post-condition ally receiver as ally (condition strip preserves real receiver)', () => {
+        expect(
+            parseSkillEffects(
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns',
+                'passive1'
+            )
+        ).toEqual([
+            { buffName: 'Repair Over Time III', target: 'ally', duration: 2, source: 'passive1' },
+        ]);
+    });
+
+    it('keeps enemy-targeted debuffs enemy', () => {
+        expect(
+            parseSkillEffects(
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns',
+                'active'
+            )
+        ).toEqual([
+            {
+                buffName: 'Defense Down II',
+                target: 'enemy',
+                duration: 2,
+                source: 'active',
+                application: 'inflict',
+            },
+        ]);
     });
 
     it('assigns source field from argument', () => {
@@ -359,21 +596,23 @@ describe('parseSkillEffects', () => {
         ).toEqual([]);
     });
 
-    it('parses "granted" (passive voice) as a self-targeting buff', () => {
+    it('parses "granted" (passive voice) as a player-side buff with all-allies scope', () => {
         const result = parseSkillEffects(
             '(All) allies are granted <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-skill>Speed Up III</unit-skill> for 2 turns.',
             'active'
         );
         expect(result).toHaveLength(2);
+        // "(All) allies are granted …" is genuinely team-wide, so each grant carries all-allies
+        // scope (previously collapsed to 'self' under the binary self/enemy parser).
         expect(result[0]).toMatchObject({
             buffName: 'Attack Up III',
-            target: 'self',
+            target: 'all-allies',
             duration: 2,
             source: 'active',
         });
         expect(result[1]).toMatchObject({
             buffName: 'Speed Up III',
-            target: 'self',
+            target: 'all-allies',
             duration: 2,
             source: 'active',
         });

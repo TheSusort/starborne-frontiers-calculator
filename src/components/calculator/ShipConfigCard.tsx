@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
 import { Select } from '../ui/Select';
 import { getAffinityMatchup } from '../../utils/calculators/affinityUtils';
+import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import {
     DPSShipConfig,
     DPSShipConfigUpdateableField,
@@ -189,12 +190,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                                 onChange={(v) =>
                                     onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
                                 }
-                                options={[
-                                    { value: 'antimatter', label: 'Antimatter' },
-                                    { value: 'thermal', label: 'Thermal' },
-                                    { value: 'chemical', label: 'Chemical' },
-                                    { value: 'electric', label: 'Electric' },
-                                ]}
+                                options={AFFINITY_OPTIONS}
                                 className="w-full"
                             />
                         </Section>

@@ -29,7 +29,10 @@ export function buildSkillBuffAutoFill(ship: Ship): SkillBuffAutoFill {
         ship.thirdPassiveSkillText,
     ]);
     return {
-        selfBuffs: toSelectedBuffs(effects.filter((e) => e.target === 'self')),
+        // selfBuffs = all PLAYER-SIDE effects (self/ally/all-allies). The legacy DPS picker
+        // path treats every entry here as player-side (unchanged); the builder reads each
+        // entry's effectTarget to route ally/all-allies grants to the right actors.
+        selfBuffs: toSelectedBuffs(effects.filter((e) => e.target !== 'enemy')),
         enemyDebuffs: toSelectedBuffs(
             effects.filter((e) => e.target === 'enemy'),
             sourceChargeCount,
@@ -47,12 +50,17 @@ function toSelectedBuffs(
     const result: SelectedGameBuff[] = [];
 
     for (const effect of effects) {
-        if (seen.has(effect.buffName)) continue;
+        // Dedupe by (name, target, source): the SAME buff granted on different slots or to
+        // different scopes is a DISTINCT grant path. Deduping on buffName alone collapsed e.g.
+        // "this Unit gains Attack Up II" (active/self) and "grants Attack Up II" (charged/all-allies)
+        // into one entry, dropping a grant the builder needs to emit as its own ability.
+        const dedupeKey = `${effect.buffName}|${effect.target}|${effect.source}`;
+        if (seen.has(dedupeKey)) continue;
         if (isDoTBuffName(effect.buffName)) continue; // DoTs go to DoT config section
         const buff = BUFFS.find((b) => b.name === effect.buffName);
         if (!buff) continue;
 
-        seen.add(effect.buffName);
+        seen.add(dedupeKey);
         const parsedEffects = parseBuffEffects(buff.name, buff.description);
         const stackInfo = isStackable(buff.description);
 
@@ -60,7 +68,10 @@ function toSelectedBuffs(
             stackInfo.stackable && effect.stackTrigger ? effect.stackTrigger : undefined;
 
         result.push({
-            id: buff.name,
+            // Unique per grant path: the legacy pickers key React lists, stacks-change, and
+            // remove off `id` (GameBuffPicker), so same-name entries from different slots/scopes
+            // must NOT share an id. Manually-added picker entries still use the bare buff name.
+            id: `${buff.name}-${effect.source}-${effect.target}`,
             buffName: buff.name,
             // For accumulating buffs, stacks = rate per trigger; otherwise always 1.
             stacks: stackTrigger ? (effect.stacks ?? 1) : 1,
@@ -74,6 +85,8 @@ function toSelectedBuffs(
             sourceStartCharged,
             stackTrigger,
             ...(effect.application !== undefined ? { application: effect.application } : {}),
+            // Carry the granular ally-scope so the builder can stamp the right ability target.
+            effectTarget: effect.target,
         });
     }
 

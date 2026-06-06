@@ -919,7 +919,11 @@ export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passi
 
 export interface SkillEffect {
     buffName: string;
-    target: 'self' | 'enemy';
+    // Player-side granularity (team-walk ally-scope): 'self' = caster only, 'ally' = a single
+    // chosen ally, 'all-allies' = every player actor. 'enemy' = enemy debuff. The combat engine
+    // routes 'ally'/'all-allies' grants from a walked team ship onto the right actors; for the
+    // attacker's own sim 'self' and 'all-allies' both fold onto its side (zero churn).
+    target: 'self' | 'ally' | 'all-allies' | 'enemy';
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
@@ -1038,6 +1042,145 @@ function verbToTarget(verb: string, buffName: string): 'self' | 'enemy' {
     return found?.type === 'buff' ? 'self' : 'enemy';
 }
 
+// Single-ally phrasings: "the ally with/in …", "the other ally", "an ally", "an adjacent ally" (singular),
+// and the pronoun forms a single-ally grant uses for its receiver ("grants them/it/that ally X").
+// "all (adjacent) allies"/"allies" plural is handled by the all-allies branch first, so a
+// bare "allies" never reaches this — only a singular "ally" does.
+const SINGLE_ALLY_RE =
+    /\bthe (?:other )?ally\b|\ban ally\b|\ban adjacent ally\b|\bthat ally\b|\bthem\b/i;
+// Ally-scoped (team-wide) grant phrasings: bare plural "allies" (subsumes "all allies"), "friendly …".
+// Note: bare "allies" subsumes "all allies", so the explicit "all allies" alternative is omitted.
+const ALL_ALLIES_RE = /friendly|allies/i;
+// A grant whose receiver is explicitly the caster ("grants itself X").
+const SELF_RECEIVER_RE = /\bitself\b/i;
+// Granting (bestowing) verbs — the caster confers the buff on a (possibly explicit) receiver.
+const GRANT_VERB_RE = /\bgrants?\b|\bgranted\b|\bgranting\b/i;
+// Receiving verbs — the subject (This Unit) takes the buff onto itself; no external receiver.
+const SELF_RECEIVE_VERB_RE = /\bgains?\b|\bgaining\b|\bgained\b|\bhas\b|\bhave\b/i;
+// Any verb that introduces a player-side buff (grant or self-receive); used to bound a buff's
+// own grant span so a sibling grant's receiver doesn't leak across verbs.
+const ANY_GRANT_VERB_RE =
+    /\bgrants?\b|\bgranted\b|\bgranting\b|\bgains?\b|\bgaining\b|\bgained\b|\bhas\b|\bhave\b/gi;
+
+// Strips trigger/condition sub-clauses from a resolved (single-sentence) grant clause so an
+// ally reference INSIDE a condition ("after an ally is critically repaired", "when an ally is
+// directly damaged, …") isn't mistaken for the buff's receiver. Two comma/clause-boundary
+// anchored forms, lookbehind-free (iOS Safari 15):
+//  - leading:  "When/After/While/If … , <receiver clause>"  → drop up to the first comma
+//  - trailing: "<receiver clause> when/after/while/if …"    → drop from the keyword onward
+// The receiver phrasing ("this Unit grants the ally X" / "X allies gain Y") survives, so a
+// genuine post-condition ally receiver (Provider: "…, this Unit grants the ally RoT III") is
+// still classified ally. The clause is the same one `resolveBuffClause` already split on
+// abbreviation-masked sentence boundaries, so "Inc."/"Out." periods never reach here as
+// boundaries; condition keywords are matched on word boundaries only.
+function stripConditionClauses(clause: string): string {
+    let out = clause;
+    // Leading "When/After/While/If … ," — only when it precedes the rest via a comma.
+    out = out.replace(/^\s*(?:when|after|while|if)\b[^,]*,\s*/i, '');
+    // Trailing " when/after/while/if …" condition (to end of clause).
+    // LOSSY: a post-condition receiver clause is destroyed here; the default-self fallback covers
+    // the live corpus. A future "if …, all allies gain X" phrasing would need receiver-aware stripping.
+    out = out.replace(/\s+\b(?:when|after|while|if)\b.*$/i, '');
+    return out;
+}
+
+/**
+ * Isolates the SPAN of a clause governed by the buff's own granting verb, so a sibling grant's
+ * receiver in the same sentence doesn't leak onto this buff. The span runs from the verb that
+ * governs this buff (the nearest player-side buff verb at or before the buff name) up to the next
+ * such verb (or end of clause). Receivers can sit either between the verb and the buff
+ * ("grants all allies X") or after the buff ("grants X to all allies"), so the whole span is kept.
+ * Returns the verb-token and the span text. No lookbehind (iOS Safari 15).
+ */
+function buffGrantSpan(
+    clause: string,
+    buffStart: number
+): { verb: string | null; subject: string; object: string } {
+    // Collect every player-side buff verb position in the clause.
+    ANY_GRANT_VERB_RE.lastIndex = 0;
+    const verbs: { index: number; end: number; token: string }[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = ANY_GRANT_VERB_RE.exec(clause)) !== null) {
+        verbs.push({ index: m.index, end: m.index + m[0].length, token: m[0].toLowerCase() });
+    }
+    // Governing verb = the last verb that starts at or before the buff name.
+    let govIdx = -1;
+    for (let i = 0; i < verbs.length; i++) {
+        if (verbs[i].index <= buffStart) govIdx = i;
+        else break;
+    }
+    if (govIdx === -1) {
+        // No verb precedes the buff (defensive): no subject/object split, whole clause as object.
+        return { verb: null, subject: '', object: clause };
+    }
+    // Subject = text from the previous verb's clause boundary up to this verb (who acts).
+    // Object  = text from this verb up to the next verb (what/whom the verb governs).
+    const subjStart = govIdx > 0 ? verbs[govIdx - 1].end : 0;
+    const subject = clause.slice(subjStart, verbs[govIdx].index);
+    const objEnd = govIdx + 1 < verbs.length ? verbs[govIdx + 1].index : clause.length;
+    const object = clause.slice(verbs[govIdx].end, objEnd);
+    return { verb: verbs[govIdx].token, subject, object };
+}
+
+/**
+ * Resolves the player-side ally-scope of a granted buff from its GRANTING CLAUSE, using the
+ * same masking-aware clause resolver (`resolveBuffClause`) as condition detection so "Inc."/
+ * "Out." abbreviation periods don't break sentence splitting.
+ *
+ * Verb-aware routing (the binding rule: a receiver-less GRANT goes to ALL players):
+ *  - RECEIVING verb ("<subject> gains/has X") — the SUBJECT keeps the buff:
+ *      · team subject ("all allies gain X" / "friendly units gain X")        → 'all-allies'
+ *      · single-ally subject ("the ally with … gains X")                     → 'ally'
+ *      · This-Unit / no subject ("This Unit gains X")                        → 'self'
+ *  - BESTOWING verb ("grants") — the OBJECT (receiver) takes the buff:
+ *      · explicit self receiver ("grants itself X")                          → 'self'
+ *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
+ *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
+ *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
+ *
+ * Subject/object are taken from the buff's own grant span (its verb, the text before it back to
+ * the previous verb = subject, the text after it up to the next verb = object) so a sibling
+ * grant's receiver in the same sentence doesn't bleed across.
+ *
+ * For the attacker's own sim 'self' and 'all-allies' are equivalent (both fold onto the
+ * attacker's side); the distinction only matters when the engine walks a team ship's grants.
+ */
+function detectGrantScope(skillText: string, buffName: string): 'self' | 'ally' | 'all-allies' {
+    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
+    // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
+    const clause = stripConditionClauses(resolved);
+    const buffStart = clause.indexOf(buffName.toLowerCase());
+    const { verb, subject, object } = buffGrantSpan(
+        clause,
+        buffStart === -1 ? clause.length : buffStart
+    );
+
+    // Receiving verb (gains/has) → route by the SUBJECT (who receives onto itself).
+    if (verb !== null && SELF_RECEIVE_VERB_RE.test(verb)) {
+        if (ALL_ALLIES_RE.test(subject)) return 'all-allies';
+        if (SINGLE_ALLY_RE.test(subject)) return 'ally';
+        return 'self';
+    }
+
+    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Team and ally
+    // receivers are tested BEFORE the self ("itself") receiver so a combined receiver like
+    // "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) routes all-allies,
+    // not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's "grants itself").
+    if (verb !== null && GRANT_VERB_RE.test(verb)) {
+        if (ALL_ALLIES_RE.test(object)) return 'all-allies';
+        if (SINGLE_ALLY_RE.test(object)) return 'ally';
+        if (SELF_RECEIVER_RE.test(object)) return 'self';
+        // Receiver-less grant → all players (the locked routing rule).
+        return 'all-allies';
+    }
+
+    // No identifiable verb (defensive): fall back to the prior phrasing-only heuristic.
+    if (SINGLE_ALLY_RE.test(clause)) return 'ally';
+    if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
+    return 'self';
+}
+
 /**
  * Maps a verb to how a debuff lands: "inflict" forms are resistible, "apply" forms are
  * guaranteed. Only meaningful for enemy debuffs; returns undefined for self-buff verbs.
@@ -1067,9 +1210,13 @@ export function parseSkillEffects(
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
 
-        // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed)
-        const target = verbToTarget(verb, buffName);
-        const application = target === 'enemy' ? verbToApplication(verb) : undefined;
+        // Step 2: Target + how the effect lands (inflict = resistible, apply = guaranteed).
+        // Player-side grants get ally-scope granularity from the granting clause (team walk);
+        // enemy debuffs stay 'enemy'.
+        const side = verbToTarget(verb, buffName);
+        const target: SkillEffect['target'] =
+            side === 'self' ? detectGrantScope(skillText, buffName) : 'enemy';
+        const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
         const nextText = segments[i + 1]?.type === 'text' ? segments[i + 1].text : '';

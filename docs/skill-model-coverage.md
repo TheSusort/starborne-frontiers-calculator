@@ -5,6 +5,7 @@
 > Updated **2026-06-03** after the combat-engine Phase 1 ship (spec 2026-06-03-combat-engine-phase1-design.md).
 > Updated **2026-06-04** after the combat-engine Phase 2 ship (branch `feat/combat-engine-phase2`).
 > Updated **2026-06-05** after the combat-engine Phase 3 ship (branch `feat/combat-engine-phase3`).
+> Updated **2026-06-05** after the team ShipSkills walk (branch `feat/combat-engine-team-skills-walk`).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -251,6 +252,94 @@ buff/charge-aura), source it from firing + passive.
   regenerates). **Defense Matrix stays TIMED** (its texts carry "for x turns") — deliberately
   excluded. **Warding Screen** ("Stackable up to 4") is an OPEN QUESTION — unverified in-game,
   deliberately absent until confirmed.
+- **Team ShipSkills walk (2026-06-05, branch `feat/combat-engine-team-skills-walk`).**
+  Team ships now walk their parsed `ShipSkills` as full combat actors. Key mechanics:
+
+  **Routing table.** `self`-targeted abilities (grants, charge gains, buffs) apply to the
+  caster only. `ally`/`all-allies`-targeted abilities and unscoped grants apply to every
+  player actor (attacker + all team ships). All debuffs and DoTs route to the enemy.
+  Condition-clause scope does not leak: grant conditions that appear inside a debuff
+  sentence (Pallas, Refine, AEGIS self-buffs) stay `self`; only explicit ally-scope
+  phrases promote to `all-allies` or `ally`.
+
+  **Per-actor statuses + condition contexts.** Each player actor now carries its own
+  timed/aura/accumulating status maps. Every condition evaluation — application-time
+  gates, aura inclusion each round, drain-time checks inside the intent executor — uses
+  the owning actor's active buff names and its own crit rate against the shared enemy
+  state (HP%, debuff counts, enemy type). A caster-gated grant ("if the caster has buff
+  X, all allies gain Y") reads the caster's buffs to decide application and lands on
+  every player actor when the gate passes.
+
+  **teamDamage attribution model.** Every point of enemy HP decline belongs to exactly
+  one source actor. The focus actor's (attacker's) damage fills the existing
+  `totalRoundDamage` + per-type fields; everything from non-focus player actors rolls up
+  into `RoundData.teamDamage`. By construction `totalRoundDamage + teamDamage = round HP
+  delta`. `summary.teamTotalDamage` is the cross-round sum. Enemy HP% and HP-threshold
+  gates derive from attacker + team cumulative damage. The focus-only summary (DPS,
+  damage-type breakdown) is unaffected — the attacker's comparison remains meaningful
+  regardless of team composition.
+
+  **Per-applier DoT contexts.** Inferno ticks resolve against the applier's own
+  effective attack, DoT modifier, and affinity multiplier each round (the engine keeps a
+  last-turn ctx per actor). Corrosion stays enemy-HP-scaled but uses the applier's DoT
+  modifier + affinity. Bombs snapshot `damagePerStack` from the applier at application.
+  DoT ticks and bomb bursts attribute to `teamDamage` for team-applied entries.
+  `dot-applied` events carry the team actor's `sourceId` and feed `on-ally-debuff-
+  inflicted` listeners on the attacker.
+
+  **Reactive parity.** `partitionReactiveAbilities` runs once per walked actor; reactive
+  listeners are registered keyed to each actor's own owner id. Registration order: focus
+  actor (attacker) first, then team actors in input order — this is a fixed implementation
+  choice (Task 6) for determinism; cross-owner registration order only matters when
+  multiple owners share a listener, and any fixed order is deterministic. Listener guards:
+  `on-crit` → `actorId === owner`; `on-debuff-inflicted` → `sourceId === owner`;
+  `on-ally-debuff-inflicted` → player `sourceId !== owner`; `start-of-round` and
+  `on-bomb-detonated` → global. The intent executor uses the owner for stats, landing
+  rolls, and crit gates; charge intents targeting `ally`/`all-allies` bump every player
+  actor. Team DoT `dot-applied` events are live (the FUTURE seam in triggers.ts is
+  removed).
+
+  **Ally charge grants.** An `ally`/`all-allies`-targeted charge ability (e.g. Hermes)
+  bumps every player actor's charge accumulator, each capped at its own `chargeCount`.
+  `allyChargePerRound` on the attacker config remains as a coexisting manual input
+  (users without a configured Hermes keep it; both accumulate independently per actor).
+
+  **Echoing Burst accumulators.** Gather all players' direct damage to the enemy
+  (damage-taken semantics; attacker + team contribute to the same pool). The detonation
+  burst lands in the caster's own `detonation` channel.
+
+  **Parser ally-scope rules.** `SkillEffect.target` is now `'self' | 'ally' | 'all-allies'
+  | 'enemy'` (the 5-member union with `all-enemies` is `AbilityTarget` in the ability
+  model, which the engine routes on). Detection is VERB-AWARE (live-verification fix
+  2026-06-05): receiving verbs ("gains/has") route by the SUBJECT — "all allies gain X"
+  → `all-allies`, "This Unit gains X" → `self`; the bestowing verb ("grants") routes by
+  the RECEIVER — "grants all allies / them X" → `all-allies`/`ally`, "grants itself X"
+  → `self` (Nuqtu), and **receiver-less "This Unit grants X" → `all-allies`** (the locked
+  routing rule: unspecified grants go to all players — Oleander-style support actives).
+  "the (other) ally with the highest …" → `ally`. The condition-clause non-leak rule:
+  condition sub-clauses (introduced by "if", "when", "after", etc.) are stripped before
+  receiver detection, so a trigger's "an ally" cannot fake a receiver (Pallas's "gains X
+  after an ally is critically repaired" stays `self`). Audit: 81 all-allies targets and
+  1 single-ally target (Howler) across the corpus; attacker-only fixtures are unaffected
+  (self and all-allies both fold onto the attacker's side when no team actors are walked).
+
+  **focusActorId / per-actor damage map seam.** The engine core has no hardcoded
+  `'attacker'` string in its hot paths. The DPS adapter passes `focusActorId: 'attacker'`;
+  a future simulator page passes whichever actor it wants to focus without engine changes.
+  Round damage accumulates in a `Map<actorId, contributions>` — the simulator-page read
+  seam is in place from day one.
+
+  **Known approximations (documented in code):**
+  - *Accumulating-status cadence*: a team ship that casts an accumulating (stackTrigger)
+    all-allies buff uses the attacker's cast cadence for the aura inclusion tick — the
+    stack accumulates on the team actor's real turns, but the per-round effect inclusion
+    runs on the attacker's round context. This is conservative (never over-counts stacks)
+    but may mis-time the effect window for fast team ships. Logged as a backlog item
+    (see §6).
+  - *Speed-buff turn reordering*: received Speed Up buffs do not reorder turns mid-round;
+    the queue uses static input speeds (Phase 4 / turn-meter manipulation).
+  - *Per-hit crit divergence*: now also applies to team multi-hit ships (see backlog item
+    7 below).
 
 ---
 
@@ -297,6 +386,23 @@ configure it and it looks like it works, but it does nothing".
 >   `bomb-detonated` events.
 > - Editor Trigger select on `AbilityCard` with non-live trigger notes.
 >
+> **Shipped 2026-06-05 (team ShipSkills walk — feat/combat-engine-team-skills-walk):**
+> - Team ships walk their parsed `ShipSkills` as full combat actors (see §5 "Team ShipSkills walk"
+>   block above).
+> - Parser ally-scope: `SkillEffect.target` granular for buff abilities; verb-aware receiver
+>   detection (receiver-less "grants" → all-allies); condition-clause non-leak rule.
+>   The `audit:skills` ally-scope pass parses each slot text in isolation (per-slot, not the
+>   refit-state combined build) so passive grants surface too: 85 all-allies + 2 single-ally.
+> - Per-actor status maps, condition contexts, gate instances, and DoT applier contexts.
+> - teamDamage attribution: per-actor damage map; `RoundData.teamDamage` + `summary.teamTotalDamage`;
+>   focus-actor summary fields unaffected.
+> - Reactive parity: per-owner listener registration; team DoT `dot-applied` seam live.
+> - Ally charge grants to all player actors; `allyChargePerRound` coexists.
+> - Echoing Burst gathers all players' direct damage.
+> - focusActorId / per-actor damage map engine seam (simulator-page ready).
+> - UI: team cards gain stats grid, affinity select + matchup badge, full skill editor; manual
+>   extras pickers retain; DPSRoundChart shows a separate team-damage cumulative line.
+>
 > **Phase 4 pointer (not yet started):**
 > - Enemy offensive actions, `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
 >   targeting/taunt/stealth, multi-enemy, heal/shield/cleanse/control consumption, self-HP realism.
@@ -327,7 +433,27 @@ configure it and it looks like it works, but it does nothing".
    averages out, but on-crit trigger frequency undercounts for multi-hit ships (Enforcer's
    3–4 hits → ~3× fewer Defense Shred stacks than in-game at 50% crit). Would need per-hit
    crit accumulator draws + per-hit `ability-performed` events; touches the damage math's
-   crit multiplier aggregation. Deliberately accepted for Phase 3.
+   crit multiplier aggregation. Deliberately accepted for Phase 3. **Now also applies to
+   team multi-hit ships** (same divergence; user-accepted 2026-06-05 as part of the team
+   ShipSkills walk).
+8. **Team accumulating-status cadence approximation** — a team ship whose accumulating
+   (stackTrigger) buff targets `all-allies` stacks on the team actor's real turns, but the
+   per-round aura-inclusion tick runs on the attacker's round context. This is conservative
+   (never over-counts stacks), but may mis-time the effect window by one round for team
+   actors faster than the attacker. Resolution: generalize aura inclusion per actor (medium
+   cost; low user-visible impact today given few ships with `stackTrigger` + ally-scope).
+   Documented in §5 known approximations; introduced 2026-06-05 (team walk).
+9. **Drain-time enemy-debuff counts exclude ability-sourced statuses** — `enemy-debuff gte N`
+   threshold gates (Asphyxiator etc.) read `landedEnemyDebuffCount` from
+   `snapshot().activeEnemyDebuffs` in `buildActorConditionContext` (`triggers.ts`), which omits
+   payload-carrying ABILITY-sourced enemy debuffs. So at drain time and for foreign-caster auras
+   the tally undercounts — ability-applied statuses don't increment the gate. Pre-dates the team
+   walk (`buildDrainContext` used this same snapshot count before the team-walk PR) and is
+   golden-locked: every hand-built drain fixture is anchored to this approximation. Resolution
+   would mirror the self-side `includeAbilitySelfNames` switch with an `includeAbilityEnemyNames`
+   analogue, but enabling it churns all locked drain goldens (medium cost; low user-visible impact
+   given how few ships gate on enemy-debuff counts via ability-sourced statuses).
+   Flagged by CodeRabbit on the team-walk PR; accepted as pre-existing Phase-3 drain semantics.
 
 ---
 
@@ -338,6 +464,8 @@ Flat inputs that interact with abilities but live outside `ShipSkills`: base sta
 `startCharged` + `allyChargePerRound`, global `enemyType`, `enemyDefense`/`enemyHp`/
 `enemySecurity`, affinity modifiers (damage/crit cap/crit penalty), global
 attacker/enemy buff pickers, and team-ship buff/debuff contributions (driven by
-`teamActors` — each team actor's real turn cadence via its own `speed`/`chargeCount`/
-`startCharged`; the per-buff `sourceStartCharged` fields are deprecated). Modifier
-abilities fold additively into the same percentage buckets as buffs.
+`teamActors` — each team actor carries `shipSkills`, `stats`, and `affinity` when picked
+from the ship list; per-actor speed/chargeCount/startCharged; the per-buff
+`sourceStartCharged` fields are deprecated). Modifier abilities fold additively into the
+same percentage buckets as buffs. Enemy affinity is an additional input (`enemyAffinity`)
+used to compute each player actor's affinity matchup multipliers.

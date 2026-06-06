@@ -36,27 +36,29 @@ import {
 } from './statusEngine';
 import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
+import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
-// Round-scoped context the enemy's DoT processing needs from the attacker's turn.
-// At default speeds the attacker acts first, so the enemy's tick uses THIS round's
+/** A deterministic event gate: maps a probability/rate to a fire/no-fire decision. */
+export type RateGate = (rate: number) => boolean;
+
+/** The timed variant of a registered ability status (duration guaranteed numeric). */
+export type TimedStatus = Extract<RegisteredAbilityStatus, { kind: 'timed' }>;
+
+// Round-scoped context the enemy's DoT processing needs from the focus player actor's
+// turn. At default speeds the player acts first, so the enemy's tick uses THIS round's
 // context (identical to the pre-restructure behaviour). For a FASTER enemy it is the
 // PREVIOUS round's context; only in that case is round 1 undefined (the enemy acts
-// before any attacker turn — containers necessarily empty, processing skipped).
-export interface AttackerRoundCtx {
+// before any player turn — containers necessarily empty, processing skipped).
+export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
     affinityMult: number;
-    /** The attacker turn's directDamage — consumed by processAccumulators. With a
-     *  FASTER enemy this is the PREVIOUS round's value (the accumulator gathers the
-     *  last direct hit dealt before its countdown step) — a documented approximation
-     *  in the fast-enemy KNOWN-DIFF; no golden fixture combines the two. */
-    directDamage: number;
 }
 
-/** Everything one attacker turn contributes to the round's RoundData row. */
-export interface AttackerTurnResult {
+/** Everything one player actor's turn contributes to the round's RoundData row. */
+export interface PlayerTurnResult {
     action: 'active' | 'charged';
     roundCrit: boolean;
     enemyHpPct: number;
@@ -68,16 +70,56 @@ export interface AttackerTurnResult {
     directDamage: number;
     secondaryDamage: number;
     conditionalDamage: number;
-    detonationDamage: number; // the attacker-turn detonate() portion
-    attackerCtx: AttackerRoundCtx; // round-scoped context for the enemy's DoT tick
+    detonationDamage: number; // the player-turn detonate() portion
+    turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
-/** Everything the attacker turn closes over. Grouped from the round-loop free
- *  variables (actors + status engine, the gate closures, lookup maps, config
- *  consts, and the per-call round number / cumulative damage). */
-export interface AttackerTurnArgs {
+/** Everything one player actor's turns need. Built once at engine setup — the
+ *  attacker's runtime comes from the top-level inputs; walked team runtimes (Task 4)
+ *  from TeamActorInput. The engine core keys on runtime/actor ids, never 'attacker'. */
+export interface PlayerActorRuntime {
     actor: CombatActor;
-    attacker: CombatActor;
+    /** actor.id === focusActorId — this runtime's turns feed the RoundData row. */
+    focus: boolean;
+    castSkills: ShipSkills; // reactive-partitioned (engine setup)
+    reactiveAbilities: ReactiveAbility[];
+    timedSelfBySlot: TimedStatus[];
+    timedEnemyBySlot: TimedStatus[];
+    hasChargedSkill: boolean;
+    // Base stats
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    defence: number;
+    hp: number;
+    // Per-actor adapter-derived rates
+    debuffLandingChance: number;
+    selfDotModifier: number;
+    defensePenetrationBuff: number;
+    affinityDamageModifier: number;
+    affinityCritCap: number;
+    affinityCritPenalty: number;
+    affinityDisadvantage: boolean;
+    allyChargePerRound?: number; // attacker-only manual input
+    // Per-actor deterministic gates (own instances — determinism isolation)
+    activeCritGate: RateGate;
+    chargedCritGate: RateGate;
+    debuffLandingGate: RateGate;
+    extendChanceGate: RateGate;
+    landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
+    // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
+    selfBuffLookup: Map<string, SelectedGameBuff[]>;
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+}
+
+/** Everything one player actor's turn closes over. The per-actor configuration/gates/
+ *  stats live on `runtime`; the rest are round-shared engine state (status engine,
+ *  enemy actor + its DoT containers, the bus, and the per-call round number /
+ *  cumulative damage). chargeCount/startCharged are NOT here — they live on
+ *  `runtime.actor` (CombatActor carries chargeCount + seeded charges). */
+export interface PlayerTurnArgs {
+    runtime: PlayerActorRuntime;
     enemy: CombatActor;
     statusEngine: StatusEngine;
     // DoT containers (live on the enemy actor; passed through for clarity).
@@ -85,49 +127,29 @@ export interface AttackerTurnArgs {
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
-    // Registered timed ability statuses indexed by source slot, applied when fired.
-    timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
-    timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
-    // Lookups.
-    selfBuffLookup: Map<string, SelectedGameBuff[]>;
-    enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
-    // Deterministic gates.
-    activeCritGate: (rate: number) => boolean;
-    chargedCritGate: (rate: number) => boolean;
-    debuffLandingGate: (rate: number) => boolean;
-    extendChanceGate: (rate: number) => boolean;
-    landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
-    // Config consts.
-    shipSkills: ShipSkills;
-    hasChargedSkill: boolean;
-    chargeCount: number;
-    attack: number;
-    crit: number;
-    critDamage: number;
-    defensePenetration: number;
-    defensePenetrationBuff: number;
     enemyDefense: number;
     enemyHp: number;
-    selfDotModifier: number;
-    debuffLandingChance: number;
-    affinityDamageModifier: number;
-    affinityCritCap: number;
-    affinityCritPenalty: number;
-    affinityDisadvantage: boolean;
-    defence: number;
-    hp: number;
-    allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
     // Required (Phase 3): the engine always passes its internal bus (wrapping the optional
-    // external tap), so the attacker turn emits unconditionally.
+    // external tap), so the player turn emits unconditionally.
     bus: CombatEventBus;
     // Per-call round state.
     round: number;
-    cumulativeDamage: number;
+    /** Enemy HP decline so far (focus + team cumulative) — drives this turn's entering-round
+     *  enemyHpPct (the value hp-threshold gates and the HP% column react to). Renamed from
+     *  `cumulativeDamage` (Task 4): it now includes team damage, not just the focus actor's. */
+    enemyHpDecline: number;
+    /** Grant `amount` charges to EVERY player actor (Task 5 ally-charge routing). Supplied by
+     *  the engine, which loops all player actors (incl. this caster) bumping
+     *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
+     *  banking). Called from the CASTER's active-round charge step (mirrors own gains). Optional
+     *  so statusEngine/standalone callers without a team need not supply it — when absent the
+     *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
+    grantAllyCharges?: (amount: number) => void;
 }
 
 // ---------------------------------------------------------------------------
-// Module-private helpers used EXCLUSIVELY by the attacker turn.
+// Module-private helpers used EXCLUSIVELY by the player turn.
 // ---------------------------------------------------------------------------
 
 // Mirror toSimBuffs/toEnemyModifiers semantics for an ability-status payload: wrap it as
@@ -327,10 +349,18 @@ function chargeGainFromSkill(args: {
     gatedSkill: Skill | undefined;
     ctxFor: Map<string, ConditionContext>;
     fallbackCtx: ConditionContext;
+    /** Which charge abilities to sum (Task 5 ally routing):
+     *  - 'own'  → self-targeted (and anything not ally/all-allies) → bumps the caster only.
+     *  - 'ally' → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
+     *  For attacker-only runs the 'ally' total still routes through grantAllyCharges, which
+     *  loops the sole attacker → identical net charge to the pre-Task-5 single 'own' sum. */
+    targetFilter: 'own' | 'ally';
 }): number {
     let gain = 0;
     for (const ability of chargeAbilitiesFromSkill(args.gatedSkill)) {
         if (ability.config.type !== 'charge') continue;
+        const isAlly = ability.target === 'ally' || ability.target === 'all-allies';
+        if (args.targetFilter === 'ally' ? !isAlly : isAlly) continue;
         const primary = ability.conditions[0];
         const scale =
             !primary || primary.countComparator != null
@@ -385,10 +415,16 @@ function detonate(args: {
             args.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
             const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
+            // Each bomb bursts with the APPLIER's affinity matchup, snapshotted at
+            // application (PendingBomb.affinityMult) — NOT the detonating actor's. A
+            // team-applied bomb detonated by the attacker's skill keeps the team's
+            // modifier, mirroring processBombs' per-entry handling on the enemy turn.
+            // Identical for attacker-only runs (every entry carries the attacker's mult).
             const payout =
-                args.pendingBombs.reduce((sum, b) => sum + b.stacks * b.damagePerStack, 0) *
-                args.affinityMult *
-                pct;
+                args.pendingBombs.reduce(
+                    (sum, b) => sum + b.stacks * b.damagePerStack * b.affinityMult,
+                    0
+                ) * pct;
             if (payout > 0) {
                 args.emitBombDetonated?.(totalStacks, payout);
             }
@@ -400,9 +436,13 @@ function detonate(args: {
 }
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
+// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution
+// (Task 4); bombs also snapshot the applier's `affinityMult` at application (used at burst).
 function applyNewDoTs(args: {
     dotsConfig: DoTApplicationConfig;
     effectiveAttack: number;
+    affinityMult: number;
+    sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -415,6 +455,7 @@ function applyNewDoTs(args: {
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
+                sourceId: args.sourceId,
             });
             args.emitDotApplied('corrosion', dot.stacks);
         } else if (dot.type === 'inferno') {
@@ -422,6 +463,7 @@ function applyNewDoTs(args: {
                 stacks: dot.stacks,
                 tier: dot.tier,
                 remainingRounds: dot.duration,
+                sourceId: args.sourceId,
             });
             args.emitDotApplied('inferno', dot.stacks);
         } else if (dot.type === 'bomb') {
@@ -430,6 +472,8 @@ function applyNewDoTs(args: {
                 damagePerStack: args.effectiveAttack * (dot.tier / 100),
                 stacks: dot.stacks,
                 tier: dot.tier,
+                sourceId: args.sourceId,
+                affinityMult: args.affinityMult,
             });
             args.emitDotApplied('bomb', dot.stacks);
         }
@@ -442,34 +486,48 @@ function applyNewDoTs(args: {
 function applyAccumulators(args: {
     gatedSkill: Skill | undefined;
     pendingAccumulators: PendingAccumulator[];
+    sourceId: string;
 }): void {
     for (const acc of accumulatorsFromSkill(args.gatedSkill)) {
         args.pendingAccumulators.push({
             roundsRemaining: Math.max(1, acc.turns),
             pct: acc.pct,
             accumulated: 0,
+            sourceId: args.sourceId,
         });
     }
 }
 
 /**
- * One attacker turn: the full damage/buff/DoT-application pipeline (combat-system.md §10),
- * minus the DoT-processing calls (tickDoTs / processBombs / processAccumulators) which run
- * on the enemy turn. Returns everything the round's RoundData row needs from this turn; the
+ * One player actor's turn: the full damage/buff/DoT-application pipeline (combat-system.md
+ * §10), minus the DoT-processing calls (tickDoTs / processBombs / processAccumulators) which
+ * run on the enemy turn. Returns everything the round's RoundData row needs from this turn; the
  * caller folds the numeric damage fields into the round accumulator and drains any pending
  * resisted team-turn entries into `resistedEnemyDebuffs`. Math is byte-identical to the old
- * inline attacker block; only the structure (parameters + return) changed.
+ * inline attacker block; only the structure (parameters + return) changed. Every per-actor
+ * read comes from `runtime`, and every owner id is `runtime.actor.id` — only the attacker
+ * uses this today (Task 3); Task 4 builds walked team runtimes.
  */
-export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
+export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const {
-        actor,
-        attacker,
+        runtime,
         enemy,
         statusEngine,
         corrosionEntries,
         infernoEntries,
         pendingBombs,
         pendingAccumulators,
+        enemyDefense,
+        enemyHp,
+        enemyType,
+        bus,
+        round: r,
+        enemyHpDecline,
+        grantAllyCharges,
+    } = args;
+
+    const {
+        actor,
         timedEnemyBySlot,
         timedSelfBySlot,
         selfBuffLookup,
@@ -479,16 +537,13 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         debuffLandingGate,
         extendChanceGate,
         landsTimedEnemyApplication,
-        shipSkills,
+        castSkills: shipSkills,
         hasChargedSkill,
-        chargeCount,
         attack,
         crit,
         critDamage,
         defensePenetration,
         defensePenetrationBuff,
-        enemyDefense,
-        enemyHp,
         selfDotModifier,
         debuffLandingChance,
         affinityDamageModifier,
@@ -498,35 +553,33 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         defence,
         hp,
         allyChargePerRound,
-        enemyType,
-        bus,
-        round: r,
-        cumulativeDamage,
-    } = args;
+    } = runtime;
+    // chargeCount lives on the actor (CombatActor carries it); read from there.
+    const chargeCount = actor.chargeCount;
 
     // ====================================================================
-    // ATTACKER TURN — the old attacker block, minus the DoT-processing
+    // PLAYER TURN — the old attacker block, minus the DoT-processing
     // calls (tickDoTs / processBombs / processAccumulators), which move to
     // the enemy turn. Math is byte-identical; only the DoT block relocated.
     // ====================================================================
 
     // --- preTurn: action selection + charge consumption ---
     let action: 'active' | 'charged';
-    if (hasChargedSkill && attacker.charges >= chargeCount) {
+    if (hasChargedSkill && actor.charges >= chargeCount) {
         action = 'charged';
-        attacker.charges = 0;
+        actor.charges = 0;
     } else {
         action = 'active';
         if (hasChargedSkill) {
-            attacker.charges += 1;
+            actor.charges += 1;
         }
     }
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
-    // Enemy HP% entering this round, derived from damage dealt so far. Floors at 0
-    // once cumulative damage exceeds the pool (the sim keeps hitting the "dead" dummy).
-    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - cumulativeDamage / enemyHp)) : 100;
+    // Enemy HP% entering this round, derived from enemy HP decline so far (focus + team).
+    // Floors at 0 once decline exceeds the pool (the sim keeps hitting the "dead" dummy).
+    const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
     // noCrit is read from the UNGATED skill: the flag is a property of the attack
@@ -544,21 +597,23 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     const emitDebuffApplied = (sourceId: string, buffName: string) =>
         bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
 
-    // Per-round buff totals from the status engine. The attacker notifies the
+    // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
     // buffs key off the actual cadence, not a predicted schedule), then we read
     // the snapshot. No decrement here — that lives in each owner's Post Turn
-    // (statusEngine.decrementSide, called after this actor's turn block).
+    // (statusEngine.decrementPlayer/decrementEnemy, called after this actor's turn block).
     // sourceFired returns the buffNames of any TIMED enemy applications the
     // landing hook rejected this round (drawn once at application — Task 7).
+    // NOTE: sourceFired(runtime.actor.id, …) is already correct for future team ids —
+    // it applies that source's own manual lists.
     const { resistedEnemy: resistedScheduledTimedNames, appliedEnemy: appliedScheduledTimedNames } =
-        statusEngine.sourceFired('attacker', action === 'charged' ? 'charge' : 'active', r);
+        statusEngine.sourceFired(actor.id, action === 'charged' ? 'charge' : 'active', r);
     // Emit debuff-applied ONCE per landed timed enemy application (discrete-infliction event).
-    // This is the attacker's scheduled timed debuffs path. The ability timed path emits below.
+    // This is this actor's scheduled timed debuffs path. The ability timed path emits below.
     for (const buffName of appliedScheduledTimedNames) {
-        emitDebuffApplied('attacker', buffName);
+        emitDebuffApplied(actor.id, buffName);
     }
-    const entry = statusEngine.snapshot();
+    const entry = statusEngine.snapshot(actor.id);
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
     const cappedCrit = (critBuffTotal: number) =>
@@ -645,7 +700,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // "Already active" ability self statuses (window-persisting timed + accumulated)
     // are visible to the gate; auras are gated themselves, so they don't pre-seed names.
     const priorAbilitySelfNames = statusEngine
-        .timedAbilityStatuses('self')
+        .timedAbilityStatuses('self', actor.id)
         .map((s) => s.active.buffName);
 
     // (a) Pre-application gate context (before ability debuffs land). effectiveCritRate uses
@@ -675,9 +730,9 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
         if (landsTimedEnemyApplication(status.payload.application)) {
-            statusEngine.applyTimedAbilityStatus(r, status);
+            statusEngine.applyTimedAbilityStatus(r, status, actor.id);
             // Discrete infliction event — emit ONCE at this application site.
-            emitDebuffApplied('attacker', status.payload.buffName);
+            emitDebuffApplied(actor.id, status.payload.buffName);
         } else {
             // status.duration is guaranteed numeric by the timed variant.
             resistedAbilityTimedEnemy.push({
@@ -688,13 +743,50 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         }
     }
 
+    // Caster-ctx resolver (Task 5): activeAbilityStatuses gates each aura/accum against ITS
+    // CASTER's context. For the acting actor's OWN statuses (casterId === actor.id) the resolver
+    // returns the local round ctx — byte-identical to the pre-Task-5 single-ctx call, so the
+    // attacker-only path (where every casterId is the attacker) is zero-churn. For a FOREIGN
+    // caster (an ally-cast aura sitting on this actor's side) it builds that caster's ctx from
+    // its own snapshot + the shared enemy state, MEMOIZED per caster for this turn (cheap: one
+    // snapshot read per distinct foreign caster). effectiveCritRate is 0 for foreign casters
+    // (the per-round crit fold is local-only). The foreign ctx is independent of which local ctx
+    // is passed, so one memo serves both the enemy-side (preDebuff) and self-side (postDebuff)
+    // resolvers below.
+    const foreignCtxMemo = new Map<string, ConditionContext>();
+    const foreignCasterCtx = (casterId: string): ConditionContext => {
+        let c = foreignCtxMemo.get(casterId);
+        if (!c) {
+            c = buildActorConditionContext(statusEngine, casterId, {
+                corrosionEntryCount: corrosionEntries.length,
+                infernoEntryCount: infernoEntries.length,
+                bombCount: pendingBombs.length,
+                enemyType,
+                enemyHpPct,
+                // Include the foreign caster's ability-sourced self statuses (e.g. its self-granted
+                // gate buffs) so its own aura's gate sees them — matches the local priorAbilitySelfNames.
+                includeAbilitySelfNames: true,
+            });
+            foreignCtxMemo.set(casterId, c);
+        }
+        return c;
+    };
+    const resolveCtx =
+        (localCtx: ConditionContext) =>
+        (casterId: string): ConditionContext =>
+            casterId === actor.id ? localCtx : foreignCasterCtx(casterId);
+
     // Enemy-side ability statuses active this round, split by kind (Task 7):
     //  - TIMED (timedAbilityStatuses): already gated at application above; they
     //    persist their window unconditionally → folded WITHOUT a landing re-roll.
     //  - aura/accumulating (activeAbilityStatuses): conceptually re-applied each
     //    round → KEEP the per-round landing re-roll, with application respected.
-    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy');
-    const recurringAbilityEnemy = statusEngine.activeAbilityStatuses('enemy', preDebuffGateCtx);
+    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id);
+    const recurringAbilityEnemy = statusEngine.activeAbilityStatuses(
+        'enemy',
+        resolveCtx(preDebuffGateCtx),
+        actor.id
+    );
     const landedAbilityEnemy: ActiveBuff[] = [];
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
     const abilityEnemyEffects: SelectedGameBuff[] = [];
@@ -724,7 +816,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // Ability entries appended AFTER scheduled (KNOWN-DIFF c ordering).
     const roundEnemyDebuffs = [...scheduledEnemy.roundEnemyDebuffs, ...abilityEnemyEffects];
     const landedEnemyDebuffs = [...scheduledEnemy.landedEnemyDebuffs, ...landedAbilityEnemy];
-    // Resisted enemy debuffs sourced from THIS attacker turn (scheduled + ability).
+    // Resisted enemy debuffs sourced from THIS player actor's turn (scheduled + ability).
     // The caller prepends any team-turn resisted entries staged before this turn.
     const resistedEnemyDebuffs = [...scheduledEnemy.resistedEnemyDebuffs, ...resistedAbilityEnemy];
     const { enemyDefenseModifier, incomingDamageModifier } = toEnemyModifiers(roundEnemyDebuffs);
@@ -743,23 +835,33 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
+        // The gate evaluates against THIS CASTER's post-debuff ctx (the status belongs to the
+        // acting runtime — postDebuffGateCtx IS the caster's context). Once it passes, the status
+        // is applied to EVERY recipient (Task 5): self → [caster]; ally/all-allies → all players.
+        // The status lives on each recipient (decrements at the recipient's Post Turn; family +
+        // persistent rules run per recipient side because applyTimedAbilityStatus threads
+        // recipientId). buff-applied emits ONCE PER RECIPIENT with the recipient's actorId.
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
-        statusEngine.applyTimedAbilityStatus(r, status);
-        bus.emit({
-            type: 'buff-applied',
-            actorId: 'attacker',
-            round: r,
-            buffName: status.payload.buffName,
-            duration: status.duration,
-        });
+        // recipients is set by the engine helper for every timed-by-slot status; default to
+        // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
+        for (const rid of status.recipients ?? [actor.id]) {
+            statusEngine.applyTimedAbilityStatus(r, status, rid);
+            bus.emit({
+                type: 'buff-applied',
+                actorId: rid,
+                round: r,
+                buffName: status.payload.buffName,
+                duration: status.duration,
+            });
+        }
     }
 
     // (e) Effective self ability statuses this round (timed in-window + auras +
     // accumulating), gated vs postDebuffGateCtx. Fold their payloads into the self totals
     // exactly where scheduled buffs fold (toSimBuffs semantics).
     const selfAbilityStatuses: ActiveAbilityStatus[] = [
-        ...statusEngine.timedAbilityStatuses('self'),
-        ...statusEngine.activeAbilityStatuses('self', postDebuffGateCtx),
+        ...statusEngine.timedAbilityStatuses('self', actor.id),
+        ...statusEngine.activeAbilityStatuses('self', resolveCtx(postDebuffGateCtx), actor.id),
     ];
     const abilitySelfEffects = selfAbilityStatuses.map((s) => payloadToSelectedBuff(s.payload));
     const abilitySelfTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
@@ -911,17 +1013,38 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // added here and the total is capped at chargeCount, since charges never
     // exceed what the charged skill requires.
     if (hasChargedSkill && action === 'active') {
+        // OWN charge gains: self-targeted (and unscoped) charge abilities from the firing skill
+        // + the always-active passive slot. Bumps the caster only, capped at its own chargeCount.
         const bonusCharges =
-            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx }) +
+            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'own' }) +
             chargeGainFromSkill({
                 gatedSkill: gatedPassive,
                 ctxFor: passiveCtxFor,
                 fallbackCtx: ctx,
+                targetFilter: 'own',
             });
-        attacker.charges = Math.min(
-            attacker.charges + bonusCharges + (allyChargePerRound ?? 0),
+        actor.charges = Math.min(
+            actor.charges + bonusCharges + (allyChargePerRound ?? 0),
             chargeCount
         );
+    }
+    // ALLY charge gains (Task 5): ally/all-allies-targeted charge abilities bump EVERY player
+    // actor (incl. this caster), each capped at its OWN chargeCount. Gated by the CASTER's
+    // active-round state (mirrors own gains — charge abilities fire on active turns); recipients
+    // receive regardless of their own action state. Applied at the SAME sequence point as own
+    // gains. Independent of hasChargedSkill: a caster with no charged skill of its own can still
+    // grant charges to allies (Hermes pattern). The engine supplies grantAllyCharges, which
+    // performs the per-actor cap-bump; absent (standalone callers) → no-op.
+    if (action === 'active' && grantAllyCharges) {
+        const allyCharges =
+            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'ally' }) +
+            chargeGainFromSkill({
+                gatedSkill: gatedPassive,
+                ctxFor: passiveCtxFor,
+                fallbackCtx: ctx,
+                targetFilter: 'ally',
+            });
+        if (allyCharges > 0) grantAllyCharges(allyCharges);
     }
 
     const preCritDamage =
@@ -968,7 +1091,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     // += (not =): with a FASTER enemy, the enemy's bomb/accumulator bursts
     // run earlier in the round — a plain assignment would clobber them.
     // Identical at default order (the accumulator resets to 0 each round).
-    // This is the attacker-turn portion; the caller folds it into the round
+    // This is the player-turn portion; the caller folds it into the round
     // accumulator's detonationDamage with += (the enemy turn may have already
     // added bursts this round at a faster speed).
     const detonationDamage = detonate({
@@ -998,6 +1121,8 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         applyNewDoTs({
             dotsConfig,
             effectiveAttack,
+            affinityMult,
+            sourceId: actor.id,
             corrosionEntries,
             infernoEntries,
             pendingBombs,
@@ -1032,7 +1157,7 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
     }
 
     if (dotsLanded) {
-        applyAccumulators({ gatedSkill, pendingAccumulators });
+        applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
     // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
@@ -1047,10 +1172,10 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         landedEnemyDebuffs.push({ buffName: 'Echoing Burst', turnsRemaining: acc.roundsRemaining });
     }
 
-    // Round-scoped context the enemy's DoT-processing turn needs. With a faster enemy
-    // the enemy reads the PREVIOUS round's context; at default speeds the attacker
-    // always precedes the enemy. The caller stores this as lastAttackerCtx.
-    const attackerCtx: AttackerRoundCtx = { effectiveAttack, dotMult, affinityMult, directDamage };
+    // Round-scoped context the enemy's DoT-processing turn needs (this actor's). With a
+    // faster enemy the enemy reads the PREVIOUS round's context; at default speeds the
+    // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
+    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult };
 
     return {
         action,
@@ -1065,6 +1190,6 @@ export function runAttackerTurn(args: AttackerTurnArgs): AttackerTurnResult {
         secondaryDamage,
         conditionalDamage,
         detonationDamage,
-        attackerCtx,
+        turnCtx,
     };
 }

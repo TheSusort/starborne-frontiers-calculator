@@ -9,11 +9,14 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
+import { AffinityName } from '../../types/ship';
 import type { ActiveBuff } from '../combat/statusEngine';
-import { runCombat } from '../combat/engine';
+import { runCombat, TeamActorEngineInput } from '../combat/engine';
+import type { CombatEventBus } from '../combat/events';
 import { flatInputToAbilities } from '../abilities/flatInputToAbilities';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
+import { computeAffinityModifiers } from './affinityUtils';
 
 // Re-exported so existing importers (e.g. RoundData consumers) keep a single home.
 export type { ActiveBuff } from '../combat/statusEngine';
@@ -64,6 +67,11 @@ export interface DPSSimulationInput {
     allyChargePerRound?: number;
     /** Enemy base class, for the 'enemy-type' charge-gain condition. */
     enemyType?: EnemyBaseClass;
+    /** Enemy affinity — vs each walked team actor's affinity yields that actor's own
+     *  damage/crit modifiers (computeAffinityModifiers). Absent → neutral defaults. The
+     *  attacker's affinity matchup is still passed pre-resolved via affinityDamageModifier
+     *  etc. (the page resolves it); this feeds the walked team actors. */
+    enemyAffinity?: AffinityName;
     /** Attacker turn-order speed. Default 100. */
     speed?: number;
     /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
@@ -74,6 +82,9 @@ export interface DPSSimulationInput {
      *  the sim HERE — keyed to their own turns. Do NOT also merge them into selfBuffs/
      *  enemyDebuffs (no-double-count). */
     teamActors?: TeamActorInput[];
+    /** Optional emit-only event tap forwarded to the combat engine. Listeners must not
+     *  read or mutate combat state (Phase 3 contract). */
+    bus?: CombatEventBus;
 }
 
 export interface RoundData {
@@ -94,6 +105,12 @@ export interface RoundData {
     detonationDamage: number;
     totalRoundDamage: number;
     cumulativeDamage: number;
+    /** All-channel non-focus player (team) damage this round: direct (incl. its
+     *  secondary/conditional components), DoT ticks from entries team actors applied, and
+     *  detonation bursts from their bombs/accumulators. `totalRoundDamage + teamDamage` =
+     *  the round's enemy-HP delta by construction. Set ONLY when walked team actors exist;
+     *  undefined on legacy/attacker-only runs (legacy RoundData shape preserved). */
+    teamDamage?: number;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -114,6 +131,9 @@ export interface DPSSimulationSummary {
     totalDetonationDamage: number;
     totalSecondaryDamage: number;
     totalConditionalDamage: number;
+    /** Total non-focus player (team) damage across all rounds. Present only when walked
+     *  team actors exist; the focus-only DPS fields above are unaffected by team damage. */
+    teamTotalDamage?: number;
 }
 
 export interface DPSSimulationResult {
@@ -175,6 +195,37 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // zero-damage charged turns whose statuses apply (spec: hasChargedSkill widening).
     const hasChargedSkill = chargeCount >= 1 && (chargedSkill?.abilities.length ?? 0) > 0;
 
+    // Per-walked-team-actor derivation (Task 4): for each team actor that carries
+    // shipSkills, resolve its OWN rates exactly as the attacker's are resolved above —
+    // landing chance from ITS hacking vs the enemy security with ITS affinity damage
+    // modifier, and affinity damage/crit modifiers from ITS affinity vs the enemy. The
+    // walked actor's selfDotModifier/defensePenetrationBuff start at 0 (its walked statuses
+    // produce those in-loop). A legacy team actor (no shipSkills) passes through unchanged.
+    const engineTeamActors: TeamActorEngineInput[] | undefined = teamActors?.map((t) => {
+        if (!t.shipSkills || !t.stats) return t;
+        const aff = computeAffinityModifiers(t.affinity, input.enemyAffinity);
+        const teamEffectiveHacking = t.stats.hacking * (1 + aff.damageModifier / 100);
+        const teamLandingChance =
+            Math.min(100, Math.max(0, teamEffectiveHacking - enemySecurity)) / 100;
+        const teamCharged = selectFiringSkill(t.shipSkills, 'charged');
+        const teamHasChargedSkill = t.chargeCount >= 1 && (teamCharged?.abilities.length ?? 0) > 0;
+        return {
+            ...t,
+            walk: {
+                shipSkills: t.shipSkills,
+                stats: t.stats,
+                debuffLandingChance: teamLandingChance,
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: aff.damageModifier,
+                affinityCritCap: aff.critCap,
+                affinityCritPenalty: aff.critPenalty,
+                hasChargedSkill: teamHasChargedSkill,
+            },
+        };
+    });
+    const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
+
     const { rounds, rawTotals } = runCombat({
         attack,
         crit,
@@ -201,7 +252,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         enemyType,
         speed,
         enemySpeed,
-        teamActors,
+        teamActors: engineTeamActors,
+        bus: input.bus,
     });
 
     const totalDamage = Math.round(rawTotals.cumulative);
@@ -217,6 +269,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
             totalDetonationDamage: Math.round(rawTotals.detonation),
             totalSecondaryDamage: Math.round(rawTotals.totalSecondary),
             totalConditionalDamage: Math.round(rawTotals.totalConditional),
+            // Team total only when any walked team actor exists (legacy shape preserved).
+            ...(hasWalkedTeam ? { teamTotalDamage: Math.round(rawTotals.teamTotal) } : {}),
         },
     };
 }

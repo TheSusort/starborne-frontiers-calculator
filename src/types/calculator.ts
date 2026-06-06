@@ -123,6 +123,8 @@ export interface SelectedGameBuff {
     stackTrigger?: StackTrigger;
     // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
     application?: 'inflict' | 'apply';
+    /** Parser ally-scope (team walk): granular target of the granting clause; absent on manual picks. */
+    effectTarget?: 'self' | 'ally' | 'all-allies' | 'enemy';
 }
 
 export interface DPSShipConfig {
@@ -216,14 +218,32 @@ export type HealerConfigUpdateableField =
     | 'critDamage'
     | 'healModifier';
 
+/** Shared stat block for walked team actors — covers every stat that influences damage,
+ *  debuff landing, and secondary (Defense/HP-based) damage calculations. */
+export interface CombatStatBlock {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    hacking: number;
+    defence: number; // source stat for Defense-based secondary damage
+    hp: number; // source stat for HP-based secondary damage
+}
+
 export interface TeamShipConfig {
     id: string;
     shipId?: string;
-    buffs: SelectedGameBuff[]; // parsed self/team buffs → merge into global attackerBuffs
-    enemyDebuffs: SelectedGameBuff[]; // parsed enemy debuffs  → merge into global enemyBuffs
+    buffs: SelectedGameBuff[]; // manual extra buffs granted to attacker → merge into global attackerBuffs
+    enemyDebuffs: SelectedGameBuff[]; // manual extra enemy debuffs → merge into global enemyBuffs
     startCharged: boolean; // auto-filled via detectFullyCharged; user-editable
     speed: number; // turn-order speed; auto-filled from ship stats
     chargeCount: number; // charge threshold; auto-filled from skill rows
+    /** Walked skills for this team actor (auto-filled on ship pick; editable per slot). */
+    shipSkills?: ShipSkills;
+    /** Combat stats for the walked team actor (auto-filled from the ship; editable). */
+    stats?: CombatStatBlock;
+    /** Affinity for the walked team actor — vs the enemy affinity yields its own modifiers. */
+    affinity?: AffinityName;
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing
@@ -238,4 +258,15 @@ export interface TeamActorInput {
     selfBuffs: SelectedGameBuff[];
     /** Debuffs inflicted on the enemy, keyed by skillSource to this actor's turns. */
     enemyDebuffs: SelectedGameBuff[];
+    /** When present, this actor WALKS its parsed skills through runPlayerTurn (Task 4):
+     *  its self-targeted buffs route to itself, enemy-targeted debuffs/DoTs to the enemy,
+     *  and its damage reduces enemy HP (reported separately as teamDamage). Without it the
+     *  actor stays a legacy scheduled-list source (byte-identical to pre-walk behaviour). */
+    shipSkills?: ShipSkills;
+    /** Combat stats for a walked team actor (auto-filled from the ship; required when
+     *  shipSkills is present so its damage/DoT ticks scale with its OWN attack). */
+    stats?: CombatStatBlock;
+    /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
+     *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
+    affinity?: AffinityName;
 }

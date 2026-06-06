@@ -531,7 +531,7 @@ describe('buildShipAbilities', () => {
         ]);
     });
 
-    it('Howler active: self buff (Attack Up III) coexists with active damage', () => {
+    it('Howler active: team buff (Attack Up III) coexists with active damage', () => {
         const s = ship({
             activeSkillText:
                 'This Unit grants <unit-skill>Attack Up III</unit-skill> for 2 turns and <unit-damage>repairs 90%</unit-damage> of its Attack.',
@@ -542,9 +542,13 @@ describe('buildShipAbilities', () => {
         expect(active).toBeDefined();
 
         const buff = abilityOfType(active!.abilities, 'buff');
+        // CHANGED (verb-aware routing fix): Howler's "This Unit grants Attack Up III" is a
+        // receiver-less BESTOWING grant → all-allies (the locked routing rule), not self. The
+        // attacker still receives it (self folds into all-allies for the attacker's own sim); the
+        // distinction only matters when the engine walks Howler as a team ship.
         expect(buff).toMatchObject({
             type: 'buff',
-            target: 'self',
+            target: 'all-allies',
             trigger: 'on-cast',
             config: { type: 'buff', buffName: 'Attack Up III' },
             autoFilled: true,
@@ -963,6 +967,41 @@ describe('buildShipAbilities', () => {
             const passive = slot(buildShipAbilities(s).slots, 'passive')!;
             const buff = namedBuff(passive.abilities, 'Stealth')!;
             expect(buff.trigger).toBe('on-bomb-detonated');
+        });
+    });
+
+    describe('parser ally-scope (team walk)', () => {
+        const namedBuff = (abilities: Ability[], name: string): Ability | undefined =>
+            abilities.find((a) => a.config.type === 'buff' && a.config.buffName === name);
+
+        it('all-allies grant produces a buff ability with target all-allies', () => {
+            const s = ship({
+                activeSkillText:
+                    'all allies gain <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('all-allies');
+        });
+
+        it('self gain produces a buff ability with target self', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('self');
+        });
+
+        it('single-ally grant produces a buff ability with target ally', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit grants the ally with the highest Attack <unit-skill>Attack Up III</unit-skill> for 2 turns.',
+            });
+            const active = slot(buildShipAbilities(s).slots, 'active')!;
+            const buff = namedBuff(active.abilities, 'Attack Up III')!;
+            expect(buff.target).toBe('ally');
         });
     });
 });

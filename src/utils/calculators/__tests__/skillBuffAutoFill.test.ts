@@ -19,7 +19,8 @@ describe('buildSkillBuffAutoFill', () => {
         expect(result.selfBuffs).toHaveLength(1);
         expect(result.selfBuffs[0].buffName).toBe('Attack Up III');
         expect(result.selfBuffs[0].autoFilled).toBe(true);
-        expect(result.selfBuffs[0].id).toBe('Attack Up III');
+        // Auto-filled ids are unique per grant path: name-source-target.
+        expect(result.selfBuffs[0].id).toBe('Attack Up III-active-self');
     });
 
     it('routes enemy effects to enemyDebuffs', () => {
@@ -42,15 +43,48 @@ describe('buildSkillBuffAutoFill', () => {
         expect(result.selfBuffs).toEqual([]);
     });
 
-    it('deduplicates by buffName across skill fields', () => {
+    it('keeps same-name grants from DIFFERENT slots as distinct entries', () => {
+        // The dedupe key is (buffName, target, source). The same buff granted on two different
+        // slots is two distinct grant paths the builder must emit separately — it must NOT collapse.
         const ship = {
             activeSkillText: 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn',
             firstPassiveSkillText:
                 'This Unit gains <unit-skill>Attack Up III</unit-skill> for 2 turns',
         } as unknown as Ship;
         const result = buildSkillBuffAutoFill(ship);
+        const entries = result.selfBuffs.filter((b) => b.buffName === 'Attack Up III');
+        expect(entries).toHaveLength(2);
+        expect(new Set(entries.map((b) => b.skillSource))).toEqual(new Set(['active', 'passive1']));
+        // Ids are unique so the legacy pickers' key/remove/stacks logic doesn't collide.
+        expect(new Set(entries.map((b) => b.id)).size).toBe(2);
+    });
+
+    it('keeps same-name grants with DIFFERENT targets as distinct entries (self + all-allies)', () => {
+        // "this Unit gains" (active, self) AND receiver-less "grants" on charge (all-allies):
+        // the dedupe widening keeps both so the all-allies grant path is not dropped.
+        const ship = {
+            activeSkillText: 'This Unit gains <unit-skill>Attack Up II</unit-skill> for 1 turn',
+            chargeSkillText:
+                'Grants <unit-skill>Attack Up II</unit-skill> to all allies for 2 turns',
+        } as unknown as Ship;
+        const result = buildSkillBuffAutoFill(ship);
+        const entries = result.selfBuffs.filter((b) => b.buffName === 'Attack Up II');
+        expect(entries).toHaveLength(2);
+        expect(new Set(entries.map((b) => b.effectTarget))).toEqual(
+            new Set(['self', 'all-allies'])
+        );
+        expect(new Set(entries.map((b) => b.id)).size).toBe(2);
+    });
+
+    it('still collapses a true duplicate (same name, target, and source)', () => {
+        // Same slot, same scope, repeated phrasing → one entry (the dedupe key still fires).
+        const ship = {
+            activeSkillText:
+                'This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn. This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn.',
+        } as unknown as Ship;
+        const result = buildSkillBuffAutoFill(ship);
         const count = result.selfBuffs.filter((b) => b.buffName === 'Attack Up III').length;
-        expect(count).toBeLessThanOrEqual(1);
+        expect(count).toBe(1);
     });
 });
 

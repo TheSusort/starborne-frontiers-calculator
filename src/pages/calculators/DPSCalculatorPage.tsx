@@ -12,7 +12,6 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
 import {
     buildDefaultShipSkills,
@@ -28,7 +27,8 @@ import { DPSCalculatorTable } from '../../components/calculator/DPSCalculatorTab
 import { DPSChart } from '../../components/calculator/DPSChart';
 import { DefensePenetrationChart } from '../../components/calculator/DefensePenetrationChart';
 import { DPSRoundChart } from '../../components/calculator/DPSRoundChart';
-import { CombatSettingsPanel } from '../../components/calculator/CombatSettingsPanel';
+import { EnemySettingsPanel } from '../../components/calculator/EnemySettingsPanel';
+import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { ShipConfigCard } from '../../components/calculator/ShipConfigCard';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
@@ -56,26 +56,33 @@ const DPSCalculatorPage: React.FC = () => {
         ).final;
     };
 
+    // Shared combat-stat extraction from a resolved final-stats object.
+    // Single source of truth for the magic defaults (hacking ?? 200, speed ?? 100, etc.)
+    // so selectShipForConfig and selectShipForTeamSlot can never silently diverge.
+    const combatStatsFromShip = (final: ReturnType<typeof shipFinalStats>) => ({
+        attack: Math.round(final.attack),
+        crit: Math.round(final.crit),
+        critDamage: Math.round(final.critDamage),
+        defensePenetration: Math.round(final.defensePenetration || 0),
+        hacking: Math.round(final.hacking ?? 200),
+        defence: Math.round(final.defence ?? 0),
+        hp: Math.round(final.hp ?? 0),
+        speed: Math.round(final.speed ?? 100),
+    });
+
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                const final = shipFinalStats(ship);
+                const stats = combatStatsFromShip(shipFinalStats(ship));
                 return {
                     configs: [
                         {
                             id: '1',
                             shipId: ship.id,
                             name: ship.name,
-                            attack: Math.round(final.attack),
-                            crit: Math.round(final.crit),
-                            critDamage: Math.round(final.critDamage),
-                            defensePenetration: Math.round(final.defensePenetration || 0),
-                            hacking: Math.round(final.hacking ?? 200),
-                            defence: Math.round(final.defence ?? 0),
-                            hp: Math.round(final.hp ?? 0),
-                            speed: Math.round(final.speed ?? 100),
+                            ...stats,
                             allyChargePerRound: 0,
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             affinity: ship.affinity,
@@ -139,7 +146,8 @@ const DPSCalculatorPage: React.FC = () => {
         },
     ]);
     const [enemyAffinity, setEnemyAffinity] = useState<AffinityName>('antimatter');
-    const [combatSettingsOpen, setCombatSettingsOpen] = useState(false);
+    const [enemySettingsOpen, setEnemySettingsOpen] = useState(false);
+    const [teamOpen, setTeamOpen] = useState(false);
 
     useEffect(() => {
         if (shipInitialized.current) return;
@@ -181,6 +189,9 @@ const DPSCalculatorPage: React.FC = () => {
                 startCharged: t.startCharged,
                 selfBuffs: t.buffs,
                 enemyDebuffs: t.enemyDebuffs,
+                shipSkills: t.shipSkills,
+                stats: t.stats,
+                affinity: t.affinity,
             })),
         [teamShips]
     );
@@ -272,6 +283,7 @@ const DPSCalculatorPage: React.FC = () => {
                     enemySpeed,
                     teamActors,
                     rounds,
+                    enemyAffinity,
                     selfBuffs: attackerBuffs,
                     enemyDebuffs: enemyBuffs,
                     startCharged: config.startCharged,
@@ -366,7 +378,7 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const final = shipFinalStats(ship);
+        const stats = combatStatsFromShip(shipFinalStats(ship));
 
         setConfigs((prev) =>
             prev.map((c) => {
@@ -375,14 +387,7 @@ const DPSCalculatorPage: React.FC = () => {
                     ...c,
                     shipId: ship.id,
                     name: ship.name,
-                    attack: Math.round(final.attack),
-                    crit: Math.round(final.crit),
-                    critDamage: Math.round(final.critDamage),
-                    defensePenetration: Math.round(final.defensePenetration || 0),
-                    hacking: Math.round(final.hacking ?? 200),
-                    defence: Math.round(final.defence ?? 0),
-                    hp: Math.round(final.hp ?? 0),
-                    speed: Math.round(final.speed ?? 100),
+                    ...stats,
                     allyChargePerRound: c.allyChargePerRound ?? 0,
                     // Reset (not carry over) when the new ship has no charge metadata —
                     // a stale threshold from the previous ship would mis-pace the sim.
@@ -434,7 +439,6 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForTeamSlot = (id: string, ship: Ship) => {
-        const { selfBuffs, enemyDebuffs: newEnemyDebuffs } = buildSkillBuffAutoFill(ship);
         const startCharged = detectFullyCharged([
             ship.activeSkillText,
             ship.chargeSkillText,
@@ -442,7 +446,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.secondPassiveSkillText,
             ship.thirdPassiveSkillText,
         ]);
-        const final = shipFinalStats(ship);
+        const { speed, ...combatStats } = combatStatsFromShip(shipFinalStats(ship));
         setTeamShips((prev) =>
             prev.map((t) => {
                 if (t.id !== id) return t;
@@ -450,10 +454,15 @@ const DPSCalculatorPage: React.FC = () => {
                     ...t,
                     shipId: ship.id,
                     startCharged,
-                    speed: Math.round(final.speed ?? 100),
+                    speed,
                     chargeCount: ship.chargeSkillCharge ?? 0,
-                    buffs: mergeAutoFill(t.buffs, selfBuffs),
-                    enemyDebuffs: mergeAutoFill(t.enemyDebuffs, newEnemyDebuffs),
+                    shipSkills: buildShipAbilities(ship),
+                    stats: combatStats,
+                    affinity: ship.affinity,
+                    // Walked skills supersede auto-fill stamping; clear any prior auto-filled
+                    // entries while preserving the user's manual extras.
+                    buffs: t.buffs.filter((b) => !b.autoFilled),
+                    enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
                 };
             })
         );
@@ -495,17 +504,15 @@ const DPSCalculatorPage: React.FC = () => {
                 action={{ label: 'Add Ship', onClick: addConfig, variant: 'primary' }}
             >
                 <div className="space-y-6">
-                    <CombatSettingsPanel
-                        isOpen={combatSettingsOpen}
-                        onToggle={() => setCombatSettingsOpen((v) => !v)}
+                    <EnemySettingsPanel
+                        isOpen={enemySettingsOpen}
+                        onToggle={() => setEnemySettingsOpen((v) => !v)}
                         enemyDefense={enemyDefense}
                         onEnemyDefenseChange={setEnemyDefense}
                         enemyHp={enemyHp}
                         onEnemyHpChange={setEnemyHp}
                         rounds={rounds}
                         onRoundsChange={setRounds}
-                        attackerBuffs={attackerBuffs}
-                        onAttackerBuffsChange={setAttackerBuffs}
                         enemyBuffs={enemyBuffs}
                         onEnemyBuffsChange={setEnemyBuffs}
                         enemyAffinity={enemyAffinity}
@@ -514,6 +521,16 @@ const DPSCalculatorPage: React.FC = () => {
                         onEnemySecurityChange={setEnemySecurity}
                         enemySpeed={enemySpeed}
                         onEnemySpeedChange={setEnemySpeed}
+                        enemyType={enemyType}
+                        onEnemyTypeChange={setEnemyType}
+                    />
+
+                    <TeamPanel
+                        isOpen={teamOpen}
+                        onToggle={() => setTeamOpen((v) => !v)}
+                        attackerBuffs={attackerBuffs}
+                        onAttackerBuffsChange={setAttackerBuffs}
+                        enemyAffinity={enemyAffinity}
                         teamShips={teamShips}
                         onAddTeamShip={addTeamShip}
                         onRemoveTeamShip={removeTeamShip}
@@ -529,8 +546,13 @@ const DPSCalculatorPage: React.FC = () => {
                         onTeamShipEnemyDebuffsChange={(id, debuffs) =>
                             updateTeamShip(id, { enemyDebuffs: debuffs })
                         }
-                        enemyType={enemyType}
-                        onEnemyTypeChange={setEnemyType}
+                        onTeamShipStatsChange={(id, stats) => updateTeamShip(id, { stats })}
+                        onTeamShipAffinityChange={(id, affinity) =>
+                            updateTeamShip(id, { affinity })
+                        }
+                        onTeamShipShipSkillsChange={(id, shipSkills) =>
+                            updateTeamShip(id, { shipSkills })
+                        }
                     />
 
                     <div
