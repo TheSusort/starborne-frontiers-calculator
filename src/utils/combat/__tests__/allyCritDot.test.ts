@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -146,5 +147,70 @@ describe('allyCritDot – Task 1: viaCrit on dot-applied', () => {
             // Executor-emitted events must NOT carry viaCrit.
             expect('viaCrit' in e).toBe(false);
         }
+    });
+});
+
+describe('allyCritDot – Task 2: on-ally-crit-dot reactive listener', () => {
+    // ── Direct unit test of registerReactiveListeners ────────────────────────
+    // Build a hand-rolled bus and assert enqueue counts per dot-applied scenario.
+    it('enqueues only for other players viaCrit dot-applied, not own/enemy/non-crit', () => {
+        // Hand-rolled minimal event bus.
+        const listeners = new Map<string, ((e: CombatEvent) => void)[]>();
+        const handBus = {
+            on<T extends CombatEvent['type']>(
+                type: T,
+                listener: (event: Extract<CombatEvent, { type: T }>) => void
+            ) {
+                const existing = listeners.get(type) ?? [];
+                listeners.set(type, [...existing, listener as unknown as (e: CombatEvent) => void]);
+            },
+            emit(event: CombatEvent) {
+                for (const l of listeners.get(event.type) ?? []) l(event);
+            },
+        };
+
+        const enqueued: Intent[] = [];
+
+        // Reactive dot ability with on-ally-crit-dot trigger.
+        const dotAbility: Ability = {
+            id: 'ally-crit-dot-ability',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-ally-crit-dot',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 3 },
+        };
+
+        const ra: ReactiveAbility = { ability: dotAbility, sourceSlot: 'passive' };
+
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            enemyId: 'enemy',
+        });
+
+        const baseEvent = {
+            targetId: 'enemy',
+            round: 1,
+            dotType: 'corrosion' as const,
+            stacks: 1,
+        };
+
+        // Scenario A: another player (team-1) with viaCrit → should enqueue 1.
+        handBus.emit({ type: 'dot-applied', sourceId: 'team-1', viaCrit: true, ...baseEvent });
+        expect(enqueued).toHaveLength(1);
+
+        // Scenario B: own cast (attacker) with viaCrit → own cast excluded → 0 additional.
+        handBus.emit({ type: 'dot-applied', sourceId: 'attacker', viaCrit: true, ...baseEvent });
+        expect(enqueued).toHaveLength(1);
+
+        // Scenario C: enemy with viaCrit → enemy excluded → 0 additional.
+        handBus.emit({ type: 'dot-applied', sourceId: 'enemy', viaCrit: true, ...baseEvent });
+        expect(enqueued).toHaveLength(1);
+
+        // Scenario D: another player (team-1) WITHOUT viaCrit → no crit, skip → 0 additional.
+        handBus.emit({ type: 'dot-applied', sourceId: 'team-1', ...baseEvent });
+        expect(enqueued).toHaveLength(1);
     });
 });

@@ -103,6 +103,7 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER player actor (ally crit-cast DoT)
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
@@ -154,6 +155,17 @@ export function registerReactiveListeners(args: {
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
                         if (e.sourceId !== ownerId && e.sourceId !== enemyId) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-crit-dot':
+                    bus.on('dot-applied', (e) => {
+                        // Ally DoT infliction whose cast crit (viaCrit): any OTHER
+                        // player's crit-cast DoT. Own casts and the enemy are excluded
+                        // (mirrors on-ally-debuff-inflicted's ally scoping). One enqueue
+                        // per qualifying infliction EVENT (per-infliction-event rule).
+                        if (e.viaCrit && e.sourceId !== ownerId && e.sourceId !== enemyId) {
+                            enqueue(intent);
+                        }
                     });
                     break;
                 case 'start-of-round':
