@@ -6,6 +6,7 @@
 > Updated **2026-06-04** after the combat-engine Phase 2 ship (branch `feat/combat-engine-phase2`).
 > Updated **2026-06-05** after the combat-engine Phase 3 ship (branch `feat/combat-engine-phase3`).
 > Updated **2026-06-05** after the team ShipSkills walk (branch `feat/combat-engine-team-skills-walk`).
+> Updated **2026-06-06** after the ally-crit-dot reactive trigger (branch `feat/combat-engine-ally-crit-dot`).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -87,7 +88,7 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 
 | Field | Status |
 |---|---|
-| `Ability.trigger` | Model now has 9 values (union extended in Phase 3: `on-cast`, `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`, `on-bomb-detonated`, `on-attacked`, `on-ally-destroyed`, `on-destroyed`); parser emits all live triggers (see §5); **editor exposes a Trigger select**; sim routes the five live triggers through the reactive machinery; non-live triggers remain annotation-only (assume-active). |
+| `Ability.trigger` | Model now has 10 values (union extended in Phase 3 + ally-crit-dot: `on-cast`, `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`, `on-ally-crit-dot`, `on-bomb-detonated`, `on-attacked`, `on-ally-destroyed`, `on-destroyed`); parser emits all live triggers (see §5); **editor exposes a Trigger select**; sim routes the six live triggers through the reactive machinery; non-live triggers remain annotation-only (assume-active). |
 | `Ability.target` | Editor exposes 5 values; sim only distinguishes self-vs-enemy when routing buff/debuff conversion. `ally`/`all-allies`/`all-enemies` have no distinct sim meaning (all-allies modifiers fold into self — correct for single-ship DPS). |
 | `modifier.isMultiplicative` | Deliberate no-op, documented in `applyAbilities.ts:38-40`; hidden in editor. |
 | `modifier.channel` `outgoingHeal` / `incomingDamage` | No DPS bucket — silently dropped (`applyAbilities.ts:68`). |
@@ -211,6 +212,30 @@ buff/charge-aura), source it from firing + passive.
     debuff applications on the team actor's turn). Requires `teamActors` to be configured;
     without it, ally-triggers never fire. Team DoT lists are deferred — only team timed debuff
     applications are derivable this phase. Covers Oleander charge-on-ally-inflict.
+  - `on-ally-crit-dot` → `dot-applied` from a team actor (`sourceId !== owner`) where
+    `viaCrit === true`. **Game rule (Crocus):** "When another ally inflicts a DoT effect with a
+    critical hit, inflicts Corrosion II on that enemy." Shipped 2026-06-06.
+    **`viaCrit` event contract:** the flag is set on `dot-applied` only when the casting ability
+    carried at least one critting hit (player-cast applications only — executor-applied DoTs such
+    as bomb-tick and DoT-extension never carry `viaCrit`). This matches the contract for
+    `ability-performed.critHits`: it is an opt-in field present only when > 0.
+    **Documented approximations:**
+    1. *Per-cast, not per-hit attribution.* "With a critical hit" is interpreted as: the cast
+       that applied the DoT had ANY critting hit. Per-hit DoT attribution (whether the specific
+       hit that placed a given DoT type was itself a crit) is not modeled — the sim does not
+       track which hit of a multi-hit skill placed which DoT entry.
+    2. *One trigger per `dot-applied` event.* A single team-actor cast that applies multiple
+       DoT types with a crit emits one `dot-applied` event per DoT type; the listener fires
+       once per such event. This is the per-infliction-event rule: the trigger fires as many
+       times as distinct DoT infliction events occur, not once per cast regardless of how many
+       types land.
+    **Apply-time nuance (golden scenario 22):** Corrosion II is a debuff (not a bomb), so it
+    applies via `applyTimedAbilityStatus`. Its effective-attack snapshot is NOT required at
+    apply time — Corrosion ticks read the status engine ctx at tick time (enemy-HP-scaled, per
+    the applier's DoT modifier + affinity). This means the reactive corrosion fires correctly
+    even when the Crocus owner has not yet acted that round (no last-turn ctx). A BOMB-type
+    reactive DoT from an owner with no last-turn ctx IS skipped: bomb `damagePerStack` is
+    snapshotted from the applier's effective attack at application time.
   - `on-bomb-detonated` → `bomb-detonated` (emitted per burst on countdown expiry and from
     skill-driven detonations). Covers Lingshe stealth, enemy charge removal, Echoing Burst
     repairs. The machinery supports any buff/debuff/dot/charge follow-up from this trigger;
@@ -444,6 +469,19 @@ configure it and it looks like it works, but it does nothing".
 >   purge-count (Phase 4 / purge modeling). Tygr Stasis → any-enemy-debuff approximation
 >   documented in §5.
 >
+> **Shipped 2026-06-06 (ally-crit-dot reactive trigger — feat/combat-engine-ally-crit-dot):**
+> - `on-ally-crit-dot` trigger: Crocus "when another ally inflicts a DoT with a critical hit,
+>   inflicts Corrosion II" now simulated. `dot-applied` events carry `viaCrit` when the
+>   casting ability had any critting hit; the listener fires once per qualifying event.
+>   Golden scenario 22 locks the contract. Two documented approximations (per-cast not per-hit
+>   attribution; once-per-event firing) and the corrosion-vs-bomb apply-time nuance are
+>   recorded in §5.
+> - Parser false-positive guards: Morao heal-as-secondary, Valkyrie burst-as-application,
+>   Vindicator and Paracelsus reactive-proc texts now parse clean. These are deliberately
+>   unmodeled content (heals and Phase-4 reactive procs) — no ability emitted, no audit
+>   finding. Valkyrie gets an `auditSkills` allowlist entry for its burst-reference phrasing.
+>   These fold into the existing heal/Phase-4 seam items (§6 items 6 and 9) — no new items.
+>
 > **Phase 4 pointer (not yet started):**
 > - Enemy offensive actions, `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
 >   targeting/taunt/stealth, multi-enemy, heal/shield/cleanse/control consumption, self-HP realism.
@@ -462,13 +500,16 @@ configure it and it looks like it works, but it does nothing".
 4. **Self HP-threshold realism** — `selfHpPct` is still fixed at 100. A declining
    self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
    self-execute-style gates meaningful.
-5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3)* — five live triggers
-   (`start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
-   `on-bomb-detonated`) are fully consumed via the reactive machinery. Three non-derivable
-   triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) remain annotation-only
-   (assume-active manual conditions) until Phase 4 brings enemy offensive actions and
-   ship-death modeling.
+5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06)* — six
+   live triggers (`start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
+   `on-bomb-detonated`, `on-ally-crit-dot`) are fully consumed via the reactive machinery. Three
+   non-derivable triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) remain
+   annotation-only (assume-active manual conditions) until Phase 4 brings enemy offensive actions
+   and ship-death modeling.
 6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
+   *Parser false-positive guards (2026-06-06):* Morao's heal-as-secondary and
+   Vindicator/Paracelsus reactive-proc texts now parse clean with no ability emitted —
+   deliberate non-coverage, deferred here.
 7. **Team accumulating-status cadence approximation** — a team ship whose accumulating
    (stackTrigger) buff targets `all-allies` stacks on the team actor's real turns, but the
    per-round aura-inclusion tick runs on the attacker's round context. This is conservative
