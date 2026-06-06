@@ -25,24 +25,39 @@ interface DPSRoundChartProps {
     height?: number;
 }
 
-/** 1-based round in which cumulative damage first reaches the enemy HP pool, or null. */
-const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
-    if (!enemyHp || enemyHp <= 0) return null;
-    const idx = ship.result.rounds.findIndex((r) => r.cumulativeDamage >= enemyHp);
-    return idx === -1 ? null : idx + 1;
-};
-
-interface ChartDataPoint {
-    round: number;
-    [key: string]: number;
-}
-
 /** Per-ship dataKey for its cumulative team-damage overlay line. */
 const teamKey = (shipId: string) => `${shipId}__team`;
 
 /** True when any of the ship's rounds reports walked-team damage. */
 const hasTeamDamage = (ship: ShipSimResult): boolean =>
     ship.result.rounds.some((r) => (r.teamDamage ?? 0) > 0);
+
+/**
+ * 1-based round in which the enemy HP pool is first emptied, or null.
+ *
+ * When the ship has walked-team damage, the enemy dies on COMBINED damage
+ * (attacker cumulative + team cumulative through that round) — matching how the
+ * engine models HP%/gates. Without team damage, it's the attacker cumulative alone.
+ */
+const killRoundFor = (ship: ShipSimResult, enemyHp?: number): number | null => {
+    if (!enemyHp || enemyHp <= 0) return null;
+    if (!hasTeamDamage(ship)) {
+        const idx = ship.result.rounds.findIndex((r) => r.cumulativeDamage >= enemyHp);
+        return idx === -1 ? null : idx + 1;
+    }
+    let teamRunning = 0;
+    for (let i = 0; i < ship.result.rounds.length; i++) {
+        const r = ship.result.rounds[i];
+        teamRunning += r.teamDamage ?? 0;
+        if (r.cumulativeDamage + teamRunning >= enemyHp) return i + 1;
+    }
+    return null;
+};
+
+interface ChartDataPoint {
+    round: number;
+    [key: string]: number;
+}
 
 interface CustomTooltipProps {
     active?: boolean;
@@ -161,8 +176,10 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
 
     if (ships.length === 0) return null;
 
-    // Ships whose sim included walked team actors get a separate (non-stacked) cumulative
-    // team-damage overlay line — kept out of the attacker's cumulative series entirely.
+    // Ships whose sim included walked team actors get a separate (non-stacked) combined
+    // total overlay line: attacker cumulative + team cumulative ("total team effort").
+    // The enemy actually dies when this combined total empties the HP pool, so this is
+    // the line that carries the kill mark when a team is configured.
     const teamShips = ships.filter(hasTeamDamage);
     const teamCumulative = new Map<string, number>();
 
@@ -177,7 +194,8 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
             const roundData = ship.result.rounds[r - 1];
             const running = (teamCumulative.get(ship.id) ?? 0) + (roundData?.teamDamage ?? 0);
             teamCumulative.set(ship.id, running);
-            point[teamKey(ship.id)] = running;
+            // Combined total = attacker cumulative this round + team cumulative this round.
+            point[teamKey(ship.id)] = (roundData?.cumulativeDamage ?? 0) + running;
         });
         chartData.push(point);
     }
@@ -225,7 +243,12 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
                         <Tooltip content={<RoundTooltip shipMap={shipMap} enemyHp={enemyHp} />} />
                         {ships.map((ship, i) => {
                             const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
-                            const killRound = killRoundFor(ship, enemyHp);
+                            // When the ship has team damage the enemy dies on the combined total,
+                            // so the kill mark lives on the dashed "with team" line instead — drop
+                            // it from the attacker's solid line here.
+                            const killRound = hasTeamDamage(ship)
+                                ? null
+                                : killRoundFor(ship, enemyHp);
                             return (
                                 <Line
                                     key={ship.id}
@@ -265,17 +288,42 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
                         {teamShips.map((ship) => {
                             const i = ships.findIndex((s) => s.id === ship.id);
                             const color = CHART_LINE_COLORS[i % CHART_LINE_COLORS.length];
+                            const killRound = killRoundFor(ship, enemyHp);
                             return (
                                 <Line
                                     key={teamKey(ship.id)}
                                     type="monotone"
                                     dataKey={teamKey(ship.id)}
-                                    name={`${ship.name} — team damage`}
+                                    name={`${ship.name} — with team`}
                                     stroke={color}
                                     strokeDasharray="5 4"
                                     {...chartLineDefaults(color)}
                                     strokeWidth={1.5}
-                                    dot={false}
+                                    // Kill marker: a ringed dot on the round the combined total
+                                    // (attacker + team) empties the enemy HP pool (no dot elsewhere).
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    dot={(props: any) =>
+                                        killRound !== null && props.index === killRound - 1 ? (
+                                            <g key={`${ship.id}-team-kill`}>
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={7}
+                                                    fill="none"
+                                                    stroke={color}
+                                                    strokeWidth={2}
+                                                />
+                                                <circle
+                                                    cx={props.cx}
+                                                    cy={props.cy}
+                                                    r={3}
+                                                    fill={color}
+                                                />
+                                            </g>
+                                        ) : (
+                                            <g key={`${ship.id}-team-${props.index}`} />
+                                        )
+                                    }
                                 />
                             );
                         })}
@@ -290,7 +338,7 @@ export const DPSRoundChart: React.FC<DPSRoundChartProps> = ({
                         ...teamShips.map((ship) => {
                             const i = ships.findIndex((s) => s.id === ship.id);
                             return {
-                                label: `${ship.name} — team damage`,
+                                label: `${ship.name} — with team`,
                                 color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],
                             };
                         }),

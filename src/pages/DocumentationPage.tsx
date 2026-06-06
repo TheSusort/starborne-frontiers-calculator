@@ -2336,7 +2336,12 @@ const DocumentationPage: React.FC = () => {
                                         ally-wide buffs and charge gains to the whole team —
                                         including the attacker. The buff and debuff pickers on team
                                         cards are manual extras only, for effects not covered by the
-                                        ship&apos;s parsed skills.
+                                        ship&apos;s parsed skills. On the round chart, the attacker
+                                        keeps its solid cumulative line and a dashed &quot;with
+                                        team&quot; line shows the combined team total (attacker plus
+                                        team damage); because the enemy dies on that combined total,
+                                        the kill mark sits on the dashed line at the round it
+                                        empties the HP pool.
                                     </p>
                                 </div>
 
