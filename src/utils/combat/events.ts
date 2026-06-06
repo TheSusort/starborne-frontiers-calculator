@@ -41,6 +41,9 @@ export type CombatEvent =
           abilityType: AbilityType;
           damage?: number;
           didCrit?: boolean;
+          /** Number of individual hits that crit this cast (per-hit crit checks).
+           *  Present only when > 0; `didCrit` stays the any-hit binary. */
+          critHits?: number;
           didHit?: boolean;
       }
     | {

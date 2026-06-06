@@ -8,6 +8,7 @@ import {
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
     gateFiringAbilities,
+    extraActionsFromSkill,
 } from '../applyAbilities';
 import { Ability, Condition, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
 import { ConditionContext } from '../evaluateConditions';
@@ -517,5 +518,66 @@ describe('gateFiringAbilities', () => {
             gateFiringAbilities(skill, { ...baseCtx, selfBuffNames: ['Stealth'] }).gatedSkill!
                 .abilities
         ).toHaveLength(1);
+    });
+});
+
+describe('extraActionsFromSkill', () => {
+    it('collects on-cast extra-action abilities; skips other types and non-cast triggers', () => {
+        const skill: Skill = {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'x1',
+                    type: 'extra-action',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'extra-action', oncePerRound: true },
+                },
+                {
+                    id: 'x2',
+                    type: 'extra-action',
+                    target: 'self',
+                    trigger: 'on-ally-destroyed',
+                    conditions: [],
+                    config: { type: 'extra-action', oncePerRound: false },
+                },
+                {
+                    id: 'x3',
+                    type: 'charge',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'charge', amount: 1 },
+                },
+            ],
+        };
+        expect(extraActionsFromSkill(skill)).toEqual([{ abilityId: 'x1', oncePerRound: true }]);
+        expect(extraActionsFromSkill(undefined)).toEqual([]);
+    });
+
+    it('a gated-out extra-action ability does not appear in grants', () => {
+        // An extra-action with a failing condition is dropped by gateFiringAbilities
+        // before extraActionsFromSkill sees the skill — grants must be empty.
+        const conditionedExtraAction: Ability = {
+            id: 'xa',
+            type: 'extra-action',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'self-buff', derivable: true, buffName: 'Stealth' }],
+            config: { type: 'extra-action', oncePerRound: true },
+        };
+        const rawSkill: Skill = { slot: 'active', abilities: [conditionedExtraAction] };
+        // Stealth not present → gateFiringAbilities drops the ability
+        const { gatedSkill } = gateFiringAbilities(rawSkill, makeCtx());
+        expect(extraActionsFromSkill(gatedSkill)).toEqual([]);
+        // Stealth present → ability passes the gate → grant surfaces
+        const { gatedSkill: gatedSkillWith } = gateFiringAbilities(rawSkill, {
+            ...makeCtx(),
+            selfBuffNames: ['Stealth'],
+        });
+        expect(extraActionsFromSkill(gatedSkillWith)).toEqual([
+            { abilityId: 'xa', oncePerRound: true },
+        ]);
     });
 });

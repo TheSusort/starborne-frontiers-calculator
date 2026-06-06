@@ -111,6 +111,9 @@ export interface RoundData {
      *  the round's enemy-HP delta by construction. Set ONLY when walked team actors exist;
      *  undefined on legacy/attacker-only runs (legacy RoundData shape preserved). */
     teamDamage?: number;
+    /** Number of EXTRA focus-actor turns this round (extra actions). Set only when
+     *  ≥ 1 — undefined preserves the legacy RoundData shape (golden snapshots). */
+    extraTurns?: number;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;

@@ -21,6 +21,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
     parseHpThresholdCondition,
@@ -768,6 +769,25 @@ function abilitiesFromText(text: string): PositionedAbility[] {
                 autoFilled: true,
             },
             pos: chargePos >= 0 ? chargePos : MAX_POS,
+        });
+    }
+
+    const extra = parseExtraAction(text);
+    if (extra) {
+        // Raw-text anchor, matching the charge block's convention (text.search) —
+        // stripUnitTags is module-local to skillTextParser and NOT exported.
+        const extraPos = text.search(/extra\s+(?:end\s+of\s+round\s+)?action/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'extra-action',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: extra.conditions,
+                config: { type: 'extra-action', oncePerRound: extra.oncePerRound },
+                autoFilled: true,
+            },
+            pos: extraPos >= 0 ? extraPos : MAX_POS,
         });
     }
 

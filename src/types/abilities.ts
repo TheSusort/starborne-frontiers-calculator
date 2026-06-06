@@ -13,6 +13,7 @@ export type AbilityType =
     | 'detonate-dot'
     | 'accumulate-detonate'
     | 'charge'
+    | 'extra-action'
     | 'heal'
     | 'shield'
     | 'cleanse'
@@ -166,6 +167,9 @@ export type AbilityConfig =
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.
     | { type: 'accumulate-detonate'; turns: number; pct: number }
     | { type: 'charge'; amount: number }
+    // A full extra turn: the engine re-inserts the granting actor into the round's
+    // remaining turn queue at its speed position (game-verified 2026-06-06).
+    | { type: 'extra-action'; oncePerRound: boolean }
     | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }
     | { type: 'cleanse' | 'purge'; count: number }
     | {

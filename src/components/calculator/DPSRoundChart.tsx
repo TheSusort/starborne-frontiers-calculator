@@ -120,6 +120,12 @@ const RoundTooltip: React.FC<CustomTooltipProps> = ({
                                     : `${roundData.charges} / ${roundData.chargeCount} charges`}
                             </p>
                         )}
+                        {roundData?.extraTurns ? (
+                            <p className="text-xs text-theme-text-secondary pl-2">
+                                +{roundData.extraTurns} extra turn
+                                {roundData.extraTurns > 1 ? 's' : ''}
+                            </p>
+                        ) : null}
                         {roundData && (
                             <p className="text-xs text-theme-text-secondary pl-2">
                                 Enemy HP: {roundData.enemyHpPct}%

@@ -46,6 +46,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',
+    'extra-action': 'Extra Action',
     heal: 'Heal',
     shield: 'Shield',
     cleanse: 'Cleanse',
@@ -299,6 +300,24 @@ export const AbilityCard: React.FC<Props> = ({
                             updateConfig({ ...config, amount: toNumber(e.target.value) })
                         }
                     />
+                );
+
+            case 'extra-action':
+                return (
+                    <div className="space-y-2">
+                        <p className="text-xs text-theme-text-secondary">
+                            {config.oncePerRound
+                                ? '+1 extra action (once per round)'
+                                : '+1 extra action'}
+                        </p>
+                        <Checkbox
+                            label="Once per round"
+                            checked={config.oncePerRound}
+                            onChange={(checked) =>
+                                updateConfig({ ...config, oncePerRound: checked })
+                            }
+                        />
+                    </div>
                 );
 
             case 'dot':

@@ -95,7 +95,7 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * Register each player owner's reactive abilities as bus listeners. Listener bodies are
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
- *  - on-crit → ability-performed with `didCrit && actorId === ownerId`
+ *  - on-crit → ability-performed where actorId === ownerId; enqueues once per CRITTING HIT (critHits field; falls back to the didCrit binary for events without it)
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied with `sourceId !== ownerId &&
  *    sourceId !== enemyId` (any OTHER player's infliction is an ally-infliction from this
@@ -127,7 +127,12 @@ export function registerReactiveListeners(args: {
             switch (ra.ability.trigger) {
                 case 'on-crit':
                     bus.on('ability-performed', (e) => {
-                        if (e.didCrit && e.actorId === ownerId) enqueue(intent);
+                        if (e.actorId !== ownerId) return;
+                        // Per-critting-hit (game-verified): 2 of 3 hits crit → the
+                        // follow-up fires twice. Events without critHits fall back
+                        // to the didCrit binary (one enqueue).
+                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
+                        for (let i = 0; i < n; i++) enqueue(intent);
                     });
                     break;
                 case 'on-debuff-inflicted':

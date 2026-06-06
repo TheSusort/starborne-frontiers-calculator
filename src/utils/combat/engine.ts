@@ -2,9 +2,11 @@ import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/ca
 import { ShipSkills } from '../../types/abilities';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
+import { type ExtraActionGrant } from '../abilities/applyAbilities';
 import {
     ActiveDoTStack,
     ActorDamage,
+    CombatActor,
     PendingAccumulator,
     PendingBomb,
     createActor,
@@ -28,6 +30,12 @@ import {
     partitionReactiveAbilities,
     registerReactiveListeners,
 } from './triggers';
+
+/** Backstop for pathological extra-action loops (a non-once-per-round grant whose
+ *  conditions stay true re-fires on the extra turn it granted). Real texts are
+ *  self-limited (charged-skill grants consume charges; passive grants are once per
+ *  round), so any round needing more than this is a config/parser bug. */
+const MAX_EXTRA_TURNS_PER_ROUND = 8;
 
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
 // and register them under the correct status-engine recipients. Returns the timed-by-slot
@@ -788,6 +796,44 @@ export function runCombat(input: CombatEngineInput): {
         // teamResistedEnemyDebuffs staging).
         const pendingResisted: ActiveBuff[] = [];
 
+        // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
+        // per actor per round (key `${actorId}:${abilityId}`); total insertions are
+        // backstopped. The queue is MUTABLE within the round — grants splice the
+        // granting actor back in at its speed position among the REMAINING actors
+        // (game-verified: re-added to the turn queue; acts immediately only when
+        // fastest remaining). Equal-speed remaining actors keep their place (they were
+        // already in line) — deterministic, consistent with the accepted Phase-2
+        // tiebreak simplification.
+        const extraActionFired = new Set<string>();
+        let extraTurnInsertions = 0;
+        const processExtraActionGrants = (
+            qi: number,
+            granter: CombatActor,
+            grants: ExtraActionGrant[]
+        ): void => {
+            for (const g of grants) {
+                const key = `${granter.id}:${g.abilityId}`;
+                if (g.oncePerRound && extraActionFired.has(key)) continue;
+                if (g.oncePerRound) extraActionFired.add(key);
+                extraTurnInsertions += 1;
+                if (extraTurnInsertions > MAX_EXTRA_TURNS_PER_ROUND) {
+                    throw new Error(
+                        `combat round ${r}: extra-action insertions exceeded ` +
+                            `MAX_EXTRA_TURNS_PER_ROUND (${MAX_EXTRA_TURNS_PER_ROUND}) — ` +
+                            `an extra-action grant is re-firing without bound`
+                    );
+                }
+                let insertAt = qi + 1;
+                while (
+                    insertAt < queue.length &&
+                    queue[insertAt].stats.speed >= granter.stats.speed
+                ) {
+                    insertAt += 1;
+                }
+                queue.splice(insertAt, 0, granter);
+            }
+        };
+
         // Drain the intent queue FIFO. Listeners may have enqueued during the emission
         // that triggered this drain; executed intents may emit events (chaining) that
         // enqueue MORE — those form the next generation. A generation is the batch
@@ -866,7 +912,8 @@ export function runCombat(input: CombatEngineInput): {
         // Drain point (a): start-of-round intents execute before the first turn.
         drainIntents();
 
-        for (const actor of queue) {
+        for (let qi = 0; qi < queue.length; qi++) {
+            const actor = queue[qi];
             bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
 
             if (actor.kind === 'attacker') {
@@ -920,6 +967,14 @@ export function runCombat(input: CombatEngineInput): {
 
                 // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                 lastTurnCtxByActor.set(actor.id, turn.turnCtx);
+
+                // Extra-action grants from this turn re-insert the attacker into the
+                // remaining queue (full extra turn — charge cadence, post-turn
+                // decrement, and triggers all run again on the inserted iteration).
+                // The extra turn intentionally re-fires statusEngine.sourceFired too:
+                // re-applying timed buffs, adding persistent stacks, and ticking
+                // accumulators are all correct for a real second turn.
+                processExtraActionGrants(qi, actor, turn.extraActionGrants);
             } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
                 // ====================================================================
                 // WALKED TEAM TURN — a real speed-ordered ally that runs the FULL
@@ -972,6 +1027,8 @@ export function runCombat(input: CombatEngineInput): {
                 // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
                 // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
                 lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
+
+                processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
             } else if (actor.kind === 'team') {
                 // ====================================================================
                 // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
@@ -1213,6 +1270,9 @@ export function runCombat(input: CombatEngineInput): {
         roundData.push({
             round: r,
             action,
+            // END-OF-ROUND charge state: with extra turns (extraTurns >= 1) the cadence
+            // ran more than once this round, so this is NOT "charges going into the
+            // turn that produced `action`" — it's the live counter after all turns.
             charges: Math.round(attacker.charges),
             chargeCount: hasChargedSkill ? chargeCount : 0,
             didCrit: roundCrit,
@@ -1226,6 +1286,8 @@ export function runCombat(input: CombatEngineInput): {
             // teamDamage set ONLY when walked team actors exist (undefined preserves the
             // legacy/attacker-only RoundData shape — goldens stay byte-identical).
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
+            // extraTurns set ONLY when ≥ 1 (undefined preserves legacy RoundData shape).
+            ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,

@@ -1030,4 +1030,72 @@ describe('dpsGoldenParity', () => {
             ],
         };
     });
+
+    // Scenario 20: per-hit crits — 3-hit active at 50% crit with an on-crit charge
+    // follow-up. Locks the per-hit draw schedule, the blended crit multiplier,
+    // and per-critting-hit trigger frequency. Added with the per-hit-crit increment
+    // (2026-06-06); hand-verified.
+    snap('per-hit crits (multi-hit + on-crit follow-up)', () => ({
+        ...BASE,
+        chargeCount: 4,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            config: { type: 'damage', multiplier: 90, hits: 3 },
+                        }),
+                        ab({
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-crit',
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+            ],
+        },
+    }));
+
+    // Scenario 21: extra actions — Liberator-style once-per-round passive grant with
+    // a charged cadence (the extra turn ADVANCES the cadence: banks a charge on
+    // active turns, fires the charged skill when full — full-normal-turn rule).
+    // Added with the extra-actions increment (2026-06-06); hand-verified.
+    snap('extra action (once-per-round passive, charged cadence)', () => ({
+        ...BASE,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 250 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'extra-action',
+                            target: 'self',
+                            config: { type: 'extra-action', oncePerRound: true },
+                        }),
+                    ],
+                },
+            ],
+        },
+    }));
 });

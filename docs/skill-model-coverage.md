@@ -193,14 +193,13 @@ buff/charge-aura), source it from firing + passive.
   - `start-of-round` → `round-started` (emitted at the round boundary, before any turn). Self-buffs
     with "at the start of the round" phrasing (Valkyrie and ~12 other occurrences) emit their
     timed windows here; real duration windows instead of the prior passive-aura approximation.
-  - `on-crit` → `ability-performed` with `didCrit && actorId === attacker`. Fires **once per crit
-    turn**, not per hit — multi-hit skills aggregate; the engine's `roundCrit` is decided once per
-    attacker action stream. Covers crit-inflicted debuffs (Enforcer's Defense Shred) and
-    crit-triggered self-buffs (Wusheng stealth). **Known divergence (user-accepted 2026-06-05):**
-    in-game each hit of a multi-hit skill crit-checks individually, so a 3-hit attacker at 50%
-    crit averages ~1.5 on-crit events per turn in-game vs ~0.5 here — the trigger FREQUENCY
-    undercounts for multi-hit ships (damage itself averages out via the deterministic schedule).
-    See backlog item 7.
+  - `on-crit` → `ability-performed` where `actorId === owner`; enqueues once per CRITTING HIT
+    (the event's `critHits` field; falls back to the `didCrit` binary for events without it).
+    Covers crit-inflicted debuffs (Enforcer's Defense Shred) and crit-triggered self-buffs
+    (Wusheng stealth). **Shipped 2026-06-06:** per-hit crit draws — each hit of a multi-hit
+    skill crit-checks individually against the deterministic gate, so a 3-hit attacker at 50%
+    crit produces the in-game ~1.5 on-crit events per turn (the former once-per-turn
+    divergence is closed; see the extra-actions §5 entry).
   - `on-debuff-inflicted` → `debuff-applied` / `dot-applied` with `sourceId === attacker`. Each
     discrete infliction event: a landed timed debuff application or a landed DoT config entry
     applied by the attacker that turn. A cast landing 2 debuffs = 2 events. Family-blocked-but-
@@ -338,8 +337,36 @@ buff/charge-aura), source it from firing + passive.
     (see §6).
   - *Speed-buff turn reordering*: received Speed Up buffs do not reorder turns mid-round;
     the queue uses static input speeds (Phase 4 / turn-meter manipulation).
-  - *Per-hit crit divergence*: now also applies to team multi-hit ships (see backlog item
-    7 below).
+- **Extra actions (2026-06-06, branch `feat/combat-engine-extra-actions-per-hit-crit`).**
+  Ships whose passive or charged text grants an extra action (Nuqtu, Sustainer, Tormenter,
+  Liberator, Tygr) gain a full additional turn, re-inserted into the round's turn queue at
+  their Speed position. Game-verified rules now locked by the engine:
+
+  1. **Extra action = full normal turn.** The granting actor re-enters the queue and takes
+     an ordinary turn (active or charged, per cadence) — it is not a reduced or
+     conditional action.
+  2. **Re-inserted by Speed.** The extra turn slot is placed immediately after the last
+     actor whose Speed is higher; if the granting actor is the fastest remaining ship it
+     acts again immediately.
+  3. **Status durations tick per turn taken.** An extra turn counts as a full turn for
+     decrement purposes — a 1-turn buff applied on the main turn expires after the extra
+     turn (buff-expired event count pinned by the golden scenario 21 test).
+  4. **Multi-hit skills crit-check per hit.** Each hit of a multi-hit skill draws its own
+     crit accumulator slot; on-crit follow-up effects fire once per critting hit. Damage
+     averages correctly; trigger frequency now matches the game.
+  5. **On-crit follow-ups fire per critting hit** (not once per action stream). The engine
+     emits ONE `ability-performed` event per cast carrying a `critHits` count (present only
+     when > 0; `didCrit` stays the any-hit binary); the reactive `on-crit` listener enqueues
+     one intent per critting hit from that count, drained after the action stream completes.
+
+  **Tygr Stasis approximation.** Tygr's extra-action condition "if the enemy is affected
+  by Stasis" is approximated as enemy-has-any-debuff (name-agnostic, same semantics as all
+  other `enemy-debuff` conditions). This is conservative (Stasis is rare; the condition is
+  non-derivable anyway) and documented in the parser code.
+
+  **`RoundData.extraTurns`.** The round data struct gains an optional `extraTurns` field
+  counting the extra turns taken by the focus actor that round. Rendered as "+N extra turn"
+  in the DPS round chart tooltip.
 
 ---
 
@@ -403,6 +430,20 @@ configure it and it looks like it works, but it does nothing".
 > - UI: team cards gain stats grid, affinity select + matchup badge, full skill editor; manual
 >   extras pickers retain; DPSRoundChart shows a separate team-damage cumulative line.
 >
+> **Shipped 2026-06-06 (extra actions + per-hit crits — feat/combat-engine-extra-actions-per-hit-crit):**
+> - Per-hit crit draws: each hit of a multi-hit skill draws its own crit accumulator slot;
+>   the damage multiplier is blended across hits. On-crit follow-up effects fire once per
+>   critting hit. Golden scenario 20 locks the contract.
+> - Extra-action abilities: `extra-action` ability type added to the model; parser detects
+>   Nuqtu/Sustainer/Tormenter/Liberator/Tygr phrasings; editor exposes the type; the engine
+>   re-inserts the granting actor into the round queue at its Speed position for a full extra
+>   turn (once per occurrence; `oncePerRound` cap). `RoundData.extraTurns` reports the count;
+>   the round tooltip shows "+N extra turn". Status durations decrement again on the extra turn.
+>   Golden scenario 21 locks cadence + buff-expiry behaviour. Chakara passive-damage lock test
+>   added (Task 9). Annotation-only seams: Sokol on-kill, Harvester ally-destroyed, Tithonus
+>   purge-count (Phase 4 / purge modeling). Tygr Stasis → any-enemy-debuff approximation
+>   documented in §5.
+>
 > **Phase 4 pointer (not yet started):**
 > - Enemy offensive actions, `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
 >   targeting/taunt/stealth, multi-enemy, heal/shield/cleanse/control consumption, self-HP realism.
@@ -428,22 +469,14 @@ configure it and it looks like it works, but it does nothing".
    (assume-active manual conditions) until Phase 4 brings enemy offensive actions and
    ship-death modeling.
 6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
-7. **Per-hit crit checks for multi-hit skills** — in-game each hit crit-checks individually
-   (user-confirmed 2026-06-05); the sim decides one `roundCrit` per action stream. Damage
-   averages out, but on-crit trigger frequency undercounts for multi-hit ships (Enforcer's
-   3–4 hits → ~3× fewer Defense Shred stacks than in-game at 50% crit). Would need per-hit
-   crit accumulator draws + per-hit `ability-performed` events; touches the damage math's
-   crit multiplier aggregation. Deliberately accepted for Phase 3. **Now also applies to
-   team multi-hit ships** (same divergence; user-accepted 2026-06-05 as part of the team
-   ShipSkills walk).
-8. **Team accumulating-status cadence approximation** — a team ship whose accumulating
+7. **Team accumulating-status cadence approximation** — a team ship whose accumulating
    (stackTrigger) buff targets `all-allies` stacks on the team actor's real turns, but the
    per-round aura-inclusion tick runs on the attacker's round context. This is conservative
    (never over-counts stacks), but may mis-time the effect window by one round for team
    actors faster than the attacker. Resolution: generalize aura inclusion per actor (medium
    cost; low user-visible impact today given few ships with `stackTrigger` + ally-scope).
    Documented in §5 known approximations; introduced 2026-06-05 (team walk).
-9. **Drain-time enemy-debuff counts exclude ability-sourced statuses** — `enemy-debuff gte N`
+8. **Drain-time enemy-debuff counts exclude ability-sourced statuses** — `enemy-debuff gte N`
    threshold gates (Asphyxiator etc.) read `landedEnemyDebuffCount` from
    `snapshot().activeEnemyDebuffs` in `buildActorConditionContext` (`triggers.ts`), which omits
    payload-carrying ABILITY-sourced enemy debuffs. So at drain time and for foreign-caster auras
@@ -454,6 +487,24 @@ configure it and it looks like it works, but it does nothing".
    analogue, but enabling it churns all locked drain goldens (medium cost; low user-visible impact
    given how few ships gate on enemy-debuff counts via ability-sourced statuses).
    Flagged by CodeRabbit on the team-walk PR; accepted as pre-existing Phase-3 drain semantics.
+9. **Annotation-only extra-action seams (Phase 4 / purge modeling)** — three extra-action
+   phrasings are deliberate annotation stubs, not yet simulated:
+   - *Sokol on-kill*: extra action granted after destroying an enemy — requires ship-death
+     modeling (Phase 4).
+   - *Harvester ally-destroyed*: extra action after an ally is destroyed — requires ally-death
+     events (Phase 4).
+   - *Tithonus purge-count*: extra action after purging 4+ buffs in a single skill — requires
+     purge mechanics (cleanse/purge modeling, also Phase 4 / Healing-calc seam).
+   Until those events are derivable these three remain assume-active annotation abilities.
+10. **Chakara lowest-speed buff-condition gap** — Chakara's third passive applies Attack Up II
+    and Defense Up II at round start when it has the lowest Speed among allies. The parser
+    currently emits only the passive damage ability (60% to the highest Speed Enemy); the two
+    buff abilities with the lowest-speed condition are not extracted (condition subject has no
+    parser mapping). This means Chakara's self-buffs are invisible to the sim for the turns
+    the condition fires. Resolution: add a `lowest-speed-ally` condition subject and emit the
+    buff abilities from the passive start-of-round clause. Low user-visible impact (most
+    Chakara configurations have the attacker as the slowest ship, making the condition always
+    true; manual picker is a workaround). Added 2026-06-06; Task 9 locks the damage proc parse.
 
 ---
 

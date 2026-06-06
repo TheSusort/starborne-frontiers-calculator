@@ -19,6 +19,8 @@ import {
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
     gateFiringAbilities,
+    extraActionsFromSkill,
+    type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import {
     toSimBuffs,
@@ -71,6 +73,9 @@ export interface PlayerTurnResult {
     secondaryDamage: number;
     conditionalDamage: number;
     detonationDamage: number; // the player-turn detonate() portion
+    /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
+     *  re-insertion + the oncePerRound/backstop bookkeeping. */
+    extraActionGrants: ExtraActionGrant[];
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
@@ -920,13 +925,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const effectiveAttack = attack * (1 + attackBuff / 100);
     const effectiveCrit = cappedCrit(critBuff);
     const effectiveCritDamage = critDamage + critDamageBuff;
-    // This round's binary crit outcome. A noCrit attack cannot crit and consumes
-    // no crit chance (the gate does not advance). Decided AFTER the modifier
-    // fold-in so the schedule uses the final effective crit rate; modifierCtx
-    // above deliberately keeps the probability-based estimate (see spec).
-    const roundCrit = damageNoCrit
-        ? false
-        : (action === 'charged' ? chargedCritGate : activeCritGate)(effectiveCrit / 100);
+    // Per-hit crit checks (game-verified 2026-06-06): each hit of a multi-hit skill
+    // draws the deterministic crit gate INDIVIDUALLY. Draw count = the UNGATED firing
+    // skill's hit count (schedule is cast-based like the old single draw — gating
+    // never changes the number of draws; a skill with no damage ability keeps the
+    // legacy hits=1 default → one draw, unchanged schedule). A noCrit attack draws
+    // nothing (the gate does not advance — unchanged). Decided AFTER the modifier
+    // fold-in so the draws use the final effective crit rate; modifierCtx above
+    // deliberately keeps the probability-based estimate (see spec).
+    // KNOWN LIMITATION (mirrors the noCrit caveat at the damageNoCrit read): the draw
+    // count follows the UNGATED hit count — if the damage ability itself were
+    // conditionally gated off, the gate would still advance. Not representable from
+    // parser output today (gate conditions never land on active/charged damage).
+    const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
+    const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
+    let critHits = 0;
+    for (let h = 0; h < drawHits; h++) {
+        if (critGate(effectiveCrit / 100)) critHits += 1;
+    }
+    // Any-hit binary: feeds ctx self-crit gates, the RoundData row, and didCrit.
+    // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
+    // registerReactiveListeners in triggers.ts.
+    const roundCrit = critHits > 0;
     const effectivePen =
         defensePenetration +
         defensePenetrationBuff +
@@ -1047,11 +1067,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (allyCharges > 0) grantAllyCharges(allyCharges);
     }
 
+    // Extra-action grants (game-verified: a full extra turn; the engine re-inserts
+    // this actor into the round's remaining queue by speed). Sourced from the FIRING
+    // skill + the always-active passive slot, both pre-gated by gateFiringAbilities.
+    const extraActionGrants = [
+        ...extraActionsFromSkill(gatedSkill),
+        ...extraActionsFromSkill(gatedPassive),
+    ];
+
     const preCritDamage =
         effectiveAttack * ((effectiveMultiplier + conditionalBonusPct) / 100) + secondaryStatValue;
-    // A "cannot critically hit" attack forces roundCrit false (decided at the gate),
-    // so this multiplier alone carries the crit effect.
-    const damageCritMultiplier = roundCrit ? 1 + effectiveCritDamage / 100 : 1;
+    // Blended per-hit crit multiplier: critHits of drawHits hits crit, each at the
+    // full (1 + critDamage) multiplier. Algebraically identical to splitting the
+    // skill multiplier + secondary + conditional bonus evenly across hits and
+    // critting each hit individually — so totals match per-hit expectation without
+    // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
+    // multiplier 1 (the "cannot critically hit" path, unchanged).
+    const critFraction = drawHits > 0 ? critHits / drawHits : 0;
+    const damageCritMultiplier = 1 + critFraction * (effectiveCritDamage / 100);
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
     const nonCritFactor =
@@ -1076,6 +1109,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         abilityType: 'damage',
         damage: directDamage,
         didCrit: roundCrit,
+        ...(critHits > 0 ? { critHits } : {}),
         didHit: true,
     });
 
@@ -1190,6 +1224,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         secondaryDamage,
         conditionalDamage,
         detonationDamage,
+        extraActionGrants,
         turnCtx,
     };
 }

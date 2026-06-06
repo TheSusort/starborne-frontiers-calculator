@@ -18,6 +18,7 @@ import {
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
+    parseExtraAction,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1599,5 +1600,120 @@ describe('parseChargeGain ally-crit trigger (Hermes)', () => {
             condition: 'always',
             derivable: false,
         });
+    });
+});
+
+describe('parseExtraAction', () => {
+    // Real texts from docs/ship-skills.csv.
+    it('Nuqtu: charged, gated on enemy having 3+ buffs', () => {
+        const r = parseExtraAction(
+            'This Unit deals <unit-damage>200% damage</unit-damage>, including additional Damage equal to <unit-damage>80%</unit-damage> of its Defense, and an extra 40% for each buff on the enemy. If the target has 3 or more buffs, this Unit grants itself 1 extra End Of Round Action.'
+        );
+        expect(r).toEqual({
+            oncePerRound: false,
+            conditions: [
+                {
+                    subject: 'enemy-buff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 3,
+                },
+            ],
+        });
+    });
+
+    it('Sustainer: gated on self having no debuffs', () => {
+        const r = parseExtraAction(
+            'This Unit deals <unit-damage>205% damage</unit-damage> with an additional <unit-damage>30%</unit-damage> for each buff on it. If this Unit has no debuffs, it gains one extra action.'
+        );
+        expect(r).toEqual({
+            oncePerRound: false,
+            conditions: [
+                {
+                    subject: 'self-debuff',
+                    derivable: true,
+                    countComparator: 'eq',
+                    countThreshold: 0,
+                },
+            ],
+        });
+    });
+
+    it('Tormenter: gated on self HP below 50%', () => {
+        const r = parseExtraAction(
+            'This Unit deals <unit-damage>180% damage</unit-damage> with a guaranteed critical hit. If its HP is below 50%, it <unit-aid>gains 1 Extra Action</unit-aid>.'
+        );
+        expect(r).toEqual({
+            oncePerRound: false,
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 50,
+                    hpSubject: 'self',
+                },
+            ],
+        });
+    });
+
+    it('Liberator: unconditional, once per round', () => {
+        const r = parseExtraAction(
+            'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.'
+        );
+        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+    });
+
+    it('Tygr: enemy-debuff presence approximation, once per round', () => {
+        const r = parseExtraAction(
+            "This Unit's attacks do not break <unit-skill>Stasis</unit-skill> and deal 30% more damage to enemies with <unit-skill>Stasis</unit-skill> or <unit-skill>Disable</unit-skill>. After damaging an enemy affected by <unit-skill>Stasis</unit-skill>, once per round, give one extra action."
+        );
+        expect(r).toEqual({
+            oncePerRound: true,
+            conditions: [
+                {
+                    subject: 'enemy-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 1,
+                },
+            ],
+        });
+    });
+
+    it('disqualified: Sokol on-kill', () => {
+        expect(
+            parseExtraAction(
+                'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
+            )
+        ).toBeNull();
+    });
+
+    it('disqualified: Harvester ally-destroyed', () => {
+        expect(
+            parseExtraAction(
+                'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
+            )
+        ).toBeNull();
+    });
+
+    it('disqualified: Tithonus purge-count', () => {
+        expect(
+            parseExtraAction(
+                'This Unit <unit-aid>gains 1 extra action</unit-aid> after it <unit-aid>purges</unit-aid> at least 4 <unit-aid>buffs</unit-aid> with a single skill.'
+            )
+        ).toBeNull();
+    });
+
+    it('no false positive on unrelated text', () => {
+        expect(parseExtraAction('This Unit deals 150% damage.')).toBeNull();
+        expect(parseExtraAction(null)).toBeNull();
+    });
+
+    it('abbrev periods in the same sentence do not break clause scoping', () => {
+        const r = parseExtraAction(
+            'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
+        );
+        expect(r).toEqual({ oncePerRound: true, conditions: [] });
     });
 });
