@@ -173,6 +173,89 @@ describe('extraActions', () => {
         ).toThrow(/extra/i);
     });
 
+    // ── Test 6: Per-hit crit draw continuity across extra turns ─────────────
+    // Verifies that the SAME continuing accumulator (activeCritGate) is used for
+    // both the normal turn and the extra turn in the same round — i.e. the gate
+    // does NOT reset between turns. This pins the "extra turn continues the draw
+    // sequence" invariant.
+    //
+    // Setup: 3-hit active (multiplier=100, hits=3), crit=50, critDamage=100,
+    //        once-per-round extra-action passive, rounds=1.
+    //
+    // makeRateGate rule (from rateAccumulator.ts):
+    //   acc starts at 0; each call: acc += rate; if acc >= 1-EPS → fire, acc -= 1.
+    //   Rate = crit/100 = 0.5. Back-loaded: first fire on call 2.
+    //
+    // Draw trace (acc starts at 0, rate=0.5, gate is shared across both turns):
+    //
+    //   Turn 1 (normal), 3 hits:
+    //     h1: acc = 0.0 + 0.5 = 0.5 → 0.5 < 1 → F (no crit)
+    //     h2: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
+    //     h3: acc = 0.0 + 0.5 = 0.5 → F
+    //   critHits turn 1 = 1
+    //
+    //   Turn 2 (extra turn), 3 hits — acc continues from 0.5:
+    //     h1: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
+    //     h2: acc = 0.0 + 0.5 = 0.5 → F
+    //     h3: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
+    //   critHits turn 2 = 2
+    //
+    // If the gate reset between turns both turns would yield critHits=1 (the 2-hit
+    // fire pattern restarts). The asymmetric [1, 2] pair proves continuity.
+    it('per-hit crit draw continues across extra turn (critHits [1, 2])', () => {
+        const bus = createEventBus();
+        const performed: { critHits?: number }[] = [];
+        bus.on('ability-performed', (e) => {
+            if (e.actorId === 'attacker' && e.round === 1 && e.abilityType === 'damage') {
+                performed.push({ critHits: e.critHits });
+            }
+        });
+        idCounter = 0;
+        simulateDPS({
+            ...BASE,
+            crit: 50,
+            critDamage: 100,
+            rounds: 1,
+            shipSkills: (() => {
+                idCounter = 0;
+                return {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    config: { type: 'damage', multiplier: 100, hits: 3 },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'extra-action',
+                                    target: 'self',
+                                    config: { type: 'extra-action', oncePerRound: true },
+                                }),
+                            ],
+                        },
+                    ],
+                };
+            })(),
+            bus,
+        });
+
+        // Two ability-performed events: one per attacker turn in round 1.
+        expect(performed).toHaveLength(2);
+
+        // Turn 1 critHits=1, turn 2 critHits=2 (see draw trace above).
+        // The [1, 2] pair is only possible when the gate accumulator carries over between
+        // turns. A resetting gate would yield [1, 1]; a shared single-outcome gate would
+        // yield either both equal or both undefined.
+        expect(performed[0].critHits).toBe(1);
+        expect(performed[1].critHits).toBe(2);
+    });
+
     // ── Test 5: Per-turn ticking across the extra turn ───────────────────────
     // A 1-turn self buff is applied in step (d) and read in step (e) of the SAME
     // runPlayerTurn call (same-turn decrement rule). Post-turn decrements it to 0 →
