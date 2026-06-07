@@ -1873,6 +1873,42 @@ describe('parseHealAbilities', () => {
             )
         ).toEqual([]);
     });
+
+    // Issue 1: basis resolution must NOT cross sentence boundaries
+    it('basis stays hp when "of its Attack" is in a LATER sentence (cross-sentence basis)', () => {
+        expect(
+            parseHealAbilities(
+                'This unit repairs 30%. This unit deals damage equal to 200% of its Attack.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self' }]);
+    });
+
+    // Issue 2: multi-component continuation must NOT span sentence boundaries
+    it('HEAL_ADDITIONAL_RE does not pick up a continuation in a LATER sentence', () => {
+        expect(
+            parseHealAbilities(
+                'This unit repairs 5% of its Max HP. An unrelated buff with an additional repair equal to 100% of its Defense exists.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self' }]);
+    });
+
+    // Issue 3: singular "the ally … their Max HP" → target ally, NOT all-allies
+    it('singular "the ally … of their Max HP" → target ally, not all-allies', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs the ally for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'ally' }]);
+    });
+
+    // Regression guard: explicit plural phrase "all allies … their Max HP" must stay all-allies
+    it('"Repairs all allies for 8% of their Max HP" remains all-allies (regression guard)', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'all-allies' }]);
+    });
 });
 
 describe('parseCleanse', () => {

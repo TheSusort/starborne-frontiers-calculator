@@ -1031,6 +1031,16 @@ export interface ParsedHealAbility {
 // (so decimals like "7.5" and abbreviation periods are NOT split). NO lookbehind — the
 // boundary lookahead `(?=\s|$)` is safe on iOS Safari 15.
 function sentenceAround(plain: string, index: number): string {
+    return sentenceBoundsAround(plain, index).text;
+}
+
+// Like sentenceAround but also returns the start offset within `plain`, so callers can
+// compute a match's position within its sentence (needed to scope basis resolution and
+// continuation scans to the sentence tail from the match onward).
+function sentenceBoundsAround(
+    plain: string,
+    index: number
+): { start: number; end: number; text: string } {
     const boundary = /[.;](?=\s|$)/g;
     let start = 0;
     let end = plain.length;
@@ -1042,7 +1052,7 @@ function sentenceAround(plain: string, index: number): string {
             break;
         }
     }
-    return plain.slice(start, end);
+    return { start, end, text: plain.slice(start, end) };
 }
 
 // Phase-4 / reactive disqualifiers — clause-scoped so an unrelated earlier sentence can't
@@ -1060,9 +1070,11 @@ const HEAL_ADDITIONAL_RE =
     /an?\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
 
 /**
- * Resolves the stat basis from the prose following a heal/shield match. Looks at the
- * tail of the scoped sentence after the match for "of <its|their> <stat>". "their Max HP"
- * → target-hp (the recipient's HP, not the caster's). Defaults to 'hp'.
+ * Resolves the stat basis from the prose of the match's own sentence. Looks for
+ * "of <its|their> <stat>" within the sentence-scoped slice after the match position.
+ * "their Max HP" → target-hp (the recipient's HP, not the caster's). Defaults to 'hp'.
+ * The caller must pass the sentence-scoped tail (not the whole remaining text) so that
+ * a stat phrase in a later sentence does not pollute the result.
  */
 function resolveHealBasis(after: string): ParsedHealAbility['basis'] {
     const m = /of\s+(its|this\s+unit'?s|their|the\s+ally'?s)\s+(max\s*hp|hp|attack|defense)/i.exec(
@@ -1080,19 +1092,24 @@ function resolveHealBasis(after: string): ParsedHealAbility['basis'] {
 
 /**
  * Resolves heal/shield target from the scoped sentence. "itself"/"its" with no other
- * recipient → self; "all allies"/"their" plural recipients → all-allies; a singular
- * ally recipient ("the ally", "that ally", "them", "most missing health") → ally.
+ * recipient → self; explicit plural phrases ("all allies", "allies") → all-allies; a
+ * singular ally recipient ("the ally", "that ally", "them", "most missing health") → ally.
+ * Note: "their" alone is NOT treated as all-allies — it may refer to a single named
+ * ally's stat (e.g. "the ally … of their Max HP"). Only explicit plural noun phrases
+ * trigger all-allies so that singular-ally phrasings aren't misrouted.
  * Defaults to self.
  */
 function resolveHealTarget(sentence: string): ParsedHealAbility['target'] {
     const s = sentence.toLowerCase();
-    if (/\ball\s+allies\b|\btheir\b/.test(s)) return 'all-allies';
+    // Singular ally detection takes priority over the bare "their" heuristic so that
+    // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
     if (
         /\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b|most\s+missing\s+health|\bthe\s+other\s+ally\b/.test(
             s
         )
     )
         return 'ally';
+    if (/\ball\s+allies\b|\ballies\b/.test(s)) return 'all-allies';
     return 'self';
 }
 
@@ -1118,18 +1135,25 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
             // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
             if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
-            const sentence = sentenceAround(plain, m.index);
+            const { start: sentenceStart, text: sentence } = sentenceBoundsAround(plain, m.index);
             if (HEAL_DISQUALIFY_RE.test(sentence)) continue;
-            const after = plain.slice(m.index);
-            const basis = resolveHealBasis(after);
+            // Scope both basis resolution and the continuation scan to the match's own
+            // sentence so that a stat phrase or "additional repair" in a LATER sentence
+            // cannot pollute this match's result (Issues 1 & 2). `basisScope` is the
+            // portion of the sentence from the match's position onward so `resolveHealBasis`
+            // finds the nearest stat phrase rather than one from a different sentence.
+            const basisScope = sentence.slice(m.index - sentenceStart);
+            const basis = resolveHealBasis(basisScope);
             const target = resolveHealTarget(sentence);
             results.push({ kind, pct, basis, target });
 
             // Multi-component continuation ("with an additional repair equal to N% of its
             // Defense") — emit a second entry inheriting this component's target.
+            // Scoped to the match's sentence to prevent cross-sentence false positives
+            // (Issue 2).
             if (kind === 'heal') {
                 HEAL_ADDITIONAL_RE.lastIndex = 0;
-                const addM = HEAL_ADDITIONAL_RE.exec(after);
+                const addM = HEAL_ADDITIONAL_RE.exec(sentence);
                 if (addM) {
                     const addPct = parseFloat(addM[1]);
                     const addStat = addM[2].toLowerCase().replace(/\s+/g, '');
