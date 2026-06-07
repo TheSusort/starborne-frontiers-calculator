@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Checkbox } from '../../components/ui/Checkbox';
 import { Input } from '../../components/ui/Input';
-import { CloseIcon, PageLayout } from '../../components/ui';
+import { CloseIcon, PageLayout, StatCard } from '../../components/ui';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { calculateDamageReduction } from '../../utils/autogear/scoring';
@@ -176,38 +176,6 @@ const DamageDeconstructionPage: React.FC = () => {
         const baseDefense =
             effectiveDefense / ((1 + defenseDebuffSum / 100) * (1 - form.defensePenetration / 100));
 
-        // Add debug logging
-        /* eslint-disable no-console */
-        console.log('Calculation steps:');
-        console.log('1. Base attack:', form.shipAttack);
-        console.log('2. After skill attack:', form.shipAttack * (form.skillAttackPercent / 100));
-        console.log(
-            '3. After crit:',
-            form.shipAttack * (form.skillAttackPercent / 100) * (1 + form.critDamagePercent / 100)
-        );
-        console.log(
-            '4. After outgoing damage buffs:',
-            form.shipAttack *
-                (form.skillAttackPercent / 100) *
-                (1 + form.critDamagePercent / 100) *
-                (1 + outgoingDamageBuffSum / 100)
-        );
-        console.log(
-            '5. After incoming damage buffs:',
-            form.shipAttack *
-                (form.skillAttackPercent / 100) *
-                (1 + form.critDamagePercent / 100) *
-                (1 + outgoingDamageBuffSum / 100) *
-                incomingDamageMultiplier
-        );
-        console.log('6. Effective damage:', effectiveDamage);
-        console.log('7. Damage reduction:', damageReduction);
-        console.log('8. Effective defense:', effectiveDefense);
-        console.log('9. Defense debuff sum:', defenseDebuffSum);
-        console.log('10. Defense penetration:', form.defensePenetration);
-        console.log('11. Final base defense:', baseDefense);
-        /* eslint-enable no-console */
-
         const hasModifiers = form.defensePenetration > 0 || defenseDebuffSum !== 0;
         const baseDamageReduction = calculateDamageReduction(baseDefense);
 
@@ -224,11 +192,13 @@ const DamageDeconstructionPage: React.FC = () => {
         type: keyof DamageDeconstructionForm,
         helpText?: string
     ) => (
-        <div>
-            <label className="block text-sm font-medium mb-1">{title}</label>
-            {helpText && <p className="text-xs text-theme-text-secondary mb-2">{helpText}</p>}
+        <div className="card space-y-2">
+            <div>
+                <h5 className="text-sm font-semibold">{title}</h5>
+                {helpText && <p className="text-xs text-theme-text-secondary mt-1">{helpText}</p>}
+            </div>
             {(form[type] as BuffDebuff[]).map((buff, index) => (
-                <div key={index} className="flex gap-2 mb-2">
+                <div key={index} className="grid grid-cols-[5rem_1fr_auto] gap-2 items-end">
                     <Input
                         type="number"
                         value={buff.value}
@@ -237,8 +207,7 @@ const DamageDeconstructionPage: React.FC = () => {
                             newBuffs[index] = { ...buff, value: Number(e.target.value) };
                             setForm((prev) => ({ ...prev, [type]: newBuffs }));
                         }}
-                        className="w-32"
-                        placeholder="Value %"
+                        placeholder="%"
                     />
                     <Input
                         type="text"
@@ -248,16 +217,19 @@ const DamageDeconstructionPage: React.FC = () => {
                             newBuffs[index] = { ...buff, description: e.target.value };
                             setForm((prev) => ({ ...prev, [type]: newBuffs }));
                         }}
-                        className="flex-1"
                         placeholder="Description"
                     />
-                    <Button variant="danger" onClick={() => removeBuffDebuff(type, index)}>
+                    <Button
+                        variant="danger"
+                        onClick={() => removeBuffDebuff(type, index)}
+                        aria-label="Remove"
+                    >
                         <CloseIcon />
                     </Button>
                 </div>
             ))}
-            <Button variant="secondary" onClick={() => addBuffDebuff(type, 0, '')} className="mt-2">
-                Add {title}
+            <Button variant="secondary" size="sm" onClick={() => addBuffDebuff(type, 0, '')}>
+                Add entry
             </Button>
         </div>
     );
@@ -273,9 +245,14 @@ const DamageDeconstructionPage: React.FC = () => {
                 Remember affinity disadvantage/advantage on the attacker.
             "
             >
-                <div className="mb-6 card">
-                    <div className="space-y-4">
-                        <h4 className="text-lg font-bold">Attacker</h4>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                    {/* Attacker */}
+                    <div className="card space-y-4">
+                        <h4 className="flex items-center gap-2 text-lg font-bold border-b border-dark-border pb-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-400" />
+                            Attacker
+                        </h4>
+
                         <Input
                             label="Actual Damage Dealt"
                             type="number"
@@ -288,61 +265,66 @@ const DamageDeconstructionPage: React.FC = () => {
                             }
                         />
 
-                        <Input
-                            label="Ship Base Attack"
-                            type="number"
-                            value={form.shipAttack}
-                            onChange={(e) =>
-                                setForm((prev) => ({ ...prev, shipAttack: Number(e.target.value) }))
-                            }
-                        />
-
-                        <Input
-                            label="Skill Attack %"
-                            type="number"
-                            value={form.skillAttackPercent}
-                            onChange={(e) =>
-                                setForm((prev) => ({
-                                    ...prev,
-                                    skillAttackPercent: Number(e.target.value),
-                                }))
-                            }
-                        />
-
-                        <Input
-                            label="Defense Penetration %"
-                            type="number"
-                            value={form.defensePenetration}
-                            onChange={(e) =>
-                                setForm((prev) => ({
-                                    ...prev,
-                                    defensePenetration: Number(e.target.value),
-                                }))
-                            }
-                        />
-
-                        <div className="flex items-center gap-4">
-                            <Checkbox
-                                label="Critical Hit"
-                                checked={form.isCrit}
-                                onChange={(checked) =>
-                                    setForm((prev) => ({ ...prev, isCrit: checked }))
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Input
+                                label="Ship Base Attack"
+                                type="number"
+                                value={form.shipAttack}
+                                onChange={(e) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        shipAttack: Number(e.target.value),
+                                    }))
                                 }
-                                className="mt-5"
                             />
-                            {form.isCrit && (
-                                <Input
-                                    label="Critical Damage %"
-                                    type="number"
-                                    value={form.critDamagePercent}
-                                    onChange={(e) =>
-                                        setForm((prev) => ({
-                                            ...prev,
-                                            critDamagePercent: Number(e.target.value),
-                                        }))
+                            <Input
+                                label="Skill Attack %"
+                                type="number"
+                                value={form.skillAttackPercent}
+                                onChange={(e) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        skillAttackPercent: Number(e.target.value),
+                                    }))
+                                }
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <Input
+                                label="Defense Penetration %"
+                                type="number"
+                                value={form.defensePenetration}
+                                onChange={(e) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        defensePenetration: Number(e.target.value),
+                                    }))
+                                }
+                            />
+                            <div className="flex items-end gap-4">
+                                <Checkbox
+                                    label="Critical Hit"
+                                    checked={form.isCrit}
+                                    onChange={(checked) =>
+                                        setForm((prev) => ({ ...prev, isCrit: checked }))
                                     }
+                                    className="mb-2.5"
                                 />
-                            )}
+                                {form.isCrit && (
+                                    <Input
+                                        label="Critical Damage %"
+                                        type="number"
+                                        value={form.critDamagePercent}
+                                        onChange={(e) =>
+                                            setForm((prev) => ({
+                                                ...prev,
+                                                critDamagePercent: Number(e.target.value),
+                                            }))
+                                        }
+                                    />
+                                )}
+                            </div>
                         </div>
 
                         {renderBuffDebuffSection('Attack Buffs/Debuffs %', 'attackBuffs')}
@@ -352,10 +334,13 @@ const DamageDeconstructionPage: React.FC = () => {
                             'outgoingDamageBuffs'
                         )}
                     </div>
-                </div>
-                <div className="mb-6 card">
-                    <div className="space-y-4">
-                        <h4 className="text-lg font-bold">Defender</h4>
+
+                    {/* Defender */}
+                    <div className="card space-y-4">
+                        <h4 className="flex items-center gap-2 text-lg font-bold border-b border-dark-border pb-2">
+                            <span className="w-2 h-2 rounded-full bg-red-400" />
+                            Defender
+                        </h4>
                         {renderBuffDebuffSection(
                             'Enemy Defense Buffs/Debuffs %',
                             'enemyDefenseBuffs',
@@ -374,26 +359,37 @@ const DamageDeconstructionPage: React.FC = () => {
                 </div>
 
                 {results && (
-                    <div className="mb-6 card">
-                        <h2 className="text-xl font-bold mb-4">Results</h2>
-                        <div className="space-y-2">
-                            <p>Actual Damage Reduction: {results.damageReduction.toFixed(2)}%</p>
+                    <div className="space-y-4">
+                        <h2 className="text-xl font-bold">Results</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <StatCard
+                                title="Actual Damage Reduction"
+                                value={`${results.damageReduction.toFixed(2)}%`}
+                                color="green"
+                            />
+                            {results.hasModifiers && (
+                                <StatCard
+                                    title="Base Damage Reduction"
+                                    value={`${results.baseDamageReduction.toFixed(2)}%`}
+                                    color="blue"
+                                />
+                            )}
+                            <StatCard
+                                title="Enemy Defense Estimation"
+                                value={Math.round(results.enemyDefense).toLocaleString()}
+                                color="yellow"
+                            />
+                        </div>
+                        <div className="card text-sm text-theme-text-secondary space-y-2">
                             {results.hasModifiers && (
                                 <p>
-                                    Base Damage Reduction: {results.baseDamageReduction.toFixed(2)}%
-                                </p>
-                            )}
-                            <p>Enemy Defense Estimation: {Math.round(results.enemyDefense)}</p>
-
-                            {results.hasModifiers && (
-                                <p className="text-sm text-theme-text-secondary">
                                     <span className="font-bold">Note:</span> Damage Reduction is the
                                     effective reduction after defense penetration and defense
                                     buffs/debuffs are applied. Base Damage Reduction is the
                                     reduction from the estimated base defense stat alone.
                                 </p>
                             )}
-                            <p className="text-sm text-theme-text-secondary">
+                            <p>
                                 <span className="font-bold">Note:</span> This is an estimation based
                                 on an approximation of the damage reduction, and most likely not
                                 100% accurate. The worst result I&apos;ve seen has been so far is
