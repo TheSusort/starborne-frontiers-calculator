@@ -3,6 +3,7 @@ import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1114,5 +1115,487 @@ describe('healing mode — enemy attackers and target intake', () => {
             expect(r.incomingDamage).toBe(0);
             expect(r.shieldAbsorbed).toBe(0);
         }
+    });
+});
+
+// ── Task 9: on-ally-critically-repaired + on-ally-crit reactive listeners ───────────────
+//
+// Hand-rolled bus + enqueue scaffold (mirrors allyCritDot.test.ts) to assert enqueue counts
+// per event scenario without running the full engine.
+describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / on-ally-crit)', () => {
+    const makeHandBus = () => {
+        const listeners = new Map<string, ((e: CombatEvent) => void)[]>();
+        return {
+            on<T extends CombatEvent['type']>(
+                type: T,
+                listener: (event: Extract<CombatEvent, { type: T }>) => void
+            ) {
+                const existing = listeners.get(type) ?? [];
+                listeners.set(type, [...existing, listener as unknown as (e: CombatEvent) => void]);
+            },
+            emit(event: CombatEvent) {
+                for (const l of listeners.get(event.type) ?? []) l(event);
+            },
+        };
+    };
+
+    it('on-ally-critically-repaired: own crit-repair of a non-self ally enqueues; self-only/no-crit/foreign do not', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        const ability: Ability = {
+            id: 'crit-repair-cleanse',
+            type: 'cleanse',
+            target: 'self',
+            trigger: 'on-ally-critically-repaired',
+            conditions: [],
+            config: { type: 'cleanse', count: 1 },
+        };
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            enemyId: 'enemy',
+        });
+        const base = { round: 1, amount: 1000 };
+
+        // Own cast, >=1 crit, non-self recipient → enqueue.
+        handBus.emit({
+            type: 'heal-performed',
+            casterId: 'attacker',
+            targets: ['t1'],
+            critHits: 1,
+            ...base,
+        });
+        expect(enqueued).toHaveLength(1);
+
+        // Own cast, crit, but only self recipient → no ally repaired → 0 additional.
+        handBus.emit({
+            type: 'heal-performed',
+            casterId: 'attacker',
+            targets: ['attacker'],
+            critHits: 1,
+            ...base,
+        });
+        expect(enqueued).toHaveLength(1);
+
+        // Own cast, non-self recipient, NO crit → 0 additional.
+        handBus.emit({
+            type: 'heal-performed',
+            casterId: 'attacker',
+            targets: ['t1'],
+            ...base,
+        });
+        expect(enqueued).toHaveLength(1);
+
+        // Foreign caster's crit-repair → not THIS unit's repair → 0 additional.
+        handBus.emit({
+            type: 'heal-performed',
+            casterId: 't2',
+            targets: ['attacker'],
+            critHits: 1,
+            ...base,
+        });
+        expect(enqueued).toHaveLength(1);
+    });
+
+    it('on-ally-crit: an ally crit enqueues once per critting hit; own/enemy/no-crit do not', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        const ability: Ability = {
+            id: 'ally-crit-charge',
+            type: 'charge',
+            target: 'self',
+            trigger: 'on-ally-crit',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        };
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            enemyId: 'enemy',
+        });
+        const base = {
+            round: 1,
+            didCrit: true,
+            targetId: 'enemy',
+            abilityType: 'damage' as const,
+        };
+
+        // Another player's cast with 2 critting hits → 2 enqueues.
+        handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(2);
+
+        // Own cast → excluded → 0 additional.
+        handBus.emit({ type: 'ability-performed', actorId: 'attacker', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(2);
+
+        // Enemy cast → excluded → 0 additional.
+        handBus.emit({ type: 'ability-performed', actorId: 'enemy', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(2);
+
+        // Another player's cast with NO crit (no critHits, didCrit false) → 0 additional.
+        handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: false });
+        expect(enqueued).toHaveLength(2);
+
+        // Another player's cast with didCrit binary only (no critHits field) → 1 enqueue.
+        handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
+        expect(enqueued).toHaveLength(3);
+    });
+});
+
+// ── Task 9: reactive heal/shield/cleanse executor ───────────────────────────────────────
+//
+// Driven through the engine in healing mode with a reactive ability carrying a start-of-round
+// trigger (fires through executeIntent every round). Asserts credits, no second crit, and no
+// heal-performed re-emission (the executor deliberately does NOT emit heal-performed — chain
+// guard), plus the healing-mode-off silent skip.
+describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
+    it('reactive heal credits directHeal (and consumption when target) but never emits heal-performed', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const perfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+        bus.on('heal-performed', (e) => perfs.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 10000,
+                crit: 100,
+                critDamage: 100, // would double a crit-heal — proves the executor never crits
+                healTargetId: 'attacker',
+                bus,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'self',
+                                    trigger: 'start-of-round',
+                                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // 10000 × 10% = 1000/round, NO crit fold (critDamage 100 ignored) → 3000 over 3 rounds.
+        expect(focusHeal(result, 'directHeal')).toBe(3000);
+        // Target is the caster itself → effectiveHeal/overheal split is credited (full overheal at full HP).
+        expect(focusHeal(result, 'overheal')).toBe(3000);
+        // The executor must NOT emit heal-performed (chain guard).
+        expect(perfs).toHaveLength(0);
+    });
+
+    it('reactive shield credits the shield bucket and grants the pool', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'shield',
+                                    target: 'self',
+                                    trigger: 'start-of-round',
+                                    config: { type: 'shield', pct: 20, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // 10000 × 20% = 2000/round × 2 = 4000.
+        expect(focusHeal(result, 'shield')).toBe(4000);
+    });
+
+    it('reactive cleanse credits the cleanseCount bucket', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                healTargetId: 'attacker',
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'cleanse',
+                                    target: 'self',
+                                    trigger: 'start-of-round',
+                                    config: { type: 'cleanse', count: 2 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(focusHeal(result, 'cleanseCount')).toBe(6); // 2 × 3 rounds
+    });
+
+    it('healing mode off: reactive heal silently skips (no healing field, no crash)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'self',
+                                    trigger: 'start-of-round',
+                                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(result.healing).toBeUndefined();
+    });
+});
+
+// ── Task 9: integration — on-ally-critically-repaired + on-ally-crit live in the engine ──
+describe('healing — Task 9: reactive trigger integration', () => {
+    // A walked team actor whose active crit-multi-hits (so its ability-performed carries
+    // critHits) — drives the focus actor's on-ally-crit charge bank.
+    const critTeamWalk = (id: string, speed: number, hits: number): TeamActorEngineInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: `${id}-dmg`,
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'damage', multiplier: 100, hits },
+                            },
+                        ],
+                    },
+                ],
+            },
+            stats: {
+                attack: 1000,
+                crit: 100, // every hit crits → critHits === hits
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp: 8000,
+            },
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('on-ally-critically-repaired: focus crit-heals an ally each round → reactive cleanse fires once per cast (crit 100)', () => {
+        idCounter = 0;
+        // Focus heals the bombarded target (an ally) every turn with crit 100 → its heal crits,
+        // and the recipient is the target (non-self when healTargetId !== focus). The passive
+        // reactive cleanse on the focus fires once per qualifying own crit-repair.
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 10000,
+                crit: 100,
+                critDamage: 0,
+                speed: 200,
+                healTargetId: 't1', // a non-self ally is the heal target
+                teamActors: [
+                    {
+                        id: 't1',
+                        speed: 10,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 1000,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 1000,
+                                hp: 50000, // big pool so heals are not all overheal (target below max)
+                            },
+                            debuffLandingChance: 1,
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'ally',
+                                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'cleanse',
+                                    target: 'self',
+                                    trigger: 'on-ally-critically-repaired',
+                                    config: { type: 'cleanse', count: 1 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // The focus crit-repairs the ally target each of 3 rounds → 1 reactive cleanse per cast.
+        expect(focusHeal(result, 'cleanseCount')).toBe(3);
+    });
+
+    it('on-ally-critically-repaired: focus heal NEVER crits (crit 0) → no reactive cleanse', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 10000,
+                crit: 0,
+                critDamage: 0,
+                speed: 200,
+                healTargetId: 't1',
+                teamActors: [
+                    {
+                        id: 't1',
+                        speed: 10,
+                        chargeCount: 0,
+                        startCharged: false,
+                        selfBuffs: [],
+                        enemyDebuffs: [],
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 1000,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 1000,
+                                hp: 50000,
+                            },
+                            debuffLandingChance: 1,
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    },
+                ],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'ally',
+                                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'cleanse',
+                                    target: 'self',
+                                    trigger: 'on-ally-critically-repaired',
+                                    config: { type: 'cleanse', count: 1 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(focusHeal(result, 'cleanseCount')).toBe(0);
+    });
+
+    it('on-ally-crit: a walked ally crit multi-hits (2) each round → focus banks 2 charges per ally cast', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                crit: 0,
+                critDamage: 0,
+                // chargeCount > 0 so the reactive charge lands, but hasChargedSkill: false so the
+                // focus has NO self charge cadence (its own turn never banks) — the banked total
+                // is purely the reactive grant, making the assertion unambiguous.
+                chargeCount: 10,
+                hasChargedSkill: false,
+                speed: 5, // focus acts AFTER the team ally so the charge is observable
+                healTargetId: 'attacker',
+                teamActors: [critTeamWalk('t1', 200, 2)],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'charge',
+                                    target: 'self',
+                                    trigger: 'on-ally-crit',
+                                    config: { type: 'charge', amount: 1 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // The ally's active crit-hits twice → 2 critting hits → 2 reactive charge intents → the
+        // focus banks 2 charges. Surfaced via the round's charge accounting.
+        expect(result.rounds[0].charges).toBe(2);
     });
 });

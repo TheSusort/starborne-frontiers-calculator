@@ -18,6 +18,8 @@ import {
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
+    detectCritRepairTrigger,
+    detectAllyCritTrigger,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -1385,6 +1387,66 @@ describe('detectReactiveTrigger', () => {
             'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns. When this Unit critically hits an enemy it inflicts <unit-skill>Defense Shred</unit-skill> for 3 turns.';
         expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();
         expect(detectReactiveTrigger(text, 'Defense Shred')).toBe('on-crit');
+    });
+
+    it('classifies an ally-critically-hits buff grant as on-ally-crit — Pallas Everliving Regeneration', () => {
+        // If the buff parsed, its clause "when an ally critically hits ... Everliving Regeneration"
+        // routes to on-ally-crit (ally subject overrides the bare "critically hits" self-crit rule).
+        const text =
+            'When an ally critically hits an enemy, this unit gains <unit-skill>Everliving Regeneration</unit-skill> for 2 turns.';
+        expect(detectReactiveTrigger(text, 'Everliving Regeneration')).toBe('on-ally-crit');
+    });
+});
+
+describe('detectCritRepairTrigger', () => {
+    it('returns on-ally-critically-repaired when the anchor is in the crit-repair sentence', () => {
+        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff from itself.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
+            'on-ally-critically-repaired'
+        );
+    });
+
+    it('handles the "allies" plural form', () => {
+        const text = 'When this unit critically repairs allies, it cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
+            'on-ally-critically-repaired'
+        );
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        // The first sentence's cleanse anchor falls OUTSIDE the crit-repair sentence.
+        const text =
+            'This Unit cleanses 1 debuff from itself. When this unit critically repairs an ally, it gains a buff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
+    });
+
+    it('returns undefined when the crit-repair phrase is absent', () => {
+        const text = 'This Unit repairs the ally and cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
+    });
+
+    it('returns undefined for a negative anchor position', () => {
+        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, -1)).toBeUndefined();
+    });
+});
+
+describe('detectAllyCritTrigger', () => {
+    it('returns on-ally-crit when the anchor is in the ally-critically-hits sentence', () => {
+        const text = 'When an ally critically hits an enemy, this unit gains 1 charge.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBe('on-ally-crit');
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        // The charge anchor in the first sentence is OUTSIDE the ally-crit sentence.
+        const text =
+            'This unit gains 1 charge to its charged skill. When an ally critically hits, it gains a buff.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBeUndefined();
+    });
+
+    it('returns undefined when the ally-crit phrase is absent', () => {
+        const text = 'When this unit critically hits, it gains 1 charge.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBeUndefined();
     });
 });
 

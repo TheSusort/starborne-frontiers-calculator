@@ -1134,6 +1134,11 @@ export function runCombat(input: CombatEngineInput): {
                             if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
                             else pendingResisted.push(resisted);
                         },
+                        // Healing mode only — the SAME shared ctx the player turns use, so a
+                        // reactive heal/shield/cleanse credits the same per-round buckets and
+                        // mutates the same live target. Undefined in DPS mode → the executor's
+                        // heal/shield/cleanse branches stay inert (goldens byte-identical).
+                        healing: healingCtx,
                     });
                 }
             }

@@ -711,6 +711,10 @@ export function detectReactiveTrigger(
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
     const clause = resolveBuffClause(skillText, buffName);
+    // "when an ally critically hits" → on-ally-crit (Pallas's Everliving Regeneration buff grant).
+    // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
+    // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
+    if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
@@ -784,6 +788,73 @@ const ALLY_CRIT_DOT_RE =
 /** Whether a skill triggers "when an ally inflicts a DoT with a critical hit" (manual, team-gated). */
 export function parseAllyCritDot(text: string | null | undefined): boolean {
     return !!text && ALLY_CRIT_DOT_RE.test(stripUnitTags(text));
+}
+
+// Pallas's TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):
+//  - "when this unit critically repairs an ally / allies" → on-ally-critically-repaired (the
+//    OWNER's own crit-repair fires it; stamped onto heal/shield/cleanse abilities in that
+//    sentence — Pallas's "it cleanses 1 debuff from itself").
+//  - "when an ally critically hits" → on-ally-crit (an ally's crit fires it; stamped onto
+//    charge/buff abilities in that sentence — Pallas's "+1 charge" and "Everliving Regeneration").
+// Both are POSITION-SCOPED: the trigger only stamps an ability whose RAW-text anchor position
+// (the same `text.search(...)` position abilitiesFromText computes) falls INSIDE the sentence
+// carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
+// even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
+const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
+const ALLY_CRIT_HIT_RE = /when an ally critically hits/i;
+
+/**
+ * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
+ * falls inside the sentence carrying the crit-repair phrase; otherwise undefined. Position-scoped
+ * on the RAW text (so the position aligns with abilitiesFromText's `text.search(...)` anchors).
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectCritRepairTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, CRIT_REPAIR_RE, anchorPos, 'on-ally-critically-repaired');
+}
+
+/**
+ * Returns 'on-ally-crit' when `anchorPos` falls inside the sentence carrying the
+ * ally-critically-hits phrase; otherwise undefined. Position-scoped on the RAW text.
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectAllyCritTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
+}
+
+// Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
+// and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
+// `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
+// Raw text is used so the bounds align with abilitiesFromText's raw-text anchor positions; the
+// phrase regexes don't span <unit-…> tags so matching on raw text is safe.
+function phrasePosTrigger(
+    text: string | null | undefined,
+    phrase: RegExp,
+    anchorPos: number,
+    trigger: AbilityTrigger
+): AbilityTrigger | undefined {
+    if (!text || anchorPos < 0) return undefined;
+    const boundary = /[.;](?=\s|$)/g;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    const phraseRe = new RegExp(phrase.source, phrase.flags.includes('i') ? 'i' : '');
+    while ((m = boundary.exec(text)) !== null) {
+        const end = m.index + 1;
+        if (anchorPos < end) {
+            return phraseRe.test(text.slice(start, end)) && anchorPos >= start
+                ? trigger
+                : undefined;
+        }
+        start = end;
+    }
+    // Anchor is in the final (unterminated) sentence.
+    return phraseRe.test(text.slice(start)) && anchorPos >= start ? trigger : undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —

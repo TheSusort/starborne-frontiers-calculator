@@ -112,6 +112,8 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-debuff-inflicted', label: 'After inflicting a debuff' },
     { value: 'on-ally-debuff-inflicted', label: 'After an ally inflicts a debuff' },
     { value: 'on-ally-crit-dot', label: 'After an ally inflicts a DoT with a crit' },
+    { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
+    { value: 'on-ally-crit', label: 'After an ally critically hits' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
 ];
 
@@ -681,7 +683,10 @@ export const AbilityCard: React.FC<Props> = ({
             {(ability.type === 'buff' ||
                 ability.type === 'debuff' ||
                 ability.type === 'dot' ||
-                ability.type === 'charge') && (
+                ability.type === 'charge' ||
+                ability.type === 'heal' ||
+                ability.type === 'shield' ||
+                ability.type === 'cleanse') && (
                 <>
                     <Select
                         label="Trigger"

@@ -28,6 +28,8 @@ import {
     parseExtendDoT,
     parseCritPowerExtend,
     parseAllyCritDot,
+    detectCritRepairTrigger,
+    detectAllyCritTrigger,
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
@@ -757,12 +759,17 @@ function abilitiesFromText(text: string): PositionedAbility[] {
         // the position only drives cosmetic editor order (the engine ignores heal types).
         const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
+        const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
+        // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
+        // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
+        // undefined → on-cast).
+        const reactiveTrigger = detectCritRepairTrigger(text, healPos);
         out.push({
             ability: {
                 id: nextId(),
                 type: h.kind,
                 target: h.target,
-                trigger: 'on-cast',
+                trigger: reactiveTrigger ?? 'on-cast',
                 conditions: [],
                 config: {
                     type: h.kind,
@@ -778,12 +785,15 @@ function abilitiesFromText(text: string): PositionedAbility[] {
 
     for (const c of parseCleanse(text)) {
         const cleansePos = text.search(/cleanse/i);
+        // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
+        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
+        const reactiveTrigger = detectCritRepairTrigger(text, cleansePos);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'cleanse',
                 target: c.target,
-                trigger: 'on-cast',
+                trigger: reactiveTrigger ?? 'on-cast',
                 conditions: [],
                 config: { type: 'cleanse', count: c.count },
                 autoFilled: true,
@@ -795,16 +805,19 @@ function abilitiesFromText(text: string): PositionedAbility[] {
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
-        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). They
-        // carry no gating condition — the trigger IS the gate (engine listens for the event).
-        const reactiveCharge = charge.trigger !== undefined;
+        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Pallas's
+        // "when an ally critically hits ... gains 1 charge" rides the on-ally-crit reactive trigger
+        // (sentence-scoped). Either reactive source means the trigger IS the gate → no gating
+        // condition. parseChargeGain's own trigger (inflict-driven) takes precedence when present.
+        const allyCritChargeTrigger = detectAllyCritTrigger(text, chargePos);
+        const reactiveTrigger = charge.trigger ?? allyCritChargeTrigger;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'charge',
                 target: 'self',
-                trigger: reactiveCharge ? charge.trigger! : 'on-cast',
-                conditions: reactiveCharge
+                trigger: reactiveTrigger ?? 'on-cast',
+                conditions: reactiveTrigger
                     ? []
                     : [
                           toCondition(
