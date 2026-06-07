@@ -19,6 +19,9 @@ import {
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
     parseExtraAction,
+    parseHealAbilities,
+    parseCleanse,
+    parseHealNoCrit,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1776,5 +1779,121 @@ describe('parseExtraAction', () => {
             'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
         );
         expect(r).toEqual({ oncePerRound: true, conditions: [] });
+    });
+});
+
+describe('parseHealAbilities', () => {
+    it('caster-HP heal to an ally', () => {
+        expect(
+            parseHealAbilities(
+                "This unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally' }]);
+    });
+    it('self repair', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self' }]);
+    });
+    it('all-allies repair', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies' }]);
+    });
+    it('most-missing-health routes as ally', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'ally' }]);
+    });
+    it('attack-based repair', () => {
+        expect(
+            parseHealAbilities('This unit <unit-damage>repairs 90%</unit-damage> of its Attack.')
+        ).toEqual([{ kind: 'heal', pct: 90, basis: 'attack', target: 'self' }]);
+    });
+    it('multi-component heal: HP + Defense', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs 5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'self' },
+            { kind: 'heal', pct: 100, basis: 'defense', target: 'self' },
+        ]);
+    });
+    it('recipient-HP heal (their Max HP)', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'all-allies' }]);
+    });
+    it('shield from caster HP', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit gains a <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.'
+            )
+        ).toEqual([{ kind: 'shield', pct: 25, basis: 'hp', target: 'self' }]);
+    });
+    it('shield from attack', () => {
+        expect(
+            parseHealAbilities(
+                'grants the ally a <unit-damage>shield equal to 180%</unit-damage> of its attack'
+            )
+        ).toEqual([{ kind: 'shield', pct: 180, basis: 'attack', target: 'ally' }]);
+    });
+    it('damage-reactive shield is NOT parsed', () => {
+        expect(
+            parseHealAbilities(
+                'gains a Shield equal to 25% of the damage taken when taking HP damage and still having Shield'
+            )
+        ).toEqual([]);
+    });
+    it('damage-dealt shield is NOT parsed', () => {
+        expect(
+            parseHealAbilities('gains a Shield equal to 15% of the Damage dealt to them')
+        ).toEqual([]);
+    });
+    it('revive/Cheat Death text is NOT parsed', () => {
+        expect(
+            parseHealAbilities(
+                'Once per battle, when this unit is destroyed, it revives with 50% of its max HP.'
+            )
+        ).toEqual([]);
+    });
+    it('"X% of damage dealt" repair is NOT parsed (Valkyrie burst reaction)', () => {
+        expect(
+            parseHealAbilities(
+                'this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+            )
+        ).toEqual([]);
+    });
+});
+
+describe('parseCleanse', () => {
+    it('parses cleanse count', () => {
+        expect(parseCleanse('it <unit-aid>cleanses 1</unit-aid> debuff from itself')).toEqual([
+            { count: 1, target: 'self' },
+        ]);
+    });
+    it('ally cleanse', () => {
+        expect(parseCleanse('<unit-aid>Cleanses 2</unit-aid> debuffs from all allies')).toEqual([
+            { count: 2, target: 'all-allies' },
+        ]);
+    });
+    it('does not parse purge as cleanse', () => {
+        expect(parseCleanse('<unit-aid>purges 1</unit-aid> buff from the enemy')).toEqual([]);
+    });
+});
+
+describe('parseHealNoCrit', () => {
+    it('Pallas repair-cannot-crit sets heal noCrit', () => {
+        expect(parseHealNoCrit('This repair cannot critically hit.')).toBe(true);
+        expect(parseHealNoCrit('This attack cannot critically hit.')).toBe(false);
     });
 });
