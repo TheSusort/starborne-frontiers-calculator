@@ -1310,14 +1310,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     return effectiveDefence;
                 case 'target-hp':
                     return healing.recipientMaxHp(rid);
-                case 'hp':
-                    return effectiveHp;
-                // damage-dealt / damage-taken are resolved by the leech hook (later task);
-                // basisValue is not called for those paths — return 0 as a safe sentinel.
+                // Cast rider (active/charged 'damage-dealt'): this turn's own cast damage —
+                // the local directDamage (incl. secondary/conditional sub-buckets and the
+                // passive hit; detonation excluded by spec). The slot-partition guard below
+                // keeps passive-slot 'damage-dealt' and all 'damage-taken' abilities off the
+                // cast path, so basisValue only sees 'damage-dealt' for active/charged riders;
+                // 'damage-taken' never reaches here.
                 case 'damage-dealt':
-                case 'damage-taken':
+                    return directDamage;
+                case 'hp':
                 default:
-                    return 0;
+                    return effectiveHp;
             }
         };
 
@@ -1389,9 +1392,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
         }
 
+        // Slot partition (damage-leech): passive-slot 'damage-dealt' abilities are standing
+        // leeches owned by the ENGINE's credit hook (engine.ts) — processing them here would
+        // double-count the cast's direct portion. 'damage-taken' abilities (any slot) are
+        // owned by the enemy-attack block. Both are skipped on the cast path.
+        const isHookOwned = (a: Ability, fromPassive: boolean): boolean => {
+            const c = a.config;
+            if (c.type !== 'heal' && c.type !== 'shield') return false;
+            if (c.basis === 'damage-taken') return true;
+            return c.basis === 'damage-dealt' && fromPassive;
+        };
         const healAbilities = [
-            ...(gatedSkill?.abilities ?? []),
-            ...(gatedPassive?.abilities ?? []),
+            ...(gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false)),
+            ...(gatedPassive?.abilities ?? []).filter((a) => !isHookOwned(a, true)),
         ];
         const healTargets: string[] = [];
         let healCritCount = 0;

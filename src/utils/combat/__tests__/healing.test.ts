@@ -1733,3 +1733,214 @@ describe('healing — Task 9: reactive trigger integration', () => {
         expect(result.rounds[0].charges).toBe(2);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 4: cast-rider damage-dealt basis in the player-turn heal block.
+// Active/charged casts that carry a damage ability AND a leech heal/shield use
+// 'damage-dealt' basis → the rider draws from THIS turn's own cast damage. The
+// slot-partition guard keeps passive-slot damage-dealt (standing leech, engine hook)
+// and ALL damage-taken procs (enemy-attack block) off the cast path.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('healing mode — cast-rider damage-dealt basis', () => {
+    // BASE: attack 5000, crit 0, critDamage 0, enemyDefense 0, no buffs.
+    // A 100% damage ability on the active slot → directDamage = 5000 × (100/100) = 5000.
+    const damageAb = (multiplier = 100): Ability =>
+        ab({
+            type: 'damage',
+            target: 'enemy',
+            config: { type: 'damage', multiplier },
+        });
+
+    // ── Test 1: active-slot leech heal, no folds ─────────────────────────────
+    it('active leech heal: directHeal === thisTurnDirectDamage × pct (crit 0, healMod 0)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    damageAb(100),
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'damage-dealt' },
+                    }),
+                ]),
+            })
+        );
+        // directDamage = 5000; rider 10% → 500. No crit/healMod/outgoing/incoming folds.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(500, 6);
+    });
+
+    // ── Test 2: healModifier 50 → ×1.5 fold applies ──────────────────────────
+    it('active leech heal: healModifier 50 → × 1.5 fold', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                healModifier: 50,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    damageAb(100),
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'damage-dealt' },
+                    }),
+                ]),
+            })
+        );
+        // 5000 × 0.10 × 1.5 = 750.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(750, 6);
+    });
+
+    // ── Test 3: shield rider, NO folds ───────────────────────────────────────
+    it('active leech shield: shield bucket === thisTurnDirectDamage × pct, no folds', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                crit: 100,
+                critDamage: 100,
+                healModifier: 50,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    damageAb(100),
+                    ab({
+                        type: 'shield',
+                        target: 'self',
+                        config: { type: 'shield', pct: 20, basis: 'damage-dealt' },
+                    }),
+                ]),
+            })
+        );
+        // directDamage at crit 100/critDamage 100 = 5000 × (1 + 1) = 10000; shield 20% → 2000.
+        // Shields apply NO heal channels (no crit/healMod fold on the shield draw itself).
+        expect(focusHeal(result, 'shield')).toBeCloseTo(2000, 6);
+    });
+
+    // ── Test 4: passive-slot damage-dealt → cast path produces NOTHING ───────
+    // The standing leech belongs to the engine's credit hook (Task 6). The cast path
+    // must skip it: no directHeal credit here.
+    it('passive-slot damage-dealt heal: cast path contributes zero (engine hook owns it)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100)] },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'self',
+                                    config: {
+                                        type: 'heal',
+                                        pct: 20,
+                                        basis: 'damage-dealt',
+                                        leechScope: 'all',
+                                    },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(focusHeal(result, 'directHeal')).toBe(0);
+    });
+
+    // ── Test 5: damage-taken (any slot) → cast path produces NOTHING ─────────
+    it('damage-taken heal/shield (any slot): cast path contributes zero (enemy-attack block owns it)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                damageAb(100),
+                                ab({
+                                    type: 'heal',
+                                    target: 'self',
+                                    config: { type: 'heal', pct: 30, basis: 'damage-taken' },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'shield',
+                                    target: 'self',
+                                    config: { type: 'shield', pct: 25, basis: 'damage-taken' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(focusHeal(result, 'directHeal')).toBe(0);
+        expect(focusHeal(result, 'shield')).toBe(0);
+    });
+
+    // ── Test 6: leech heal crit fold respects noCrit ─────────────────────────
+    it('leech heal crit fold: noCrit:false crits at crit 100; noCrit:true does not', () => {
+        idCounter = 0;
+        // noCrit:false at crit 100 → crit fold applies (raw × (1 + critDamage/100)).
+        const crits = runCombat(
+            BASE({
+                numRounds: 1,
+                crit: 100,
+                critDamage: 50,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    damageAb(100),
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'damage-dealt' },
+                    }),
+                ]),
+            })
+        );
+        // directDamage at crit 100/critDamage 50 = 5000 × (1 + 0.5) = 7500; rider 10% → 750,
+        // then the heal's OWN crit draw at crit 100 fires (rate 1.0) → × (1 + 50/100) = 1125.
+        expect(focusHeal(crits, 'directHeal')).toBeCloseTo(1125, 6);
+
+        idCounter = 0;
+        // noCrit:true → the heal draw does not crit; only the underlying directDamage crit fold.
+        const noCrit = runCombat(
+            BASE({
+                numRounds: 1,
+                crit: 100,
+                critDamage: 50,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    damageAb(100),
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'damage-dealt', noCrit: true },
+                    }),
+                ]),
+            })
+        );
+        // directDamage 7500 (crit-folded damage) × 0.10 = 750; the heal itself does NOT crit.
+        expect(focusHeal(noCrit, 'directHeal')).toBeCloseTo(750, 6);
+    });
+});

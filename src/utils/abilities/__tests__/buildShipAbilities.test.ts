@@ -1424,7 +1424,9 @@ describe('buildShipAbilities', () => {
 
     // Damage-leech: passive-slot damage-dealt heals carry a default leechScope 'all' (direct + DoT
     // ticks + detonations, per user decision); cast riders (active/charged) carry NO scope. Shields
-    // never flip target and never carry leechScope. The damage-taken punch-through flag
+    // never flip target; current in-scope ships have no passive-slot damage-dealt shields, so
+    // leechScope doesn't appear on shield configs in practice (but the type permits it — the engine's
+    // standing-leech hook reads scope for shields too). The damage-taken punch-through flag
     // (requiresHpDamage) only threads onto shields parsed from damage-taken text.
     describe('damage-leech ships', () => {
         it('Magnolia: passive standing leech → self heal, basis damage-dealt, scope all', () => {
@@ -1578,6 +1580,7 @@ describe('buildShipAbilities', () => {
             const shield = active?.abilities.find((a) => a.type === 'shield');
             expect(shield).toMatchObject({
                 type: 'shield',
+                target: 'self',
                 config: { type: 'shield', pct: 30, basis: 'damage-dealt' },
             });
         });
