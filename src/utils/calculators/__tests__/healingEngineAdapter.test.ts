@@ -73,7 +73,8 @@ describe('simulateHealing adapter', () => {
             expect(r.targetHpPct).toBe(100);
             expect(r.overheal).toBe(1000);
             expect(r.effectiveHealing).toBe(0);
-            expect(r.teamHealing).toBeUndefined();
+            expect('teamHealing' in r).toBe(false);
+            expect('extraTurns' in r).toBe(false);
         }
         // cumulative accumulates 1000/round.
         expect(result.rounds.map((r) => r.cumulativeHealing)).toEqual([
@@ -88,8 +89,8 @@ describe('simulateHealing adapter', () => {
         expect(s.avgHealingPerRound).toBe(1000);
         expect(s.totalOverheal).toBe(5000);
         expect(s.totalEffectiveHealing).toBe(0);
-        expect(s.destroyedRound).toBeUndefined();
-        expect(s.teamTotalHealing).toBeUndefined();
+        expect('destroyedRound' in s).toBe(false);
+        expect('teamTotalHealing' in s).toBe(false);
     });
 
     // ── Test 2: charged cadence ──────────────────────────────────────────────
@@ -309,8 +310,8 @@ describe('simulateHealing adapter', () => {
                 ]),
             })
         );
-        expect(noTeam.rounds[0].teamHealing).toBeUndefined();
-        expect(noTeam.summary.teamTotalHealing).toBeUndefined();
+        expect('teamHealing' in noTeam.rounds[0]).toBe(false);
+        expect('teamTotalHealing' in noTeam.summary).toBe(false);
 
         // A walked team healer that self-heals → its raw shows up in teamHealing (non-focus).
         idCounter = 0;
