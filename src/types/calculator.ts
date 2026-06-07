@@ -177,13 +177,6 @@ export interface AttackerBuffTotals {
     critDamageBuff: number;
 }
 
-export interface HealingBuffTotals {
-    critBuff: number;
-    critDamageBuff: number;
-    outgoingHealBuff: number;
-    incomingHealBuff: number;
-}
-
 export interface DefenseBuffTotals {
     defenseBuff: number;
     incomingDamageBuff: number;
@@ -202,33 +195,37 @@ export interface DefenseShipConfig {
     buffs: SelectedGameBuff[];
 }
 
-export interface HealerConfig {
+/** A healer config for the engine-backed Healing Calculator. Mirrors DPSShipConfig but
+ *  carries the heal-relevant stats (healModifier) and omits attacker-only affinity/allyCharge.
+ *  The combat engine reads heal/shield/cleanse abilities from `shipSkills` directly. */
+export interface HealerShipConfig {
     id: string;
     shipId?: string;
     name: string;
     hp: number;
-    healPercent: number;
-    healPercentAutoFilled?: boolean;
-    chargedHealPercent: number;
-    chargedHealPercentAutoFilled?: boolean;
-    chargeCount: number;
-    startCharged: boolean;
+    attack: number;
+    defence: number;
     crit: number;
     critDamage: number;
     healModifier: number;
-    healModifierAutoFilled?: boolean;
-    buffs: SelectedGameBuff[];
+    speed: number; // turn-order speed; auto-filled from ship stats
+    hacking: number; // debuff landing (cleanse / debuff abilities) vs enemy security
+    chargeCount: number;
+    startCharged: boolean;
+    shipSkills: ShipSkills;
 }
 
-export type HealerConfigUpdateableField =
+export type HealerShipConfigUpdateableField =
     | 'name'
     | 'hp'
-    | 'healPercent'
-    | 'chargedHealPercent'
-    | 'chargeCount'
+    | 'attack'
+    | 'defence'
     | 'crit'
     | 'critDamage'
-    | 'healModifier';
+    | 'healModifier'
+    | 'speed'
+    | 'hacking'
+    | 'chargeCount';
 
 /** Shared stat block for walked team actors — covers every stat that influences damage,
  *  debuff landing, and secondary (Defense/HP-based) damage calculations. */

@@ -1072,21 +1072,6 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     return { oncePerRound: /once per round/i.test(clause), conditions };
 }
 
-/**
- * Returns the heal percentage from the first <unit-damage>repairs X%</unit-damage> tag found.
- * Returns a float percentage (e.g. 15 for "repairs 15%"), or 0 if none found.
- */
-export function parseSkillHeal(text: string): number {
-    if (!text) return 0;
-    const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
-    let match: RegExpExecArray | null;
-    while ((match = tagPattern.exec(text)) !== null) {
-        const healMatch = /^\s*repairs\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
-        if (healMatch) return parseFloat(healMatch[1]);
-    }
-    return 0;
-}
-
 // --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
 //
 // These extract heal & shield grants (and cleanse counts) for the healing calculator.
