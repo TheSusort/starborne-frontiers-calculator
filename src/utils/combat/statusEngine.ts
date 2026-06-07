@@ -85,6 +85,12 @@ export type RegisteredAbilityStatus =
 export interface ActiveAbilityStatus {
     payload: AbilityStatusPayload;
     active: ActiveBuff;
+    /** The actor that CAST this status (Task 7 HoT attribution). Present whenever the
+     *  registered status/state carried it; for TIMED statuses it is stamped on BuffState at
+     *  application from `status.casterId`. Undefined for statuses applied without caster
+     *  identity (e.g. scheduled timed upserts, or statusEngine unit-test fixtures that omit
+     *  casterId). Read sites attribute HoT ticks to this applier; absent → the holder. */
+    casterId?: string;
 }
 
 export interface StatusEngine {
@@ -202,6 +208,10 @@ interface BuffState {
     tier: number;
     /** Present for ability-sourced timed statuses; folded into round totals by the engine. */
     payload?: AbilityStatusPayload;
+    /** The caster of an ability-sourced timed status (Task 7 HoT attribution). Stamped at
+     *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
+     *  identity) and for timed statuses whose registered status omitted casterId. */
+    casterId?: string;
 }
 
 interface AccumulatingState {
@@ -770,6 +780,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             turnsRemaining: status.duration,
             tier,
             payload: status.payload,
+            casterId: status.casterId,
         });
     };
 
@@ -792,6 +803,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             out.push({
                 payload: a.payload,
                 active: { buffName: a.payload.buffName, turnsRemaining: 'recurring' },
+                casterId: a.casterId,
             });
         }
         // Accumulating ability statuses: included when stacks > 0 AND conditions pass (gated
@@ -811,6 +823,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             out.push({
                 payload: { ...s.payload, stacks: s.stacks },
                 active: { buffName: s.buffName, turnsRemaining: 'recurring', stacks: s.stacks },
+                casterId: s.casterId,
             });
         }
         return out;
@@ -829,6 +842,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 out.push({
                     payload: s.payload,
                     active: { buffName: s.buffName, turnsRemaining: s.turnsRemaining },
+                    casterId: s.casterId,
                 });
             }
         }

@@ -81,6 +81,12 @@ export interface HealingRuntimeCtx {
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
     recipientIncomingHealPct: (actorId: string) => number;
+    /** A FOREIGN HoT applier's effective max HP at tick time (Task 7): reads
+     *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
+     *  rule). Returns undefined when the applier has not acted this run yet, in which case
+     *  the holder SKIPS the tick entirely. (The acting holder's self-granted HoTs use the
+     *  local effectiveHp directly, never this accessor.) */
+    applierMaxHp: (actorId: string) => number | undefined;
     /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
      *  Mutates target.currentHp. Returns the split. */
     applyHealToTarget: (raw: number) => { consumed: number; overheal: number };
@@ -1284,6 +1290,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // non-target non-self recipient — an accepted approximation, see plan).
         const incomingPctFor = (rid: string): number =>
             rid === actor.id ? incomingHealBuff : healing.recipientIncomingHealPct(rid);
+        // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
+        // all-allies → every player in fixed source order. Shared by the heal + shield branches.
+        const recipientsFor = (target: Ability['target']): string[] =>
+            target === 'self'
+                ? [actor.id]
+                : target === 'all-allies'
+                  ? healing.playerIds
+                  : [healing.targetId];
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
             basis: 'hp' | 'attack' | 'defense' | 'target-hp',
@@ -1302,6 +1316,69 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
         };
 
+        // ── HoT (Repair Over Time) ticking ──────────────────────────────────────────
+        // FIXED ordering: HoTs tick at TURN START — i.e. BEFORE this turn's cast heals
+        // (documented). The HOLDER (this acting actor) heals each of its own turns for
+        // applierEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
+        // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
+        // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
+        // but DO get the HOLDER's incomingHeal amplification (the local incomingHealBuff,
+        // since the holder is the acting actor). Holder === target → the consumption split
+        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal.
+        //
+        // Applier max HP at tick time:
+        //  - applier === this acting actor (self-granted HoT) → local effectiveHp.
+        //  - foreign applier → healing.applierMaxHp(applierId); undefined → SKIP the tick
+        //    (strict corrosion rule, NO base-stat fallback).
+        //  - scheduled HoT (no caster identity) → applier = the holder itself (local effectiveHp).
+        //
+        // Sources are DISJOINT (no double-count): payload-carrying ability statuses
+        // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
+        // applier = status.casterId) and scheduled snapshot buffs (entry.activeSelfBuffs ×
+        // selfBuffLookup, expanded SelectedGameBuff.parsedEffects.hotPct × stacks, applier = holder).
+        const holderIncomingFactor = 1 + incomingHealBuff / 100;
+        // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.
+        const hotApplierMaxHp = (applierId: string | undefined): number | undefined => {
+            if (applierId === undefined || applierId === actor.id) return effectiveHp;
+            return healing.applierMaxHp(applierId);
+        };
+        // Credit one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor)
+        // to the applier's hotHeal bucket, and route consumption (holder === target) to the
+        // applier's effectiveHeal/overheal.
+        const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
+            if (hotPct <= 0 || stacks <= 0) return;
+            const maxHp = hotApplierMaxHp(applierId);
+            if (maxHp === undefined) return; // foreign applier with no ctx yet → skip the tick
+            // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
+            const creditId = applierId ?? actor.id;
+            const raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            if (raw <= 0) return;
+            healing.credit(creditId, 'hotHeal', raw);
+            // Holder === target → the heal lands on the target; split consumption to the applier.
+            if (actor.id === healing.targetId) {
+                const { consumed, overheal } = healing.applyHealToTarget(raw);
+                healing.credit(creditId, 'effectiveHeal', consumed);
+                healing.credit(creditId, 'overheal', overheal);
+            }
+        };
+        // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
+        // payload.stacks already folds accumulating per-round counts / timed configured stacks.
+        for (const s of selfAbilityStatuses) {
+            const hotPct = s.payload.parsedEffects.hotPct;
+            if (!hotPct) continue;
+            tickHot(s.casterId, hotPct, s.payload.stacks);
+        }
+        // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
+        // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
+        // SelectedGameBuff carries the effective stacks already.
+        for (const ab of entry.activeSelfBuffs) {
+            for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                const hotPct = b.parsedEffects?.hotPct;
+                if (!hotPct) continue;
+                tickHot(undefined, hotPct, b.stacks ?? 1);
+            }
+        }
+
         const healAbilities = [
             ...(gatedSkill?.abilities ?? []),
             ...(gatedPassive?.abilities ?? []),
@@ -1313,14 +1390,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const ability of healAbilities) {
             const cfg = ability.config;
             if (cfg.type === 'heal') {
-                // Recipients (user-confirmed routing): self → caster; ally → the bombarded
-                // target; all-allies → every player in fixed source order.
-                const recipients =
-                    ability.target === 'self'
-                        ? [actor.id]
-                        : ability.target === 'all-allies'
-                          ? healing.playerIds
-                          : [healing.targetId];
+                const recipients = recipientsFor(ability.target);
                 // ONE crit draw per heal ability (not per recipient).
                 const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
                 if (didCrit) healCritCount += 1;
@@ -1345,12 +1415,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             } else if (cfg.type === 'shield') {
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
-                const recipients =
-                    ability.target === 'self'
-                        ? [actor.id]
-                        : ability.target === 'all-allies'
-                          ? healing.playerIds
-                          : [healing.targetId];
+                const recipients = recipientsFor(ability.target);
                 for (const rid of recipients) {
                     const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                     healing.credit(actor.id, 'shield', raw);

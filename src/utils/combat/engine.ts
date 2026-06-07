@@ -849,6 +849,9 @@ export function runCombat(input: CombatEngineInput): {
               },
               recipientMaxHp,
               recipientIncomingHealPct,
+              // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
+              // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
+              applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
               applyHealToTarget: (raw) => {
                   // Dead target → all overheal. Otherwise consume up to the deficit against
                   // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
