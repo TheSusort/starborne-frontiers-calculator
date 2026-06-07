@@ -362,6 +362,24 @@ describe('AbilityCard', () => {
             config: { type: 'purge', count: 1 },
         };
 
+        const damageDealtHealAbility: Ability = {
+            id: 'h5',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
+        };
+
+        const damageTakenShieldAbility: Ability = {
+            id: 'h6',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: { type: 'shield', pct: 30, basis: 'damage-taken' },
+        };
+
         it('heal ability renders pct/basis/noCrit fields', () => {
             const onChange = vi.fn();
             render(<AbilityCard ability={healAbility} onChange={onChange} onRemove={vi.fn()} />);
@@ -432,24 +450,6 @@ describe('AbilityCard', () => {
                 })
             );
         });
-
-        const damageDealtHealAbility: Ability = {
-            id: 'h5',
-            type: 'heal',
-            target: 'self',
-            trigger: 'on-cast',
-            conditions: [],
-            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
-        };
-
-        const damageTakenShieldAbility: Ability = {
-            id: 'h6',
-            type: 'shield',
-            target: 'self',
-            trigger: 'on-attacked',
-            conditions: [],
-            config: { type: 'shield', pct: 30, basis: 'damage-taken' },
-        };
 
         it('damage-dealt heal renders the basis select and a leech-scope select', () => {
             render(
