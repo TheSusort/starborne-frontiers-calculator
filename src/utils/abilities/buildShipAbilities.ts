@@ -33,6 +33,9 @@ import {
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
+    parseHealAbilities,
+    parseCleanse,
+    parseHealNoCrit,
     parseSkillEffects,
     classifyEnemyEffect,
     statusEffectCondition,
@@ -741,6 +744,51 @@ function abilitiesFromText(text: string): PositionedAbility[] {
                 autoFilled: true,
             },
             pos: accumulatePos >= 0 ? accumulatePos : MAX_POS,
+        });
+    }
+
+    // Heal / shield grants (and cleanse) — parsed narrowly (on-cast, percentage-of-stat only;
+    // damage-reactive and revive shapes emit nothing, see parseHealAbilities). The combat engine
+    // ignores these types for now (DPS unchanged); they carry the model for the healing calculator.
+    const healNoCrit = parseHealNoCrit(text);
+    for (const h of parseHealAbilities(text)) {
+        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
+        // heal components share the same pct the regex may hit the wrong tag — acceptable, since
+        // the position only drives cosmetic editor order (the engine ignores heal types).
+        const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
+        const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: h.kind,
+                target: h.target,
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: h.kind,
+                    pct: h.pct,
+                    basis: h.basis,
+                    ...(h.kind === 'heal' && healNoCrit ? { noCrit: true } : {}),
+                },
+                autoFilled: true,
+            },
+            pos: healTagPos >= 0 ? healTagPos : fallbackPos >= 0 ? fallbackPos : MAX_POS,
+        });
+    }
+
+    for (const c of parseCleanse(text)) {
+        const cleansePos = text.search(/cleanse/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'cleanse',
+                target: c.target,
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'cleanse', count: c.count },
+                autoFilled: true,
+            },
+            pos: cleansePos >= 0 ? cleansePos : MAX_POS,
         });
     }
 

@@ -1078,4 +1078,75 @@ describe('buildShipAbilities', () => {
             config: { type: 'dot', dotType: 'corrosion', duration: 2 },
         });
     });
+
+    describe('heal/shield/cleanse emission', () => {
+        it('emits heal abilities with text-position ordering', () => {
+            const s = ship({
+                activeSkillText:
+                    "This unit deals <unit-damage>120% damage</unit-damage> and <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP.",
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                target: 'ally',
+                trigger: 'on-cast',
+                config: { type: 'heal', pct: 4, basis: 'hp' },
+                autoFilled: true,
+            });
+            expect(active!.abilities[0].type).toBe('damage'); // damage tag precedes the repair
+        });
+
+        it('emits shield abilities', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit gains a <unit-damage>Shield equal to 30%</unit-damage> of its Max HP.',
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            const shield = charged?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                target: 'self',
+                trigger: 'on-cast',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+                autoFilled: true,
+            });
+        });
+
+        it('emits cleanse abilities', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit <unit-aid>cleanses 1</unit-aid> debuff from all allies.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const cleanse = active?.abilities.find((a) => a.type === 'cleanse');
+            expect(cleanse).toMatchObject({
+                target: 'all-allies',
+                trigger: 'on-cast',
+                config: { type: 'cleanse', count: 1 },
+                autoFilled: true,
+            });
+        });
+
+        it('heal noCrit flows from parseHealNoCrit', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and repairs itself for 5% of its Max HP. This repair cannot critically hit.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal?.config).toMatchObject({ type: 'heal', noCrit: true });
+            const damage = active?.abilities.find((a) => a.type === 'damage');
+            // The repair no-crit must NOT bleed onto the attack damage.
+            expect((damage?.config as { noCrit?: boolean }).noCrit).toBeUndefined();
+        });
+
+        it('damage-reactive shield emits nothing', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains a Shield equal to 25% of the damage taken when taking HP damage.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toBeUndefined();
+        });
+    });
 });
