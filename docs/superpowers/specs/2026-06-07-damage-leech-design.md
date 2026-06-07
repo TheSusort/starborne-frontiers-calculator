@@ -152,9 +152,11 @@ No new triggers, no Intent changes, no new event shapes. Slot decides the mechan
   `'detonation'` = detonation only):
   - Heal: `raw = amount × pct/100 × (1 + owner.healModifier/100)`, then (unless
     `noCrit`) one draw on the owner's `activeHealCritGate` at the owner's standing
-    crit/critDamage (runtime base+gear stats, not round buffs — simplified drain-style
-    fold, documented approximation mirroring the executor's reactive-heal fold, **plus**
-    the crit draw per user decision 2).
+    crit/critDamage — specifically `PlayerActorRuntime.crit` / `.critDamage` (the
+    adapter-derived base+gear stats), NOT the per-turn folded `effectiveCrit` (which
+    only exists mid-turn). Simplified drain-style fold, documented approximation
+    mirroring the executor's reactive-heal fold, **plus** the crit draw per user
+    decision 2.
   - Shield: `raw = amount × pct/100` (no crit, no channels).
   - Recipients: `self` → owner; `ally` → heal target; `all-allies` → `playerIds` (fixed
     order). Heals credit the owner's `directHeal` bucket (no new bucket — YAGNI);
@@ -215,7 +217,10 @@ No new triggers, no Intent changes, no new event shapes. Slot decides the mechan
   taken passive + shield interplay). Targeted regeneration only (delete + re-run);
   NEVER `vitest -u`.
 - Full suite via pre-commit (~2 min); ESLint zero warnings; **no RegExp lookbehind**
-  (iOS Safari 15).
+  (iOS Safari 15). Scope note: the lookbehind ban applies to bundled client code
+  (`src/` — `skillTextParser.ts`); the Node-only `scripts/auditSkills.ts` already uses a
+  lookbehind legitimately — do not "fix" it, and do not copy its split pattern into the
+  parser.
 
 ### 8. Docs & corrections
 
