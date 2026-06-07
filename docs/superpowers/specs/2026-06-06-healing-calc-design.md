@@ -96,8 +96,10 @@ road to the full simulator page.
   `Shield equal to N% of …` → shield ability with the same basis resolution.
 - Target routing reuses the existing clause-target resolution: self / "that
   ally" / "the ally" / all allies. "Ally with the most missing health" routes
-  as `ally`; in the sim, single-recipient ally heals route to the tracked heal
-  target by default (it is the damaged one).
+  as `ally`. **Sim routing rule (user-confirmed):** ally-targeted heals —
+  including "most missing health" — resolve to the tracked **heal target** (it
+  is the damaged one). Self-targeted heals stay on the caster. When the heal
+  target IS the healer, both routes land on the same actor.
 - **HoT statuses:** "grants Repair Over Time II for 2 turns" already parses as
   a buff ability via the buff-name pipeline. New work is in
   `src/utils/calculators/buffParser.ts`: parse `N% Applying Unit HP%` into a
@@ -371,3 +373,6 @@ consumers).
   bombarding it. Decisions 1–2 revised to consumption + absorption; decisions
   6–8 added (single target, dead-is-dead, additive shield pool capped at max
   HP). Result/UI shapes extended accordingly.
+- **2026-06-07 (user correction):** ally-targeted heals (incl. "most missing
+  health") resolve to the heal target — NOT to self. Self-routing only
+  coincides when the heal target is the healer itself.
