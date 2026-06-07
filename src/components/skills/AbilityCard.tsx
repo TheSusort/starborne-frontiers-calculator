@@ -584,7 +584,7 @@ export const AbilityCard: React.FC<Props> = ({
                                 }
                             />
                         </div>
-                        {config.basis === 'damage-dealt' && (
+                        {config.basis === 'damage-dealt' && slot === 'passive' && (
                             <Select
                                 label="Leech scope"
                                 value={config.leechScope ?? 'all'}
@@ -597,7 +597,7 @@ export const AbilityCard: React.FC<Props> = ({
                                 }
                             />
                         )}
-                        {config.basis === 'damage-taken' && (
+                        {config.basis === 'damage-taken' && slot === 'passive' && (
                             <Checkbox
                                 label="Only when damage punches through shield"
                                 checked={config.requiresHpDamage ?? false}

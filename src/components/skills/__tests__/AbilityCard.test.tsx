@@ -451,10 +451,11 @@ describe('AbilityCard', () => {
             );
         });
 
-        it('damage-dealt heal renders the basis select and a leech-scope select', () => {
+        it('damage-dealt heal on passive slot renders the basis select and a leech-scope select', () => {
             render(
                 <AbilityCard
                     ability={damageDealtHealAbility}
+                    slot="passive"
                     onChange={vi.fn()}
                     onRemove={vi.fn()}
                 />
@@ -468,11 +469,24 @@ describe('AbilityCard', () => {
             expect(screen.getByText('Detonations only')).toBeInTheDocument();
         });
 
+        it('damage-dealt heal on active slot does NOT render the leech-scope select', () => {
+            render(
+                <AbilityCard
+                    ability={damageDealtHealAbility}
+                    slot="active"
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(screen.queryByLabelText('Leech scope')).not.toBeInTheDocument();
+        });
+
         it('changing leech scope to Detonations only sets leechScope detonation', () => {
             const onChange = vi.fn();
             render(
                 <AbilityCard
                     ability={damageDealtHealAbility}
+                    slot="passive"
                     onChange={onChange}
                     onRemove={vi.fn()}
                 />
@@ -499,6 +513,7 @@ describe('AbilityCard', () => {
                             leechScope: 'detonation',
                         },
                     }}
+                    slot="passive"
                     onChange={onChange}
                     onRemove={vi.fn()}
                 />
@@ -512,11 +527,12 @@ describe('AbilityCard', () => {
             );
         });
 
-        it('damage-taken shield renders the punch-through checkbox and toggles it', () => {
+        it('damage-taken shield on passive slot renders the punch-through checkbox and toggles it', () => {
             const onChange = vi.fn();
             render(
                 <AbilityCard
                     ability={damageTakenShieldAbility}
+                    slot="passive"
                     onChange={onChange}
                     onRemove={vi.fn()}
                 />
@@ -545,6 +561,7 @@ describe('AbilityCard', () => {
                             requiresHpDamage: true,
                         },
                     }}
+                    slot="passive"
                     onChange={onChange}
                     onRemove={vi.fn()}
                 />
