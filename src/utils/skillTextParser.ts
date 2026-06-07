@@ -1209,7 +1209,7 @@ function sentenceBoundsAround(
 // Phase-4 / reactive disqualifiers — clause-scoped so an unrelated earlier sentence can't
 // block a legitimate heal later in the same skill text.
 const HEAL_DISQUALIFY_RE =
-    /of the damage (?:taken|dealt)|\bdamage dealt\b|\brevives?\b|\bcheat death\b/i;
+    /of (?:the )?damage (?:taken|dealt|(?:it|this unit) deals)|\bdamage dealt\b|\brevives?\b|\bcheat death\b/i;
 
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").

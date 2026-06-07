@@ -1972,6 +1972,22 @@ describe('parseHealAbilities', () => {
         ).toEqual([]);
     });
 
+    it('"of the damage it deals" leech repair is NOT parsed (Magnolia)', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit <unit-damage>repairs itself for 20%</unit-damage> of the damage it deals to enemies.'
+            )
+        ).toEqual([]);
+    });
+
+    it('"of Damage dealt to the enemy" leech repair is NOT parsed (Valerian)', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit <unit-damage>repairs 15%</unit-damage> of Damage dealt to the enemy, including inflcted Damage over Time effects.'
+            )
+        ).toEqual([]);
+    });
+
     // Issue 1: basis resolution must NOT cross sentence boundaries
     it('basis stays hp when "of its Attack" is in a LATER sentence (cross-sentence basis)', () => {
         expect(
