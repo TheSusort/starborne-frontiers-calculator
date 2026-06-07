@@ -1,5 +1,5 @@
 import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
-import { ShipSkills } from '../../types/abilities';
+import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -300,6 +300,9 @@ function tickDoTs(args: {
     expireStacks(args.corrosionEntries);
     expireStacks(args.infernoEntries);
 }
+
+/** Damage-credit channels the standing-leech hook distinguishes (damage-leech spec §4). */
+type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
 
 /** A team actor input as the ENGINE consumes it: the public TeamActorInput plus an
  *  optional `walk` bundle the adapter (simulateDPS) resolves when the actor carries
@@ -1001,6 +1004,84 @@ export function runCombat(input: CombatEngineInput): {
         ...teamRuntimeById,
     ]);
 
+    // Passive-slot standing leeches per owner (damage-leech spec §4): X% of credited
+    // damage repaired/shielded immediately at credit time. Scanned once at setup from each
+    // runtime's reactive-partitioned castSkills (passive-slot heal/shield abilities are
+    // on-cast, not reactive, so they remain here after partitioning). Healing mode only.
+    interface StandingLeech {
+        kind: 'heal' | 'shield';
+        pct: number;
+        target: AbilityTarget;
+        noCrit: boolean;
+        scope: 'all' | 'detonation';
+    }
+    const standingLeeches = new Map<string, StandingLeech[]>();
+    if (healTarget) {
+        for (const [ownerId, rt] of runtimesById) {
+            const entries: StandingLeech[] = [];
+            for (const slot of rt.castSkills.slots) {
+                if (slot.slot !== 'passive') continue;
+                for (const a of slot.abilities) {
+                    const c = a.config;
+                    if ((c.type === 'heal' || c.type === 'shield') && c.basis === 'damage-dealt') {
+                        entries.push({
+                            kind: c.type,
+                            pct: c.pct,
+                            target: a.target,
+                            noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
+                            scope: c.leechScope ?? 'all',
+                        });
+                    }
+                }
+            }
+            if (entries.length > 0) standingLeeches.set(ownerId, entries);
+        }
+    }
+
+    // Proc an owner's standing leeches against a damage credit (heals immediately at
+    // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
+    // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
+    // deterministic heal-crit draw on the owner's activeHealCritGate at the RUNTIME's
+    // standing crit/critDamage (base+gear stats — the per-turn folded effectiveCrit only
+    // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
+    // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
+    const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
+        if (!healingCtx || amount <= 0) return;
+        const entries = standingLeeches.get(sourceId);
+        if (!entries) return;
+        const owner = runtimesById.get(sourceId);
+        if (!owner) return;
+        for (const e of entries) {
+            if (e.scope === 'detonation' && channel !== 'detonation') continue;
+            let raw = amount * (e.pct / 100);
+            if (e.kind === 'heal') {
+                raw *= 1 + owner.healModifier / 100;
+                if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
+                    raw *= 1 + owner.critDamage / 100;
+                }
+            }
+            const recipients =
+                e.target === 'ally'
+                    ? [healTarget!.id]
+                    : e.target === 'all-allies'
+                      ? healingCtx.playerIds
+                      : [sourceId];
+            for (const rid of recipients) {
+                if (e.kind === 'heal') {
+                    healingCtx.credit(sourceId, 'directHeal', raw);
+                    if (rid === healTarget!.id) {
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
+                        healingCtx.credit(sourceId, 'overheal', overheal);
+                    }
+                } else {
+                    healingCtx.credit(sourceId, 'shield', raw);
+                    if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
+                }
+            }
+        }
+    };
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -1031,14 +1112,12 @@ export function runCombat(input: CombatEngineInput): {
             }
             return d;
         };
-        /** Damage-credit channels the standing-leech hook distinguishes (Task 6). */
-        type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
         // Single damage-credit point: every channel write flows through here so standing
         // leeches (damage-leech spec) can proc at credit time. With no leeches registered
         // this is byte-identical to the bare dmg() writes (the goldens are the referee).
         const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
             dmg(sourceId)[channel] += amount;
-            // procStandingLeeches(sourceId, channel, amount);  // ← enabled in Task 6
+            procStandingLeeches(sourceId, channel, amount);
         };
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;

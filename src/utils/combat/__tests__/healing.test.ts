@@ -1822,10 +1822,10 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
         expect(focusHeal(result, 'shield')).toBeCloseTo(2000, 6);
     });
 
-    // ── Test 4: passive-slot damage-dealt → cast path produces NOTHING ───────
-    // The standing leech belongs to the engine's credit hook (Task 6). The cast path
-    // must skip it: no directHeal credit here.
-    it('passive-slot damage-dealt heal: cast path contributes zero (engine hook owns it)', () => {
+    // ── Test 4: passive-slot damage-dealt → engine credit hook owns it ───────
+    // The cast path skips the standing leech (no double-count); the engine's creditDamage
+    // hook (Task 6) procs it against the active's direct damage: 5000 × 0.20 = 1000.
+    it('passive-slot damage-dealt heal: engine credit hook produces the leech', () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -1854,7 +1854,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
                 },
             })
         );
-        expect(focusHeal(result, 'directHeal')).toBe(0);
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(1000, 6);
         expect(focusHeal(result, 'shield')).toBe(0);
     });
 
