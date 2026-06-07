@@ -1635,6 +1635,12 @@ export function runCombat(input: CombatEngineInput): {
                     // raw scales from the FULL attack damage, not the HP portion. Quixilver's
                     // punch-through gate (requiresHpDamage): shield present at attack start
                     // AND HP damage dealt; Malvex is unconditional.
+                    // Per-attack (not per-hit): per-hit application would restructure the
+                    // shield-drain arithmetic and risk float-level golden churn; the accuracy
+                    // delta is below the fidelity of the flat enemy model — on the in-game
+                    // verify list (spec §5).
+                    // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
+                    // to the heal target (enemy attacks only ever hit it).
                     if (takenLeeches.length > 0 && healingCtx) {
                         const hpDamage = damage - absorbed;
                         const rt = runtimesById.get(healTarget!.id);
