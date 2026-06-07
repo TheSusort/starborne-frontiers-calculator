@@ -583,7 +583,7 @@ interface StandingLeech {
 }
 const standingLeeches = new Map<string, StandingLeech[]>();
 if (healTarget) {
-    for (const [ownerId, rt] of runtimes) {
+    for (const [ownerId, rt] of runtimesById) {
         const entries: StandingLeech[] = [];
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
@@ -618,7 +618,7 @@ const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: nu
     if (!healingCtx || amount <= 0) return;
     const entries = standingLeeches.get(sourceId);
     if (!entries) return;
-    const owner = runtimes.get(sourceId);
+    const owner = runtimesById.get(sourceId);
     if (!owner) return;
     for (const e of entries) {
         if (e.scope === 'detonation' && channel !== 'detonation') continue;
@@ -717,7 +717,7 @@ interface TakenLeech {
 }
 const takenLeeches: TakenLeech[] = [];
 if (healTarget) {
-    const rt = runtimes.get(healTarget.id);
+    const rt = runtimesById.get(healTarget.id);
     if (rt) {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
@@ -751,7 +751,7 @@ if (damage > 0) {
     // punch-through gate: shield at attack start AND HP damage dealt.
     if (takenLeeches.length > 0 && healingCtx) {
         const hpDamage = damage - absorbed;
-        const rt = runtimes.get(healTarget!.id);
+        const rt = runtimesById.get(healTarget!.id);
         for (const e of takenLeeches) {
             if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) continue;
             let raw = damage * (e.pct / 100);
