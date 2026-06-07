@@ -2,7 +2,12 @@ import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/ca
 import { ShipSkills } from '../../types/abilities';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { type ExtraActionGrant } from '../abilities/applyAbilities';
+import {
+    type ExtraActionGrant,
+    selectFiringSkill,
+    damageInputsFromSkill,
+} from '../abilities/applyAbilities';
+import { EnemyAttackerRuntime, runEnemyAttackerTurn } from './enemyTurn';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -367,6 +372,15 @@ export interface CombatEngineInput {
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
      *  result block is returned. Absent → DPS mode (the heal pipeline is fully inert). */
     healTargetId?: string;
+    /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
+     *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier. */
+    enemyAttackers?: {
+        id: string;
+        stats: { attack: number; crit: number; critDamage: number; speed: number };
+        chargeCount: number;
+        startCharged: boolean;
+        shipSkills?: ShipSkills;
+    }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
 }
@@ -806,6 +820,55 @@ export function runCombat(input: CombatEngineInput): {
     }
     const healingMode = !!healTarget;
 
+    // Enemy attackers (healing mode). Offense-only queue actors that bombard the heal target.
+    // They exist ONLY in healing mode — providing them without a heal target is a config bug.
+    const enemyAttackerInputs = input.enemyAttackers ?? [];
+    if (enemyAttackerInputs.length > 0 && !healTarget) {
+        throw new Error('runCombat: enemyAttackers require healTargetId');
+    }
+    // Build CombatActors (side/kind 'enemy'; bare-stat — defence/hp/defensePenetration 0 in
+    // ActorStats: enemies are pure offense and never queried as heal recipients) and per-enemy
+    // EnemyAttackerRuntimes, in input order. Each runtime gets its OWN makeRateGate() pair so
+    // its crit draws never interleave with another actor's deterministic schedule.
+    // Enemies use the RAW shipSkills directly (NO reactive partitioning): damage abilities are
+    // never reactive, and Phase 4 owns any future enemy buff/debuff behaviour.
+    const enemyAttackerRuntimes: EnemyAttackerRuntime[] = enemyAttackerInputs.map((e) => {
+        const actor = createActor({
+            id: e.id,
+            side: 'enemy',
+            kind: 'enemy',
+            stats: {
+                attack: e.stats.attack,
+                crit: e.stats.crit,
+                critDamage: e.stats.critDamage,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 0,
+                speed: e.stats.speed,
+            },
+            chargeCount: e.chargeCount,
+            startCharged: e.startCharged,
+        });
+        // hasChargedSkill: ship-backed → there is a charged-slot damage ability AND chargeCount
+        // >= 1; a manual flat card (no shipSkills) is one basic attack per turn (chargeCount is
+        // meaningless without a skill → false, so it always fires 'active').
+        const hasChargedSkill = e.shipSkills
+            ? e.chargeCount >= 1 &&
+              damageInputsFromSkill(selectFiringSkill(e.shipSkills, 'charged')).multiplier > 0
+            : false;
+        return {
+            actor,
+            castSkills: e.shipSkills,
+            hasChargedSkill,
+            activeCritGate: makeRateGate(),
+            chargedCritGate: makeRateGate(),
+        };
+    });
+    const enemyAttackerActors = enemyAttackerRuntimes.map((r) => r.actor);
+    const enemyAttackerRuntimeByActorId = new Map<string, EnemyAttackerRuntime>(
+        enemyAttackerRuntimes.map((r) => [r.actor.id, r])
+    );
+
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; legacy team → its combat-actor hp (1).
     // Enemy ids are never queried as recipients.
@@ -814,6 +877,15 @@ export function runCombat(input: CombatEngineInput): {
         ...teamActors.map((t) => [t.id, t.walk ? t.walk.stats.hp : 1] as const),
     ]);
     const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
+
+    // Base-DEFENCE fallback for an enemy attacker's target-defence read before the target has
+    // taken its first turn (no ctx yet): attacker → input.defence; walked team → walk defence;
+    // legacy team → 0. After the target's first turn the live ctx.effectiveDefence is preferred.
+    const baseDefenceById = new Map<string, number>([
+        [attacker.id, defence],
+        ...teamActors.map((t) => [t.id, t.walk ? t.walk.stats.defence : 0] as const),
+    ]);
+    const baseDefenceFor = (id: string): number => baseDefenceById.get(id) ?? 0;
 
     // The per-round healing map. Rebound at the top of each round (in healing mode) so the
     // ctx's `credit` always writes into the CURRENT round's entries via this `let`.
@@ -910,8 +982,15 @@ export function runCombat(input: CombatEngineInput): {
         statusEngine.beginRound(r);
 
         // Team actors listed BEFORE the attacker so the input-order tiebreak yields
-        // team → attacker → enemy at equal speeds (buildTurnQueue requirement).
-        const queue = buildTurnQueue([...teamCombatActors, attacker, enemy]);
+        // team → attacker → enemy at equal speeds (buildTurnQueue requirement). Enemy
+        // attackers (healing mode) are appended after the dummy `enemy`; the queue is
+        // speed-ordered so their actual turn position follows their stats.speed.
+        const queue = buildTurnQueue([
+            ...teamCombatActors,
+            attacker,
+            enemy,
+            ...enemyAttackerActors,
+        ]);
 
         // --- Round accumulator, shared by the turn blocks and the post-round assembly.
         // Declared fresh each round (like the old scalar locals). Each actor writes into
@@ -932,6 +1011,11 @@ export function runCombat(input: CombatEngineInput): {
         // the adapter owns any rounding. No-op in DPS mode (currentRoundHealing stays unread).
         let targetHpPctStart = 0;
         let targetShieldStart = 0;
+        // Per-round intake accounting (healing mode): folded into this round's HealingRoundEngine
+        // entry at post-round assembly (replacing the 0 placeholders). Enemy attacker turns add
+        // to these via the shield-first drain below.
+        let roundIncomingDamage = 0;
+        let roundShieldAbsorbed = 0;
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -1068,6 +1152,50 @@ export function runCombat(input: CombatEngineInput): {
 
         for (let qi = 0; qi < queue.length; qi++) {
             const actor = queue[qi];
+
+            // Dead-target turn skip (healing mode): a destroyed heal target does not act.
+            // We skip the ENTIRE turn body for that actor — including turn-started/turn-ended
+            // emissions and the post-turn status decrement (a dead ship has no live status to
+            // tick). Enemy attacker turns are NOT skipped (they keep banking charges and the
+            // dead-target damage path returns 0). When the dead actor IS the focus actor a round
+            // would otherwise produce ZERO focus turns and the focusTurns.length throw below would
+            // fire — so we synthesize a minimal dead focus-turn result (no sourceFired: it did not
+            // act) carrying the entering-round enemyHpPct and a zeroed/last-known ctx, just enough
+            // for row assembly.
+            if (healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0) {
+                if (actor.id === focusActorId) {
+                    const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+                    const enemyHpPct =
+                        enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+                    const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
+                    focusTurns.push({
+                        action: 'active',
+                        roundCrit: false,
+                        enemyHpPct,
+                        dotsConfig: [],
+                        dotsLanded: true,
+                        activeSelfBuffs: [],
+                        landedEnemyDebuffs: [],
+                        resistedEnemyDebuffs: [],
+                        directDamage: 0,
+                        secondaryDamage: 0,
+                        conditionalDamage: 0,
+                        detonationDamage: 0,
+                        extraActionGrants: [],
+                        turnCtx: lastKnownCtx ?? {
+                            effectiveAttack: 0,
+                            dotMult: 1,
+                            affinityMult: 1,
+                            effectiveDefence: 0,
+                            effectiveMaxHp: 0,
+                            outgoingHealPct: 0,
+                            incomingHealPct: 0,
+                        },
+                    });
+                }
+                continue;
+            }
+
             bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
 
             if (actor.kind === 'attacker') {
@@ -1250,7 +1378,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingResisted.push(...teamResisted);
                     }
                 }
-            } else if (actor.kind === 'enemy') {
+            } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
                 // ====================================================================
                 // ENEMY TURN — ticks the DoT containers it carries, per-entry attributed
                 // to the entry's APPLIER. DoTs tick at the start of the afflicted ship's
@@ -1310,6 +1438,43 @@ export function runCombat(input: CombatEngineInput): {
                         dmg(sourceId).detonation += damage;
                     },
                 });
+            } else if (actor.kind === 'enemy') {
+                // ====================================================================
+                // ENEMY ATTACKER TURN (healing mode) — a bare-stat offense actor that
+                // bombards the heal target. Healing mode is guaranteed here (enemyAttackers
+                // require healTargetId), so healTarget is defined whenever this branch runs.
+                // The cadence runs even vs a dead target (charges keep banking); a dead
+                // target takes 0 damage. Damage drains shield-first into the live target.
+                // ====================================================================
+                const runtime = enemyAttackerRuntimeByActorId.get(actor.id)!;
+                // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
+                // else its base defence (pre-first-turn fallback).
+                const targetDefence =
+                    lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
+                    baseDefenceFor(healTarget!.id);
+                const dead = healTarget!.currentHp <= 0;
+                const { damage } = runEnemyAttackerTurn({
+                    runtime,
+                    targetDefence,
+                    targetDead: dead,
+                });
+                if (damage > 0) {
+                    roundIncomingDamage += damage;
+                    // Shield-first drain: the absorption pool drains before HP.
+                    const absorbed = Math.min(healTarget!.shieldPool, damage);
+                    healTarget!.shieldPool -= absorbed;
+                    roundShieldAbsorbed += absorbed;
+                    const wasAlive = healTarget!.currentHp > 0;
+                    healTarget!.currentHp = Math.max(
+                        0,
+                        healTarget!.currentHp - (damage - absorbed)
+                    );
+                    // First reach 0 → record the destroyed round + emit ship-destroyed once.
+                    if (wasAlive && healTarget!.currentHp <= 0) {
+                        healTargetDestroyedRound = r;
+                        bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+                    }
+                }
             }
 
             // Drain point (b): follow-ups triggered by this actor's turn body run as
@@ -1321,13 +1486,16 @@ export function runCombat(input: CombatEngineInput): {
 
             // Post Turn (combat-system.md section 4): the status CARRIER decrements.
             // Player-side actors call decrementPlayer(actor.id) — team actors have empty
-            // maps now and calling on an empty owner is a safe no-op. Enemy actors call
-            // decrementEnemy(). This wires ALL player-kind actors so that when team
-            // actors gain real status in a later task, decrement just works.
-            if (actor.kind === 'enemy') {
+            // maps now and calling on an empty owner is a safe no-op. The DUMMY enemy calls
+            // decrementEnemy() (it carries the singular enemy status maps). Enemy ATTACKERS
+            // carry no status and must NOT call decrementEnemy() — that would over-decrement
+            // the dummy's enemy-debuff durations once per attacker per round.
+            if (actor.kind === 'enemy' && actor.id === enemy.id) {
                 for (const buffName of statusEngine.decrementEnemy().expired) {
                     bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
+            } else if (actor.kind === 'enemy') {
+                // Enemy attacker: no status carrier — nothing to decrement.
             } else {
                 // 'attacker' and 'team' kinds: decrement this actor's player-side map.
                 for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
@@ -1478,15 +1646,16 @@ export function runCombat(input: CombatEngineInput): {
         });
 
         // Healing mode: push this round's healing accounting. incomingDamage/shieldAbsorbed
-        // stay 0 until enemy attacks (Task 8). The destroyed-round seam reads the live target
-        // HP at post-round — no damage reaches the target this task, so it never fires yet.
+        // are the per-round intake totals folded from this round's enemy attacker turns.
+        // The destroyed-round seam is set the moment the target's HP first reaches 0 (in the
+        // enemy attacker turn); this post-round guard is a backstop for any other 0-HP path.
         if (healTarget) {
             healingRounds.push({
                 perActor: currentRoundHealing,
                 targetHpPctStart,
                 targetShieldStart,
-                incomingDamage: 0,
-                shieldAbsorbed: 0,
+                incomingDamage: roundIncomingDamage,
+                shieldAbsorbed: roundShieldAbsorbed,
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

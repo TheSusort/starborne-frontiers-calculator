@@ -787,3 +787,332 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
         expect(focusHeal(result, 'hotHeal')).toBe(2000);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 8: enemy attackers (manual + basics walk) and target damage intake.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('healing mode — enemy attackers and target intake', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const manualEnemy = (
+        id: string,
+        attack: number,
+        speed = 50,
+        extra: Partial<EnemyAttacker> = {}
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        ...extra,
+    });
+
+    const teamWalk = (
+        id: string,
+        speed: number,
+        hp: number,
+        extra: Partial<TeamActorEngineInput> = {}
+    ): TeamActorEngineInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp,
+            },
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+        ...extra,
+    });
+
+    // ── Test 1: pressure + partial-deficit consumption ───────────────────────
+    // Heal raw 5000/round (hp 10000, target-hp 50%); enemy manual attack 2000, target
+    // defence 0 → 2000 intake/round. Attacker (focus, speed 100) heals first, enemy
+    // (speed 50) attacks second.
+    //   R1: top 100%. deficit 0 → consume 0, overheal 5000. enemy 2000 → hp 8000.
+    //   R2: top 80%. deficit 2000 → consume min(5000,2000)=2000 (PARTIAL), overheal 3000.
+    //       hp 10000. enemy 2000 → hp 8000.
+    // The R2 consume=2000/overheal=3000 split is the partial-deficit branch Tasks 6-7
+    // could not reach (raw 5000 > deficit 2000).
+    it('pressure + partial-deficit: heal larger than deficit splits consume/overheal exactly', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 50, basis: 'target-hp' },
+                    }),
+                ]),
+            })
+        );
+        const rounds = result.healing!.rounds;
+        // targetHpPct declines: enters R1 at 100%, R2 at 80%.
+        expect(rounds[0].targetHpPctStart).toBeCloseTo(100, 6);
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(80, 6);
+        // R1: consume 0 / overheal 5000. R2: consume 2000 / overheal 3000 (partial deficit).
+        expect(rounds[0].perActor.get('attacker')!.effectiveHeal).toBeCloseTo(0, 6);
+        expect(rounds[0].perActor.get('attacker')!.overheal).toBeCloseTo(5000, 6);
+        expect(rounds[1].perActor.get('attacker')!.effectiveHeal).toBeCloseTo(2000, 6);
+        expect(rounds[1].perActor.get('attacker')!.overheal).toBeCloseTo(3000, 6);
+        // directHeal counts raw both rounds.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(10000, 6);
+        // incomingDamage 2000/round.
+        expect(rounds[0].incomingDamage).toBeCloseTo(2000, 6);
+        expect(rounds[1].incomingDamage).toBeCloseTo(2000, 6);
+    });
+
+    // ── Test 2: shield absorption ordering (pool drains before HP) ────────────
+    // Shield 2500/round (hp 10000, 25%); enemy manual attack 4000, defence 0.
+    //   R1: pool 0→2500. enemy 4000 → absorbed 2500, hp -=1500 → 8500. shieldAbsorbed 2500.
+    //   R2: top pool 0, hp 85%. pool +2500. enemy 4000 → absorbed 2500, hp 7000.
+    it('shield absorption: pool drains before HP (hand-computed timeline)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 4000)],
+                shipSkills: healSkills([
+                    ab({
+                        type: 'shield',
+                        target: 'self',
+                        config: { type: 'shield', pct: 25, basis: 'hp' },
+                    }),
+                ]),
+            })
+        );
+        const rounds = result.healing!.rounds;
+        // R1 incoming 4000, absorbed 2500 (pool fully drained, 1500 spills to HP).
+        expect(rounds[0].incomingDamage).toBeCloseTo(4000, 6);
+        expect(rounds[0].shieldAbsorbed).toBeCloseTo(2500, 6);
+        // R2 enters: HP 8500 → 85%, shield pool 0.
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(85, 6);
+        expect(rounds[1].targetShieldStart).toBeCloseTo(0, 6);
+        expect(rounds[1].shieldAbsorbed).toBeCloseTo(2500, 6);
+    });
+
+    // ── Test 3: lethal — destroyedRound + ship-destroyed once + flatline ──────
+    // Target = team actor t1 (hp 5000) so the focus attacker always acts. Enemy manual
+    // attack 3000, t1 defence 0 → 3000 intake/round. No heals.
+    //   R1: t1 5000 − 3000 = 2000. R2: 2000 − 3000 → 0 (destroyed round 2).
+    //   R3: target dead → incoming 0; targetHpPctStart flatlines at 0.
+    it('lethal: destroyedRound set, ship-destroyed emitted once, post-death flatline', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 4,
+                speed: 200, // attacker fast, but it does nothing damaging
+                hp: 10000,
+                healTargetId: 't1',
+                // t1 walk defence 0 so intake = enemy attack (no reduction): exactly 3000/round.
+                teamActors: [
+                    teamWalk('t1', 40, 5000, {
+                        walk: {
+                            shipSkills: { slots: [] },
+                            stats: {
+                                attack: 1000,
+                                crit: 0,
+                                critDamage: 0,
+                                defensePenetration: 0,
+                                hacking: 0,
+                                defence: 0,
+                                hp: 5000,
+                            },
+                            debuffLandingChance: 1,
+                            selfDotModifier: 0,
+                            defensePenetrationBuff: 0,
+                            affinityDamageModifier: 0,
+                            affinityCritCap: 100,
+                            affinityCritPenalty: 0,
+                            hasChargedSkill: false,
+                        },
+                    }),
+                ],
+                bus,
+                enemyAttackers: [manualEnemy('atk1', 3000, 30)],
+                shipSkills: { slots: [] },
+            })
+        );
+        const t1Destroyed = destroyed.filter((e) => e.actorId === 't1');
+        expect(t1Destroyed).toHaveLength(1);
+        expect(t1Destroyed[0].round).toBe(2);
+        expect(result.healing!.destroyedRound).toBe(2);
+        const rounds = result.healing!.rounds;
+        // Post-death rounds: incomingDamage 0, targetHpPctStart flatlines at 0.
+        expect(rounds[2].incomingDamage).toBe(0);
+        expect(rounds[3].incomingDamage).toBe(0);
+        expect(rounds[2].targetHpPctStart).toBeCloseTo(0, 6);
+        expect(rounds[3].targetHpPctStart).toBeCloseTo(0, 6);
+    });
+
+    // ── Test 4: spike cadence (ship-backed enemy charged nuke) ────────────────
+    // chargeCount 2, active mult 100, charged mult 400, attack 1000, target defence 0.
+    // Pattern of incomingDamage: t1 active(1000), t2 active(1000), t3 charged(4000), repeat.
+    it('spike cadence: charged nuke produces [a,a,A,a,a,A] incoming pattern', () => {
+        idCounter = 0;
+        const enemySkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 400 } }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 6,
+                hp: 100_000, // never dies
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'atk1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 2,
+                        startCharged: false,
+                        shipSkills: enemySkills,
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        const incoming = result.healing!.rounds.map((r) => Math.round(r.incomingDamage));
+        expect(incoming).toEqual([1000, 1000, 4000, 1000, 1000, 4000]);
+    });
+
+    // ── Test 5: focus healer IS the target and dies ───────────────────────────
+    // The focus attacker is the heal target. With no heal it dies; once dead it stops
+    // acting (turn skipped) but the engine must keep assembling rows without throwing.
+    it('focus healer is the target and dies: rows keep assembling, no throw, flatline', () => {
+        idCounter = 0;
+        const run = () =>
+            runCombat(
+                BASE({
+                    numRounds: 4,
+                    hp: 5000,
+                    defence: 0,
+                    healTargetId: 'attacker', // focus IS the target
+                    enemyAttackers: [manualEnemy('atk1', 3000)],
+                    shipSkills: { slots: [] },
+                })
+            );
+        const result = run();
+        // R1: 5000 − 3000 = 2000. R2: 2000 − 3000 → 0 (destroyed round 2).
+        expect(result.healing!.destroyedRound).toBe(2);
+        const dpsRounds = result.rounds;
+        expect(dpsRounds).toHaveLength(4);
+        // Action/charge fields are sane (no crash, no NaN).
+        for (const r of dpsRounds) {
+            expect(['active', 'charged']).toContain(r.action);
+            expect(Number.isFinite(r.charges)).toBe(true);
+        }
+        // Post-death: target HP flatlines at 0, no further intake.
+        const rounds = result.healing!.rounds;
+        expect(rounds[2].incomingDamage).toBe(0);
+        expect(rounds[3].targetHpPctStart).toBeCloseTo(0, 6);
+    });
+
+    // ── Test 6: enemyAttackers without healTargetId throws ────────────────────
+    it('throws when enemyAttackers provided without healTargetId', () => {
+        idCounter = 0;
+        expect(() =>
+            runCombat(
+                BASE({
+                    enemyAttackers: [manualEnemy('atk1', 2000)],
+                    shipSkills: { slots: [] },
+                })
+            )
+        ).toThrow(/enemyAttackers require healTargetId/);
+    });
+
+    // ── Test 7: target defence reduces intake ─────────────────────────────────
+    // A target with defence 2000 takes less intake than the same target at defence 0.
+    it('target defence matters: higher defence reduces intake', () => {
+        idCounter = 0;
+        const withDef = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 2000,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 5000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        idCounter = 0;
+        const noDef = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 5000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        const dWith = withDef.healing!.rounds[0].incomingDamage;
+        const dNo = noDef.healing!.rounds[0].incomingDamage;
+        expect(dNo).toBeCloseTo(5000, 6);
+        expect(dWith).toBeLessThan(dNo);
+        // Hand-checked: 5000 × (1 − dr(2000)/100).
+        expect(dWith).toBeCloseTo(3186.4464026358046, 6);
+    });
+
+    // ── Test 8: DPS-mode inertness re-check ───────────────────────────────────
+    it('no enemyAttackers → healing rounds have zero intake', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                healTargetId: 'attacker',
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'hp' },
+                    }),
+                ]),
+            })
+        );
+        for (const r of result.healing!.rounds) {
+            expect(r.incomingDamage).toBe(0);
+            expect(r.shieldAbsorbed).toBe(0);
+        }
+    });
+});
