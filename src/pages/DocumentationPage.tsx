@@ -2429,6 +2429,16 @@ const DocumentationPage: React.FC = () => {
                                         from any damage crits.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Damage-Based Sustain:</span>{' '}
+                                        Some ships repair or gain shields based on a percentage of
+                                        the damage they deal — lifesteal-style sustain (including,
+                                        for some ships, from damage-over-time ticks such as
+                                        Corrosion and Inferno) and burst-triggered heals — or based
+                                        on the damage they take, like shield-on-hit. These are now
+                                        simulated in the Healing Calculator too, applied as the
+                                        damage is dealt or taken round by round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Survival Metric:</span> The
                                         summary reports how many rounds the target survives — or the
                                         round it is destroyed if incoming damage outpaces healing —

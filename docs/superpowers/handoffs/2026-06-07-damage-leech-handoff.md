@@ -25,26 +25,38 @@ page. Engine honors it: `focusActorId`, per-actor `ActorDamage`/`ActorHealing` m
   or ship-backed **basics walk**: damage abilities only, team-mirror charge cadence,
   per-hit crits, id-collision validation); dead-is-dead (`destroyedRound`, dead target
   skips turns + synthesized focus turn protects the focusTurns invariant).
-- **Events**: `heal-performed` {casterId,targets,amount,critHits?}, `damage-taken`
-  {targetId,round,amount,didCrit?} (healing mode only, per landed enemy hit, pre-shield).
-- **FIVE new live triggers** (now 11 total): `on-ally-critically-repaired` (OWN crit
-  repair of an ally — Pallas cleanse), `on-ally-crit` (per ally critting hit — Pallas
-  charge), `on-ally-damaged` (per hit on an ally — Cultivator heals the hit ally),
-  `on-self-damaged` (per hit on SELF — tank sustain; heal/shield config gained
-  `onCritHit?: boolean` for Isha's "3% per hit, instead 6% when critically hit" —
-  absent=every hit / false=non-crit only / true=crit only; LISTENER-side filtering
-  against `damage-taken.didCrit`), plus executor heal/shield/cleanse follow-ups
-  (drain-time fold: basis × pct × (1+healModifier) for heals, basis × pct for shields,
-  NO crit draw, NO heal-performed re-emission — chain guard).
+- **Events**: `heal-performed` {casterId,targets,amount,critHits?}. (CORRECTION: there is
+  NO `damage-taken` event — that was never shipped. Enemy attacker turns produce one
+  aggregate damage number per turn via `runEnemyAttackerTurn`, with per-hit crit draws
+  folded into a blended multiplier; nothing emits a per-hit `damage-taken` event.)
+- **TWO new live triggers** (now 8 total — NOT 11): `on-ally-critically-repaired` (OWN
+  crit repair of an ally — Pallas cleanse) and `on-ally-crit` (per ally critting hit —
+  Pallas charge), plus executor heal/shield/cleanse follow-ups (drain-time fold:
+  basis × pct × (1+healModifier) for heals, basis × pct for shields, NO crit draw,
+  NO heal-performed re-emission — chain guard). (CORRECTION: there are NO
+  `on-ally-damaged` / `on-self-damaged` triggers and NO `onCritHit?` field on heal/shield
+  configs — none of those shipped. Cultivator/Isha-style "when an ally is directly
+  damaged" repairs are on-cast per-turn passive heals; the PR #87 fix
+  (`b36866b7`) corrected their parsed RECIPIENT — ally vs self — not a trigger.)
 - **Parser target-routing rules (all user-verified 2026-06-07)**: bare repairs/cleanses
   on PURE SUPPORT actives/charged (no damage component) → **ally** (one-target-per-skill;
   Hermes/Mender/Salvation/Makoli + 13 more); damage-skill repair riders stay self;
   passives stay self; "**grants** a/the shield" (receiver-less, pure support) → ally
   (Aegis/Nyxen) while "**gains** a Shield" stays self; self-damage-conditional repairs
   stay self (Meatshield carve-out); cleanse-trigger repairs → ally when the ship class
-  is SUPPORTER (Cultivator), self for DEFENDER (Morao); "when an ally is directly
-  damaged" → on-ally-damaged; "when directly damaged" (no "an ally") → on-self-damaged;
-  leech guard widened ("of the damage it deals" — Magnolia misparse fixed).
+  is SUPPORTER (Cultivator), self for DEFENDER (Morao); leech guard widened ("of
+  the damage it deals" — Magnolia misparse fixed). (CORRECTION: the "when an ally is
+  directly damaged" / "when directly damaged" repairs did NOT become triggers — they
+  remain on-cast per-turn passive heals routed to the correct recipient; see the trigger
+  correction above.)
+
+> **Damage-leech increment note (post-PR #87):** the damage-leech feature on
+> `feat/damage-leech` shipped leech heals/shields via the engine's damage CREDIT-POINT
+> hooks — a `creditDamage(sourceId, channel, amount)` wrapper for standing leeches plus a
+> per-attack proc in the enemy-attack block for damage-taken shields — NOT via the
+> (nonexistent) `damage-taken` event or `on-ally-damaged`/`on-self-damaged` trigger seams
+> this handoff originally implied. New heal/shield bases `'damage-dealt'`/`'damage-taken'`
+> (with an optional `leechScope`) carry it; no new events or triggers were added.
 - **Adapter** `simulateHealing` (`healingEngineAdapter.ts`); shared
   `deriveTeamEngineActors` extracted from dpsSimulator (byte-identical goldens).
 - **UI**: HealingCalculatorPage rebuilt (DPS-page image): healer config cards (compare),
