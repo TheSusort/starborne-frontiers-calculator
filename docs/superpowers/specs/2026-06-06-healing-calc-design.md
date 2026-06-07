@@ -155,7 +155,10 @@ Two enemy flavors, one turn handler:
   charge banking (`CombatActor.charges`/`chargeCount` already exist on every
   actor), skill damage multipliers, multi-hit with per-hit deterministic crit
   draws (`drawHits`), all through the same attack-vs-defence formula against
-  the target. This produces **pressure patterns** (charged-nuke spikes vs
+  the target. Enemy charge cadence mirrors the team-actor block
+  (`engine.ts:1042-1050`): +1 charge per turn, fire-and-reset at
+  `chargeCount`; bonus/ally charge sources never reach enemies. `startCharged`
+  seeds `charges = chargeCount` exactly as for players (`createActor`). This produces **pressure patterns** (charged-nuke spikes vs
   steady chip) — the burst-recovery vs sustain healer separation. Non-damage
   enemy abilities (debuffs, DoTs, buffs, heals, controls) are skipped this
   increment — Phase 4.
