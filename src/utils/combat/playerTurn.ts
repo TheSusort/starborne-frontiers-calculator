@@ -1300,7 +1300,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                   : [healing.targetId];
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
-            basis: 'hp' | 'attack' | 'defense' | 'target-hp',
+            basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken',
             rid: string
         ): number => {
             switch (basis) {
@@ -1311,8 +1311,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 case 'target-hp':
                     return healing.recipientMaxHp(rid);
                 case 'hp':
-                default:
                     return effectiveHp;
+                // damage-dealt / damage-taken are resolved by the leech hook (later task);
+                // basisValue is not called for those paths — return 0 as a safe sentinel.
+                case 'damage-dealt':
+                case 'damage-taken':
+                default:
+                    return 0;
             }
         };
 
