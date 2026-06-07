@@ -569,6 +569,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // cast path (which folds outgoingHeal + recipient incomingHeal): heal applies the
         // owner's healModifier only; shield is basis×pct (shields aren't repairs). The
         // owner's standing heal buffs are not re-derived at drain time.
+        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this simplified mirror.
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
         const basisValue =
             cfg.basis === 'attack'

@@ -840,21 +840,26 @@ function phrasePosTrigger(
     trigger: AbilityTrigger
 ): AbilityTrigger | undefined {
     if (!text || anchorPos < 0) return undefined;
+    // Mask "Inc."/"Out." abbreviation periods (same sentinel as resolveBuffClause/parseExtraAction)
+    // before the boundary scan so a buff name like "Inc. Damage Up" does not split the sentence
+    // mid-name. The placeholder is the same byte length as the replaced space, so anchorPos (which
+    // points into the raw unmasked text) stays stable and needs no adjustment.
+    const masked = maskAbbrev(text);
     const boundary = /[.;](?=\s|$)/g;
     let start = 0;
     let m: RegExpExecArray | null;
-    const phraseRe = new RegExp(phrase.source, phrase.flags.includes('i') ? 'i' : '');
-    while ((m = boundary.exec(text)) !== null) {
+    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
+    while ((m = boundary.exec(masked)) !== null) {
         const end = m.index + 1;
         if (anchorPos < end) {
-            return phraseRe.test(text.slice(start, end)) && anchorPos >= start
+            return phraseRe.test(masked.slice(start, end)) && anchorPos >= start
                 ? trigger
                 : undefined;
         }
         start = end;
     }
     // Anchor is in the final (unterminated) sentence.
-    return phraseRe.test(text.slice(start)) && anchorPos >= start ? trigger : undefined;
+    return phraseRe.test(masked.slice(start)) && anchorPos >= start ? trigger : undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —

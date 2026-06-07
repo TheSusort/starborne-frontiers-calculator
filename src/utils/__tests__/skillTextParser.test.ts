@@ -1429,6 +1429,19 @@ describe('detectCritRepairTrigger', () => {
         const text = 'When this unit critically repairs an ally, it cleanses 1 debuff.';
         expect(detectCritRepairTrigger(text, -1)).toBeUndefined();
     });
+
+    it('abbreviation period in buff name does not split the sentence — trigger still stamps', () => {
+        // "Inc. Damage Up" contains a period after "Inc." that is followed by a space — the
+        // same pattern phrasePosTrigger's boundary regex /[.;](?=\s|$)/ matches. When the
+        // abbreviation sits INSIDE the crit-repair sentence, the unmasked period splits the
+        // sentence there, so the crit-repair phrase ends up in one segment and the heal
+        // anchor in the next — detectCritRepairTrigger would return undefined instead of the
+        // trigger. Masking the abbreviation period before the boundary scan prevents the split.
+        const text =
+            'When this unit critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
+    });
 });
 
 describe('detectAllyCritTrigger', () => {
