@@ -519,7 +519,34 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
 // charge/extend/modifiers are heuristics that may land on an earlier mention of the
 // word (e.g. "removes 1 charge ... adds 1 charge") — cosmetic editor-order only.
 
-function abilitiesFromText(text: string): PositionedAbility[] {
+/**
+ * One-target-per-skill game rule (user-verified 2026-06-07; Hermes/Isha live-verification bug).
+ * A bare repair/cleanse (no recipient phrase, so the parser defaulted target to 'self') on an
+ * ACTIVE or CHARGED skill with NO damage component is a pure support skill — it targets an ally,
+ * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
+ * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
+ * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
+ * repair is a self rider), passive repairs, and explicit recipients are unaffected. Shields are
+ * deliberately NOT flipped ("gains a Shield" stays self).
+ */
+function flipBareSupportTarget(
+    target: 'self' | 'ally' | 'all-allies',
+    explicitTarget: boolean,
+    slot: SkillSlot,
+    hasDamage: boolean
+): 'self' | 'ally' | 'all-allies' {
+    if (
+        !explicitTarget &&
+        target === 'self' &&
+        (slot === 'active' || slot === 'charged') &&
+        !hasDamage
+    ) {
+        return 'ally';
+    }
+    return target;
+}
+
+function abilitiesFromText(text: string, slot: SkillSlot): PositionedAbility[] {
     // Build the list in construction order first (so out[0]?.type === 'damage' checks work
     // for condition/scaling attachment). Positions are computed in parallel and applied
     // at the END via a single stable sort — so construction order never leaks into the result.
@@ -764,11 +791,16 @@ function abilitiesFromText(text: string): PositionedAbility[] {
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast).
         const reactiveTrigger = detectCritRepairTrigger(text, healPos);
+        // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
+        const healTarget =
+            h.kind === 'heal'
+                ? flipBareSupportTarget(h.target, h.explicitTarget, slot, mult > 0)
+                : h.target;
         out.push({
             ability: {
                 id: nextId(),
                 type: h.kind,
-                target: h.target,
+                target: healTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
                 conditions: [],
                 config: {
@@ -788,11 +820,12 @@ function abilitiesFromText(text: string): PositionedAbility[] {
         // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
         // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
         const reactiveTrigger = detectCritRepairTrigger(text, cleansePos);
+        const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'cleanse',
-                target: c.target,
+                target: cleanseTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
                 conditions: [],
                 config: { type: 'cleanse', count: c.count },
@@ -931,7 +964,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     for (const row of getShipSkillRows(ship)) {
         const slot = slotFor(row.label);
         if (!slot) continue;
-        const positioned = abilitiesFromText(row.text);
+        const positioned = abilitiesFromText(row.text, slot);
         pushToSlot(bySlot, slot, positioned);
     }
 

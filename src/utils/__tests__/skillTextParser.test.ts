@@ -1828,42 +1828,44 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 "This unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP."
             )
-        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally' }]);
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
     });
     it('self repair', () => {
         expect(
             parseHealAbilities(
                 'This unit <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.'
             )
-        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self' }]);
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: true }]);
     });
     it('all-allies repair', () => {
         expect(
             parseHealAbilities(
                 'This unit <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.'
             )
-        ).toEqual([{ kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies' }]);
+        ).toEqual([
+            { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
+        ]);
     });
     it('most-missing-health routes as ally', () => {
         expect(
             parseHealAbilities(
                 'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
             )
-        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'ally' }]);
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'ally', explicitTarget: true }]);
     });
-    it('attack-based repair', () => {
-        expect(
-            parseHealAbilities('This unit <unit-damage>repairs 90%</unit-damage> of its Attack.')
-        ).toEqual([{ kind: 'heal', pct: 90, basis: 'attack', target: 'self' }]);
+    it('attack-based repair (bare → self, explicitTarget false)', () => {
+        expect(parseHealAbilities('repairs <unit-damage>90%</unit-damage> of its Attack.')).toEqual(
+            [{ kind: 'heal', pct: 90, basis: 'attack', target: 'self', explicitTarget: false }]
+        );
     });
-    it('multi-component heal: HP + Defense', () => {
+    it('multi-component heal: HP + Defense (bare → self, explicitTarget false)', () => {
         expect(
             parseHealAbilities(
-                'This unit <unit-damage>repairs 5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
+                'repairs <unit-damage>5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
             )
         ).toEqual([
-            { kind: 'heal', pct: 5, basis: 'hp', target: 'self' },
-            { kind: 'heal', pct: 100, basis: 'defense', target: 'self' },
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
+            { kind: 'heal', pct: 100, basis: 'defense', target: 'self', explicitTarget: false },
         ]);
     });
     it('recipient-HP heal (their Max HP)', () => {
@@ -1871,21 +1873,33 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
             )
-        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'all-allies' }]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'target-hp',
+                target: 'all-allies',
+                explicitTarget: true,
+            },
+        ]);
     });
     it('shield from caster HP', () => {
         expect(
             parseHealAbilities(
                 'This Unit gains a <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.'
             )
-        ).toEqual([{ kind: 'shield', pct: 25, basis: 'hp', target: 'self' }]);
+        ).toEqual([
+            { kind: 'shield', pct: 25, basis: 'hp', target: 'self', explicitTarget: false },
+        ]);
     });
     it('shield from attack', () => {
         expect(
             parseHealAbilities(
                 'grants the ally a <unit-damage>shield equal to 180%</unit-damage> of its attack'
             )
-        ).toEqual([{ kind: 'shield', pct: 180, basis: 'attack', target: 'ally' }]);
+        ).toEqual([
+            { kind: 'shield', pct: 180, basis: 'attack', target: 'ally', explicitTarget: true },
+        ]);
     });
     it('damage-reactive shield is NOT parsed', () => {
         expect(
@@ -1920,7 +1934,7 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 'This unit repairs 30%. This unit deals damage equal to 200% of its Attack.'
             )
-        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self' }]);
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: false }]);
     });
 
     // Issue 2: multi-component continuation must NOT span sentence boundaries
@@ -1929,7 +1943,7 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 'This unit repairs 5% of its Max HP. An unrelated buff with an additional repair equal to 100% of its Defense exists.'
             )
-        ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self' }]);
+        ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false }]);
     });
 
     // Issue 3: singular "the ally … their Max HP" → target ally, NOT all-allies
@@ -1938,7 +1952,9 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 'Repairs the ally for <unit-damage>8%</unit-damage> of their Max HP.'
             )
-        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'ally' }]);
+        ).toEqual([
+            { kind: 'heal', pct: 8, basis: 'target-hp', target: 'ally', explicitTarget: true },
+        ]);
     });
 
     // Regression guard: explicit plural phrase "all allies … their Max HP" must stay all-allies
@@ -1947,19 +1963,57 @@ describe('parseHealAbilities', () => {
             parseHealAbilities(
                 'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
             )
-        ).toEqual([{ kind: 'heal', pct: 8, basis: 'target-hp', target: 'all-allies' }]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'target-hp',
+                target: 'all-allies',
+                explicitTarget: true,
+            },
+        ]);
+    });
+});
+
+describe('parseHealAbilities explicitTarget', () => {
+    // The parser keeps defaulting bare repairs to target 'self' (the slot/damage-aware FLIP to
+    // 'ally' lives in buildShipAbilities, not here). explicitTarget records whether a target
+    // phrase was actually matched, so the flip can tell a bare default from a real 'self'.
+    it('bare repair: target self, explicitTarget false', () => {
+        expect(parseHealAbilities('This Unit Repairs 27% of its Max HP.')).toEqual([
+            { kind: 'heal', pct: 27, basis: 'hp', target: 'self', explicitTarget: false },
+        ]);
+    });
+    it('explicit "repairs itself": target self, explicitTarget true', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: true }]);
+    });
+    it('explicit "the ally": target ally, explicitTarget true', () => {
+        expect(
+            parseHealAbilities(
+                "This unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
     });
 });
 
 describe('parseCleanse', () => {
     it('parses cleanse count', () => {
         expect(parseCleanse('it <unit-aid>cleanses 1</unit-aid> debuff from itself')).toEqual([
-            { count: 1, target: 'self' },
+            { count: 1, target: 'self', explicitTarget: true },
         ]);
     });
     it('ally cleanse', () => {
         expect(parseCleanse('<unit-aid>Cleanses 2</unit-aid> debuffs from all allies')).toEqual([
-            { count: 2, target: 'all-allies' },
+            { count: 2, target: 'all-allies', explicitTarget: true },
+        ]);
+    });
+    it('bare cleanse: target self, explicitTarget false', () => {
+        expect(parseCleanse('This Unit <unit-aid>cleanses 1</unit-aid> debuff.')).toEqual([
+            { count: 1, target: 'self', explicitTarget: false },
         ]);
     });
     it('does not parse purge as cleanse', () => {

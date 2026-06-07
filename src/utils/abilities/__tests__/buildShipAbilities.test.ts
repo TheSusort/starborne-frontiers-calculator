@@ -1150,6 +1150,97 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // One-target-per-skill game rule (user-verified 2026-06-07, Hermes/Isha live-verification
+    // bug): a bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill
+    // (no damage component) targets the ally, not the caster. The parser defaults bare to
+    // 'self'; the flip lives in abilitiesFromText where the slot + damage component are known.
+    describe('bare repair/cleanse flip to ally on pure-support active/charged skills', () => {
+        it('Hermes active bare repair → heal target ally', () => {
+            const s = ship({ activeSkillText: 'This Unit Repairs 27% of its Max HP.' });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                trigger: 'on-cast',
+                config: { type: 'heal', pct: 27, basis: 'hp' },
+            });
+        });
+
+        it('Hermes charged bare repair → heal target ally; charge still parses', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
+                chargeSkillCharge: 4,
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            const heal = charged?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 37, basis: 'hp' },
+            });
+            const charge = charged?.abilities.find((a) => a.type === 'charge');
+            expect(charge).toMatchObject({ type: 'charge', config: { type: 'charge', amount: 1 } });
+        });
+
+        it('damage-rider bare repair stays self (skill has a damage component)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>160% damage</unit-damage> and repairs 9% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('passive bare repair stays self', () => {
+            const s = ship({
+                firstPassiveSkillText: 'This unit repairs 5% of its Max HP every turn.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('explicit "repairs itself" on a pure-support active stays self (explicit wins)', () => {
+            const s = ship({
+                activeSkillText: 'This Unit repairs itself for 30% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('bare cleanse on a pure-support active → ally; cleanse on a damage skill → self', () => {
+            const support = ship({
+                activeSkillText: 'This Unit <unit-aid>cleanses 1</unit-aid> debuff.',
+            });
+            const supportActive = buildShipAbilities(support).slots.find(
+                (x) => x.slot === 'active'
+            );
+            const supportCleanse = supportActive?.abilities.find((a) => a.type === 'cleanse');
+            expect(supportCleanse).toMatchObject({ type: 'cleanse', target: 'ally' });
+
+            const damage = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and <unit-aid>cleanses 1</unit-aid> debuff.',
+            });
+            const damageActive = buildShipAbilities(damage).slots.find((x) => x.slot === 'active');
+            const damageCleanse = damageActive?.abilities.find((a) => a.type === 'cleanse');
+            expect(damageCleanse).toMatchObject({ type: 'cleanse', target: 'self' });
+        });
+
+        it('bare shield on a pure-support active stays self (shields not flipped)', () => {
+            const s = ship({
+                activeSkillText: 'This Unit gains a Shield equal to 30% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'self' });
+        });
+    });
+
     describe('Pallas-pattern ally-crit reactive triggers', () => {
         // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
         // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).

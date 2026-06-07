@@ -1085,6 +1085,10 @@ export interface ParsedHealAbility {
     pct: number;
     basis: 'hp' | 'attack' | 'defense' | 'target-hp';
     target: 'self' | 'ally' | 'all-allies';
+    // True when a target phrase was actually matched ("itself", "the ally", "all allies");
+    // false when target defaulted to 'self' because the text named no recipient. The
+    // slot/damage-aware bare-repair→ally FLIP in buildShipAbilities keys off this flag.
+    explicitTarget: boolean;
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -1160,7 +1164,10 @@ function resolveHealBasis(after: string): ParsedHealAbility['basis'] {
  * trigger all-allies so that singular-ally phrasings aren't misrouted.
  * Defaults to self.
  */
-function resolveHealTarget(sentence: string): ParsedHealAbility['target'] {
+function resolveHealTarget(sentence: string): {
+    target: ParsedHealAbility['target'];
+    explicit: boolean;
+} {
     const s = sentence.toLowerCase();
     // Singular ally detection takes priority over the bare "their" heuristic so that
     // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
@@ -1169,9 +1176,13 @@ function resolveHealTarget(sentence: string): ParsedHealAbility['target'] {
             s
         )
     )
-        return 'ally';
-    if (/\ball\s+allies\b|\ballies\b/.test(s)) return 'all-allies';
-    return 'self';
+        return { target: 'ally', explicit: true };
+    if (/\ball\s+allies\b|\ballies\b/.test(s)) return { target: 'all-allies', explicit: true };
+    // "itself" (or "to/from this unit") is an explicit self RECIPIENT. A bare leading subject
+    // ("This Unit repairs 27% …") names no recipient and is the bare default (explicit: false) —
+    // the signal the buildShipAbilities flip keys off. Mirrors parseCleanse's self detection.
+    if (/\bitself\b|(?:from|to)\s+this\s+unit\b/.test(s)) return { target: 'self', explicit: true };
+    return { target: 'self', explicit: false };
 }
 
 /**
@@ -1205,8 +1216,8 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const basis = resolveHealBasis(basisScope);
-            const target = resolveHealTarget(sentence);
-            results.push({ kind, pct, basis, target });
+            const { target, explicit: explicitTarget } = resolveHealTarget(sentence);
+            results.push({ kind, pct, basis, target, explicitTarget });
 
             // Multi-component continuation ("with an additional repair equal to N% of its
             // Defense") — emit a second entry inheriting this component's target.
@@ -1229,6 +1240,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                                       ? 'defense'
                                       : 'hp',
                             target,
+                            explicitTarget,
                         });
                     }
                 }
@@ -1251,21 +1263,30 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
  */
 export function parseCleanse(
     text: string | null | undefined
-): { count: number; target: 'self' | 'ally' | 'all-allies' }[] {
+): { count: number; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
-    const results: { count: number; target: 'self' | 'ally' | 'all-allies' }[] = [];
+    const results: {
+        count: number;
+        target: 'self' | 'ally' | 'all-allies';
+        explicitTarget: boolean;
+    }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CLEANSE_RE.exec(plain)) !== null) {
         const count = parseInt(m[1], 10);
         if (!count || isNaN(count)) continue;
         const sentence = sentenceAround(plain, m.index).toLowerCase();
+        // explicitTarget mirrors parseHealAbilities: true when a recipient phrase was matched,
+        // false when target defaulted to 'self' with no named recipient (the bare-cleanse case
+        // the buildShipAbilities flip routes to the ally).
         let target: 'self' | 'ally' | 'all-allies' = 'self';
+        let explicitTarget = true;
         if (/all\s+allies/.test(sentence)) target = 'all-allies';
         else if (/itself|from\s+this\s+unit/.test(sentence)) target = 'self';
         else if (/the\s+ally|that\s+ally|an\s+ally/.test(sentence)) target = 'ally';
-        results.push({ count, target });
+        else explicitTarget = false;
+        results.push({ count, target, explicitTarget });
     }
     return results;
 }
