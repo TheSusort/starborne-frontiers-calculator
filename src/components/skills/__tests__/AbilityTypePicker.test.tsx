@@ -40,6 +40,6 @@ describe('AbilityTypePicker', () => {
 
     it('marks the Utility category as not simulated in DPS', () => {
         render(<AbilityTypePicker onPick={() => {}} />);
-        expect(screen.getByText(/not simulated in the dps calculator/i)).toBeInTheDocument();
+        expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
     });
 });

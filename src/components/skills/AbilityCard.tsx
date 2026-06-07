@@ -90,6 +90,13 @@ const DEBUFF_APPLICATION_OPTIONS = [
     { value: 'apply', label: 'Apply' },
 ];
 
+const HEAL_BASIS_OPTIONS = [
+    { value: 'hp', label: "Caster's Max HP" },
+    { value: 'attack', label: "Caster's Attack" },
+    { value: 'defense', label: "Caster's Defense" },
+    { value: 'target-hp', label: "Recipient's Max HP" },
+];
+
 const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
     { value: 'active', label: 'All active DoTs' },
     { value: 'inflicted', label: 'Only DoTs from this cast' },
@@ -534,6 +541,58 @@ export const AbilityCard: React.FC<Props> = ({
                     </div>
                 );
             }
+
+            case 'heal':
+            case 'shield':
+                return (
+                    <div className="space-y-2">
+                        <div className="flex gap-2">
+                            <Input
+                                label="Percent"
+                                type="number"
+                                step="0.01"
+                                value={config.pct}
+                                onChange={(e) =>
+                                    updateConfig({ ...config, pct: toNumber(e.target.value) })
+                                }
+                            />
+                            <Select
+                                label="Based on stat"
+                                value={config.basis}
+                                options={HEAL_BASIS_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        basis: value as 'hp' | 'attack' | 'defense' | 'target-hp',
+                                    })
+                                }
+                            />
+                        </div>
+                        {config.type === 'heal' && (
+                            <Checkbox
+                                label="Cannot critically hit"
+                                checked={config.noCrit ?? false}
+                                onChange={(checked) =>
+                                    updateConfig({ ...config, noCrit: checked ? true : undefined })
+                                }
+                            />
+                        )}
+                    </div>
+                );
+
+            case 'cleanse':
+            case 'purge':
+                return (
+                    <Input
+                        label="Count"
+                        type="number"
+                        min={1}
+                        value={config.count}
+                        onChange={(e) =>
+                            updateConfig({ ...config, count: toNumber(e.target.value) })
+                        }
+                    />
+                );
 
             default:
                 return (
