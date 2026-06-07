@@ -14,7 +14,7 @@ import {
 } from './statusEngine';
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
-import type { PlayerActorRuntime, PlayerRoundCtx } from './playerTurn';
+import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx } from './playerTurn';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -28,14 +28,30 @@ export { LIVE_TRIGGERS };
  *  the engine throws naming the constant rather than hanging. */
 export const MAX_INTENT_GENERATIONS = 10;
 
-/** Ability types the executor knows how to follow up (see executeIntent). Only
- *  these four reactive types are routed through the trigger machinery; any other
- *  type carrying a live trigger stays on the on-cast path (not-simulated follow-up
- *  payloads — e.g. control/cleanse from a bomb-detonate reactive). */
-export type ReactiveAbilityType = 'buff' | 'debuff' | 'dot' | 'charge';
+/** Ability types the executor knows how to follow up (see executeIntent). These reactive
+ *  types are routed through the trigger machinery; any other type carrying a live trigger
+ *  stays on the on-cast path (not-simulated follow-up payloads — e.g. control from a
+ *  bomb-detonate reactive). heal/shield/cleanse are routed too (Task 9) but only DO anything
+ *  in healing mode — in DPS mode the executor's healing-ctx-off guard makes them inert. */
+export type ReactiveAbilityType =
+    | 'buff'
+    | 'debuff'
+    | 'dot'
+    | 'charge'
+    | 'heal'
+    | 'shield'
+    | 'cleanse';
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
-const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = ['buff', 'debuff', 'dot', 'charge'];
+const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
+    'buff',
+    'debuff',
+    'dot',
+    'charge',
+    'heal',
+    'shield',
+    'cleanse',
+];
 
 /** A reactive ability registered as a listener, paired with its source slot
  *  (for parity with the timed-status sourceSlot bookkeeping). */
@@ -56,8 +72,8 @@ export interface Intent {
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
- *  buff/debuff/dot/charge ability whose trigger is in the live set. Anything
- *  else stays on the on-cast path. */
+ *  buff/debuff/dot/charge/heal/shield/cleanse ability whose trigger is in the live
+ *  set. Anything else stays on the on-cast path. */
 function isReactiveAbility(ability: Ability): boolean {
     if (!LIVE_TRIGGERS.has(ability.trigger)) return false;
     return (REACTIVE_ABILITY_TYPES as readonly string[]).includes(ability.config.type);
@@ -65,7 +81,7 @@ function isReactiveAbility(ability: Ability): boolean {
 
 /**
  * Partition the input ShipSkills ONCE at setup into:
- *  - `castSkills`: everything except live-trigger buff/debuff/dot/charge abilities.
+ *  - `castSkills`: everything except live-trigger buff/debuff/dot/charge/heal/shield/cleanse abilities.
  *    Feeds every on-cast pipeline (status registration loop + runPlayerTurn).
  *  - `reactiveAbilities`: the excluded abilities, in slot/text order — fixed
  *    registration order = fixed execution order (determinism).
@@ -102,6 +118,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
  *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
  *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER player actor (ally crit-cast DoT)
+ *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
+ *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
+ *    repairs an ally"). One enqueue per qualifying cast.
+ *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
+ *    fires once PER CRITTING HIT; the owner's own casts and the enemy are excluded.
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
  *
@@ -168,6 +189,29 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-ally-critically-repaired':
+                    bus.on('heal-performed', (e) => {
+                        // The OWNER's own crit repair of an ALLY (Pallas: "when this unit
+                        // critically repairs an ally"): own cast, >= 1 critting draw, and
+                        // at least one non-self recipient. One enqueue per qualifying cast.
+                        if (
+                            e.casterId === ownerId &&
+                            (e.critHits ?? 0) >= 1 &&
+                            e.targets.some((t) => t !== ownerId)
+                        ) {
+                            enqueue(intent);
+                        }
+                    });
+                    break;
+                case 'on-ally-crit':
+                    bus.on('ability-performed', (e) => {
+                        // An ALLY's critting hits (mirrors on-crit with ally scoping):
+                        // fires once PER CRITTING HIT, own casts and the enemy excluded.
+                        if (e.actorId === ownerId || e.actorId === enemyId) return;
+                        const n = e.critHits ?? (e.didCrit ? 1 : 0);
+                        for (let i = 0; i < n; i++) enqueue(intent);
+                    });
+                    break;
                 case 'start-of-round':
                     bus.on('round-started', () => enqueue(intent));
                     break;
@@ -217,6 +261,11 @@ export interface IntentExecContext {
     /** Record a resisted enemy application onto the round's resisted list (the engine
      *  routes it to pendingResisted or the last attacker turn, per Task-2 staging). */
     recordResisted: (resisted: ActiveBuff) => void;
+    /** Healing-mode runtime ctx (Task 9). Present ONLY in healing mode; the SAME shared
+     *  instance the player turns use (credit/applyHealToTarget/grantShieldToTarget close
+     *  over the live target). When undefined, the heal/shield/cleanse executor branches
+     *  are inert (not-simulated follow-up) — DPS goldens stay byte-identical. */
+    healing?: HealingRuntimeCtx;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -334,8 +383,15 @@ function payloadFromConfig(cfg: {
  *    stack (duration ?? 1 is irrelevant — statusEngine routes it persistent by name).
  *  - dot → landing draw, then append to the enemy DoT containers + dot-applied
  *    (chainable). Bombs need effectiveAttack; skipped with a note when undefined.
+ *  - heal/shield (Task 9) → healing mode only (ctx.healing): credit the owner's bucket
+ *    + route the consumption/pool to the target. Reactive heals NEVER crit (no draw at
+ *    drain time — deterministic, documented approximation) and use a SIMPLIFIED fold
+ *    (heal: healModifier only; shield: basis×pct). DELIBERATELY emits NO heal-performed
+ *    (a reactive heal must not re-trigger heal listeners — chain guard). Off → silent skip.
+ *  - cleanse (Task 9) → healing mode only: credit cleanseCount. Off → silent skip.
  *  - any other type → skipped silently (not-simulated follow-up payloads).
- * Intents that emit events (debuff/dot) chain through the listeners again.
+ * Intents that emit events (debuff/dot) chain through the listeners again. heal/shield/
+ * cleanse emit nothing, so they never chain.
  *
  * Condition gating applies to ALL four branches, not just debuff: reclassified
  * start-of-round buffs carry real co-gates (Sustainer `self-debuff eq 0`,
@@ -505,5 +561,62 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         return;
     }
 
-    // Any other type (heal/shield/control/cleanse/...) → not-simulated follow-up; skip.
+    if (cfg.type === 'heal' || cfg.type === 'shield') {
+        if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
+        // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
+        // turn, fall back to runtime base stats. The fold is DELIBERATELY simplified vs the
+        // cast path (which folds outgoingHeal + recipient incomingHeal): heal applies the
+        // owner's healModifier only; shield is basis×pct (shields aren't repairs). The
+        // owner's standing heal buffs are not re-derived at drain time.
+        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this simplified mirror.
+        const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+        // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
+        // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
+        // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
+        // for the target-hp case.
+        const nonTargetHpBasis =
+            cfg.basis === 'attack'
+                ? (ownerCtx?.effectiveAttack ?? owner.attack)
+                : cfg.basis === 'defense'
+                  ? (ownerCtx?.effectiveDefence ?? owner.defence)
+                  : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+        const recipients =
+            intent.ability.target === 'ally'
+                ? [ctx.healing.targetId]
+                : intent.ability.target === 'all-allies'
+                  ? ctx.playerIds
+                  : [intent.ownerId];
+        for (const rid of recipients) {
+            const basisValue =
+                cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
+            const raw =
+                cfg.type === 'heal'
+                    ? basisValue * (cfg.pct / 100) * (1 + owner.healModifier / 100)
+                    : basisValue * (cfg.pct / 100);
+            if (cfg.type === 'heal') {
+                ctx.healing.credit(intent.ownerId, 'directHeal', raw);
+                if (rid === ctx.healing.targetId) {
+                    const { consumed, overheal } = ctx.healing.applyHealToTarget(raw);
+                    ctx.healing.credit(intent.ownerId, 'effectiveHeal', consumed);
+                    ctx.healing.credit(intent.ownerId, 'overheal', overheal);
+                }
+            } else {
+                ctx.healing.credit(intent.ownerId, 'shield', raw);
+                if (rid === ctx.healing.targetId) ctx.healing.grantShieldToTarget(raw);
+            }
+        }
+        // Deliberately NO heal-performed emission from the executor (a reactive heal must
+        // not re-trigger heal listeners — chain guard; mirrors the drain-time no-crit-outcome
+        // conventions). heal/shield therefore never chain.
+        return;
+    }
+
+    if (cfg.type === 'cleanse') {
+        if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        ctx.healing.credit(intent.ownerId, 'cleanseCount', cfg.count);
+        return;
+    }
+
+    // Any other type (purge/control/...) → not-simulated follow-up; skip.
 }

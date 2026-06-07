@@ -1,4 +1,5 @@
 import { Ship } from '../../types/ship';
+import { ShipTypeName } from '../../constants/shipTypes';
 import {
     EnemyBaseClass,
     ConditionalCondition,
@@ -28,11 +29,16 @@ import {
     parseExtendDoT,
     parseCritPowerExtend,
     parseAllyCritDot,
+    detectCritRepairTrigger,
+    detectAllyCritTrigger,
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
+    parseHealAbilities,
+    parseCleanse,
+    parseHealNoCrit,
     parseSkillEffects,
     classifyEnemyEffect,
     statusEffectCondition,
@@ -514,7 +520,81 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
 // charge/extend/modifiers are heuristics that may land on an earlier mention of the
 // word (e.g. "removes 1 charge ... adds 1 charge") — cosmetic editor-order only.
 
-function abilitiesFromText(text: string): PositionedAbility[] {
+/**
+ * One-target-per-skill game rule (user-verified 2026-06-07; Hermes/Isha live-verification bug).
+ * A bare repair/cleanse (no recipient phrase, so the parser defaulted target to 'self') on an
+ * ACTIVE or CHARGED skill with NO damage component is a pure support skill — it targets an ally,
+ * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
+ * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
+ * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
+ * repair is a self rider), passive repairs, and explicit recipients are unaffected. Shields are
+ * deliberately NOT flipped ("gains a Shield" stays self).
+ *
+ * Exception (user-verified 2026-06-07): a bare repair whose own sentence is gated on a
+ * SELF-DAMAGE condition ("if this unit has been directly damaged this round") is a SELF-heal —
+ * the caster is the one absorbing hits and recovering. Meatshield's active is the canonical case:
+ * "If this Unit has been directly damaged this round, it repairs 5% of its max HP." must stay
+ * 'self'. `healSentence` carries the sentence containing the heal match so the guard is
+ * scoped to that clause alone (not a skill-wide keyword scan).
+ *
+ * PASSIVE recipient rules (user-verified 2026-06-07 via Cultivator vs Morao). Bare passive
+ * repairs default to self, but two trigger shapes in the heal's own sentence flip the recipient:
+ *  (A) an ally-damage trigger ("when an ally … damaged") always heals THAT damaged ally —
+ *      Cultivator passive 2 "when an ally is directly damaged … repairs 8% of this unit's HP".
+ *  (B) a cleanse trigger ("when this unit cleanses" / "upon cleansing") heals the cleansed ALLY
+ *      only when the caster is a SUPPORTER (supporters cleanse allies); it stays SELF for every
+ *      other role (defenders cleanse themselves). Cultivator (SUPPORTER) passive 1 → ally; Morao
+ *      (DEFENDER) "upon cleansing a debuff, repairs an additional 50%" → self. Basis stays caster HP.
+ * `role` is threaded from the ship (`ship.type`, the ship-class field) so rule B can read the class.
+ */
+function flipBareSupportTarget(
+    target: 'self' | 'ally' | 'all-allies',
+    explicitTarget: boolean,
+    slot: SkillSlot,
+    hasDamage: boolean,
+    healSentence?: string,
+    role?: ShipTypeName
+): 'self' | 'ally' | 'all-allies' {
+    if (
+        !explicitTarget &&
+        target === 'self' &&
+        (slot === 'active' || slot === 'charged') &&
+        !hasDamage
+    ) {
+        // Self-damage-conditional: the heal sentence conditions on "if this unit (has been|was|is|
+        // gets|takes) … damag…" → the caster is the tank, so this is a self-heal, not an ally-heal.
+        // No lookbehind needed — the sentence boundary is already scoped by sentenceContaining().
+        if (
+            healSentence &&
+            /if this unit (?:has been|was|is|gets|takes)[^.;]*damag/i.test(healSentence)
+        ) {
+            return 'self';
+        }
+        return 'ally';
+    }
+
+    // PASSIVE recipient rules — see the jsdoc above. (A) ally-damage trigger → heal that ally;
+    // (B) cleanse trigger → ally for SUPPORTERs, self otherwise (Cultivator vs Morao, user-verified).
+    if (!explicitTarget && target === 'self' && slot === 'passive' && healSentence) {
+        if (/when an ally [^.;]*(?:is |gets |was )?(?:directly )?damaged/i.test(healSentence)) {
+            return 'ally';
+        }
+        if (
+            /(?:when this unit cleanses|upon cleansing)/i.test(healSentence) &&
+            role === 'SUPPORTER'
+        ) {
+            return 'ally';
+        }
+    }
+
+    return target;
+}
+
+function abilitiesFromText(
+    text: string,
+    slot: SkillSlot,
+    role?: ShipTypeName
+): PositionedAbility[] {
     // Build the list in construction order first (so out[0]?.type === 'damage' checks work
     // for condition/scaling attachment). Positions are computed in parallel and applied
     // at the END via a single stable sort — so construction order never leaks into the result.
@@ -744,19 +824,93 @@ function abilitiesFromText(text: string): PositionedAbility[] {
         });
     }
 
+    // Heal / shield grants (and cleanse) — parsed narrowly (on-cast, percentage-of-stat only;
+    // damage-reactive and revive shapes emit nothing, see parseHealAbilities). The combat engine
+    // ignores these types for now (DPS unchanged); they carry the model for the healing calculator.
+    const healNoCrit = parseHealNoCrit(text);
+    for (const h of parseHealAbilities(text)) {
+        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
+        // heal components share the same pct the regex may hit the wrong tag — acceptable, since
+        // the position only drives cosmetic editor order (the engine ignores heal types).
+        const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
+        const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
+        const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
+        // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
+        // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
+        // undefined → on-cast).
+        const reactiveTrigger = detectCritRepairTrigger(text, healPos);
+        // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
+        // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
+        // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
+        const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+        const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
+        const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
+        const healTarget =
+            h.kind === 'heal'
+                ? flipBareSupportTarget(
+                      h.target,
+                      h.explicitTarget,
+                      slot,
+                      mult > 0,
+                      healSentence,
+                      role
+                  )
+                : h.target;
+        out.push({
+            ability: {
+                id: nextId(),
+                type: h.kind,
+                target: healTarget,
+                trigger: reactiveTrigger ?? 'on-cast',
+                conditions: [],
+                config: {
+                    type: h.kind,
+                    pct: h.pct,
+                    basis: h.basis,
+                    ...(h.kind === 'heal' && healNoCrit ? { noCrit: true } : {}),
+                },
+                autoFilled: true,
+            },
+            pos: healTagPos >= 0 ? healTagPos : fallbackPos >= 0 ? fallbackPos : MAX_POS,
+        });
+    }
+
+    for (const c of parseCleanse(text)) {
+        const cleansePos = text.search(/cleanse/i);
+        // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
+        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
+        const reactiveTrigger = detectCritRepairTrigger(text, cleansePos);
+        const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'cleanse',
+                target: cleanseTarget,
+                trigger: reactiveTrigger ?? 'on-cast',
+                conditions: [],
+                config: { type: 'cleanse', count: c.count },
+                autoFilled: true,
+            },
+            pos: cleansePos >= 0 ? cleansePos : MAX_POS,
+        });
+    }
+
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
-        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). They
-        // carry no gating condition — the trigger IS the gate (engine listens for the event).
-        const reactiveCharge = charge.trigger !== undefined;
+        // Inflict-driven charge gains fire on a reactive event (+amount per infliction). Pallas's
+        // "when an ally critically hits ... gains 1 charge" rides the on-ally-crit reactive trigger
+        // (sentence-scoped). Either reactive source means the trigger IS the gate → no gating
+        // condition. parseChargeGain's own trigger (inflict-driven) takes precedence when present.
+        const allyCritChargeTrigger = detectAllyCritTrigger(text, chargePos);
+        const reactiveTrigger = charge.trigger ?? allyCritChargeTrigger;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'charge',
                 target: 'self',
-                trigger: reactiveCharge ? charge.trigger! : 'on-cast',
-                conditions: reactiveCharge
+                trigger: reactiveTrigger ?? 'on-cast',
+                conditions: reactiveTrigger
                     ? []
                     : [
                           toCondition(
@@ -870,7 +1024,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     for (const row of getShipSkillRows(ship)) {
         const slot = slotFor(row.label);
         if (!slot) continue;
-        const positioned = abilitiesFromText(row.text);
+        const positioned = abilitiesFromText(row.text, slot, ship.type);
         pushToSlot(bySlot, slot, positioned);
     }
 

@@ -1078,4 +1078,340 @@ describe('buildShipAbilities', () => {
             config: { type: 'dot', dotType: 'corrosion', duration: 2 },
         });
     });
+
+    describe('heal/shield/cleanse emission', () => {
+        it('emits heal abilities with text-position ordering', () => {
+            const s = ship({
+                activeSkillText:
+                    "This unit deals <unit-damage>120% damage</unit-damage> and <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP.",
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                target: 'ally',
+                trigger: 'on-cast',
+                config: { type: 'heal', pct: 4, basis: 'hp' },
+                autoFilled: true,
+            });
+            expect(active!.abilities[0].type).toBe('damage'); // damage tag precedes the repair
+        });
+
+        it('emits shield abilities', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit gains a <unit-damage>Shield equal to 30%</unit-damage> of its Max HP.',
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            const shield = charged?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                target: 'self',
+                trigger: 'on-cast',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+                autoFilled: true,
+            });
+        });
+
+        it('emits cleanse abilities', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit <unit-aid>cleanses 1</unit-aid> debuff from all allies.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const cleanse = active?.abilities.find((a) => a.type === 'cleanse');
+            expect(cleanse).toMatchObject({
+                target: 'all-allies',
+                trigger: 'on-cast',
+                config: { type: 'cleanse', count: 1 },
+                autoFilled: true,
+            });
+        });
+
+        it('heal noCrit flows from parseHealNoCrit', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and repairs itself for 5% of its Max HP. This repair cannot critically hit.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal?.config).toMatchObject({ type: 'heal', noCrit: true });
+            const damage = active?.abilities.find((a) => a.type === 'damage');
+            // The repair no-crit must NOT bleed onto the attack damage.
+            expect((damage?.config as { noCrit?: boolean }).noCrit).toBeUndefined();
+        });
+
+        it('damage-reactive shield emits nothing', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains a Shield equal to 25% of the damage taken when taking HP damage.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toBeUndefined();
+        });
+    });
+
+    // One-target-per-skill game rule (user-verified 2026-06-07, Hermes/Isha live-verification
+    // bug): a bare repair/cleanse (no target phrase) on a PURE-SUPPORT active/charged skill
+    // (no damage component) targets the ally, not the caster. The parser defaults bare to
+    // 'self'; the flip lives in abilitiesFromText where the slot + damage component are known.
+    describe('bare repair/cleanse flip to ally on pure-support active/charged skills', () => {
+        it('Hermes active bare repair → heal target ally', () => {
+            const s = ship({ activeSkillText: 'This Unit Repairs 27% of its Max HP.' });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                trigger: 'on-cast',
+                config: { type: 'heal', pct: 27, basis: 'hp' },
+            });
+        });
+
+        it('Hermes charged bare repair → heal target ally; charge still parses', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit repairs 37% of its Max HP and adds 1 charge to the Charged Skill. If the target has less than 40% HP, it grants Cheat Death.',
+                chargeSkillCharge: 4,
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            const heal = charged?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 37, basis: 'hp' },
+            });
+            const charge = charged?.abilities.find((a) => a.type === 'charge');
+            expect(charge).toMatchObject({ type: 'charge', config: { type: 'charge', amount: 1 } });
+        });
+
+        it('damage-rider bare repair stays self (skill has a damage component)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>160% damage</unit-damage> and repairs 9% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('passive bare repair stays self', () => {
+            const s = ship({
+                firstPassiveSkillText: 'This unit repairs 5% of its Max HP every turn.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('explicit "repairs itself" on a pure-support active stays self (explicit wins)', () => {
+            const s = ship({
+                activeSkillText: 'This Unit repairs itself for 30% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+
+        it('bare cleanse on a pure-support active → ally; cleanse on a damage skill → self', () => {
+            const support = ship({
+                activeSkillText: 'This Unit <unit-aid>cleanses 1</unit-aid> debuff.',
+            });
+            const supportActive = buildShipAbilities(support).slots.find(
+                (x) => x.slot === 'active'
+            );
+            const supportCleanse = supportActive?.abilities.find((a) => a.type === 'cleanse');
+            expect(supportCleanse).toMatchObject({ type: 'cleanse', target: 'ally' });
+
+            const damage = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and <unit-aid>cleanses 1</unit-aid> debuff.',
+            });
+            const damageActive = buildShipAbilities(damage).slots.find((x) => x.slot === 'active');
+            const damageCleanse = damageActive?.abilities.find((a) => a.type === 'cleanse');
+            expect(damageCleanse).toMatchObject({ type: 'cleanse', target: 'self' });
+        });
+
+        it('bare shield on a pure-support active stays self (shields not flipped)', () => {
+            const s = ship({
+                activeSkillText: 'This Unit gains a Shield equal to 30% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'self' });
+        });
+
+        // User-verified 2026-06-07: a bare repair whose OWN sentence is gated on a self-damage
+        // condition ("if this unit has been directly damaged this round") is a SELF-heal — the caster
+        // tanks damage and heals itself. The flip to 'ally' must NOT apply even though the skill has
+        // no damage component and no explicit target phrase.
+        it('Meatshield active: self-damage-conditional bare repair stays self (real text)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains <unit-skill>Inc. Repair Up III</unit-skill> for 2 turns.<br /><br /> If this Unit has been directly damaged this round, it <unit-damage>repairs 5%</unit-damage> of its max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                config: { type: 'heal', pct: 5, basis: 'hp' },
+            });
+        });
+
+        // Regression lock: Oleander's active has no self-damage conditional in the repair sentence,
+        // so the flip to 'ally' still applies (user-confirmed correct 2026-06-07).
+        it('Oleander active: bare repair without self-damage condition → still flips to ally (regression)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and <unit-damage>repairs 100%</unit-damage> of its Max HP, with an additional <unit-damage>8.5%</unit-damage> repair for each debuffed enemy.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 100, basis: 'hp' },
+            });
+        });
+    });
+
+    // Cleanse-triggered & ally-damage-triggered PASSIVE repairs resolve their real recipient
+    // (user-verified 2026-06-07). A bare passive repair (no explicit recipient phrase) is normally
+    // a self-heal, but two trigger shapes flip it to the ally: (A) an "when an ally … damaged"
+    // trigger always heals that damaged ally; (B) a cleanse-trigger heals the cleansed ALLY only
+    // when the caster is a SUPPORTER (supporters cleanse allies), staying SELF for other roles
+    // (defenders cleanse themselves). Canonical cases: Cultivator (SUPPORTER) vs Morao (DEFENDER).
+    // Role is read from `ship.type` (the ship-class field); fixtures set it explicitly per case.
+    describe('cleanse/ally-damage-triggered passive repair recipient', () => {
+        it('Cultivator clause 1: cleanse-trigger on a SUPPORTER passive → ally heal', () => {
+            const s = ship({
+                type: 'SUPPORTER',
+                thirdPassiveSkillText:
+                    "When this unit cleanses a debuff it also repairs 4% of this unit's max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 4, basis: 'hp' },
+            });
+        });
+
+        it('Cultivator clause 2: ally-damaged-trigger passive repair → ally heal', () => {
+            const s = ship({
+                type: 'SUPPORTER',
+                thirdPassiveSkillText:
+                    "When an ally is directly damaged within the active pattern, this unit repairs 8% of this unit's max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+        });
+
+        it('Morao: cleanse-trigger on a DEFENDER passive → both repairs stay self', () => {
+            const s = ship({
+                type: 'DEFENDER',
+                thirdPassiveSkillText:
+                    'This Unit repairs 5% of its max HP every turn and, upon cleansing a debuff, repairs an additional 50% of its max HP while gaining Defense Up 2 for 2 turns.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
+            expect(heals).toHaveLength(2);
+            for (const heal of heals) {
+                expect(heal.target).toBe('self');
+            }
+            expect(
+                heals.map((h) => (h.config as { pct: number }).pct).sort((a, b) => a - b)
+            ).toEqual([5, 50]);
+        });
+
+        it('Anemone: enemy-DoT-trigger passive repair stays self (not an ally trigger)', () => {
+            const s = ship({
+                type: 'DEBUFFER',
+                thirdPassiveSkillText:
+                    "When an enemy takes damage from a Damage over Time effect, repair 5% of this Unit's Max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+    });
+
+    describe('Pallas-pattern ally-crit reactive triggers', () => {
+        // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
+        // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).
+        const PALLAS_TEXT =
+            "This Unit's Defense is increased by 20%. When an ally critically hits an enemy, this unit gains 1 charge to its charged skill and Everliving Regeneration 3 for 2 turns. Additionally, when this unit critically repairs an ally, it cleanses 1 debuff from itself.";
+
+        it('cleanse rides on-ally-critically-repaired', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                firstPassiveSkillText: PALLAS_TEXT,
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const cleanse = passive?.abilities.find((a) => a.type === 'cleanse');
+            expect(cleanse).toMatchObject({
+                type: 'cleanse',
+                target: 'self',
+                trigger: 'on-ally-critically-repaired',
+                conditions: [],
+                config: { type: 'cleanse', count: 1 },
+            });
+        });
+
+        it('charge rides on-ally-crit (trigger is the gate → no gating condition)', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                firstPassiveSkillText: PALLAS_TEXT,
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const charge = passive?.abilities.find((a) => a.type === 'charge');
+            expect(charge).toMatchObject({
+                type: 'charge',
+                trigger: 'on-ally-crit',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            });
+        });
+
+        // DOCUMENTED BUFF GAP: "Everliving Regeneration 3 for 2 turns" does NOT parse through the
+        // buff pipeline for this phrasing (no application verb attaches the buff in the parser),
+        // so no buff ability is emitted. detectReactiveTrigger IS extended for the ally-crit
+        // phrasing so that IF the buff parsed (other ships), it would ride on-ally-crit — verified
+        // by the detectReactiveTrigger unit test below. Here we assert the charge + cleanse routing
+        // and document the buff gap rather than forcing it.
+        it('Everliving Regeneration buff does not parse (documented gap) — no buff ability', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                firstPassiveSkillText: PALLAS_TEXT,
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            expect(passive?.abilities.find((a) => a.type === 'buff')).toBeUndefined();
+        });
+
+        // A heal in the crit-repair sentence rides on-ally-critically-repaired; an UNRELATED heal
+        // elsewhere stays on-cast (sentence scoping).
+        it('crit-repair heal rides the trigger; an unrelated heal stays on-cast (distinct anchors)', () => {
+            // Each heal carries its own <unit-damage> tag at a distinct pct so the position anchors
+            // land in the correct sentence (the position-scoped detector then stamps only the heal
+            // inside the crit-repair sentence).
+            const s = ship({
+                activeSkillText:
+                    'This Unit <unit-damage>repairs the ally for 4%</unit-damage> of its Max HP. When this unit critically repairs an ally, it <unit-damage>repairs itself for 7%</unit-damage> of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heals = active?.abilities.filter((a) => a.type === 'heal') ?? [];
+            const byPct = new Map(heals.map((h) => [(h.config as { pct: number }).pct, h.trigger]));
+            expect(byPct.get(4)).toBe('on-cast');
+            expect(byPct.get(7)).toBe('on-ally-critically-repaired');
+        });
+    });
 });

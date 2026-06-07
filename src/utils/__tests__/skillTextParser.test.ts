@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
     parseSkillDamage,
-    parseSkillHeal,
     detectFullyCharged,
     parseSkillEffects,
     parseAllSkillEffects,
@@ -18,7 +17,12 @@ import {
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
+    detectCritRepairTrigger,
+    detectAllyCritTrigger,
     parseExtraAction,
+    parseHealAbilities,
+    parseCleanse,
+    parseHealNoCrit,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -72,40 +76,6 @@ describe('parseSkillDamage', () => {
         const text =
             'Deals <unit-damage>100% damage</unit-damage> plus extra based on <unit-damage>50%</unit-damage> of its HP';
         expect(parseSkillDamage(text)).toBe(100);
-    });
-});
-
-describe('parseSkillHeal', () => {
-    it('returns 0 for empty string', () => {
-        expect(parseSkillHeal('')).toBe(0);
-    });
-
-    it('extracts heal percentage from repairs tag', () => {
-        expect(
-            parseSkillHeal('This Unit <unit-damage>repairs 15%</unit-damage> of target HP')
-        ).toBe(15);
-    });
-
-    it('handles decimal heal percentages', () => {
-        expect(parseSkillHeal('<unit-damage>repairs 12.5%</unit-damage>')).toBe(12.5);
-    });
-
-    it('is case-insensitive', () => {
-        expect(parseSkillHeal('<unit-damage>Repairs 20%</unit-damage>')).toBe(20);
-    });
-
-    it('returns 0 when tag content is not a repair', () => {
-        expect(parseSkillHeal('<unit-damage>180% damage</unit-damage>')).toBe(0);
-    });
-
-    it('returns 0 for flat heal text without percent', () => {
-        expect(parseSkillHeal('<unit-damage>repairs 1500 HP</unit-damage>')).toBe(0);
-    });
-
-    it('ignores damage tags and finds the repairs tag', () => {
-        const text =
-            'Deals <unit-damage>100% damage</unit-damage> and <unit-damage>repairs 15%</unit-damage>';
-        expect(parseSkillHeal(text)).toBe(15);
     });
 });
 
@@ -1383,6 +1353,98 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Attack Up II')).toBeUndefined();
         expect(detectReactiveTrigger(text, 'Defense Shred')).toBe('on-crit');
     });
+
+    it('classifies an ally-critically-hits buff grant as on-ally-crit — Pallas Everliving Regeneration', () => {
+        // If the buff parsed, its clause "when an ally critically hits ... Everliving Regeneration"
+        // routes to on-ally-crit (ally subject overrides the bare "critically hits" self-crit rule).
+        const text =
+            'When an ally critically hits an enemy, this unit gains <unit-skill>Everliving Regeneration</unit-skill> for 2 turns.';
+        expect(detectReactiveTrigger(text, 'Everliving Regeneration')).toBe('on-ally-crit');
+    });
+});
+
+describe('detectCritRepairTrigger', () => {
+    it('returns on-ally-critically-repaired when the anchor is in the crit-repair sentence', () => {
+        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff from itself.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
+            'on-ally-critically-repaired'
+        );
+    });
+
+    it('handles the "allies" plural form', () => {
+        const text = 'When this unit critically repairs allies, it cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBe(
+            'on-ally-critically-repaired'
+        );
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        // The first sentence's cleanse anchor falls OUTSIDE the crit-repair sentence.
+        const text =
+            'This Unit cleanses 1 debuff from itself. When this unit critically repairs an ally, it gains a buff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
+    });
+
+    it('returns undefined when the crit-repair phrase is absent', () => {
+        const text = 'This Unit repairs the ally and cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, text.indexOf('cleanses'))).toBeUndefined();
+    });
+
+    it('returns undefined for a negative anchor position', () => {
+        const text = 'When this unit critically repairs an ally, it cleanses 1 debuff.';
+        expect(detectCritRepairTrigger(text, -1)).toBeUndefined();
+    });
+
+    it('abbreviation period in buff name does not split the sentence — trigger still stamps', () => {
+        // "Inc. Damage Up" contains a period after "Inc." that is followed by a space — the
+        // same pattern phrasePosTrigger's boundary regex /[.;](?=\s|$)/ matches. When the
+        // abbreviation sits INSIDE the crit-repair sentence, the unmasked period splits the
+        // sentence there, so the crit-repair phrase ends up in one segment and the heal
+        // anchor in the next — detectCritRepairTrigger would return undefined instead of the
+        // trigger. Masking the abbreviation period before the boundary scan prevents the split.
+        const text =
+            'When this unit critically repairs an ally, it grants Inc. Damage Up and heals the ally for 5% of its Max HP.';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
+    });
+
+    it('treats <br> tags as sentence boundaries: an anchor in a later paragraph is NOT stamped', () => {
+        // No period separates the paragraphs — only <br /><br />. Without treating <br> as a
+        // boundary, the crit-repair phrase (paragraph 1) and the heal anchor (paragraph 2) would
+        // be co-scoped in one segment and wrongly stamped.
+        const text =
+            'When this unit critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBeUndefined();
+    });
+
+    it('stamps when the anchor shares the <br>-delimited paragraph with the phrase', () => {
+        // Same paragraph 1 carries both the crit-repair phrase and the heal anchor; paragraph 2
+        // (after <br />) is unrelated. The anchor must still be stamped.
+        const text =
+            'When this unit critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
+    });
+});
+
+describe('detectAllyCritTrigger', () => {
+    it('returns on-ally-crit when the anchor is in the ally-critically-hits sentence', () => {
+        const text = 'When an ally critically hits an enemy, this unit gains 1 charge.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBe('on-ally-crit');
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        // The charge anchor in the first sentence is OUTSIDE the ally-crit sentence.
+        const text =
+            'This unit gains 1 charge to its charged skill. When an ally critically hits, it gains a buff.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBeUndefined();
+    });
+
+    it('returns undefined when the ally-crit phrase is absent', () => {
+        const text = 'When this unit critically hits, it gains 1 charge.';
+        expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBeUndefined();
+    });
 });
 
 describe('parseAllSkillEffects', () => {
@@ -1776,5 +1838,211 @@ describe('parseExtraAction', () => {
             'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
         );
         expect(r).toEqual({ oncePerRound: true, conditions: [] });
+    });
+});
+
+describe('parseHealAbilities', () => {
+    it('caster-HP heal to an ally', () => {
+        expect(
+            parseHealAbilities(
+                "This unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
+    });
+    it('self repair', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: true }]);
+    });
+    it('all-allies repair', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
+        ]);
+    });
+    it('most-missing-health routes as ally', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs 30%</unit-damage> of its Max HP to the ally with the most missing health.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'ally', explicitTarget: true }]);
+    });
+    it('attack-based repair (bare → self, explicitTarget false)', () => {
+        expect(parseHealAbilities('repairs <unit-damage>90%</unit-damage> of its Attack.')).toEqual(
+            [{ kind: 'heal', pct: 90, basis: 'attack', target: 'self', explicitTarget: false }]
+        );
+    });
+    it('multi-component heal: HP + Defense (bare → self, explicitTarget false)', () => {
+        expect(
+            parseHealAbilities(
+                'repairs <unit-damage>5%</unit-damage> of its Max HP with an additional repair equal to 100% of its Defense.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
+            { kind: 'heal', pct: 100, basis: 'defense', target: 'self', explicitTarget: false },
+        ]);
+    });
+    it('recipient-HP heal (their Max HP)', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'target-hp',
+                target: 'all-allies',
+                explicitTarget: true,
+            },
+        ]);
+    });
+    it('shield from caster HP', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit gains a <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.'
+            )
+        ).toEqual([
+            { kind: 'shield', pct: 25, basis: 'hp', target: 'self', explicitTarget: false },
+        ]);
+    });
+    it('shield from attack', () => {
+        expect(
+            parseHealAbilities(
+                'grants the ally a <unit-damage>shield equal to 180%</unit-damage> of its attack'
+            )
+        ).toEqual([
+            { kind: 'shield', pct: 180, basis: 'attack', target: 'ally', explicitTarget: true },
+        ]);
+    });
+    it('damage-reactive shield is NOT parsed', () => {
+        expect(
+            parseHealAbilities(
+                'gains a Shield equal to 25% of the damage taken when taking HP damage and still having Shield'
+            )
+        ).toEqual([]);
+    });
+    it('damage-dealt shield is NOT parsed', () => {
+        expect(
+            parseHealAbilities('gains a Shield equal to 15% of the Damage dealt to them')
+        ).toEqual([]);
+    });
+    it('revive/Cheat Death text is NOT parsed', () => {
+        expect(
+            parseHealAbilities(
+                'Once per battle, when this unit is destroyed, it revives with 50% of its max HP.'
+            )
+        ).toEqual([]);
+    });
+    it('"X% of damage dealt" repair is NOT parsed (Valkyrie burst reaction)', () => {
+        expect(
+            parseHealAbilities(
+                'this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
+            )
+        ).toEqual([]);
+    });
+
+    // Issue 1: basis resolution must NOT cross sentence boundaries
+    it('basis stays hp when "of its Attack" is in a LATER sentence (cross-sentence basis)', () => {
+        expect(
+            parseHealAbilities(
+                'This unit repairs 30%. This unit deals damage equal to 200% of its Attack.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: false }]);
+    });
+
+    // Issue 2: multi-component continuation must NOT span sentence boundaries
+    it('HEAL_ADDITIONAL_RE does not pick up a continuation in a LATER sentence', () => {
+        expect(
+            parseHealAbilities(
+                'This unit repairs 5% of its Max HP. An unrelated buff with an additional repair equal to 100% of its Defense exists.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false }]);
+    });
+
+    // Issue 3: singular "the ally … their Max HP" → target ally, NOT all-allies
+    it('singular "the ally … of their Max HP" → target ally, not all-allies', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs the ally for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 8, basis: 'target-hp', target: 'ally', explicitTarget: true },
+        ]);
+    });
+
+    // Regression guard: explicit plural phrase "all allies … their Max HP" must stay all-allies
+    it('"Repairs all allies for 8% of their Max HP" remains all-allies (regression guard)', () => {
+        expect(
+            parseHealAbilities(
+                'Repairs all allies for <unit-damage>8%</unit-damage> of their Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'target-hp',
+                target: 'all-allies',
+                explicitTarget: true,
+            },
+        ]);
+    });
+});
+
+describe('parseHealAbilities explicitTarget', () => {
+    // The parser keeps defaulting bare repairs to target 'self' (the slot/damage-aware FLIP to
+    // 'ally' lives in buildShipAbilities, not here). explicitTarget records whether a target
+    // phrase was actually matched, so the flip can tell a bare default from a real 'self'.
+    it('bare repair: target self, explicitTarget false', () => {
+        expect(parseHealAbilities('This Unit Repairs 27% of its Max HP.')).toEqual([
+            { kind: 'heal', pct: 27, basis: 'hp', target: 'self', explicitTarget: false },
+        ]);
+    });
+    it('explicit "repairs itself": target self, explicitTarget true', () => {
+        expect(
+            parseHealAbilities(
+                'This unit <unit-damage>repairs itself for 30%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: true }]);
+    });
+    it('explicit "the ally": target ally, explicitTarget true', () => {
+        expect(
+            parseHealAbilities(
+                "This unit <unit-damage>repairs the ally for 4%</unit-damage> of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
+    });
+});
+
+describe('parseCleanse', () => {
+    it('parses cleanse count', () => {
+        expect(parseCleanse('it <unit-aid>cleanses 1</unit-aid> debuff from itself')).toEqual([
+            { count: 1, target: 'self', explicitTarget: true },
+        ]);
+    });
+    it('ally cleanse', () => {
+        expect(parseCleanse('<unit-aid>Cleanses 2</unit-aid> debuffs from all allies')).toEqual([
+            { count: 2, target: 'all-allies', explicitTarget: true },
+        ]);
+    });
+    it('bare cleanse: target self, explicitTarget false', () => {
+        expect(parseCleanse('This Unit <unit-aid>cleanses 1</unit-aid> debuff.')).toEqual([
+            { count: 1, target: 'self', explicitTarget: false },
+        ]);
+    });
+    it('does not parse purge as cleanse', () => {
+        expect(parseCleanse('<unit-aid>purges 1</unit-aid> buff from the enemy')).toEqual([]);
+    });
+});
+
+describe('parseHealNoCrit', () => {
+    it('Pallas repair-cannot-crit sets heal noCrit', () => {
+        expect(parseHealNoCrit('This repair cannot critically hit.')).toBe(true);
+        expect(parseHealNoCrit('This attack cannot critically hit.')).toBe(false);
     });
 });

@@ -11,8 +11,10 @@ import { TeamShipRow } from './TeamShipRow';
 interface TeamPanelProps {
     isOpen: boolean;
     onToggle: () => void;
-    attackerBuffs: SelectedGameBuff[];
-    onAttackerBuffsChange: (v: SelectedGameBuff[]) => void;
+    /** Whether to show the shared attacker buffs/debuffs picker. Defaults to true. */
+    showSharedBuffs?: boolean;
+    attackerBuffs?: SelectedGameBuff[];
+    onAttackerBuffsChange?: (v: SelectedGameBuff[]) => void;
     enemyAffinity: AffinityName;
     teamShips: TeamShipConfig[];
     onAddTeamShip: () => void;
@@ -31,7 +33,8 @@ interface TeamPanelProps {
 export const TeamPanel: React.FC<TeamPanelProps> = ({
     isOpen,
     onToggle,
-    attackerBuffs,
+    showSharedBuffs = true,
+    attackerBuffs = [],
     onAttackerBuffsChange,
     enemyAffinity,
     teamShips,
@@ -62,23 +65,27 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
-                <p className="text-sm text-theme-text-secondary">
-                    Shared attacker buffs applied to all ship configurations
-                </p>
-                <GameBuffPicker
-                    label="Attacker Buffs / Debuffs"
-                    relevantStats={[
-                        'attack',
-                        'crit',
-                        'critDamage',
-                        'outgoingDamage',
-                        'defensePenetration',
-                        'dotDamage',
-                    ]}
-                    excludeTypes={['effect']}
-                    value={attackerBuffs}
-                    onChange={onAttackerBuffsChange}
-                />
+                {showSharedBuffs && onAttackerBuffsChange && (
+                    <>
+                        <p className="text-sm text-theme-text-secondary">
+                            Shared attacker buffs applied to all ship configurations
+                        </p>
+                        <GameBuffPicker
+                            label="Attacker Buffs / Debuffs"
+                            relevantStats={[
+                                'attack',
+                                'crit',
+                                'critDamage',
+                                'outgoingDamage',
+                                'defensePenetration',
+                                'dotDamage',
+                            ]}
+                            excludeTypes={['effect']}
+                            value={attackerBuffs}
+                            onChange={onAttackerBuffsChange}
+                        />
+                    </>
+                )}
                 <div className="border-t border-dark-border pt-4">
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-3">
                         Team (up to 4)

@@ -221,6 +221,24 @@ describe('isStackable', () => {
     });
 });
 
+describe('hotPct (Repair Over Time)', () => {
+    it('parses "10% Applying Unit HP%" into hotPct', () => {
+        expect(parseBuffEffects('Repair Over Time I', '10% Applying Unit HP%').hotPct).toBe(10);
+    });
+    it('parses Repair Over Time III (20%)', () => {
+        expect(parseBuffEffects('Repair Over Time III', '20% Applying Unit HP%').hotPct).toBe(20);
+    });
+    it('Everliving Regeneration is NOT a HoT (incoming repair amplifier)', () => {
+        const fx = parseBuffEffects(
+            'Everliving Regeneration',
+            '+20% Incoming Repair, +20 Security'
+        );
+        expect(fx.hotPct).toBeUndefined();
+        expect(fx.incomingHeal).toBe(20);
+        expect(fx.security).toBe(20);
+    });
+});
+
 describe('hasDpsEffect', () => {
     it('returns true when any relevant stat is present', () => {
         expect(hasDpsEffect({ attack: 30 }, ['attack', 'crit'])).toBe(true);

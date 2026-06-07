@@ -65,13 +65,13 @@ describe('AbilityCard', () => {
     });
 
     describe('sim-coverage notices', () => {
-        const heal: Ability = {
+        const control: Ability = {
             id: 'a1',
-            type: 'heal',
-            target: 'self',
+            type: 'control',
+            target: 'enemy',
             trigger: 'on-cast',
             conditions: [],
-            config: { type: 'heal', pct: 20, basis: 'hp' },
+            config: { type: 'control', effect: 'provoke' },
         };
         const dot: Ability = {
             id: 'a2',
@@ -83,8 +83,8 @@ describe('AbilityCard', () => {
         };
 
         it('shows a not-simulated note for utility types', () => {
-            render(<AbilityCard ability={heal} onChange={() => {}} onRemove={() => {}} />);
-            expect(screen.getByText(/not simulated in the dps calculator/i)).toBeInTheDocument();
+            render(<AbilityCard ability={control} onChange={() => {}} onRemove={() => {}} />);
+            expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
         });
 
         it('warns when a firing-only type sits on the passive slot', () => {
@@ -320,6 +320,115 @@ describe('AbilityCard', () => {
             expect(onChange).toHaveBeenCalledWith(
                 expect.objectContaining({
                     config: expect.objectContaining({ type: 'extra-action', oncePerRound: true }),
+                })
+            );
+        });
+    });
+
+    describe('heal / shield / cleanse abilities', () => {
+        const healAbility: Ability = {
+            id: 'h1',
+            type: 'heal',
+            target: 'ally',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 15, basis: 'hp' },
+        };
+
+        const shieldAbility: Ability = {
+            id: 'h2',
+            type: 'shield',
+            target: 'ally',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 10, basis: 'attack' },
+        };
+
+        const cleanseAbility: Ability = {
+            id: 'h3',
+            type: 'cleanse',
+            target: 'ally',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'cleanse', count: 1 },
+        };
+
+        const purgeAbility: Ability = {
+            id: 'h4',
+            type: 'purge',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'purge', count: 1 },
+        };
+
+        it('heal ability renders pct/basis/noCrit fields', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={healAbility} onChange={onChange} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Percent')).toBeInTheDocument();
+            expect(screen.getByLabelText('Based on stat')).toBeInTheDocument();
+            expect(screen.getByLabelText('Cannot critically hit')).toBeInTheDocument();
+        });
+
+        it('heal ability propagates pct change via onChange', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={healAbility} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.change(screen.getByLabelText('Percent'), { target: { value: '25' } });
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'heal', pct: 25 }),
+                })
+            );
+        });
+
+        it('heal/shield basis select offers Caster Defense and Recipient Max HP options', () => {
+            render(<AbilityCard ability={healAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            // Open the "Based on stat" select
+            fireEvent.click(screen.getByLabelText('Based on stat'));
+            expect(screen.getByText("Caster's Defense")).toBeInTheDocument();
+            expect(screen.getByText("Recipient's Max HP")).toBeInTheDocument();
+        });
+
+        it('shield ability renders pct/basis but no noCrit checkbox', () => {
+            render(<AbilityCard ability={shieldAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Percent')).toBeInTheDocument();
+            expect(screen.getByLabelText('Based on stat')).toBeInTheDocument();
+            expect(screen.queryByLabelText('Cannot critically hit')).not.toBeInTheDocument();
+        });
+
+        it('cleanse ability renders count field and does NOT show not-simulated note', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={cleanseAbility} onChange={onChange} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Count')).toBeInTheDocument();
+            expect(
+                screen.queryByText(/not simulated in the calculators yet/i)
+            ).not.toBeInTheDocument();
+        });
+
+        it('cleanse ability propagates count change via onChange', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={cleanseAbility} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.change(screen.getByLabelText('Count'), { target: { value: '2' } });
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'cleanse', count: 2 }),
+                })
+            );
+        });
+
+        it('purge ability renders Count field AND the not-simulated note', () => {
+            render(<AbilityCard ability={purgeAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Count')).toBeInTheDocument();
+            expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
+        });
+
+        it('purge ability propagates count change via onChange', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={purgeAbility} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.change(screen.getByLabelText('Count'), { target: { value: '3' } });
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'purge', count: 3 }),
                 })
             );
         });

@@ -711,6 +711,10 @@ export function detectReactiveTrigger(
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
     const clause = resolveBuffClause(skillText, buffName);
+    // "when an ally critically hits" → on-ally-crit (Pallas's Everliving Regeneration buff grant).
+    // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
+    // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
+    if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
@@ -784,6 +788,83 @@ const ALLY_CRIT_DOT_RE =
 /** Whether a skill triggers "when an ally inflicts a DoT with a critical hit" (manual, team-gated). */
 export function parseAllyCritDot(text: string | null | undefined): boolean {
     return !!text && ALLY_CRIT_DOT_RE.test(stripUnitTags(text));
+}
+
+// Pallas's TWO ally-crit reactive phrasings (live triggers; see types/abilities.ts):
+//  - "when this unit critically repairs an ally / allies" → on-ally-critically-repaired (the
+//    OWNER's own crit-repair fires it; stamped onto heal/shield/cleanse abilities in that
+//    sentence — Pallas's "it cleanses 1 debuff from itself").
+//  - "when an ally critically hits" → on-ally-crit (an ally's crit fires it; stamped onto
+//    charge/buff abilities in that sentence — Pallas's "+1 charge" and "Everliving Regeneration").
+// Both are POSITION-SCOPED: the trigger only stamps an ability whose RAW-text anchor position
+// (the same `text.search(...)` position abilitiesFromText computes) falls INSIDE the sentence
+// carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
+// even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
+const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
+const ALLY_CRIT_HIT_RE = /when an ally critically hits/i;
+
+/**
+ * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
+ * falls inside the sentence carrying the crit-repair phrase; otherwise undefined. Position-scoped
+ * on the RAW text (so the position aligns with abilitiesFromText's `text.search(...)` anchors).
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectCritRepairTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, CRIT_REPAIR_RE, anchorPos, 'on-ally-critically-repaired');
+}
+
+/**
+ * Returns 'on-ally-crit' when `anchorPos` falls inside the sentence carrying the
+ * ally-critically-hits phrase; otherwise undefined. Position-scoped on the RAW text.
+ * Reference data: docs/ship-skills.csv.
+ */
+export function detectAllyCritTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
+}
+
+// Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
+// and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
+// `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
+// Raw text is used so the bounds align with abilitiesFromText's raw-text anchor positions; the
+// phrase regexes don't span <unit-…> tags so matching on raw text is safe.
+function phrasePosTrigger(
+    text: string | null | undefined,
+    phrase: RegExp,
+    anchorPos: number,
+    trigger: AbilityTrigger
+): AbilityTrigger | undefined {
+    if (!text || anchorPos < 0) return undefined;
+    // Mask "Inc."/"Out." abbreviation periods (same sentinel as resolveBuffClause/parseExtraAction)
+    // before the boundary scan so a buff name like "Inc. Damage Up" does not split the sentence
+    // mid-name. The placeholder is the same byte length as the replaced space, so anchorPos (which
+    // points into the raw unmasked text) stays stable and needs no adjustment.
+    const masked = maskAbbrev(text);
+    // Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
+    // <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
+    // <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
+    // raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
+    // (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
+    while ((m = boundary.exec(masked)) !== null) {
+        const end = m.index + m[0].length;
+        if (anchorPos < end) {
+            return phraseRe.test(masked.slice(start, end)) && anchorPos >= start
+                ? trigger
+                : undefined;
+        }
+        start = end;
+    }
+    // Anchor is in the final (unterminated) sentence.
+    return phraseRe.test(masked.slice(start)) && anchorPos >= start ? trigger : undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
@@ -996,19 +1077,236 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     return { oncePerRound: /once per round/i.test(clause), conditions };
 }
 
-/**
- * Returns the heal percentage from the first <unit-damage>repairs X%</unit-damage> tag found.
- * Returns a float percentage (e.g. 15 for "repairs 15%"), or 0 if none found.
- */
-export function parseSkillHeal(text: string): number {
-    if (!text) return 0;
-    const tagPattern = /<unit-damage>(.*?)<\/unit-damage>/g;
-    let match: RegExpExecArray | null;
-    while ((match = tagPattern.exec(text)) !== null) {
-        const healMatch = /^\s*repairs\s+(\d+(?:\.\d+)?)\s*%/i.exec(match[1]);
-        if (healMatch) return parseFloat(healMatch[1]);
+// --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
+//
+// These extract heal & shield grants (and cleanse counts) for the healing calculator.
+// They are intentionally narrow: only on-cast, percentage-of-stat heals/shields are
+// emitted. Damage-reactive amounts ("of the damage taken/dealt") and revive content
+// ("revives with X%", "Cheat Death") are Phase-4 / reactive seams and emit nothing.
+// Reference data: docs/ship-skills.csv.
+
+export interface ParsedHealAbility {
+    kind: 'heal' | 'shield';
+    pct: number;
+    basis: 'hp' | 'attack' | 'defense' | 'target-hp';
+    target: 'self' | 'ally' | 'all-allies';
+    // True when a target phrase was actually matched ("itself", "the ally", "all allies");
+    // false when target defaulted to 'self' because the text named no recipient. The
+    // slot/damage-aware bare-repair→ally FLIP in buildShipAbilities keys off this flag.
+    explicitTarget: boolean;
+}
+
+// Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
+// containing `index`, with boundaries at `.`/`;` followed by whitespace or end-of-string
+// (so decimals like "7.5" and abbreviation periods are NOT split). NO lookbehind — the
+// boundary lookahead `(?=\s|$)` is safe on iOS Safari 15.
+function sentenceAround(plain: string, index: number): string {
+    return sentenceBoundsAround(plain, index).text;
+}
+
+// Like sentenceAround but also returns the start offset within `plain`, so callers can
+// compute a match's position within its sentence (needed to scope basis resolution and
+// continuation scans to the sentence tail from the match onward).
+function sentenceBoundsAround(
+    plain: string,
+    index: number
+): { start: number; end: number; text: string } {
+    const boundary = /[.;](?=\s|$)/g;
+    let start = 0;
+    let end = plain.length;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(plain)) !== null) {
+        if (m.index < index) start = m.index + 1;
+        else {
+            end = m.index + 1;
+            break;
+        }
     }
-    return 0;
+    return { start, end, text: plain.slice(start, end) };
+}
+
+// Phase-4 / reactive disqualifiers — clause-scoped so an unrelated earlier sentence can't
+// block a legitimate heal later in the same skill text.
+const HEAL_DISQUALIFY_RE =
+    /of the damage (?:taken|dealt)|\bdamage dealt\b|\brevives?\b|\bcheat death\b/i;
+
+// Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
+// the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
+const HEAL_REPAIR_RE = /\brepairs?\b[^%.;]*?(\d+(?:\.\d+)?)\s*%/gi;
+// Shield amount: "Shield equal to N%".
+const HEAL_SHIELD_RE = /\bshield\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%/gi;
+// A multi-component continuation: "with an additional repair/amount equal to N% of its Defense".
+const HEAL_ADDITIONAL_RE =
+    /an?\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
+
+/**
+ * Resolves the stat basis from the prose of the match's own sentence. Looks for
+ * "of <its|their> <stat>" within the sentence-scoped slice after the match position.
+ * "their Max HP" → target-hp (the recipient's HP, not the caster's). Defaults to 'hp'.
+ * The caller must pass the sentence-scoped tail (not the whole remaining text) so that
+ * a stat phrase in a later sentence does not pollute the result.
+ */
+function resolveHealBasis(after: string): ParsedHealAbility['basis'] {
+    const m = /of\s+(its|this\s+unit'?s|their|the\s+ally'?s)\s+(max\s*hp|hp|attack|defense)/i.exec(
+        after
+    );
+    if (!m) return 'hp';
+    const owner = m[1].toLowerCase();
+    const stat = m[2].toLowerCase().replace(/\s+/g, '');
+    const recipientOwned = owner === 'their' || owner.startsWith('the ally');
+    if (stat === 'attack') return 'attack';
+    if (stat === 'defense') return 'defense';
+    // HP basis: recipient-owned HP ("their Max HP") is target-hp; caster HP is 'hp'.
+    return recipientOwned ? 'target-hp' : 'hp';
+}
+
+/**
+ * Resolves heal/shield target from the scoped sentence. "itself"/"its" with no other
+ * recipient → self; explicit plural phrases ("all allies", "allies") → all-allies; a
+ * singular ally recipient ("the ally", "that ally", "them", "most missing health") → ally.
+ * Note: "their" alone is NOT treated as all-allies — it may refer to a single named
+ * ally's stat (e.g. "the ally … of their Max HP"). Only explicit plural noun phrases
+ * trigger all-allies so that singular-ally phrasings aren't misrouted.
+ * Defaults to self.
+ */
+function resolveHealTarget(sentence: string): {
+    target: ParsedHealAbility['target'];
+    explicit: boolean;
+} {
+    const s = sentence.toLowerCase();
+    // Singular ally detection takes priority over the bare "their" heuristic so that
+    // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
+    if (
+        /\bthe\s+ally\b|\bthat\s+ally\b|\ban\s+ally\b|\bthem\b|most\s+missing\s+health|\bthe\s+other\s+ally\b/.test(
+            s
+        )
+    )
+        return { target: 'ally', explicit: true };
+    if (/\ball\s+allies\b|\ballies\b/.test(s)) return { target: 'all-allies', explicit: true };
+    // "itself" (or "to/from this unit") is an explicit self RECIPIENT. A bare leading subject
+    // ("This Unit repairs 27% …") names no recipient and is the bare default (explicit: false) —
+    // the signal the buildShipAbilities flip keys off. Mirrors parseCleanse's self detection.
+    if (/\bitself\b|(?:from|to)\s+this\s+unit\b/.test(s)) return { target: 'self', explicit: true };
+    return { target: 'self', explicit: false };
+}
+
+/**
+ * Parses on-cast heal and shield grants from skill text. Walks every repair/shield match,
+ * emitting one entry per match (plus a continuation entry for multi-component heals). Each
+ * match's target/basis/disqualify guards are scoped to the sentence around the match, so a
+ * damage-reactive or revive clause elsewhere in the same skill doesn't suppress a real heal.
+ * Reference data: docs/ship-skills.csv.
+ */
+export function parseHealAbilities(text: string | null | undefined): ParsedHealAbility[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: ParsedHealAbility[] = [];
+
+    const emit = (kind: ParsedHealAbility['kind'], re: RegExp): void => {
+        re.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(plain)) !== null) {
+            const pct = parseFloat(m[1]);
+            if (isNaN(pct)) continue;
+            // A "repair … equal to N%" match is a multi-component continuation handled
+            // below by HEAL_ADDITIONAL_RE inheriting the primary's target — skip it here so
+            // it isn't double-counted (and so it doesn't inherit the wrong target/basis).
+            if (kind === 'heal' && /equal\s+to/i.test(m[0])) continue;
+            const { start: sentenceStart, text: sentence } = sentenceBoundsAround(plain, m.index);
+            if (HEAL_DISQUALIFY_RE.test(sentence)) continue;
+            // Scope both basis resolution and the continuation scan to the match's own
+            // sentence so that a stat phrase or "additional repair" in a LATER sentence
+            // cannot pollute this match's result (Issues 1 & 2). `basisScope` is the
+            // portion of the sentence from the match's position onward so `resolveHealBasis`
+            // finds the nearest stat phrase rather than one from a different sentence.
+            const basisScope = sentence.slice(m.index - sentenceStart);
+            const basis = resolveHealBasis(basisScope);
+            const { target, explicit: explicitTarget } = resolveHealTarget(sentence);
+            results.push({ kind, pct, basis, target, explicitTarget });
+
+            // Multi-component continuation ("with an additional repair equal to N% of its
+            // Defense") — emit a second entry inheriting this component's target.
+            // Scoped to the match's sentence to prevent cross-sentence false positives
+            // (Issue 2).
+            if (kind === 'heal') {
+                HEAL_ADDITIONAL_RE.lastIndex = 0;
+                const addM = HEAL_ADDITIONAL_RE.exec(sentence);
+                if (addM) {
+                    const addPct = parseFloat(addM[1]);
+                    const addStat = addM[2].toLowerCase().replace(/\s+/g, '');
+                    if (!isNaN(addPct)) {
+                        results.push({
+                            kind: 'heal',
+                            pct: addPct,
+                            basis:
+                                addStat === 'attack'
+                                    ? 'attack'
+                                    : addStat === 'defense'
+                                      ? 'defense'
+                                      : 'hp',
+                            target,
+                            explicitTarget,
+                        });
+                    }
+                }
+            }
+        }
+    };
+
+    emit('heal', HEAL_REPAIR_RE);
+    emit('shield', HEAL_SHIELD_RE);
+    return results;
+}
+
+// "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
+const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
+
+/**
+ * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
+ * clause: "from itself" → self, "from all allies" → all-allies, "from the/that ally" → ally;
+ * default self. Does not match "purges". Reference data: docs/ship-skills.csv.
+ */
+export function parseCleanse(
+    text: string | null | undefined
+): { count: number; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: {
+        count: number;
+        target: 'self' | 'ally' | 'all-allies';
+        explicitTarget: boolean;
+    }[] = [];
+    CLEANSE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = CLEANSE_RE.exec(plain)) !== null) {
+        const count = parseInt(m[1], 10);
+        if (!count || isNaN(count)) continue;
+        const sentence = sentenceAround(plain, m.index).toLowerCase();
+        // explicitTarget mirrors parseHealAbilities: true when a recipient phrase was matched,
+        // false when target defaulted to 'self' with no named recipient (the bare-cleanse case
+        // the buildShipAbilities flip routes to the ally).
+        let target: 'self' | 'ally' | 'all-allies' = 'self';
+        let explicitTarget = true;
+        if (/all\s+allies/.test(sentence)) target = 'all-allies';
+        else if (/itself|from\s+this\s+unit/.test(sentence)) target = 'self';
+        else if (/the\s+ally|that\s+ally|an\s+ally/.test(sentence)) target = 'ally';
+        else explicitTarget = false;
+        results.push({ count, target, explicitTarget });
+    }
+    return results;
+}
+
+/**
+ * Whether a skill's REPAIR/HEAL cannot critically hit (the exact complement of parseNoCrit,
+ * which flags attack no-crit). Returns true only when a "cannot critically hit" subject IS a
+ * repair/heal verb. Reference data: docs/ship-skills.csv.
+ */
+export function parseHealNoCrit(text: string | null | undefined): boolean {
+    if (!text) return false;
+    for (const m of stripUnitTags(text).matchAll(NO_CRIT_RE)) {
+        if (NO_CRIT_HEAL_SUBJECTS.has(m[1].toLowerCase())) return true;
+    }
+    return false;
 }
 
 /**

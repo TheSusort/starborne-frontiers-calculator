@@ -1,244 +1,299 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
-import {
-    HealerConfig,
-    HealerConfigUpdateableField,
-    HealingBuffTotals,
-    SelectedGameBuff,
-} from '../../types/calculator';
-import { calculateHealing } from '../../utils/calculators/healingCalculator';
+import { HealerShipConfig, HealerShipConfigUpdateableField } from '../../types/calculator';
+import { ShipSkills } from '../../types/abilities';
+import { HealingSimulationResult } from '../../utils/calculators/healingEngineAdapter';
 import { ShipSelector } from '../ship/ShipSelector';
-import { ShipSkillList } from '../ship/ShipSkillList';
-import { CloseIcon } from '../ui';
+import { CloseIcon, StatCard } from '../ui';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
-import { GameBuffPicker } from './GameBuffPicker';
+import { getSkillRowForSlot } from '../../utils/ship/skillRows';
+import { SkillSlotList } from '../skills/SkillSlotList';
 
 interface HealerConfigCardProps {
-    config: HealerConfig;
+    config: HealerShipConfig;
     isBest: boolean;
     isComparing: boolean;
+    simResult: HealingSimulationResult | undefined;
     bestEffectiveHealing: number | undefined;
-    buffTotals?: HealingBuffTotals;
     onRemove: () => void;
-    onUpdate: (field: HealerConfigUpdateableField, value: string | number) => void;
+    onUpdate: (field: HealerShipConfigUpdateableField, value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
     onStartChargedChange: (checked: boolean) => void;
-    onBuffsChange: (buffs: SelectedGameBuff[]) => void;
+    onShipSkillsChange: (shipSkills: ShipSkills) => void;
 }
+
+/** Compact labelled group inside the config card; children are evenly spaced. */
+const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+    <div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-primary mb-2">
+            {title}
+        </div>
+        <div className="space-y-3">{children}</div>
+    </div>
+);
+
+const SummaryRow: React.FC<{
+    label: string;
+    value: React.ReactNode;
+    valueClassName?: string;
+}> = ({ label, value, valueClassName }) => (
+    <div className="flex justify-between text-sm">
+        <span className="text-theme-text-secondary">{label}</span>
+        <span className={valueClassName}>{value}</span>
+    </div>
+);
 
 export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
     config,
     isBest,
     isComparing,
+    simResult,
     bestEffectiveHealing,
-    buffTotals,
     onRemove,
     onUpdate,
     onSelectShip,
     onStartChargedChange,
-    onBuffsChange,
+    onShipSkillsChange,
 }) => {
-    const [advancedOpen, setAdvancedOpen] = useState(false);
-    const [skillRefOpen, setSkillRefOpen] = useState(false);
+    const [openAdvanced, setOpenAdvanced] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
-    const result = calculateHealing(config, buffTotals);
-    const hasCharged = config.chargedHealPercent > 0 && config.chargeCount > 0;
+    const hasPassive =
+        config.shipSkills.slots.some((s) => s.slot === 'passive') ||
+        (selectedShip ? !!getSkillRowForSlot(selectedShip, 'passive') : false);
+
+    const summary = simResult?.summary;
+    const overhealPctOfRaw =
+        summary && summary.totalHealing > 0
+            ? Math.round((summary.totalOverheal / summary.totalHealing) * 100)
+            : 0;
+    const vsBest =
+        isComparing && !isBest && bestEffectiveHealing && summary
+            ? ((summary.totalEffectiveHealing - bestEffectiveHealing) / bestEffectiveHealing) * 100
+            : null;
 
     return (
-        <div className={`card relative ${isBest ? 'border-primary' : ''}`}>
-            <div className="mb-4">
+        <div className={`card ${isBest ? '!border-primary' : ''}`}>
+            <div className="space-y-3">
                 <ShipSelector
                     selected={selectedShip ?? null}
                     onSelect={onSelectShip}
                     variant="compact"
                 />
-            </div>
-            <div className="flex justify-between items-center mb-4">
-                <Input
-                    value={config.name}
-                    onChange={(e) => onUpdate('name', e.target.value)}
-                    className="font-bold"
-                />
-                <Button variant="danger" onClick={onRemove} aria-label="Remove healer">
-                    <CloseIcon />
-                </Button>
+                <div className="flex items-end justify-between gap-2">
+                    <Input
+                        label="Config name"
+                        value={config.name}
+                        onChange={(e) => onUpdate('name', e.target.value)}
+                        className="font-bold"
+                    />
+                    <Button variant="danger" onClick={onRemove} aria-label="Remove healer">
+                        <CloseIcon />
+                    </Button>
+                </div>
             </div>
 
-            <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <Input
-                        label="HP"
-                        type="number"
-                        value={config.hp}
-                        onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
-                    />
-                    <Input
-                        label="Crit Chance (%)"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={config.crit}
-                        onChange={(e) => onUpdate('crit', parseInt(e.target.value) || 0)}
-                    />
-                    <Input
-                        label="Crit Power (%)"
-                        type="number"
-                        min="0"
-                        max="200"
-                        value={config.critDamage}
-                        onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
-                    />
-                    <Input
-                        label="Heal Modifier (%)"
-                        type="number"
-                        min="0"
-                        value={config.healModifier}
-                        helpLabel={config.healModifierAutoFilled ? 'auto-filled' : undefined}
-                        onChange={(e) => onUpdate('healModifier', parseInt(e.target.value) || 0)}
-                    />
-                </div>
+            <div className="mt-4 space-y-4">
+                <Section title="Stats">
+                    <div className="grid grid-cols-2 gap-4">
+                        <Input
+                            label="HP"
+                            type="number"
+                            min="0"
+                            value={config.hp}
+                            onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Heal Modifier (%)"
+                            type="number"
+                            min="0"
+                            value={config.healModifier}
+                            onChange={(e) =>
+                                onUpdate('healModifier', parseInt(e.target.value) || 0)
+                            }
+                        />
+                        <Input
+                            label="Crit Rate (%)"
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={config.crit}
+                            onChange={(e) => onUpdate('crit', parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Crit Damage (%)"
+                            type="number"
+                            min="0"
+                            value={config.critDamage}
+                            onChange={(e) => onUpdate('critDamage', parseInt(e.target.value) || 0)}
+                        />
+                        <Input
+                            label="Speed"
+                            type="number"
+                            min="0"
+                            value={config.speed}
+                            onChange={(e) =>
+                                onUpdate('speed', Math.max(0, parseInt(e.target.value) || 0))
+                            }
+                        />
+                    </div>
+                </Section>
 
                 <Button
                     variant="link"
-                    onClick={() => setAdvancedOpen((v) => !v)}
-                    className="w-full flex justify-between items-center mt-4"
+                    onClick={() => setOpenAdvanced((v) => !v)}
+                    className="w-full flex justify-between items-center"
                 >
                     <span className="flex items-center gap-2">
                         <ChevronDownIcon
-                            className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${advancedOpen ? 'rotate-180' : ''}`}
+                            className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${openAdvanced ? 'rotate-180' : ''}`}
                         />
-                        {advancedOpen ? 'Hide' : 'Show'} Advanced
+                        {openAdvanced ? 'Hide' : 'Show'} Advanced
                     </span>
                 </Button>
 
-                <CollapsibleForm isVisible={advancedOpen}>
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
-                        Skills
-                    </div>
-                    <div className="grid grid-cols-4 lg:grid-cols-2 gap-4 mb-4 items-end">
-                        <Input
-                            label="Active (%)"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={config.healPercent}
-                            helpLabel={config.healPercentAutoFilled ? 'auto-filled' : undefined}
-                            onChange={(e) =>
-                                onUpdate('healPercent', parseFloat(e.target.value) || 0)
-                            }
-                        />
-                        <Input
-                            label="Charged (%)"
-                            type="number"
-                            min="0"
-                            max="100"
-                            step="0.1"
-                            value={config.chargedHealPercent}
-                            helpLabel={
-                                config.chargedHealPercentAutoFilled ? 'auto-filled' : undefined
-                            }
-                            onChange={(e) =>
-                                onUpdate('chargedHealPercent', parseFloat(e.target.value) || 0)
-                            }
-                        />
-                        <Input
-                            label="Charge Count"
-                            type="number"
-                            min="0"
-                            value={config.chargeCount}
-                            onChange={(e) => onUpdate('chargeCount', parseInt(e.target.value) || 0)}
-                        />
-                        <div>
+                <CollapsibleForm isVisible={openAdvanced}>
+                    <div className="space-y-4">
+                        <Section title="Heal Sources">
+                            <div className="grid grid-cols-2 gap-4">
+                                <Input
+                                    label="Attack"
+                                    type="number"
+                                    min="0"
+                                    value={config.attack}
+                                    onChange={(e) =>
+                                        onUpdate('attack', parseInt(e.target.value) || 0)
+                                    }
+                                    helpLabel="source stat for attack-based heals"
+                                />
+                                <Input
+                                    label="Defense"
+                                    type="number"
+                                    min="0"
+                                    value={config.defence}
+                                    onChange={(e) =>
+                                        onUpdate('defence', parseInt(e.target.value) || 0)
+                                    }
+                                    helpLabel="source stat for defense-based heals"
+                                />
+                            </div>
+                        </Section>
+
+                        <Section title="Charge">
+                            <Input
+                                label="Charge Count"
+                                type="number"
+                                min="0"
+                                value={config.chargeCount}
+                                onChange={(e) =>
+                                    onUpdate('chargeCount', parseInt(e.target.value) || 0)
+                                }
+                            />
                             <Checkbox
                                 id={`start-charged-${config.id}`}
                                 label="Start Charged"
                                 checked={config.startCharged}
                                 onChange={onStartChargedChange}
                             />
-                        </div>
-                    </div>
+                        </Section>
 
-                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2 mt-4">
-                        Ship Buffs
-                    </div>
-                    <GameBuffPicker
-                        label="Ship Buffs"
-                        relevantStats={['crit', 'critDamage', 'outgoingHeal', 'incomingHeal']}
-                        excludeTypes={['effect']}
-                        value={config.buffs}
-                        onChange={onBuffsChange}
-                        noEffectLabel="No healing effect"
-                    />
+                        <Section title="Debuff Landing">
+                            <Input
+                                label="Hacking"
+                                type="number"
+                                min="0"
+                                value={config.hacking}
+                                onChange={(e) => onUpdate('hacking', parseInt(e.target.value) || 0)}
+                                helpLabel="cleanse / debuff landing vs enemy security"
+                            />
+                        </Section>
 
-                    {selectedShip && (
-                        <>
-                            <Button
-                                variant="link"
-                                onClick={() => setSkillRefOpen((v) => !v)}
-                                className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <ChevronDownIcon
-                                        className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen ? 'rotate-180' : ''}`}
-                                    />
-                                    Skill Reference
-                                </span>
-                            </Button>
-                            <CollapsibleForm isVisible={skillRefOpen}>
-                                <div className="pt-2 pb-4 border-b border-dark-border mb-4">
-                                    <ShipSkillList ship={selectedShip} />
-                                </div>
-                            </CollapsibleForm>
-                        </>
-                    )}
+                        <Section title="Skills">
+                            <SkillSlotList
+                                shipSkills={config.shipSkills}
+                                hasPassive={hasPassive}
+                                ship={selectedShip}
+                                onChange={onShipSkillsChange}
+                            />
+                        </Section>
+                    </div>
                 </CollapsibleForm>
 
-                <div className="mt-4 pt-4 border-t border-dark-border space-y-2">
-                    <div className="flex justify-between">
-                        <span className="text-theme-text-secondary">Active Heal:</span>
-                        <span>{Math.round(result.activeEffectiveHealing).toLocaleString()} HP</span>
-                    </div>
-                    {hasCharged && (
-                        <div className="flex justify-between">
-                            <span className="text-theme-text-secondary">Charged Heal:</span>
-                            <span>
-                                {Math.round(result.chargedEffectiveHealing).toLocaleString()} HP
-                            </span>
+                {summary && (
+                    <div className="mt-4 pt-4 border-t border-dark-border space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                            <StatCard
+                                title="Effective Healing"
+                                value={summary.totalEffectiveHealing.toLocaleString()}
+                                color={isBest ? 'green' : 'blue'}
+                            />
+                            <StatCard
+                                title="Shield Absorbed"
+                                value={summary.totalShieldAbsorbed.toLocaleString()}
+                                color="purple"
+                            />
                         </div>
-                    )}
-                    <div className="flex justify-between">
-                        <span className="text-theme-text-secondary">
-                            {hasCharged ? 'Avg per Round:' : 'Effective Healing:'}
-                        </span>
-                        <span className={isBest ? 'text-primary font-bold' : ''}>
-                            {Math.round(result.effectiveHealing).toLocaleString()} HP
-                        </span>
-                    </div>
-                    {isComparing && !isBest && bestEffectiveHealing && (
-                        <div className="flex justify-between">
-                            <span className="text-theme-text-secondary">Compared to best:</span>
-                            <span className="text-red-500">
-                                {(
-                                    ((result.effectiveHealing - bestEffectiveHealing) /
-                                        bestEffectiveHealing) *
-                                    100
-                                ).toFixed(2)}
-                                %
-                            </span>
-                        </div>
-                    )}
-                </div>
 
-                {isBest && (
-                    <div className="text-primary text-sm mt-2 text-center">
-                        Best healer configuration
+                        <SummaryRow
+                            label="Overheal"
+                            value={`${summary.totalOverheal.toLocaleString()} (${overhealPctOfRaw}% of raw)`}
+                        />
+                        <SummaryRow
+                            label="Survival"
+                            value={
+                                summary.destroyedRound !== undefined
+                                    ? `Destroyed round ${summary.destroyedRound}`
+                                    : `Survived ${simResult.rounds.length} ${simResult.rounds.length === 1 ? 'round' : 'rounds'}`
+                            }
+                            valueClassName={
+                                summary.destroyedRound !== undefined
+                                    ? 'text-red-400 font-medium'
+                                    : 'text-green-400 font-medium'
+                            }
+                        />
+
+                        <div className="pt-2 border-t border-dark-border space-y-2">
+                            <SummaryRow
+                                label="Direct Heal (raw)"
+                                value={summary.totalDirectHeal.toLocaleString()}
+                            />
+                            <SummaryRow
+                                label="Heal Over Time (raw)"
+                                value={summary.totalHotHeal.toLocaleString()}
+                            />
+                            <SummaryRow
+                                label="Shield Granted (raw)"
+                                value={summary.totalShield.toLocaleString()}
+                            />
+                            <SummaryRow
+                                label="Cleanses"
+                                value={summary.totalCleanses.toLocaleString()}
+                            />
+                            {summary.teamTotalHealing !== undefined && (
+                                <SummaryRow
+                                    label="Team Healing (raw)"
+                                    value={summary.teamTotalHealing.toLocaleString()}
+                                />
+                            )}
+                        </div>
+
+                        {vsBest !== null && (
+                            <SummaryRow
+                                label="Compared to best"
+                                value={`${vsBest.toFixed(2)}%`}
+                                valueClassName="text-red-400"
+                            />
+                        )}
+                        {isBest && isComparing && (
+                            <div className="text-primary text-sm text-center">
+                                Best healer configuration
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

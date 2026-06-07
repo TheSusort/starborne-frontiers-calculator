@@ -90,6 +90,13 @@ const DEBUFF_APPLICATION_OPTIONS = [
     { value: 'apply', label: 'Apply' },
 ];
 
+const HEAL_BASIS_OPTIONS = [
+    { value: 'hp', label: "Caster's Max HP" },
+    { value: 'attack', label: "Caster's Attack" },
+    { value: 'defense', label: "Caster's Defense" },
+    { value: 'target-hp', label: "Recipient's Max HP" },
+];
+
 const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
     { value: 'active', label: 'All active DoTs' },
     { value: 'inflicted', label: 'Only DoTs from this cast' },
@@ -105,6 +112,8 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-debuff-inflicted', label: 'After inflicting a debuff' },
     { value: 'on-ally-debuff-inflicted', label: 'After an ally inflicts a debuff' },
     { value: 'on-ally-crit-dot', label: 'After an ally inflicts a DoT with a crit' },
+    { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
+    { value: 'on-ally-crit', label: 'After an ally critically hits' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
 ];
 
@@ -535,12 +544,63 @@ export const AbilityCard: React.FC<Props> = ({
                 );
             }
 
+            case 'heal':
+            case 'shield':
+                return (
+                    <div className="space-y-2">
+                        <div className="flex gap-2">
+                            <Input
+                                label="Percent"
+                                type="number"
+                                min={0}
+                                step="0.01"
+                                value={config.pct}
+                                onChange={(e) =>
+                                    updateConfig({ ...config, pct: toNumber(e.target.value) })
+                                }
+                            />
+                            <Select
+                                label="Based on stat"
+                                value={config.basis}
+                                options={HEAL_BASIS_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        basis: value as 'hp' | 'attack' | 'defense' | 'target-hp',
+                                    })
+                                }
+                            />
+                        </div>
+                        {config.type === 'heal' && (
+                            <Checkbox
+                                label="Cannot critically hit"
+                                checked={config.noCrit ?? false}
+                                onChange={(checked) =>
+                                    updateConfig({ ...config, noCrit: checked ? true : undefined })
+                                }
+                            />
+                        )}
+                    </div>
+                );
+
+            case 'cleanse':
+            case 'purge':
+                return (
+                    <Input
+                        label="Count"
+                        type="number"
+                        min={1}
+                        value={config.count}
+                        onChange={(e) =>
+                            updateConfig({ ...config, count: toNumber(e.target.value) })
+                        }
+                    />
+                );
+
             default:
                 return (
                     <p className="text-xs text-theme-text-secondary">
-                        {NOT_SIMULATED_TYPES.has(ability.type)
-                            ? NOT_SIMULATED_NOTE
-                            : 'No editable fields for this ability type.'}
+                        No editable fields for this ability type.
                     </p>
                 );
         }
@@ -606,6 +666,13 @@ export const AbilityCard: React.FC<Props> = ({
                     <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
                 )}
 
+            {/* Not-simulated note is independent of the field editor so it always
+                shows for flagged types even when a case provides editable fields
+                (e.g. purge: count is editable for annotation but not yet simulated). */}
+            {NOT_SIMULATED_TYPES.has(ability.type) && (
+                <p className="text-xs text-theme-text-secondary">{NOT_SIMULATED_NOTE}</p>
+            )}
+
             <Select
                 label="Target"
                 value={ability.target}
@@ -616,7 +683,10 @@ export const AbilityCard: React.FC<Props> = ({
             {(ability.type === 'buff' ||
                 ability.type === 'debuff' ||
                 ability.type === 'dot' ||
-                ability.type === 'charge') && (
+                ability.type === 'charge' ||
+                ability.type === 'heal' ||
+                ability.type === 'shield' ||
+                ability.type === 'cleanse') && (
                 <>
                     <Select
                         label="Trigger"

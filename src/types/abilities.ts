@@ -35,6 +35,8 @@ export type AbilityTrigger =
     | 'on-debuff-inflicted'
     | 'on-ally-debuff-inflicted'
     | 'on-ally-crit-dot'
+    | 'on-ally-critically-repaired'
+    | 'on-ally-crit'
     | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
@@ -55,6 +57,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuff-inflicted',
     'on-ally-debuff-inflicted',
     'on-ally-crit-dot',
+    'on-ally-critically-repaired',
+    'on-ally-crit',
     'on-bomb-detonated',
 ]);
 
@@ -172,7 +176,15 @@ export type AbilityConfig =
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
     | { type: 'extra-action'; oncePerRound: boolean }
-    | { type: 'heal' | 'shield'; pct: number; basis: 'hp' | 'attack' }
+    | {
+          type: 'heal' | 'shield';
+          pct: number;
+          /** Stat the amount scales from: caster max HP / attack / defence, or the
+           *  RECIPIENT's max HP ('target-hp' — "of their Max HP"). */
+          basis: 'hp' | 'attack' | 'defense' | 'target-hp';
+          /** Pallas: "repair cannot critically hit". Shields never crit regardless. */
+          noCrit?: boolean;
+      }
     | { type: 'cleanse' | 'purge'; count: number }
     | {
           type: 'control';

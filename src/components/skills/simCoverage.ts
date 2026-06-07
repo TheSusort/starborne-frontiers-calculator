@@ -1,17 +1,14 @@
 import { AbilityType } from '../../types/abilities';
 
 /**
- * Ability types the DPS sim does not consume at all. They stay pickable in the
- * editor (annotations for the future Healing-calc / combat-sim phases) but must
- * be visibly marked so a configured ability isn't mistaken for a simulated one.
+ * Ability types not yet consumed by any calculator. They stay pickable in the
+ * editor (annotations for the healing-calc / combat-sim phases) but are visibly
+ * marked so a configured ability isn't mistaken for a simulated one.
+ * heal / shield / cleanse are intentionally NOT in this set — the healing
+ * calculator consumes them (adopted in the healing-calc engine work).
+ * purge keeps its count field editable for annotation while still flagged here.
  */
-export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set([
-    'heal',
-    'shield',
-    'cleanse',
-    'purge',
-    'control',
-]);
+export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set(['purge', 'control']);
 
 /**
  * Ability types the DPS sim sources from the FIRING skill only (active/charged).
@@ -28,6 +25,6 @@ export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
     'additional-damage',
 ]);
 
-export const NOT_SIMULATED_NOTE = 'Not simulated in the DPS calculator yet.';
+export const NOT_SIMULATED_NOTE = 'Not simulated in the calculators yet.';
 export const PASSIVE_NOOP_WARNING =
     'Not simulated on the passive slot — the DPS calculator only reads this ability type from the active and charged skills.';

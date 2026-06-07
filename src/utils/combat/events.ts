@@ -80,6 +80,18 @@ export type CombatEvent =
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
       }
+    /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
+     *  ids in application order; `amount` is the summed RAW amount across recipients.
+     *  `critHits` present only when >= 1 (single-draw heals: 0 or 1 per heal ability;
+     *  summed across the cast's heal abilities). */
+    | {
+          type: 'heal-performed';
+          casterId: string;
+          targets: string[];
+          round: number;
+          amount: number;
+          critHits?: number;
+      }
     | {
           type: 'dot-ticked';
           targetId: string;

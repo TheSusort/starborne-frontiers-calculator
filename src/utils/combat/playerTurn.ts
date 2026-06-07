@@ -28,7 +28,13 @@ import {
     toEnemyDotModifier,
     toDotAndPenModifiers,
 } from '../calculators/dpsBuffHelpers';
-import { ActiveDoTStack, PendingAccumulator, PendingBomb, CombatActor } from './state';
+import {
+    ActiveDoTStack,
+    ActorHealing,
+    PendingAccumulator,
+    PendingBomb,
+    CombatActor,
+} from './state';
 import {
     ActiveBuff,
     AbilityStatusPayload,
@@ -57,6 +63,38 @@ export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
     affinityMult: number;
+    /** Healing-calc seams (additive): the actor's current effective defence/max-HP, and its
+     *  outgoing/incoming-heal % as of its last turn — read by enemy attacks (target defence),
+     *  'target-hp' heals, outgoing-heal scaling, and incoming-heal amplification (corrosion
+     *  applier-ctx rule). */
+    effectiveDefence: number;
+    effectiveMaxHp: number;
+    outgoingHealPct: number;
+    incomingHealPct: number;
+}
+
+/** Healing-mode context threaded into player turns (and later the executor). The ENGINE
+ *  owns all mutation (applyHealToTarget/grantShieldToTarget close over the live target). */
+export interface HealingRuntimeCtx {
+    targetId: string;
+    credit: (actorId: string, bucket: keyof ActorHealing, amount: number) => void;
+    /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
+    recipientMaxHp: (actorId: string) => number;
+    recipientIncomingHealPct: (actorId: string) => number;
+    /** A FOREIGN HoT applier's effective max HP at tick time (Task 7): reads
+     *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
+     *  rule). Returns undefined when the applier has not acted this run yet, in which case
+     *  the holder SKIPS the tick entirely. (The acting holder's self-granted HoTs use the
+     *  local effectiveHp directly, never this accessor.) */
+    applierMaxHp: (actorId: string) => number | undefined;
+    /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
+     *  Mutates target.currentHp. Returns the split. */
+    applyHealToTarget: (raw: number) => { consumed: number; overheal: number };
+    /** Additive pool capped at the target's max HP; drains before HP (enemy attacks, Task 8).
+     *  Dead target → no-op. */
+    grantShieldToTarget: (raw: number) => void;
+    /** Fixed player-id order for all-allies recipient routing. */
+    playerIds: string[];
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -98,6 +136,8 @@ export interface PlayerActorRuntime {
     defensePenetration: number;
     defence: number;
     hp: number;
+    /** Caster heal-modifier stat (healing calc). Default 0. */
+    healModifier: number;
     // Per-actor adapter-derived rates
     debuffLandingChance: number;
     selfDotModifier: number;
@@ -112,6 +152,10 @@ export interface PlayerActorRuntime {
     chargedCritGate: RateGate;
     debuffLandingGate: RateGate;
     extendChanceGate: RateGate;
+    /** Heal crit gates (healing calc): SEPARATE from the damage crit gates so drawing a
+     *  heal crit never shifts a heal-carrying ship's damage-crit schedule. */
+    activeHealCritGate: RateGate;
+    chargedHealCritGate: RateGate;
     landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
@@ -151,6 +195,10 @@ export interface PlayerTurnArgs {
      *  so statusEngine/standalone callers without a team need not supply it — when absent the
      *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
     grantAllyCharges?: (amount: number) => void;
+    /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
+     *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
+     *  goldens byte-identical. */
+    healing?: HealingRuntimeCtx;
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +236,24 @@ function calculateBuffTotals(buffs: Buff[]) {
         .filter((b) => b.stat === 'defence')
         .reduce((sum, b) => sum + b.value, 0);
     const hpBuff = buffs.filter((b) => b.stat === 'hp').reduce((sum, b) => sum + b.value, 0);
-    return { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff };
+    // Heal channels (healing calc). hotPct is intentionally NOT summed here: HoTs need
+    // per-status applier identity, so a later task reads those statuses directly.
+    const outgoingHealBuff = buffs
+        .filter((b) => b.stat === 'outgoingHeal')
+        .reduce((sum, b) => sum + b.value, 0);
+    const incomingHealBuff = buffs
+        .filter((b) => b.stat === 'incomingHeal')
+        .reduce((sum, b) => sum + b.value, 0);
+    return {
+        attackBuff,
+        critBuff,
+        critDamageBuff,
+        outgoingDamageBuff,
+        defenceBuff,
+        hpBuff,
+        outgoingHealBuff,
+        incomingHealBuff,
+    };
 }
 
 // Expand an active buff/debuff into its underlying SelectedGameBuff effects.
@@ -539,9 +604,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffLookup,
         activeCritGate,
         chargedCritGate,
+        activeHealCritGate,
+        chargedHealCritGate,
         debuffLandingGate,
         extendChanceGate,
         landsTimedEnemyApplication,
+        healModifier,
         castSkills: shipSkills,
         hasChargedSkill,
         attack,
@@ -629,11 +697,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledSelfBuffNames = entry.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
-    let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
-        resolveSelfBuffTotals({
-            activeSelfBuffs: entry.activeSelfBuffs,
-            selfBuffLookup,
-        });
+    let {
+        attackBuff,
+        critBuff,
+        critDamageBuff,
+        outgoingDamageBuff,
+        defenceBuff,
+        hpBuff,
+        outgoingHealBuff,
+        incomingHealBuff,
+    } = resolveSelfBuffTotals({
+        activeSelfBuffs: entry.activeSelfBuffs,
+        selfBuffLookup,
+    });
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
     // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
@@ -876,6 +952,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     outgoingDamageBuff += abilitySelfTotals.outgoingDamageBuff;
     defenceBuff += abilitySelfTotals.defenceBuff;
     hpBuff += abilitySelfTotals.hpBuff;
+    outgoingHealBuff += abilitySelfTotals.outgoingHealBuff;
+    incomingHealBuff += abilitySelfTotals.incomingHealBuff;
 
     // (f) Per-round defPen/dot fold from ability-status payloads (KNOWN-DIFF b): these
     // no longer ride the always-on static toDotAndPenModifiers path (the adapter feeds
@@ -1195,6 +1273,180 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
+    // ====================================================================
+    // HEALING MODE — heal/shield/cleanse consumption against the live heal
+    // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
+    // never supplies it, so this block is inert there (goldens byte-identical).
+    // Runs at a fixed sequence point AFTER all DoT-application steps and BEFORE
+    // the turnCtx assembly. Processes gated firing + passive abilities in array
+    // order; heals draw the SEPARATE per-actor heal crit gate (never the damage
+    // crit gate). HoT (hotHeal) ticking is Task 7 — not produced here.
+    // ====================================================================
+    if (args.healing) {
+        const healing = args.healing;
+        const healCritGate = action === 'charged' ? chargedHealCritGate : activeHealCritGate;
+        // Recipient's incoming-heal %: the acting actor reads its own LOCAL folded total;
+        // any other recipient resolves through lastTurnCtxByActor (may be stale/base for a
+        // non-target non-self recipient — an accepted approximation, see plan).
+        const incomingPctFor = (rid: string): number =>
+            rid === actor.id ? incomingHealBuff : healing.recipientIncomingHealPct(rid);
+        // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
+        // all-allies → every player in fixed source order. Shared by the heal + shield branches.
+        const recipientsFor = (target: Ability['target']): string[] =>
+            target === 'self'
+                ? [actor.id]
+                : target === 'all-allies'
+                  ? healing.playerIds
+                  : [healing.targetId];
+        // Basis value for a heal/shield ability against recipient `rid`.
+        const basisValue = (
+            basis: 'hp' | 'attack' | 'defense' | 'target-hp',
+            rid: string
+        ): number => {
+            switch (basis) {
+                case 'attack':
+                    return effectiveAttack;
+                case 'defense':
+                    return effectiveDefence;
+                case 'target-hp':
+                    return healing.recipientMaxHp(rid);
+                case 'hp':
+                default:
+                    return effectiveHp;
+            }
+        };
+
+        // ── HoT (Repair Over Time) ticking ──────────────────────────────────────────
+        // Ordering note (RECORDED APPROXIMATION, pending in-game verification — coverage doc §6):
+        // these ticks fire here, BEFORE this turn's cast heals, but the HoT SOURCES are read
+        // AFTER this turn's own status/buff applications. Consequence: a HoT a ship grants to
+        // ITSELF this turn already appears in selfAbilityStatuses/activeSelfBuffs and therefore
+        // ticks on its OWN cast turn (not only on subsequent turns). The healing goldens lock
+        // this behaviour; do not change it without re-validating the in-game rule.
+        // The HOLDER (this acting actor) heals each of its own turns for
+        // applierEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
+        // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
+        // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
+        // but DO get the HOLDER's incomingHeal amplification (the local incomingHealBuff,
+        // since the holder is the acting actor). Holder === target → the consumption split
+        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal.
+        //
+        // Applier max HP at tick time:
+        //  - applier === this acting actor (self-granted HoT) → local effectiveHp.
+        //  - foreign applier → healing.applierMaxHp(applierId); undefined → SKIP the tick
+        //    (strict corrosion rule, NO base-stat fallback).
+        //  - scheduled HoT (no caster identity) → applier = the holder itself (local effectiveHp).
+        //
+        // Sources are DISJOINT (no double-count): payload-carrying ability statuses
+        // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
+        // applier = status.casterId) and scheduled snapshot buffs (entry.activeSelfBuffs ×
+        // selfBuffLookup, expanded SelectedGameBuff.parsedEffects.hotPct × stacks, applier = holder).
+        const holderIncomingFactor = 1 + incomingHealBuff / 100;
+        // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.
+        const hotApplierMaxHp = (applierId: string | undefined): number | undefined => {
+            if (applierId === undefined || applierId === actor.id) return effectiveHp;
+            return healing.applierMaxHp(applierId);
+        };
+        // Credit one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor)
+        // to the applier's hotHeal bucket, and route consumption (holder === target) to the
+        // applier's effectiveHeal/overheal.
+        const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
+            if (hotPct <= 0 || stacks <= 0) return;
+            const maxHp = hotApplierMaxHp(applierId);
+            if (maxHp === undefined) return; // foreign applier with no ctx yet → skip the tick
+            // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
+            const creditId = applierId ?? actor.id;
+            const raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            if (raw <= 0) return;
+            healing.credit(creditId, 'hotHeal', raw);
+            // Holder === target → the heal lands on the target; split consumption to the applier.
+            if (actor.id === healing.targetId) {
+                const { consumed, overheal } = healing.applyHealToTarget(raw);
+                healing.credit(creditId, 'effectiveHeal', consumed);
+                healing.credit(creditId, 'overheal', overheal);
+            }
+        };
+        // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
+        // payload.stacks already folds accumulating per-round counts / timed configured stacks.
+        for (const s of selfAbilityStatuses) {
+            const hotPct = s.payload.parsedEffects.hotPct;
+            if (!hotPct) continue;
+            tickHot(s.casterId, hotPct, s.payload.stacks);
+        }
+        // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
+        // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
+        // SelectedGameBuff carries the effective stacks already.
+        for (const ab of entry.activeSelfBuffs) {
+            for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                const hotPct = b.parsedEffects?.hotPct;
+                if (!hotPct) continue;
+                tickHot(undefined, hotPct, b.stacks ?? 1);
+            }
+        }
+
+        const healAbilities = [
+            ...(gatedSkill?.abilities ?? []),
+            ...(gatedPassive?.abilities ?? []),
+        ];
+        const healTargets: string[] = [];
+        let healCritCount = 0;
+        let healRawSum = 0;
+
+        for (const ability of healAbilities) {
+            const cfg = ability.config;
+            if (cfg.type === 'heal') {
+                const recipients = recipientsFor(ability.target);
+                // ONE crit draw per heal ability (not per recipient).
+                const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
+                if (didCrit) healCritCount += 1;
+                for (const rid of recipients) {
+                    const basis = basisValue(cfg.basis, rid);
+                    const raw =
+                        basis *
+                        (cfg.pct / 100) *
+                        (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
+                        (1 + healModifier / 100) *
+                        (1 + outgoingHealBuff / 100) *
+                        (1 + incomingPctFor(rid) / 100);
+                    healing.credit(actor.id, 'directHeal', raw);
+                    if (rid === healing.targetId) {
+                        const { consumed, overheal } = healing.applyHealToTarget(raw);
+                        healing.credit(actor.id, 'effectiveHeal', consumed);
+                        healing.credit(actor.id, 'overheal', overheal);
+                    }
+                    healTargets.push(rid);
+                    healRawSum += raw;
+                }
+            } else if (cfg.type === 'shield') {
+                // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
+                // outgoingHeal/incomingHeal channels — raw = basis × pct.
+                const recipients = recipientsFor(ability.target);
+                for (const rid of recipients) {
+                    const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
+                    healing.credit(actor.id, 'shield', raw);
+                    if (rid === healing.targetId) {
+                        healing.grantShieldToTarget(raw);
+                    }
+                }
+            } else if (cfg.type === 'cleanse') {
+                healing.credit(actor.id, 'cleanseCount', cfg.count);
+            }
+        }
+
+        // ONE heal-performed per cast that healed at least one recipient. critHits is the
+        // number of heal abilities that crit (present-only-when-positive).
+        if (healTargets.length > 0) {
+            bus.emit({
+                type: 'heal-performed',
+                casterId: actor.id,
+                targets: healTargets,
+                round: r,
+                amount: healRawSum,
+                ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+            });
+        }
+    }
+
     // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
     // such effect the parser emits; the ability config carries no name) in the round's
     // debuff list with their countdown. Appended AFTER the gate contexts are built and
@@ -1210,7 +1462,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Round-scoped context the enemy's DoT-processing turn needs (this actor's). With a
     // faster enemy the enemy reads the PREVIOUS round's context; at default speeds the
     // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
-    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult };
+    const turnCtx: PlayerRoundCtx = {
+        effectiveAttack,
+        dotMult,
+        affinityMult,
+        effectiveDefence,
+        effectiveMaxHp: effectiveHp,
+        outgoingHealPct: outgoingHealBuff,
+        incomingHealPct: incomingHealBuff,
+    };
 
     return {
         action,
