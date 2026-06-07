@@ -713,7 +713,7 @@ Capture `targetHpPctStart`/`targetShieldStart` at round top (before any turn); i
 4. Scheduled (manual `selfBuffs` list) Repair Over Time on the FOCUS actor → applier = holder itself (no caster identity), heals holder hp × hotPct.
 
 - [ ] **Step 7.2:** Run → FAIL.
-- [ ] **Step 7.3: statusEngine.ts** — `BuffState` gains `casterId?: string`; `applyTimedAbilityStatus` stamps `casterId: status.casterId` into the map entry; `ActiveAbilityStatus` gains `casterId?: string`; `timedAbilityStatuses` + `activeAbilityStatuses` return it (`casterId: s.casterId` / `a.casterId`). All additive — no existing test churn (verify).
+- [ ] **Step 7.3: statusEngine.ts** — `BuffState.casterId` ALREADY EXISTS (statusEngine.ts:218 — wait, that's AccumulatingState; verify: AccumulatingState carries casterId, and the engine stamps casterId on registered statuses; check whether the TIMED map entry (`BuffState`, ~line 199) stores it — if NOT, add `casterId?: string` there and stamp it in `applyTimedAbilityStatus`). What genuinely needs adding: `ActiveAbilityStatus` (line 84-87) gains `casterId?: string`, and `timedAbilityStatuses` + `activeAbilityStatuses` return it (`casterId: s.casterId` / `a.casterId`). All additive — no existing test churn (verify).
 - [ ] **Step 7.4: playerTurn.ts** — inside the `if (args.healing)` block, BEFORE the cast-heal loop (HoTs tick at turn start conceptually; FIXED ordering — document):
 
 ```ts
