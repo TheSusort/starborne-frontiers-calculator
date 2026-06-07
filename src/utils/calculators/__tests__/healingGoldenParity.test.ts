@@ -16,7 +16,7 @@
 //     suite once. Blanket `-u` would silently paper over an unintended change in an
 //     unrelated scenario. (This mirrors the DPS suite's convention, enforced by project
 //     docs/process rather than by a header there.)
-//   • HAND-VERIFICATION PROVENANCE. Scenarios 1, 6 and 7 are traced round-by-round in
+//   • HAND-VERIFICATION PROVENANCE. Scenarios 1, 6, 7, 9 and 12 are traced round-by-round in
 //     the commit that introduced this file (formula, gate schedule, shield drain order,
 //     death round). The other scenarios are spot-checked for plausibility (no NaN,
 //     cumulative monotonic, charge cadence sane, routed-cast heal-conservation). If you
@@ -438,7 +438,7 @@ describe('healingGoldenParity', () => {
     //   ⇒ directHeal = 257.9416 + 1000 = 1257.9416 (→ 1258). Full HP → effectiveHealing 0,
     //     overheal 1257.9416 (→ 1258). hotHeal 0, shield 0, incomingDamage 0.
     //   cumulativeHealing: R1 1258, R2 2516, R3 3774, …
-    snap('Magnolia shape (standing damage-leech all-scope: cast + Inferno tick)', () =>
+    const scenario9Input = () =>
         BASE({
             rounds: 10,
             healer: { ...HEALER, hp: 10000 },
@@ -484,61 +484,15 @@ describe('healingGoldenParity', () => {
                     },
                 ],
             },
-        })
-    );
+        });
+
+    snap('Magnolia shape (standing damage-leech all-scope: cast + Inferno tick)', scenario9Input);
 
     // Supplementary in-code assertion for scenario 9: round-1 directHeal is the cast-leech
     // (258) + the Inferno-tick leech (1000) folded into the focus bucket → 1258.
     it('scenario 9: round-1 directHeal is exactly 1258 (cast 258 + inferno 1000)', () => {
         idCounter = 0;
-        const result = simulateHealing(
-            BASE({
-                rounds: 10,
-                healer: { ...HEALER, hp: 10000 },
-                healTargetId: 'healer',
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                                ab({
-                                    type: 'dot',
-                                    target: 'enemy',
-                                    config: {
-                                        type: 'dot',
-                                        dotType: 'inferno',
-                                        tier: 100,
-                                        stacks: 1,
-                                        duration: 1,
-                                    },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'passive',
-                            abilities: [
-                                ab({
-                                    type: 'heal',
-                                    target: 'self',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'heal',
-                                        pct: 20,
-                                        basis: 'damage-dealt',
-                                        leechScope: 'all',
-                                    },
-                                }),
-                            ],
-                        },
-                    ],
-                },
-            })
-        );
+        const result = simulateHealing(scenario9Input());
         expect(result.rounds[0].directHeal).toBe(1258);
     });
 
@@ -704,7 +658,10 @@ describe('healingGoldenParity', () => {
     //     1257.9416 (→ 1258).
     //   ⇒ shield 1258, shieldAbsorbed 1257.9416 (→ 1258), incomingDamage 4000.
     // (No heals at all → directHeal/hotHeal/effectiveHealing/overheal 0 every round.)
-    snap('Quixilver as heal target (shield rider + punch-through taken shield)', () =>
+    // DESTROYED round 4: the cumulative net damage (4000 − shield absorption each round)
+    // exceeds the 10000 HP pool by round 4. R5-R10 flatline with incomingDamage 0.
+    // summary.destroyedRound === 4.
+    const scenario12Input = () =>
         BASE({
             rounds: 10,
             healer: { ...HEALER, hp: 10000, defence: 0 },
@@ -752,64 +709,23 @@ describe('healingGoldenParity', () => {
                     },
                 ],
             },
-        })
-    );
+        });
+
+    snap('Quixilver as heal target (shield rider + punch-through taken shield)', scenario12Input);
 
     // Supplementary in-code assertion for scenario 12: round-1 shield is the rider (258) +
     // the punch-through taken shield (1000) → 1258, and round-1 absorbed is just the rider pool.
     it('scenario 12: round-1 shield is 1258 (rider 258 + taken 1000), absorbed 258', () => {
         idCounter = 0;
-        const result = simulateHealing(
-            BASE({
-                rounds: 10,
-                healer: { ...HEALER, hp: 10000, defence: 0 },
-                healTargetId: 'healer',
-                enemies: [
-                    {
-                        id: 'e1',
-                        stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
-                        chargeCount: 0,
-                        startCharged: false,
-                    },
-                ],
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [
-                                ab({
-                                    type: 'damage',
-                                    target: 'enemy',
-                                    config: { type: 'damage', multiplier: 100, hits: 1 },
-                                }),
-                                ab({
-                                    type: 'shield',
-                                    target: 'self',
-                                    config: { type: 'shield', pct: 20, basis: 'damage-dealt' },
-                                }),
-                            ],
-                        },
-                        {
-                            slot: 'passive',
-                            abilities: [
-                                ab({
-                                    type: 'shield',
-                                    target: 'self',
-                                    trigger: 'on-cast',
-                                    config: {
-                                        type: 'shield',
-                                        pct: 25,
-                                        basis: 'damage-taken',
-                                        requiresHpDamage: true,
-                                    },
-                                }),
-                            ],
-                        },
-                    ],
-                },
-            })
-        );
+        const result = simulateHealing(scenario12Input());
         expect(result.rounds[0].shield).toBe(1258);
         expect(result.rounds[0].shieldAbsorbed).toBe(258);
+    });
+
+    // Supplementary in-code assertion for scenario 12: target is DESTROYED on round 4.
+    it('scenario 12: summary.destroyedRound is 4', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario12Input());
+        expect(result.summary.destroyedRound).toBe(4);
     });
 });
