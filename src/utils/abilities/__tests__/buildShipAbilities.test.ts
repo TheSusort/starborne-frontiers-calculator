@@ -1139,14 +1139,21 @@ describe('buildShipAbilities', () => {
             expect((damage?.config as { noCrit?: boolean }).noCrit).toBeUndefined();
         });
 
-        it('damage-reactive shield emits nothing', () => {
+        it('damage-taken shield emits a leech shield (basis damage-taken)', () => {
+            // Damage-leech shields/heals are now PARSED (basis 'damage-taken'/'damage-dealt');
+            // they used to emit nothing. The leech-field threading (requiresHpDamage / leechScope)
+            // lands in the buildShipAbilities task and is asserted there.
             const s = ship({
                 activeSkillText:
                     'This Unit gains a Shield equal to 25% of the damage taken when taking HP damage.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const shield = active?.abilities.find((a) => a.type === 'shield');
-            expect(shield).toBeUndefined();
+            expect(shield?.config).toMatchObject({
+                type: 'shield',
+                pct: 25,
+                basis: 'damage-taken',
+            });
         });
     });
 

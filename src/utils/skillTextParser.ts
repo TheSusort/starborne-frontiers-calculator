@@ -1088,12 +1088,16 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
 export interface ParsedHealAbility {
     kind: 'heal' | 'shield';
     pct: number;
-    basis: 'hp' | 'attack' | 'defense' | 'target-hp';
+    basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken';
     target: 'self' | 'ally' | 'all-allies';
     // True when a target phrase was actually matched ("itself", "the ally", "all allies");
     // false when target defaulted to 'self' because the text named no recipient. The
     // slot/damage-aware bare-repair→ally FLIP in buildShipAbilities keys off this flag.
     explicitTarget: boolean;
+    /** Valkyrie: leech scoped to Echoing Burst explosions (detonation credits only). */
+    leechScope?: 'all' | 'detonation';
+    /** Quixilver: damage-taken proc gated on shield punch-through. */
+    requiresHpDamage?: boolean;
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -1125,19 +1129,34 @@ function sentenceBoundsAround(
     return { start, end, text: plain.slice(start, end) };
 }
 
-// Phase-4 / reactive disqualifiers — clause-scoped so an unrelated earlier sentence can't
-// block a legitimate heal later in the same skill text.
-const HEAL_DISQUALIFY_RE =
-    /of the damage (?:taken|dealt)|\bdamage dealt\b|\brevives?\b|\bcheat death\b/i;
+// Phase-4 / reactive disqualifiers — clause-scoped. Damage-leech phrases ("of the
+// damage taken/dealt") are now PARSED (basis 'damage-dealt'/'damage-taken'); only
+// revive content and enemy-action reactions ("when an enemy uses ...") stay out.
+const HEAL_DISQUALIFY_RE = /\brevives?\b|\bcheat death\b|when an enemy uses/i;
 
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
 const HEAL_REPAIR_RE = /\brepairs?\b[^%.;]*?(\d+(?:\.\d+)?)\s*%/gi;
 // Shield amount: "Shield equal to N%".
 const HEAL_SHIELD_RE = /\bshield\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%/gi;
+// Pallas: "heals for 20% of the damage dealt" — the 'heals' verb is parsed ONLY when
+// followed by a leech tail (no general heals-verb support; avoids false positives).
+const LEECH_HEAL_VERB_RE =
+    /\bheals?\s+for\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:the\s+)?damage\s+dealt/gi;
 // A multi-component continuation: "with an additional repair/amount equal to N% of its Defense".
 const HEAL_ADDITIONAL_RE =
     /an?\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
+
+// Leech basis from the sentence tail after the match. ORDER MATTERS: "damage dealt
+// to them/this unit" (Malvex) is damage TAKEN and must be tested before the generic
+// damage-dealt phrasing. No lookbehind (iOS Safari 15).
+function resolveLeechBasis(after: string): 'damage-dealt' | 'damage-taken' | undefined {
+    if (/of\s+the\s+damage\s+taken|damage\s+dealt\s+to\s+(?:them|this\s+unit)/i.test(after)) {
+        return 'damage-taken';
+    }
+    if (/of\s+(?:the\s+)?damage\s+(?:dealt|it\s+deals)/i.test(after)) return 'damage-dealt';
+    return undefined;
+}
 
 /**
  * Resolves the stat basis from the prose of the match's own sentence. Looks for
@@ -1220,9 +1239,39 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // portion of the sentence from the match's position onward so `resolveHealBasis`
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
-            const basis = resolveHealBasis(basisScope);
+            const leechBasis = resolveLeechBasis(basisScope);
+            const basis = leechBasis ?? resolveHealBasis(basisScope);
             const { target, explicit: explicitTarget } = resolveHealTarget(sentence);
-            results.push({ kind, pct, basis, target, explicitTarget });
+            const leechScope: ParsedHealAbility['leechScope'] =
+                leechBasis === 'damage-dealt' && /echoing\s+burst\s+explodes/i.test(sentence)
+                    ? 'detonation'
+                    : undefined;
+            const requiresHpDamage =
+                leechBasis === 'damage-taken' &&
+                /when\s+taking\s+hp\s+damage\s+and\s+still\s+having\s+shield/i.test(sentence)
+                    ? true
+                    : undefined;
+            results.push({
+                kind,
+                pct,
+                basis,
+                target,
+                explicitTarget,
+                ...(leechScope ? { leechScope } : {}),
+                ...(requiresHpDamage ? { requiresHpDamage } : {}),
+            });
+            // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
+            // second SELF entry mirroring the first (5% each, same basis/scope).
+            if (leechBasis && /\bthis\s+unit\s+and\s+the\s+ally\b/i.test(sentence)) {
+                results.push({
+                    kind,
+                    pct,
+                    basis,
+                    target: 'self',
+                    explicitTarget: true,
+                    ...(leechScope ? { leechScope } : {}),
+                });
+            }
 
             // Multi-component continuation ("with an additional repair equal to N% of its
             // Defense") — emit a second entry inheriting this component's target.
@@ -1254,6 +1303,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
     };
 
     emit('heal', HEAL_REPAIR_RE);
+    emit('heal', LEECH_HEAL_VERB_RE);
     emit('shield', HEAL_SHIELD_RE);
     return results;
 }
