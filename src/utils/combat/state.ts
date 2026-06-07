@@ -15,6 +15,29 @@ export function emptyActorDamage(): ActorDamage {
     return { direct: 0, secondary: 0, conditional: 0, corrosion: 0, inferno: 0, detonation: 0 };
 }
 
+/** Per-actor healing contributions within one round (healing-calc adoption; mirrors
+ *  ActorDamage). effectiveHeal/overheal partition the TARGET-routed portion of
+ *  directHeal+hotHeal; non-target recipients count raw only. */
+export interface ActorHealing {
+    directHeal: number;
+    hotHeal: number;
+    shield: number;
+    cleanseCount: number;
+    effectiveHeal: number;
+    overheal: number;
+}
+
+export function emptyActorHealing(): ActorHealing {
+    return {
+        directHeal: 0,
+        hotHeal: 0,
+        shield: 0,
+        cleanseCount: 0,
+        effectiveHeal: 0,
+        overheal: 0,
+    };
+}
+
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
  *  `sourceId` is the applier (per-actor attribution — Task 4): inferno ticks resolve the
  *  applier's current-round effective attack/dotMult/affinityMult, and the damage attributes
@@ -73,6 +96,8 @@ export interface CombatActor {
     stats: ActorStats;
     /** Remaining HP. Phase 1: meaningful for the enemy only (pool − cumulative damage, floored at 0 for HP%-derivation; the sim keeps hitting the dead dummy). */
     currentHp: number;
+    /** Absorption pool (healing mode): additive, capped at max HP, drains before HP. */
+    shieldPool: number;
     turnMeter: number;
     /** Banked charges toward this actor's charged skill (attacker + team). */
     charges: number;
@@ -97,6 +122,7 @@ export function createActor(
     return {
         ...rest,
         currentHp: partial.stats.hp,
+        shieldPool: 0,
         turnMeter: 0,
         charges: startCharged ? chargeCount : 0,
         chargeCount,

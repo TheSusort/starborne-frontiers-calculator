@@ -28,7 +28,13 @@ import {
     toEnemyDotModifier,
     toDotAndPenModifiers,
 } from '../calculators/dpsBuffHelpers';
-import { ActiveDoTStack, PendingAccumulator, PendingBomb, CombatActor } from './state';
+import {
+    ActiveDoTStack,
+    ActorHealing,
+    PendingAccumulator,
+    PendingBomb,
+    CombatActor,
+} from './state';
 import {
     ActiveBuff,
     AbilityStatusPayload,
@@ -65,6 +71,24 @@ export interface PlayerRoundCtx {
     effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
+}
+
+/** Healing-mode context threaded into player turns (and later the executor). The ENGINE
+ *  owns all mutation (applyHealToTarget/grantShieldToTarget close over the live target). */
+export interface HealingRuntimeCtx {
+    targetId: string;
+    credit: (actorId: string, bucket: keyof ActorHealing, amount: number) => void;
+    /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
+    recipientMaxHp: (actorId: string) => number;
+    recipientIncomingHealPct: (actorId: string) => number;
+    /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
+     *  Mutates target.currentHp. Returns the split. */
+    applyHealToTarget: (raw: number) => { consumed: number; overheal: number };
+    /** Additive pool capped at the target's max HP; drains before HP (enemy attacks, Task 8).
+     *  Dead target → no-op. */
+    grantShieldToTarget: (raw: number) => void;
+    /** Fixed player-id order for all-allies recipient routing. */
+    playerIds: string[];
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -122,6 +146,10 @@ export interface PlayerActorRuntime {
     chargedCritGate: RateGate;
     debuffLandingGate: RateGate;
     extendChanceGate: RateGate;
+    /** Heal crit gates (healing calc): SEPARATE from the damage crit gates so drawing a
+     *  heal crit never shifts a heal-carrying ship's damage-crit schedule. */
+    activeHealCritGate: RateGate;
+    chargedHealCritGate: RateGate;
     landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
@@ -161,6 +189,10 @@ export interface PlayerTurnArgs {
      *  so statusEngine/standalone callers without a team need not supply it — when absent the
      *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
     grantAllyCharges?: (amount: number) => void;
+    /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
+     *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
+     *  goldens byte-identical. */
+    healing?: HealingRuntimeCtx;
 }
 
 // ---------------------------------------------------------------------------
@@ -566,9 +598,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffLookup,
         activeCritGate,
         chargedCritGate,
+        activeHealCritGate,
+        chargedHealCritGate,
         debuffLandingGate,
         extendChanceGate,
         landsTimedEnemyApplication,
+        healModifier,
         castSkills: shipSkills,
         hasChargedSkill,
         attack,
@@ -1230,6 +1265,116 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     if (dotsLanded) {
         applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+    }
+
+    // ====================================================================
+    // HEALING MODE — heal/shield/cleanse consumption against the live heal
+    // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
+    // never supplies it, so this block is inert there (goldens byte-identical).
+    // Runs at a fixed sequence point AFTER all DoT-application steps and BEFORE
+    // the turnCtx assembly. Processes gated firing + passive abilities in array
+    // order; heals draw the SEPARATE per-actor heal crit gate (never the damage
+    // crit gate). HoT (hotHeal) ticking is Task 7 — not produced here.
+    // ====================================================================
+    if (args.healing) {
+        const healing = args.healing;
+        const healCritGate = action === 'charged' ? chargedHealCritGate : activeHealCritGate;
+        // Recipient's incoming-heal %: the acting actor reads its own LOCAL folded total;
+        // any other recipient resolves through lastTurnCtxByActor (may be stale/base for a
+        // non-target non-self recipient — an accepted approximation, see plan).
+        const incomingPctFor = (rid: string): number =>
+            rid === actor.id ? incomingHealBuff : healing.recipientIncomingHealPct(rid);
+        // Basis value for a heal/shield ability against recipient `rid`.
+        const basisValue = (
+            basis: 'hp' | 'attack' | 'defense' | 'target-hp',
+            rid: string
+        ): number => {
+            switch (basis) {
+                case 'attack':
+                    return effectiveAttack;
+                case 'defense':
+                    return effectiveDefence;
+                case 'target-hp':
+                    return healing.recipientMaxHp(rid);
+                case 'hp':
+                default:
+                    return effectiveHp;
+            }
+        };
+
+        const healAbilities = [
+            ...(gatedSkill?.abilities ?? []),
+            ...(gatedPassive?.abilities ?? []),
+        ];
+        const healTargets: string[] = [];
+        let healCritCount = 0;
+        let healRawSum = 0;
+
+        for (const ability of healAbilities) {
+            const cfg = ability.config;
+            if (cfg.type === 'heal') {
+                // Recipients (user-confirmed routing): self → caster; ally → the bombarded
+                // target; all-allies → every player in fixed source order.
+                const recipients =
+                    ability.target === 'self'
+                        ? [actor.id]
+                        : ability.target === 'all-allies'
+                          ? healing.playerIds
+                          : [healing.targetId];
+                // ONE crit draw per heal ability (not per recipient).
+                const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
+                if (didCrit) healCritCount += 1;
+                for (const rid of recipients) {
+                    const basis = basisValue(cfg.basis, rid);
+                    const raw =
+                        basis *
+                        (cfg.pct / 100) *
+                        (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
+                        (1 + healModifier / 100) *
+                        (1 + outgoingHealBuff / 100) *
+                        (1 + incomingPctFor(rid) / 100);
+                    healing.credit(actor.id, 'directHeal', raw);
+                    if (rid === healing.targetId) {
+                        const { consumed, overheal } = healing.applyHealToTarget(raw);
+                        healing.credit(actor.id, 'effectiveHeal', consumed);
+                        healing.credit(actor.id, 'overheal', overheal);
+                    }
+                    healTargets.push(rid);
+                    healRawSum += raw;
+                }
+            } else if (cfg.type === 'shield') {
+                // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
+                // outgoingHeal/incomingHeal channels — raw = basis × pct.
+                const recipients =
+                    ability.target === 'self'
+                        ? [actor.id]
+                        : ability.target === 'all-allies'
+                          ? healing.playerIds
+                          : [healing.targetId];
+                for (const rid of recipients) {
+                    const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
+                    healing.credit(actor.id, 'shield', raw);
+                    if (rid === healing.targetId) {
+                        healing.grantShieldToTarget(raw);
+                    }
+                }
+            } else if (cfg.type === 'cleanse') {
+                healing.credit(actor.id, 'cleanseCount', cfg.count);
+            }
+        }
+
+        // ONE heal-performed per cast that healed at least one recipient. critHits is the
+        // number of heal abilities that crit (present-only-when-positive).
+        if (healTargets.length > 0) {
+            bus.emit({
+                type: 'heal-performed',
+                casterId: actor.id,
+                targets: healTargets,
+                round: r,
+                amount: healRawSum,
+                ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+            });
+        }
     }
 
     // Display-only: surface pending accumulate-detonate effects (Echoing Burst — the only
