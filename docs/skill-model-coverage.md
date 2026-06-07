@@ -7,6 +7,7 @@
 > Updated **2026-06-05** after the combat-engine Phase 3 ship (branch `feat/combat-engine-phase3`).
 > Updated **2026-06-05** after the team ShipSkills walk (branch `feat/combat-engine-team-skills-walk`).
 > Updated **2026-06-06** after the ally-crit-dot reactive trigger (branch `feat/combat-engine-ally-crit-dot`).
+> Updated **2026-06-07** after the Healing Calculator engine rebuild (branch `feat/healing-calc-engine`).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -35,16 +36,16 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 | `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ `gateFiringAbilities`; un-thresholded conditions also scale (binary self-crit, per-count subjects) | per-count / binary self-crit via `evaluateCondition` (positional ctx) | **firing + passive** |
-| `heal` | ❌ never emitted | ❌ **type pickable but NO config fields rendered** (label-only in `AbilityCard`) | ❌ **not consumed** | — | — | — |
-| `shield` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
-| `cleanse` / `purge` | ❌ | ❌ label-only | ❌ not consumed | — | — | — |
+| `heal` | ✅ `parseHealAbilities` / `parseHealNoCrit` (basis: caster max HP / Attack / Defense / recipient max HP; self/ally/all-allies targets; sentence-scoped) | ✅ pct, basis, target, noCrit | ✅ **healing calc only** (consumed against a live heal target; provably inert in DPS runs — gated on `healTargetId`) | ⚠️ Phase-4 disqualify guards in parser ("of the damage taken/dealt", revive/Cheat Death stay unparsed); in-sim conditions follow the buff/debuff rules | ✅ formula = casterStat(basis) × pct% × critBlend × (1+healModifier%) × (1+outgoingHeal%) × (1+recipient incomingHeal%) | firing + passive (heals emitted text-position ordered) |
+| `shield` | ✅ `parseHealAbilities` (basis × pct) | ✅ pct, basis, target | ✅ **healing calc only** — additive absorption pool, capped at target max HP, drains before HP, no expiry | ⚠️ same as heal | ✅ basis × pct only (NO crit, NO heal channels — documented assumption) | firing + passive |
+| `cleanse` / `purge` | ✅ `parseCleanse` (cleanse only — count of debuffs removed) | ✅ cleanse count | ⚠️ **healing calc: cleanse OUTPUT COUNT only** (reported, no debuff consumption yet); `purge` stays annotation-only | — | — | firing + passive |
 | `control` | ❌ (Taunt/Provoke parse as buff/debuff *conditions*, not control abilities) | ❌ label-only | ❌ not consumed | — | — | — |
 
 ### Headline gaps (parsed + editable, but sim silently ignores)
 
-1. **heal/shield/cleanse/purge/control** — exist in the model and type picker, have no
-   editor fields and no sim consumption. (Expected: these are the Healing-calc /
-   combat-sim seams.)
+1. **purge/control** — exist in the model and type picker, have no sim consumption.
+   (Heal/shield/cleanse are now parsed + consumed by the **Healing Calculator** — see §5
+   HEALING. Purge/control remain Phase-4 seams.)
 
 ---
 
@@ -97,7 +98,8 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 | `buff/debuff.stackTrigger` | Consumed by the timeline, but not directly editable (comes from the buff picker / parser). |
 | `Condition.buffName` on `enemy-debuff` | Ignored — enemy-debuff count is name-agnostic by design. |
 | `scaling.conditionIndex` | Model supports any index; **editor hardcodes `conditions[0]`**. |
-| `ParsedBuffEffects` heal keys (`outgoingHeal`, `incomingHeal`) | Dropped by `toSimBuffs`/`toEnemyModifiers`. |
+| `ParsedBuffEffects` heal keys (`outgoingHeal`, `incomingHeal`) | Dropped in DPS (`toSimBuffs`/`toEnemyModifiers`); **consumed in the healing calc** as outgoing/incoming repair multipliers. |
+| `ParsedBuffEffects.hotPct` | Parsed from "Repair Over Time I/II/III" buff descriptions ("N% Applying Unit HP%"); **consumed in the healing calc** as a HoT (ticks at the holder's turn). "Everliving Regeneration" is NOT a HoT — it is an incoming-repair amplifier. |
 | `dot.duration` | Finite only — no `'recurring'` DoTs anywhere in the chain (matches game). |
 
 ---
@@ -392,6 +394,82 @@ buff/charge-aura), source it from firing + passive.
   **`RoundData.extraTurns`.** The round data struct gains an optional `extraTurns` field
   counting the extra turns taken by the focus actor that round. Rendered as "+N extra turn"
   in the DPS round chart tooltip.
+- **Healing Calculator engine rebuild (2026-06-07, branch `feat/healing-calc-engine`).**
+  The Healing Calculator now rides the same deterministic combat engine as DPS. The healing
+  path is **gated on `healTargetId`**: when absent the engine runs provably inert for DPS
+  (the 22 DPS goldens are byte-identical), and the healing path only activates when a live
+  heal target is configured. Adapter: `simulateHealing` (`src/utils/calculators/
+  healingEngineAdapter.ts`). Hand-verified by `healingGoldenParity.test.ts` (8 referee-built
+  scenarios). The following rules are game-verified or documented-assumption:
+
+  **Heal formula + channels (game-modeled).** A heal's raw amount =
+  `casterStat(basis) × pct% × critBlend × (1 + healModifier%) × (1 + outgoingHeal%) ×
+  (1 + recipient incomingHeal%)`. The `basis` is one of: caster max HP, caster Attack,
+  caster Defense, or recipient max HP ("their Max HP"). `critBlend` comes from the heal
+  crit schedule (see next). NoCrit heals (Pallas) skip the crit draw entirely (no schedule
+  slot consumed) and use a 1.0 blend.
+
+  **Separate per-actor heal crit gates (WHY: damage-schedule isolation).** Heal crits draw
+  from a **dedicated per-actor heal crit accumulator**, never the damage crit gates. A
+  healer's damage crits and heal crits advance independently, so consuming the damage
+  schedule for a heal (or vice-versa) can never alias the two cadences. This isolation is
+  the same fractional-accumulator discipline the damage gates use, just on a separate
+  schedule per actor.
+
+  **Heal consumption vs a live target.** `effective = min(raw, maxHp − currentHp)`; the
+  shortfall is tracked as overheal. A heal landing on a target already at full HP is 100%
+  overheal. Dead targets (HP floored at 0) receive nothing.
+
+  **Shields (user-verified pool cap 2026-06-07; no-crit/no-channels is an ASSUMPTION —
+  verify in game).** A shield's amount = `basis × pct` only — NO crit blend and NONE of the
+  heal channels (healModifier / outgoingHeal / incomingHeal) apply. It adds to an **additive
+  absorption pool on the target, capped at the target's max HP** (user-verified game rule).
+  The pool **drains before HP** on incoming hits and has **no expiry**. The no-crit /
+  no-channels treatment is a documented assumption pending in-game confirmation.
+
+  **HoT (Repair Over Time) ticking (cast-turn-tick note → VERIFY in game).** "Repair Over
+  Time I/II/III" buff descriptions parse into `hotPct`. A HoT ticks at the **holder's turn
+  start** for `applierMaxHp × hotPct% × stacks × (1 + holder incomingHeal%)`. The applier
+  context is read at **TICK time** (the corrosion rule) — a foreign applier without a live
+  ctx is **strictly skipped** (no tick). A **self-applied HoT ticks on its own cast turn**
+  (flagged for in-game verification — the game may delay the first tick a turn).
+  "Everliving Regeneration" is an incoming-repair amplifier, NOT a HoT.
+
+  **Ally-heal → heal-target routing (user-confirmed).** An `ally`/`all-allies`-targeted heal
+  or shield from any actor lands on the configured heal target (the single tracked recipient
+  this increment). Self-targeted heals stay on the caster. This routing rule was confirmed
+  with the user.
+
+  **Dead-is-dead semantics (game-modeled).** The heal target's HP floors at 0. A destroyed
+  target skips its own turns, receives no further heals, and enemies stop attacking it. The
+  round it dies is reported as `destroyedRound`; the sim continues (other actors still act)
+  so comparison runs complete.
+
+  **Reactive heal triggers (drain-time approximations).** Two reactive triggers are LIVE for
+  healing: `on-ally-critically-repaired` (own crit-repair of an ally — Pallas cleanse) and
+  `on-ally-crit` (per ally critting hit — Pallas charge). The intent executor learned
+  heal/shield/cleanse follow-ups, with documented **drain-time simplifications**:
+  - Reactive heals fold as `basis × pct × (1 + healModifier)` — NO crit, NO outgoing/
+    incoming channels.
+  - Reactive shields fold as `basis × pct` — NO crit, NO channels.
+  - Reactive follow-ups do **NOT** re-emit a `heal-performed` event, so a reactive heal
+    cannot chain into another `on-ally-critically-repaired` listener (no re-emission chain).
+  A new `heal-performed` event is emitted by player-cast heals (the trigger source for
+  `on-ally-critically-repaired`). **Parser gap:** Pallas's "Everliving Regeneration 3" grant
+  does NOT parse (no application verb) — manual editor fallback (see §6).
+
+  **Enemy attackers (offense-only queue actors).** Up to 4 enemy attackers act at their own
+  Speed. Two flavors:
+  - *Manual flat cards* — one basic attack of `attack × 100%` vs the target's defence via
+    `calculateDamageReduction`, with per-hit deterministic crits.
+  - *Ship-backed basics walk* — DAMAGE abilities only (active/charged cadence with the
+    same team-mirror charge banking as the DPS team walk, multipliers, multi-hit per-hit
+    crits). NON-damage enemy abilities (buffs/debuffs/heals on the enemy side) are **skipped
+    until Phase 4**.
+
+  **Healing ignores affinity (this increment).** Heal/shield amounts do not apply an affinity
+  matchup multiplier this increment (the DPS engine does for damage). Team actors heal at
+  `healModifier 0` — `CombatStatBlock` lacks the healModifier field (documented; see §6).
 
 ---
 
@@ -482,9 +560,32 @@ configure it and it looks like it works, but it does nothing".
 >   finding. Valkyrie gets an `auditSkills` allowlist entry for its burst-reference phrasing.
 >   These fold into the existing heal/Phase-4 seam items (§6 items 6 and 9) — no new items.
 >
+> **Shipped 2026-06-07 (Healing Calculator engine rebuild — feat/healing-calc-engine):**
+> - Item 6 (heal/shield consumption) — SHIPPED for the Healing Calculator. heal/shield/cleanse
+>   parsed (`parseHealAbilities`/`parseCleanse`/`parseHealNoCrit`), emitted text-position ordered
+>   by `buildShipAbilities`, and consumed by the engine in healing mode (gated on `healTargetId`;
+>   DPS runs provably inert). `parseSkillHeal` (legacy flat %) deleted. See §5 HEALING for the full
+>   rule set: heal formula + channels, separate per-actor heal crit gates, shield additive pool
+>   (capped at max HP, drains before HP, no expiry), HoT ticking (`hotPct`), ally-heal routing,
+>   dead-is-dead, reactive heal triggers (`on-ally-critically-repaired`, `on-ally-crit`), enemy
+>   attackers (manual flat + ship basics walk), healing-ignores-affinity.
+> - Adapter `simulateHealing`; golden suite `healingGoldenParity.test.ts` (8 scenarios). UI rebuilt
+>   in the DPS-page image (healer config compare, HealTargetPanel, EnemyAttackersPanel, TeamPanel
+>   reuse, Skill Editor heal/shield/cleanse fields, HealingTimelineChart + cumulative comparison,
+>   survival stat).
+>
+> **In-game verification list (healing — assumptions to confirm):**
+> - *Self-HoT cast-turn tick*: a self-applied Repair Over Time ticks on its own cast turn in-sim.
+>   The game may delay the first tick one turn — confirm and adjust if so.
+> - *Shield no-crit / no-channels*: shields use `basis × pct` only (no heal crit, no
+>   healModifier/outgoing/incoming). Confirm shields do not crit or scale with repair channels.
+> - *Shield no-expiry*: the absorption pool persists until drained. Confirm shields do not time out.
+>
 > **Phase 4 pointer (not yet started):**
-> - Enemy offensive actions, `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
->   targeting/taunt/stealth, multi-enemy, heal/shield/cleanse/control consumption, self-HP realism.
+> - Enemy offensive actions (DPS side), `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
+>   targeting/taunt/stealth, multi-enemy, NON-damage enemy abilities in the healing walk,
+>   revive / Cheat Death, damage-reactive shields, cleanse debuff consumption (currently output-count
+>   only), purge/control consumption, self-HP realism.
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
@@ -506,10 +607,13 @@ configure it and it looks like it works, but it does nothing".
    non-derivable triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) remain
    annotation-only (assume-active manual conditions) until Phase 4 brings enemy offensive actions
    and ship-death modeling.
-6. **Heal/shield consumption** — scoped to the Healing-calc adoption spec, not DPS.
+6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
+   and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
+   (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4
+   pointer (revive/Cheat Death, damage-reactive shields, cleanse debuff consumption, purge,
+   NON-damage enemy abilities in the healing walk).
    *Parser false-positive guards (2026-06-06):* Morao's heal-as-secondary and
-   Vindicator/Paracelsus reactive-proc texts now parse clean with no ability emitted —
-   deliberate non-coverage, deferred here.
+   Vindicator/Paracelsus reactive-proc texts parse clean with no DPS ability emitted.
 7. **Team accumulating-status cadence approximation** — a team ship whose accumulating
    (stackTrigger) buff targets `all-allies` stacks on the team actor's real turns, but the
    per-round aura-inclusion tick runs on the attacker's round context. This is conservative
@@ -546,6 +650,16 @@ configure it and it looks like it works, but it does nothing".
     buff abilities from the passive start-of-round clause. Low user-visible impact (most
     Chakara configurations have the attacker as the slowest ship, making the condition always
     true; manual picker is a workaround). Added 2026-06-06; Task 9 locks the damage proc parse.
+11. **Pallas Everliving-Regeneration grant parser gap** — Pallas's text grants "Everliving
+    Regeneration 3" but the phrasing carries no application verb the parser recognises, so no
+    buff ability is emitted. Workaround today: add it manually in the Skill Editor. Resolution:
+    teach the buff auto-fill to recognise the grant phrasing (low user-visible impact — single
+    ship). Added 2026-06-07 (healing rebuild).
+12. **Team-actor healModifier not threaded** — team support ships heal at `healModifier 0`
+    because `CombatStatBlock` has no healModifier field; only the focus healer's healModifier
+    feeds its heal formula. So a team healer's own gear healModifier is invisible to its heals.
+    Resolution: add `healModifier` to `CombatStatBlock` and thread it through the team-actor
+    heal fold (low cost; matters once multi-healer comparisons are common). Added 2026-06-07.
 
 ---
 

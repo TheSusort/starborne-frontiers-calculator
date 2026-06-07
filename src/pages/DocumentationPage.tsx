@@ -2377,11 +2377,72 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Healing Calculator
                                     </h4>
+                                    <p className="text-theme-text mb-2">
+                                        Calculate how much a supporter ship actually keeps a target
+                                        alive. The Healing Calculator runs on the same deterministic
+                                        combat engine as the DPS Calculator — identical inputs
+                                        always produce identical round-by-round results.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Parsed Heal / Shield / Cleanse Abilities:
+                                        </span>{' '}
+                                        When you select a healer, its heal, shield, and cleanse
+                                        abilities are auto-filled from the skill text and shown in
+                                        the per-skill ability editor. Heals scale from the
+                                        configured basis (the caster&apos;s max HP, Attack, or
+                                        Defense, or the recipient&apos;s max HP) by the parsed
+                                        percentage; shields and cleanse counts are editable too.
+                                        Heal modifier, Outgoing Repair, and Incoming Repair all feed
+                                        in as separate multipliers.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Heal Target &amp; Enemy Attackers:
+                                        </span>{' '}
+                                        Pick what the healer is keeping alive — the healer itself,
+                                        another of your ships, or a manual stat line — then add up
+                                        to four enemy attackers that bombard it each round. Enemies
+                                        can be real ships (their charged skills produce realistic
+                                        damage spikes through the same combat walk as the DPS
+                                        Calculator) or quick manual attack/defense lines.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Effective Healing vs Overheal:
+                                        </span>{' '}
+                                        Each round the simulation tracks the target&apos;s HP and
+                                        applies incoming damage and healing in turn order. Healing
+                                        that would push the target above its max HP is counted as
+                                        overheal, so you see the difference between raw healing
+                                        output and the healing that actually mattered.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Shields and Heal-Over-Time:
+                                        </span>{' '}
+                                        Shields build an absorption pool on the target (capped at
+                                        its max HP) that soaks incoming damage before HP is touched,
+                                        and does not expire. Repair Over Time effects tick at the
+                                        holder&apos;s turn for their per-stack amount. Crit heals
+                                        resolve on their own deterministic crit schedule, separate
+                                        from any damage crits.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Survival Metric:</span> The
+                                        summary reports how many rounds the target survives — or the
+                                        round it is destroyed if incoming damage outpaces healing —
+                                        so you can tell at a glance whether a healer keeps its
+                                        charge standing.
+                                    </p>
                                     <p className="text-theme-text">
-                                        Calculate healing output for supporter ships. Heal modifier
-                                        is auto-filled from ship gear when a ship is selected.
-                                        Supports Outgoing Repair buffs as a separate multiplier
-                                        alongside crit and heal modifier.
+                                        <span className="text-primary">Team Healers:</span> Add team
+                                        ships and their parsed heals, shields, and cleanses
+                                        contribute on their own turns, alongside reactive heal
+                                        triggers (such as a ship reacting when it critically repairs
+                                        an ally). The timeline chart shows HP, shield pool, incoming
+                                        damage, and effective healing per round, with a cumulative
+                                        comparison between configurations.
                                     </p>
                                 </div>
 
