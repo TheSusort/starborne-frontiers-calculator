@@ -152,6 +152,50 @@ export interface ActiveDoTState {
 }
 
 /**
+ * Per-walked-team-actor engine-input derivation, shared by the DPS and healing adapters.
+ * For each team actor carrying shipSkills (and stats), resolve its OWN rates exactly as the
+ * attacker's are resolved — landing chance from ITS hacking vs the enemy security with ITS
+ * affinity damage modifier, and affinity damage/crit modifiers from ITS affinity vs the enemy.
+ * The walked actor's selfDotModifier/defensePenetrationBuff start at 0 (its walked statuses
+ * produce those in-loop). A legacy team actor (no shipSkills/stats) passes through unchanged.
+ *
+ * `healModifier` is intentionally NOT threaded: TeamActorInput.stats is a CombatStatBlock,
+ * which carries no healModifier — so walked team actors heal at modifier 0 (the engine's
+ * walk-bundle default). Widening CombatStatBlock is out of scope for this seam.
+ *
+ * Returns undefined when `teamActors` is undefined (preserves the DPS-path shape).
+ */
+export function deriveTeamEngineActors(
+    teamActors: TeamActorInput[] | undefined,
+    enemySecurity: number,
+    enemyAffinity: AffinityName | undefined
+): TeamActorEngineInput[] | undefined {
+    return teamActors?.map((t) => {
+        if (!t.shipSkills || !t.stats) return t;
+        const aff = computeAffinityModifiers(t.affinity, enemyAffinity);
+        const teamEffectiveHacking = t.stats.hacking * (1 + aff.damageModifier / 100);
+        const teamLandingChance =
+            Math.min(100, Math.max(0, teamEffectiveHacking - enemySecurity)) / 100;
+        const teamCharged = selectFiringSkill(t.shipSkills, 'charged');
+        const teamHasChargedSkill = t.chargeCount >= 1 && (teamCharged?.abilities.length ?? 0) > 0;
+        return {
+            ...t,
+            walk: {
+                shipSkills: t.shipSkills,
+                stats: t.stats,
+                debuffLandingChance: teamLandingChance,
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: aff.damageModifier,
+                affinityCritCap: aff.critCap,
+                affinityCritPenalty: aff.critPenalty,
+                hasChargedSkill: teamHasChargedSkill,
+            },
+        };
+    });
+}
+
+/**
  * Thin adapter over the combat engine (`src/utils/combat/engine.ts`). This derives
  * the engine's input from the public DPS input — landing chance, the static
  * defPen/dot self-buff fold, the flat-fields fallback, and the charged-skill check —
@@ -198,35 +242,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // zero-damage charged turns whose statuses apply (spec: hasChargedSkill widening).
     const hasChargedSkill = chargeCount >= 1 && (chargedSkill?.abilities.length ?? 0) > 0;
 
-    // Per-walked-team-actor derivation (Task 4): for each team actor that carries
-    // shipSkills, resolve its OWN rates exactly as the attacker's are resolved above —
-    // landing chance from ITS hacking vs the enemy security with ITS affinity damage
-    // modifier, and affinity damage/crit modifiers from ITS affinity vs the enemy. The
-    // walked actor's selfDotModifier/defensePenetrationBuff start at 0 (its walked statuses
-    // produce those in-loop). A legacy team actor (no shipSkills) passes through unchanged.
-    const engineTeamActors: TeamActorEngineInput[] | undefined = teamActors?.map((t) => {
-        if (!t.shipSkills || !t.stats) return t;
-        const aff = computeAffinityModifiers(t.affinity, input.enemyAffinity);
-        const teamEffectiveHacking = t.stats.hacking * (1 + aff.damageModifier / 100);
-        const teamLandingChance =
-            Math.min(100, Math.max(0, teamEffectiveHacking - enemySecurity)) / 100;
-        const teamCharged = selectFiringSkill(t.shipSkills, 'charged');
-        const teamHasChargedSkill = t.chargeCount >= 1 && (teamCharged?.abilities.length ?? 0) > 0;
-        return {
-            ...t,
-            walk: {
-                shipSkills: t.shipSkills,
-                stats: t.stats,
-                debuffLandingChance: teamLandingChance,
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: aff.damageModifier,
-                affinityCritCap: aff.critCap,
-                affinityCritPenalty: aff.critPenalty,
-                hasChargedSkill: teamHasChargedSkill,
-            },
-        };
-    });
+    // Per-walked-team-actor derivation (Task 4), extracted into a shared helper so the
+    // healing adapter reuses byte-identical walk logic (goldens prove the extraction is
+    // behaviour-preserving).
+    const engineTeamActors = deriveTeamEngineActors(teamActors, enemySecurity, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
     const { rounds, rawTotals } = runCombat({
