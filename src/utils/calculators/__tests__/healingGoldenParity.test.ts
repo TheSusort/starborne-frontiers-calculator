@@ -14,7 +14,8 @@
 //   • REGENERATION IS DELETE-AND-RERUN, NEVER `vitest -u`. To intentionally re-bless
 //     the suite, DELETE `__snapshots__/healingGoldenParity.test.ts.snap` and run the
 //     suite once. Blanket `-u` would silently paper over an unintended change in an
-//     unrelated scenario. (Same rule as the DPS suite.)
+//     unrelated scenario. (This mirrors the DPS suite's convention, enforced by project
+//     docs/process rather than by a header there.)
 //   • HAND-VERIFICATION PROVENANCE. Scenarios 1, 6 and 7 are traced round-by-round in
 //     the commit that introduced this file (formula, gate schedule, shield drain order,
 //     death round). The other scenarios are spot-checked for plausibility (no NaN,
@@ -92,7 +93,7 @@ describe('healingGoldenParity', () => {
     // HAND-VERIFIED. healer hp 10000, active heal 10% hp → raw 1000/round. Healer IS
     // the target, no enemies → full HP every round → all overheal, effectiveHealing 0.
     // crit 0 → no crit fold. 10 active rounds (chargeCount 0). cumulative 1000,2000,…,10000.
-    snap('plain heal cadence (self-heal, no enemies)', () =>
+    const scenario1Input = () =>
         BASE({
             rounds: 10,
             shipSkills: healSkills([
@@ -102,24 +103,14 @@ describe('healingGoldenParity', () => {
                     config: { type: 'heal', pct: 10, basis: 'hp' },
                 }),
             ]),
-        })
-    );
+        });
+
+    snap('plain heal cadence (self-heal, no enemies)', scenario1Input);
 
     // Supplementary in-code assertion for scenario 1.
     it('scenario 1: round-1 directHeal is exactly 1000', () => {
         idCounter = 0;
-        const result = simulateHealing(
-            BASE({
-                rounds: 10,
-                shipSkills: healSkills([
-                    ab({
-                        type: 'heal',
-                        target: 'self',
-                        config: { type: 'heal', pct: 10, basis: 'hp' },
-                    }),
-                ]),
-            })
-        );
+        const result = simulateHealing(scenario1Input());
         expect(result.rounds[0].directHeal).toBe(1000);
     });
 
@@ -293,7 +284,7 @@ describe('healingGoldenParity', () => {
     //       hp 6000.
     //   R3…: steady state — enter 60%, effective 4000 / overheal 1000 each round.
     // targetHpPct declines 100→60 then holds at 60. effectiveHealing>0 AND overheal>0 from R2.
-    snap('pressure (declining HP, partial-deficit effective healing)', () =>
+    const scenario6Input = () =>
         BASE({
             rounds: 10,
             healer: { ...HEALER, hp: 10000, defence: 0 },
@@ -313,35 +304,15 @@ describe('healingGoldenParity', () => {
                     config: { type: 'heal', pct: 50, basis: 'target-hp' },
                 }),
             ]),
-        })
-    );
+        });
+
+    snap('pressure (declining HP, partial-deficit effective healing)', scenario6Input);
 
     // Supplementary in-code assertion for scenario 6: at least one round shows the
     // partial-deficit signature (effectiveHealing > 0 AND overheal > 0).
     it('scenario 6: has a partial-deficit round (effective > 0 AND overheal > 0)', () => {
         idCounter = 0;
-        const result = simulateHealing(
-            BASE({
-                rounds: 10,
-                healer: { ...HEALER, hp: 10000, defence: 0 },
-                healTargetId: 'healer',
-                enemies: [
-                    {
-                        id: 'e1',
-                        stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
-                        chargeCount: 0,
-                        startCharged: false,
-                    },
-                ],
-                shipSkills: healSkills([
-                    ab({
-                        type: 'heal',
-                        target: 'self',
-                        config: { type: 'heal', pct: 50, basis: 'target-hp' },
-                    }),
-                ]),
-            })
-        );
+        const result = simulateHealing(scenario6Input());
         expect(result.rounds.some((r) => r.effectiveHealing > 0 && r.overheal > 0)).toBe(true);
     });
 
@@ -355,7 +326,7 @@ describe('healingGoldenParity', () => {
     //       3000 → hp 0 → DESTROYED round 2.
     //   R3-6: target dead → the healer no longer heals a dead target (directHeal 0),
     //         incomingDamage 0, targetHpPct flatlines at 0. summary.destroyedRound === 2.
-    snap('lethal pressure (target dies mid-run, flatline + post-death overheal)', () =>
+    const scenario7Input = () =>
         BASE({
             rounds: 6,
             healer: { ...HEALER, hp: 5000, defence: 0 },
@@ -376,34 +347,14 @@ describe('healingGoldenParity', () => {
                     config: { type: 'heal', pct: 10, basis: 'hp' },
                 }),
             ]),
-        })
-    );
+        });
+
+    snap('lethal pressure (target dies mid-run, flatline + post-death overheal)', scenario7Input);
 
     // Supplementary in-code assertion for scenario 7: destroyedRound is a number.
     it('scenario 7: summary.destroyedRound is a number', () => {
         idCounter = 0;
-        const result = simulateHealing(
-            BASE({
-                rounds: 6,
-                healer: { ...HEALER, hp: 5000, defence: 0 },
-                healTargetId: 'healer',
-                enemies: [
-                    {
-                        id: 'e1',
-                        stats: { attack: 3000, crit: 0, critDamage: 0, speed: 50 },
-                        chargeCount: 0,
-                        startCharged: false,
-                    },
-                ],
-                shipSkills: healSkills([
-                    ab({
-                        type: 'heal',
-                        target: 'self',
-                        config: { type: 'heal', pct: 10, basis: 'hp' },
-                    }),
-                ]),
-            })
-        );
+        const result = simulateHealing(scenario7Input());
         expect(typeof result.summary.destroyedRound).toBe('number');
     });
 
