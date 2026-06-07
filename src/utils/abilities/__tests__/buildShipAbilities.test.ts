@@ -1275,6 +1275,73 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // Cleanse-triggered & ally-damage-triggered PASSIVE repairs resolve their real recipient
+    // (user-verified 2026-06-07). A bare passive repair (no explicit recipient phrase) is normally
+    // a self-heal, but two trigger shapes flip it to the ally: (A) an "when an ally … damaged"
+    // trigger always heals that damaged ally; (B) a cleanse-trigger heals the cleansed ALLY only
+    // when the caster is a SUPPORTER (supporters cleanse allies), staying SELF for other roles
+    // (defenders cleanse themselves). Canonical cases: Cultivator (SUPPORTER) vs Morao (DEFENDER).
+    // Role is read from `ship.type` (the ship-class field); fixtures set it explicitly per case.
+    describe('cleanse/ally-damage-triggered passive repair recipient', () => {
+        it('Cultivator clause 1: cleanse-trigger on a SUPPORTER passive → ally heal', () => {
+            const s = ship({
+                type: 'SUPPORTER',
+                thirdPassiveSkillText:
+                    "When this unit cleanses a debuff it also repairs 4% of this unit's max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 4, basis: 'hp' },
+            });
+        });
+
+        it('Cultivator clause 2: ally-damaged-trigger passive repair → ally heal', () => {
+            const s = ship({
+                type: 'SUPPORTER',
+                thirdPassiveSkillText:
+                    "When an ally is directly damaged within the active pattern, this unit repairs 8% of this unit's max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+        });
+
+        it('Morao: cleanse-trigger on a DEFENDER passive → both repairs stay self', () => {
+            const s = ship({
+                type: 'DEFENDER',
+                thirdPassiveSkillText:
+                    'This Unit repairs 5% of its max HP every turn and, upon cleansing a debuff, repairs an additional 50% of its max HP while gaining Defense Up 2 for 2 turns.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
+            expect(heals).toHaveLength(2);
+            for (const heal of heals) {
+                expect(heal.target).toBe('self');
+            }
+            expect(
+                heals.map((h) => (h.config as { pct: number }).pct).sort((a, b) => a - b)
+            ).toEqual([5, 50]);
+        });
+
+        it('Anemone: enemy-DoT-trigger passive repair stays self (not an ally trigger)', () => {
+            const s = ship({
+                type: 'DEBUFFER',
+                thirdPassiveSkillText:
+                    "When an enemy takes damage from a Damage over Time effect, repair 5% of this Unit's Max HP.",
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({ type: 'heal', target: 'self' });
+        });
+    });
+
     describe('Pallas-pattern ally-crit reactive triggers', () => {
         // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
         // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).
