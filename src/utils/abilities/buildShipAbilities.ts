@@ -868,6 +868,13 @@ function abilitiesFromText(
                     pct: h.pct,
                     basis: h.basis,
                     ...(h.kind === 'heal' && healNoCrit ? { noCrit: true } : {}),
+                    // Standing leech (passive-slot damage-dealt): default scope 'all'
+                    // (user decision: direct + DoT ticks + detonations). Cast riders
+                    // (active/charged) carry no scope.
+                    ...(h.basis === 'damage-dealt' && slot === 'passive'
+                        ? { leechScope: h.leechScope ?? 'all' }
+                        : {}),
+                    ...(h.requiresHpDamage ? { requiresHpDamage: true } : {}),
                 },
                 autoFilled: true,
             },

@@ -2033,6 +2033,7 @@ describe('damage-leech parsing', () => {
         );
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({ kind: 'heal', pct: 15, basis: 'damage-dealt' });
+        expect(r[0].leechScope).toBeUndefined();
     });
 
     it('Magnolia standing: repairs itself for 20% of the damage it deals to enemies', () => {

@@ -1247,6 +1247,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             const resolved = resolveHealTarget(sentence);
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
             const explicitTarget = leechBasis === 'damage-taken' ? true : resolved.explicit;
+            // Deliberately tested against the WHOLE sentence (not basisScope): trailing-clause
+            // phrases like Quixilver's "when taking HP damage…" sit AFTER the match, so the
+            // basisScope tail discipline that protects basis resolution doesn't apply here.
             const leechScope: ParsedHealAbility['leechScope'] =
                 leechBasis === 'damage-dealt' && /echoing\s+burst\s+explodes/i.test(sentence)
                     ? 'detonation'
