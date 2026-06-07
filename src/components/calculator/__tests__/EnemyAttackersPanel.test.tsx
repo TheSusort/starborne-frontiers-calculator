@@ -1,13 +1,42 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { EnemyAttackersPanel, EnemyAttackerConfig } from '../EnemyAttackersPanel';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
+import { Ship } from '../../../types/ship';
+
+const mockGetShipById = vi.fn((_id: string): Ship | undefined => undefined);
 
 vi.mock('../../../contexts/ShipsContext', () => ({
-    useShips: () => ({ ships: [], getShipById: () => undefined }),
+    useShips: () => ({ ships: [], getShipById: mockGetShipById }),
 }));
 
 vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
+
+// ShipSelector pulls in ShipDisplay which needs many context providers — stub it out.
+vi.mock('../../ship/ShipSelector', () => ({
+    ShipSelector: () => null,
+}));
+
+const minimalShip: Ship = {
+    id: 'x',
+    name: 'Test Ship',
+    rarity: 'LEGENDARY',
+    faction: 'ATLAS_SYNDICATE',
+    type: 'ATTACKER',
+    baseStats: {
+        hp: 0,
+        attack: 0,
+        defence: 0,
+        hacking: 0,
+        security: 0,
+        crit: 0,
+        critDamage: 0,
+        speed: 0,
+    },
+    equipment: {},
+    implants: {},
+    refits: [],
+};
 
 const manual: EnemyAttackerConfig = {
     id: '1',
@@ -23,6 +52,10 @@ const manual: EnemyAttackerConfig = {
 const noop = () => {};
 
 describe('EnemyAttackersPanel', () => {
+    beforeEach(() => {
+        mockGetShipById.mockReset();
+        mockGetShipById.mockReturnValue(undefined);
+    });
     it('renders manual fields with their defaults', () => {
         render(
             <EnemyAttackersPanel
@@ -43,7 +76,8 @@ describe('EnemyAttackersPanel', () => {
         ).not.toBeInTheDocument();
     });
 
-    it('shows the autofill note when an enemy has walked skills (ship picked)', () => {
+    it('shows the autofill note when a ship is selected for an enemy', () => {
+        mockGetShipById.mockImplementation((id: string) => (id === 'x' ? minimalShip : undefined));
         render(
             <EnemyAttackersPanel
                 isOpen
@@ -55,9 +89,9 @@ describe('EnemyAttackersPanel', () => {
                 onUpdate={noop}
             />
         );
-        // getShipById is mocked to undefined; the note depends on selectedShip, so this asserts
-        // the manual path. The note presence is exercised in the page-level integration.
-        expect(screen.getByLabelText('Attack')).toBeInTheDocument();
+        expect(
+            screen.getByText('Damage abilities are simulated; other abilities are not yet.')
+        ).toBeInTheDocument();
     });
 
     it('calls onAdd and hides the add button at the cap', () => {

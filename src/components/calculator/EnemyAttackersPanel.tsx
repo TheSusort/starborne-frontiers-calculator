@@ -47,7 +47,7 @@ const EnemyCard: React.FC<{
     const selectedShip = enemy.shipId ? getShipById(enemy.shipId) : undefined;
 
     return (
-        <div className="p-4 bg-dark border border-dark-border space-y-3">
+        <div className="card space-y-3">
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                     <ShipSelector

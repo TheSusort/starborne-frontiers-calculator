@@ -108,7 +108,7 @@ describe('HealerConfigCard', () => {
                 onShipSkillsChange={noop}
             />
         );
-        expect(screen.getByText('Survived 1 rounds')).toBeInTheDocument();
+        expect(screen.getByText('Survived 1 round')).toBeInTheDocument();
     });
 
     it('shows danger survival text when the target is destroyed', () => {

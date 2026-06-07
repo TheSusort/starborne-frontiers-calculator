@@ -78,7 +78,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
             : null;
 
     return (
-        <div className={`p-4 bg-dark border ${isBest ? 'border-primary' : 'border-dark-border'}`}>
+        <div className={`card ${isBest ? '!border-primary' : ''}`}>
             <div className="space-y-3">
                 <ShipSelector
                     selected={selectedShip ?? null}
@@ -248,7 +248,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                             value={
                                 summary.destroyedRound !== undefined
                                     ? `Destroyed round ${summary.destroyedRound}`
-                                    : `Survived ${simResult.rounds.length} rounds`
+                                    : `Survived ${simResult.rounds.length} ${simResult.rounds.length === 1 ? 'round' : 'rounds'}`
                             }
                             valueClassName={
                                 summary.destroyedRound !== undefined

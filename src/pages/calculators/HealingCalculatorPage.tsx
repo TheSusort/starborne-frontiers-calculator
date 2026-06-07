@@ -516,8 +516,7 @@ const HealingCalculatorPage: React.FC = () => {
                     <TeamPanel
                         isOpen={teamOpen}
                         onToggle={() => setTeamOpen((v) => !v)}
-                        attackerBuffs={[]}
-                        onAttackerBuffsChange={() => {}}
+                        showSharedBuffs={false}
                         enemyAffinity="antimatter"
                         teamShips={teamShips}
                         onAddTeamShip={addTeamShip}
