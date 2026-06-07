@@ -802,6 +802,11 @@ export function parseAllyCritDot(text: string | null | undefined): boolean {
 // even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
 const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
 const ALLY_CRIT_HIT_RE = /when an ally critically hits/i;
+// Cultivator R2: "when an ally is directly damaged within the active pattern, this Unit
+// repairs that ally for 8% …" → a reactive heal/shield/cleanse that fires per ally direct hit.
+// Mirrors the recipient-flip phrasing in flipBareSupportTarget (rule A). Sentence-scoped via
+// phrasePosTrigger so an unrelated heal in a different sentence is never mis-triggered.
+const ALLY_DAMAGED_RE = /when an ally [^.;]*(?:is |gets |was )?(?:directly )?damaged/i;
 
 /**
  * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
@@ -826,6 +831,19 @@ export function detectAllyCritTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
+}
+
+/**
+ * Returns 'on-ally-damaged' when `anchorPos` falls inside the sentence carrying the
+ * "when an ally … damaged" phrase; otherwise undefined. Position-scoped on the RAW text
+ * (so the position aligns with abilitiesFromText's anchors). Cultivator R2's 8% repair fires
+ * per ally direct hit. Reference data: docs/ship-skills.csv.
+ */
+export function detectAllyDamagedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_DAMAGED_RE, anchorPos, 'on-ally-damaged');
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals

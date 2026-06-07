@@ -37,6 +37,7 @@ export type AbilityTrigger =
     | 'on-ally-crit-dot'
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
+    | 'on-ally-damaged'
     | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
@@ -59,6 +60,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',
+    'on-ally-damaged',
     'on-bomb-detonated',
 ]);
 

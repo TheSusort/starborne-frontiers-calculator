@@ -123,6 +123,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    repairs an ally"). One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
  *    fires once PER CRITTING HIT; the owner's own casts and the enemy are excluded.
+ *  - on-ally-damaged → an ALLY's damage-taken (any player actor other than the owner took a direct
+ *    hit): fires once PER LANDED HIT. The owner's own hits are excluded (Phase-4 on-attacked seam).
+ *    Healing-mode only — damage-taken is emitted only from the enemy-attacker turn block.
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
  *
@@ -210,6 +213,15 @@ export function registerReactiveListeners(args: {
                         if (e.actorId === ownerId || e.actorId === enemyId) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
                         for (let i = 0; i < n; i++) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-damaged':
+                    bus.on('damage-taken', (e) => {
+                        // An ALLY (any other player actor) took a direct hit. Once per hit
+                        // event. Own hits excluded (self-damage reactions are the Phase-4
+                        // on-attacked seam). targetId is always a player actor — only the heal
+                        // target takes hits today.
+                        if (e.targetId !== ownerId) enqueue(intent);
                     });
                     break;
                 case 'start-of-round':

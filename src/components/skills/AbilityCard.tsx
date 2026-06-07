@@ -114,6 +114,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-ally-crit-dot', label: 'After an ally inflicts a DoT with a crit' },
     { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
     { value: 'on-ally-crit', label: 'After an ally critically hits' },
+    { value: 'on-ally-damaged', label: 'After an ally takes a direct hit' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
 ];
 

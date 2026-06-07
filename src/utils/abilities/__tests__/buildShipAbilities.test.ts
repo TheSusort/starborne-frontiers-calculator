@@ -367,6 +367,34 @@ describe('buildShipAbilities', () => {
         expect(dot.conditions).toEqual([]);
     });
 
+    it('Cultivator R2 passive: 8% ally-damage repair rides on-ally-damaged; 4% cleanse repair flips to ally (supporter)', () => {
+        // Real R2 text (docs/ship-skills.csv): the 4% repair fires when this unit cleanses a
+        // debuff; the 8% repair fires when an ally is directly damaged. The non-explicit
+        // "of this Unit's Max HP" form (rule A / rule B flips both apply for a SUPPORTER).
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            type: 'SUPPORTER',
+            secondPassiveSkillText:
+                "When this Unit <unit-aid>cleanses a Debuff</unit-aid>, it also <unit-damage>repairs 4%</unit-damage> of this Unit's Max HP.<br /><br />Additionally, when an ally is directly damaged within the active pattern, this Unit <unit-damage>repairs 8%</unit-damage> of this Unit's Max HP.",
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heals = passive.abilities.filter((a) => a.type === 'heal');
+        expect(heals).toHaveLength(2);
+
+        // The 8% repair rides the on-ally-damaged reactive trigger and heals the damaged ally.
+        const eightPct = heals.find((h) => h.config.type === 'heal' && h.config.pct === 8)!;
+        expect(eightPct.trigger).toBe('on-ally-damaged');
+        expect(eightPct.target).toBe('ally');
+        expect(eightPct.config).toMatchObject({ type: 'heal', pct: 8, basis: 'hp' });
+
+        // The 4% cleanse-trigger repair flips to ally (rule B, SUPPORTER) and stays on-cast
+        // (the cleanse trigger is not a live engine trigger this phase).
+        const fourPct = heals.find((h) => h.config.type === 'heal' && h.config.pct === 4)!;
+        expect(fourPct.target).toBe('ally');
+        expect(fourPct.trigger).toBe('on-cast');
+    });
+
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
         const s = ship({
             chargeSkillText:

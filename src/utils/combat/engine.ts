@@ -1494,6 +1494,18 @@ export function runCombat(input: CombatEngineInput): {
                     targetDead: dead,
                 });
                 if (damage > 0) {
+                    // Reactive seam (on-ally-damaged): emit BEFORE the shield/HP application so a
+                    // shield-absorbed hit still counts as "being hit" (documented assumption). The
+                    // listener only enqueues; the per-turn drainIntents() below (turn-generic, runs
+                    // after every turn including this enemy-attacker turn) drains the reactive heals
+                    // same-round AFTER the hit lands — the game's reactive order. `amount` is the
+                    // pre-shield damage.
+                    bus.emit({
+                        type: 'damage-taken',
+                        targetId: healTarget!.id,
+                        round: r,
+                        amount: damage,
+                    });
                     roundIncomingDamage += damage;
                     // Shield-first drain: the absorption pool drains before HP.
                     const absorbed = Math.min(healTarget!.shieldPool, damage);

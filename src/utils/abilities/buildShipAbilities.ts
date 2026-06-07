@@ -31,6 +31,7 @@ import {
     parseAllyCritDot,
     detectCritRepairTrigger,
     detectAllyCritTrigger,
+    detectAllyDamagedTrigger,
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
@@ -844,8 +845,10 @@ function abilitiesFromText(
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
         // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
-        // undefined → on-cast).
-        const reactiveTrigger = detectCritRepairTrigger(text, healPos);
+        // undefined → on-cast). Cultivator R2: a heal/shield anchored in the "when an ally is
+        // directly damaged" sentence rides on-ally-damaged (fires per ally direct hit).
+        const reactiveTrigger =
+            detectCritRepairTrigger(text, healPos) ?? detectAllyDamagedTrigger(text, healPos);
         // Heals always run the bare-support flip (pass hasDamage so a damage-rider repair stays
         // self, and the heal sentence so the self-damage-conditional guard can scope to that clause
         // — Meatshield; see jsdoc). Shields flip ONLY when their own clause uses a GRANT verb
@@ -889,8 +892,10 @@ function abilitiesFromText(
     for (const c of parseCleanse(text)) {
         const cleansePos = text.search(/cleanse/i);
         // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
-        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
-        const reactiveTrigger = detectCritRepairTrigger(text, cleansePos);
+        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped). A
+        // cleanse anchored in a "when an ally is directly damaged" sentence rides on-ally-damaged.
+        const reactiveTrigger =
+            detectCritRepairTrigger(text, cleansePos) ?? detectAllyDamagedTrigger(text, cleansePos);
         const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         out.push({
             ability: {

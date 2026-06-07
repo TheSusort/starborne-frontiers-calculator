@@ -1164,6 +1164,100 @@ describe('healing mode — enemy attackers and target intake', () => {
         }
     });
 
+    // ── on-ally-damaged reactive heal (Cultivator R2) ─────────────────────────
+    // Focus healer (hp 10000) carries a passive reactive heal {on-ally-damaged, ally, 8%, hp}.
+    // Heal target = team actor t1. TWO manual enemies hit t1 each round → the reactive heal
+    // fires TWICE per round (once per landed direct hit), credited to the focus healer.
+    // Per fire: basis 'hp' = OWNER (focus) max HP 10000 × 8% × (1 + 0/100) = 800. Reactive
+    // heals never crit. Two fires/round → 1600 directHeal/round credited to 'attacker'.
+    it('on-ally-damaged: reactive heal fires once per ally direct hit (two enemies → twice/round)', () => {
+        idCounter = 0;
+        const reactiveHeal = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'heal',
+                            target: 'ally',
+                            trigger: 'on-ally-damaged',
+                            config: { type: 'heal', pct: 8, basis: 'hp' },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000, // focus (healer) max HP → reactive heal basis
+                healTargetId: 't1',
+                // t1 is the heal target with a big HP pool so it survives both rounds.
+                teamActors: [teamWalk('t1', 40, 1_000_000)],
+                enemyAttackers: [manualEnemy('atk1', 2000), manualEnemy('atk2', 2000, 45)],
+                shipSkills: reactiveHeal(),
+            })
+        );
+        const rounds = result.healing!.rounds;
+        expect(rounds).toHaveLength(2);
+        // Two enemy hits/round → two reactive fires → directHeal 1600/round, credited to focus.
+        for (const r of rounds) {
+            expect(r.perActor.get('attacker')!.directHeal).toBeCloseTo(1600, 6);
+        }
+        // Total directHeal across both rounds = 3200, all credited to the focus healer.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(3200, 6);
+    });
+
+    // ── on-ally-damaged with ZERO enemies → never fires ───────────────────────
+    it('on-ally-damaged: with no enemy attackers the reactive heal never fires (zero directHeal)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                healTargetId: 't1',
+                teamActors: [teamWalk('t1', 40, 1_000_000)],
+                // No enemyAttackers → no damage-taken events → no reactive heal.
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'ally',
+                                    trigger: 'on-ally-damaged',
+                                    config: { type: 'heal', pct: 8, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        expect(focusHeal(result, 'directHeal')).toBe(0);
+    });
+
+    // ── DPS-mode inertness: no damage-taken event without healing mode ────────
+    // Enemy attackers can't exist without healTargetId (the engine throws), so a DPS-style
+    // run (no healTargetId, no enemyAttackers) emits NO damage-taken events. Verified via bus tap.
+    it('DPS-mode run emits no damage-taken events', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const damageTaken: Extract<CombatEvent, { type: 'damage-taken' }>[] = [];
+        bus.on('damage-taken', (e) => damageTaken.push(e));
+        runCombat(
+            BASE({
+                numRounds: 3,
+                shipSkills: healSkills([
+                    ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                ]),
+                bus,
+            })
+        );
+        expect(damageTaken).toHaveLength(0);
+    });
+
     // ── Heal-deficit clamp under a SHRUNK max HP ──────────────────────────────
     // applyHealToTarget computes consumed = max(0, min(raw, targetMaxHp − currentHp)). The
     // max(0,…) guards the case where a max-HP buff expires and shrinks effectiveMaxHp below the

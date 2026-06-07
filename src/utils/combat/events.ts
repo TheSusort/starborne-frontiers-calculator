@@ -109,6 +109,10 @@ export type CombatEvent =
      *  In both cases `damage` is the realized payout under that path's scaling, not a
      *  normalized value. `actorId` is 'attacker' in both paths. */
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
+    /** A player actor took direct damage from an enemy attacker (healing mode only).
+     *  Emitted once per landed hit (damage > 0 pre-shield; shield-absorbed hits count
+     *  as being hit — documented assumption). */
+    | { type: 'damage-taken'; targetId: string; round: number; amount: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     | { type: 'ship-destroyed'; actorId: string; round: number };
 
