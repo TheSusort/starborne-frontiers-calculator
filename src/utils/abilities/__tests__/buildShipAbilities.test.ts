@@ -1239,6 +1239,40 @@ describe('buildShipAbilities', () => {
             const shield = active?.abilities.find((a) => a.type === 'shield');
             expect(shield).toMatchObject({ type: 'shield', target: 'self' });
         });
+
+        // User-verified 2026-06-07: a bare repair whose OWN sentence is gated on a self-damage
+        // condition ("if this unit has been directly damaged this round") is a SELF-heal — the caster
+        // tanks damage and heals itself. The flip to 'ally' must NOT apply even though the skill has
+        // no damage component and no explicit target phrase.
+        it('Meatshield active: self-damage-conditional bare repair stays self (real text)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains <unit-skill>Inc. Repair Up III</unit-skill> for 2 turns.<br /><br /> If this Unit has been directly damaged this round, it <unit-damage>repairs 5%</unit-damage> of its max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                config: { type: 'heal', pct: 5, basis: 'hp' },
+            });
+        });
+
+        // Regression lock: Oleander's active has no self-damage conditional in the repair sentence,
+        // so the flip to 'ally' still applies (user-confirmed correct 2026-06-07).
+        it('Oleander active: bare repair without self-damage condition → still flips to ally (regression)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit grants <unit-skill>Hacking Up III</unit-skill> for 2 turns and <unit-damage>repairs 100%</unit-damage> of its Max HP, with an additional <unit-damage>8.5%</unit-damage> repair for each debuffed enemy.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 100, basis: 'hp' },
+            });
+        });
     });
 
     describe('Pallas-pattern ally-crit reactive triggers', () => {

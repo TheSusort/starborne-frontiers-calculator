@@ -528,12 +528,20 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected. Shields are
  * deliberately NOT flipped ("gains a Shield" stays self).
+ *
+ * Exception (user-verified 2026-06-07): a bare repair whose own sentence is gated on a
+ * SELF-DAMAGE condition ("if this unit has been directly damaged this round") is a SELF-heal —
+ * the caster is the one absorbing hits and recovering. Meatshield's active is the canonical case:
+ * "If this Unit has been directly damaged this round, it repairs 5% of its max HP." must stay
+ * 'self'. `selfDamageSentence` carries the sentence containing the heal match so the guard is
+ * scoped to that clause alone (not a skill-wide keyword scan).
  */
 function flipBareSupportTarget(
     target: 'self' | 'ally' | 'all-allies',
     explicitTarget: boolean,
     slot: SkillSlot,
-    hasDamage: boolean
+    hasDamage: boolean,
+    selfDamageSentence?: string
 ): 'self' | 'ally' | 'all-allies' {
     if (
         !explicitTarget &&
@@ -541,6 +549,15 @@ function flipBareSupportTarget(
         (slot === 'active' || slot === 'charged') &&
         !hasDamage
     ) {
+        // Self-damage-conditional: the heal sentence conditions on "if this unit (has been|was|is|
+        // gets|takes) … damag…" → the caster is the tank, so this is a self-heal, not an ally-heal.
+        // No lookbehind needed — the sentence boundary is already scoped by sentenceContaining().
+        if (
+            selfDamageSentence &&
+            /if this unit (?:has been|was|is|gets|takes)[^.;]*damag/i.test(selfDamageSentence)
+        ) {
+            return 'self';
+        }
         return 'ally';
     }
     return target;
@@ -792,9 +809,14 @@ function abilitiesFromText(text: string, slot: SkillSlot): PositionedAbility[] {
         // undefined → on-cast).
         const reactiveTrigger = detectCritRepairTrigger(text, healPos);
         // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
+        // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
+        // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
+        const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+        const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
+        const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
         const healTarget =
             h.kind === 'heal'
-                ? flipBareSupportTarget(h.target, h.explicitTarget, slot, mult > 0)
+                ? flipBareSupportTarget(h.target, h.explicitTarget, slot, mult > 0, healSentence)
                 : h.target;
         out.push({
             ability: {
