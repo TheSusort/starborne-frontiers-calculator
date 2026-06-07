@@ -46,6 +46,13 @@ road to the full simulator page.
 6. **Intake model: one selected target ship.** All enemies bombard a single
    designated target (any ship, including the healer itself for self-sustain
    kits). Per-enemy targeting and whole-team AoE are Phase 4.
+9. **Enemy depth: basics walk** *(added 2026-06-07)*. Enemy cards carry a ship
+   selector; a ship-backed enemy walks its **damage abilities only** —
+   active/charged cadence with charge banking, skill multipliers, multi-hit,
+   per-hit deterministic crits. Enemy debuffs/DoTs/buffs/heals are skipped
+   until Phase 4 (visible as unmodeled in the editor/audit posture). Manual
+   flat cards ({attack, crit, critDamage, speed} — one basic attack per turn)
+   remain as the fallback for hypothetical enemies.
 7. **Death rule: dead is dead; sim continues.** Target HP floors at 0; no
    heals land after death; rounds keep running (charts stay comparable);
    result reports `destroyedRound`. Survival becomes a headline metric.
@@ -124,20 +131,38 @@ road to the full simulator page.
 
 ## Section 2 — Engine: enemy pressure, consumption, adapter
 
-### Enemy model (Phase-4-lite)
+### Enemy model (Phase-4-lite, basics walk)
 
-`HealingSimulationInput.enemies[]`: each enemy is `{ attack, crit, critDamage,
-speed }`. Enemies join the round turn queue as real actors at their speed (the
-queue machinery exists; enemies already take turns — that's when DoTs tick).
-On its turn, each enemy makes **one basic attack** against the designated
-target:
+`HealingSimulationInput.enemies[]`: each enemy mirrors the `TeamActorInput`
+shape — `{ stats: { attack, crit, critDamage, speed }, chargeCount?,
+startCharged?, shipSkills? }`. Enemies join the round turn queue as real
+actors at their speed (the queue machinery exists; enemies already take
+turns — that's when DoTs tick). NOTE: the existing enemy turn
+(`engine.ts:1094`) only ticks DoT containers today — enemy offense is
+**net-new behavior** on that turn path, not reuse of existing enemy-damage
+code.
 
-- Damage = the existing attack-vs-defence formula using the **target's current
-  effective defence** (so Defense Up buffs from any kit reduce intake — the
-  archetype-comparison motivation).
-- Crit via a per-enemy deterministic rate gate (`makeRateGate`), fixed queue
-  order. Single hit per attack.
-- No enemy skills, DoTs, debuffs, or multi-hit — Phase 4.
+Two enemy flavors, one turn handler:
+
+- **Manual flat card** (no `shipSkills`): one basic attack per turn. Damage =
+  the existing attack-vs-defence formula (`calculateDamageReduction`) using
+  the **target's current effective defence** (so Defense Up buffs from any
+  kit reduce intake — the archetype-comparison motivation). Crit via a
+  per-enemy deterministic rate gate (`makeRateGate`), fixed queue order,
+  single hit.
+- **Ship-backed card** (`shipSkills` present): walks **damage abilities
+  only** — active/charged cadence via the existing firing-skill selection and
+  charge banking (`CombatActor.charges`/`chargeCount` already exist on every
+  actor), skill damage multipliers, multi-hit with per-hit deterministic crit
+  draws (`drawHits`), all through the same attack-vs-defence formula against
+  the target. This produces **pressure patterns** (charged-nuke spikes vs
+  steady chip) — the burst-recovery vs sustain healer separation. Non-damage
+  enemy abilities (debuffs, DoTs, buffs, heals, controls) are skipped this
+  increment — Phase 4.
+
+Player-side "enemy"-targeted abilities (e.g. the healer's own attack feeding
+on-crit heal triggers) route to the **first enemy in input order**; player
+damage output is reported nowhere in the healing result (it's not the metric).
 
 ### Heal target + consumption
 
@@ -211,10 +236,14 @@ interface HealingSimulationInput {
     // stats (hp/attack/defence/crit/critDamage/healModifier/speed/hacking),
     // chargeCount, startCharged, shipSkills, selfBuffs, teamActors, rounds, bus?
     healTargetId: string;            // which actor the enemies bombard
-    enemies: SimpleEnemyInput[];     // { attack, crit, critDamage, speed }
+    enemies: EnemyActorInput[];      // { stats: {attack, crit, critDamage, speed},
+                                     //   chargeCount?, startCharged?, shipSkills? }
+                                     // shipSkills → basics walk (damage cadence);
+                                     // absent → one basic attack per turn
     // NO enemyDefense/enemyHp for offense math — the dummy enemy the DPS calc
     // attacks is irrelevant here; heal triggers needing an enemy (on-crit
-    // attack heals) get a zero-offense dummy supplied internally.
+    // attack heals) target the first enemy (or a zero-offense dummy when the
+    // enemy list is empty).
 }
 
 interface HealingRoundData {
@@ -282,8 +311,11 @@ Mirrors the DPS page structure:
 - Ship selector modal (focus healer).
 - **Heal-target slot**: ship selector for the bombarded target (may equal the
   healer).
-- **Enemy list editor**: add/remove rows of `attack / crit / crit damage /
-  speed` — `Input`s in a `card`; no ship selector needed.
+- **Enemy attacker cards**: add/remove enemy cards. Each card has a ship
+  selector (auto-fills attack/crit/critDamage/speed/chargeCount + parsed
+  damage skills for the basics walk) OR manual flat inputs (`attack / crit /
+  crit damage / speed` — basic attack per turn). Ship-backed cards surface
+  which abilities are walked vs skipped (damage only this increment).
 - Skill Editor: heal/shield/cleanse abilities become **editable** —
   `AbilityCard` gains `pct` input + `basis` select for heal/shield and `count`
   input for cleanse (today these types render label-only).
@@ -309,13 +341,16 @@ consumers).
   `hotPct`; engine consumption (crit-heal gates, HoT applier-context ticking,
   `incomingHeal`/`outgoingHeal` channels, all-allies summing, `target-hp`
   basis); enemy basic attacks (formula vs target defence, deterministic crit
-  gates, queue order); shield pool (additive, max-HP cap, drain order);
+  gates, queue order); enemy basics walk (charged cadence, multi-hit per-hit
+  crits, non-damage abilities skipped); shield pool (additive, max-HP cap,
+  drain order);
   overheal split; death semantics (`destroyedRound`, no post-death heals);
   `on-ally-critically-repaired` trigger; adapter shape.
 - **New healing golden suite** (`healingGoldenParity.test.ts`): hand-verified
   snapshots — plain heal cadence, charged heal, HoT, reactive trigger, team
   healing, pressure scenario (target damaged, overheal + shield absorption),
-  lethal-pressure scenario (target dies). Same referee discipline: regenerate
+  lethal-pressure scenario (target dies), spike-pressure scenario (ship-backed
+  enemy with charged nuke cadence). Same referee discipline: regenerate
   only by delete + re-run, never `vitest -u`.
 - DPS golden parity: 22 snapshots byte-identical (see Section 2).
 - Live verification with the user's 212-ship fleet (dev server :3002) at the
@@ -356,8 +391,9 @@ consumers).
 ## Out of scope (deferred)
 
 - Revive/Cheat Death (target death is final this increment).
-- Enemy skills, DoTs, debuffs, multi-hit, per-enemy targeting, whole-team
-  intake (Phase 4).
+- Enemy non-damage abilities — debuffs on the target, enemy self-buffs, enemy
+  DoTs/heals/controls — plus per-enemy targeting and whole-team intake
+  (Phase 4). Enemy DAMAGE abilities walk this increment (decision 9).
 - Real `selfHpPct` for non-target actors (Phase 4).
 - Damage-reactive shields ("equal to N% of damage taken") (Phase 4).
 - Cleanse debuff-consumption modeling (Phase 4).
@@ -376,3 +412,7 @@ consumers).
 - **2026-06-07 (user correction):** ally-targeted heals (incl. "most missing
   health") resolve to the heal target — NOT to self. Self-routing only
   coincides when the heal target is the healer itself.
+- **2026-06-07 (user request):** enemies upgraded from flat rows to **enemy
+  attacker cards** with ship selector + basics walk (damage abilities only:
+  cadence, multipliers, multi-hit, per-hit crits). Decision 9 added; manual
+  flat cards remain the fallback. Full enemy kits stay Phase 4.
