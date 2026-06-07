@@ -550,6 +550,7 @@ export const AbilityCard: React.FC<Props> = ({
                             <Input
                                 label="Percent"
                                 type="number"
+                                min={0}
                                 step="0.01"
                                 value={config.pct}
                                 onChange={(e) =>
@@ -597,9 +598,7 @@ export const AbilityCard: React.FC<Props> = ({
             default:
                 return (
                     <p className="text-xs text-theme-text-secondary">
-                        {NOT_SIMULATED_TYPES.has(ability.type)
-                            ? NOT_SIMULATED_NOTE
-                            : 'No editable fields for this ability type.'}
+                        No editable fields for this ability type.
                     </p>
                 );
         }
@@ -664,6 +663,13 @@ export const AbilityCard: React.FC<Props> = ({
                 !LIVE_TRIGGERS.has(ability.trigger) && (
                     <p className="text-xs text-yellow-400">{PASSIVE_NOOP_WARNING}</p>
                 )}
+
+            {/* Not-simulated note is independent of the field editor so it always
+                shows for flagged types even when a case provides editable fields
+                (e.g. purge: count is editable for annotation but not yet simulated). */}
+            {NOT_SIMULATED_TYPES.has(ability.type) && (
+                <p className="text-xs text-theme-text-secondary">{NOT_SIMULATED_NOTE}</p>
+            )}
 
             <Select
                 label="Target"
