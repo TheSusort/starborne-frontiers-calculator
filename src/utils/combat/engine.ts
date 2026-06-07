@@ -1038,6 +1038,37 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
+    // The heal target's passive damage-taken abilities (damage-leech spec §5): each enemy
+    // ATTACK on the target procs these AFTER the attack's shield-first drain. Sibling shape
+    // to the standing leeches above. Enemy attacks only ever hit the heal target in this
+    // model, so only the heal target's runtime is scanned. Healing mode only.
+    interface TakenLeech {
+        kind: 'heal' | 'shield';
+        pct: number;
+        noCrit: boolean;
+        requiresHpDamage: boolean;
+    }
+    const takenLeeches: TakenLeech[] = [];
+    if (healTarget) {
+        const rt = runtimesById.get(healTarget.id);
+        if (rt) {
+            for (const slot of rt.castSkills.slots) {
+                if (slot.slot !== 'passive') continue;
+                for (const a of slot.abilities) {
+                    const c = a.config;
+                    if ((c.type === 'heal' || c.type === 'shield') && c.basis === 'damage-taken') {
+                        takenLeeches.push({
+                            kind: c.type,
+                            pct: c.pct,
+                            noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
+                            requiresHpDamage: c.requiresHpDamage ?? false,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
     // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
@@ -1367,6 +1398,9 @@ export function runCombat(input: CombatEngineInput): {
                 // clobber them. direct/secondary/conditional are single-focus-turn
                 // today; += keeps the 0..N-turn seam additive.
                 const d = dmg(actor.id);
+                // secondary/conditional are display sub-buckets already rolled into
+                // turn.directDamage — they must NOT be routed through creditDamage or the
+                // standing-leech hook would double-count them.
                 d.secondary += turn.secondaryDamage;
                 d.conditional += turn.conditionalDamage;
                 creditDamage(actor.id, 'direct', turn.directDamage);
@@ -1579,7 +1613,9 @@ export function runCombat(input: CombatEngineInput): {
                 });
                 if (damage > 0) {
                     roundIncomingDamage += damage;
-                    // Shield-first drain: the absorption pool drains before HP.
+                    // Shield-first drain: the absorption pool drains before HP. Capture the
+                    // pre-drain pool for the punch-through gate (Quixilver) below.
+                    const shieldBefore = healTarget!.shieldPool;
                     const absorbed = Math.min(healTarget!.shieldPool, damage);
                     healTarget!.shieldPool -= absorbed;
                     roundShieldAbsorbed += absorbed;
@@ -1592,6 +1628,37 @@ export function runCombat(input: CombatEngineInput): {
                     if (wasAlive && healTarget!.currentHp <= 0) {
                         healTargetDestroyedRound = r;
                         bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+                    }
+
+                    // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
+                    // AFTER this attack's drain so the proc never absorbs its own trigger.
+                    // raw scales from the FULL attack damage, not the HP portion. Quixilver's
+                    // punch-through gate (requiresHpDamage): shield present at attack start
+                    // AND HP damage dealt; Malvex is unconditional.
+                    if (takenLeeches.length > 0 && healingCtx) {
+                        const hpDamage = damage - absorbed;
+                        const rt = runtimesById.get(healTarget!.id);
+                        for (const e of takenLeeches) {
+                            if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
+                                continue;
+                            }
+                            let raw = damage * (e.pct / 100);
+                            if (e.kind === 'heal' && rt) {
+                                raw *= 1 + rt.healModifier / 100;
+                                if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
+                                    raw *= 1 + rt.critDamage / 100;
+                                }
+                            }
+                            if (e.kind === 'heal') {
+                                healingCtx.credit(healTarget!.id, 'directHeal', raw);
+                                const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
+                                healingCtx.credit(healTarget!.id, 'effectiveHeal', consumed);
+                                healingCtx.credit(healTarget!.id, 'overheal', overheal);
+                            } else {
+                                healingCtx.credit(healTarget!.id, 'shield', raw);
+                                healingCtx.grantShieldToTarget(raw);
+                            }
+                        }
                     }
                 }
             }

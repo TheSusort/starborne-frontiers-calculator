@@ -403,3 +403,197 @@ describe('standing-leech hook — damage-dealt passive', () => {
         expect(sumHeal(result, 'directHeal')).toBeCloseTo(1500, 4);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 7: damage-taken procs (damage-leech spec §5). A passive-slot heal/shield
+// ability with basis 'damage-taken' on the HEAL TARGET procs once per enemy ATTACK,
+// AFTER that attack's shield-first drain (so the proc never absorbs its own trigger).
+// raw = FULL attack damage × pct (not just the HP portion). Quixilver's punch-through
+// gate (requiresHpDamage): the attack must have started with shield > 0 AND dealt HP
+// damage. Malvex is unconditional. Shield-kind only → fully deterministic (no folds).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('damage-taken procs — passive on the heal target', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    // Manual enemy attacker, speed 10 so it always acts AFTER the focus attacker (default
+    // speed) — guarantees any same-turn active shield is granted before the attack lands.
+    const manualEnemy = (id: string, attack: number, speed = 10): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    const takenShield = (pct: number, requiresHpDamage = false): Ability =>
+        ab({
+            type: 'shield',
+            target: 'self',
+            config: { type: 'shield', pct, basis: 'damage-taken', requiresHpDamage },
+        });
+
+    // Active-slot shield to seed a pre-existing pool (basis 'hp' → pct% of max HP).
+    const activeShield = (pct: number): Ability =>
+        ab({
+            type: 'shield',
+            target: 'self',
+            config: { type: 'shield', pct, basis: 'hp' },
+        });
+
+    const incoming = (result: ReturnType<typeof runCombat>, round: number): number =>
+        result.healing?.rounds[round - 1]?.incomingDamage ?? 0;
+    const shieldAbsorbed = (result: ReturnType<typeof runCombat>, round: number): number =>
+        result.healing?.rounds[round - 1]?.shieldAbsorbed ?? 0;
+
+    // ── Test 1: Malvex shape — unconditional shield proc grows the pool ──────────
+    it('malvex: passive 15% damage-taken shield grows the pool each attack', () => {
+        idCounter = 0;
+        // attack 2000, defence 0 → D = 2000/round. No pre-existing shield.
+        //   R1: shieldBefore 0, absorbed 0, hpDamage 2000. Proc unconditional → shield += 300.
+        //   R2: shieldBefore 300, absorbed 300 (the R1 proc), proc again → shield += 300.
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100)] },
+                        { slot: 'passive', abilities: [takenShield(15)] },
+                    ],
+                },
+            })
+        );
+        // Shield bucket: 2000 × 0.15 = 300 per attack, both rounds → 600.
+        expect(sumHeal(result, 'shield')).toBeCloseTo(600, 4);
+        // The R2 attack drains the R1 proc (300) — proof the pool actually grew & persisted.
+        expect(shieldAbsorbed(result, 2)).toBeCloseTo(300, 4);
+    });
+
+    // ── Test 2: Quixilver gate, no shield at attack start → no proc ──────────────
+    it('quixilver gate: no shield at attack start → no proc', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100)] },
+                        { slot: 'passive', abilities: [takenShield(25, true)] },
+                    ],
+                },
+            })
+        );
+        // requiresHpDamage gate needs shieldBefore > 0; pool starts empty and never grows
+        // (the proc itself never fires) → zero shield ever.
+        expect(sumHeal(result, 'shield')).toBe(0);
+    });
+
+    // ── Test 3: Quixilver punch-through → proc fires on FULL attack damage ───────
+    it('quixilver punch-through: shield drained AND HP damage dealt → proc on full damage', () => {
+        idCounter = 0;
+        // Active shield 10% of 10000 = 1000 (granted on the attacker's turn, before the
+        // enemy at speed 10 attacks). Enemy D = 2000:
+        //   shieldBefore 1000 > 0, absorbed 1000, hpDamage 1000 > 0 → gate passes.
+        //   proc = 2000 × 0.25 = 500 (FULL attack damage, not the 1000 HP portion).
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100), activeShield(10)] },
+                        { slot: 'passive', abilities: [takenShield(25, true)] },
+                    ],
+                },
+            })
+        );
+        // Shield bucket = active grant (1000) + proc (500) = 1500.
+        expect(sumHeal(result, 'shield')).toBeCloseTo(1500, 4);
+        // Only the pre-existing 1000 pool was absorbed — the proc applied AFTER the drain.
+        expect(shieldAbsorbed(result, 1)).toBeCloseTo(1000, 4);
+        expect(incoming(result, 1)).toBeCloseTo(2000, 4);
+    });
+
+    // ── Test 4: Quixilver gate, attack fully absorbed → no HP damage → no proc ───
+    it('quixilver gate: shield fully absorbs the attack (hpDamage 0) → no proc', () => {
+        idCounter = 0;
+        // Active shield 50% = 5000 pool. Enemy D = 2000 → absorbed 2000, hpDamage 0 → gate
+        // fails (no HP damage). Only the active grant (5000) lands; no +500 proc.
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100), activeShield(50)] },
+                        { slot: 'passive', abilities: [takenShield(25, true)] },
+                    ],
+                },
+            })
+        );
+        expect(sumHeal(result, 'shield')).toBeCloseTo(5000, 4);
+        expect(shieldAbsorbed(result, 1)).toBeCloseTo(2000, 4);
+    });
+
+    // ── Test 5: proc applies AFTER the drain — granting attack gets no absorption ─
+    it('proc-after-drain: the triggering attack is never absorbed by its own proc', () => {
+        idCounter = 0;
+        // Malvex 15%, 2 rounds, no pre-existing pool.
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100)] },
+                        { slot: 'passive', abilities: [takenShield(15)] },
+                    ],
+                },
+            })
+        );
+        // R1: pool empty at attack start → 0 absorbed (the proc shield is NOT available to
+        // its own trigger). R2: the R1 proc (300) is available → 300 absorbed.
+        expect(shieldAbsorbed(result, 1)).toBe(0);
+        expect(shieldAbsorbed(result, 2)).toBeCloseTo(300, 4);
+    });
+
+    // ── Test 6: dead target — grantShieldToTarget no-ops, no crash ───────────────
+    it('dead target: a lethal attack triggers no proc grant and does not crash', () => {
+        idCounter = 0;
+        // hp 1000, enemy D = 5000 → kills the target. The proc's grantShieldToTarget is a
+        // no-op on a dead target (existing semantics). No throw.
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [manualEnemy('atk1', 5000)],
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [damageAb(100)] },
+                        { slot: 'passive', abilities: [takenShield(15)] },
+                    ],
+                },
+            })
+        );
+        expect(result.healing?.destroyedRound).toBe(1);
+        // The grant no-ops on a dead target, but the bucket still credits the raw shield
+        // (display sub-bucket): 5000 × 0.15 = 750 credited, 0 actually pooled.
+        expect(sumHeal(result, 'shield')).toBeCloseTo(750, 4);
+    });
+});
