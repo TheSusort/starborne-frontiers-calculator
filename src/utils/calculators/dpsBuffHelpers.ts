@@ -32,6 +32,24 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
             });
         if (parsedEffects.hp !== undefined)
             entries.push({ id: `${s.id}-hp`, stat: 'hp', value: parsedEffects.hp * stacks });
+        if (parsedEffects.outgoingHeal !== undefined)
+            entries.push({
+                id: `${s.id}-oh`,
+                stat: 'outgoingHeal',
+                value: parsedEffects.outgoingHeal * stacks,
+            });
+        if (parsedEffects.incomingHeal !== undefined)
+            entries.push({
+                id: `${s.id}-ih`,
+                stat: 'incomingHeal',
+                value: parsedEffects.incomingHeal * stacks,
+            });
+        if (parsedEffects.hotPct !== undefined)
+            entries.push({
+                id: `${s.id}-hot`,
+                stat: 'hotPct',
+                value: parsedEffects.hotPct * stacks,
+            });
         return entries;
     });
 }

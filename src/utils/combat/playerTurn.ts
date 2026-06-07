@@ -57,6 +57,14 @@ export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
     affinityMult: number;
+    /** Healing-calc seams (additive): the actor's current effective defence/max-HP, and its
+     *  outgoing/incoming-heal % as of its last turn — read by enemy attacks (target defence),
+     *  'target-hp' heals, outgoing-heal scaling, and incoming-heal amplification (corrosion
+     *  applier-ctx rule). */
+    effectiveDefence: number;
+    effectiveMaxHp: number;
+    outgoingHealPct: number;
+    incomingHealPct: number;
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -98,6 +106,8 @@ export interface PlayerActorRuntime {
     defensePenetration: number;
     defence: number;
     hp: number;
+    /** Caster heal-modifier stat (healing calc). Default 0. */
+    healModifier: number;
     // Per-actor adapter-derived rates
     debuffLandingChance: number;
     selfDotModifier: number;
@@ -188,7 +198,24 @@ function calculateBuffTotals(buffs: Buff[]) {
         .filter((b) => b.stat === 'defence')
         .reduce((sum, b) => sum + b.value, 0);
     const hpBuff = buffs.filter((b) => b.stat === 'hp').reduce((sum, b) => sum + b.value, 0);
-    return { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff };
+    // Heal channels (healing calc). hotPct is intentionally NOT summed here: HoTs need
+    // per-status applier identity, so a later task reads those statuses directly.
+    const outgoingHealBuff = buffs
+        .filter((b) => b.stat === 'outgoingHeal')
+        .reduce((sum, b) => sum + b.value, 0);
+    const incomingHealBuff = buffs
+        .filter((b) => b.stat === 'incomingHeal')
+        .reduce((sum, b) => sum + b.value, 0);
+    return {
+        attackBuff,
+        critBuff,
+        critDamageBuff,
+        outgoingDamageBuff,
+        defenceBuff,
+        hpBuff,
+        outgoingHealBuff,
+        incomingHealBuff,
+    };
 }
 
 // Expand an active buff/debuff into its underlying SelectedGameBuff effects.
@@ -629,11 +656,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledSelfBuffNames = entry.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
-    let { attackBuff, critBuff, critDamageBuff, outgoingDamageBuff, defenceBuff, hpBuff } =
-        resolveSelfBuffTotals({
-            activeSelfBuffs: entry.activeSelfBuffs,
-            selfBuffLookup,
-        });
+    let {
+        attackBuff,
+        critBuff,
+        critDamageBuff,
+        outgoingDamageBuff,
+        defenceBuff,
+        hpBuff,
+        outgoingHealBuff,
+        incomingHealBuff,
+    } = resolveSelfBuffTotals({
+        activeSelfBuffs: entry.activeSelfBuffs,
+        selfBuffLookup,
+    });
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
     // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
@@ -876,6 +911,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     outgoingDamageBuff += abilitySelfTotals.outgoingDamageBuff;
     defenceBuff += abilitySelfTotals.defenceBuff;
     hpBuff += abilitySelfTotals.hpBuff;
+    outgoingHealBuff += abilitySelfTotals.outgoingHealBuff;
+    incomingHealBuff += abilitySelfTotals.incomingHealBuff;
 
     // (f) Per-round defPen/dot fold from ability-status payloads (KNOWN-DIFF b): these
     // no longer ride the always-on static toDotAndPenModifiers path (the adapter feeds
@@ -1210,7 +1247,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Round-scoped context the enemy's DoT-processing turn needs (this actor's). With a
     // faster enemy the enemy reads the PREVIOUS round's context; at default speeds the
     // player always precedes the enemy. The caller stores it in lastTurnCtxByActor[actor.id].
-    const turnCtx: PlayerRoundCtx = { effectiveAttack, dotMult, affinityMult };
+    const turnCtx: PlayerRoundCtx = {
+        effectiveAttack,
+        dotMult,
+        affinityMult,
+        effectiveDefence,
+        effectiveMaxHp: effectiveHp,
+        outgoingHealPct: outgoingHealBuff,
+        incomingHealPct: incomingHealBuff,
+    };
 
     return {
         action,

@@ -58,7 +58,16 @@ export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> 
 
 export interface Buff {
     id: string;
-    stat: 'attack' | 'crit' | 'critDamage' | 'outgoingDamage' | 'defence' | 'hp';
+    stat:
+        | 'attack'
+        | 'crit'
+        | 'critDamage'
+        | 'outgoingDamage'
+        | 'defence'
+        | 'hp'
+        | 'outgoingHeal'
+        | 'incomingHeal'
+        | 'hotPct';
     value: number;
 }
 

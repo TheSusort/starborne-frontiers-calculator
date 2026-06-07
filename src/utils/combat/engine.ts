@@ -312,6 +312,8 @@ export type TeamActorEngineInput = TeamActorInput & {
         affinityCritCap: number;
         affinityCritPenalty: number;
         hasChargedSkill: boolean;
+        /** Caster heal-modifier stat (healing calc). Default 0. */
+        healModifier?: number;
     };
 };
 
@@ -350,6 +352,8 @@ export interface CombatEngineInput {
     speed?: number;
     /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
     enemySpeed?: number;
+    /** Caster heal-modifier stat (healing calc). Default 0. */
+    healModifier?: number;
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
 }
@@ -582,6 +586,7 @@ export function runCombat(input: CombatEngineInput): {
         defensePenetration,
         defence,
         hp,
+        healModifier: input.healModifier ?? 0,
         debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
@@ -651,6 +656,7 @@ export function runCombat(input: CombatEngineInput): {
             defensePenetration: w.stats.defensePenetration,
             defence: w.stats.defence,
             hp: w.stats.hp,
+            healModifier: w.healModifier ?? 0,
             debuffLandingChance: w.debuffLandingChance,
             selfDotModifier: w.selfDotModifier,
             defensePenetrationBuff: w.defensePenetrationBuff,
