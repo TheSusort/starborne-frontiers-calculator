@@ -227,9 +227,17 @@ the same effective/overheal split.
 - New `heal-performed` event: `casterId`, `targets`, `amount`, `critHits?`
   (additive; optional fields present-only-when-true — `critHits`/`viaCrit`
   precedents).
-- New live trigger `on-ally-critically-repaired` (seventh): listeners receive
-  `heal-performed` with `critHits ≥ 1` from an ally; executor remains the sole
-  mutator; fixed listener order preserved.
+- New live trigger `on-ally-critically-repaired`: fires when the OWNER's own
+  `heal-performed` event has `critHits ≥ 1` and at least one non-self recipient
+  (Pallas's text: "when THIS UNIT critically repairs an ally, it cleanses 1
+  debuff from itself" — the caster reacts to its own crit repair; corrected
+  2026-06-07 from the earlier "from an ally" wording). Additionally a live
+  `on-ally-crit` trigger (mirrors `on-crit` with ally scoping — `ability-performed`
+  from another player actor, per critting hit) makes the same passive's "when an
+  ally critically hits an enemy, gains 1 charge and Everliving Regeneration"
+  part live. Executor remains the sole mutator; fixed listener order preserved.
+  The executor learns `heal`/`shield`/`cleanse` follow-up types (reactive
+  cleanse/heal payloads — Pallas cleanse, Valkyrie heal-on-burst).
 
 ### Public adapter (`src/utils/calculators/healingSimulator.ts`, replaced wholesale)
 
