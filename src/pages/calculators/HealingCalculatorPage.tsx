@@ -25,6 +25,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { Input } from '../../components/ui/Input';
 import { HealerConfigCard } from '../../components/calculator/HealerConfigCard';
+import { TurnOrderActor } from '../../components/calculator/TurnOrderStrip';
 import { HealTargetPanel, HealTargetState } from '../../components/calculator/HealTargetPanel';
 import {
     EnemyAttackersPanel,
@@ -412,6 +413,39 @@ const HealingCalculatorPage: React.FC = () => {
         targetCombatStats,
     ]);
 
+    // Display-ready PLAYER-side turn-order actors that precede the healer: configured team
+    // slots (resolved name or "Team N") in input order, then the heal target when it's a
+    // separate ally ("Target" or its ship name). Unconfigured team slots (no ship AND no
+    // buffs/debuffs) contribute nothing to the sim, so they're hidden from the strip — the
+    // "Team N" numbering keeps the slot index, mirroring the DPS page.
+    const teamTurnOrderActors = useMemo<TurnOrderActor[]>(() => {
+        const teamActorsForStrip: TurnOrderActor[] = teamShips
+            .map((t, i) => ({
+                name: (t.shipId && getShipById(t.shipId)?.name) || `Team ${i + 1}`,
+                speed: t.speed,
+                side: 'player' as const,
+                configured: !!t.shipId || t.buffs.length > 0 || t.enemyDebuffs.length > 0,
+            }))
+            .filter((t) => t.configured)
+            .map(({ name, speed, side }) => ({ name, speed, side }));
+        if (!target.useHealerAsTarget) {
+            const targetName = (target.shipId && getShipById(target.shipId)?.name) || 'Target';
+            teamActorsForStrip.push({ name: targetName, speed: target.speed, side: 'player' });
+        }
+        return teamActorsForStrip;
+    }, [teamShips, getShipById, target.useHealerAsTarget, target.shipId, target.speed]);
+
+    // Display-ready enemy turn-order actors: resolved ship name or "Enemy N" + speed (input order).
+    const enemyTurnOrderActors = useMemo<TurnOrderActor[]>(
+        () =>
+            enemies.map((e, i) => ({
+                name: (e.shipId && getShipById(e.shipId)?.name) || e.name || `Enemy ${i + 1}`,
+                speed: e.speed,
+                side: 'enemy' as const,
+            })),
+        [enemies, getShipById]
+    );
+
     const enemyInputs = useMemo<EnemyAttackerInput[]>(
         () =>
             enemies.map((e) => ({
@@ -605,6 +639,8 @@ const HealingCalculatorPage: React.FC = () => {
                                 isComparing={configs.length > 1}
                                 simResult={simResults.get(config.id)}
                                 bestEffectiveHealing={bestEffectiveHealing}
+                                teamTurnOrderActors={teamTurnOrderActors}
+                                enemyTurnOrderActors={enemyTurnOrderActors}
                                 onRemove={() => removeConfig(config.id)}
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}

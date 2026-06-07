@@ -546,6 +546,13 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  *      other role (defenders cleanse themselves). Cultivator (SUPPORTER) passive 1 → ally; Morao
  *      (DEFENDER) "upon cleansing a debuff, repairs an additional 50%" → self. Basis stays caster HP.
  * `role` is threaded from the ship (`ship.type`, the ship-class field) so rule B can read the class.
+ *
+ * SHIELD verb rule (live-verification finding 2026-06-07; Aegis/Nyxen). Shields are NOT flipped
+ * by default ("gains a Shield" stays self), but on a pure-support active/charged skill a shield
+ * whose own clause uses a GRANT verb ("grants a/the shield …", no explicit receiver) targets the
+ * ally — Aegis "grants a shield equal to 21% of its Max HP" routes the pool to the heal target.
+ * "gains a shield" never flips. The caller passes `shieldGrantVerb` only when the shield's sentence
+ * matches the grant-verb→shield shape; heals leave it false (their flip is unconditional above).
  */
 function flipBareSupportTarget(
     target: 'self' | 'ally' | 'all-allies',
@@ -839,14 +846,18 @@ function abilitiesFromText(
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast).
         const reactiveTrigger = detectCritRepairTrigger(text, healPos);
-        // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
-        // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
-        // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
+        // Heals always run the bare-support flip (pass hasDamage so a damage-rider repair stays
+        // self, and the heal sentence so the self-damage-conditional guard can scope to that clause
+        // — Meatshield; see jsdoc). Shields flip ONLY when their own clause uses a GRANT verb
+        // ("grants a/the shield …"); a "gains a shield" or damage-rider shield keeps its parse
+        // (live-verification finding 2026-06-07; Aegis/Nyxen vs start-of-combat "gains a Shield").
         const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
+        const shieldFlips =
+            h.kind === 'shield' && /\bgrants?\b[^.;]{0,40}shield/i.test(healSentence);
         const healTarget =
-            h.kind === 'heal'
+            h.kind === 'heal' || shieldFlips
                 ? flipBareSupportTarget(
                       h.target,
                       h.explicitTarget,

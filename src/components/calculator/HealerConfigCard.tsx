@@ -13,6 +13,7 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
+import { TurnOrderStrip, TurnOrderActor } from './TurnOrderStrip';
 
 interface HealerConfigCardProps {
     config: HealerShipConfig;
@@ -20,6 +21,14 @@ interface HealerConfigCardProps {
     isComparing: boolean;
     simResult: HealingSimulationResult | undefined;
     bestEffectiveHealing: number | undefined;
+    /**
+     * Player-side turn-order actors that PRECEDE this healer in input order — the team actors
+     * and, when healing a separate ally, the heal target. Listed in input order so the shared
+     * strip's tiebreak resolves team → target → healer at equal speeds. Page-derived once.
+     */
+    teamTurnOrderActors?: TurnOrderActor[];
+    /** Enemy attacker actors for the turn-order strip (input order). Page-derived once. */
+    enemyTurnOrderActors?: TurnOrderActor[];
     onRemove: () => void;
     onUpdate: (field: HealerShipConfigUpdateableField, value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
@@ -54,6 +63,8 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
     isComparing,
     simResult,
     bestEffectiveHealing,
+    teamTurnOrderActors = [],
+    enemyTurnOrderActors = [],
     onRemove,
     onUpdate,
     onSelectShip,
@@ -76,6 +87,14 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
         isComparing && !isBest && bestEffectiveHealing && summary
             ? ((summary.totalEffectiveHealing - bestEffectiveHealing) / bestEffectiveHealing) * 100
             : null;
+
+    // Turn-order strip input order (mirrors the DPS card): team + target, then this healer, then
+    // the enemies — so the shared strip resolves equal speeds team → target → healer → enemy.
+    const turnOrderActors: TurnOrderActor[] = [
+        ...teamTurnOrderActors,
+        { name: config.name, speed: config.speed, side: 'player' as const },
+        ...enemyTurnOrderActors,
+    ];
 
     return (
         <div className={`card ${isBest ? '!border-primary' : ''}`}>
@@ -226,6 +245,7 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
 
                 {summary && (
                     <div className="mt-4 pt-4 border-t border-dark-border space-y-3">
+                        <TurnOrderStrip actors={turnOrderActors} />
                         <div className="grid grid-cols-2 gap-3">
                             <StatCard
                                 title="Effective Healing"

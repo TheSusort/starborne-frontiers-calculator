@@ -1,5 +1,14 @@
 import React from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import {
+    ComposedChart,
+    Bar,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    ReferenceLine,
+} from 'recharts';
 import { BaseChart, ChartLegend, LINE_CHART_MARGIN } from '../ui/charts';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { HealingSimulationResult } from '../../utils/calculators/healingEngineAdapter';
@@ -63,6 +72,10 @@ export const HealingTimelineChart: React.FC<HealingTimelineChartProps> = ({
 }) => {
     const colors = useThemeColors();
 
+    // The round the target was destroyed (if any) — marked with a danger ReferenceLine so the
+    // round HP reaches 0 is obvious, mirroring the DPSRoundChart kill mark in intent and color.
+    const destroyedRound = result.summary.destroyedRound;
+
     const data = [];
     for (let r = 1; r <= rounds; r++) {
         const rd = result.rounds[r - 1];
@@ -113,6 +126,20 @@ export const HealingTimelineChart: React.FC<HealingTimelineChartProps> = ({
                         tick={{ fill: colors.text }}
                     />
                     <Tooltip content={<TimelineTooltip />} />
+                    {destroyedRound !== undefined && (
+                        <ReferenceLine
+                            yAxisId="pct"
+                            x={destroyedRound}
+                            stroke={COLOR_DAMAGE}
+                            strokeDasharray="4 3"
+                            label={{
+                                value: 'Destroyed',
+                                position: 'top',
+                                fill: COLOR_DAMAGE,
+                                fontSize: 11,
+                            }}
+                        />
+                    )}
                     <Bar
                         yAxisId="value"
                         dataKey="incomingDamage"

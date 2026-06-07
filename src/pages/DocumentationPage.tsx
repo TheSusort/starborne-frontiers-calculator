@@ -2433,7 +2433,10 @@ const DocumentationPage: React.FC = () => {
                                         summary reports how many rounds the target survives — or the
                                         round it is destroyed if incoming damage outpaces healing —
                                         so you can tell at a glance whether a healer keeps its
-                                        charge standing.
+                                        charge standing. Each config also shows a Turn Order strip:
+                                        the speed-ordered sequence of the team, the heal target, the
+                                        healer, and the enemy attackers, so you can see who acts
+                                        when.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">Team Healers:</span> Add team
@@ -2442,7 +2445,8 @@ const DocumentationPage: React.FC = () => {
                                         triggers (such as a ship reacting when it critically repairs
                                         an ally). The timeline chart shows HP, shield pool, incoming
                                         damage, and effective healing per round, with a cumulative
-                                        comparison between configurations.
+                                        comparison between configurations; both charts mark the
+                                        round the target is destroyed.
                                     </p>
                                 </div>
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HealingCalculatorPage from '../HealingCalculatorPage';
 
@@ -51,5 +51,19 @@ describe('HealingCalculatorPage', () => {
         // the timeline legend both surface "Effective Healing").
         expect(screen.getAllByText('Effective Healing').length).toBeGreaterThan(0);
         expect(screen.getByText('About the Simulation')).toBeInTheDocument();
+    });
+
+    it('derives a turn-order strip with the healer and the enemy (unconfigured team slot hidden)', () => {
+        render(
+            <MemoryRouter>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        // Defaults: heal-the-healer (no separate target), one Enemy 1 (speed 50), one EMPTY team
+        // slot (no ship / no buffs → excluded). Strip = Healer 1 (100) before Enemy 1 (50).
+        const chips = within(screen.getByTestId('turn-order-strip')).getAllByTestId(
+            'turn-order-chip'
+        );
+        expect(chips.map((c) => c.textContent)).toEqual(['1Healer 1100', '2Enemy 150']);
     });
 });

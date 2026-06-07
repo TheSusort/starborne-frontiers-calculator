@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { HealerConfigCard } from '../HealerConfigCard';
 import { HealerShipConfig } from '../../../types/calculator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
@@ -127,6 +127,34 @@ describe('HealerConfigCard', () => {
             />
         );
         expect(screen.getByText('Destroyed round 7')).toBeInTheDocument();
+    });
+
+    it('renders the turn-order strip with team, the healer, and enemies in resolved order', () => {
+        render(
+            <HealerConfigCard
+                config={config}
+                isBest={false}
+                isComparing={false}
+                simResult={makeResult()}
+                bestEffectiveHealing={5000}
+                teamTurnOrderActors={[{ name: 'Team 1', speed: 90, side: 'player' }]}
+                enemyTurnOrderActors={[{ name: 'Enemy 1', speed: 130, side: 'enemy' }]}
+                onRemove={noop}
+                onUpdate={noop}
+                onSelectShip={noop}
+                onStartChargedChange={noop}
+                onShipSkillsChange={noop}
+            />
+        );
+        const chips = within(screen.getByTestId('turn-order-strip')).getAllByTestId(
+            'turn-order-chip'
+        );
+        // Enemy (130) fastest, then healer (100), then team (90).
+        expect(chips.map((c) => c.textContent)).toEqual([
+            '1Enemy 1130',
+            '2Healer 1100',
+            '3Team 190',
+        ]);
     });
 
     it('propagates stat edits via onUpdate', () => {

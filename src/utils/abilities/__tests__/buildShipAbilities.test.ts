@@ -1231,9 +1231,53 @@ describe('buildShipAbilities', () => {
             expect(damageCleanse).toMatchObject({ type: 'cleanse', target: 'self' });
         });
 
-        it('bare shield on a pure-support active stays self (shields not flipped)', () => {
+        it('bare "gains a Shield" on a pure-support active stays self (gains never flips)', () => {
             const s = ship({
                 activeSkillText: 'This Unit gains a Shield equal to 30% of its Max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'self' });
+        });
+
+        // Grant-verb shield rule (live-verification finding 2026-06-07): on a PURE-SUPPORT
+        // active/charged skill, "grants a/the shield" with no explicit receiver targets the
+        // ally (mirrors the bare-repair flip + PR #84 verb-aware grant scope). "gains a shield"
+        // stays self; explicit receivers and damage-component skills keep their parse.
+        it('Aegis active: "grants a shield equal to 21% of its Max HP" → shield target ally', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit grants a <unit-damage>Shield equal to 21%</unit-damage> of its Max HP and grants <unit-skill>Hacking Up 3</unit-skill> for 2 turns.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'ally' });
+        });
+
+        it('Nyxen active: "cleanses 2 bombs, grants shield equal to 15% of its max HP" → ally', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit <unit-aid>cleanses 2</unit-aid> bombs and grants a <unit-damage>Shield equal to 15%</unit-damage> of its max HP.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'ally' });
+        });
+
+        it('start-of-combat "gains a Shield equal to 25% of its Max HP" stays self (regression)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit gains a <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({ type: 'shield', target: 'self' });
+        });
+
+        it('damage skill with a "grants a shield" rider keeps the shield self', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>150% damage</unit-damage> and grants a <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const shield = active?.abilities.find((a) => a.type === 'shield');
