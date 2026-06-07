@@ -224,6 +224,24 @@ export function registerReactiveListeners(args: {
                         if (e.targetId !== ownerId) enqueue(intent);
                     });
                     break;
+                case 'on-self-damaged':
+                    bus.on('damage-taken', (e) => {
+                        // THIS owner took a direct hit (tank self-sustain: "when directly
+                        // damaged, repairs…"). Once per hit. The Isha crit-instead split is
+                        // realized by filtering on the heal/shield config's onCritHit against
+                        // the event's didCrit — both pure reads (event + static config), so the
+                        // listener stays state-free (mirrors the on-crit listener reading critHits):
+                        //   absent → every hit; true → crit hits only; false → non-crit hits only.
+                        if (e.targetId !== ownerId) return;
+                        const cfg = intent.ability.config;
+                        const onCritHit =
+                            cfg.type === 'heal' || cfg.type === 'shield'
+                                ? cfg.onCritHit
+                                : undefined;
+                        if (onCritHit !== undefined && onCritHit !== (e.didCrit ?? false)) return;
+                        enqueue(intent);
+                    });
+                    break;
                 case 'start-of-round':
                     bus.on('round-started', () => enqueue(intent));
                     break;

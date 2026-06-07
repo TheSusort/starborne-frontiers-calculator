@@ -2443,10 +2443,13 @@ const DocumentationPage: React.FC = () => {
                                         ships and their parsed heals, shields, and cleanses
                                         contribute on their own turns, alongside reactive heal
                                         triggers (such as a ship reacting when it critically repairs
-                                        an ally). The timeline chart shows HP, shield pool, incoming
-                                        damage, and effective healing per round, with a cumulative
-                                        comparison between configurations; both charts mark the
-                                        round the target is destroyed.
+                                        an ally, when an ally takes a hit, or when it is itself
+                                        directly hit — including Isha&apos;s crit-instead repair,
+                                        where a normal hit repairs less and a critical hit repairs
+                                        more instead). The timeline chart shows HP, shield pool,
+                                        incoming damage, and effective healing per round, with a
+                                        cumulative comparison between configurations; both charts
+                                        mark the round the target is destroyed.
                                     </p>
                                 </div>
 

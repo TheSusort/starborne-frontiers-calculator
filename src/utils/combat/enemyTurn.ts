@@ -19,6 +19,10 @@ export interface EnemyAttackResult {
     /** Damage thrown at the target this turn (pre-shield). 0 when the target is dead. */
     damage: number;
     action: 'active' | 'charged';
+    /** Number of this turn's hits that crit (per-hit crit draws). Drives the
+     *  damage-taken event's didCrit (>= 1 → crit hit) for the on-self-damaged
+     *  crit-instead split. 0 when noCrit, dead target, or no crit landed. */
+    critHits: number;
 }
 
 /**
@@ -58,7 +62,7 @@ export function runEnemyAttackerTurn(args: {
 
     // Dead target → no damage, but the cadence above already advanced.
     if (targetDead) {
-        return { damage: 0, action };
+        return { damage: 0, action, critHits: 0 };
     }
 
     // Resolve this turn's damage inputs. Manual: a single basic attack at 100% multiplier,
@@ -80,7 +84,7 @@ export function runEnemyAttackerTurn(args: {
     }
 
     if (multiplier <= 0) {
-        return { damage: 0, action };
+        return { damage: 0, action, critHits: 0 };
     }
 
     // Per-hit crit draws (mirrors the player pipeline): draw the crit gate once per hit at
@@ -98,5 +102,5 @@ export function runEnemyAttackerTurn(args: {
     const damage =
         actor.stats.attack * ((multiplier * hits) / 100) * critMult * (1 - reduction / 100);
 
-    return { damage, action };
+    return { damage, action, critHits };
 }

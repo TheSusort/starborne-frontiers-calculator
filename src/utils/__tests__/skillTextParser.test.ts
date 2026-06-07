@@ -19,6 +19,7 @@ import {
     detectReactiveTrigger,
     detectCritRepairTrigger,
     detectAllyCritTrigger,
+    detectSelfDamagedTrigger,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -1444,6 +1445,30 @@ describe('detectAllyCritTrigger', () => {
     it('returns undefined when the ally-crit phrase is absent', () => {
         const text = 'When this unit critically hits, it gains 1 charge.';
         expect(detectAllyCritTrigger(text, text.indexOf('charge'))).toBeUndefined();
+    });
+});
+
+describe('detectSelfDamagedTrigger', () => {
+    it('returns on-self-damaged when the anchor is in a "when directly damaged" sentence', () => {
+        const text = 'When directly damaged, this Unit repairs 3% of its max HP.';
+        expect(detectSelfDamagedTrigger(text, text.indexOf('repairs'))).toBe('on-self-damaged');
+    });
+
+    it('does NOT match "when an ally is directly damaged" (orthogonal to on-ally-damaged)', () => {
+        const text =
+            'When an ally is directly damaged within the active pattern, this Unit repairs that ally for 8% of its Max HP.';
+        expect(detectSelfDamagedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        const text =
+            'This Unit repairs 13% of its Max HP. When directly damaged, this Unit gains a buff.';
+        expect(detectSelfDamagedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
+    });
+
+    it('returns undefined when the directly-damaged phrase is absent', () => {
+        const text = 'This Unit repairs 13% of its Max HP.';
+        expect(detectSelfDamagedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
     });
 });
 

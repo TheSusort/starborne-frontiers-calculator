@@ -1238,6 +1238,113 @@ describe('healing mode — enemy attackers and target intake', () => {
         expect(focusHeal(result, 'directHeal')).toBe(0);
     });
 
+    // ── Enemy critHits → damage-taken.didCrit stamping ───────────────────────
+    // The enemy attack's per-hit crit draws drive the event's didCrit. crit 100 → every hit
+    // crits → every damage-taken carries didCrit true. crit 0 → no crit → didCrit absent.
+    it('enemy crit 100 → every damage-taken has didCrit true', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const damageTaken: Extract<CombatEvent, { type: 'damage-taken' }>[] = [];
+        bus.on('damage-taken', (e) => damageTaken.push(e));
+        runCombat(
+            BASE({
+                numRounds: 3,
+                healTargetId: 't1',
+                teamActors: [teamWalk('t1', 40, 1_000_000)],
+                enemyAttackers: [
+                    {
+                        id: 'atk1',
+                        stats: { attack: 2000, crit: 100, critDamage: 50, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    },
+                ],
+                shipSkills: { slots: [] },
+                bus,
+            })
+        );
+        expect(damageTaken).toHaveLength(3);
+        for (const e of damageTaken) expect(e.didCrit).toBe(true);
+    });
+
+    it('enemy crit 0 → damage-taken didCrit absent', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const damageTaken: Extract<CombatEvent, { type: 'damage-taken' }>[] = [];
+        bus.on('damage-taken', (e) => damageTaken.push(e));
+        runCombat(
+            BASE({
+                numRounds: 3,
+                healTargetId: 't1',
+                teamActors: [teamWalk('t1', 40, 1_000_000)],
+                enemyAttackers: [manualEnemy('atk1', 2000)],
+                shipSkills: { slots: [] },
+                bus,
+            })
+        );
+        expect(damageTaken).toHaveLength(3);
+        for (const e of damageTaken) expect(e.didCrit).toBeUndefined();
+    });
+
+    // ── on-self-damaged crit-instead (Isha pattern) ───────────────────────────
+    // Heal-target tank (focus, hp 10000) carries TWO passive reactive self-repairs:
+    //   {on-self-damaged, self, 3% hp, onCritHit:false} — base, NON-crit hits only
+    //   {on-self-damaged, self, 6% hp, onCritHit:true}  — instead, CRIT hits only
+    // ONE single-hit enemy with crit 50. The back-loaded RateGate (rate 0.5, single hit)
+    // fires on turn 2, 4, … so: turn1 non-crit → 3% (300 raw), turn2 crit → 6% (600 raw),
+    // turn3 non-crit → 300, turn4 crit → 600. Never both per hit.
+    // Focus (speed 100) heals nothing on cast; enemy (speed 50) attacks each round, the
+    // reactive repair drains after the hit. directHeal credited to the focus tank, basis
+    // = its own max HP 10000.
+    it('on-self-damaged crit-instead: 3% on non-crit hits, 6% on crit hits, never both', () => {
+        idCounter = 0;
+        const selfRepairs = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-self-damaged',
+                            config: { type: 'heal', pct: 3, basis: 'hp', onCritHit: false },
+                        }),
+                        ab({
+                            type: 'heal',
+                            target: 'self',
+                            trigger: 'on-self-damaged',
+                            config: { type: 'heal', pct: 6, basis: 'hp', onCritHit: true },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const result = runCombat(
+            BASE({
+                numRounds: 4,
+                hp: 10000,
+                defence: 0,
+                healTargetId: 'attacker', // the focus tank IS the heal target (self-sustain)
+                enemyAttackers: [
+                    {
+                        id: 'atk1',
+                        stats: { attack: 2000, crit: 50, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    },
+                ],
+                shipSkills: selfRepairs(),
+            })
+        );
+        const rounds = result.healing!.rounds;
+        expect(rounds).toHaveLength(4);
+        // Per-round directHeal (back-loaded crit gate): R1 300, R2 600, R3 300, R4 600.
+        const perRound = rounds.map((r) => r.perActor.get('attacker')!.directHeal);
+        expect(perRound).toEqual([300, 600, 300, 600]);
+        // Total directHeal = 1800, all credited to the focus tank.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(1800, 6);
+    });
+
     // ── DPS-mode inertness: no damage-taken event without healing mode ────────
     // Enemy attackers can't exist without healTargetId (the engine throws), so a DPS-style
     // run (no healTargetId, no enemyAttackers) emits NO damage-taken events. Verified via bus tap.

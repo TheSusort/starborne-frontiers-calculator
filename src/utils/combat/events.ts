@@ -111,8 +111,10 @@ export type CombatEvent =
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
     /** A player actor took direct damage from an enemy attacker (healing mode only).
      *  Emitted once per landed hit (damage > 0 pre-shield; shield-absorbed hits count
-     *  as being hit — documented assumption). */
-    | { type: 'damage-taken'; targetId: string; round: number; amount: number }
+     *  as being hit — documented assumption). `didCrit` is present only when the hit had
+     *  >= 1 critting draw (enemy attack critHits > 0); absent for non-crit hits. Drives the
+     *  Isha crit-instead split in the on-self-damaged listener. */
+    | { type: 'damage-taken'; targetId: string; round: number; amount: number; didCrit?: boolean }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     | { type: 'ship-destroyed'; actorId: string; round: number };
 

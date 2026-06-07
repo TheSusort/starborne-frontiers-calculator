@@ -115,7 +115,15 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
     { value: 'on-ally-crit', label: 'After an ally critically hits' },
     { value: 'on-ally-damaged', label: 'After an ally takes a direct hit' },
+    { value: 'on-self-damaged', label: 'After taking a direct hit' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
+];
+
+/** Tri-state for an on-self-damaged heal/shield's crit gating (Isha crit-instead). */
+const ON_CRIT_HIT_OPTIONS: { value: string; label: string }[] = [
+    { value: 'any', label: 'Any hit' },
+    { value: 'noncrit', label: 'Non-crit hits only' },
+    { value: 'crit', label: 'Crit hits only' },
 ];
 
 const ALL_BUFF_STATS = [
@@ -578,6 +586,31 @@ export const AbilityCard: React.FC<Props> = ({
                                 checked={config.noCrit ?? false}
                                 onChange={(checked) =>
                                     updateConfig({ ...config, noCrit: checked ? true : undefined })
+                                }
+                            />
+                        )}
+                        {ability.trigger === 'on-self-damaged' && (
+                            <Select
+                                label="Fires on"
+                                helpLabel="Which incoming hits trigger this repair (Isha: 3% non-crit, 6% on crit)"
+                                value={
+                                    config.onCritHit === undefined
+                                        ? 'any'
+                                        : config.onCritHit
+                                          ? 'crit'
+                                          : 'noncrit'
+                                }
+                                options={ON_CRIT_HIT_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        onCritHit:
+                                            value === 'any'
+                                                ? undefined
+                                                : value === 'crit'
+                                                  ? true
+                                                  : false,
+                                    })
                                 }
                             />
                         )}

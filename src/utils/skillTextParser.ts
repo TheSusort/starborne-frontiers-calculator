@@ -807,6 +807,16 @@ const ALLY_CRIT_HIT_RE = /when an ally critically hits/i;
 // Mirrors the recipient-flip phrasing in flipBareSupportTarget (rule A). Sentence-scoped via
 // phrasePosTrigger so an unrelated heal in a different sentence is never mis-triggered.
 const ALLY_DAMAGED_RE = /when an ally [^.;]*(?:is |gets |was )?(?:directly )?damaged/i;
+// Isha/Warden/Heliodor: "when (directly) damaged, this Unit repairs …" — the OWNER absorbing a
+// hit (tank self-sustain). The negative lookahead keeps it ORTHOGONAL to ALLY_DAMAGED_RE: a
+// "when an ally … damaged" sentence is NOT a self-damaged trigger. Sentence-scoped via
+// phrasePosTrigger. Reference data: docs/ship-skills.csv.
+const SELF_DAMAGED_RE = /when\s+(?:directly\s+)?damaged\b(?![^.;]*\ban ally)/i;
+// Isha's crit-instead pairing within a self-damaged sentence: "… but when criticall(y) hit, it
+// instead repairs N%". The game typo "criticall" (no trailing y) is real — tolerate both. The
+// captured N is the crit-variant (instead) repair pct. Run on tag-stripped text.
+const CRIT_INSTEAD_REPAIR_RE =
+    /(?:critical(?:ly)?|criticall)[^.;]*\binstead\b[^.;]*\brepairs?\s+(\d+(?:\.\d+)?)\s*%/i;
 
 /**
  * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
@@ -844,6 +854,59 @@ export function detectAllyDamagedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ALLY_DAMAGED_RE, anchorPos, 'on-ally-damaged');
+}
+
+/**
+ * Returns 'on-self-damaged' when `anchorPos` falls inside the sentence carrying a "when
+ * (directly) damaged, this Unit …" phrase; otherwise undefined. Position-scoped on the RAW
+ * text. ORTHOGONAL to detectAllyDamagedTrigger: a "when an ally is directly damaged" sentence
+ * is excluded (negative lookahead). The OWNER's self-repair fires per incoming direct hit (Isha,
+ * Warden, Heliodor). Reference data: docs/ship-skills.csv.
+ */
+export function detectSelfDamagedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, SELF_DAMAGED_RE, anchorPos, 'on-self-damaged');
+}
+
+/**
+ * For an on-self-damaged sentence with the Isha crit-instead shape ("… repairs 3% …, but when
+ * criticall(y) hit, it instead repairs 6% …"), returns the INSTEAD (crit-variant) repair pct;
+ * null when the sentence has no instead-variant (a lone repair fires on every hit). The game
+ * typo "criticall" is tolerated. The caller stamps onCritHit:true on the matching pct and
+ * onCritHit:false on the OTHER (base) repair. Sentence-scoped to `anchorPos`.
+ */
+export function selfDamagedInsteadPct(
+    text: string | null | undefined,
+    anchorPos: number
+): number | null {
+    if (!text || anchorPos < 0) return null;
+    // Reuse phrasePosTrigger's sentence resolution by scanning the same masked-boundary slice.
+    // Simpler: confirm the anchor is in a self-damaged sentence first, then match the instead
+    // shape against that sentence on tag-stripped text (the pct lives inside <unit-damage> tags).
+    if (detectSelfDamagedTrigger(text, anchorPos) === undefined) return null;
+    const sentence = selfDamagedSentence(text, anchorPos);
+    if (sentence === null) return null;
+    const m = CRIT_INSTEAD_REPAIR_RE.exec(stripUnitTags(sentence));
+    if (!m) return null;
+    const pct = parseFloat(m[1]);
+    return isNaN(pct) ? null : pct;
+}
+
+/** The RAW-text sentence (same boundary rule as phrasePosTrigger) containing `anchorPos`, or
+ *  null when out of range. Shared by selfDamagedInsteadPct. */
+function selfDamagedSentence(text: string, anchorPos: number): string | null {
+    const masked = maskAbbrev(text);
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
+    let start = 0;
+    let m: RegExpExecArray | null;
+    while ((m = boundary.exec(masked)) !== null) {
+        const end = m.index + m[0].length;
+        if (anchorPos < end) return anchorPos >= start ? text.slice(start, end) : null;
+        start = end;
+    }
+    return anchorPos >= start ? text.slice(start) : null;
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals

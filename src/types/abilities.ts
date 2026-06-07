@@ -38,6 +38,7 @@ export type AbilityTrigger =
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
     | 'on-ally-damaged'
+    | 'on-self-damaged'
     | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
@@ -61,6 +62,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-critically-repaired',
     'on-ally-crit',
     'on-ally-damaged',
+    'on-self-damaged',
     'on-bomb-detonated',
 ]);
 
@@ -186,6 +188,15 @@ export type AbilityConfig =
           basis: 'hp' | 'attack' | 'defense' | 'target-hp';
           /** Pallas: "repair cannot critically hit". Shields never crit regardless. */
           noCrit?: boolean;
+          /** on-self-damaged refinement (Isha pattern). Filters which incoming hits the
+           *  reactive heal/shield fires on, evaluated in the listener against the
+           *  damage-taken event's `didCrit`:
+           *    absent → fires on EVERY incoming hit (Warden simple "repairs 3% when damaged");
+           *    true   → fires on CRIT hits only ("when critically hit, it instead repairs 6%");
+           *    false  → fires on NON-crit hits only (the base repair when an instead-variant exists).
+           *  The "instead" semantics are realized by pairing onCritHit:false (base) with
+           *  onCritHit:true (instead) — never both fire on the same hit. */
+          onCritHit?: boolean;
       }
     | { type: 'cleanse' | 'purge'; count: number }
     | {

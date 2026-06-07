@@ -1488,7 +1488,7 @@ export function runCombat(input: CombatEngineInput): {
                     lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
                     baseDefenceFor(healTarget!.id);
                 const dead = healTarget!.currentHp <= 0;
-                const { damage } = runEnemyAttackerTurn({
+                const { damage, critHits } = runEnemyAttackerTurn({
                     runtime,
                     targetDefence,
                     targetDead: dead,
@@ -1505,6 +1505,10 @@ export function runCombat(input: CombatEngineInput): {
                         targetId: healTarget!.id,
                         round: r,
                         amount: damage,
+                        // >= 1 critting draw this hit → didCrit true (drives the on-self-damaged
+                        // crit-instead split). Absent for a non-crit hit (additive — DPS goldens
+                        // and the on-ally-damaged path ignore it).
+                        ...(critHits > 0 ? { didCrit: true } : {}),
                     });
                     roundIncomingDamage += damage;
                     // Shield-first drain: the absorption pool drains before HP.

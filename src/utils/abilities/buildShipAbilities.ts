@@ -32,6 +32,8 @@ import {
     detectCritRepairTrigger,
     detectAllyCritTrigger,
     detectAllyDamagedTrigger,
+    detectSelfDamagedTrigger,
+    selfDamagedInsteadPct,
     parseNoCrit,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
@@ -846,9 +848,22 @@ function abilitiesFromText(
         // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast). Cultivator R2: a heal/shield anchored in the "when an ally is
-        // directly damaged" sentence rides on-ally-damaged (fires per ally direct hit).
+        // directly damaged" sentence rides on-ally-damaged (fires per ally direct hit). Isha/Warden:
+        // a heal/shield in a "when (directly) damaged, this Unit …" sentence rides on-self-damaged
+        // (fires per OWN direct hit; checked AFTER ally-damaged so the orthogonal lookahead applies).
         const reactiveTrigger =
-            detectCritRepairTrigger(text, healPos) ?? detectAllyDamagedTrigger(text, healPos);
+            detectCritRepairTrigger(text, healPos) ??
+            detectAllyDamagedTrigger(text, healPos) ??
+            detectSelfDamagedTrigger(text, healPos);
+        // Isha crit-instead split: within an on-self-damaged sentence carrying "… but when
+        // criticall(y) hit, it instead repairs N%", the instead (crit-variant) pct gets
+        // onCritHit:true and the OTHER (base) repair gets onCritHit:false — so each incoming hit
+        // fires exactly ONE repair (3% non-crit, 6% crit). A lone self-repair (no instead-variant)
+        // gets NO onCritHit (fires on every hit).
+        const insteadPct =
+            reactiveTrigger === 'on-self-damaged' ? selfDamagedInsteadPct(text, healPos) : null;
+        const onCritHit: boolean | undefined =
+            insteadPct === null ? undefined : h.pct === insteadPct;
         // Heals always run the bare-support flip (pass hasDamage so a damage-rider repair stays
         // self, and the heal sentence so the self-damage-conditional guard can scope to that clause
         // — Meatshield; see jsdoc). Shields flip ONLY when their own clause uses a GRANT verb
@@ -882,6 +897,7 @@ function abilitiesFromText(
                     pct: h.pct,
                     basis: h.basis,
                     ...(h.kind === 'heal' && healNoCrit ? { noCrit: true } : {}),
+                    ...(onCritHit !== undefined ? { onCritHit } : {}),
                 },
                 autoFilled: true,
             },
@@ -894,8 +910,11 @@ function abilitiesFromText(
         // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
         // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped). A
         // cleanse anchored in a "when an ally is directly damaged" sentence rides on-ally-damaged.
+        // Purifier: "cleanses 1 debuff when directly damaged" rides on-self-damaged (fires per own hit).
         const reactiveTrigger =
-            detectCritRepairTrigger(text, cleansePos) ?? detectAllyDamagedTrigger(text, cleansePos);
+            detectCritRepairTrigger(text, cleansePos) ??
+            detectAllyDamagedTrigger(text, cleansePos) ??
+            detectSelfDamagedTrigger(text, cleansePos);
         const cleanseTarget = flipBareSupportTarget(c.target, c.explicitTarget, slot, mult > 0);
         out.push({
             ability: {

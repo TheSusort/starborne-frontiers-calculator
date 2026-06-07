@@ -395,6 +395,69 @@ describe('buildShipAbilities', () => {
         expect(fourPct.trigger).toBe('on-cast');
     });
 
+    it('Isha R2: two self-repairs ride on-self-damaged; 3% onCritHit false, 6% onCritHit true', () => {
+        // Real R2 text (docs/ship-skills.csv), game typo "criticall" preserved. Each incoming
+        // direct hit triggers ONE repair: 3% non-crit, 6% (instead) on crit. Never both.
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            type: 'DEFENDER',
+            secondPassiveSkillText:
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heals = passive.abilities.filter((a) => a.type === 'heal');
+        expect(heals).toHaveLength(2);
+
+        const threePct = heals.find((h) => h.config.type === 'heal' && h.config.pct === 3)!;
+        expect(threePct.trigger).toBe('on-self-damaged');
+        expect(threePct.target).toBe('self');
+        expect(threePct.config).toMatchObject({
+            type: 'heal',
+            pct: 3,
+            basis: 'hp',
+            onCritHit: false,
+        });
+
+        const sixPct = heals.find((h) => h.config.type === 'heal' && h.config.pct === 6)!;
+        expect(sixPct.trigger).toBe('on-self-damaged');
+        expect(sixPct.target).toBe('self');
+        expect(sixPct.config).toMatchObject({ type: 'heal', pct: 6, basis: 'hp', onCritHit: true });
+    });
+
+    it('Warden-style simple self-repair: one heal, on-self-damaged, NO onCritHit', () => {
+        // "When directly damaged, … repairs itself 3% of its Max HP" — no crit variant, so
+        // ONE repair per hit (every hit, crit or not) → no onCritHit flag.
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            type: 'DEFENDER',
+            secondPassiveSkillText:
+                'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heals = passive.abilities.filter((a) => a.type === 'heal');
+        expect(heals).toHaveLength(1);
+        expect(heals[0].trigger).toBe('on-self-damaged');
+        expect(heals[0].target).toBe('self');
+        expect(heals[0].config).toMatchObject({ type: 'heal', pct: 3, basis: 'hp' });
+        expect((heals[0].config as { onCritHit?: boolean }).onCritHit).toBeUndefined();
+    });
+
+    it('Cultivator-orthogonality: "when an ally is directly damaged" stays on-ally-damaged, not on-self-damaged', () => {
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            type: 'SUPPORTER',
+            secondPassiveSkillText:
+                "When an ally is directly damaged within the active pattern, this Unit <unit-damage>repairs that ally for 8%</unit-damage> of this Unit's Max HP.",
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heal = passive.abilities.find((a) => a.type === 'heal')!;
+        expect(heal.trigger).toBe('on-ally-damaged');
+        expect((heal.config as { onCritHit?: boolean }).onCritHit).toBeUndefined();
+    });
+
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
         const s = ship({
             chargeSkillText:
