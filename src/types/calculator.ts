@@ -90,6 +90,9 @@ export interface ParsedBuffEffects {
 
     // Receiver-side (healer targets)
     incomingHeal?: number; // additive on incoming repair received
+    /** Heal-over-time: % of the APPLYING unit's max HP healed to the holder per
+     *  holder turn ("Repair Over Time I/II/III" — '10% Applying Unit HP%'). */
+    hotPct?: number;
 
     // Enemy-side
     defense?: number; // modifier on enemyDefense: -30 means enemy defense × 0.70
