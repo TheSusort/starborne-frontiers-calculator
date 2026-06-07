@@ -1931,7 +1931,7 @@ describe('parseHealAbilities', () => {
                 pct: 25,
                 basis: 'damage-taken',
                 target: 'self',
-                explicitTarget: false,
+                explicitTarget: true,
                 requiresHpDamage: true,
             },
         ]);
@@ -1944,7 +1944,7 @@ describe('parseHealAbilities', () => {
                 kind: 'shield',
                 pct: 15,
                 basis: 'damage-taken',
-                target: 'ally',
+                target: 'self',
                 explicitTarget: true,
             },
         ]);
@@ -2111,6 +2111,7 @@ describe('damage-leech parsing', () => {
             kind: 'shield',
             pct: 25,
             basis: 'damage-taken',
+            target: 'self',
             requiresHpDamage: true,
         });
     });
@@ -2120,7 +2121,12 @@ describe('damage-leech parsing', () => {
             'When directly damaged as a primary target, this Unit gains Shield equal to 15% of the Damage dealt to them.'
         );
         expect(r).toHaveLength(1);
-        expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
+        expect(r[0]).toMatchObject({
+            kind: 'shield',
+            pct: 15,
+            basis: 'damage-taken',
+            target: 'self',
+        });
         expect(r[0].requiresHpDamage).toBeUndefined();
     });
 

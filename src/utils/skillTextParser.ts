@@ -1241,7 +1241,12 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
             const basis = leechBasis ?? resolveHealBasis(basisScope);
-            const { target, explicit: explicitTarget } = resolveHealTarget(sentence);
+            // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
+            // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
+            // must not apply (Malvex).
+            const resolved = resolveHealTarget(sentence);
+            const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
+            const explicitTarget = leechBasis === 'damage-taken' ? true : resolved.explicit;
             const leechScope: ParsedHealAbility['leechScope'] =
                 leechBasis === 'damage-dealt' && /echoing\s+burst\s+explodes/i.test(sentence)
                     ? 'detonation'
