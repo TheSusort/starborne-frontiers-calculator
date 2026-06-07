@@ -192,7 +192,7 @@ const DamageDeconstructionPage: React.FC = () => {
         type: keyof DamageDeconstructionForm,
         helpText?: string
     ) => (
-        <div className="bg-dark-lighter border border-dark-border p-3 space-y-2">
+        <div className="card space-y-2">
             <div>
                 <h5 className="text-sm font-semibold">{title}</h5>
                 {helpText && <p className="text-xs text-theme-text-secondary mt-1">{helpText}</p>}
