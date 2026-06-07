@@ -1318,6 +1318,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // 'damage-taken' never reaches here.
                 case 'damage-dealt':
                     return directDamage;
+                case 'damage-taken':
+                    throw new Error(
+                        'basisValue: damage-taken must not reach the cast path (slot-partition guard owns it)'
+                    );
                 case 'hp':
                 default:
                     return effectiveHp;
@@ -1396,6 +1400,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // leeches owned by the ENGINE's credit hook (engine.ts) — processing them here would
         // double-count the cast's direct portion. 'damage-taken' abilities (any slot) are
         // owned by the enemy-attack block. Both are skipped on the cast path.
+        // Only heal/shield abilities can be hook-owned; other ability types pass through (the heal loop ignores them anyway).
         const isHookOwned = (a: Ability, fromPassive: boolean): boolean => {
             const c = a.config;
             if (c.type !== 'heal' && c.type !== 'shield') return false;

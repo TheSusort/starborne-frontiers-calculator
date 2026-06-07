@@ -1031,6 +1031,15 @@ export function runCombat(input: CombatEngineInput): {
             }
             return d;
         };
+        /** Damage-credit channels the standing-leech hook distinguishes (Task 6). */
+        type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
+        // Single damage-credit point: every channel write flows through here so standing
+        // leeches (damage-leech spec) can proc at credit time. With no leeches registered
+        // this is byte-identical to the bare dmg() writes (the goldens are the referee).
+        const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
+            dmg(sourceId)[channel] += amount;
+            // procStandingLeeches(sourceId, channel, amount);  // ← enabled in Task 6
+        };
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;
         // the adapter owns any rounding. No-op in DPS mode (currentRoundHealing stays unread).
@@ -1279,10 +1288,10 @@ export function runCombat(input: CombatEngineInput): {
                 // clobber them. direct/secondary/conditional are single-focus-turn
                 // today; += keeps the 0..N-turn seam additive.
                 const d = dmg(actor.id);
-                d.direct += turn.directDamage;
                 d.secondary += turn.secondaryDamage;
                 d.conditional += turn.conditionalDamage;
-                d.detonation += turn.detonationDamage;
+                creditDamage(actor.id, 'direct', turn.directDamage);
+                creditDamage(actor.id, 'detonation', turn.detonationDamage);
                 focusTurns.push(turn);
 
                 // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
@@ -1328,10 +1337,10 @@ export function runCombat(input: CombatEngineInput): {
                 // sub-buckets of direct (do NOT double-add) but kept distinct for the
                 // simulator-page seam.
                 const td = dmg(actor.id);
-                td.direct += teamTurn.directDamage;
                 td.secondary += teamTurn.secondaryDamage;
                 td.conditional += teamTurn.conditionalDamage;
-                td.detonation += teamTurn.detonationDamage;
+                creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
 
                 // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
                 // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
@@ -1436,9 +1445,7 @@ export function runCombat(input: CombatEngineInput): {
                             dotType,
                             damage,
                         }),
-                    credit: (sourceId, dotType, damage) => {
-                        dmg(sourceId)[dotType] += damage;
-                    },
+                    credit: (sourceId, dotType, damage) => creditDamage(sourceId, dotType, damage),
                 });
 
                 // Bombs: per-entry burst credited to the applier's detonation channel,
@@ -1454,9 +1461,8 @@ export function runCombat(input: CombatEngineInput): {
                             stacks,
                             damage,
                         }),
-                    creditDetonation: (sourceId, damage) => {
-                        dmg(sourceId).detonation += damage;
-                    },
+                    creditDetonation: (sourceId, damage) =>
+                        creditDamage(sourceId, 'detonation', damage),
                 });
 
                 // Accumulators: the gather INPUT is the summed direct damage of ALL players
@@ -1469,9 +1475,8 @@ export function runCombat(input: CombatEngineInput): {
                 processAccumulators({
                     pendingAccumulators,
                     allPlayersDirect,
-                    creditDetonation: (sourceId, damage) => {
-                        dmg(sourceId).detonation += damage;
-                    },
+                    creditDetonation: (sourceId, damage) =>
+                        creditDamage(sourceId, 'detonation', damage),
                 });
             } else if (actor.kind === 'enemy') {
                 // ====================================================================

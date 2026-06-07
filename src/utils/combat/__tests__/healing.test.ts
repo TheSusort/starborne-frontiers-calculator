@@ -1855,6 +1855,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
             })
         );
         expect(focusHeal(result, 'directHeal')).toBe(0);
+        expect(focusHeal(result, 'shield')).toBe(0);
     });
 
     // ── Test 5: damage-taken (any slot) → cast path produces NOTHING ─────────
