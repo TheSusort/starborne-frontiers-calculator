@@ -1407,6 +1407,25 @@ describe('detectCritRepairTrigger', () => {
         const healAnchor = text.indexOf('heals');
         expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
     });
+
+    it('treats <br> tags as sentence boundaries: an anchor in a later paragraph is NOT stamped', () => {
+        // No period separates the paragraphs — only <br /><br />. Without treating <br> as a
+        // boundary, the crit-repair phrase (paragraph 1) and the heal anchor (paragraph 2) would
+        // be co-scoped in one segment and wrongly stamped.
+        const text =
+            'When this unit critically repairs an ally, it gains a buff<br /><br />This unit heals the ally for 5% of its Max HP';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBeUndefined();
+    });
+
+    it('stamps when the anchor shares the <br>-delimited paragraph with the phrase', () => {
+        // Same paragraph 1 carries both the crit-repair phrase and the heal anchor; paragraph 2
+        // (after <br />) is unrelated. The anchor must still be stamped.
+        const text =
+            'When this unit critically repairs an ally, it heals the ally for 5% of its Max HP<br />This unit gains a buff';
+        const healAnchor = text.indexOf('heals');
+        expect(detectCritRepairTrigger(text, healAnchor)).toBe('on-ally-critically-repaired');
+    });
 });
 
 describe('detectAllyCritTrigger', () => {

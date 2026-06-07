@@ -1317,8 +1317,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         };
 
         // ── HoT (Repair Over Time) ticking ──────────────────────────────────────────
-        // FIXED ordering: HoTs tick at TURN START — i.e. BEFORE this turn's cast heals
-        // (documented). The HOLDER (this acting actor) heals each of its own turns for
+        // Ordering note (RECORDED APPROXIMATION, pending in-game verification — coverage doc §6):
+        // these ticks fire here, BEFORE this turn's cast heals, but the HoT SOURCES are read
+        // AFTER this turn's own status/buff applications. Consequence: a HoT a ship grants to
+        // ITSELF this turn already appears in selfAbilityStatuses/activeSelfBuffs and therefore
+        // ticks on its OWN cast turn (not only on subsequent turns). The healing goldens lock
+        // this behaviour; do not change it without re-validating the in-game rule.
+        // The HOLDER (this acting actor) heals each of its own turns for
         // applierEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),

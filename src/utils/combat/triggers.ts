@@ -571,14 +571,16 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // owner's standing heal buffs are not re-derived at drain time.
         // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this simplified mirror.
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-        const basisValue =
+        // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
+        // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
+        // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
+        // for the target-hp case.
+        const nonTargetHpBasis =
             cfg.basis === 'attack'
                 ? (ownerCtx?.effectiveAttack ?? owner.attack)
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
-                  : cfg.basis === 'target-hp'
-                    ? ctx.healing.recipientMaxHp(ctx.healing.targetId)
-                    : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+                  : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         const recipients =
             intent.ability.target === 'ally'
                 ? [ctx.healing.targetId]
@@ -586,6 +588,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                   ? ctx.playerIds
                   : [intent.ownerId];
         for (const rid of recipients) {
+            const basisValue =
+                cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
             const raw =
                 cfg.type === 'heal'
                     ? basisValue * (cfg.pct / 100) * (1 + owner.healModifier / 100)

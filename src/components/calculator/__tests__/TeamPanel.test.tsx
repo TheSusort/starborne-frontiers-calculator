@@ -45,4 +45,14 @@ describe('TeamPanel', () => {
             screen.queryByText('Shared attacker buffs applied to all ship configurations')
         ).not.toBeInTheDocument();
     });
+
+    it('hides the shared attacker buffs picker when onAttackerBuffsChange is omitted even with showSharedBuffs default', () => {
+        // showSharedBuffs defaults to true, but no handler is provided: an editable-but-non-persisting
+        // picker would silently drop edits, so the picker must not render.
+        render(<TeamPanel {...baseProps} />);
+        expect(screen.queryByText(/Select Attacker Buffs \/ Debuffs/)).not.toBeInTheDocument();
+        expect(
+            screen.queryByText('Shared attacker buffs applied to all ship configurations')
+        ).not.toBeInTheDocument();
+    });
 });

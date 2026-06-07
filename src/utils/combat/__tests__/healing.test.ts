@@ -1061,6 +1061,53 @@ describe('healing mode — enemy attackers and target intake', () => {
         ).toThrow(/enemyAttackers require healTargetId/);
     });
 
+    // ── Enemy attacker id validation ──────────────────────────────────────────
+    it('throws on duplicate enemyAttackers ids', () => {
+        idCounter = 0;
+        expect(() =>
+            runCombat(
+                BASE({
+                    numRounds: 1,
+                    hp: 1_000_000,
+                    healTargetId: 'attacker',
+                    enemyAttackers: [manualEnemy('dup', 2000), manualEnemy('dup', 3000)],
+                    shipSkills: { slots: [] },
+                })
+            )
+        ).toThrow(/duplicate enemyAttackers\[\]\.id 'dup'/);
+    });
+
+    it("throws when an enemy attacker id is the reserved 'enemy' id", () => {
+        idCounter = 0;
+        expect(() =>
+            runCombat(
+                BASE({
+                    numRounds: 1,
+                    hp: 1_000_000,
+                    healTargetId: 'attacker',
+                    enemyAttackers: [manualEnemy('enemy', 2000)],
+                    shipSkills: { slots: [] },
+                })
+            )
+        ).toThrow(/'enemy' collides with a reserved or player actor id/);
+    });
+
+    it('throws when an enemy attacker id collides with a team actor id', () => {
+        idCounter = 0;
+        expect(() =>
+            runCombat(
+                BASE({
+                    numRounds: 1,
+                    hp: 1_000_000,
+                    healTargetId: 'attacker',
+                    teamActors: [teamWalk('t1', 50, 8000)],
+                    enemyAttackers: [manualEnemy('t1', 2000)],
+                    shipSkills: { slots: [] },
+                })
+            )
+        ).toThrow(/'t1' collides with a reserved or player actor id/);
+    });
+
     // ── Test 7: target defence reduces intake ─────────────────────────────────
     // A target with defence 2000 takes less intake than the same target at defence 0.
     it('target defence matters: higher defence reduces intake', () => {
@@ -1115,6 +1162,31 @@ describe('healing mode — enemy attackers and target intake', () => {
             expect(r.incomingDamage).toBe(0);
             expect(r.shieldAbsorbed).toBe(0);
         }
+    });
+
+    // ── Heal-deficit clamp under a SHRUNK max HP ──────────────────────────────
+    // applyHealToTarget computes consumed = max(0, min(raw, targetMaxHp − currentHp)). The
+    // max(0,…) guards the case where a max-HP buff expires and shrinks effectiveMaxHp below the
+    // already-filled currentHp, making (targetMaxHp − currentHp) NEGATIVE — without the floor, a
+    // heal would REDUCE the target's HP. Driving that exact ordering (buffed → healed to the
+    // buffed max → buff expires next round) through the public runCombat API is not cheaply
+    // reachable: it needs a timed self-HP buff on the heal target plus precise round timing, and
+    // the engine's per-round ctx refresh makes the transient overshoot hard to land deterministically
+    // without risking golden churn. The clamp arithmetic is verified directly below; the engine path
+    // is otherwise covered by the partial-deficit/overheal split tests above.
+    it('heal-deficit clamp: negative deficit (currentHp > shrunk maxHp) yields consumed 0, full overheal', () => {
+        // Replicates the consumed/overheal arithmetic of applyHealToTarget for a shrunk max HP.
+        const applyHealClamp = (raw: number, currentHp: number, targetMaxHp: number) => {
+            const consumed = Math.max(0, Math.min(raw, targetMaxHp - currentHp));
+            return { consumed, overheal: raw - consumed };
+        };
+        // currentHp 9000 > shrunk maxHp 8000 → deficit −1000. Without max(0,…) consumed would be
+        // −1000 (HP would DROP); the floor makes it 0 with full overheal.
+        expect(applyHealClamp(2000, 9000, 8000)).toEqual({ consumed: 0, overheal: 2000 });
+        // Sanity: normal partial deficit still splits correctly.
+        expect(applyHealClamp(5000, 8000, 10000)).toEqual({ consumed: 2000, overheal: 3000 });
+        // Full overheal at the cap.
+        expect(applyHealClamp(5000, 10000, 10000)).toEqual({ consumed: 0, overheal: 5000 });
     });
 });
 
@@ -1289,6 +1361,68 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
         expect(focusHeal(result, 'overheal')).toBe(3000);
         // The executor must NOT emit heal-performed (chain guard).
         expect(perfs).toHaveLength(0);
+    });
+
+    it('reactive all-allies heal with basis target-hp scales each recipient by its OWN max HP', () => {
+        idCounter = 0;
+        // A reactive all-allies heal on the focus, basis target-hp. Recipients = focus + t1 + t2,
+        // each with a DIFFERENT max HP. Before the per-recipient fix the basis was resolved once
+        // against the heal target's max HP and applied to every recipient — so all three credits
+        // would use the focus's 10000. With the fix each recipient scales by its own max HP.
+        const teamWalk = (id: string, hp: number): TeamActorEngineInput => ({
+            id,
+            speed: 10, // slower than the focus so they don't act/heal this round
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            walk: {
+                shipSkills: { slots: [] },
+                stats: {
+                    attack: 1000,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 1000,
+                    hp,
+                },
+                debuffLandingChance: 1,
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000, // focus max HP
+                healTargetId: 'attacker',
+                speed: 200, // focus acts first
+                teamActors: [teamWalk('t1', 20000), teamWalk('t2', 30000)],
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'all-allies',
+                                    trigger: 'start-of-round',
+                                    config: { type: 'heal', pct: 10, basis: 'target-hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // Per-recipient raw at 10% of each own max HP: focus 1000 + t1 2000 + t2 3000 = 6000.
+        // (A once-resolved basis would credit 3 × 1000 = 3000.) All credited to the owner 'attacker'.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(6000, 6);
     });
 
     it('reactive shield credits the shield bucket and grants the pool', () => {

@@ -35,7 +35,7 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
     onToggle,
     showSharedBuffs = true,
     attackerBuffs = [],
-    onAttackerBuffsChange = () => {},
+    onAttackerBuffsChange,
     enemyAffinity,
     teamShips,
     onAddTeamShip,
@@ -65,7 +65,7 @@ export const TeamPanel: React.FC<TeamPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
-                {showSharedBuffs && (
+                {showSharedBuffs && onAttackerBuffsChange && (
                     <>
                         <p className="text-sm text-theme-text-secondary">
                             Shared attacker buffs applied to all ship configurations

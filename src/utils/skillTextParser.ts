@@ -845,12 +845,17 @@ function phrasePosTrigger(
     // mid-name. The placeholder is the same byte length as the replaced space, so anchorPos (which
     // points into the raw unmasked text) stays stable and needs no adjustment.
     const masked = maskAbbrev(text);
-    const boundary = /[.;](?=\s|$)/g;
+    // Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
+    // <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
+    // <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
+    // raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
+    // (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
     let start = 0;
     let m: RegExpExecArray | null;
     const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
     while ((m = boundary.exec(masked)) !== null) {
-        const end = m.index + 1;
+        const end = m.index + m[0].length;
         if (anchorPos < end) {
             return phraseRe.test(masked.slice(start, end)) && anchorPos >= start
                 ? trigger
