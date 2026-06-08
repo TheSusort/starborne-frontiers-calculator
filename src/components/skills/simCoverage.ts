@@ -7,6 +7,11 @@ import { AbilityType } from '../../types/abilities';
  * heal / shield / cleanse are intentionally NOT in this set — the healing
  * calculator consumes them (adopted in the healing-calc engine work).
  * purge keeps its count field editable for annotation while still flagged here.
+ * `control` stays flagged because its OWN lockout/combat effect (Stasis/Taunt/
+ * etc.) is still unsimulated — but it is now a TRIGGER SOURCE: the cast-path
+ * emits a `control-applied` event that drives reactions (e.g. Defiant's
+ * shield-on-Stasis). So the control's effect is unsimulated even though it can
+ * fire a simulated reaction.
  */
 export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set(['purge', 'control']);
 

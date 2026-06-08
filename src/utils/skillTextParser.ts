@@ -853,7 +853,9 @@ export function detectDebuffInflictedTrigger(
 // any ship reacts to today, via Defiant's shield-on-Stasis). Provoke/Taunt stay handled as
 // targeting-status CONDITIONS (statusEffectCondition), NOT control abilities. The <unit-skill>
 // tags don't bracket the verb, so matching on raw text is safe.
-const STASIS_INFLICT_RE = /\b(?:inflicts?|applies|applying)\b[^.]*?<unit-skill>\s*Stasis\b/i;
+// "applying" deliberately omitted: the infliction verb is always "inflicts/applies"; "applying"
+// only appears in the passive reactive clause ("when applying Stasis"), matched separately below.
+const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
 
 /** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
  *  docs/ship-skills.csv (Defiant charged "inflicts Stasis for 1 turn"). */

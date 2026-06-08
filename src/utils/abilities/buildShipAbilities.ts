@@ -842,6 +842,13 @@ function abilitiesFromText(
                 type: 'control',
                 target: 'enemy',
                 trigger: 'on-cast',
+                // Control abilities carry no conditions: a GATED Stasis (e.g. Crocus "if target
+                // has >3 debuffs") therefore emits control-applied unconditionally on the cast
+                // path. Inert today (the only on-stasis-applied reactor, Defiant, has an
+                // UNCONDITIONAL Stasis, and no ship both gates its own Stasis and reacts to it).
+                // If a future ship pairs a gated Stasis with an own-stasis reaction, thread the
+                // inflicting ability's conditions onto the control ability so a gated-off Stasis
+                // doesn't over-fire the shield.
                 conditions: [],
                 config: { type: 'control', effect: controlEffect },
                 autoFilled: true,
