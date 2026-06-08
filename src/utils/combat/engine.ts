@@ -40,8 +40,10 @@ import {
     Intent,
     MAX_INTENT_GENERATIONS,
     executeIntent,
+    ownerDebuffNamesFor,
     partitionReactiveAbilities,
     registerReactiveListeners,
+    selfBuffNamesForOwners,
 } from './triggers';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
@@ -282,7 +284,9 @@ export function buildEnemyPlayerActorRuntime(
         playerIds
     );
 
-    // hasChargedSkill: mirrors EnemyAttackerRuntime logic exactly.
+    // hasChargedSkill: true only when the enemy banks charges (chargeCount >= 1) AND its
+    // charged slot actually carries a damage ability (multiplier > 0). A manual flat card
+    // (no shipSkills) never has a charged slot → false.
     const hasChargedSkill = e.shipSkills
         ? e.chargeCount >= 1 &&
           damageInputsFromSkill(selectFiringSkill(e.shipSkills, 'charged')).multiplier > 0
@@ -1029,9 +1033,28 @@ export function runCombat(input: CombatEngineInput): {
         buildEnemyPlayerActorRuntime(e, { statusEngine, playerIds, enemyDebuffLookup })
     );
     const enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor);
+    const enemyAttackerActorIds = enemyAttackerActors.map((a) => a.id);
     const enemyPlayerRuntimeByActorId = new Map<string, PlayerActorRuntime>(
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
+
+    // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
+    // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
+    // are folded exactly once via snapshot()/activeAbilityStatuses/timedAbilityStatuses), so
+    // there is no double-fold. Recomputed per turn from CURRENT live state.
+    //
+    //  - PLAYER actor's `enemy-buff` gate → opposing side = the enemy attacker(s). Aggregation:
+    //    UNION of every enemy attacker's self-buff names (the condition is "does an enemy have a
+    //    buff", not "does THIS enemy"). Inert in DPS mode (no enemy attackers → empty list).
+    //  - PLAYER actor's `self-debuff` gate → its OWN enemy-applied debuffs (per-target store keyed
+    //    by its id — the tank carries the enemy attacker's debuffs).
+    //  - ENEMY actor's `enemy-buff` gate → opposing side = the player team (union of player
+    //    self-buff names). `self-debuff` → its own per-target debuff store keyed by its id.
+    const playerEnemyBuffNames = (): string[] =>
+        selfBuffNamesForOwners(statusEngine, enemyAttackerActorIds);
+    const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
+    const ownerDebuffNames = (ownerId: string): string[] =>
+        ownerDebuffNamesFor(statusEngine, ownerId);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; legacy team → its combat-actor hp (1).
@@ -1402,6 +1425,9 @@ export function runCombat(input: CombatEngineInput): {
                         runtimes: runtimesById,
                         grantAllyCharges,
                         playerIds,
+                        // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
+                        // self-buffs (names only). Empty in DPS mode → byte-identical.
+                        enemyAttackerIds: enemyAttackerActorIds,
                         lastTurnCtxByActor,
                         enemyType,
                         enemyHp,
@@ -1542,6 +1568,12 @@ export function runCombat(input: CombatEngineInput): {
                         attackerMaxHp > 0
                             ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
                             : 100,
+                    // Task 7: enemy-buff gates read the UNION of enemy attackers' self-buffs;
+                    // self-debuff gates read this actor's own enemy-applied debuffs (names only).
+                    // Both empty in DPS mode (no enemy attackers, no debuffs on the focus) →
+                    // byte-identical goldens.
+                    enemyBuffNames: playerEnemyBuffNames(),
+                    selfDebuffNames: ownerDebuffNames(actor.id),
                 });
 
                 // Drain any team-turn resisted entries staged BEFORE this attacker turn
@@ -1607,6 +1639,11 @@ export function runCombat(input: CombatEngineInput): {
                     // Live HP% for self-HP-threshold gates (same logic as attacker above).
                     selfHpPct:
                         teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
+                    // Task 7: same as the attacker branch — enemy-buff = union of enemy attackers'
+                    // self-buffs; self-debuff = this team actor's own enemy-applied debuffs (names
+                    // only). Empty in DPS mode → byte-identical goldens.
+                    enemyBuffNames: playerEnemyBuffNames(),
+                    selfDebuffNames: ownerDebuffNames(actor.id),
                 });
 
                 // Fold the team turn's damage into ITS OWN map entry (post-round assembly
@@ -1763,66 +1800,99 @@ export function runCombat(input: CombatEngineInput): {
                 // into the live target via the intake below; self-buffs land in its OWN owner
                 // store; debuffs/DoTs land on the target's per-target store (targetId).
                 // Healing mode is guaranteed here (enemyAttackers require healTargetId), so
-                // healTarget is defined whenever this branch runs. A dead target takes 0
-                // damage but the cadence still runs (charges keep banking via runPlayerTurn).
+                // healTarget is defined whenever this branch runs.
+                //
+                // DEAD-TARGET GUARD (restores the retired runEnemyAttackerTurn semantic): vs a
+                // dead heal target the enemy must NOT apply debuffs/DoTs or emit application
+                // events to it — but the charge cadence must STILL advance (charges keep banking,
+                // so a revived/re-spawned target would face a correctly-charged attacker). We
+                // therefore SKIP runPlayerTurn entirely when the target is dead (runPlayerTurn is
+                // the sole site that resolves the attack + applies the kit + emits events) and
+                // advance the cadence manually here, mirroring runPlayerTurn's preTurn step
+                // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
                 // ====================================================================
                 const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
-                // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
-                // else its base defence (pre-first-turn fallback).
-                const targetDefence =
-                    lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
-                    baseDefenceFor(healTarget!.id);
-                // Target's max-HP pool + its damage-so-far → the enemyHpPct the enemy's OWN
-                // condition gates read (a bare neutral enemy has no such gates, so this is inert
-                // for current fixtures; computed for correctness when Task 7+ adds gated kits).
-                const targetMaxHpForEnemy = recipientMaxHp(healTarget!.id);
-                const targetHpDecline = Math.max(0, targetMaxHpForEnemy - healTarget!.currentHp);
-                // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
-                const enemyActorMaxHp = enemyRuntime.hp;
-                const enemySelfHpPct =
-                    enemyActorMaxHp > 0
-                        ? (100 * Math.max(0, enemyRuntime.actor.currentHp)) / enemyActorMaxHp
-                        : 100;
-                const enemyTurn = runPlayerTurn({
-                    runtime: enemyRuntime,
-                    // The heal target is the enemy's victim — bind it as the `enemy` arg so
-                    // damage/debuffs resolve against it and route to its per-target store.
-                    enemy: healTarget!,
-                    targetId: healTarget!.id,
-                    statusEngine,
-                    // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
-                    corrosionEntries: healTarget!.corrosionEntries,
-                    infernoEntries: healTarget!.infernoEntries,
-                    pendingBombs: healTarget!.pendingBombs,
-                    pendingAccumulators: healTarget!.pendingAccumulators,
-                    enemyDefense: targetDefence,
-                    enemyHp: targetMaxHpForEnemy,
-                    enemyHpDecline: targetHpDecline,
-                    // No class is carried on a CombatActor → undefined (no enemyType matchup).
-                    enemyType: undefined,
-                    bus,
-                    round: r,
-                    // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
-                    // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
-                    // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
-                    // the player team. Inert today (the synthesized manual enemy is damage-only with
-                    // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
-                    // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
-                    grantAllyCharges: undefined,
-                    healing: healingCtx,
-                    selfHpPct: enemySelfHpPct,
-                });
-                // Total damage the enemy dealt to the bound target this turn. secondary/
-                // conditional are display sub-buckets ALREADY inside directDamage (do NOT
-                // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
-                // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
-                const damage =
-                    healTarget!.currentHp <= 0
-                        ? 0
-                        : enemyTurn.directDamage + enemyTurn.detonationDamage;
-                // Record the enemy actor's round-scoped ctx (parity with player/team branches;
-                // its own future DoT entries would tick with this ctx).
-                lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                const targetDead = healTarget!.currentHp <= 0;
+                let damage = 0;
+                if (targetDead) {
+                    // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
+                    // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
+                    // application events — a dead target is untouched (old short-circuit).
+                    if (enemyRuntime.hasChargedSkill && actor.chargeCount > 0) {
+                        if (actor.charges >= actor.chargeCount) {
+                            actor.charges = 0;
+                        } else {
+                            actor.charges += 1;
+                        }
+                    }
+                    // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
+                    // produced no ctx either; this actor has no live DoTs to attribute).
+                } else {
+                    // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
+                    // else its base defence (pre-first-turn fallback).
+                    const targetDefence =
+                        lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
+                        baseDefenceFor(healTarget!.id);
+                    // Target's max-HP pool + its damage-so-far → the enemyHpPct the enemy's OWN
+                    // condition gates read (a bare neutral enemy has no such gates, so this is inert
+                    // for current fixtures; computed for correctness when Task 7+ adds gated kits).
+                    const targetMaxHpForEnemy = recipientMaxHp(healTarget!.id);
+                    const targetHpDecline = Math.max(
+                        0,
+                        targetMaxHpForEnemy - healTarget!.currentHp
+                    );
+                    // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
+                    const enemyActorMaxHp = enemyRuntime.hp;
+                    const enemySelfHpPct =
+                        enemyActorMaxHp > 0
+                            ? (100 * Math.max(0, enemyRuntime.actor.currentHp)) / enemyActorMaxHp
+                            : 100;
+                    const enemyTurn = runPlayerTurn({
+                        runtime: enemyRuntime,
+                        // The heal target is the enemy's victim — bind it as the `enemy` arg so
+                        // damage/debuffs resolve against it and route to its per-target store.
+                        enemy: healTarget!,
+                        targetId: healTarget!.id,
+                        statusEngine,
+                        // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
+                        corrosionEntries: healTarget!.corrosionEntries,
+                        infernoEntries: healTarget!.infernoEntries,
+                        pendingBombs: healTarget!.pendingBombs,
+                        pendingAccumulators: healTarget!.pendingAccumulators,
+                        enemyDefense: targetDefence,
+                        enemyHp: targetMaxHpForEnemy,
+                        enemyHpDecline: targetHpDecline,
+                        // No class is carried on a CombatActor → undefined (no enemyType matchup).
+                        enemyType: undefined,
+                        bus,
+                        round: r,
+                        // Opposing side from the ENEMY's view = the player team (Task 7). UNION of
+                        // player self-buff names for the enemy's own `enemy-buff` gates. A bare enemy
+                        // has no such gate, so this is inert today — computed for the full-kit enemy.
+                        enemyBuffNames: enemyEnemyBuffNames(),
+                        // This enemy's OWN debuffs (a player ability could land some onto it), keyed
+                        // by THIS actor's id (its per-target store). Empty for the current fixtures —
+                        // no player ability targets enemy attackers — but threaded for the full kit.
+                        selfDebuffNames: ownerDebuffNames(actor.id),
+                        // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
+                        // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
+                        // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
+                        // the player team. Inert today (the synthesized manual enemy is damage-only with
+                        // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
+                        // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
+                        grantAllyCharges: undefined,
+                        healing: healingCtx,
+                        selfHpPct: enemySelfHpPct,
+                    });
+                    // Total damage the enemy dealt to the bound target this turn. secondary/
+                    // conditional are display sub-buckets ALREADY inside directDamage (do NOT
+                    // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
+                    // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
+                    damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                    // Record the enemy actor's round-scoped ctx (parity with player/team branches;
+                    // its own future DoT entries would tick with this ctx).
+                    lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                }
                 if (damage > 0) {
                     roundIncomingDamage += damage;
                     // Shield-first drain: the absorption pool drains before HP. Capture the

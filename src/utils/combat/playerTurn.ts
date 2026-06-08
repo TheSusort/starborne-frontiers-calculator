@@ -210,6 +210,17 @@ export interface PlayerTurnArgs {
      *  (pre-Task-6 path, byte-identical). The real tank id is supplied only by the enemy-dispatch
      *  branch (Task 6b); all player-side call sites in engine.ts leave this unset. */
     targetId?: string;
+    /** Active buff names on the OPPOSING side (Task 7) for this actor's `enemy-buff` condition
+     *  gates. For a player actor this is the UNION of the enemy attacker(s)' self-buff names;
+     *  for the enemy-dispatch walk it is symmetric (the player team's buffs). NAMES ONLY — these
+     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
+     *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
+    enemyBuffNames?: string[];
+    /** Active debuff names on THIS actor (Task 7) for its `self-debuff` condition gates. For a
+     *  player heal target these are the enemy-applied debuffs in its per-target store (keyed by
+     *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
+     *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
+    selfDebuffNames?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -607,6 +618,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
         targetId,
+        enemyBuffNames: enemyBuffNamesArg = [],
+        selfDebuffNames: selfDebuffNamesArg = [],
     } = args;
 
     const {
@@ -812,6 +825,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
@@ -929,6 +944,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -1003,6 +1020,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [
@@ -1075,6 +1094,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         roundCrit,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this

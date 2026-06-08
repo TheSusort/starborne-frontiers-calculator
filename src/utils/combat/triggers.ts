@@ -283,6 +283,10 @@ export interface IntentExecContext {
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
+    /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
+     *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
+     *  here. Empty/omitted in DPS mode (no enemy attackers) → drain `enemyBuffNames` stays []. */
+    enemyAttackerIds?: string[];
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
@@ -393,7 +397,95 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         bombCount: ctx.pendingBombs.length,
         enemyType: ctx.enemyType,
         enemyHpPct,
+        // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
+        // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
+        // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
+        // (no enemy attackers, no debuffs on player actors) → drain gating byte-identical.
+        enemyBuffNames: selfBuffNamesForOwners(ctx.statusEngine, ctx.enemyAttackerIds ?? []),
+        selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
     });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAMES-ONLY status exposure (Task 7) — for the player-side `enemy-buff` /
+// `self-debuff` condition gates. These read buff/debuff NAMES from the status
+// engine WITHOUT folding any effect. Effects are folded exactly once elsewhere
+// (snapshot()'s active lists + activeAbilityStatuses/timedAbilityStatuses); these
+// helpers add ONLY names to a condition context, so there is no double-fold.
+//
+// Payload-exclusion rule: ability-sourced statuses carry a payload and are
+// excluded from snapshot() (the `!s.payload` guards). To surface their names we
+// pull them from timedAbilityStatuses/activeAbilityStatuses (which DO return
+// payload-carriers) — names only, never re-applying the payload effect.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Neutral resolver for the names-only aura/accum reads: a status's own conditions
+// are evaluated against a default (full-HP, no-debuff) round context. This is a
+// deliberate names-existence approximation — an "enemy has a buff" / "self has a
+// debuff" gate only needs to know the status is present, not re-derive its full
+// live gate. No fixture exercises a conditional enemy aura/accum, so this is inert
+// for current goldens (YAGNI: the gated full-kit enemy lands in a later task).
+const NEUTRAL_NAMES_CTX = buildRoundContext({
+    selfBuffNames: [],
+    landedEnemyDebuffCount: 0,
+    corrosionEntryCount: 0,
+    infernoEntryCount: 0,
+    bombCount: 0,
+    effectiveCritRate: 0,
+});
+
+/** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).
+ *  Scheduled non-payload buffs come from snapshot().activeSelfBuffs; payload-carrying
+ *  ability self statuses (timed window-persisting + aura/accum) come from the
+ *  ability-status reads. Used to populate `enemyBuffNames` for a player actor's
+ *  `enemy-buff` gates: the OPPOSING side from a player gate's view is the enemy
+ *  attacker(s). Aggregation choice: UNION across all enemy owners (the condition is
+ *  conceptually "does an enemy have a buff", not "does THIS enemy" — the simplest
+ *  correct interpretation for multi-enemy healing mode). De-duplicated. */
+export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: string[]): string[] {
+    const names = new Set<string>();
+    for (const ownerId of ownerIds) {
+        const snap = statusEngine.snapshot(ownerId);
+        for (const ab of snap.activeSelfBuffs) {
+            if (ab.stacks === undefined || ab.stacks > 0) names.add(ab.buffName);
+        }
+        for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
+            names.add(s.active.buffName);
+        }
+        for (const s of statusEngine.activeAbilityStatuses(
+            'self',
+            () => NEUTRAL_NAMES_CTX,
+            ownerId
+        )) {
+            names.add(s.active.buffName);
+        }
+    }
+    return [...names];
+}
+
+/** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
+ *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
+ *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads
+ *  keyed by the same target. Used to populate `selfDebuffNames` for a player actor whose own
+ *  enemy-applied debuffs live under its id (the heal target / tank). De-duplicated. */
+export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string): string[] {
+    const names = new Set<string>();
+    const snap = statusEngine.snapshot(undefined, targetId);
+    for (const ab of snap.activeEnemyDebuffs) {
+        if (ab.stacks === undefined || ab.stacks > 0) names.add(ab.buffName);
+    }
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, targetId)) {
+        names.add(s.active.buffName);
+    }
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        targetId
+    )) {
+        names.add(s.active.buffName);
+    }
+    return [...names];
 }
 
 function payloadFromConfig(cfg: {
