@@ -552,3 +552,106 @@ describe('Task 9: enemy affinity threading', () => {
         );
     });
 });
+
+describe('Task 4a: enemy-applied DoTs surface in enemyEffects[].dots', () => {
+    // A single ship-backed enemy whose ACTIVE slot applies an inferno DoT (tier 100, 1 stack,
+    // 3 turns) to the heal target every round (no debuff, no self-buff). The target is a beefy
+    // self-healer so it survives. Each round the engine re-applies the inferno → the active
+    // entry count on the target climbs to a steady 3 (then holds, oldest expires). The DoTs
+    // must be attributed to e1 via the stack sourceId and summed per type+tier.
+    const infernoEnemy = (id: string) => ({
+        id,
+        stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 50, hits: 1 },
+                        }),
+                        ab({
+                            type: 'dot',
+                            target: 'enemy',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 100,
+                                stacks: 1,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        },
+    });
+
+    it('single inferno enemy: enemyEffects[].dots carries the inferno stacks, attributed to that enemy', () => {
+        idCounter = 0;
+        const result = simulateHealing(
+            BASE({
+                rounds: 6,
+                healer: { ...HEALER, hp: 1000000, defence: 0 },
+                healTargetId: 'healer',
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 50, basis: 'hp' },
+                    }),
+                ]),
+                enemies: [infernoEnemy('e1')],
+            })
+        );
+
+        const rounds = result.rounds;
+        // R1: applied at the enemy turn → 1 active entry by round-end, attributed to e1.
+        expect(rounds[0].enemyEffects).toHaveLength(1);
+        const r1 = rounds[0].enemyEffects[0];
+        expect(r1.enemyId).toBe('e1');
+        expect(r1.dots).toEqual([{ type: 'inferno', tier: 100, stacks: 1 }]);
+
+        // The active stack count (entries summed per type+tier) climbs and holds at a steady 3.
+        const stacksByRound = rounds.map((rd) => {
+            const e = rd.enemyEffects.find((x) => x.enemyId === 'e1');
+            const dot = e?.dots.find((d) => d.type === 'inferno' && d.tier === 100);
+            return dot?.stacks ?? 0;
+        });
+        expect(stacksByRound[0]).toBe(1);
+        expect(stacksByRound.every((s) => s >= 1)).toBe(true);
+        expect(Math.max(...stacksByRound)).toBe(3);
+
+        // Sanity: the DoT actually ticks → positive incoming damage (additive field changes nothing).
+        expect(result.summary.totalIncomingDamage).toBeGreaterThan(0);
+    });
+
+    it('multi-enemy: each enemy DoT is attributed to its own source id', () => {
+        idCounter = 0;
+        const result = simulateHealing(
+            BASE({
+                rounds: 4,
+                healer: { ...HEALER, hp: 1000000, defence: 0 },
+                healTargetId: 'healer',
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 50, basis: 'hp' },
+                    }),
+                ]),
+                enemies: [infernoEnemy('e1'), infernoEnemy('e2')],
+            })
+        );
+
+        const r2 = result.rounds[1].enemyEffects;
+        const e1 = r2.find((x) => x.enemyId === 'e1');
+        const e2 = r2.find((x) => x.enemyId === 'e2');
+        expect(e1?.dots.some((d) => d.type === 'inferno' && d.tier === 100)).toBe(true);
+        expect(e2?.dots.some((d) => d.type === 'inferno' && d.tier === 100)).toBe(true);
+    });
+});

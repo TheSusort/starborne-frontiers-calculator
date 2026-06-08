@@ -1,6 +1,7 @@
 import React from 'react';
 import { BuffRow } from '../ui/BuffRow';
 import { HealingRoundData } from '../../utils/calculators/healingEngineAdapter';
+import { dotStateLabel } from './dotLabels';
 
 interface EnemyEffectsPanelProps {
     /** Per-config sections — one per healer config, mirroring DPSBuffPanel's `ships`. Each carries
@@ -28,7 +29,7 @@ const ConfigSection: React.FC<{
     enemyName: (enemyId: string) => string;
 }> = ({ name, color, roundData, enemyName }) => {
     const enemyEffects = (roundData?.enemyEffects ?? []).filter(
-        (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0
+        (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0 || e.dots.length > 0
     );
     const isEmpty = enemyEffects.length === 0;
 
@@ -73,6 +74,24 @@ const ConfigSection: React.FC<{
                                         buff={b}
                                         variant="enemy"
                                     />
+                                ))}
+                            </>
+                        )}
+                        {enemy.dots.length > 0 && (
+                            <>
+                                <div className="text-xs text-theme-text-secondary mt-1 mb-1">
+                                    DoTs on Target
+                                </div>
+                                {enemy.dots.map((dot, j) => (
+                                    <div
+                                        key={`tdot-${dot.type}-${dot.tier}-${j}`}
+                                        className="flex items-center gap-1.5 mb-1"
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
+                                        <span className="flex-1 text-xs text-theme-text-primary truncate">
+                                            {dotStateLabel(dot)}
+                                        </span>
+                                    </div>
                                 ))}
                             </>
                         )}

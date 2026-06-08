@@ -1850,6 +1850,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
               "turnsRemaining": 2,
             },
           ],
+          "dots": [
+            {
+              "stacks": 1,
+              "tier": 100,
+              "type": "inferno",
+            },
+          ],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -1885,6 +1892,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
             {
               "buffName": "Defense Down",
               "turnsRemaining": 2,
+            },
+          ],
+          "dots": [
+            {
+              "stacks": 2,
+              "tier": 100,
+              "type": "inferno",
             },
           ],
           "enemyId": "e1",
@@ -1924,6 +1938,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
               "turnsRemaining": 2,
             },
           ],
+          "dots": [
+            {
+              "stacks": 3,
+              "tier": 100,
+              "type": "inferno",
+            },
+          ],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -1959,6 +1980,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
             {
               "buffName": "Defense Down",
               "turnsRemaining": 2,
+            },
+          ],
+          "dots": [
+            {
+              "stacks": 3,
+              "tier": 100,
+              "type": "inferno",
             },
           ],
           "enemyId": "e1",
@@ -1998,6 +2026,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
               "turnsRemaining": 2,
             },
           ],
+          "dots": [
+            {
+              "stacks": 3,
+              "tier": 100,
+              "type": "inferno",
+            },
+          ],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2033,6 +2068,13 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
             {
               "buffName": "Defense Down",
               "turnsRemaining": 2,
+            },
+          ],
+          "dots": [
+            {
+              "stacks": 3,
+              "tier": 100,
+              "type": "inferno",
             },
           ],
           "enemyId": "e1",
@@ -2086,6 +2128,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2118,6 +2161,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2150,6 +2194,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2182,6 +2227,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2214,6 +2260,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {
@@ -2246,6 +2293,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "enemyEffects": [
         {
           "debuffs": [],
+          "dots": [],
           "enemyId": "e1",
           "selfBuffs": [
             {

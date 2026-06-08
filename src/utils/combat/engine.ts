@@ -387,6 +387,61 @@ function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
     return out;
 }
 
+/** Assemble the per-round `EnemyRoundEffects[]` for the healing UI (Task 4a). Each enemy that acted
+ *  (in `roundEnemyEffects`, keyed by actor id) keeps its de-duped self-buffs/debuffs; on top, the
+ *  DoTs ACTIVE on the heal target this round are attributed to their applier via the stack
+ *  `sourceId`, summed per type+tier (mirroring the DPS active-DoT display). A DoT-only enemy (no
+ *  self-buffs/debuffs, so absent from `roundEnemyEffects`) gets a fresh entry appended so its DoTs
+ *  still surface. NAMES/COUNTS ONLY for display — never folded into a sim value. */
+function buildEnemyRoundEffects(
+    roundEnemyEffects: Map<string, { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }>,
+    corrosionEntries: ActiveDoTStack[],
+    infernoEntries: ActiveDoTStack[]
+): EnemyRoundEffects[] {
+    // Sum active stacks per source → type → tier, preserving first-seen source order.
+    const dotsBySource = new Map<string, Map<string, EnemyDoTState>>();
+    const accumulate = (type: 'corrosion' | 'inferno', entries: ActiveDoTStack[]): void => {
+        for (const e of entries) {
+            let byKey = dotsBySource.get(e.sourceId);
+            if (!byKey) {
+                byKey = new Map();
+                dotsBySource.set(e.sourceId, byKey);
+            }
+            const key = `${type}-${e.tier}`;
+            const existing = byKey.get(key);
+            if (existing) existing.stacks += e.stacks;
+            else byKey.set(key, { type, tier: e.tier, stacks: e.stacks });
+        }
+    };
+    accumulate('corrosion', corrosionEntries);
+    accumulate('inferno', infernoEntries);
+
+    const out: EnemyRoundEffects[] = [];
+    const emitted = new Set<string>();
+    // Enemies that acted (self-buffs/debuffs) first, in their acting order — each gains its DoTs.
+    for (const [enemyId, e] of roundEnemyEffects) {
+        emitted.add(enemyId);
+        out.push({
+            enemyId,
+            selfBuffs: dedupeByBuffName(e.selfBuffs),
+            debuffs: dedupeByBuffName(e.debuffs),
+            dots: Array.from(dotsBySource.get(enemyId)?.values() ?? []),
+        });
+    }
+    // DoT-only enemies (active DoTs but no self-buffs/debuffs) appended in container order.
+    for (const [sourceId, byKey] of dotsBySource) {
+        if (emitted.has(sourceId)) continue;
+        emitted.add(sourceId);
+        out.push({
+            enemyId: sourceId,
+            selfBuffs: [],
+            debuffs: [],
+            dots: Array.from(byKey.values()),
+        });
+    }
+    return out;
+}
+
 function expireStacks(entries: ActiveDoTStack[]): void {
     for (let i = entries.length - 1; i >= 0; i--) {
         entries[i].remainingRounds -= 1;
@@ -607,6 +662,21 @@ export interface EnemyRoundEffects {
     enemyId: string;
     selfBuffs: ActiveBuff[];
     debuffs: ActiveBuff[];
+    /** Enemy-applied DoTs (Corrosion/Inferno) ACTIVE on the heal target this round, attributed to
+     *  this enemy via the stack's `sourceId` (the applier's actor id), summed per type+tier. Mirrors
+     *  the DPS `ActiveDoTState` `{ type, tier, stacks }` shape so the UI reuses the DPS DoT-label
+     *  helper. A DoT shows for every round it is active on the target (across its duration), so a
+     *  DoT-based enemy (Torcher/Belladonna) surfaces in the panel even with no self-buffs/debuffs.
+     *  NAMES ONLY for display — never folded into any sim value. Empty when no DoTs are active. */
+    dots: EnemyDoTState[];
+}
+
+/** One enemy-applied DoT active on the heal target, attributed to its source enemy and summed per
+ *  type+tier (mirrors the DPS `ActiveDoTState` shape, minus ticksRemaining which the panel omits). */
+export interface EnemyDoTState {
+    type: 'corrosion' | 'inferno';
+    tier: number;
+    stacks: number;
 }
 
 export interface HealingRoundEngine {
@@ -2295,12 +2365,14 @@ export function runCombat(input: CombatEngineInput): {
                 shieldAbsorbed: roundShieldAbsorbed,
                 // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
                 // (keep the first occurrence so the UI shows each effect once per enemy per round),
-                // preserving the order enemies first acted this round.
-                enemyEffects: Array.from(roundEnemyEffects, ([enemyId, e]) => ({
-                    enemyId,
-                    selfBuffs: dedupeByBuffName(e.selfBuffs),
-                    debuffs: dedupeByBuffName(e.debuffs),
-                })),
+                // preserving the order enemies first acted this round. Active enemy-applied DoTs on
+                // the target are attributed by stack `sourceId` and merged in below — a DoT-only
+                // enemy that produced no self-buffs/debuffs still gets an entry so its DoTs show.
+                enemyEffects: buildEnemyRoundEffects(
+                    roundEnemyEffects,
+                    healTarget.corrosionEntries,
+                    healTarget.infernoEntries
+                ),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

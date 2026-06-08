@@ -35,11 +35,13 @@ const twoEnemyRound = (): HealingRoundData =>
                 enemyId: 'e1',
                 selfBuffs: [{ buffName: 'Attack Up', turnsRemaining: 2 }],
                 debuffs: [{ buffName: 'Defense Down', turnsRemaining: 3, stacks: 2 }],
+                dots: [],
             },
             {
                 enemyId: 'e2',
                 selfBuffs: [{ buffName: 'Crit Up', turnsRemaining: 1 }],
                 debuffs: [{ buffName: 'Corrosion', turnsRemaining: 2 }],
+                dots: [],
             },
         ],
     });
@@ -120,6 +122,7 @@ describe('EnemyEffectsPanel', () => {
                                     enemyId: 'e3',
                                     selfBuffs: [{ buffName: 'Speed Up', turnsRemaining: 2 }],
                                     debuffs: [],
+                                    dots: [],
                                 },
                             ],
                         }),
@@ -149,6 +152,67 @@ describe('EnemyEffectsPanel', () => {
             />
         );
         expect(screen.getByText(/no enemy effects this round/i)).toBeInTheDocument();
+    });
+
+    it("renders an enemy's active DoTs on the target with the DPS DoT label (×stacks)", () => {
+        render(
+            <EnemyEffectsPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [],
+                                    dots: [{ type: 'inferno', tier: 15, stacks: 3 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        // DoT-only enemy still surfaces, with its DoTs-on-Target sub-section + the labelled stack.
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
+        expect(screen.getByText('Inferno I ×3')).toBeInTheDocument();
+    });
+
+    it('renders DoTs alongside self-buffs and debuffs in the same enemy group', () => {
+        render(
+            <EnemyEffectsPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [{ buffName: 'Attack Up', turnsRemaining: 2 }],
+                                    debuffs: [{ buffName: 'Defense Down', turnsRemaining: 2 }],
+                                    dots: [{ type: 'corrosion', tier: 3, stacks: 1 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        expect(screen.getByText('Attack Up')).toBeInTheDocument();
+        expect(screen.getByText('Defense Down')).toBeInTheDocument();
+        expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
+        // Single stack → no ×N suffix.
+        expect(screen.getByText('Corrosion I')).toBeInTheDocument();
     });
 
     it('falls back to the raw enemy id when no name is resolved', () => {
