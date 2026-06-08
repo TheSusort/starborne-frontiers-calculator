@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
+import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
+import { TeamActorInput } from '../../../types/calculator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -430,6 +432,56 @@ describe('healing mode — heal consumption + heal-performed', () => {
         expect(attackerPerf.targets).toEqual(['attacker', 't1', 't2']);
         expect(attackerPerf.amount).toBe(3000);
         expect(attackerPerf.critHits).toBe(1); // ONE draw, not 3
+    });
+
+    // ── Test 8b: walked team healer folds its OWN healModifier ───────────────
+    // A team actor whose stats.healModifier = 50 is threaded through deriveTeamEngineActors
+    // (the real auto-fill seam) → its walk bundle carries healModifier 50. It casts a self
+    // heal (basis hp 8000, pct 10). With crit 0 and no outgoing/incoming heal buffs, its OWN
+    // directHeal must be basis × pct × (1 + 50/100) = 8000 × 0.10 × 1.5 = 1200. The focus
+    // actor does nothing (empty skills). Pre-threading this healed at ×1.0 (= 800) because
+    // CombatStatBlock carried no healModifier and the walk bundle defaulted it to 0.
+    it('walked team healer folds its own stats.healModifier into directHeal', () => {
+        idCounter = 0;
+        const teamHealer: TeamActorInput = {
+            id: 't1',
+            speed: 200, // acts before the (inert) focus actor
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: healSkills([
+                ab({
+                    type: 'heal',
+                    target: 'self',
+                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                }),
+            ]),
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp: 8000,
+                healModifier: 50,
+            },
+        };
+        // Thread through the real seam (security 100, no enemy affinity) → walk.healModifier 50.
+        const engineTeamActors = deriveTeamEngineActors([teamHealer], 100, undefined);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                speed: 40, // focus acts after the team healer
+                healTargetId: 't1',
+                teamActors: engineTeamActors,
+                shipSkills: { slots: [] }, // focus actor is inert
+            })
+        );
+        // basis 8000 × pct 10% × (1 + healModifier 50/100) = 1200, credited to the caster t1.
+        expect(sumHeal(result, 'directHeal', 't1')).toBe(1200);
     });
 
     // ── Test 9: DPS-mode inertness ───────────────────────────────────────────

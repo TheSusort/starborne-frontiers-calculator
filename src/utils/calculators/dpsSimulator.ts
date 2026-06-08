@@ -159,9 +159,9 @@ export interface ActiveDoTState {
  * The walked actor's selfDotModifier/defensePenetrationBuff start at 0 (its walked statuses
  * produce those in-loop). A legacy team actor (no shipSkills/stats) passes through unchanged.
  *
- * `healModifier` is intentionally NOT threaded: TeamActorInput.stats is a CombatStatBlock,
- * which carries no healModifier — so walked team actors heal at modifier 0 (the engine's
- * walk-bundle default). Widening CombatStatBlock is out of scope for this seam.
+ * `healModifier` IS threaded from `CombatStatBlock.healModifier` (default 0 when absent) into
+ * the walk bundle, so walked team actors fold their own heal-modifier into heal casts (the
+ * engine reads it off the walk bundle). Fixtures without it default to modifier 0 (unchanged).
  *
  * Returns undefined when `teamActors` is undefined (preserves the DPS-path shape).
  */
@@ -183,6 +183,7 @@ export function deriveTeamEngineActors(
             walk: {
                 shipSkills: t.shipSkills,
                 stats: t.stats,
+                healModifier: t.stats.healModifier ?? 0,
                 debuffLandingChance: teamLandingChance,
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
