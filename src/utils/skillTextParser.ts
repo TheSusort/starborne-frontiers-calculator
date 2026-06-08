@@ -828,6 +828,25 @@ export function detectAllyCritTrigger(
     return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
 }
 
+// "when an enemy gets/is/becomes debuffed" — a reactive own-infliction trigger (APEX's
+// shield-on-debuff). Matches "debuff" specifically so it does NOT collide with the
+// "when an enemy gets/is buffed" enemy-buff handling (debuffed ≠ buffed). No lookbehind:
+// requiring "debuffed" (not "buffed") is sufficient disambiguation since "buffed" lacks
+// the "de" prefix. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
+const ENEMY_DEBUFFED_RE = /\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+debuffed\b/i;
+
+/**
+ * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
+ * "when an enemy gets debuffed" phrase; otherwise undefined. Position-scoped on the RAW text
+ * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
+ */
+export function detectDebuffInflictedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
@@ -1240,12 +1259,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
-            const basis = leechBasis ?? resolveHealBasis(basisScope);
+            const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
             // must not apply (Malvex).
             const resolved = resolveHealTarget(sentence);
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
+            // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
+            // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max
+            // HP"). Recipient == caster, so normalize to the caster-owned 'hp' basis (the two
+            // are behaviourally identical for self, and 'hp' is the canonical self basis).
+            const basis = rawBasis === 'target-hp' && target === 'self' ? 'hp' : rawBasis;
             const explicitTarget = leechBasis === 'damage-taken' ? true : resolved.explicit;
             // Deliberately tested against the WHOLE sentence (not basisScope): trailing-clause
             // phrases like Quixilver's "when taking HP damage…" sit AFTER the match, so the

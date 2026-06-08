@@ -1368,6 +1368,41 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
         expect(enqueued).toHaveLength(3);
     });
+
+    it('on-debuff-inflicted shield (APEX): own infliction enqueues; ally/enemy infliction does not', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        // APEX's refit-active passive: gains a Shield = 3% Max HP when an enemy gets debuffed.
+        // The trigger fires on THIS unit's own inflictions (Speed Down II / Crit Power Down III).
+        const ability: Ability = {
+            id: 'apex-shield-on-debuff',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            config: { type: 'shield', pct: 3, basis: 'hp' },
+        };
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            enemyId: 'enemy',
+        });
+        const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
+
+        // This unit's own infliction → enqueue.
+        handBus.emit({ type: 'debuff-applied', sourceId: 'attacker', ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // An ally's infliction → own-only trigger does NOT fire.
+        handBus.emit({ type: 'debuff-applied', sourceId: 'other', ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // The enemy's own infliction → does NOT fire.
+        handBus.emit({ type: 'debuff-applied', sourceId: 'enemy', ...base });
+        expect(enqueued).toHaveLength(1);
+    });
 });
 
 // ── Task 9: reactive heal/shield/cleanse executor ───────────────────────────────────────

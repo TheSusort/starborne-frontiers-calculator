@@ -30,6 +30,7 @@ import {
     parseCritPowerExtend,
     parseAllyCritDot,
     detectCritRepairTrigger,
+    detectDebuffInflictedTrigger,
     detectAllyCritTrigger,
     parseNoCrit,
     parseAllyInflictsDebuff,
@@ -837,8 +838,12 @@ function abilitiesFromText(
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
         // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
-        // undefined → on-cast).
-        const reactiveTrigger = detectCritRepairTrigger(text, healPos);
+        // undefined → on-cast). APEX: a SHIELD whose anchor falls in the "when an enemy gets
+        // debuffed" sentence rides on-debuff-inflicted (own inflictions; position-scoped). Both
+        // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
+        const reactiveTrigger =
+            detectCritRepairTrigger(text, healPos) ??
+            (h.kind === 'shield' ? detectDebuffInflictedTrigger(text, healPos) : undefined);
         // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
         // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
         // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
