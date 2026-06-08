@@ -35,6 +35,7 @@ import {
     PendingAccumulator,
     PendingBomb,
     CombatActor,
+    advanceChargeCadence,
 } from './state';
 import {
     ActiveBuff,
@@ -666,13 +667,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let action: 'active' | 'charged';
     if (hasChargedSkill && actor.charges >= chargeCount) {
         action = 'charged';
-        actor.charges = 0;
     } else {
         action = 'active';
-        if (hasChargedSkill) {
-            actor.charges += 1;
-        }
     }
+    advanceChargeCadence(actor, hasChargedSkill);
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 

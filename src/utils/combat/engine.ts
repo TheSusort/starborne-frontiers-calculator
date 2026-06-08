@@ -18,6 +18,7 @@ import {
     buildTurnQueue,
     emptyActorDamage,
     emptyActorHealing,
+    advanceChargeCadence,
 } from './state';
 import {
     ActiveBuff,
@@ -1688,11 +1689,10 @@ export function runCombat(input: CombatEngineInput): {
                 let teamAction: 'active' | 'charged';
                 if (teamHasCharged && actor.charges >= actor.chargeCount) {
                     teamAction = 'charged';
-                    actor.charges = 0;
                 } else {
                     teamAction = 'active';
-                    if (teamHasCharged) actor.charges += 1;
                 }
+                advanceChargeCadence(actor, teamHasCharged);
 
                 bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
 
@@ -1818,13 +1818,9 @@ export function runCombat(input: CombatEngineInput): {
                     // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                     // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
                     // application events — a dead target is untouched (old short-circuit).
-                    if (enemyRuntime.hasChargedSkill && actor.chargeCount > 0) {
-                        if (actor.charges >= actor.chargeCount) {
-                            actor.charges = 0;
-                        } else {
-                            actor.charges += 1;
-                        }
-                    }
+                    // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
+                    // implies chargeCount >= 1); the helper's internal guard handles it.
+                    advanceChargeCadence(actor, enemyRuntime.hasChargedSkill);
                     // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                     // produced no ctx either; this actor has no live DoTs to attribute).
                 } else {
