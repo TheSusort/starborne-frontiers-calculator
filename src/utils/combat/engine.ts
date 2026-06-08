@@ -373,6 +373,20 @@ function totalStacks(entries: ActiveDoTStack[]): number {
     return entries.reduce((sum, e) => sum + e.stacks, 0);
 }
 
+/** De-dupe ActiveBuffs by buffName, keeping the first occurrence. Used to collapse the
+ *  per-round enemy-effects union (multiple enemy attackers can carry the same status) so
+ *  the UI shows each effect once per round (Task 10). */
+function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
+    const seen = new Set<string>();
+    const out: ActiveBuff[] = [];
+    for (const b of buffs) {
+        if (seen.has(b.buffName)) continue;
+        seen.add(b.buffName);
+        out.push(b);
+    }
+    return out;
+}
+
 function expireStacks(entries: ActiveDoTStack[]): void {
     for (let i = entries.length - 1; i >= 0; i--) {
         entries[i].remainingRounds -= 1;
@@ -590,6 +604,14 @@ export interface HealingRoundEngine {
     targetShieldStart: number;
     incomingDamage: number;
     shieldAbsorbed: number;
+    /** Self-buffs active on enemy attackers this round (union across all enemy attacker
+     *  turns — Task 10). Surfaced for the UI's enemy-effects round overview. Empty for a
+     *  bare/manual enemy with no self-buffs. */
+    enemySelfBuffs: ActiveBuff[];
+    /** Debuffs/DoTs the enemy attackers landed on the heal target this round (union across
+     *  all enemy attacker turns — Task 10). Surfaced for the UI's enemy-effects round
+     *  overview. Empty for a bare/manual enemy that lands nothing. */
+    targetDebuffs: ActiveBuff[];
 }
 
 /**
@@ -1350,6 +1372,12 @@ export function runCombat(input: CombatEngineInput): {
         // to these via the shield-first drain below.
         let roundIncomingDamage = 0;
         let roundShieldAbsorbed = 0;
+        // Enemy-effects accounting (healing mode, Task 10): the self-buffs active on enemy
+        // attackers and the debuffs they land on the heal target this round, surfaced for the
+        // UI's enemy-effects round overview. Accumulated across enemy attacker turns; de-duped
+        // by buffName at the post-round push. Empty for a bare/manual enemy → no UI rows.
+        const roundEnemySelfBuffs: ActiveBuff[] = [];
+        const roundTargetDebuffs: ActiveBuff[] = [];
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -1908,6 +1936,11 @@ export function runCombat(input: CombatEngineInput): {
                     // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                     // its own future DoT entries would tick with this ctx).
                     lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                    // Surface this enemy attacker's effects for the UI's round overview (Task 10):
+                    // its own active self-buffs and the debuffs it landed on the heal target. NAMES
+                    // ONLY for display — never folded into any sim value. Empty for a bare enemy.
+                    roundEnemySelfBuffs.push(...enemyTurn.activeSelfBuffs);
+                    roundTargetDebuffs.push(...enemyTurn.landedEnemyDebuffs);
                 }
                 if (damage > 0) {
                     roundIncomingDamage += damage;
@@ -2180,6 +2213,10 @@ export function runCombat(input: CombatEngineInput): {
                 targetShieldStart,
                 incomingDamage: roundIncomingDamage,
                 shieldAbsorbed: roundShieldAbsorbed,
+                // De-dupe by buffName (multiple enemy attackers can carry the same status) —
+                // keep the first occurrence so the UI shows each effect once per round.
+                enemySelfBuffs: dedupeByBuffName(roundEnemySelfBuffs),
+                targetDebuffs: dedupeByBuffName(roundTargetDebuffs),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

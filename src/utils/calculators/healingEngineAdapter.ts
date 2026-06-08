@@ -73,6 +73,12 @@ export interface HealingRoundData {
     cumulativeHealing: number;
     teamHealing?: number; // non-focus actors' raw (direct+HoT) healing; only when team actors exist
     activeSelfBuffs: ActiveBuff[];
+    /** Self-buffs active on the enemy attackers this round (Task 10) — for the UI's
+     *  enemy-effects round overview. Empty for a bare/manual enemy with no self-buffs. */
+    enemySelfBuffs: ActiveBuff[];
+    /** Debuffs/DoTs the enemy attackers landed on the heal target this round (Task 10) —
+     *  for the UI's enemy-effects round overview. Empty when the enemy lands nothing. */
+    targetDebuffs: ActiveBuff[];
     extraTurns?: number;
 }
 
@@ -106,9 +112,13 @@ const FOCUS_ID = 'attacker';
  * walk (shared `deriveTeamEngineActors`) — then calls `runCombat` and assembles the public
  * result from the additive `healing` block.
  *
- * Affinity is IGNORED this increment (healing ignores affinity): affinityDamageModifier 0,
- * affinityCritCap 100, affinityCritPenalty 0, and the team walk is derived with no enemy
- * affinity. The dummy enemy is a pure DoT carrier / player-offense target (enemySpeed 0 →
+ * Enemy affinity IS resolved per attacker via computeAffinityModifiers(enemyAffinity,
+ * healTargetAffinity) (the enemy is the attacker, the heal target the defender) — producing
+ * each enemy's affinityDamageModifier / affinityCritCap / affinityCritPenalty. Absent enemy
+ * or target affinity → neutral (modifier 0, cap 100, penalty 0). The HEALER's own offense vs
+ * the dummy enemy still passes affinityDamageModifier 0 / cap 100 / penalty 0 (its damage is
+ * irrelevant to healing), and the team walk is derived with no enemy affinity. The dummy enemy
+ * is a pure DoT carrier / player-offense target (enemySpeed 0 →
  * it acts last) — player offense vs it is irrelevant to healing output, but the cadence and
  * DoT machinery still run as in DPS mode.
  *
@@ -276,6 +286,9 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             cumulativeHealing: Math.round(cumulativeRaw),
             ...(hasTeamActors ? { teamHealing: Math.round(teamRoundRaw) } : {}),
             activeSelfBuffs: rd.activeSelfBuffs,
+            // Enemy-effects overview (Task 10): names only, never folded into any value.
+            enemySelfBuffs: hr?.enemySelfBuffs ?? [],
+            targetDebuffs: hr?.targetDebuffs ?? [],
             ...(rd.extraTurns !== undefined ? { extraTurns: rd.extraTurns } : {}),
         };
     });

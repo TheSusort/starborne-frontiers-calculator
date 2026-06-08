@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
 import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
@@ -35,6 +35,7 @@ import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 import { HealingCumulativeChart } from '../../components/calculator/HealingCumulativeChart';
 import { HealingTimelineChart } from '../../components/calculator/HealingTimelineChart';
+import { EnemyEffectsOverview } from '../../components/calculator/EnemyEffectsOverview';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
 import { Button } from '../../components/ui/Button';
@@ -145,6 +146,9 @@ const HealingCalculatorPage: React.FC = () => {
     const [targetShipSkills, setTargetShipSkills] = useState<ShipSkills | undefined>(undefined);
     const [targetChargeCount, setTargetChargeCount] = useState(0);
     const [targetStartCharged, setTargetStartCharged] = useState(false);
+    // Selected heal-target ship's affinity (explicit-target case). Drives each enemy attacker's
+    // matchup vs the target. Undefined → neutral. Self-heal resolves from the healer ship instead.
+    const [targetAffinity, setTargetAffinity] = useState<AffinityName | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
         undefined
     );
@@ -239,6 +243,7 @@ const HealingCalculatorPage: React.FC = () => {
         setTargetShipSkills(buildShipAbilities(ship));
         setTargetChargeCount(ship.chargeSkillCharge ?? 0);
         setTargetStartCharged(detectShipCharged(ship));
+        setTargetAffinity(ship.affinity);
         setTargetCombatStats({
             attack: Math.round(final.attack ?? 0),
             crit: Math.round(final.crit ?? 0),
@@ -289,6 +294,7 @@ const HealingCalculatorPage: React.FC = () => {
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
                     shipSkills: buildShipAbilities(ship),
+                    affinity: ship.affinity,
                 };
             })
         );
@@ -426,6 +432,7 @@ const HealingCalculatorPage: React.FC = () => {
                 chargeCount: e.chargeCount,
                 startCharged: e.startCharged,
                 shipSkills: e.shipSkills,
+                affinity: e.affinity,
             })),
         [enemies]
     );
@@ -435,6 +442,13 @@ const HealingCalculatorPage: React.FC = () => {
         const allTeamActors = targetActor ? [...teamActors, targetActor] : teamActors;
         const healTargetId = target.useHealerAsTarget ? 'healer' : HEAL_TARGET_ID;
         configs.forEach((config) => {
+            // Heal-target affinity drives each enemy attacker's matchup. When self-healing the
+            // target IS this config's healer ship; otherwise it's the selected heal-target ship.
+            const healTargetAffinity = target.useHealerAsTarget
+                ? config.shipId
+                    ? getShipById(config.shipId)?.affinity
+                    : undefined
+                : targetAffinity;
             map.set(
                 config.id,
                 simulateHealing({
@@ -454,6 +468,7 @@ const HealingCalculatorPage: React.FC = () => {
                     shipSkills: config.shipSkills,
                     selfBuffs: healerBuffs,
                     healTargetId,
+                    healTargetAffinity,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
                     rounds,
@@ -467,6 +482,8 @@ const HealingCalculatorPage: React.FC = () => {
         teamActors,
         targetActor,
         target.useHealerAsTarget,
+        targetAffinity,
+        getShipById,
         enemyInputs,
         rounds,
     ]);
@@ -652,6 +669,17 @@ const HealingCalculatorPage: React.FC = () => {
                         )}
                     </div>
 
+                    {bestResult && (
+                        <div className="card">
+                            <h3 className="text-lg font-bold mb-2">Enemy Effects</h3>
+                            <p className="text-sm text-theme-text-secondary mb-4">
+                                Per round, the self-buffs active on the enemy attackers and the
+                                debuffs or DoTs they landed on the heal target.
+                            </p>
+                            <EnemyEffectsOverview result={bestResult} rounds={rounds} />
+                        </div>
+                    )}
+
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">About the Simulation</h2>
                         <p className="mb-2">
@@ -690,7 +718,8 @@ const HealingCalculatorPage: React.FC = () => {
                             <strong>Fully deterministic.</strong> The simulation contains no
                             randomness — identical inputs always produce identical results. Crits
                             use a fractional-accumulator schedule at the healer&apos;s effective
-                            crit rate. Affinity is ignored for healing this release.
+                            crit rate. Each enemy attacker&apos;s affinity is matched against the
+                            heal target&apos;s affinity to scale its incoming damage.
                         </p>
                     </div>
                 </div>
