@@ -204,6 +204,12 @@ export interface PlayerTurnArgs {
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
      *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
     selfHpPct?: number;
+    /** Enemy-side debuff target key (Task 6). Passed as the `enemyTargetId` arg to the three
+     *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
+     *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
+     *  (pre-Task-6 path, byte-identical). The real tank id is supplied only by the enemy-dispatch
+     *  branch (Task 6b); all player-side call sites in engine.ts leave this unset. */
+    targetId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -600,6 +606,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpDecline,
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
+        targetId,
     } = args;
 
     const {
@@ -818,7 +825,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
         if (landsTimedEnemyApplication(status.payload.application)) {
-            statusEngine.applyTimedAbilityStatus(r, status, actor.id);
+            statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
             // Discrete infliction event — emit ONCE at this application site.
             emitDebuffApplied(actor.id, status.payload.buffName);
         } else {
@@ -869,11 +876,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //    persist their window unconditionally → folded WITHOUT a landing re-roll.
     //  - aura/accumulating (activeAbilityStatuses): conceptually re-applied each
     //    round → KEEP the per-round landing re-roll, with application respected.
-    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id);
+    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id, targetId);
     const recurringAbilityEnemy = statusEngine.activeAbilityStatuses(
         'enemy',
         resolveCtx(preDebuffGateCtx),
-        actor.id
+        actor.id,
+        targetId
     );
     const landedAbilityEnemy: ActiveBuff[] = [];
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
