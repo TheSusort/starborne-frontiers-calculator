@@ -362,6 +362,24 @@ describe('AbilityCard', () => {
             config: { type: 'purge', count: 1 },
         };
 
+        const damageDealtHealAbility: Ability = {
+            id: 'h5',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 20, basis: 'damage-dealt' },
+        };
+
+        const damageTakenShieldAbility: Ability = {
+            id: 'h6',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: { type: 'shield', pct: 30, basis: 'damage-taken' },
+        };
+
         it('heal ability renders pct/basis/noCrit fields', () => {
             const onChange = vi.fn();
             render(<AbilityCard ability={healAbility} onChange={onChange} onRemove={vi.fn()} />);
@@ -431,6 +449,137 @@ describe('AbilityCard', () => {
                     config: expect.objectContaining({ type: 'purge', count: 3 }),
                 })
             );
+        });
+
+        it('damage-dealt heal on passive slot renders the basis select and a leech-scope select', () => {
+            render(
+                <AbilityCard
+                    ability={damageDealtHealAbility}
+                    slot="passive"
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            // Basis select shows the damage-dealt option as selected.
+            fireEvent.click(screen.getByLabelText('Based on stat'));
+            expect(screen.getAllByText('Damage dealt').length).toBeGreaterThan(0);
+            // Scope select with its two options.
+            fireEvent.click(screen.getByLabelText('Leech scope'));
+            expect(screen.getAllByText('All damage').length).toBeGreaterThan(0);
+            expect(screen.getByText('Detonations only')).toBeInTheDocument();
+        });
+
+        it('damage-dealt heal on active slot does NOT render the leech-scope select', () => {
+            render(
+                <AbilityCard
+                    ability={damageDealtHealAbility}
+                    slot="active"
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(screen.queryByLabelText('Leech scope')).not.toBeInTheDocument();
+        });
+
+        it('changing leech scope to Detonations only sets leechScope detonation', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={damageDealtHealAbility}
+                    slot="passive"
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Leech scope'));
+            fireEvent.click(screen.getByText('Detonations only'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ leechScope: 'detonation' }),
+                })
+            );
+        });
+
+        it('changing leech scope to All damage sets leechScope all', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={{
+                        ...damageDealtHealAbility,
+                        config: {
+                            type: 'heal',
+                            pct: 20,
+                            basis: 'damage-dealt',
+                            leechScope: 'detonation',
+                        },
+                    }}
+                    slot="passive"
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Leech scope'));
+            fireEvent.click(screen.getByText('All damage'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ leechScope: 'all' }),
+                })
+            );
+        });
+
+        it('damage-taken shield on passive slot renders the punch-through checkbox and toggles it', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={damageTakenShieldAbility}
+                    slot="passive"
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            const checkbox = screen.getByLabelText('Only when damage punches through shield');
+            expect(checkbox).toBeInTheDocument();
+            // Toggle ON -> requiresHpDamage: true
+            fireEvent.click(checkbox);
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ requiresHpDamage: true }),
+                })
+            );
+        });
+
+        it('damage-taken shield punch-through toggles OFF to undefined', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={{
+                        ...damageTakenShieldAbility,
+                        config: {
+                            type: 'shield',
+                            pct: 30,
+                            basis: 'damage-taken',
+                            requiresHpDamage: true,
+                        },
+                    }}
+                    slot="passive"
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Only when damage punches through shield'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ requiresHpDamage: undefined }),
+                })
+            );
+        });
+
+        it('basis hp renders neither leech-scope select nor punch-through checkbox', () => {
+            render(<AbilityCard ability={healAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByLabelText('Leech scope')).not.toBeInTheDocument();
+            expect(
+                screen.queryByLabelText('Only when damage punches through shield')
+            ).not.toBeInTheDocument();
         });
     });
 

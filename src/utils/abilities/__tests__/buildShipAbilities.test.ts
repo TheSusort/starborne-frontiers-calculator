@@ -1139,14 +1139,21 @@ describe('buildShipAbilities', () => {
             expect((damage?.config as { noCrit?: boolean }).noCrit).toBeUndefined();
         });
 
-        it('damage-reactive shield emits nothing', () => {
+        it('damage-taken shield emits a leech shield (basis damage-taken)', () => {
+            // Damage-leech shields/heals are now PARSED (basis 'damage-taken'/'damage-dealt');
+            // they used to emit nothing. The leech-field threading (requiresHpDamage / leechScope)
+            // lands in the buildShipAbilities task and is asserted there.
             const s = ship({
                 activeSkillText:
                     'This Unit gains a Shield equal to 25% of the damage taken when taking HP damage.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const shield = active?.abilities.find((a) => a.type === 'shield');
-            expect(shield).toBeUndefined();
+            expect(shield?.config).toMatchObject({
+                type: 'shield',
+                pct: 25,
+                basis: 'damage-taken',
+            });
         });
     });
 
@@ -1412,6 +1419,191 @@ describe('buildShipAbilities', () => {
             const byPct = new Map(heals.map((h) => [(h.config as { pct: number }).pct, h.trigger]));
             expect(byPct.get(4)).toBe('on-cast');
             expect(byPct.get(7)).toBe('on-ally-critically-repaired');
+        });
+    });
+
+    // Damage-leech: passive-slot damage-dealt heals carry a default leechScope 'all' (direct + DoT
+    // ticks + detonations, per user decision); cast riders (active/charged) carry NO scope. Shields
+    // never flip target; current in-scope ships have no passive-slot damage-dealt shields, so
+    // leechScope doesn't appear on shield configs in practice (but the type permits it — the engine's
+    // standing-leech hook reads scope for shields too). The damage-taken punch-through flag
+    // (requiresHpDamage) only threads onto shields parsed from damage-taken text.
+    describe('damage-leech ships', () => {
+        it('Magnolia: passive standing leech → self heal, basis damage-dealt, scope all', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit <unit-damage>repairs itself for 20%</unit-damage> of the damage it deals to enemies.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                config: { type: 'heal', pct: 20, basis: 'damage-dealt', leechScope: 'all' },
+            });
+        });
+
+        it('Valerian: DoT-inclusive passive text parses identically (scope all, damage-DEALT)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit <unit-damage>repairs 15%</unit-damage> of Damage dealt to the enemy, including inflcted Damage over Time effects.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                config: { type: 'heal', pct: 15, basis: 'damage-dealt', leechScope: 'all' },
+            });
+        });
+
+        it('Iridium: active rider → self heal damage-dealt, NO leechScope (active slot)', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>40% damage</unit-damage> with additional <unit-damage>damage equal to 9%</unit-damage> of its max HP and <unit-damage>repairs 15%</unit-damage> of the damage dealt.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                config: { type: 'heal', pct: 15, basis: 'damage-dealt' },
+            });
+            expect((heal?.config as { leechScope?: string }).leechScope).toBeUndefined();
+        });
+
+        it('Tithonus: active all-allies leech + skill-wide noCrit', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-aid>purges 2 buffs</unit-aid> from the enemy and deals <unit-damage>170% damage</unit-damage>.<br /><br /> Then <unit-damage>repairs all allies 7%</unit-damage> of the damage dealt. This repair cannot critically hit.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'all-allies',
+                config: { type: 'heal', pct: 7, basis: 'damage-dealt', noCrit: true },
+            });
+        });
+
+        it('Pallas: active "heals for" verb → ally leech + noCrit', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>200% damage</unit-damage>. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const heal = active?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 20, basis: 'damage-dealt', noCrit: true },
+            });
+        });
+
+        it('Valkyrie: passive detonation dual-recipient → ally + self leech, scope detonation', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-skill>Speed Up II</unit-skill> for 1 turn at the start of the round.<br /><br />When an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy, this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
+            expect(heals).toHaveLength(2);
+            for (const heal of heals) {
+                expect(heal.config).toMatchObject({
+                    type: 'heal',
+                    pct: 5,
+                    basis: 'damage-dealt',
+                    leechScope: 'detonation',
+                });
+            }
+            expect(heals.map((h) => h.target).sort()).toEqual(['ally', 'self']);
+        });
+
+        it('Quixilver active: shield self, basis damage-dealt, no leechScope', () => {
+            const s = ship({
+                activeSkillText:
+                    'This unit deals <unit-damage>100% damage</unit-damage> plus an additional damage equal to <unit-damage>14%</unit-damage> of its current Shield, and gains <unit-damage>Shield equal to 20%</unit-damage> of the damage dealt..',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                config: { type: 'shield', pct: 20, basis: 'damage-dealt' },
+            });
+            expect((shield?.config as { leechScope?: string }).leechScope).toBeUndefined();
+        });
+
+        it('Quixilver passive: damage-taken shield with requiresHpDamage, no leechScope', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of the damage taken when taking HP damage and still having Shield.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                config: {
+                    type: 'shield',
+                    pct: 25,
+                    basis: 'damage-taken',
+                    requiresHpDamage: true,
+                },
+            });
+            expect((shield?.config as { leechScope?: string }).leechScope).toBeUndefined();
+        });
+
+        it('Malvex passive: damage-taken shield, no requiresHpDamage', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                config: { type: 'shield', pct: 15, basis: 'damage-taken' },
+            });
+            expect(
+                (shield?.config as { requiresHpDamage?: boolean }).requiresHpDamage
+            ).toBeUndefined();
+        });
+
+        it('FrontLine active: damage-dealt shield', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>80% damage</unit-damage> with additional damage equal to <unit-damage>60%</unit-damage> of their current Shield, and gains a <unit-damage>Shield equal to 30%</unit-damage> of the damage dealt.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                config: { type: 'shield', pct: 30, basis: 'damage-dealt' },
+            });
+        });
+
+        it('FrontLine R4 passive: start-of-combat max-HP shield parses; no damage-dealt/taken shield', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const shields = passive?.abilities.filter((a) => a.type === 'shield') ?? [];
+            // The start-of-combat Max-HP shield (basis 'hp') still parses.
+            expect(shields.some((sh) => (sh.config as { basis: string }).basis === 'hp')).toBe(
+                true
+            );
+            // No damage-dealt / damage-taken shield is produced from this passive.
+            expect(
+                shields.some((sh) =>
+                    ['damage-dealt', 'damage-taken'].includes(
+                        (sh.config as { basis: string }).basis
+                    )
+                )
+            ).toBe(false);
         });
     });
 });

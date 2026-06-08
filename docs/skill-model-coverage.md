@@ -8,6 +8,7 @@
 > Updated **2026-06-05** after the team ShipSkills walk (branch `feat/combat-engine-team-skills-walk`).
 > Updated **2026-06-06** after the ally-crit-dot reactive trigger (branch `feat/combat-engine-ally-crit-dot`).
 > Updated **2026-06-07** after the Healing Calculator engine rebuild (branch `feat/healing-calc-engine`).
+> Updated **2026-06-07** after the damage-leech heals & shields ship (branch `feat/damage-leech`): the ~14 leech text cells (~11 ships) now parse + simulate (see §5 LEECH, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -36,8 +37,8 @@ Legend: ✅ full, ⚠️ partial (see notes), ❌ none.
 | `detonate-dot` | ✅ `parseDetonateDoT` | ✅ | ✅ Step 2.95 | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `accumulate-detonate` | ⚠️ hardcoded effect names (Echoing Burst) | ✅ | ✅ Step 3b/6b (gated only by DoT landing roll) | ✅ `gateFiringAbilities` | ❌ | firing only |
 | `charge` | ✅ `parseChargeGain` + condition classifier | ✅ | ✅ active rounds only, capped at `chargeCount` | ✅ `gateFiringAbilities`; un-thresholded conditions also scale (binary self-crit, per-count subjects) | per-count / binary self-crit via `evaluateCondition` (positional ctx) | **firing + passive** |
-| `heal` | ✅ `parseHealAbilities` / `parseHealNoCrit` (basis: caster max HP / Attack / Defense / recipient max HP; self/ally/all-allies targets; sentence-scoped) | ✅ pct, basis, target, noCrit | ✅ **healing calc only** (consumed against a live heal target; provably inert in DPS runs — gated on `healTargetId`) | ⚠️ Phase-4 disqualify guards in parser ("of the damage taken/dealt", revive/Cheat Death stay unparsed); in-sim conditions follow the buff/debuff rules | ✅ formula = casterStat(basis) × pct% × critBlend × (1+healModifier%) × (1+outgoingHeal%) × (1+recipient incomingHeal%) | firing + passive (heals emitted text-position ordered) |
-| `shield` | ✅ `parseHealAbilities` (basis × pct) | ✅ pct, basis, target | ✅ **healing calc only** — additive absorption pool, capped at target max HP, drains before HP, no expiry | ⚠️ same as heal | ✅ basis × pct only (NO crit, NO heal channels — documented assumption) | firing + passive |
+| `heal` | ✅ `parseHealAbilities` / `parseHealNoCrit` (basis: caster max HP / Attack / Defense / recipient max HP / **damage-dealt / damage-taken**; self/ally/all-allies targets; sentence-scoped; `leechScope` for passive damage-dealt) | ✅ pct, basis, target, noCrit, scope | ✅ **healing calc only** (consumed against a live heal target; provably inert in DPS runs — gated on `healTargetId`) | ⚠️ revive/Cheat Death stay unparsed; FrontLine R4 enemy-action leech disqualified; in-sim conditions follow the buff/debuff rules | ✅ stat bases: casterStat(basis) × pct% × critBlend × (1+healModifier%) × (1+outgoingHeal%) × (1+recipient incomingHeal%). Leech bases (damage-dealt/taken): see §5 LEECH | firing + passive (heals emitted text-position ordered) |
+| `shield` | ✅ `parseHealAbilities` (basis × pct; incl. damage-dealt / damage-taken + `leechScope`) | ✅ pct, basis, target, scope | ✅ **healing calc only** — additive absorption pool, capped at target max HP, drains before HP, no expiry | ⚠️ same as heal | ✅ basis × pct only (NO crit, NO heal channels — documented assumption); leech-shield basis = §5 LEECH | firing + passive |
 | `cleanse` / `purge` | ✅ `parseCleanse` (cleanse only — count of debuffs removed) | ✅ cleanse count | ⚠️ **healing calc: cleanse OUTPUT COUNT only** (reported, no debuff consumption yet); `purge` stays annotation-only | — | — | firing + passive |
 | `control` | ❌ (Taunt/Provoke parse as buff/debuff *conditions*, not control abilities) | ❌ label-only | ❌ not consumed | — | — | — |
 
@@ -470,6 +471,71 @@ buff/charge-aura), source it from firing + passive.
   **Healing ignores affinity (this increment).** Heal/shield amounts do not apply an affinity
   matchup multiplier this increment (the DPS engine does for damage). Team actors heal at
   `healModifier 0` — `CombatStatBlock` lacks the healModifier field (documented; see §6).
+- **Damage-leech heals & shields (2026-06-07, branch `feat/damage-leech`).** LEECH — heals/
+  shields equal to a percentage of damage **dealt** or **taken** (~14 text cells / ~11 ships).
+  Two new heal/shield bases `'damage-dealt'` / `'damage-taken'` plus an optional
+  `leechScope: 'all' | 'detonation'` (passive damage-dealt only). For `damage-dealt`, the
+  **slot decides the mechanism**: active/charged-slot = a cast rider (resolved in the heal
+  block); passive-slot = a standing leech (engine `creditDamage` hook). `damage-taken` is
+  **hook-owned regardless of slot** — `isHookOwned` excludes every `damage-taken` heal/shield
+  from the cast path, and the per-attack proc scans the heal target's passive-slot
+  `damage-taken` abilities (the only shape any ship uses). Zero RNG; all 30 goldens
+  stayed byte-identical (the credit wrapper is a pure refactor; D is per-attack; DPS mode inert).
+  The following rules are game-decided (user decisions 2026-06-07) or documented approximations:
+
+  **Leech repairs draw heal crits (user decision 2026-06-07).** A leech repair (X% of damage
+  dealt) DRAWS a heal crit on the separate per-actor heal crit gate UNLESS the text says the
+  repair "cannot critically hit". Magnolia/Valerian/Iridium/Opal crit; Tithonus and Pallas parse
+  `noCrit: true` and skip the draw (no schedule slot consumed). Rationale: the explicit "cannot
+  critically hit" exemptions imply crits are the default. On the in-game verify list.
+
+  **Standing-leech scope = ALL credited damage (user decision 2026-06-07).** A standing passive
+  leech (Magnolia 20/40% self, Valerian 15% self) leeches EVERY point of damage credited to the
+  actor: direct hits + DoT ticks (Corrosion / Inferno) + detonations (`leechScope: 'all'`,
+  default). Valerian's "including DoT ticks" phrasing is treated as clarification, not
+  differentiation — **Magnolia leeches her own Inferno ticks too**. Valkyrie's burst-heal is
+  scoped to detonations only (`leechScope: 'detonation'`) — it procs only on Echoing Burst
+  explosions, splitting into two abilities (self 5% + lowest-HP ally 5%). On the in-game verify list.
+
+  **Cast-rider 'damage-dealt' basis = the cast's own direct damage (group A).** Iridium, Opal,
+  Tithonus, Pallas, Quixilver-active, FrontLine active/charged. The basis resolves to THIS turn's
+  cast direct-damage total (which already includes secondary/conditional sub-buckets), EXCLUDING
+  detonation damage (no group-A ship detonates on the same cast). It is folded through the FULL
+  heal pipeline — heal-crit draw (unless `noCrit`), `healModifier`, `outgoingHeal`, recipient
+  `incomingHeal` for heals; `basis × pct` only for shields (existing convention). Emits
+  `heal-performed` like any cast heal. The player-turn heal block **skips** passive-slot
+  `damage-dealt`/`damage-taken` abilities (slot-partition guard — they belong to the standing
+  hook / enemy-attack block; processing them here would double-count).
+
+  **Standing-leech + damage-taken procs use a SIMPLIFIED fold and emit NO `heal-performed`.**
+  Their heal fold is `amount × pct × (1 + healModifier%)` plus (unless `noCrit`) one heal-crit
+  draw — NO outgoing/incoming channels (the same simplification the executor's reactive-heal fold
+  uses). The crit draw reads the owner's standing `PlayerActorRuntime.crit` / `.critDamage` (base
+  + gear), NOT the mid-turn folded `effectiveCrit`. Shields fold `amount × pct` only. They emit
+  **no `heal-performed`** (chain guard, same as executor reactive heals) — consequence: leech
+  procs never feed `on-ally-critically-repaired`. Documented. Standing procs apply **immediately
+  at credit time** via a new `creditDamage(sourceId, channel, amount)` engine closure
+  (`channel ∈ {direct, detonation, corrosion, inferno}`) wrapping the existing credit points; a
+  DoT-tick leech lands during the enemy turn, before later queue entries (deterministic order).
+  The hook no-ops in DPS mode and with an empty table is a pure refactor (goldens are the referee).
+
+  **Damage-taken procs fire PER ENEMY ATTACK on the FULL aggregate attack damage (group D).**
+  Quixilver passive (shield 25% of damage taken) and Malvex (shield 15% of "damage dealt to
+  them" = damage TAKEN, recipient = self). They proc AFTER the attack's shield-first drain
+  resolves, on the aggregate attack damage (never absorbing their own trigger). **Quixilver is
+  gated on punch-through** — it procs only when the attack started with a shield pool > 0 AND
+  dealt HP damage (the only reading consistent with the user-verified shield-first drain model).
+  **Malvex is unconditional** (its "primary target" is always true in the single-target
+  bombardment model). Per-ATTACK (not per-hit) is a deliberate approximation: per-hit application
+  would restructure the shield-drain arithmetic and risk float-level churn on the 8 locked healing
+  goldens, and the accuracy gap (mid-attack shield compounding) is below the enemy-model fidelity.
+  Dead target = no procs. `runEnemyAttackerTurn` is unchanged. On the in-game verify list.
+
+  **Out of scope (Phase-4 cells, parser-disqualified or untouched).** FrontLine R4 ("When an
+  enemy uses their Charged skill…") — enemy-action reaction; gets a parser disqualifier so it
+  cannot half-parse. Laika ("Shield equal to 20% of its Max HP upon removing Shield from an
+  enemy") — hp-basis shield with an unparseable trigger; pre-existing behaviour untouched. Both
+  noted as known Phase-4 cells. Revive/Cheat Death guard retained.
 
 ---
 
@@ -574,12 +640,35 @@ configure it and it looks like it works, but it does nothing".
 >   reuse, Skill Editor heal/shield/cleanse fields, HealingTimelineChart + cumulative comparison,
 >   survival stat).
 >
+> **Shipped 2026-06-07 (damage-leech heals & shields — feat/damage-leech):**
+> - LEECH heals/shields parsed + simulated for the ~14 text cells / ~11 ships: two new bases
+>   `'damage-dealt'` / `'damage-taken'` + optional `leechScope`. Cast riders (Iridium, Opal,
+>   Tithonus, Pallas, Quixilver-active, FrontLine) fold through the player-turn heal block;
+>   standing leeches (Magnolia, Valerian) + Valkyrie's detonation-scoped burst fire via a new
+>   `creditDamage` engine hook; damage-taken shields (Quixilver passive, Malvex) proc per enemy
+>   attack. All 30 goldens byte-identical. New healing goldens: Magnolia (Inferno-tick leech),
+>   Valerian (Corrosion leech), Tithonus + Pallas (noCrit riders), Valkyrie (detonation leech),
+>   Quixilver (active rider + taken passive). See §5 LEECH for the full rule set. Skill Editor
+>   gains the Damage dealt / Damage taken basis options + a scope select on passive damage-dealt.
+>
 > **In-game verification list (healing — assumptions to confirm):**
 > - *Self-HoT cast-turn tick*: a self-applied Repair Over Time ticks on its own cast turn in-sim.
 >   The game may delay the first tick one turn — confirm and adjust if so.
 > - *Shield no-crit / no-channels*: shields use `basis × pct` only (no heal crit, no
 >   healModifier/outgoing/incoming). Confirm shields do not crit or scale with repair channels.
 > - *Shield no-expiry*: the absorption pool persists until drained. Confirm shields do not time out.
+> - *Magnolia DoT-tick leech*: her standing leech is modeled as including her Inferno ticks
+>   (`leechScope: 'all'`). Confirm in-game that her "repairs … of the damage it deals" really
+>   credits DoT-tick damage and not just direct hits.
+> - *Leech repairs draw crits*: leech repairs without an explicit "cannot critically hit" clause
+>   crit (the explicit exemptions on Tithonus/Pallas imply the default). Confirm the explicit
+>   "cannot crit" text is redundant-by-default and not a special-case exemption.
+> - *Per-ATTACK damage-taken approximation*: Quixilver/Malvex shields proc on the aggregate
+>   per-attack damage, not per-hit. Confirm the mid-attack shield-compounding difference is
+>   negligible in practice.
+> - *FrontLine R4 + Laika still unparsed (Phase 4)*: FrontLine R4's enemy-charged-skill leech
+>   shield and Laika's shield-on-shield-remove remain unmodeled (Phase-4 enemy-action / hp-basis
+>   trigger cells); confirm they are intentionally absent until Phase 4.
 >
 > **Phase 4 pointer (not yet started):**
 > - Enemy offensive actions (DPS side), `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,

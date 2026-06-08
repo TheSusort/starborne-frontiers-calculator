@@ -1,5 +1,5 @@
 import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
-import { ShipSkills } from '../../types/abilities';
+import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -300,6 +300,9 @@ function tickDoTs(args: {
     expireStacks(args.corrosionEntries);
     expireStacks(args.infernoEntries);
 }
+
+/** Damage-credit channels the standing-leech hook distinguishes (damage-leech spec §4). */
+type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
 
 /** A team actor input as the ENGINE consumes it: the public TeamActorInput plus an
  *  optional `walk` bundle the adapter (simulateDPS) resolves when the actor carries
@@ -1001,6 +1004,115 @@ export function runCombat(input: CombatEngineInput): {
         ...teamRuntimeById,
     ]);
 
+    // Passive-slot standing leeches per owner (damage-leech spec §4): X% of credited
+    // damage repaired/shielded immediately at credit time. Scanned once at setup from each
+    // runtime's reactive-partitioned castSkills (passive-slot heal/shield abilities are
+    // on-cast, not reactive, so they remain here after partitioning). Healing mode only.
+    interface StandingLeech {
+        kind: 'heal' | 'shield';
+        pct: number;
+        target: AbilityTarget;
+        noCrit: boolean;
+        scope: 'all' | 'detonation';
+    }
+    const standingLeeches = new Map<string, StandingLeech[]>();
+    if (healTarget) {
+        for (const [ownerId, rt] of runtimesById) {
+            const entries: StandingLeech[] = [];
+            for (const slot of rt.castSkills.slots) {
+                if (slot.slot !== 'passive') continue;
+                for (const a of slot.abilities) {
+                    const c = a.config;
+                    if ((c.type === 'heal' || c.type === 'shield') && c.basis === 'damage-dealt') {
+                        entries.push({
+                            kind: c.type,
+                            pct: c.pct,
+                            target: a.target,
+                            noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
+                            scope: c.leechScope ?? 'all',
+                        });
+                    }
+                }
+            }
+            if (entries.length > 0) standingLeeches.set(ownerId, entries);
+        }
+    }
+
+    // The heal target's passive damage-taken abilities (damage-leech spec §5): each enemy
+    // ATTACK on the target procs these AFTER the attack's shield-first drain. Sibling shape
+    // to the standing leeches above. Enemy attacks only ever hit the heal target in this
+    // model, so only the heal target's runtime is scanned. Healing mode only.
+    interface TakenLeech {
+        kind: 'heal' | 'shield';
+        pct: number;
+        noCrit: boolean;
+        requiresHpDamage: boolean;
+    }
+    const takenLeeches: TakenLeech[] = [];
+    if (healTarget) {
+        const rt = runtimesById.get(healTarget.id);
+        if (rt) {
+            for (const slot of rt.castSkills.slots) {
+                if (slot.slot !== 'passive') continue;
+                for (const a of slot.abilities) {
+                    const c = a.config;
+                    if ((c.type === 'heal' || c.type === 'shield') && c.basis === 'damage-taken') {
+                        takenLeeches.push({
+                            kind: c.type,
+                            pct: c.pct,
+                            noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
+                            requiresHpDamage: c.requiresHpDamage ?? false,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Proc an owner's standing leeches against a damage credit (heals immediately at
+    // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
+    // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
+    // deterministic heal-crit draw on the owner's activeHealCritGate at the RUNTIME's
+    // standing crit/critDamage (base+gear stats — the per-turn folded effectiveCrit only
+    // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
+    // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
+    const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
+        if (!healingCtx || amount <= 0) return;
+        const entries = standingLeeches.get(sourceId);
+        if (!entries) return;
+        const owner = runtimesById.get(sourceId);
+        if (!owner) return;
+        for (const e of entries) {
+            if (e.scope === 'detonation' && channel !== 'detonation') continue;
+            let raw = amount * (e.pct / 100);
+            if (e.kind === 'heal') {
+                raw *= 1 + owner.healModifier / 100;
+                if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
+                    raw *= 1 + owner.critDamage / 100;
+                }
+            }
+            const recipients =
+                e.target === 'ally'
+                    ? [healTarget!.id]
+                    : e.target === 'all-allies'
+                      ? healingCtx.playerIds
+                      : [sourceId];
+            for (const rid of recipients) {
+                if (e.kind === 'heal') {
+                    healingCtx.credit(sourceId, 'directHeal', raw);
+                    if (rid === healTarget!.id) {
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
+                        healingCtx.credit(sourceId, 'overheal', overheal);
+                    }
+                } else {
+                    healingCtx.credit(sourceId, 'shield', raw);
+                    if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
+                }
+            }
+        }
+    };
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -1030,6 +1142,13 @@ export function runCombat(input: CombatEngineInput): {
                 roundDamage.set(id, d);
             }
             return d;
+        };
+        // Single damage-credit point: every channel write flows through here so standing
+        // leeches (damage-leech spec) can proc at credit time. With no leeches registered
+        // this is byte-identical to the bare dmg() writes (the goldens are the referee).
+        const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
+            dmg(sourceId)[channel] += amount;
+            procStandingLeeches(sourceId, channel, amount);
         };
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;
@@ -1279,10 +1398,13 @@ export function runCombat(input: CombatEngineInput): {
                 // clobber them. direct/secondary/conditional are single-focus-turn
                 // today; += keeps the 0..N-turn seam additive.
                 const d = dmg(actor.id);
-                d.direct += turn.directDamage;
+                // secondary/conditional are display sub-buckets already rolled into
+                // turn.directDamage — they must NOT be routed through creditDamage or the
+                // standing-leech hook would double-count them.
                 d.secondary += turn.secondaryDamage;
                 d.conditional += turn.conditionalDamage;
-                d.detonation += turn.detonationDamage;
+                creditDamage(actor.id, 'direct', turn.directDamage);
+                creditDamage(actor.id, 'detonation', turn.detonationDamage);
                 focusTurns.push(turn);
 
                 // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
@@ -1328,10 +1450,10 @@ export function runCombat(input: CombatEngineInput): {
                 // sub-buckets of direct (do NOT double-add) but kept distinct for the
                 // simulator-page seam.
                 const td = dmg(actor.id);
-                td.direct += teamTurn.directDamage;
                 td.secondary += teamTurn.secondaryDamage;
                 td.conditional += teamTurn.conditionalDamage;
-                td.detonation += teamTurn.detonationDamage;
+                creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
 
                 // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
                 // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
@@ -1436,9 +1558,7 @@ export function runCombat(input: CombatEngineInput): {
                             dotType,
                             damage,
                         }),
-                    credit: (sourceId, dotType, damage) => {
-                        dmg(sourceId)[dotType] += damage;
-                    },
+                    credit: (sourceId, dotType, damage) => creditDamage(sourceId, dotType, damage),
                 });
 
                 // Bombs: per-entry burst credited to the applier's detonation channel,
@@ -1454,9 +1574,8 @@ export function runCombat(input: CombatEngineInput): {
                             stacks,
                             damage,
                         }),
-                    creditDetonation: (sourceId, damage) => {
-                        dmg(sourceId).detonation += damage;
-                    },
+                    creditDetonation: (sourceId, damage) =>
+                        creditDamage(sourceId, 'detonation', damage),
                 });
 
                 // Accumulators: the gather INPUT is the summed direct damage of ALL players
@@ -1469,9 +1588,8 @@ export function runCombat(input: CombatEngineInput): {
                 processAccumulators({
                     pendingAccumulators,
                     allPlayersDirect,
-                    creditDetonation: (sourceId, damage) => {
-                        dmg(sourceId).detonation += damage;
-                    },
+                    creditDetonation: (sourceId, damage) =>
+                        creditDamage(sourceId, 'detonation', damage),
                 });
             } else if (actor.kind === 'enemy') {
                 // ====================================================================
@@ -1495,7 +1613,9 @@ export function runCombat(input: CombatEngineInput): {
                 });
                 if (damage > 0) {
                     roundIncomingDamage += damage;
-                    // Shield-first drain: the absorption pool drains before HP.
+                    // Shield-first drain: the absorption pool drains before HP. Capture the
+                    // pre-drain pool for the punch-through gate (Quixilver) below.
+                    const shieldBefore = healTarget!.shieldPool;
                     const absorbed = Math.min(healTarget!.shieldPool, damage);
                     healTarget!.shieldPool -= absorbed;
                     roundShieldAbsorbed += absorbed;
@@ -1508,6 +1628,43 @@ export function runCombat(input: CombatEngineInput): {
                     if (wasAlive && healTarget!.currentHp <= 0) {
                         healTargetDestroyedRound = r;
                         bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+                    }
+
+                    // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
+                    // AFTER this attack's drain so the proc never absorbs its own trigger.
+                    // raw scales from the FULL attack damage, not the HP portion. Quixilver's
+                    // punch-through gate (requiresHpDamage): shield present at attack start
+                    // AND HP damage dealt; Malvex is unconditional.
+                    // Per-attack (not per-hit): per-hit application would restructure the
+                    // shield-drain arithmetic and risk float-level golden churn; the accuracy
+                    // delta is below the fidelity of the flat enemy model — on the in-game
+                    // verify list (spec §5).
+                    // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
+                    // to the heal target (enemy attacks only ever hit it).
+                    if (takenLeeches.length > 0 && healingCtx) {
+                        const hpDamage = damage - absorbed;
+                        const rt = runtimesById.get(healTarget!.id);
+                        for (const e of takenLeeches) {
+                            if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
+                                continue;
+                            }
+                            let raw = damage * (e.pct / 100);
+                            if (e.kind === 'heal' && rt) {
+                                raw *= 1 + rt.healModifier / 100;
+                                if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
+                                    raw *= 1 + rt.critDamage / 100;
+                                }
+                            }
+                            if (e.kind === 'heal') {
+                                healingCtx.credit(healTarget!.id, 'directHeal', raw);
+                                const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
+                                healingCtx.credit(healTarget!.id, 'effectiveHeal', consumed);
+                                healingCtx.credit(healTarget!.id, 'overheal', overheal);
+                            } else {
+                                healingCtx.credit(healTarget!.id, 'shield', raw);
+                                healingCtx.grantShieldToTarget(raw);
+                            }
+                        }
                     }
                 }
             }

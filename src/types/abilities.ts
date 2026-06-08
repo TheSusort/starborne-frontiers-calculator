@@ -179,11 +179,23 @@ export type AbilityConfig =
     | {
           type: 'heal' | 'shield';
           pct: number;
-          /** Stat the amount scales from: caster max HP / attack / defence, or the
-           *  RECIPIENT's max HP ('target-hp' — "of their Max HP"). */
-          basis: 'hp' | 'attack' | 'defense' | 'target-hp';
-          /** Pallas: "repair cannot critically hit". Shields never crit regardless. */
+          /** Stat the amount scales from: caster max HP / attack / defence, the
+           *  RECIPIENT's max HP ('target-hp' — "of their Max HP"), or a damage-leech
+           *  basis: 'damage-dealt' (X% of damage this actor deals — cast rider on
+           *  active/charged slots, standing leech on the passive slot) /
+           *  'damage-taken' (X% of an enemy attack's damage on this actor; passive
+           *  slot, procs only while the actor is the heal target). */
+          basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken';
+          /** Pallas/Tithonus: "repair cannot critically hit". Shields never crit regardless. */
           noCrit?: boolean;
+          /** Passive-slot 'damage-dealt' only: which credited damage procs the leech.
+           *  'all' (default — direct + DoT ticks + detonations, user decision 2026-06-07)
+           *  or 'detonation' (Valkyrie: Echoing Burst explosions only). */
+          leechScope?: 'all' | 'detonation';
+          /** 'damage-taken' only (Quixilver "when taking HP damage and still having
+           *  Shield"): proc only when the attack started with shield > 0 AND dealt HP
+           *  damage (punched through the pool). Absent → unconditional (Malvex). */
+          requiresHpDamage?: boolean;
       }
     | { type: 'cleanse' | 'purge'; count: number }
     | {

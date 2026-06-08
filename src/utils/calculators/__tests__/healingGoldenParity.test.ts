@@ -16,7 +16,7 @@
 //     suite once. Blanket `-u` would silently paper over an unintended change in an
 //     unrelated scenario. (This mirrors the DPS suite's convention, enforced by project
 //     docs/process rather than by a header there.)
-//   • HAND-VERIFICATION PROVENANCE. Scenarios 1, 6 and 7 are traced round-by-round in
+//   • HAND-VERIFICATION PROVENANCE. Scenarios 1, 6, 7, 9 and 12 are traced round-by-round in
 //     the commit that introduced this file (formula, gate schedule, shield drain order,
 //     death round). The other scenarios are spot-checked for plausibility (no NaN,
 //     cumulative monotonic, charge cadence sane, routed-cast heal-conservation). If you
@@ -410,5 +410,322 @@ describe('healingGoldenParity', () => {
                 }),
             ]),
         });
+    });
+
+    // ── Scenario 9: Magnolia shape (standing damage-leech, all-scope) ─────────
+    // HAND-VERIFIED (damage-leech spec §4). The healer IS the focus + heal target, no
+    // enemies → all leech-heal is overheal (deficit 0). Active slot = a 100% damage cast
+    // (1 hit, crit 0) + a 1-turn Inferno (tier 100, 1 stack). Passive slot = a standing
+    // leech `{ type:'heal', basis:'damage-dealt', pct:20, leechScope:'all', target:'self' }`.
+    // The leech is HOOK-OWNED (passive damage-dealt) → simplified fold: healModifier + crit
+    // only (healMod 0, crit 0 → bare raw = credit × 20%). 'all' scope leeches BOTH direct
+    // and the Inferno tick.
+    //
+    // Damage constants (effectiveAttack 5000, dummy defence 10000 → postDefenseFactor
+    // 1 − dr(10000)/100 = 0.2579415898443159):
+    //   cast direct        = 5000 × 100% × 0.2579415898443159 = 1289.7079492215796
+    //   Inferno tick       = 1 stack × (100/100) × 5000 × dotMult 1 × affinityMult 1 = 5000
+    //
+    // Per-round timeline (identical every round — full HP, Inferno re-applied at duration 1):
+    //   • Focus turn (speed 100, acts first): the cast deals direct 1289.708 to the dummy →
+    //     creditDamage('attacker','direct',1289.708) procs the leech at CREDIT time:
+    //       cast leech raw = 1289.7079492215796 × 20% = 257.94158984431596 (→ 258).
+    //     Then the Inferno (duration 1) is applied to the dummy's container.
+    //   • Dummy enemy turn (speed 0, acts last): ticks the Inferno (5000) →
+    //     creditDamage('attacker','inferno',5000) procs the SAME leech ('all' scope) at the
+    //     ENEMY turn (correct survival timing — a DoT-tick leech lands during the enemy turn):
+    //       inferno leech raw = 5000 × 20% = 1000.
+    //   ⇒ directHeal = 257.9416 + 1000 = 1257.9416 (→ 1258). Full HP → effectiveHealing 0,
+    //     overheal 1257.9416 (→ 1258). hotHeal 0, shield 0, incomingDamage 0.
+    //   cumulativeHealing: R1 1258, R2 2516, R3 3774, …
+    const scenario9Input = () =>
+        BASE({
+            rounds: 10,
+            healer: { ...HEALER, hp: 10000 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                            ab({
+                                type: 'dot',
+                                target: 'enemy',
+                                config: {
+                                    type: 'dot',
+                                    dotType: 'inferno',
+                                    tier: 100,
+                                    stacks: 1,
+                                    duration: 1,
+                                },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 20,
+                                    basis: 'damage-dealt',
+                                    leechScope: 'all',
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
+    snap('Magnolia shape (standing damage-leech all-scope: cast + Inferno tick)', scenario9Input);
+
+    // Supplementary in-code assertion for scenario 9: round-1 directHeal is the cast-leech
+    // (258) + the Inferno-tick leech (1000) folded into the focus bucket → 1258.
+    it('scenario 9: round-1 directHeal is exactly 1258 (cast 258 + inferno 1000)', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario9Input());
+        expect(result.rounds[0].directHeal).toBe(1258);
+    });
+
+    // ── Scenario 10: Tithonus/Pallas shape (all-allies noCrit cast rider) ─────
+    // Active slot = a 100% damage cast + an all-allies cast rider
+    // `{ type:'heal', basis:'damage-dealt', pct:7, noCrit:true, target:'all-allies' }`. This
+    // is an ACTIVE-slot 'damage-dealt' ability → a CAST RIDER (NOT hook-owned): the FULL fold
+    // path (healModifier + outgoing + incoming, crit gated — here all 0/noCrit). A team actor
+    // t1 is present and is the heal target (healer ≠ heal target), so all-allies routing is
+    // exercised across both player ids (['attacker','t1']). The rider credits the FOCUS bucket
+    // for every recipient (per-recipient directHeal credit), while consumption (applyHealToTarget)
+    // routes only to t1. No enemies → t1 stays full → all overheal. Spot-checked for plausibility
+    // (routed-cast heal-conservation; no NaN; cumulative monotonic).
+    snap('Tithonus/Pallas shape (all-allies noCrit cast rider, routed to a team target)', () => {
+        const team: TeamActorInput = {
+            id: 't1',
+            speed: 10, // slower than the healer (speed 100) → healer acts first
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp: 50000, // large pool so the routed heal stays overheal (deficit 0)
+            },
+        };
+        return BASE({
+            rounds: 10,
+            healTargetId: 't1',
+            teamActors: [team],
+            shipSkills: healSkills([
+                ab({
+                    type: 'damage',
+                    target: 'enemy',
+                    config: { type: 'damage', multiplier: 100, hits: 1 },
+                }),
+                ab({
+                    type: 'heal',
+                    target: 'all-allies',
+                    config: {
+                        type: 'heal',
+                        pct: 7,
+                        basis: 'damage-dealt',
+                        noCrit: true,
+                    },
+                }),
+            ]),
+        });
+    });
+
+    // ── Scenario 11: Valkyrie shape (detonation-scope standing leeches) ───────
+    // chargeCount 2, startCharged false → cadence [active, active, charged] (scenario 2's
+    // schedule). rounds 4 → the charged slot fires ONLY on round 3. The charged slot carries a
+    // 100% damage cast + an accumulate-detonate `{ turns:1, pct:100 }` (Echoing Burst): applied
+    // on the round-3 focus turn (roundsRemaining 1), it gathers ALL players' round-3 direct and
+    // bursts on the round-3 dummy turn, crediting the DETONATION channel. Two passive standing
+    // leeches scoped to detonation only — one ally (5%) + one self (5%) — therefore proc ONLY on
+    // round 3 (the burst round); the direct channel on rounds 1/2/4 is skipped by the scope
+    // guard. Healer is focus + heal target, full HP → all overheal. Spot-checked for plausibility.
+    snap(
+        'Valkyrie shape (accumulate-detonate burst → detonation-scope leeches, burst round only)',
+        () =>
+            BASE({
+                rounds: 4,
+                chargeCount: 2,
+                startCharged: false,
+                healer: { ...HEALER, hp: 10000 },
+                healTargetId: 'healer',
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 100, hits: 1 },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'charged',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 100, hits: 1 },
+                                }),
+                                ab({
+                                    type: 'accumulate-detonate',
+                                    target: 'enemy',
+                                    config: { type: 'accumulate-detonate', turns: 1, pct: 100 },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'heal',
+                                    target: 'ally',
+                                    trigger: 'on-cast',
+                                    config: {
+                                        type: 'heal',
+                                        pct: 5,
+                                        basis: 'damage-dealt',
+                                        leechScope: 'detonation',
+                                    },
+                                }),
+                                ab({
+                                    type: 'heal',
+                                    target: 'self',
+                                    trigger: 'on-cast',
+                                    config: {
+                                        type: 'heal',
+                                        pct: 5,
+                                        basis: 'damage-dealt',
+                                        leechScope: 'detonation',
+                                    },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+    );
+
+    // ── Scenario 12: Quixilver as heal target (rider shield + taken shield) ───
+    // HAND-VERIFIED (damage-leech spec §5). The healer IS the focus + heal target (hp 10000,
+    // defence 0 → the enemy's reduction term is 0, so enemy damage = its attack exactly).
+    //   • Active slot = a 100% damage cast + a shield CAST RIDER
+    //     `{ type:'shield', basis:'damage-dealt', pct:20 }` (shields never crit / never fold) →
+    //     each focus turn grants shield = cast direct × 20%.
+    //   • Passive slot = a damage-TAKEN shield `{ basis:'damage-taken', pct:25,
+    //     requiresHpDamage:true }` (Quixilver punch-through gate): procs on an enemy ATTACK only
+    //     when shield was present at attack start AND the attack dealt HP damage. raw = FULL
+    //     attack damage × 25%, applied AFTER the attack's shield-first drain.
+    //   • One enemy attacker (attack 4000, crit 0, speed 50) → acts AFTER the healer (speed 100).
+    //
+    // Damage constants (effectiveAttack 5000, dummy defence 10000 → postDefenseFactor
+    // 0.2579415898443159; enemy reduction 0 at defence 0):
+    //   cast direct  = 5000 × 100% × 0.2579415898443159 = 1289.7079492215796
+    //   shield rider = 1289.7079492215796 × 20% = 257.94158984431596
+    //   enemy hit    = 4000 (defence 0 → no reduction)
+    //   taken shield = 4000 × 25% = 1000
+    //
+    // R1 (enter HP 100%, shield 0):
+    //   • focus turn: rider grants 257.9416 → shieldPool 257.9416; shield bucket 257.9416.
+    //   • enemy hit 4000: shieldBefore 257.9416 → absorbed 257.9416, hpDamage 3742.0584 →
+    //     HP 6257.9416. Gate (shieldBefore>0 AND hpDamage>0) PASSES → taken proc 1000 →
+    //     shieldPool 0 + 1000 = 1000; shield bucket 257.9416 + 1000 = 1257.9416 (→ 1258).
+    //   ⇒ shield 1258, shieldAbsorbed 257.9416 (→ 258), incomingDamage 4000.
+    // R2 (enter HP 6257.9416/10000 = 62.579% → 63, shield 1000):
+    //   • focus turn: rider grants 257.9416 → shieldPool 1257.9416; shield bucket 257.9416.
+    //   • enemy hit 4000: shieldBefore 1257.9416 → absorbed 1257.9416, hpDamage 2742.0584 →
+    //     HP 3515.8832. Gate PASSES → taken proc 1000 → shieldPool 1000; shield bucket
+    //     1257.9416 (→ 1258).
+    //   ⇒ shield 1258, shieldAbsorbed 1257.9416 (→ 1258), incomingDamage 4000.
+    // (No heals at all → directHeal/hotHeal/effectiveHealing/overheal 0 every round.)
+    // DESTROYED round 4: the cumulative net damage (4000 − shield absorption each round)
+    // exceeds the 10000 HP pool by round 4. R5-R10 flatline with incomingDamage 0.
+    // summary.destroyedRound === 4.
+    const scenario12Input = () =>
+        BASE({
+            rounds: 10,
+            healer: { ...HEALER, hp: 10000, defence: 0 },
+            healTargetId: 'healer',
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100, hits: 1 },
+                            }),
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                config: { type: 'shield', pct: 20, basis: 'damage-dealt' },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'shield',
+                                    pct: 25,
+                                    basis: 'damage-taken',
+                                    requiresHpDamage: true,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
+    snap('Quixilver as heal target (shield rider + punch-through taken shield)', scenario12Input);
+
+    // Supplementary in-code assertion for scenario 12: round-1 shield is the rider (258) +
+    // the punch-through taken shield (1000) → 1258, and round-1 absorbed is just the rider pool.
+    it('scenario 12: round-1 shield is 1258 (rider 258 + taken 1000), absorbed 258', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario12Input());
+        expect(result.rounds[0].shield).toBe(1258);
+        expect(result.rounds[0].shieldAbsorbed).toBe(258);
+    });
+
+    // Supplementary in-code assertion for scenario 12: target is DESTROYED on round 4.
+    it('scenario 12: summary.destroyedRound is 4', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario12Input());
+        expect(result.summary.destroyedRound).toBe(4);
     });
 });

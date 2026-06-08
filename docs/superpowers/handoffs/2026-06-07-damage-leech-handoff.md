@@ -25,45 +25,61 @@ page. Engine honors it: `focusActorId`, per-actor `ActorDamage`/`ActorHealing` m
   or ship-backed **basics walk**: damage abilities only, team-mirror charge cadence,
   per-hit crits, id-collision validation); dead-is-dead (`destroyedRound`, dead target
   skips turns + synthesized focus turn protects the focusTurns invariant).
-- **Events**: `heal-performed` {casterId,targets,amount,critHits?}, `damage-taken`
-  {targetId,round,amount,didCrit?} (healing mode only, per landed enemy hit, pre-shield).
-- **FIVE new live triggers** (now 11 total): `on-ally-critically-repaired` (OWN crit
-  repair of an ally — Pallas cleanse), `on-ally-crit` (per ally critting hit — Pallas
-  charge), `on-ally-damaged` (per hit on an ally — Cultivator heals the hit ally),
-  `on-self-damaged` (per hit on SELF — tank sustain; heal/shield config gained
-  `onCritHit?: boolean` for Isha's "3% per hit, instead 6% when critically hit" —
-  absent=every hit / false=non-crit only / true=crit only; LISTENER-side filtering
-  against `damage-taken.didCrit`), plus executor heal/shield/cleanse follow-ups
-  (drain-time fold: basis × pct × (1+healModifier) for heals, basis × pct for shields,
-  NO crit draw, NO heal-performed re-emission — chain guard).
+- **Events**: `heal-performed` {casterId,targets,amount,critHits?}. (CORRECTION: there is
+  NO `damage-taken` event — that was never shipped. Enemy attacker turns produce one
+  aggregate damage number per turn via `runEnemyAttackerTurn`, with per-hit crit draws
+  folded into a blended multiplier; nothing emits a per-hit `damage-taken` event.)
+- **TWO new live triggers** (now 8 total — NOT 11): `on-ally-critically-repaired` (OWN
+  crit repair of an ally — Pallas cleanse) and `on-ally-crit` (per ally critting hit —
+  Pallas charge), plus executor heal/shield/cleanse follow-ups (drain-time fold:
+  basis × pct × (1+healModifier) for heals, basis × pct for shields, NO crit draw,
+  NO heal-performed re-emission — chain guard). (CORRECTION: there are NO
+  `on-ally-damaged` / `on-self-damaged` triggers and NO `onCritHit?` field on heal/shield
+  configs — none of those shipped. Cultivator/Isha-style "when an ally is directly
+  damaged" repairs are on-cast per-turn passive heals; the PR #87 fix
+  (`b36866b7`) corrected their parsed RECIPIENT — ally vs self — not a trigger.)
 - **Parser target-routing rules (all user-verified 2026-06-07)**: bare repairs/cleanses
   on PURE SUPPORT actives/charged (no damage component) → **ally** (one-target-per-skill;
   Hermes/Mender/Salvation/Makoli + 13 more); damage-skill repair riders stay self;
   passives stay self; "**grants** a/the shield" (receiver-less, pure support) → ally
   (Aegis/Nyxen) while "**gains** a Shield" stays self; self-damage-conditional repairs
   stay self (Meatshield carve-out); cleanse-trigger repairs → ally when the ship class
-  is SUPPORTER (Cultivator), self for DEFENDER (Morao); "when an ally is directly
-  damaged" → on-ally-damaged; "when directly damaged" (no "an ally") → on-self-damaged;
-  leech guard widened ("of the damage it deals" — Magnolia misparse fixed).
+  is SUPPORTER (Cultivator), self for DEFENDER (Morao); leech guard widened ("of
+  the damage it deals" — Magnolia misparse fixed). (CORRECTION: the "when an ally is
+  directly damaged" / "when directly damaged" repairs did NOT become triggers — they
+  remain on-cast per-turn passive heals routed to the correct recipient; see the trigger
+  correction above.)
+
+> **Damage-leech increment note (post-PR #87):** the damage-leech feature on
+> `feat/damage-leech` shipped leech heals/shields via the engine's damage CREDIT-POINT
+> hooks — a `creditDamage(sourceId, channel, amount)` wrapper for standing leeches plus a
+> per-attack proc in the enemy-attack block for damage-taken shields — NOT via the
+> (nonexistent) `damage-taken` event or `on-ally-damaged`/`on-self-damaged` trigger seams
+> this handoff originally implied. New heal/shield bases `'damage-dealt'`/`'damage-taken'`
+> (with an optional `leechScope`) carry it; no new events or triggers were added.
 - **Adapter** `simulateHealing` (`healingEngineAdapter.ts`); shared
   `deriveTeamEngineActors` extracted from dpsSimulator (byte-identical goldens).
 - **UI**: HealingCalculatorPage rebuilt (DPS-page image): healer config cards (compare),
   HealTargetPanel ("use healer as target" or ship/manual), EnemyAttackersPanel (≤4,
   ship autofill w/ basics-walk note or manual), TeamPanel reuse (`showSharedBuffs` gate),
-  Skill Editor with heal/shield/cleanse fields + new trigger options + onCritHit
-  tri-state, **TurnOrderStrip** (shared with the DPS card, `orderByTurnPriority`),
+  Skill Editor with heal/shield/cleanse fields (CORRECTION: the "+ new trigger options +
+  onCritHit tri-state" once listed here were NEVER built — see the trigger correction above;
+  the damage-leech increment later added basis/scope/punch-through fields instead),
+  **TurnOrderStrip** (shared with the DPS card, `orderByTurnPriority`),
   HealingTimelineChart (HP%/shield/incoming/effective + dashed "Destroyed" ReferenceLine)
   + cumulative comparison chart (ringed death dot).
-- **Live-verified on the fleet**: Hermes→Isha routing, Cultivator per-hit ally heal
-  (60 hits × 90 = 5,400 exact), Aegis shield absorption, Flamel HoT ticks, Makoli/
-  Meiying scenarios, death marks, turn-order strip, effective+overheal=raw invariant.
+- **Live-verified on the fleet**: Hermes→ally routing, Cultivator ally heal (CORRECTION:
+  this is an on-cast per-turn ally heal via recipient routing — NOT a per-hit reaction; the
+  "60 hits × 90 = 5,400 exact" once claimed here described a per-hit trigger that was never
+  built), Aegis shield absorption, Flamel HoT ticks, Makoli/Meiying scenarios, death marks,
+  turn-order strip, effective+overheal=raw invariant.
 
 ## Increment menu (recommended order)
 
 | # | Increment | Size | Notes |
 |---|---|---|---|
-| 1 | **Damage-leech heals/shields** | Small-medium, own mini-spec | THE user-chosen next step. 14 text cells / ~11 ships: Magnolia ("repairs itself for 20% of the damage it deals"), Valerian (15% of damage dealt incl. DoTs), Opal, Iridium, Tithonus ("repairs all allies 7% of the damage dealt", noCrit), Pallas (lowest-HP ally heals 20% of damage dealt), Valkyrie (burst-heal on Echoing Burst explosion — `bomb-detonated`/accumulator events carry damage), Quixilver/FrontLine ("gains Shield equal to X% of the damage taken/dealt"), Malvex, Laika. MECHANISM EXISTS: `ability-performed.damage` (own direct damage), `damage-taken.amount` (hits on the target), detonation events. Design: new heal/shield basis `'damage-dealt'`/`'damage-taken'` OR reactive abilities with a pct-of-event-amount payload (leaning reactive: listener reads the event amount → intent carries it → executor heals pct × amount; needs an amount-carrying Intent extension — today intents are static abilities). Parser: lift the disqualify guards into real parses. Watch: leech heals are per-ATTACK (ride the caster's own turn), leech-shields-from-taken are per-hit. |
-| 2 | **Healing backlog batch** | Small | (a) `buildSkillBuffAutoFill` scans ALL passive rows → duplicate buff abilities for tier-inclusive texts (PRE-EXISTING, DPS-wide — use `getShipSkillRows`; golden-churn risk, check fixtures); (b) Pallas "Everliving Regeneration 3" grant unparsed (no application verb — "gains X and Y *for 2 turns*" shape); (c) Graphite/Refine reactive BUFF grants ("when an ally ... damaged, grants Repair Over Time III") — route buffs through on-ally-damaged (buff executor branch exists); (d) team-actor healModifier (CombatStatBlock lacks the stat — widen TeamActorInput.stats or thread separately); (e) status-conditional shield procs: APEX ("when an enemy gets debuffed" → on-debuff-inflicted EXISTS), Defiant (on applying Stasis — needs a status-applied trigger), Laika (Phase 4). |
+| 1 | **Damage-leech heals/shields** | ✅ SHIPPED — PR #89 (2026-06-08) | DONE. 14 cells / 11 ships (Magnolia/Valerian/Iridium/Opal/Tithonus/Pallas/Valkyrie/Quixilver/FrontLine/Malvex). The "leaning reactive / amount-carrying Intent" design once sketched here was REJECTED: shipped via three engine seams with NO new events/triggers/Intents — (A) cast-rider `basis:'damage-dealt'` in the playerTurn heal block; (B) a `creditDamage(sourceId,channel,amount)` chokepoint + `procStandingLeeches` for passive standing leeches (Magnolia/Valerian incl. DoT ticks + detonations, Valkyrie detonation-only via `leechScope`); (C) per-attack `damage-taken` procs in the enemy-attack block (Quixilver punch-through, Malvex). New bases `'damage-dealt'`/`'damage-taken'` + `leechScope` + `requiresHpDamage`. Goldens byte-identical + 4 new healing scenarios. FrontLine R4 + Laika stay Phase 4. Spec `2026-06-07-damage-leech-design.md`, plan `2026-06-07-damage-leech.md`. |
+| 2 | **Healing backlog batch** | Small | (a) `buildSkillBuffAutoFill` scans ALL passive rows → duplicate buff abilities for tier-inclusive texts (PRE-EXISTING, DPS-wide — use `getShipSkillRows`; golden-churn risk, check fixtures); (b) Pallas "Everliving Regeneration 3" grant unparsed (no application verb — "gains X and Y *for 2 turns*" shape); (c) Graphite/Refine reactive BUFF grants ("when an ally ... damaged, grants Repair Over Time III") — CORRECTION: there is NO `on-ally-damaged` trigger; this needs a damage-reaction seam (Phase 4 whole-team intake) or could ride the damage-leech per-attack proc point if scoped to the heal target; (d) team-actor healModifier (CombatStatBlock lacks the stat — widen TeamActorInput.stats or thread separately); (e) status-conditional shield procs: APEX ("when an enemy gets debuffed" → on-debuff-inflicted EXISTS), Defiant (on applying Stasis — needs a status-applied trigger), Laika (Phase 4). |
 | 3 | **Phase 4: enemy offensive actions** | Large, own spec cycle | Enemy kits beyond damage (debuffs on players, enemy self-buffs, enemy DoTs/heals), on-attacked/on-destroyed, taunt/stealth targeting, multi-enemy player offense, whole-team intake, revive/Cheat Death (5 cells: Hayyan/Yazid/Tycho), enemy-action reactions (13 cells: Zosimos/Arum/Yarrow/Larkspur/Grif), purge consumption (Sefuba), real `selfHpPct` (retro-activates Makoli/Guardian below-40% gates — parsed but DROPPED today, documented), defense-calc adoption. |
 | 4 | **Simulator page** | Phase-sized | Per-round damage/healing/defense per ship; per-actor maps are the data source. |
 

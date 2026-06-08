@@ -1920,17 +1920,34 @@ describe('parseHealAbilities', () => {
             { kind: 'shield', pct: 180, basis: 'attack', target: 'ally', explicitTarget: true },
         ]);
     });
-    it('damage-reactive shield is NOT parsed', () => {
+    it('damage-taken shield IS parsed as a leech (basis damage-taken, requiresHpDamage)', () => {
         expect(
             parseHealAbilities(
                 'gains a Shield equal to 25% of the damage taken when taking HP damage and still having Shield'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'shield',
+                pct: 25,
+                basis: 'damage-taken',
+                target: 'self',
+                explicitTarget: true,
+                requiresHpDamage: true,
+            },
+        ]);
     });
-    it('damage-dealt shield is NOT parsed', () => {
+    it('"damage dealt to them" shield IS parsed as damage-taken (Malvex)', () => {
         expect(
             parseHealAbilities('gains a Shield equal to 15% of the Damage dealt to them')
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'shield',
+                pct: 15,
+                basis: 'damage-taken',
+                target: 'self',
+                explicitTarget: true,
+            },
+        ]);
     });
     it('revive/Cheat Death text is NOT parsed', () => {
         expect(
@@ -1939,12 +1956,27 @@ describe('parseHealAbilities', () => {
             )
         ).toEqual([]);
     });
-    it('"X% of damage dealt" repair is NOT parsed (Valkyrie burst reaction)', () => {
+    it('"X% of damage dealt" repair IS parsed as a dual-recipient leech (Valkyrie burst reaction)', () => {
         expect(
             parseHealAbilities(
                 'this Unit and the ally with the lowest current health percentage <unit-damage>repair 5%</unit-damage> of damage dealt.'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 5,
+                basis: 'damage-dealt',
+                target: 'ally',
+                explicitTarget: true,
+            },
+            {
+                kind: 'heal',
+                pct: 5,
+                basis: 'damage-dealt',
+                target: 'self',
+                explicitTarget: true,
+            },
+        ]);
     });
 
     // Issue 1: basis resolution must NOT cross sentence boundaries
@@ -1991,6 +2023,123 @@ describe('parseHealAbilities', () => {
                 explicitTarget: true,
             },
         ]);
+    });
+});
+
+describe('damage-leech parsing', () => {
+    it('Iridium rider: repairs 15% of the damage dealt → damage-dealt basis', () => {
+        const r = parseHealAbilities(
+            'This Unit deals 40% damage with additional damage equal to 9% of its max HP and repairs 15% of the damage dealt.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'heal', pct: 15, basis: 'damage-dealt' });
+        expect(r[0].leechScope).toBeUndefined();
+    });
+
+    it('Magnolia standing: repairs itself for 20% of the damage it deals to enemies', () => {
+        const r = parseHealAbilities(
+            'This Unit repairs itself for 20% of the damage it deals to enemies.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            kind: 'heal',
+            pct: 20,
+            basis: 'damage-dealt',
+            target: 'self',
+            explicitTarget: true,
+        });
+    });
+
+    it('Tithonus: repairs all allies 7% of the damage dealt → all-allies', () => {
+        const r = parseHealAbilities(
+            'This Unit deals purges 2 buffs from the enemy and deals 170% damage. Then repairs all allies 7% of the damage dealt. This repair cannot critically hit.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            kind: 'heal',
+            pct: 7,
+            basis: 'damage-dealt',
+            target: 'all-allies',
+        });
+    });
+
+    it('Pallas: "heals for 20% of the damage dealt" leech verb → ally', () => {
+        const r = parseHealAbilities(
+            'This Unit deals 200% damage. The other ally with the lowest current health percentage heals for 20% of the damage dealt and this repair cannot critically hit.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            kind: 'heal',
+            pct: 20,
+            basis: 'damage-dealt',
+            target: 'ally',
+        });
+    });
+
+    it('"heals" verb does NOT parse without a leech tail (no general heals-verb parsing)', () => {
+        expect(parseHealAbilities('This Unit heals for 20% of its max HP.')).toHaveLength(0);
+    });
+
+    it('Valkyrie: dual recipient + Echoing Burst scope → two entries, detonation scope', () => {
+        const r = parseHealAbilities(
+            'When an Echoing Burst explodes on an enemy, this Unit and the ally with the lowest current health percentage repair 5% of damage dealt.'
+        );
+        expect(r).toHaveLength(2);
+        expect(r[0]).toMatchObject({
+            kind: 'heal',
+            pct: 5,
+            basis: 'damage-dealt',
+            target: 'ally',
+            leechScope: 'detonation',
+        });
+        expect(r[1]).toMatchObject({ target: 'self', leechScope: 'detonation' });
+    });
+
+    it('Quixilver active: gains Shield equal to 20% of the damage dealt', () => {
+        const r = parseHealAbilities(
+            'This unit deals 100% damage plus an additional damage equal to 14% of its current Shield, and gains Shield equal to 20% of the damage dealt..'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'shield', pct: 20, basis: 'damage-dealt' });
+    });
+
+    it('Quixilver passive: Shield equal to 25% of the damage taken → damage-taken + requiresHpDamage', () => {
+        const r = parseHealAbilities(
+            'This Unit gains Shield equal to 25% of the damage taken when taking HP damage and still having Shield.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            kind: 'shield',
+            pct: 25,
+            basis: 'damage-taken',
+            target: 'self',
+            requiresHpDamage: true,
+        });
+    });
+
+    it('Malvex: "Damage dealt to them" is damage TAKEN, unconditional', () => {
+        const r = parseHealAbilities(
+            'When directly damaged as a primary target, this Unit gains Shield equal to 15% of the Damage dealt to them.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({
+            kind: 'shield',
+            pct: 15,
+            basis: 'damage-taken',
+            target: 'self',
+        });
+        expect(r[0].requiresHpDamage).toBeUndefined();
+    });
+
+    it('FrontLine R4: enemy-action leech shield does NOT parse', () => {
+        const r = parseHealAbilities(
+            'When an enemy uses their Charged skill, it deals 80% and gains a Shield equal to 30% of the damage dealt, once per round.'
+        );
+        expect(r).toHaveLength(0);
+    });
+
+    it('revive/Cheat Death still disqualified', () => {
+        expect(parseHealAbilities('This Unit revives with 50% HP.')).toHaveLength(0);
     });
 });
 

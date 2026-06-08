@@ -95,6 +95,13 @@ const HEAL_BASIS_OPTIONS = [
     { value: 'attack', label: "Caster's Attack" },
     { value: 'defense', label: "Caster's Defense" },
     { value: 'target-hp', label: "Recipient's Max HP" },
+    { value: 'damage-dealt', label: 'Damage dealt' },
+    { value: 'damage-taken', label: 'Damage taken' },
+];
+
+const LEECH_SCOPE_OPTIONS = [
+    { value: 'all', label: 'All damage' },
+    { value: 'detonation', label: 'Detonations only' },
 ];
 
 const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
@@ -566,11 +573,42 @@ export const AbilityCard: React.FC<Props> = ({
                                 onChange={(value) =>
                                     updateConfig({
                                         ...config,
-                                        basis: value as 'hp' | 'attack' | 'defense' | 'target-hp',
+                                        basis: value as
+                                            | 'hp'
+                                            | 'attack'
+                                            | 'defense'
+                                            | 'target-hp'
+                                            | 'damage-dealt'
+                                            | 'damage-taken',
                                     })
                                 }
                             />
                         </div>
+                        {config.basis === 'damage-dealt' && slot === 'passive' && (
+                            <Select
+                                label="Leech scope"
+                                value={config.leechScope ?? 'all'}
+                                options={LEECH_SCOPE_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        leechScope: value as 'all' | 'detonation',
+                                    })
+                                }
+                            />
+                        )}
+                        {config.basis === 'damage-taken' && slot === 'passive' && (
+                            <Checkbox
+                                label="Only when damage punches through shield"
+                                checked={config.requiresHpDamage ?? false}
+                                onChange={(checked) =>
+                                    updateConfig({
+                                        ...config,
+                                        requiresHpDamage: checked ? true : undefined,
+                                    })
+                                }
+                            />
+                        )}
                         {config.type === 'heal' && (
                             <Checkbox
                                 label="Cannot critically hit"
