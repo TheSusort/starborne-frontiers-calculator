@@ -74,10 +74,19 @@ describe('buildEnemyPlayerActorRuntime', () => {
         // empty lookups (walked-style — payloads carry effects)
         expect(runtime.selfBuffLookup.size).toBe(0);
 
-        // castSkills and reactiveAbilities present (empty for manual enemy)
+        // castSkills present; a manual flat-card enemy (no shipSkills) is given a synthesized
+        // single basic-attack active slot (100% multiplier, 1 hit) so the runPlayerTurn walk
+        // deals one basic per turn. reactiveAbilities empty (damage is never reactive).
         expect(runtime.castSkills).toBeDefined();
+        const manualAbilities = runtime.castSkills.slots.flatMap((s) => s.abilities);
+        expect(manualAbilities).toHaveLength(1);
+        expect(manualAbilities[0].type).toBe('damage');
+        expect(
+            manualAbilities[0].config.type === 'damage' && manualAbilities[0].config.multiplier
+        ).toBe(100);
         expect(runtime.reactiveAbilities).toBeDefined();
         expect(Array.isArray(runtime.reactiveAbilities)).toBe(true);
+        expect(runtime.reactiveAbilities).toHaveLength(0);
 
         // own gate instances are functions
         expect(typeof runtime.activeCritGate).toBe('function');
