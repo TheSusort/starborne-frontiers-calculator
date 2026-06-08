@@ -1405,20 +1405,26 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        // DOCUMENTED BUFF GAP: "Everliving Regeneration 3 for 2 turns" does NOT parse through the
-        // buff pipeline for this phrasing (no application verb attaches the buff in the parser),
-        // so no buff ability is emitted. detectReactiveTrigger IS extended for the ally-crit
-        // phrasing so that IF the buff parsed (other ships), it would ride on-ally-crit — verified
-        // by the detectReactiveTrigger unit test below. Here we assert the charge + cleanse routing
-        // and document the buff gap rather than forcing it.
-        it('Everliving Regeneration buff does not parse (documented gap) — no buff ability', () => {
+        // The conjoined grant "gains 1 charge … and Everliving Regeneration 3 for 2 turns" parses:
+        // the buff name sits after "and" with no governing verb directly before it (the verb "gains"
+        // is consumed by "gains 1 charge"), so the primary segment-loop emitter misses it. A
+        // supplementary BUFFS-gated conjoined-grant scan in parseSkillEffects emits it (buffName
+        // normalized "3" → "III" to match the BUFFS entry), and the buff-merge loop attaches the
+        // on-ally-crit reactive trigger detected on the clause — no engine change needed.
+        it('Everliving Regeneration buff parses and rides on-ally-crit (conjoined grant)', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 firstPassiveSkillText: PALLAS_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
-            expect(passive?.abilities.find((a) => a.type === 'buff')).toBeUndefined();
+            const buff = passive?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-ally-crit',
+                config: { buffName: 'Everliving Regeneration III', duration: 2 },
+            });
         });
 
         // A heal in the crit-repair sentence rides on-ally-critically-repaired; an UNRELATED heal

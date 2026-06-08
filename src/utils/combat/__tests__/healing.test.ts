@@ -1391,7 +1391,9 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         });
         const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
 
-        // This unit's own infliction → enqueue.
+        // This unit's own infliction → enqueue. (The 'dot-applied' path of on-debuff-inflicted is
+        // covered by the pre-existing trigger machinery — it is not APEX-specific, so it's not
+        // re-asserted here.)
         handBus.emit({ type: 'debuff-applied', sourceId: 'attacker', ...base });
         expect(enqueued).toHaveLength(1);
 

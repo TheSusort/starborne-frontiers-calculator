@@ -833,7 +833,8 @@ export function detectAllyCritTrigger(
 // "when an enemy gets/is buffed" enemy-buff handling (debuffed ≠ buffed). No lookbehind:
 // requiring "debuffed" (not "buffed") is sufficient disambiguation since "buffed" lacks
 // the "de" prefix. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
-const ENEMY_DEBUFFED_RE = /\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+debuffed\b/i;
+const ENEMY_DEBUFFED_RE =
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+debuffed\b/i;
 
 /**
  * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
@@ -1445,6 +1446,43 @@ const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
 const CONNECTOR_RE = /^\s*(,\s*)?(and|or)?\s*$/i;
 const MAX_SCAN_CHARS = 120;
 
+// Conjoined self-grant: "gains/grants <something> and <BuffName> for N turns". The primary
+// segment-loop emitter attaches a buff to the nearest preceding application verb, but in a
+// conjoined grant the verb is consumed by the FIRST conjunct (Hermes: "gains 1 charge …") and
+// the trailing buff name after "and" has no governing verb of its own (and may not even be
+// <unit-skill>-tagged). This supplementary pass catches that trailing buff. It is deliberately
+// narrow: a self-grant verb, then "and <BuffName> for N turns", and <BuffName> must resolve to a
+// known BUFFS entry (resolveBuffName, incl. "3" → "III" normalization). Anything not in BUFFS is
+// ignored, so it never invents buffs from arbitrary capitalized phrases. Matched on tag-stripped
+// raw text so it works whether or not the trailing buff is tagged. Group 1 = buff name, group 2 =
+// duration. Across the full ship corpus the ONLY net-new emission (i.e. not already produced by
+// the segment loop) is Hermes's Everliving Regeneration III.
+const CONJOINED_SELF_GRANT_RE =
+    /\b(?:gains?|grants?)\b[^.;]*?\band\s+([A-Z][A-Za-z][A-Za-z. ]*?[A-Za-z0-9])\s+for\s+(\d+)\s+turns?/gi;
+
+// Resolves a candidate buff name (possibly using arabic numerals where BUFFS uses roman numerals)
+// to its canonical BUFFS entry name, or undefined if it isn't a known buff. Mirrors the number↔roman
+// handling in findBuffDescription, but returns the canonical name rather than the description.
+function resolveBuffName(candidate: string): string | undefined {
+    const trimmed = candidate.trim();
+    const exact = BUFFS.find((b) => b.name.toLowerCase() === trimmed.toLowerCase());
+    if (exact) return exact.name;
+    // Text may use arabic numerals ("Everliving Regeneration 3") where BUFFS uses roman ("III").
+    const numberToRoman: Record<string, string> = {
+        '1': 'I',
+        '2': 'II',
+        '3': 'III',
+        '4': 'IV',
+        '5': 'V',
+    };
+    const romanized = trimmed.replace(/\b([1-5])\b/g, (_, d: string) => numberToRoman[d]);
+    if (romanized !== trimmed) {
+        const match = BUFFS.find((b) => b.name.toLowerCase() === romanized.toLowerCase());
+        if (match) return match.name;
+    }
+    return undefined;
+}
+
 /**
  * Scans forward from startIndex through connector-only text segments and non-text segments,
  * looking for a shared "for N turns" or "every turn" that applies to all preceding tags.
@@ -1745,6 +1783,26 @@ export function parseSkillEffects(
             ...(stacks !== undefined ? { stacks } : {}),
             ...(stackTrigger !== undefined ? { stackTrigger } : {}),
             ...(application !== undefined ? { application } : {}),
+            source,
+        });
+    }
+
+    // Supplementary pass: conjoined self-grants ("gains 1 charge … and <BuffName> for N turns")
+    // whose trailing buff the segment loop missed (no governing verb of its own). Gated by BUFFS
+    // membership and deduped against what the segment loop already emitted, so it adds only genuine
+    // self-buffs and never double-emits. Always 'self' (the construct's verb is a self-grant).
+    const alreadyEmitted = new Set(effects.map((e) => e.buffName));
+    const rawText = skillText.replace(/<[^>]+>/g, ' ');
+    let conjoined: RegExpExecArray | null;
+    CONJOINED_SELF_GRANT_RE.lastIndex = 0;
+    while ((conjoined = CONJOINED_SELF_GRANT_RE.exec(rawText)) !== null) {
+        const canonical = resolveBuffName(conjoined[1]);
+        if (!canonical || alreadyEmitted.has(canonical)) continue;
+        alreadyEmitted.add(canonical);
+        effects.push({
+            buffName: canonical,
+            target: 'self',
+            duration: parseInt(conjoined[2], 10),
             source,
         });
     }
