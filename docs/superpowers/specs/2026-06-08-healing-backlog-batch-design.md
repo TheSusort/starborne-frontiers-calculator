@@ -26,7 +26,8 @@ byte-identical except where an item documents a hand-verified KNOWN-DIFF.
 ## Naming correction (do not repeat the roadmap's error)
 
 The roadmap/handoff called item 1 "Pallas Everliving Regeneration 3 grant." That is
-**wrong** — the kit is **Hermes** (`docs/ship-skills.csv` row 32 / `ships.ts` `Everliving_9`):
+**wrong** — the kit is **Hermes** (locate by NAME in `docs/ship-skills.csv`; `ships.ts`
+`Everliving_9` — cited line numbers in this spec are grep hints, not data-row indices):
 R4 passive = "Defense +20%. When an ally critically hits an enemy, this Unit gains 1 charge
 to its Charged Skill and Everliving Regeneration III for 2 turns. Additionally, when this
 Unit critically repairs an ally, it Cleanses 1 debuff from itself." **Pallas** (CSV row 110)
@@ -112,6 +113,12 @@ Stasis is a `control` ability (`config.type 'control'`, `effect 'stasis'`) that 
 does NOT simulate or emit (today it's a "not-simulated follow-up payload"). Defiant's passive
 "gains Shield equal to 30% of its Max HP when applying Stasis" needs new machinery:
 
+0. **Parse the Stasis inflict as a `control` ability first (prerequisite).** Today the
+   charged skill's "inflicts Stasis" is NOT parsed into a `control` ability (no `type:'control'`
+   stasis parse exists in `buildShipAbilities`; `'stasis'` appears only as a config-effect enum
+   and a condition gate). The cast-path emission in step 1 needs a `control` ability on the
+   firing skill to detect — so scope parsing Defiant's charged "inflicts Stasis" → a `control`
+   ability {effect 'stasis'} as a discrete sub-task. Without it nothing emits the event.
 1. **Event** `control-applied` { casterId, effect: ControlEffect, round } — emitted on the
    CAST path (`playerTurn.ts`) when the firing skill (active/charged) carries a `control`
    ability. Present-only-when-fired; additive to `CombatEvent`. Emitting it does NOT make the
@@ -126,8 +133,11 @@ does NOT simulate or emit (today it's a "not-simulated follow-up payload"). Defi
 3. **Executor**: the existing shield follow-up handles the `shield` config (no new executor
    branch — `on-stasis-applied` is just another live trigger routing a `shield` intent).
 4. **Parser**: Defiant passive "Shield equal to 30% of its Max HP when applying Stasis" →
-   `shield` {basis 'hp', pct 30} on the `on-stasis-applied` trigger. Defiant's own active
-   ("inflicts Stasis") / charged supply the control ability whose firing emits the event.
+   `shield` {basis 'hp', pct 30} on the `on-stasis-applied` trigger. NOTE Defiant's **active
+   applies Provoke, not Stasis — the CHARGED skill inflicts Stasis** (verified against the
+   kit). So the `control-applied` event fires on the **charged-cast** path, and the Defiant
+   healing-golden/engine fixture MUST cast the charged skill (e.g. start charged) for the
+   shield to proc. The charged Stasis inflict is the `control` ability parsed in step 0.
 
 - Determinism / discipline: listener is pure (enqueues intent only); executor is the sole
   mutator; the event is additive. DPS goldens byte-identical (no DPS fixture has a control on
