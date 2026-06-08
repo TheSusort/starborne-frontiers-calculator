@@ -244,9 +244,8 @@ export function registerReactiveListeners(args: {
                 case 'on-attacked':
                     bus.on('attacked', (e) => {
                         // Target-scoped: fires when THIS OWNER (the target) is attacked.
-                        // NOTE: the engine does not yet emit `attacked` events (Task 8);
-                        // the listener is registered here so `on-attacked` abilities
-                        // partition as reactive, but nothing fires until Task 8.
+                        // The engine emits `attacked` once per enemy attack turn from the
+                        // enemy intake in engine.ts (Task 8) — after the shield-first drain.
                         if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;

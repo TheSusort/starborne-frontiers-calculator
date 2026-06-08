@@ -122,8 +122,8 @@ export type CombatEvent =
     | { type: 'ship-destroyed'; actorId: string; round: number }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is present only when the attack
-     *  critted. NOTE: as of Task 4 this event is defined and wired (on-attacked is
-     *  a live trigger) but the engine does NOT yet emit it — that is Task 8. */
+     *  critted. Emitted once per enemy attack TURN (aggregate — not per-hit) from
+     *  the enemy intake in engine.ts, after the shield-first drain (Task 8). */
     | {
           type: 'attacked';
           targetId: string;
