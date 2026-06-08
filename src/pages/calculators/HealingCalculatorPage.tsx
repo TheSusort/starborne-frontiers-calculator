@@ -36,6 +36,7 @@ import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 import { HealingCumulativeChart } from '../../components/calculator/HealingCumulativeChart';
 import { HealingTimelineChart } from '../../components/calculator/HealingTimelineChart';
 import { EnemyEffectsOverview } from '../../components/calculator/EnemyEffectsOverview';
+import { HealerRoundOverview } from '../../components/calculator/HealerRoundOverview';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
 import { Button } from '../../components/ui/Button';
@@ -668,6 +669,22 @@ const HealingCalculatorPage: React.FC = () => {
                             </div>
                         )}
                     </div>
+
+                    {bestResult && bestConfig && (
+                        <div className="card">
+                            <h3 className="text-lg font-bold mb-2">Healer Output by Round</h3>
+                            <p className="text-sm text-theme-text-secondary mb-4">
+                                Per round, what the {configs.length > 1 ? 'best ' : ''}healer
+                                produced: direct heal, heal-over-time, shield granted, effective vs
+                                overheal, cleanses, and the incoming damage / target HP% it faced.
+                            </p>
+                            <HealerRoundOverview
+                                result={bestResult}
+                                name={bestConfig.name}
+                                rounds={rounds}
+                            />
+                        </div>
+                    )}
 
                     {bestResult && (
                         <div className="card">

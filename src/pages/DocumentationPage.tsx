@@ -2464,6 +2464,15 @@ const DocumentationPage: React.FC = () => {
                                         damage, and effective healing per round, with a cumulative
                                         comparison between configurations.
                                     </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">
+                                            Per-Round Healer Overview:
+                                        </span>{' '}
+                                        A round-by-round breakdown of the best config&apos;s output
+                                        — direct heal, heal-over-time, shield granted, effective vs
+                                        overheal, cleanses, and the incoming damage / target HP% it
+                                        faced each round, with charged and crit badges.
+                                    </p>
                                 </div>
 
                                 <div className="card">
