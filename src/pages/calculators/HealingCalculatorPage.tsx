@@ -35,8 +35,6 @@ import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 import { HealingCumulativeChart } from '../../components/calculator/HealingCumulativeChart';
 import { HealingTimelineChart } from '../../components/calculator/HealingTimelineChart';
-import { EnemyEffectsOverview } from '../../components/calculator/EnemyEffectsOverview';
-import { HealerRoundOverview } from '../../components/calculator/HealerRoundOverview';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../../components/ui/icons/ChevronIcons';
 import { Button } from '../../components/ui/Button';
@@ -661,45 +659,21 @@ const HealingCalculatorPage: React.FC = () => {
                         {bestResult && bestConfig && (
                             <div className="mt-6 pt-6 border-t border-dark-border">
                                 <h4 className="text-md font-bold mb-2">Best Config Timeline</h4>
+                                <p className="text-sm text-theme-text-secondary mb-2">
+                                    Hover a round to see the healer&apos;s output for that round
+                                    (direct heal, HoT, shield, effective vs overheal, cleanses,
+                                    incoming damage) in the chart card, and the enemy effects active
+                                    that round in the panel beside it.
+                                </p>
                                 <HealingTimelineChart
                                     result={bestResult}
                                     name={bestConfig.name}
                                     rounds={rounds}
+                                    enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
                                 />
                             </div>
                         )}
                     </div>
-
-                    {bestResult && bestConfig && (
-                        <div className="card">
-                            <h3 className="text-lg font-bold mb-2">Healer Output by Round</h3>
-                            <p className="text-sm text-theme-text-secondary mb-4">
-                                Per round, what the {configs.length > 1 ? 'best ' : ''}healer
-                                produced: direct heal, heal-over-time, shield granted, effective vs
-                                overheal, cleanses, and the incoming damage / target HP% it faced.
-                            </p>
-                            <HealerRoundOverview
-                                result={bestResult}
-                                name={bestConfig.name}
-                                rounds={rounds}
-                            />
-                        </div>
-                    )}
-
-                    {bestResult && (
-                        <div className="card">
-                            <h3 className="text-lg font-bold mb-2">Enemy Effects</h3>
-                            <p className="text-sm text-theme-text-secondary mb-4">
-                                Per round, grouped by each enemy attacker: the self-buffs active on
-                                that enemy and the debuffs or DoTs it landed on the heal target.
-                            </p>
-                            <EnemyEffectsOverview
-                                result={bestResult}
-                                rounds={rounds}
-                                enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
-                            />
-                        </div>
-                    )}
 
                     <div className="card">
                         <h2 className="text-xl font-bold mb-4">About the Simulation</h2>
