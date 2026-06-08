@@ -76,6 +76,25 @@ describe('buildSkillBuffAutoFill', () => {
         expect(new Set(entries.map((b) => b.id)).size).toBe(2);
     });
 
+    it('scans ONLY the refit-active passive (no duplicate tier buffs)', () => {
+        // R0 grants Defense Up I, R4 grants Defense Up III. With 4 refits, getShipSkillRows
+        // selects the R4 passive (thirdPassiveSkillText). The scan must surface ONLY the
+        // refit-active tier — not a duplicate from the lower (R0) column.
+        const ship = {
+            firstPassiveSkillText:
+                'This Unit gains <unit-skill>Defense Up I</unit-skill> for 2 turns',
+            thirdPassiveSkillText:
+                'This Unit gains <unit-skill>Defense Up III</unit-skill> for 2 turns',
+            refits: [{}, {}, {}, {}],
+        } as unknown as Ship;
+        const result = buildSkillBuffAutoFill(ship);
+        const defenseUps = result.selfBuffs.filter((b) => b.buffName.startsWith('Defense Up'));
+        expect(defenseUps).toHaveLength(1);
+        expect(defenseUps[0].buffName).toBe('Defense Up III');
+        // Tagged with its original column source so per-round/slot routing is preserved.
+        expect(defenseUps[0].skillSource).toBe('passive3');
+    });
+
     it('still collapses a true duplicate (same name, target, and source)', () => {
         // Same slot, same scope, repeated phrasing → one entry (the dedupe key still fires).
         const ship = {

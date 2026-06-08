@@ -11,6 +11,7 @@ import {
     DoTType,
 } from '../types/calculator';
 import { AbilityTrigger, Condition, ConditionSubject } from '../types/abilities';
+import { getShipSkillRows } from './ship/skillRows';
 
 /**
  * Represents a parsed segment of skill text
@@ -1811,11 +1812,21 @@ export function parseSkillEffects(
 }
 
 export function parseAllSkillEffects(ship: Ship): SkillEffect[] {
+    // Scan only the REFIT-ACTIVE passive — the same one buildShipAbilities resolves via
+    // getShipSkillRows. Scanning all three columns produced duplicate/tier-conflicting auto-fill
+    // entries for tier-inclusive passives (R0/R2/R4 each naming a different tier of one buff).
+    const passiveRow = getShipSkillRows(ship).find((r) => r.label.startsWith('Passive'));
+    // Tag the active passive with its ORIGINAL column source so downstream behaviour is unchanged:
+    // (a) per-round stackTrigger fires for passive1/2/3; (b) slotForBuffSource maps it to 'passive'.
+    const passiveSource: SkillSource =
+        passiveRow?.label === 'Passive R4'
+            ? 'passive3'
+            : passiveRow?.label === 'Passive R2'
+              ? 'passive2'
+              : 'passive1';
     return [
         ...parseSkillEffects(ship.activeSkillText, 'active'),
         ...parseSkillEffects(ship.chargeSkillText, 'charge'),
-        ...parseSkillEffects(ship.firstPassiveSkillText, 'passive1'),
-        ...parseSkillEffects(ship.secondPassiveSkillText, 'passive2'),
-        ...parseSkillEffects(ship.thirdPassiveSkillText, 'passive3'),
+        ...(passiveRow ? parseSkillEffects(passiveRow.text, passiveSource) : []),
     ];
 }
