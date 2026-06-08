@@ -2404,8 +2404,15 @@ const DocumentationPage: React.FC = () => {
                                         another of your ships, or a manual stat line — then add up
                                         to four enemy attackers that bombard it each round. Enemies
                                         can be real ships (their charged skills produce realistic
-                                        damage spikes through the same combat walk as the DPS
-                                        Calculator) or quick manual attack/defense lines.
+                                        damage spikes, and they apply their real debuffs and
+                                        damage-over-time effects to the target — which tick for
+                                        damage each round — and buff themselves with their own
+                                        abilities) or quick manual attack/defense lines. Each enemy
+                                        attacker has an affinity selector matched against the
+                                        target&apos;s affinity to scale their incoming damage. An
+                                        Enemy Effects panel shows, round by round, which self-buffs
+                                        are active on each enemy and which debuffs or DoTs they have
+                                        landed on the target.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
