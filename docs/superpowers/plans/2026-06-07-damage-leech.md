@@ -17,7 +17,7 @@
 
 ---
 
-### Task 0: Branch
+## Task 0: Branch
 
 - [ ] **Step 1: Create the feature branch**
 
@@ -28,7 +28,7 @@ git checkout -b feat/damage-leech
 
 ---
 
-### Task 1: Config types
+## Task 1: Config types
 
 **Files:**
 - Modify: `src/types/abilities.ts:179-187` (the heal/shield `AbilityConfig` variant)
@@ -74,7 +74,7 @@ git add src/types/abilities.ts && git commit -m "feat: damage-leech basis values
 
 ---
 
-### Task 2: Parser — leech basis, verb, scope, split, guard
+## Task 2: Parser — leech basis, verb, scope, split, guard
 
 **Files:**
 - Modify: `src/utils/skillTextParser.ts` (`HEAL_DISQUALIFY_RE` ~line 1130, `ParsedHealAbility` ~1088, `resolveHealBasis` ~1149, `parseHealAbilities` ~1200)
@@ -305,7 +305,7 @@ git commit -m "feat: parse damage-leech heal/shield bases (dealt/taken, scope, d
 
 ---
 
-### Task 3: buildShipAbilities — thread leech fields onto configs
+## Task 3: buildShipAbilities — thread leech fields onto configs
 
 **Files:**
 - Modify: `src/utils/abilities/buildShipAbilities.ts` (heal emission loop, ~lines 830-876)
@@ -393,7 +393,7 @@ git commit -m "feat: build leech heal/shield abilities (scope, punch-through fla
 
 ---
 
-### Task 4: Cast riders in the player-turn heal block
+## Task 4: Cast riders in the player-turn heal block
 
 **Files:**
 - Modify: `src/utils/combat/playerTurn.ts` (heal block ~lines 1285-1448: `basisValue` ~1302, `healAbilities` assembly ~1387)
@@ -484,7 +484,7 @@ git commit -m "feat: cast-rider damage-dealt basis in the player-turn heal block
 
 ---
 
-### Task 5: Engine `creditDamage` wrapper (pure refactor — goldens are the referee)
+## Task 5: Engine `creditDamage` wrapper (pure refactor — goldens are the referee)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (credit points: focus fold ~1281-1285, team fold ~1330-1334, `tickDoTs` credit callback ~1423-1441, `processBombs` ~1447-1460, `processAccumulators` ~1465-1475)
@@ -535,7 +535,7 @@ git commit -m "refactor: route all damage credits through creditDamage (leech ho
 
 ---
 
-### Task 6: Standing-leech hook (groups B + C)
+## Task 6: Standing-leech hook (groups B + C)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (setup scan + `procStandingLeeches` + enable the call in `creditDamage`)
@@ -672,7 +672,7 @@ git commit -m "feat: standing-leech credit hook (Magnolia/Valerian/Valkyrie shap
 
 ---
 
-### Task 7: Damage-taken procs (group D)
+## Task 7: Damage-taken procs (group D)
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (enemy-attacker branch, ~lines 1476-1513)
@@ -789,7 +789,7 @@ git commit -m "feat: per-attack damage-taken shield/heal procs (Quixilver/Malvex
 
 ---
 
-### Task 8: New healing golden scenarios
+## Task 8: New healing golden scenarios
 
 **Files:**
 - Modify: `src/utils/calculators/__tests__/healingGoldenParity.test.ts`
@@ -827,7 +827,7 @@ git commit -m "test: damage-leech healing golden scenarios (hand-verified)"
 
 ---
 
-### Task 9: Skill Editor fields
+## Task 9: Skill Editor fields
 
 **Files:**
 - Modify: `src/components/skills/AbilityCard.tsx` (`HEAL_BASIS_OPTIONS` ~line 93, heal/shield case ~547-584)
@@ -904,7 +904,7 @@ git commit -m "feat: leech basis/scope/punch-through fields in the skill editor"
 
 ---
 
-### Task 10: Parser-coverage audit sweep
+## Task 10: Parser-coverage audit sweep
 
 **Files:**
 - Possibly modify: `scripts/auditSkills.allowlist.ts`
@@ -927,7 +927,7 @@ git commit -m "chore: drop stale leech allowlist entries after parser coverage"
 
 ---
 
-### Task 11: Docs, changelog, handoff correction
+## Task 11: Docs, changelog, handoff correction
 
 **Files:**
 - Modify: `docs/skill-model-coverage.md` (§5 rules, §6 verify list + counts)
@@ -951,7 +951,7 @@ git commit -m "docs: damage-leech rules, verify list, handoff correction, change
 
 ---
 
-### Task 12: Final verification
+## Task 12: Final verification
 
 - [ ] **Step 1: Full suite + lint**
 

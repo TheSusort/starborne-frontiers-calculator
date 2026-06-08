@@ -474,9 +474,12 @@ buff/charge-aura), source it from firing + passive.
 - **Damage-leech heals & shields (2026-06-07, branch `feat/damage-leech`).** LEECH — heals/
   shields equal to a percentage of damage **dealt** or **taken** (~14 text cells / ~11 ships).
   Two new heal/shield bases `'damage-dealt'` / `'damage-taken'` plus an optional
-  `leechScope: 'all' | 'detonation'` (passive damage-dealt only). The **slot decides the
-  mechanism**: active/charged-slot `damage-dealt` = a cast rider; passive-slot `damage-dealt` =
-  a standing leech; passive-slot `damage-taken` = a damage-taken proc. Zero RNG; all 30 goldens
+  `leechScope: 'all' | 'detonation'` (passive damage-dealt only). For `damage-dealt`, the
+  **slot decides the mechanism**: active/charged-slot = a cast rider (resolved in the heal
+  block); passive-slot = a standing leech (engine `creditDamage` hook). `damage-taken` is
+  **hook-owned regardless of slot** — `isHookOwned` excludes every `damage-taken` heal/shield
+  from the cast path, and the per-attack proc scans the heal target's passive-slot
+  `damage-taken` abilities (the only shape any ship uses). Zero RNG; all 30 goldens
   stayed byte-identical (the credit wrapper is a pure refactor; D is per-attack; DPS mode inert).
   The following rules are game-decided (user decisions 2026-06-07) or documented approximations:
 
