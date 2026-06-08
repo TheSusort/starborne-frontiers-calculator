@@ -24,6 +24,7 @@ import {
     ActiveBuff,
     AbilityStatusPayload,
     RegisteredAbilityStatus,
+    StatusEngine,
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
@@ -192,6 +193,150 @@ function registerActorAbilityStatuses(
         statusEngine.registerAbilityStatuses(statuses, rid === 'enemy' ? ownerId : rid);
     }
     return { timedSelfBySlot, timedEnemyBySlot };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enemy PlayerActorRuntime builder (Task 5)
+//
+// Constructs a FULL PlayerActorRuntime for a healing-mode enemy attacker, mirroring
+// the walked-team construction at engine.ts:681-756. This runtime is built ALONGSIDE
+// the EnemyAttackerRuntime (which still drives dispatch) — the dispatch switch happens
+// in Task 6b. Building separately now isolates the setup change from the behavioural
+// change.
+//
+// Design decisions:
+//   defence/hp:    The enemy's own stats (default 0 until Task 9 populates real values
+//                  via the adapter). Not forced to 0 as in EnemyAttackerRuntime — the
+//                  target-tracking path in Task 6b needs real values here.
+//   affinity:      Neutral placeholder (modifier 0, cap 100, penalty 0, no disadvantage).
+//                  Task 9 wires real matchup after the affinity selector lands.
+//   selfBuffLookup: Empty map (walked-style: payload effects are self-contained).
+//   enemyDebuffLookup: The engine's global map (same as walked-team actors).
+//   status registration: registerActorAbilityStatuses is called but is expected to be
+//                  a no-op for current enemy inputs (damage-only shipSkills have no
+//                  buff/debuff abilities to register). Safe to call defensively.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Input shape for buildEnemyPlayerActorRuntime. Mirrors CombatEngineInput['enemyAttackers'][number]. */
+export interface EnemyActorInput {
+    id: string;
+    stats: {
+        attack: number;
+        crit: number;
+        critDamage: number;
+        speed: number;
+        defence?: number;
+        hp?: number;
+    };
+    chargeCount: number;
+    startCharged: boolean;
+    shipSkills?: ShipSkills;
+}
+
+/** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
+ *  Exported for unit-testing; called inside runCombat alongside the
+ *  EnemyAttackerRuntime build. Dispatch still uses EnemyAttackerRuntime
+ *  until Task 6b switches it. */
+export function buildEnemyPlayerActorRuntime(
+    e: EnemyActorInput,
+    ctx: {
+        statusEngine: StatusEngine;
+        playerIds: string[];
+        enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
+    }
+): PlayerActorRuntime {
+    const { statusEngine, playerIds, enemyDebuffLookup } = ctx;
+
+    // Partition reactive abilities out of castSkills (mirrors walked-team pattern).
+    // Enemy attackers currently have damage-only shipSkills so reactiveAbilities will
+    // be empty; partitioning here keeps the runtime shape consistent with PlayerActorRuntime
+    // contract and prepares the path for Task 6b dispatch.
+    const emptySkills: ShipSkills = { slots: [] };
+    const { castSkills, reactiveAbilities } = partitionReactiveAbilities(
+        e.shipSkills ?? emptySkills
+    );
+
+    // Register this enemy actor's cast buff/debuff abilities (no-op for damage-only
+    // shipSkills; safe to call defensively). Own ownerId = actor id. playerIds is
+    // passed for ally-routing — irrelevant for pure damage actors.
+    const { timedSelfBySlot, timedEnemyBySlot } = registerActorAbilityStatuses(
+        castSkills,
+        statusEngine,
+        e.id,
+        playerIds
+    );
+
+    // hasChargedSkill: mirrors EnemyAttackerRuntime logic exactly.
+    const hasChargedSkill = e.shipSkills
+        ? e.chargeCount >= 1 &&
+          damageInputsFromSkill(selectFiringSkill(e.shipSkills, 'charged')).multiplier > 0
+        : false;
+
+    const actor = createActor({
+        id: e.id,
+        side: 'enemy',
+        kind: 'enemy',
+        stats: {
+            attack: e.stats.attack,
+            crit: e.stats.crit,
+            critDamage: e.stats.critDamage,
+            defensePenetration: 0,
+            defence: e.stats.defence ?? 0,
+            hp: e.stats.hp ?? 0,
+            speed: e.stats.speed,
+        },
+        chargeCount: e.chargeCount,
+        startCharged: e.startCharged,
+    });
+
+    // Neutral affinity placeholder — Task 9 wires the real matchup after the
+    // affinity selector is added to the adapter. Zero modifier = no damage penalty/
+    // bonus; cap 100 = no crit suppression; penalty 0; disadvantage false.
+    const affinityDisadvantage = false;
+    // Own gate instances — separate draw streams so this enemy's crit/heal-crit/debuff/extend
+    // rolls are fully isolated from every other actor's deterministic schedule.
+    const enemyActiveCritGate = makeRateGate();
+    const enemyChargedCritGate = makeRateGate();
+    const enemyActiveHealCritGate = makeRateGate();
+    const enemyChargedHealCritGate = makeRateGate();
+    const enemyDebuffLandingGate = makeRateGate();
+    const enemyExtendChanceGate = makeRateGate();
+    const landsTimedEnemyApplicationFn = (application?: 'inflict' | 'apply'): boolean =>
+        application === 'apply' ? !affinityDisadvantage : enemyDebuffLandingGate(1); // 100% landing rate (no hacking check for enemy actors)
+
+    return {
+        actor,
+        focus: false,
+        castSkills,
+        reactiveAbilities,
+        timedSelfBySlot,
+        timedEnemyBySlot,
+        hasChargedSkill,
+        attack: e.stats.attack,
+        crit: e.stats.crit,
+        critDamage: e.stats.critDamage,
+        defensePenetration: 0,
+        defence: e.stats.defence ?? 0,
+        hp: e.stats.hp ?? 0,
+        healModifier: 0,
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        affinityDisadvantage,
+        allyChargePerRound: undefined,
+        activeCritGate: enemyActiveCritGate,
+        chargedCritGate: enemyChargedCritGate,
+        activeHealCritGate: enemyActiveHealCritGate,
+        chargedHealCritGate: enemyChargedHealCritGate,
+        debuffLandingGate: enemyDebuffLandingGate,
+        extendChanceGate: enemyExtendChanceGate,
+        landsTimedEnemyApplication: landsTimedEnemyApplicationFn,
+        selfBuffLookup: new Map(),
+        enemyDebuffLookup,
+    };
 }
 
 function totalStacks(entries: ActiveDoTStack[]): number {
@@ -376,10 +521,21 @@ export interface CombatEngineInput {
      *  result block is returned. Absent → DPS mode (the heal pipeline is fully inert). */
     healTargetId?: string;
     /** Enemy attackers (healing mode): offense-only queue actors bombarding the heal
-     *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier. */
+     *  target. The singular dummy `enemy` remains the player-offense target + DoT carrier.
+     *  `defence` and `hp` are optional now (default 0 for bare-stat legacy path); Task 9
+     *  populates them with real matchup values via the adapter. */
     enemyAttackers?: {
         id: string;
-        stats: { attack: number; crit: number; critDamage: number; speed: number };
+        stats: {
+            attack: number;
+            crit: number;
+            critDamage: number;
+            speed: number;
+            /** Enemy's own defence stat. Default 0. Task 9 provides real value. */
+            defence?: number;
+            /** Enemy's own hp stat. Default 0. Task 9 provides real value. */
+            hp?: number;
+        };
         chargeCount: number;
         startCharged: boolean;
         shipSkills?: ShipSkills;
@@ -887,6 +1043,20 @@ export function runCombat(input: CombatEngineInput): {
     const enemyAttackerActors = enemyAttackerRuntimes.map((r) => r.actor);
     const enemyAttackerRuntimeByActorId = new Map<string, EnemyAttackerRuntime>(
         enemyAttackerRuntimes.map((r) => [r.actor.id, r])
+    );
+
+    // Task 5: Build a full PlayerActorRuntime for each enemy attacker, ALONGSIDE the
+    // EnemyAttackerRuntime above. Dispatch still uses EnemyAttackerRuntime (Task 6b
+    // switches it). Building here isolates the (riskier) setup change from the
+    // behavioural switch, keeping goldens byte-identical (nothing routes through this
+    // runtime yet). Each enemy gets its OWN gate instances (determinism isolation),
+    // partitioned abilities, and neutral affinity placeholder.
+    const enemyPlayerRuntimes: PlayerActorRuntime[] = enemyAttackerInputs.map((e) =>
+        buildEnemyPlayerActorRuntime(e, { statusEngine, playerIds, enemyDebuffLookup })
+    );
+    // Keyed for future dispatch (Task 6b) — stored but not yet consulted.
+    const _enemyPlayerRuntimeByActorId = new Map<string, PlayerActorRuntime>(
+        enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
