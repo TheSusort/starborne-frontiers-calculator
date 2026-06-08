@@ -182,4 +182,22 @@ describe('EnemyAttackersPanel', () => {
         fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
         expect(onRemove).toHaveBeenCalledWith('1');
     });
+
+    it('renders correctly with zero enemies and still shows the Add button', () => {
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        // No enemy cards rendered.
+        expect(screen.queryByLabelText('Remove enemy attacker')).not.toBeInTheDocument();
+        // Add button still visible (0 < MAX_ENEMY_ATTACKERS).
+        expect(screen.getByText('+ Add enemy attacker')).toBeInTheDocument();
+    });
 });

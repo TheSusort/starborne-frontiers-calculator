@@ -275,7 +275,7 @@ const HealingCalculatorPage: React.FC = () => {
     };
 
     const removeEnemy = (id: string) => {
-        setEnemies((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
+        setEnemies((prev) => prev.filter((e) => e.id !== id));
     };
 
     const selectEnemyShip = (id: string, ship: Ship) => {

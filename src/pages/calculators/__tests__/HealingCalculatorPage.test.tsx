@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import HealingCalculatorPage from '../HealingCalculatorPage';
 
@@ -51,5 +51,19 @@ describe('HealingCalculatorPage', () => {
         // the timeline legend both surface "Effective Healing").
         expect(screen.getAllByText('Effective Healing').length).toBeGreaterThan(0);
         expect(screen.getByText('About the Simulation')).toBeInTheDocument();
+    });
+
+    it('removeEnemy: clicking X on the only enemy attacker reduces the count to 0', () => {
+        render(
+            <MemoryRouter>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        // Initially one enemy → count shows (1/4).
+        expect(screen.getByText(/Enemy Attackers \(1\/4\)/)).toBeInTheDocument();
+        // Click the remove button for the first (and only) enemy attacker.
+        fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
+        // Guard removed → count now shows (0/4).
+        expect(screen.getByText(/Enemy Attackers \(0\/4\)/)).toBeInTheDocument();
     });
 });
