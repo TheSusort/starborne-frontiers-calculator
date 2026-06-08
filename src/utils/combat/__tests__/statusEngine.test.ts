@@ -1135,3 +1135,200 @@ describe('per-actor player sides', () => {
         expect(attackerActive.find((s) => s.payload.buffName === 'TeamAura')).toBeUndefined();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Per-target debuff stores (Task 1 — Phase 4a)
+// ---------------------------------------------------------------------------
+// The enemy-debuff side is now keyed by target actor id. The default enemy
+// target id (used when no targetId is supplied) produces byte-identical
+// behaviour to the pre-Task-1 singular store. A second target id ('tank')
+// gets an isolated store.
+// ---------------------------------------------------------------------------
+
+describe('per-target debuff stores (Task 1)', () => {
+    const baseCtx: ConditionContext = {
+        selfBuffNames: [],
+        selfDebuffNames: [],
+        enemyBuffNames: [],
+        enemyDebuffCount: 0,
+        effectiveCritRate: 50,
+        adjacentAllyCount: 0,
+        enemyAdjacentCount: 0,
+        enemyDestroyedCount: 0,
+        selfHpPct: 100,
+        enemyHpPct: 100,
+    };
+
+    // Helpers for making timed enemy-side RegisteredAbilityStatus objects.
+    function timedEnemyStatus(
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> {
+        return {
+            kind: 'timed',
+            side: 'enemy',
+            sourceSlot: 'active',
+            conditions: [],
+            duration,
+            payload: { buffName, stacks: 1, parsedEffects: { defense: -10 } },
+        };
+    }
+
+    describe('default enemy target — byte-identical to the singular store', () => {
+        it('a scheduled timed enemy debuff appears in snapshot().activeEnemyDebuffs', () => {
+            const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
+            eng.beginRound(1);
+            eng.sourceFired('attacker', 'active', 1);
+            expect(eng.snapshot().activeEnemyDebuffs).toEqual([
+                { buffName: 'Def Down', turnsRemaining: 2 },
+            ]);
+        });
+
+        it('decrementEnemy() with no argument decrements the default target and reports expiry', () => {
+            const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 1 });
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
+            eng.beginRound(1);
+            eng.sourceFired('attacker', 'active', 1);
+            expect(eng.snapshot().activeEnemyDebuffs).toHaveLength(1);
+            const { expired } = eng.decrementEnemy();
+            expect(expired).toEqual(['Def Down']);
+            expect(eng.snapshot().activeEnemyDebuffs).toHaveLength(0);
+        });
+
+        it('applyTimedAbilityStatus enemy side goes to the default target store by default', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const status = timedEnemyStatus('Armor Break', 2);
+            eng.registerAbilityStatuses([status]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, status);
+            // Visible in timedAbilityStatuses without specifying a targetId.
+            // (Ability-sourced timed statuses carry a payload and are excluded from snapshot() —
+            //  the engine appends them via timedAbilityStatuses after scheduled ones.)
+            const timed = eng.timedAbilityStatuses('enemy');
+            expect(timed).toHaveLength(1);
+            expect(timed[0].payload.buffName).toBe('Armor Break');
+        });
+
+        it('activeAbilityStatuses enemy-side aura is visible without specifying a targetId', () => {
+            const aura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                payload: { buffName: 'WeakenAura', stacks: 1, parsedEffects: { defense: -5 } },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([aura]);
+            eng.beginRound(1);
+            const active = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(active).toHaveLength(1);
+            expect(active[0].payload.buffName).toBe('WeakenAura');
+        });
+
+        it('decrementEnemy decrements timed ability status on default target', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const status = timedEnemyStatus('Def Down', 2);
+            eng.registerAbilityStatuses([status]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, status);
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(1);
+            eng.decrementEnemy(); // 2 → 1
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(1);
+            expect(eng.timedAbilityStatuses('enemy')[0].active.turnsRemaining).toBe(1);
+            eng.decrementEnemy(); // 1 → 0 → expired
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+        });
+    });
+
+    describe('second target id isolation', () => {
+        it('a debuff applied with enemyTargetId=tank does not appear in the default timedAbilityStatuses', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const status = timedEnemyStatus('Shield Break', 2);
+            eng.registerAbilityStatuses([status]);
+            eng.beginRound(1);
+            // 4th param is enemyTargetId — routes to the 'tank' store
+            eng.applyTimedAbilityStatus(1, status, undefined, 'tank');
+            // Default enemy target must have no debuffs
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+            // Tank target has the debuff (3rd param = enemyTargetId)
+            expect(
+                eng.timedAbilityStatuses('enemy', undefined, 'tank').map((s) => s.payload.buffName)
+            ).toEqual(['Shield Break']);
+        });
+
+        it('decrementEnemy with targetId=tank does not age default enemy debuffs', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            // Apply a 1-turn debuff to the default enemy
+            const statusDefault = timedEnemyStatus('Def Down', 1);
+            eng.registerAbilityStatuses([statusDefault]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, statusDefault);
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(1);
+            // Decrement the tank target (empty) — must not touch the default enemy
+            const { expired } = eng.decrementEnemy('tank');
+            expect(expired).toEqual([]);
+            expect(eng.timedAbilityStatuses('enemy')).toHaveLength(1);
+        });
+
+        it('decrementEnemy with targetId=tank only decrements the tank store', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const tankStatus = timedEnemyStatus('Shield Break', 1);
+            eng.registerAbilityStatuses([tankStatus]);
+            eng.beginRound(1);
+            // 4th param routes to 'tank'
+            eng.applyTimedAbilityStatus(1, tankStatus, undefined, 'tank');
+            // Ability-sourced statuses are in timedAbilityStatuses, not snapshot()
+            // (3rd param = enemyTargetId)
+            expect(eng.timedAbilityStatuses('enemy', undefined, 'tank')).toHaveLength(1);
+            const { expired } = eng.decrementEnemy('tank');
+            expect(expired).toEqual(['Shield Break']);
+            expect(eng.timedAbilityStatuses('enemy', undefined, 'tank')).toHaveLength(0);
+        });
+
+        it('timedAbilityStatuses enemy targetId=tank returns only tank debuffs', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const defaultStatus = timedEnemyStatus('Def Down', 2);
+            const tankStatus = timedEnemyStatus('Armor Break', 2);
+            eng.registerAbilityStatuses([defaultStatus, tankStatus]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, defaultStatus);
+            eng.applyTimedAbilityStatus(1, tankStatus, undefined, 'tank');
+            const defaultTimed = eng.timedAbilityStatuses('enemy');
+            expect(defaultTimed.map((s) => s.payload.buffName)).toEqual(['Def Down']);
+            // 3rd param = enemyTargetId
+            const tankTimed = eng.timedAbilityStatuses('enemy', undefined, 'tank');
+            expect(tankTimed.map((s) => s.payload.buffName)).toEqual(['Armor Break']);
+        });
+
+        it('activeAbilityStatuses enemy aura side target isolation is NOT in scope (aura remains singular)', () => {
+            // auraEnemy stays a single list (shared across all targets in this task).
+            // This test verifies that an aura registered without a targetId is visible
+            // in the default call regardless.
+            const aura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                payload: { buffName: 'GlobalWeaken', stacks: 1, parsedEffects: {} },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([aura]);
+            eng.beginRound(1);
+            const active = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(active).toHaveLength(1);
+            expect(active[0].payload.buffName).toBe('GlobalWeaken');
+        });
+
+        it('scheduled timed enemy debuffs (sourceFired) go to the default target and not to tank', () => {
+            const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
+            eng.beginRound(1);
+            eng.sourceFired('attacker', 'active', 1);
+            // Default enemy has the debuff
+            expect(eng.snapshot().activeEnemyDebuffs).toHaveLength(1);
+            // Tank target snapshot has nothing
+            expect(eng.snapshot('attacker', 'tank').activeEnemyDebuffs).toHaveLength(0);
+        });
+    });
+});
