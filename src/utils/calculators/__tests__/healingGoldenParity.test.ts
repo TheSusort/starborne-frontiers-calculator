@@ -833,16 +833,35 @@ describe('healingGoldenParity', () => {
     // self-buff → it folds into THIS turn's effectiveAttack before the damage assembly:
     //   enemy hit = 4000 × 1.50 (Attack Up) × 100% × 1 (defence 0, crit 0, neutral aff) = 6000.
     // The heal target (hp 100000, defence 0) self-heals 5% of its own max HP = 5000/round.
-    //   • DoT note: the enemy applies the inferno to the TARGET's DoT container, but the engine
-    //     only ticks the DUMMY enemy's containers — so the target's inferno NEVER ticks and
-    //     deals 0 incoming damage (it re-applies every round, dot-applied asserted below). The
-    //     debuff/self-buff DO surface as NAMES in targetDebuffs / enemySelfBuffs (display only).
-    // Per-round (heal-before-damage; HP enters R1 at 100%):
-    //   R1 enter 100%: heal 5000 (deficit 0 → all overheal). Enemy 6000 → HP 94000 → 94%.
-    //   R2 enter 94%:  heal 5000 (deficit 6000 → effective 5000). Enemy 6000 → HP 93000 → 93%.
-    //   R3…: steady −1000 HP/round (heal 5000 < hit 6000) → 92, 91, 90.
-    //   ⇒ incomingDamage 6000 + directHeal 5000 every round; targetDebuffs=['Defense Down'],
-    //     enemySelfBuffs=['Attack Up'] every round. cumulativeHealing 5000,10000,…,30000.
+    //   • DoT TICK (Task 11b): the enemy applies the inferno to the TARGET's DoT container, and
+    //     the engine ticks the TARGET's own containers at the TARGET's turn-start (the afflicted
+    //     ship's turn). The applier (the enemy) carries effectiveAttack 6000 (Attack Up folded),
+    //     so each inferno tick = 1 stack × (tier 100/100) × 6000 × dotMult 1 × affinityMult 1 =
+    //     6000 incoming. duration 3 → an entry applied on round N ticks on rounds N+1, N+2, N+3
+    //     then expires. The enemy re-applies every round, so the live entry count climbs to a
+    //     steady 3 (then holds — the 4-rounds-ago entry has expired). The debuff/self-buff DO
+    //     surface as NAMES in targetDebuffs / enemySelfBuffs (display only).
+    // Per-round (target speed 100 > enemy speed 50, so the target acts FIRST each round; its DoT
+    // ticks at turn-start, BEFORE its heal, then the enemy attacks last). HP enters R1 at 100%:
+    //   R1 enter 100%: 0 inferno entries → tick 0. heal 5000 (deficit 0 → all overheal). Enemy
+    //       hit 6000 → HP 94000; apply inferno A (rem 3). incoming R1 = 6000 (hit only).
+    //   R2 enter 94%:  entries [A:3] → tick 6000 → HP 88000 (A→2). heal 5000 (deficit 6000 →
+    //       effective 5000) → HP 93000. Enemy hit 6000 → HP 87000; apply B (rem 3).
+    //       incoming R2 = 6000 (DoT) + 6000 (hit) = 12000.
+    //   R3 enter 87%:  [A:2,B:3] → tick 12000 → HP 75000 (A→1,B→2). heal 5000 → HP 80000. Enemy
+    //       6000 → HP 74000; apply C (rem 3). incoming R3 = 12000 + 6000 = 18000.
+    //   R4 enter 74%:  [A:1,B:2,C:3] → tick 18000 → HP 56000 (A expires; B→1,C→2). heal 5000 →
+    //       HP 61000. Enemy 6000 → HP 55000; apply D (rem 3). incoming R4 = 18000 + 6000 = 24000.
+    //   R5 enter 55%:  [B:1,C:2,D:3] → tick 18000 → HP 37000 (B expires; C→1,D→2). heal 5000 →
+    //       HP 42000. Enemy 6000 → HP 36000; apply E. incoming R5 = 24000.
+    //   R6 enter 36%:  [C:1,D:2,E:3] → tick 18000 → HP 18000 (C expires; D→1,E→2). heal 5000 →
+    //       HP 23000. Enemy 6000 → HP 17000. incoming R6 = 24000.
+    //   ⇒ incomingDamage = 6000, 12000, 18000, 24000, 24000, 24000. directHeal 5000 every round
+    //     (effective 0/overheal 5000 on R1; effective 5000/overheal 0 from R2 — the DoT tick
+    //     opens a full deficit before the heal). targetDebuffs=['Defense Down'],
+    //     enemySelfBuffs=['Attack Up'] every round. cumulativeHealing 5000,10000,…,30000. The
+    //     target SURVIVES all 6 rounds (HP 17000 at the end). targetHpPct entering: 100, 94, 87,
+    //     74, 55, 36.
     const scenario14Input = () =>
         BASE({
             rounds: 6,
@@ -928,21 +947,43 @@ describe('healingGoldenParity', () => {
         expect(result.rounds[0].targetDebuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
     });
 
-    // Supplementary: the inferno DoT IS applied every round (dot-applied emitted) even though
-    // it never ticks in healing mode (target containers are not ticked → 0 incoming from it).
-    it('scenario 14: enemy applies the inferno DoT every round (dot-applied ×6, no DoT damage)', () => {
+    // Supplementary: the inferno DoT is applied every round (dot-applied ×6) AND ticks on the
+    // target at its turn-start (Task 11b), adding 6000 incoming per live entry. The live entry
+    // count climbs (duration 3, re-applied every round) → incoming grows 6000 → 12000 → 18000
+    // → 24000 then holds (3 live entries in steady state). dot-ticked fires on the TARGET from
+    // round 2 (the round-1 application's first tick).
+    it('scenario 14: enemy inferno DoT applied ×6 AND ticks on the target (incoming grows with live entries)', () => {
         idCounter = 0;
         const bus = createEventBus();
         const dotApplied: number[] = [];
+        const dotTicked: { round: number; targetId: string; damage: number }[] = [];
         bus.on('dot-applied', (e) => {
             if ((e as { dotType?: string }).dotType === 'inferno') {
                 dotApplied.push((e as { round: number }).round);
             }
         });
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { dotType?: string; round: number; targetId: string; damage: number };
+            if (ev.dotType === 'inferno') {
+                dotTicked.push({ round: ev.round, targetId: ev.targetId, damage: ev.damage });
+            }
+        });
         const result = simulateHealing({ ...scenario14Input(), bus });
         expect(dotApplied).toEqual([1, 2, 3, 4, 5, 6]);
-        // No tick → incoming is exactly the 6000 attack each round (no DoT bleed on top).
-        expect(result.rounds.every((r) => r.incomingDamage === 6000)).toBe(true);
+        // DoT-tick bleed: hit 6000 every round + 6000 per live inferno entry at the target's
+        // turn-start (0,1,2,3,3,3 live entries on rounds 1–6).
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([
+            6000, 12000, 18000, 24000, 24000, 24000,
+        ]);
+        // The tick lands on the TARGET (the focus actor id is 'attacker'; healTargetId 'healer'
+        // resolves to it), summed per dotType = 6000 × live-entry-count, from round 2.
+        expect(dotTicked).toEqual([
+            { round: 2, targetId: 'attacker', damage: 6000 },
+            { round: 3, targetId: 'attacker', damage: 12000 },
+            { round: 4, targetId: 'attacker', damage: 18000 },
+            { round: 5, targetId: 'attacker', damage: 18000 },
+            { round: 6, targetId: 'attacker', damage: 18000 },
+        ]);
     });
 
     // ── Scenario 15 (b): affinity-advantage enemy damage (+25%) ──────────────

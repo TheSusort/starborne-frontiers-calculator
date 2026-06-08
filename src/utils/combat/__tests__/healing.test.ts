@@ -1240,6 +1240,88 @@ describe('healing mode — enemy attackers and target intake', () => {
         // Full overheal at the cap.
         expect(applyHealClamp(5000, 10000, 10000)).toEqual({ consumed: 0, overheal: 5000 });
     });
+
+    // ── Task 11b: enemy-applied DoT ticks on the tank (credits incoming) ──────
+    // An enemy attacker (attack 5000, defence 0, neutral affinity, speed 50) hits the heal
+    // target for a 100% direct (5000) AND applies an inferno DoT (tier 100, 1 stack, duration
+    // 1). The target (focus, speed 100) acts FIRST each round; its DoT entries tick at its
+    // turn-start. No heals (hp 100000 → never dies, isolates the DoT bleed).
+    //
+    // Inferno tick = stacks 1 × (tier 100/100) × applier effectiveAttack 5000 × dotMult 1 ×
+    //   affinityMult 1 = 5000. duration 1 → exactly ONE tick per application (no compounding):
+    //   the entry applied on round N ticks once at round N+1's tank turn-start, then expires.
+    //
+    //   R1: tank tick — no entries yet → 0. enemy: direct 5000 → HP 95000; apply inferno
+    //       (rem 1). incoming R1 = 5000 (direct only).
+    //   R2: tank tick — 1 entry (rem 1) → 5000 incoming; HP 95000−5000 = 90000; entry expires.
+    //       enemy: direct 5000 → HP 85000; re-apply inferno (rem 1). incoming R2 =
+    //       5000 (DoT) + 5000 (direct) = 10000.
+    //   R3: same as R2 → incoming 10000; HP 75000.
+    // The DoT bleed adds 5000 incoming from R2 onward (vs the inert-DoT behaviour that would
+    // report 5000 every round). The single-entry-per-round invariant proves it expires.
+    it('enemy-applied inferno DoT ticks on the tank at its turn-start (credits incoming, expires)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const dotTicks: { round: number; targetId: string; damage: number }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; damage: number; dotType: string };
+            if (ev.dotType === 'inferno') {
+                dotTicks.push({ round: ev.round, targetId: ev.targetId, damage: ev.damage });
+            }
+        });
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 100_000, // never dies — isolates the DoT bleed
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                enemyAttackers: [
+                    manualEnemy('atk1', 5000, 50, {
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'damage',
+                                            target: 'enemy',
+                                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                                        }),
+                                        ab({
+                                            type: 'dot',
+                                            target: 'enemy',
+                                            config: {
+                                                type: 'dot',
+                                                dotType: 'inferno',
+                                                tier: 100,
+                                                stacks: 1,
+                                                duration: 1,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    }),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        const rounds = result.healing!.rounds;
+        // R1: direct only (no DoT tick yet). R2+: direct 5000 + DoT tick 5000 = 10000.
+        expect(rounds[0].incomingDamage).toBeCloseTo(5000, 6);
+        expect(rounds[1].incomingDamage).toBeCloseTo(10000, 6);
+        expect(rounds[2].incomingDamage).toBeCloseTo(10000, 6);
+        // Survival declines faster than the inert-DoT case: HP enters R3 below the
+        // direct-only floor (85000 → 85%, not 90000 → 90%).
+        expect(rounds[2].targetHpPctStart).toBeCloseTo(85, 6);
+        // The DoT ticks on the TANK (targetId = the heal target), 5000 each, from R2.
+        expect(dotTicks).toEqual([
+            { round: 2, targetId: 'attacker', damage: 5000 },
+            { round: 3, targetId: 'attacker', damage: 5000 },
+        ]);
+    });
 });
 
 // ── Task 9: on-ally-critically-repaired + on-ally-crit reactive listeners ───────────────

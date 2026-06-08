@@ -1378,6 +1378,30 @@ export function runCombat(input: CombatEngineInput): {
         // by buffName at the post-round push. Empty for a bare/manual enemy → no UI rows.
         const roundEnemySelfBuffs: ActiveBuff[] = [];
         const roundTargetDebuffs: ActiveBuff[] = [];
+        // Shared incoming-damage intake (healing mode): drains the heal target shield-first
+        // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
+        // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
+        // shield-before / absorbed / hpDamage the caller needs for any per-attack rider (the
+        // taken-leech punch-through gate). Both the per-attack enemy intake (below) and the tank
+        // DoT-tick intake (turn-start) route through here so the bleed accounting is identical.
+        const applyIncomingToTarget = (
+            damage: number
+        ): { shieldBefore: number; absorbed: number; hpDamage: number } => {
+            roundIncomingDamage += damage;
+            const shieldBefore = healTarget!.shieldPool;
+            const absorbed = Math.min(healTarget!.shieldPool, damage);
+            healTarget!.shieldPool -= absorbed;
+            roundShieldAbsorbed += absorbed;
+            const hpDamage = damage - absorbed;
+            const wasAlive = healTarget!.currentHp > 0;
+            healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
+            // First reach 0 → record the destroyed round + emit ship-destroyed once.
+            if (wasAlive && healTarget!.currentHp <= 0) {
+                healTargetDestroyedRound = r;
+                bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+            }
+            return { shieldBefore, absorbed, hpDamage };
+        };
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -1572,6 +1596,44 @@ export function runCombat(input: CombatEngineInput): {
             }
 
             bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+
+            // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
+            // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's
+            // turn-start). An enemy attacker lands inferno/corrosion in the tank's containers
+            // (Task 6b); without this tick they would never deal damage. Routes the ticked
+            // damage into the INCOMING-damage accounting (shield-first → HP → ship-destroyed →
+            // roundIncoming/roundShield) — NOT the player→enemy damage path. Reuses tickDoTs:
+            // the applier's effectiveAttack/dotMult/affinityMult come from the entry's sourceId
+            // (the enemy) via lastTurnCtxByActor; corrosion scales with the AFFLICTED ship's
+            // (the tank's) max HP. The dead-target guard above already skipped a destroyed tank,
+            // so the tank is alive here. DPS mode / no enemy-applied DoTs → empty containers →
+            // a no-op (goldens byte-identical).
+            if (healTarget && actor.id === healTarget.id) {
+                let tankDotDamage = 0;
+                tickDoTs({
+                    corrosionEntries: healTarget.corrosionEntries,
+                    infernoEntries: healTarget.infernoEntries,
+                    // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
+                    enemyHp: recipientMaxHp(healTarget.id),
+                    ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                    emitTicked: (dotType, damage) =>
+                        bus.emit({
+                            type: 'dot-ticked',
+                            targetId: healTarget.id,
+                            round: r,
+                            dotType,
+                            damage,
+                        }),
+                    // Sum the ticked damage across all appliers; route it as INCOMING to the tank
+                    // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
+                    credit: (_sourceId, _dotType, damage) => {
+                        tankDotDamage += damage;
+                    },
+                });
+                if (tankDotDamage > 0) {
+                    applyIncomingToTarget(tankDotDamage);
+                }
+            }
 
             if (actor.kind === 'attacker') {
                 // ====================================================================
@@ -1943,23 +2005,9 @@ export function runCombat(input: CombatEngineInput): {
                     roundTargetDebuffs.push(...enemyTurn.landedEnemyDebuffs);
                 }
                 if (damage > 0) {
-                    roundIncomingDamage += damage;
-                    // Shield-first drain: the absorption pool drains before HP. Capture the
-                    // pre-drain pool for the punch-through gate (Quixilver) below.
-                    const shieldBefore = healTarget!.shieldPool;
-                    const absorbed = Math.min(healTarget!.shieldPool, damage);
-                    healTarget!.shieldPool -= absorbed;
-                    roundShieldAbsorbed += absorbed;
-                    const wasAlive = healTarget!.currentHp > 0;
-                    healTarget!.currentHp = Math.max(
-                        0,
-                        healTarget!.currentHp - (damage - absorbed)
-                    );
-                    // First reach 0 → record the destroyed round + emit ship-destroyed once.
-                    if (wasAlive && healTarget!.currentHp <= 0) {
-                        healTargetDestroyedRound = r;
-                        bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
-                    }
+                    // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
+                    // shieldBefore/absorbed are captured for the punch-through gate (Quixilver) below.
+                    const { shieldBefore, absorbed } = applyIncomingToTarget(damage);
 
                     // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                     // AFTER this attack's drain so the proc never absorbs its own trigger.
