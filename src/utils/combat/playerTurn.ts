@@ -200,6 +200,10 @@ export interface PlayerTurnArgs {
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
     healing?: HealingRuntimeCtx;
+    /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
+     *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
+     *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
+    selfHpPct?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +599,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         round: r,
         enemyHpDecline,
         grantAllyCharges,
+        selfHpPct: selfHpPctArg = 100,
     } = args;
 
     const {
@@ -799,6 +804,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
     });
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
@@ -914,6 +920,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -987,6 +994,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [
@@ -1058,6 +1066,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         roundCrit,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this

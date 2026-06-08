@@ -1362,6 +1362,7 @@ export function runCombat(input: CombatEngineInput): {
                 // The attacker's per-actor config/gates/stats are bundled in
                 // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                 // ====================================================================
+                const attackerMaxHp = baseHpFor(actor.id);
                 const turn = runPlayerTurn({
                     runtime: attackerRuntime,
                     enemy,
@@ -1382,6 +1383,14 @@ export function runCombat(input: CombatEngineInput): {
                     // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
                     // block inert, goldens byte-identical).
                     healing: healingCtx,
+                    // Live HP% for self-HP-threshold gates. In DPS mode the attacker never
+                    // takes damage (currentHp === maxHp → 100%) so gates don't fire →
+                    // goldens byte-identical. In healing mode the acting actor may be
+                    // below full HP (Task 8 enemy attacks reduce currentHp).
+                    selfHpPct:
+                        attackerMaxHp > 0
+                            ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
+                            : 100,
                 });
 
                 // Drain any team-turn resisted entries staged BEFORE this attacker turn
@@ -1426,6 +1435,7 @@ export function runCombat(input: CombatEngineInput): {
                 // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
                 // the legacy sourceFired block below is fully superseded for walked actors.
                 // ====================================================================
+                const teamMaxHp = baseHpFor(actor.id);
                 const teamTurn = runPlayerTurn({
                     runtime: teamRuntimeById.get(actor.id)!,
                     enemy,
@@ -1443,6 +1453,9 @@ export function runCombat(input: CombatEngineInput): {
                     grantAllyCharges,
                     // Healing mode only — walked team turns heal/shield through the same ctx.
                     healing: healingCtx,
+                    // Live HP% for self-HP-threshold gates (same logic as attacker above).
+                    selfHpPct:
+                        teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
                 });
 
                 // Fold the team turn's damage into ITS OWN map entry (post-round assembly
