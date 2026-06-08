@@ -27,7 +27,8 @@
 
 **Files:**
 - Modify: `src/types/calculator.ts` (`CombatStatBlock` ~232)
-- Modify: `src/utils/calculators/healingEngineAdapter.ts` (`deriveTeamEngineActors` + the "NOT threaded" comment ~144)
+- Modify: `src/utils/calculators/dpsSimulator.ts` (`deriveTeamEngineActors` ~168 — this is where it's DEFINED; the healing adapter only CALLS it at `healingEngineAdapter.ts:146`). The engine reads `healModifier` off the **walk bundle** (`engine.ts:726`, `w.healModifier ?? 0`), so add `healModifier` INSIDE the `walk: {…}` object (~dpsSimulator.ts:183-193, alongside `affinityDamageModifier` etc.) — NOT the top-level team-actor input.
+- Modify: `src/utils/calculators/healingEngineAdapter.ts` (update the "healModifier is NOT threaded" comment ~144)
 - Modify: wherever team `CombatStatBlock`s are auto-filled from a ship (grep `CombatStatBlock` / team stat construction in the calculator pages/util — likely `TeamShipConfig` build)
 - Test: `src/utils/combat/__tests__/healing.test.ts` or the adapter test
 
@@ -61,7 +62,7 @@
 
 CONTEXT: `buildShipAbilities` gets its buffs from `buildSkillBuffAutoFill(ship)` → `parseAllSkillEffects` → `parseSkillEffects`. Hermes's refit-active passive: "Defense +20%. When an ally critically hits an enemy, this Unit gains 1 charge to its Charged Skill **and Everliving Regeneration III for 2 turns**. Additionally, when this Unit critically repairs an ally, it Cleanses 1 debuff from itself." The charge + cleanse parse; the Everliving Regeneration III self-buff does NOT (the diagnostic in Step 1 pins whether it's not emitted by `parseSkillEffects` or emitted without the `on-ally-crit` trigger).
 
-- [ ] **Step 1: Failing test** — build a ship with Hermes's refit-active passive text; assert the passive slot contains a `buff` ability `{ type:'buff', target:'self', config:{ buffName:'Everliving Regeneration III', duration:2 }, trigger:'on-ally-crit' }` alongside the existing charge (`on-ally-crit`) and cleanse (`on-ally-critically-repaired`) abilities. Confirm FAIL. (There's an existing `PALLAS_TEXT` fixture carrying this Hermes-shaped text — reuse or add a Hermes-named one.)
+- [ ] **Step 1: Failing test** — there is an EXISTING test (~`buildShipAbilities.test.ts:1397`, in the `PALLAS_TEXT`/ally-crit block) asserting the Everliving Regeneration buff "does NOT parse (documented gap)". FLIP/REPLACE that test (don't just add a new one — leaving the old assertion makes a confusing red suite): assert the passive slot now contains a `buff` ability `{ type:'buff', target:'self', config:{ buffName:'Everliving Regeneration III', duration:2 }, trigger:'on-ally-crit' }` alongside the existing charge (`on-ally-crit`) and cleanse (`on-ally-critically-repaired`) abilities. The `PALLAS_TEXT` fixture carries this Hermes-shaped text (a naming artifact — fine to reuse; optionally add a Hermes-named alias). Confirm FAIL.
 - [ ] **Step 2: Diagnose & implement** — if `parseSkillEffects` drops the conjoined "and Everliving Regeneration III for 2 turns" buff (charge-coupled clause), widen it to emit the buff SkillEffect (duration 2). Ensure the buff-merge loop's reactive-trigger detection (`detectAllyCritTrigger` on the buff's clause) assigns `on-ally-crit`. Everliving Regeneration III is in `BUFFS` with its incoming-repair effect — once emitted + triggered, the engine's reactive buff follow-up applies it (no engine change needed).
 - [ ] **Step 3: Run** `npx vitest run src/utils/abilities/ src/utils/__tests__/skillTextParser.test.ts src/utils/calculators/` — PASS; zero golden churn (Hermes not in parity fixtures). Watch `skillBuffAutoFill.test.ts` — if Hermes/Everliving appears there, update expectations legitimately.
 - [ ] **Step 4: Commit** `feat: parse Hermes Everliving Regeneration III reactive grant (on-ally-crit)`
