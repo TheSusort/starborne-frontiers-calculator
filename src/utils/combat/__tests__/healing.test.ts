@@ -1322,6 +1322,61 @@ describe('healing mode — enemy attackers and target intake', () => {
             { round: 3, targetId: 'attacker', damage: 5000 },
         ]);
     });
+
+    // ── Test: enemy extra-action grants are processed (CodeRabbit fix) ────────
+    // An enemy attacker with a once-per-round extra-action passive MUST take an extra
+    // turn each round via processExtraActionGrants. Without the fix, the extra grant is
+    // silently dropped → enemy only attacks once per round (2000 damage). With the fix,
+    // the enemy attacks twice (4000 damage).
+    //
+    // Setup: attack 2000, target defence 0 → 2000 per turn; once-per-round extra-action
+    //        passive → 2 enemy turns per round → 4000 incomingDamage/round.
+    // Baseline (no extra-action passive): 2000/round.
+    it('enemy extra-action passive doubles incoming damage per round', () => {
+        idCounter = 0;
+        const enemyWithExtraAction: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'extra-action',
+                            target: 'self',
+                            config: { type: 'extra-action', oncePerRound: true },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 1_000_000, // never dies
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'atk1',
+                        stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyWithExtraAction,
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Each round: 2 enemy turns × 2000/turn = 4000 incomingDamage.
+        for (const round of result.healing!.rounds) {
+            expect(round.incomingDamage).toBeCloseTo(4000, 6);
+        }
+    });
 });
 
 // ── Task 9: on-ally-critically-repaired + on-ally-crit reactive listeners ───────────────

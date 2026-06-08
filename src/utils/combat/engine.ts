@@ -2003,6 +2003,12 @@ export function runCombat(input: CombatEngineInput): {
                     // ONLY for display — never folded into any sim value. Empty for a bare enemy.
                     roundEnemySelfBuffs.push(...enemyTurn.activeSelfBuffs);
                     roundTargetDebuffs.push(...enemyTurn.landedEnemyDebuffs);
+                    // Extra-action grants: re-insert this enemy into the remaining queue for an extra
+                    // turn (full-actor completeness — mirrors the attacker and walked-team branches).
+                    // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
+                    // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
+                    // undefined (enemy's "allies" are enemy-side, not the player team).
+                    processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
                 }
                 if (damage > 0) {
                     // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
