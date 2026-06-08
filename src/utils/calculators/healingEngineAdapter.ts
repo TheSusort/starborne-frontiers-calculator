@@ -141,8 +141,8 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     const healTargetId = input.healTargetId === 'healer' ? FOCUS_ID : input.healTargetId;
 
     // Walked team actors via the shared helper (security 100, no enemy affinity — healing
-    // ignores affinity this increment). healModifier is NOT threaded: CombatStatBlock carries
-    // none, so walked team actors heal at modifier 0 (the engine's walk-bundle default).
+    // ignores affinity this increment). healModifier IS threaded from CombatStatBlock.healModifier
+    // (default 0 when absent), so walked team actors fold their own heal-modifier into heal casts.
     const engineTeamActors = deriveTeamEngineActors(teamActors, ENEMY_SECURITY, undefined);
     const hasTeamActors = !!teamActors && teamActors.length > 0;
 

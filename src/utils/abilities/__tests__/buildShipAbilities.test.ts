@@ -1111,6 +1111,23 @@ describe('buildShipAbilities', () => {
             });
         });
 
+        it('APEX refit-active passive: shield-on-debuff rides on-debuff-inflicted', () => {
+            // APEX's active inflicts Speed Down II / Crit Power Down III — those own
+            // inflictions supply the on-debuff-inflicted events that fire this shield grant.
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains a <unit-damage>Shield equal to 3%</unit-damage> of their Max HP when an enemy gets debuffed.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-debuff-inflicted',
+                config: { type: 'shield', pct: 3, basis: 'hp' },
+            });
+        });
+
         it('emits cleanse abilities', () => {
             const s = ship({
                 activeSkillText:
@@ -1388,20 +1405,26 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        // DOCUMENTED BUFF GAP: "Everliving Regeneration 3 for 2 turns" does NOT parse through the
-        // buff pipeline for this phrasing (no application verb attaches the buff in the parser),
-        // so no buff ability is emitted. detectReactiveTrigger IS extended for the ally-crit
-        // phrasing so that IF the buff parsed (other ships), it would ride on-ally-crit — verified
-        // by the detectReactiveTrigger unit test below. Here we assert the charge + cleanse routing
-        // and document the buff gap rather than forcing it.
-        it('Everliving Regeneration buff does not parse (documented gap) — no buff ability', () => {
+        // The conjoined grant "gains 1 charge … and Everliving Regeneration 3 for 2 turns" parses:
+        // the buff name sits after "and" with no governing verb directly before it (the verb "gains"
+        // is consumed by "gains 1 charge"), so the primary segment-loop emitter misses it. A
+        // supplementary BUFFS-gated conjoined-grant scan in parseSkillEffects emits it (buffName
+        // normalized "3" → "III" to match the BUFFS entry), and the buff-merge loop attaches the
+        // on-ally-crit reactive trigger detected on the clause — no engine change needed.
+        it('Everliving Regeneration buff parses and rides on-ally-crit (conjoined grant)', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
                 firstPassiveSkillText: PALLAS_TEXT,
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
-            expect(passive?.abilities.find((a) => a.type === 'buff')).toBeUndefined();
+            const buff = passive?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-ally-crit',
+                config: { buffName: 'Everliving Regeneration III', duration: 2 },
+            });
         });
 
         // A heal in the crit-repair sentence rides on-ally-critically-repaired; an UNRELATED heal
@@ -1604,6 +1627,74 @@ describe('buildShipAbilities', () => {
                     )
                 )
             ).toBe(false);
+        });
+    });
+
+    describe('Defiant shield-on-Stasis (control ability + on-stasis-applied)', () => {
+        it('charged "inflicts Stasis for 1 turn" parses a control ability with effect stasis', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+                chargeSkillText:
+                    'This Unit deals <unit-damage>195% damage</unit-damage> and inflicts <unit-skill>Stasis</unit-skill> for 1 turn.',
+                chargeSkillCharge: 2,
+            });
+            const charged = buildShipAbilities(s).slots.find((sl) => sl.slot === 'charged');
+            const control = charged?.abilities.find((a) => a.type === 'control');
+            expect(control).toMatchObject({
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'control', effect: 'stasis' },
+            });
+            // The charged damage is unaffected (control rider does not alter the damage ability).
+            const dmg = abilityOfType(charged!.abilities, 'damage');
+            expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 195 } });
+        });
+
+        it('active "applies Provoke" does NOT produce a stasis control ability', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+            });
+            const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+            const control = active?.abilities.find(
+                (a) => a.type === 'control' && a.config.type === 'control'
+            );
+            expect(control).toBeUndefined();
+        });
+
+        it('R0 passive "Shield equal to 30% of Max HP when applying Stasis" → shield on-stasis-applied', () => {
+            const s = ship({
+                refits: [],
+                firstPassiveSkillText:
+                    'This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+            });
+            const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-stasis-applied',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+            });
+        });
+
+        it('R2 passive parses ONLY the shield-on-Stasis clause (adjacency HP grant left unparsed)', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+            });
+            const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-stasis-applied',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+            });
         });
     });
 });

@@ -67,6 +67,7 @@ const DPSCalculatorPage: React.FC = () => {
         hacking: Math.round(final.hacking ?? 200),
         defence: Math.round(final.defence ?? 0),
         hp: Math.round(final.hp ?? 0),
+        healModifier: Math.round(final.healModifier ?? 0),
         speed: Math.round(final.speed ?? 100),
     });
 
@@ -75,7 +76,10 @@ const DPSCalculatorPage: React.FC = () => {
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                const stats = combatStatsFromShip(shipFinalStats(ship));
+                // Drop healModifier — it's not part of DPSShipConfig (attacker config).
+                const { healModifier: _healModifier, ...stats } = combatStatsFromShip(
+                    shipFinalStats(ship)
+                );
                 return {
                     configs: [
                         {
@@ -378,7 +382,9 @@ const DPSCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const stats = combatStatsFromShip(shipFinalStats(ship));
+        // healModifier is a team/heal-target concern, not part of DPSShipConfig — drop it
+        // from the attacker config spread (mirrors how team slots keep it separately).
+        const { healModifier: _healModifier, ...stats } = combatStatsFromShip(shipFinalStats(ship));
 
         setConfigs((prev) =>
             prev.map((c) => {

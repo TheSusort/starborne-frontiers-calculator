@@ -125,6 +125,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    fires once PER CRITTING HIT; the owner's own casts and the enemy are excluded.
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
+ *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
+ *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
@@ -217,6 +219,13 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-bomb-detonated':
                     bus.on('bomb-detonated', () => enqueue(intent));
+                    break;
+                case 'on-stasis-applied':
+                    bus.on('control-applied', (e) => {
+                        // Defiant: the OWNER's OWN Stasis application (own-cast scoped). The
+                        // existing `shield` follow-up applies the grant — no new executor branch.
+                        if (e.effect === 'stasis' && e.casterId === ownerId) enqueue(intent);
+                    });
                     break;
                 default:
                     // Non-live triggers are never registered (filtered at partition time).

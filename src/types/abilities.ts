@@ -37,6 +37,7 @@ export type AbilityTrigger =
     | 'on-ally-crit-dot'
     | 'on-ally-critically-repaired'
     | 'on-ally-crit'
+    | 'on-stasis-applied'
     | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
@@ -59,6 +60,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-crit-dot',
     'on-ally-critically-repaired',
     'on-ally-crit',
+    'on-stasis-applied',
     'on-bomb-detonated',
 ]);
 
@@ -200,8 +202,13 @@ export type AbilityConfig =
     | { type: 'cleanse' | 'purge'; count: number }
     | {
           type: 'control';
-          effect: 'provoke' | 'taunt' | 'stasis' | 'overload' | 'concentrate-fire';
+          effect: ControlEffect;
       };
+
+/** Crowd-control effects a `control` ability can apply. The engine does not simulate
+ *  these combat effects; the `control-applied` event (events.ts) only exposes the
+ *  application moment so reactions (e.g. Defiant's shield-on-Stasis) can fire. */
+export type ControlEffect = 'provoke' | 'taunt' | 'stasis' | 'overload' | 'concentrate-fire';
 
 export interface Ability {
     id: string;

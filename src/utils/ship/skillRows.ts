@@ -1,13 +1,17 @@
 import { Ship } from '../../types/ship';
 
 export interface SkillRow {
-    label: string;
+    // Narrowed to a literal union so source-tag mappings keyed on these labels
+    // (e.g. parseAllSkillEffects in skillTextParser.ts) fail to compile on label
+    // drift instead of silently mis-tagging.
+    label: 'Active' | 'Charge' | 'Passive R0' | 'Passive R2' | 'Passive R4';
     text: string;
     charge?: number;
 }
 
 export function getShipSkillRows(ship: Ship): SkillRow[] {
-    const refitCount = ship.refits.length;
+    // `ship.refits?.length ?? 0` is a test-fixture concession: a real Ship always has refits[].
+    const refitCount = ship.refits?.length ?? 0;
     // The highest-unlocked passive applies. R4 needs 4 refits, R2 needs 2; the base passive
     // (R0) is innate and applies even on an unrefit ship — so it must NOT be gated behind a
     // refit count, or unrefit ships (e.g. FrontLine) surface no passive at all.
@@ -20,7 +24,7 @@ export function getShipSkillRows(ship: Ship): SkillRow[] {
                 ? { label: 'Passive R0', text: ship.firstPassiveSkillText }
                 : null;
 
-    return [
+    const rows: SkillRow[] = [
         { label: 'Active', text: ship.activeSkillText ?? '' },
         {
             label: 'Charge',
@@ -28,7 +32,8 @@ export function getShipSkillRows(ship: Ship): SkillRow[] {
             charge: ship.chargeSkillCharge,
         },
         ...(activePassive ? [activePassive] : []),
-    ].filter((row) => row.text.length > 0);
+    ];
+    return rows.filter((row) => row.text.length > 0);
 }
 
 /**

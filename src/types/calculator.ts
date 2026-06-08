@@ -237,6 +237,7 @@ export interface CombatStatBlock {
     hacking: number;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
+    healModifier?: number; // heal-modifier %, folded into walked team-actor heal casts
 }
 
 export interface TeamShipConfig {

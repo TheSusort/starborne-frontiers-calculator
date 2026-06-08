@@ -10,7 +10,8 @@ import {
     EnemyBaseClass,
     DoTType,
 } from '../types/calculator';
-import { AbilityTrigger, Condition, ConditionSubject } from '../types/abilities';
+import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
+import { getShipSkillRows } from './ship/skillRows';
 
 /**
  * Represents a parsed segment of skill text
@@ -828,6 +829,59 @@ export function detectAllyCritTrigger(
     return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
 }
 
+// "when an enemy gets/is/becomes debuffed" — a reactive own-infliction trigger (APEX's
+// shield-on-debuff). Matches "debuff" specifically so it does NOT collide with the
+// "when an enemy gets/is buffed" enemy-buff handling (debuffed ≠ buffed). No lookbehind:
+// requiring "debuffed" (not "buffed") is sufficient disambiguation since "buffed" lacks
+// the "de" prefix. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
+const ENEMY_DEBUFFED_RE =
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+debuffed\b/i;
+
+/**
+ * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
+ * "when an enemy gets debuffed" phrase; otherwise undefined. Position-scoped on the RAW text
+ * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
+ */
+export function detectDebuffInflictedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
+}
+
+// "inflicts/applies Stasis" — a control infliction. Conservative: ONLY Stasis (the one control
+// any ship reacts to today, via Defiant's shield-on-Stasis). Provoke/Taunt stay handled as
+// targeting-status CONDITIONS (statusEffectCondition), NOT control abilities. The <unit-skill>
+// tags don't bracket the verb, so matching on raw text is safe.
+// "applying" deliberately omitted: the infliction verb is always "inflicts/applies"; "applying"
+// only appears in the passive reactive clause ("when applying Stasis"), matched separately below.
+const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
+
+/** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
+ *  docs/ship-skills.csv (Defiant charged "inflicts Stasis for 1 turn"). */
+export function parseControlInflict(text: string | null | undefined): ControlEffect | null {
+    if (!text) return null;
+    return STASIS_INFLICT_RE.test(text) ? 'stasis' : null;
+}
+
+// "when applying Stasis" — the reactive trigger for a grant that procs when THIS unit applies
+// Stasis (Defiant's "gains Shield equal to 30% of its Max HP when applying Stasis"). Position-
+// scoped (mirrors detectDebuffInflictedTrigger); no lookbehind.
+const APPLYING_STASIS_RE = /\bwhen\s+applying\s+stasis\b/i;
+
+/**
+ * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "when applying Stasis" phrase; otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectDebuffInflictedTrigger). Reference data:
+ * docs/ship-skills.csv (Defiant passive).
+ */
+export function detectStasisAppliedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, APPLYING_STASIS_RE, anchorPos, 'on-stasis-applied');
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
@@ -1240,12 +1294,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
-            const basis = leechBasis ?? resolveHealBasis(basisScope);
+            const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
             // must not apply (Malvex).
             const resolved = resolveHealTarget(sentence);
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
+            // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
+            // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max
+            // HP"). Recipient == caster, so normalize to the caster-owned 'hp' basis (the two
+            // are behaviourally identical for self, and 'hp' is the canonical self basis).
+            const basis = rawBasis === 'target-hp' && target === 'self' ? 'hp' : rawBasis;
             const explicitTarget = leechBasis === 'damage-taken' ? true : resolved.explicit;
             // Deliberately tested against the WHOLE sentence (not basisScope): trailing-clause
             // phrases like Quixilver's "when taking HP damage…" sit AFTER the match, so the
@@ -1420,6 +1479,43 @@ const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
 // Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or ")
 const CONNECTOR_RE = /^\s*(,\s*)?(and|or)?\s*$/i;
 const MAX_SCAN_CHARS = 120;
+
+// Conjoined self-grant: "gains/grants <something> and <BuffName> for N turns". The primary
+// segment-loop emitter attaches a buff to the nearest preceding application verb, but in a
+// conjoined grant the verb is consumed by the FIRST conjunct (Hermes: "gains 1 charge …") and
+// the trailing buff name after "and" has no governing verb of its own (and may not even be
+// <unit-skill>-tagged). This supplementary pass catches that trailing buff. It is deliberately
+// narrow: a self-grant verb, then "and <BuffName> for N turns", and <BuffName> must resolve to a
+// known BUFFS entry (resolveBuffName, incl. "3" → "III" normalization). Anything not in BUFFS is
+// ignored, so it never invents buffs from arbitrary capitalized phrases. Matched on tag-stripped
+// raw text so it works whether or not the trailing buff is tagged. Group 1 = buff name, group 2 =
+// duration. Across the full ship corpus the ONLY net-new emission (i.e. not already produced by
+// the segment loop) is Hermes's Everliving Regeneration III.
+const CONJOINED_SELF_GRANT_RE =
+    /\b(?:gains?|grants?)\b[^.;]*?\band\s+([A-Z][A-Za-z][A-Za-z. ]*?[A-Za-z0-9])\s+for\s+(\d+)\s+turns?/gi;
+
+// Resolves a candidate buff name (possibly using arabic numerals where BUFFS uses roman numerals)
+// to its canonical BUFFS entry name, or undefined if it isn't a known buff. Mirrors the number↔roman
+// handling in findBuffDescription, but returns the canonical name rather than the description.
+function resolveBuffName(candidate: string): string | undefined {
+    const trimmed = candidate.trim();
+    const exact = BUFFS.find((b) => b.name.toLowerCase() === trimmed.toLowerCase());
+    if (exact) return exact.name;
+    // Text may use arabic numerals ("Everliving Regeneration 3") where BUFFS uses roman ("III").
+    const numberToRoman: Record<string, string> = {
+        '1': 'I',
+        '2': 'II',
+        '3': 'III',
+        '4': 'IV',
+        '5': 'V',
+    };
+    const romanized = trimmed.replace(/\b([1-5])\b/g, (_, d: string) => numberToRoman[d]);
+    if (romanized !== trimmed) {
+        const match = BUFFS.find((b) => b.name.toLowerCase() === romanized.toLowerCase());
+        if (match) return match.name;
+    }
+    return undefined;
+}
 
 /**
  * Scans forward from startIndex through connector-only text segments and non-text segments,
@@ -1725,15 +1821,45 @@ export function parseSkillEffects(
         });
     }
 
+    // Supplementary pass: conjoined self-grants ("gains 1 charge … and <BuffName> for N turns")
+    // whose trailing buff the segment loop missed (no governing verb of its own). Gated by BUFFS
+    // membership and deduped against what the segment loop already emitted, so it adds only genuine
+    // self-buffs and never double-emits. Always 'self' (the construct's verb is a self-grant).
+    const alreadyEmitted = new Set(effects.map((e) => e.buffName));
+    const rawText = skillText.replace(/<[^>]+>/g, ' ');
+    let conjoined: RegExpExecArray | null;
+    CONJOINED_SELF_GRANT_RE.lastIndex = 0;
+    while ((conjoined = CONJOINED_SELF_GRANT_RE.exec(rawText)) !== null) {
+        const canonical = resolveBuffName(conjoined[1]);
+        if (!canonical || alreadyEmitted.has(canonical)) continue;
+        alreadyEmitted.add(canonical);
+        effects.push({
+            buffName: canonical,
+            target: 'self',
+            duration: parseInt(conjoined[2], 10),
+            source,
+        });
+    }
+
     return effects;
 }
 
 export function parseAllSkillEffects(ship: Ship): SkillEffect[] {
+    // Scan only the REFIT-ACTIVE passive — the same one buildShipAbilities resolves via
+    // getShipSkillRows. Scanning all three columns produced duplicate/tier-conflicting auto-fill
+    // entries for tier-inclusive passives (R0/R2/R4 each naming a different tier of one buff).
+    const passiveRow = getShipSkillRows(ship).find((r) => r.label.startsWith('Passive'));
+    // Tag the active passive with its ORIGINAL column source so downstream behaviour is unchanged:
+    // (a) per-round stackTrigger fires for passive1/2/3; (b) slotForBuffSource maps it to 'passive'.
+    const passiveSource: SkillSource =
+        passiveRow?.label === 'Passive R4'
+            ? 'passive3'
+            : passiveRow?.label === 'Passive R2'
+              ? 'passive2'
+              : 'passive1';
     return [
         ...parseSkillEffects(ship.activeSkillText, 'active'),
         ...parseSkillEffects(ship.chargeSkillText, 'charge'),
-        ...parseSkillEffects(ship.firstPassiveSkillText, 'passive1'),
-        ...parseSkillEffects(ship.secondPassiveSkillText, 'passive2'),
-        ...parseSkillEffects(ship.thirdPassiveSkillText, 'passive3'),
+        ...(passiveRow ? parseSkillEffects(passiveRow.text, passiveSource) : []),
     ];
 }

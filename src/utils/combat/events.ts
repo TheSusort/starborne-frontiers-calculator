@@ -1,4 +1,4 @@
-import { AbilityType } from '../../types/abilities';
+import { AbilityType, ControlEffect } from '../../types/abilities';
 import { DoTType } from '../../types/calculator';
 
 /**
@@ -21,6 +21,11 @@ import { DoTType } from '../../types/calculator';
  *  - `bomb-detonated`: asymmetric paths — `processBombs` (enemy turn) emits one event
  *    per pending bomb that detonates; `detonate()` bomb branch (attacker turn) emits one
  *    aggregate event for all consumed bombs. `actorId` is 'attacker' in both paths.
+ *  - `control-applied`: emitted on the CAST path when the firing skill carries a `control`
+ *    ability (e.g. Defiant's charged Stasis inflict). `casterId` is the applying actor;
+ *    `effect` is the control effect. Present-only-when-fired. Emitting it does NOT make the
+ *    engine simulate the control (Stasis/Taunt/etc. stay unmodelled) — it only exposes the
+ *    application moment so reactions (Defiant's shield-on-Stasis, on-stasis-applied) can fire.
  */
 export type CombatEvent =
     | { type: 'round-started'; round: number }
@@ -109,6 +114,10 @@ export type CombatEvent =
      *  In both cases `damage` is the realized payout under that path's scaling, not a
      *  normalized value. `actorId` is 'attacker' in both paths. */
     | { type: 'bomb-detonated'; actorId: string; round: number; stacks: number; damage: number }
+    /** A `control` ability resolved on the cast path. `casterId` is the applying actor;
+     *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
+     *  does NOT simulate the control's combat effect. */
+    | { type: 'control-applied'; casterId: string; effect: ControlEffect; round: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     | { type: 'ship-destroyed'; actorId: string; round: number };
 

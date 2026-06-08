@@ -471,6 +471,47 @@ buff/charge-aura), source it from firing + passive.
   **Healing ignores affinity (this increment).** Heal/shield amounts do not apply an affinity
   matchup multiplier this increment (the DPS engine does for damage). Team actors heal at
   `healModifier 0` — `CombatStatBlock` lacks the healModifier field (documented; see §6).
+- **Healing backlog batch (2026-06-08, branch `feat/healing-backlog`).** A cluster of reactive
+  shield/heal procs and parser cleanups, all gated on healing mode (DPS goldens byte-identical):
+
+  **`control-applied` event + `on-stasis-applied` trigger (new machinery).** Stasis inflictions
+  ("inflicts/applies Stasis") now parse into a `control` ability (conservative: ONLY Stasis;
+  Provoke/Taunt stay targeting-status CONDITIONS). The cast path emits a new `control-applied`
+  event so reactions can fire. The control's OWN lockout/combat effect (Stasis itself) remains
+  UNSIMULATED — `control` is a TRIGGER SOURCE only, not a modeled effect. The control ability
+  carries no conditions, so a gated Stasis (e.g. Crocus "if target has >3 debuffs") emits
+  control-applied unconditionally; inert today (no ship both gates its own Stasis and reacts to
+  it) and documented in `buildShipAbilities.ts`. Scoping is own-cast: the trigger fires for the
+  inflicting actor's own Stasis casts.
+
+  **Defiant shield-on-Stasis.** Defiant's "gains Shield equal to 30% of its Max HP when applying
+  Stasis" parses into a SHIELD anchored in the "when applying Stasis" clause, riding the
+  `on-stasis-applied` reactive trigger (`detectStasisAppliedTrigger`, position-scoped). Defiant's
+  Stasis is on its CHARGED skill, so the shield fires on the charged cast (VERIFY in game that the
+  shield procs on the charged cast and not a delayed turn).
+
+  **APEX shield-on-debuff.** A SHIELD whose anchor falls in the "when an enemy gets debuffed"
+  sentence rides `on-debuff-inflicted` (own inflictions, position-scoped — see
+  `detectDebuffInflictedTrigger`). APEX gains a shield reacting to its own debuff inflictions.
+
+  **Hermes Everliving Regeneration III reactive grant.** A supplementary BUFFS-gated
+  conjoined-grant scan in `parseSkillEffects` emits a trailing self-buff in a "gains X … and
+  <BuffName> for N turns" construct even when the leading conjunct consumes the verb (Hermes:
+  "gains 1 charge … and Everliving Regeneration III for 2 turns"). Deduped against the segment-loop
+  output and gated by BUFFS membership (arabic→roman normalized); across the full corpus the only
+  net-new emission is Hermes's Everliving Regeneration III. The buff-merge loop attaches the
+  `on-ally-crit` reactive trigger automatically. (Everliving Regeneration is an incoming-repair
+  amplifier, NOT a HoT — see the HEALING block above.)
+
+  **Team-actor healModifier now threaded.** `CombatStatBlock` gains a `healModifier` field and the
+  team-actor heal fold reads it, so a team support ship's own gear healModifier feeds its heals
+  (previously fixed at 0; see the prior §5 HEALING note, now superseded). Team-ship cards expose an
+  editable Heal Modifier input.
+
+  **Refit-active auto-fill scan alignment.** The buff auto-fill (`parseAllSkillEffects`) now scans
+  the refit-active passive via `getShipSkillRows()` — the same resolver the rest of the skill model
+  uses — instead of all passive tiers, so a ship no longer emits duplicate tier buffs from
+  inactive refit passives.
 - **Damage-leech heals & shields (2026-06-07, branch `feat/damage-leech`).** LEECH — heals/
   shields equal to a percentage of damage **dealt** or **taken** (~14 text cells / ~11 ships).
   Two new heal/shield bases `'damage-dealt'` / `'damage-taken'` plus an optional
@@ -651,7 +692,30 @@ configure it and it looks like it works, but it does nothing".
 >   Quixilver (active rider + taken passive). See §5 LEECH for the full rule set. Skill Editor
 >   gains the Damage dealt / Damage taken basis options + a scope select on passive damage-dealt.
 >
+> **Shipped 2026-06-08 (healing backlog batch — feat/healing-backlog):**
+> - New machinery: `control-applied` event + `on-stasis-applied` reactive trigger (own-cast scoped;
+>   the control's own Stasis effect stays UNSIMULATED — it is a trigger source only). Stasis
+>   inflictions parse into a `control` ability (conservative: Stasis only).
+> - Defiant shield-on-Stasis (fires on the CHARGED cast), APEX shield-on-debuff
+>   (`on-debuff-inflicted`, own inflictions) — both now simulated for the Healing Calculator.
+> - Hermes Everliving Regeneration III reactive grant: a BUFFS-gated conjoined-grant scan emits the
+>   trailing self-buff so the `on-ally-crit` reactive trigger attaches (was item 11 — formerly
+>   mislabelled "Pallas"; the actual ship is Hermes). Single net-new corpus emission.
+> - Team-actor healModifier threaded: `CombatStatBlock` gains `healModifier`; team support ships
+>   heal with their own heal-boost stat (was item 12). Team-ship cards expose the input.
+> - Refit-active auto-fill scan alignment: buff auto-fill scans the refit-active passive via
+>   `getShipSkillRows()` — no duplicate tier buffs from inactive refit passives.
+> - DPS goldens byte-identical; all healing changes gated on healing mode.
+>
 > **In-game verification list (healing — assumptions to confirm):**
+> - *Defiant shield-on-Stasis fires on the charged cast*: Defiant's Stasis is on its charged skill,
+>   so the shield procs on the charged cast in-sim. Confirm the shield grants on the charged cast
+>   and is not delayed a turn.
+> - *Gated-Stasis control over-emit (latent)*: the `control` ability carries no conditions, so a
+>   gated Stasis (e.g. a "if target has >3 debuffs" Stasis) would emit `control-applied`
+>   unconditionally. Inert today (no ship both gates its own Stasis and reacts to it); if a future
+>   ship pairs a gated Stasis with an own-stasis reaction, thread the inflicting ability's
+>   conditions onto the control ability (see the code note in `buildShipAbilities.ts`).
 > - *Self-HoT cast-turn tick*: a self-applied Repair Over Time ticks on its own cast turn in-sim.
 >   The game may delay the first tick one turn — confirm and adjust if so.
 > - *Shield no-crit / no-channels*: shields use `basis × pct` only (no heal crit, no
@@ -739,16 +803,10 @@ configure it and it looks like it works, but it does nothing".
     buff abilities from the passive start-of-round clause. Low user-visible impact (most
     Chakara configurations have the attacker as the slowest ship, making the condition always
     true; manual picker is a workaround). Added 2026-06-06; Task 9 locks the damage proc parse.
-11. **Pallas Everliving-Regeneration grant parser gap** — Pallas's text grants "Everliving
-    Regeneration 3" but the phrasing carries no application verb the parser recognises, so no
-    buff ability is emitted. Workaround today: add it manually in the Skill Editor. Resolution:
-    teach the buff auto-fill to recognise the grant phrasing (low user-visible impact — single
-    ship). Added 2026-06-07 (healing rebuild).
-12. **Team-actor healModifier not threaded** — team support ships heal at `healModifier 0`
-    because `CombatStatBlock` has no healModifier field; only the focus healer's healModifier
-    feeds its heal formula. So a team healer's own gear healModifier is invisible to its heals.
-    Resolution: add `healModifier` to `CombatStatBlock` and thread it through the team-actor
-    heal fold (low cost; matters once multi-healer comparisons are common). Added 2026-06-07.
+
+> *Items 11 (Hermes Everliving-Regeneration grant — formerly mislabelled "Pallas") and 12
+> (team-actor healModifier) shipped 2026-06-08 in the healing backlog batch — see the shipped
+> block above.*
 
 ---
 

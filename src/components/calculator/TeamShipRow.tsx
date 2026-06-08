@@ -210,6 +210,19 @@ export const TeamShipRow: React.FC<TeamShipRowProps> = ({
                                 }
                                 helpLabel="source stat for HP-based damage"
                             />
+                            <Input
+                                label="Heal Modifier (%)"
+                                type="number"
+                                min="0"
+                                value={config.stats.healModifier ?? 0}
+                                onChange={(e) =>
+                                    updateStat(
+                                        'healModifier',
+                                        Math.max(0, parseInt(e.target.value) || 0)
+                                    )
+                                }
+                                helpLabel="boosts heals this ship casts"
+                            />
                         </div>
                     )}
 

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
+import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
+import { TeamActorInput } from '../../../types/calculator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -430,6 +432,56 @@ describe('healing mode — heal consumption + heal-performed', () => {
         expect(attackerPerf.targets).toEqual(['attacker', 't1', 't2']);
         expect(attackerPerf.amount).toBe(3000);
         expect(attackerPerf.critHits).toBe(1); // ONE draw, not 3
+    });
+
+    // ── Test 8b: walked team healer folds its OWN healModifier ───────────────
+    // A team actor whose stats.healModifier = 50 is threaded through deriveTeamEngineActors
+    // (the real auto-fill seam) → its walk bundle carries healModifier 50. It casts a self
+    // heal (basis hp 8000, pct 10). With crit 0 and no outgoing/incoming heal buffs, its OWN
+    // directHeal must be basis × pct × (1 + 50/100) = 8000 × 0.10 × 1.5 = 1200. The focus
+    // actor does nothing (empty skills). Pre-threading this healed at ×1.0 (= 800) because
+    // CombatStatBlock carried no healModifier and the walk bundle defaulted it to 0.
+    it('walked team healer folds its own stats.healModifier into directHeal', () => {
+        idCounter = 0;
+        const teamHealer: TeamActorInput = {
+            id: 't1',
+            speed: 200, // acts before the (inert) focus actor
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: healSkills([
+                ab({
+                    type: 'heal',
+                    target: 'self',
+                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                }),
+            ]),
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp: 8000,
+                healModifier: 50,
+            },
+        };
+        // Thread through the real seam (security 100, no enemy affinity) → walk.healModifier 50.
+        const engineTeamActors = deriveTeamEngineActors([teamHealer], 100, undefined);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                speed: 40, // focus acts after the team healer
+                healTargetId: 't1',
+                teamActors: engineTeamActors,
+                shipSkills: { slots: [] }, // focus actor is inert
+            })
+        );
+        // basis 8000 × pct 10% × (1 + healModifier 50/100) = 1200, credited to the caster t1.
+        expect(sumHeal(result, 'directHeal', 't1')).toBe(1200);
     });
 
     // ── Test 9: DPS-mode inertness ───────────────────────────────────────────
@@ -1316,6 +1368,43 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
         expect(enqueued).toHaveLength(3);
     });
+
+    it('on-debuff-inflicted shield (APEX): own infliction enqueues; ally/enemy infliction does not', () => {
+        const handBus = makeHandBus();
+        const enqueued: Intent[] = [];
+        // APEX's refit-active passive: gains a Shield = 3% Max HP when an enemy gets debuffed.
+        // The trigger fires on THIS unit's own inflictions (Speed Down II / Crit Power Down III).
+        const ability: Ability = {
+            id: 'apex-shield-on-debuff',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            config: { type: 'shield', pct: 3, basis: 'hp' },
+        };
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            enemyId: 'enemy',
+        });
+        const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
+
+        // This unit's own infliction → enqueue. (The 'dot-applied' path of on-debuff-inflicted is
+        // covered by the pre-existing trigger machinery — it is not APEX-specific, so it's not
+        // re-asserted here.)
+        handBus.emit({ type: 'debuff-applied', sourceId: 'attacker', ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // An ally's infliction → own-only trigger does NOT fire.
+        handBus.emit({ type: 'debuff-applied', sourceId: 'other', ...base });
+        expect(enqueued).toHaveLength(1);
+
+        // The enemy's own infliction → does NOT fire.
+        handBus.emit({ type: 'debuff-applied', sourceId: 'enemy', ...base });
+        expect(enqueued).toHaveLength(1);
+    });
 });
 
 // ── Task 9: reactive heal/shield/cleanse executor ───────────────────────────────────────
@@ -1943,5 +2032,72 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
         );
         // directDamage 7500 (crit-folded damage) × 0.10 = 750; the heal itself does NOT crit.
         expect(focusHeal(noCrit, 'directHeal')).toBeCloseTo(750, 6);
+    });
+});
+
+// ── Defiant shield-on-Stasis: control-applied → on-stasis-applied shield (engine end-to-end) ──
+describe('healing — Defiant shield-on-Stasis (control-applied → on-stasis-applied)', () => {
+    it('charged Stasis cast grows the focus shield pool by 30% of max HP via on-stasis-applied', () => {
+        idCounter = 0;
+        // Focus = heal target. Charged slot carries a damage + a stasis control ability; the
+        // passive shield reacts to the focus's OWN Stasis application. chargeCount 1 +
+        // startCharged → charged fires rounds 1,3,5 (3 of 5 rounds); shield 30% × 10000 = 3000
+        // each of those rounds. Active rounds (2,4) fire the inert active cast → no shield.
+        const result = runCombat(
+            BASE({
+                numRounds: 5,
+                hp: 10000,
+                healTargetId: 'attacker',
+                hasChargedSkill: true,
+                chargeCount: 1,
+                startCharged: true,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 145 },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'charged',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 195 },
+                                }),
+                                ab({
+                                    type: 'control',
+                                    target: 'enemy',
+                                    config: { type: 'control', effect: 'stasis' },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'shield',
+                                    target: 'self',
+                                    trigger: 'on-stasis-applied',
+                                    config: { type: 'shield', pct: 30, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // Shield bucket counts the raw 3000 grant on each charged (Stasis) round: rounds 1,3,5.
+        const shieldByRound = (result.healing?.rounds ?? []).map(
+            (rd) => rd.perActor.get('attacker')?.shield ?? 0
+        );
+        expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000]);
+        expect(focusHeal(result, 'shield')).toBe(9000);
     });
 });

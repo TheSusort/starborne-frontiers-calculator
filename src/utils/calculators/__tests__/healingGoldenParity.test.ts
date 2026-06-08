@@ -728,4 +728,84 @@ describe('healingGoldenParity', () => {
         const result = simulateHealing(scenario12Input());
         expect(result.summary.destroyedRound).toBe(4);
     });
+
+    // ── Scenario 13: Defiant shape (shield-on-Stasis via control-applied) ─────
+    // HAND-VERIFIED. The focus IS the heal target (hp 10000, no enemies → full HP every round,
+    // all shield is pool growth, no absorption). The Defiant kit:
+    //   • Active slot = a 145% damage cast (its in-game Provoke is NOT modelled — no control
+    //     ability parsed for Provoke; the active cast is inert here, no enemies).
+    //   • Charged slot = a 195% damage cast + a `control` ability { effect:'stasis' }. On a
+    //     charged cast the cast path emits `control-applied {effect:'stasis', casterId:focus}`.
+    //   • Passive slot = a shield `{ basis:'hp', pct:30, trigger:'on-stasis-applied' }`. The
+    //     on-stasis-applied listener fires on the focus's OWN Stasis application → the existing
+    //     shield follow-up grants 30% of max HP = 10000 × 30% = 3000 (raw; shields never crit /
+    //     never fold), capping the pool at max HP. shield bucket counts the RAW 3000 each cast.
+    //
+    // Cadence: chargeCount 1, startCharged true → charged fires on rounds 1,3,5,7,9 (charges
+    // 1≥1 → fire, reset 0; +1 on the intervening active rounds). So control-applied → shield
+    // procs ONLY on those 5 charged rounds; active rounds 2,4,6,8,10 grant no shield.
+    //   ⇒ shield bucket = 3000 on rounds 1,3,5,7,9; 0 on rounds 2,4,6,8,10. cumulative shield
+    //     over 10 rounds = 5 × 3000 = 15000. No directHeal/hotHeal/effective/overheal (no heals).
+    const scenario13Input = () =>
+        BASE({
+            rounds: 10,
+            chargeCount: 1,
+            startCharged: true,
+            healer: { ...HEALER, hp: 10000 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 145 },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 195 },
+                            }),
+                            ab({
+                                type: 'control',
+                                target: 'enemy',
+                                config: { type: 'control', effect: 'stasis' },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                trigger: 'on-stasis-applied',
+                                config: { type: 'shield', pct: 30, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
+    snap(
+        'Defiant shape (shield-on-Stasis via control-applied → on-stasis-applied)',
+        scenario13Input
+    );
+
+    // Supplementary in-code assertion for scenario 13: charged rounds (1,3,5,7,9) grant a 3000
+    // shield via on-stasis-applied; active rounds (2,4,6,8,10) grant none.
+    it('scenario 13: shield is 3000 on charged rounds (1,3,5,7,9), 0 on active rounds', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario13Input());
+        const shieldByRound = result.rounds.map((r) => r.shield);
+        expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000, 0, 3000, 0, 3000, 0]);
+    });
 });

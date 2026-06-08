@@ -2436,7 +2436,10 @@ const DocumentationPage: React.FC = () => {
                                         Corrosion and Inferno) and burst-triggered heals — or based
                                         on the damage they take, like shield-on-hit. These are now
                                         simulated in the Healing Calculator too, applied as the
-                                        damage is dealt or taken round by round.
+                                        damage is dealt or taken round by round. Event-reactive
+                                        shields and heals — such as gaining a shield when an enemy
+                                        is debuffed or when the ship applies Stasis — fire from
+                                        their real triggers as well.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Survival Metric:</span> The

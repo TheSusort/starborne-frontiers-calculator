@@ -15,6 +15,7 @@ import {
     secondaryFromSkill,
     dotsFromSkill,
     chargeAbilitiesFromSkill,
+    controlAbilitiesFromSkill,
     detonationsFromSkill,
     accumulatorsFromSkill,
     modifierTotalsFromAbilities,
@@ -1062,6 +1063,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Hard gate: payload abilities whose conditions fail contribute nothing this
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
     const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx);
+
+    // Control inflictions (e.g. Defiant's charged Stasis): emit `control-applied` so reactions
+    // (on-stasis-applied) can fire. Emission ONLY — the engine does NOT simulate the control's
+    // combat effect (Stasis/Taunt stay unmodelled). An emitted-but-unconsumed event changes
+    // nothing, so DPS-mode goldens are unaffected.
+    for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
+        if (ctrl.config.type === 'control') {
+            bus.emit({
+                type: 'control-applied',
+                casterId: actor.id,
+                effect: ctrl.config.effect,
+                round: r,
+            });
+        }
+    }
+
     const { multiplier: rawMultiplier, hits, scalingAbility } = damageInputsFromSkill(gatedSkill);
     const effectiveMultiplier = rawMultiplier * hits;
     const secondary = secondaryFromSkill(gatedSkill);

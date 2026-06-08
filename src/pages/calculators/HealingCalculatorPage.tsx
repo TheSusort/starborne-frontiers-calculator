@@ -345,6 +345,7 @@ const HealingCalculatorPage: React.FC = () => {
                         hacking: Math.round(final.hacking ?? 200),
                         defence: Math.round(final.defence ?? 0),
                         hp: Math.round(final.hp ?? 0),
+                        healModifier: Math.round(final.healModifier ?? 0),
                     },
                     affinity: ship.affinity,
                     buffs: t.buffs.filter((b) => !b.autoFilled),
