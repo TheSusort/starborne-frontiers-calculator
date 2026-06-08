@@ -30,8 +30,8 @@
 - `src/utils/combat/events.ts` — additive `attacked` event. (Task 4)
 - `src/types/abilities.ts` — add `on-attacked` to `LIVE_TRIGGERS`. (Task 4)
 - `src/utils/combat/playerTurn.ts` — accept the acting actor's own `selfHpPct`; route it into the actor's condition contexts. (Task 3)
-- `src/utils/combat/engine.ts` — build the enemy a `PlayerActorRuntime`; dispatch enemy turns through `runPlayerTurn` bound to the heal target; drain damage into the target (reuse existing shield-first intake + `damage-taken` procs); emit `attacked`; decrement the enemy's own statuses; retire the `runEnemyAttackerTurn` branch. (Tasks 5, 6, 8)
-- `src/utils/combat/enemyTurn.ts` — **deleted** once Task 6 lands.
+- `src/utils/combat/engine.ts` — build the enemy a `PlayerActorRuntime`; dispatch enemy turns through `runPlayerTurn` bound to the heal target; drain damage into the target (reuse existing shield-first intake + `damage-taken` procs); emit `attacked`; decrement the enemy's own statuses; retire the `runEnemyAttackerTurn` branch. (Tasks 5, 6, 6b, 8)
+- `src/utils/combat/enemyTurn.ts` — **deleted** once Task 6b lands.
 - `src/utils/calculators/healingEngineAdapter.ts` — `EnemyAttackerInput` gains `affinity`; resolve the enemy matchup via `computeAffinityModifiers`; build the enemy with full (not damage-only) `shipSkills`. (Task 9)
 - `src/utils/calculators/dpsSimulator.ts` — `deriveTeamEngineActors` reused for the enemy runtime bundle (no signature change expected). (Task 9)
 - `src/components/.../EnemyAttackersPanel.tsx` + healing round-overview component — affinity `Select`; enemy-effects round overview. (Task 10)
@@ -227,7 +227,7 @@
 - Modify: `src/utils/calculators/healingEngineAdapter.ts:22-29` (`EnemyAttackerInput` gains `affinity?: AffinityName` — enemy attackers carry **no affinity fields today**, so this is net-new; the existing `:166-168` neutral block is the *focus healer's* affinity, not the attackers' — don't conflate), `:146` (`deriveTeamEngineActors`)
 - Test: `src/utils/calculators/__tests__/healingEngineAdapter.test.ts`
 
-- [ ] **Step 1: Write failing test.** An enemy attacker with `affinity` at advantage vs the target deals `+25%` damage vs neutral; the four affinity fields on the built enemy runtime come from `computeAffinityModifiers(enemyAffinity, targetAffinity)`. (Mind the matchup direction — verify against `computeAffinityModifiers`'s `(attacker, enemy)` argument order in `affinityUtils.ts:23-31`; the enemy is the attacker here.)
+- [ ] **Step 1: Write failing test.** An enemy attacker with `affinity` at advantage vs the target deals `+25%` damage vs neutral. `computeAffinityModifiers` returns **three** fields (`damageModifier`/`critCap`/`critPenalty`); the **fourth** runtime field, `affinityDisadvantage`, is derived locally as `affinityDamageModifier < 0` (mirror `deriveTeamEngineActors` / `engine.ts:699`). (Mind the matchup direction — verify against `computeAffinityModifiers`'s `(attacker, enemy)` argument order in `src/utils/calculators/affinityUtils.ts:23-31`; the enemy is the attacker here.)
 - [ ] **Step 2: Run red.** FAIL (neutral hardcoded).
 - [ ] **Step 3: Implement.** Add `affinity` to `EnemyAttackerInput`. Resolve `computeAffinityModifiers(enemy.affinity, targetAffinity)` and pass the four fields into the enemy runtime instead of the hardcoded zeros. Build the enemy with full `shipSkills` (drop any damage-only filtering for enemy attackers). Pass `targetAffinity` through from the heal-target ship.
 - [ ] **Step 4: Run green.** PASS.
