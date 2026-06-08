@@ -70,7 +70,7 @@ round (as `modifierCtx` and `ctx`), both **before Step-3 DoT application**.
 | `enemy-debuff` | ✅ | landed debuffs + DoT entries — **name-agnostic, `buffName` ignored** (`evaluateConditions.ts:31-35`) | real | ✅ |
 | `enemy-type` | ✅ (incl. negation, anyOf OR-lists) | global page-level `enemyType` | real | ✅ |
 | `self-crit` | ✅ | binary per-round outcome from deterministic crit schedule (in payload ctx); `effectiveCritRate / 100` probability in modifier ctx | real | ✅ |
-| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct` fixed 100; `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self fixed 100, enemy live | ✅ enemy HP-threshold gates now switch mid-fight; self remains fixed |
+| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct`: live for the heal target in healing mode (bombarded tank's current HP%); fixed 100 in DPS mode and for un-targeted actors. `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self live in healing mode (tank), fixed 100 in DPS | ✅ enemy HP-threshold gates switch mid-fight; DERIVABLE self HP-threshold gates (at-full-HP off-switch, extra-action HP<N, modifier HP<N) now switch for the tank in healing mode. **Non-derivable** self HP-threshold gates (Makoli/Guardian-style reactive heals) stay manual — the parser marks "below X% HP" on reactive heals as non-derivable, and the "when directly damaged" trigger is unmodeled (4c). |
 | `enemy-hp-pct` / `enemy-hp-missing-pct` | ✅ (`hpProportionalScaling`: "up to X% based on the target's current/missing HP" — Akula/Tithonus) | count = live `enemyHpPct` (or `100 −` it) | real | ✅ HP-proportional scaling modifiers track the declining pool |
 | `adjacent-ally` | ✅ (for-each scaling) | `adjacentAllyCount` | **0** | ❌ manual only |
 | `enemy-adjacent` | ✅ (charge classifier) | `enemyAdjacentCount` | **0** | ❌ manual only |
@@ -598,10 +598,17 @@ buff/charge-aura), source it from firing + passive.
   configured per enemy attacker in the UI; auto-filled when picking a ship.
 
   **Real `selfHpPct` for the tank.** The heal target's current HP percentage is now live and
-  fed as `selfHpPct` in the enemy's condition context. This retro-activates parsed-but-
-  previously-dropped self-HP gates on the ENEMY's own abilities (Makoli/Guardian below-40%
-  gates, Tormenter HP<50 extra-action, self-execute style gates). The tank's `selfHpPct`
-  also feeds into any ability conditions evaluated against the tank's live HP.
+  fed as `selfHpPct` in the actor's condition context. This activates the DERIVABLE self-HP
+  gates the parser emits: (1) **at-full-HP / above-99% gates** now correctly switch OFF when
+  the actor is below full HP; (2) **Tormenter-style extra-action HP<N gates**
+  (`EXTRA_ACTION_SELF_HP_RE`) switch ON when the actor's HP drops below the threshold; and
+  (3) **`hpThresholdFromSentence` modifier clauses** (e.g. Los's "30% more damage when its HP
+  is below 50%") become live. These are the `hp-threshold` conditions the parser marks
+  derivable. **NOT activated by 4a:** Makoli/Guardian-style "below X% HP" REACTIVE HEALS
+  ("When directly damaged while below 40% HP, repairs 20%") — the parser keeps "below X% HP"
+  gates on REACTIVE heals MANUAL (non-derivable; see `skillTextParser.ts:485,599`), and the
+  "when directly damaged" trigger itself is not yet modeled (deferred to **4c**). Real
+  `selfHpPct` does not reach those repair abilities.
 
   **`attacked` event + live `on-attacked` trigger.** A new additive `attacked` event is
   emitted each time an actor takes damage from an enemy turn. The `on-attacked` trigger is
@@ -815,8 +822,10 @@ configure it and it looks like it works, but it does nothing".
 >   `runEnemyAttackerTurn` / `enemyTurn.ts` retired.
 > - Full parsed kit: affinity-modified damage, debuffs/DoTs to the tank, self-buffs to itself.
 > - Affinity symmetry: enemy resolves `computeAffinityModifiers(enemyAffinity, targetAffinity)`.
-> - Real `selfHpPct` for the tank: retro-activates self-HP gates on enemy abilities
->   (Makoli/Guardian below-40%, Tormenter HP<50, self-execute patterns).
+> - Real `selfHpPct` for the tank: activates the DERIVABLE self-HP gates (at-full-HP
+>   off-switch, Tormenter HP<50 extra-action, Los-style modifier HP<N). Makoli/Guardian
+>   "below X% HP" REACTIVE heals are NOT activated — the parser keeps those gates
+>   manual + the "when directly damaged" trigger is unmodeled (deferred to 4c).
 > - `attacked` event + `on-attacked` trigger moved from annotation-only to LIVE (`LIVE_TRIGGERS`).
 > - Per-target status stores: each target's debuffs are isolated in the StatusEngine; enemy
 >   self-buffs in their own per-owner store.

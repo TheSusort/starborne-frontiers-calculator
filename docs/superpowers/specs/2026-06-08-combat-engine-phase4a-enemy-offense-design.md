@@ -171,6 +171,19 @@ DPS-assumption defaults are unchanged:
 - **`selfHpPct`** — per-actor live HP (`currentHp / maxHp × 100`). A bombarded target declines;
   untargeted ships and the DPS attacker stay 100. Retro-activates parsed-but-dropped gates:
   Makoli / Guardian below-40%, Tormenter HP<50, self-execute.
+
+  **Post-implementation correction (2026-06-08):** The claim "retro-activates Makoli/Guardian
+  below-40% gates" is inaccurate. What 4a actually activates is the set of DERIVABLE self-HP
+  gates: (1) at-full-HP / above-99% off-switches, (2) Tormenter-style extra-action HP<N gates
+  (`EXTRA_ACTION_SELF_HP_RE`), and (3) `hpThresholdFromSentence` modifier clauses (Los-style
+  "N% more damage when HP is below X%"). Makoli/Guardian's "When directly damaged while below
+  40% HP, repairs 20%" is a REACTIVE HEAL triggered by taking damage. The parser intentionally
+  keeps "below X% HP" on reactive heals NON-DERIVABLE (see `skillTextParser.ts:485,599`), and
+  `parseHealAbilities` emits no hp-threshold gate and no trigger for these entries — so real
+  `selfHpPct` does NOT reach them. Modeling these requires (a) the parser emitting "below X%
+  HP" as a derivable self hp-threshold on reactive heals AND (b) the "when directly damaged"
+  trigger being modeled as `on-self-damaged`. Both are deferred to **4c** (generic
+  damage-reaction triggers).
 - **`enemyBuffNames`** — the opposing side's buffs. For a **player** actor's context this = the
   **enemy actor's self-buffs** → lights up the 24 `enemy-buff` / `self-debuff` conditions
   (forced to `[]` today).
@@ -233,10 +246,11 @@ the literal `'attacker'`; everything keys on `focusActorId` / owner ids.
   byte-identical, and document any genuine divergence as a hand-verified KNOWN-DIFF. Never
   `vitest -u` — delete + targeted regenerate.
 - **New healing goldens** for the new behaviour: enemy applies a debuff + DoT + self-buff;
-  affinity-modified enemy damage; `selfHpPct` gate activation (e.g. Makoli/Guardian as the heal
-  target dipping below 40%); an `enemy-buff` condition firing; `on-attacked` firing. Hand-built
-  `ab()` fixtures (parity suites do not use `buildShipAbilities`); hand-verified, reviewer
-  re-derived.
+  affinity-modified enemy damage; `selfHpPct` gate activation (e.g. a DERIVABLE self-HP gate
+  such as an at-full-HP off-switch or a modifier HP<N clause — **not** Makoli/Guardian whose
+  "below 40%" reactive heal is non-derivable and unmodeled until 4c); an `enemy-buff` condition
+  firing; `on-attacked` firing. Hand-built `ab()` fixtures (parity suites do not use
+  `buildShipAbilities`); hand-verified, reviewer re-derived.
 - **Unit tests** on the new seams: target binding (player→enemy unchanged, enemy→tank routed),
   per-target debuff store (enemy.id path byte-identical; tank key isolated), the three
   condition-context fields, the `attacked` event + listener (pure, fires annotated abilities).

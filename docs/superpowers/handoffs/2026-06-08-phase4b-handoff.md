@@ -19,9 +19,11 @@ pipeline. The damage-only `runEnemyAttackerTurn` / `enemyTurn.ts` was retired. C
   self-buffs to itself; the same `runPlayerTurn(PlayerActorRuntime)` pipeline handles both.
 - **Affinity symmetry** — `computeAffinityModifiers(enemyAffinity, targetAffinity)` on
   enemy attacks; affinity auto-filled from the selected ship.
-- **Real `selfHpPct`** for the tank — retro-activates parsed-but-previously-dropped
-  self-HP gates on enemy abilities (Makoli/Guardian below-40%, Tormenter HP<50,
-  self-execute patterns).
+- **Real `selfHpPct`** for the tank — activates DERIVABLE self-HP gates: at-full-HP
+  off-switches, Tormenter-style extra-action HP<N gates, and modifier HP<N clauses
+  (e.g. Los "30% more damage when HP is below 50%"). **Not activated:** Makoli/Guardian
+  "below X% HP" REACTIVE heals — the parser keeps these non-derivable and the
+  "when directly damaged" trigger is unmodeled (deferred to 4c).
 - **`attacked` event + live `on-attacked` trigger** — the heal target's reactive defenses
   (shields, heals, charge gains on being hit) fire from real combat events.
 - **Per-target status stores** — tank's debuffs and enemy's self-buffs are isolated in
@@ -116,7 +118,7 @@ finishing-a-development-branch → PR.
 
 | # | Sub-increment | Notes |
 |---|---|---|
-| **4c** | Enemy-action reactions + generic damage triggers | `on-attacked` consumer ships, `on-self-damaged`/`on-ally-damaged`, Graphite/Refine |
+| **4c** | Enemy-action reactions + generic damage triggers | `on-attacked` consumer ships, `on-self-damaged`/`on-ally-damaged`, Graphite/Refine. Also: **Makoli/Guardian "below X% HP" reactive heals** — needs (a) parser to emit "below X% HP" as a derivable self hp-threshold on reactive heals (currently non-derivable; see `skillTextParser.ts:485,599`) AND (b) modeling the "when directly damaged" reactive heal trigger (`on-self-damaged`). Note DPS-golden-churn risk if "below X% HP" is flipped to derivable. |
 | **4d** | Targeting + multi-enemy | taunt/stealth/provoke targeting, AoE, death-fallback re-targeting |
 | **4e** | Consumption & mitigation | cleanse debuff consumption, purge, control effects, damage reduction/reflect |
 | **4f** | Defense-calc adoption | defense calculator on the engine |
