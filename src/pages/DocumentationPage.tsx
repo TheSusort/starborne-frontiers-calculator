@@ -2410,10 +2410,10 @@ const DocumentationPage: React.FC = () => {
                                         abilities) or quick manual attack/defense lines. Each enemy
                                         attacker has an affinity selector matched against the
                                         target&apos;s affinity to scale their incoming damage. A
-                                        hover-gated Enemy Effects panel beside the timeline chart
-                                        shows, for the hovered round, which self-buffs are active on
-                                        each enemy and which debuffs or DoTs they have landed on the
-                                        target.
+                                        hover-gated Enemy Effects panel beside the Healing Over Time
+                                        chart shows, for the hovered round, which self-buffs are
+                                        active on each enemy and which debuffs or DoTs they have
+                                        landed on the target — grouped per healer config.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2469,11 +2469,11 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Per-Round Healer Overview:
                                         </span>{' '}
-                                        Hover any round on the timeline chart to see that
-                                        round&apos;s healer output in the chart&apos;s hover card —
-                                        direct heal, heal-over-time, shield granted, effective vs
-                                        overheal, cleanses, and the incoming damage / target HP% it
-                                        faced — with charged and crit badges.
+                                        Hover any round on the Healing Over Time chart to see every
+                                        config&apos;s output for that round in the chart&apos;s
+                                        hover card — direct heal, heal-over-time, shield granted,
+                                        effective vs overheal, cleanses, and the incoming damage /
+                                        target HP% each faced — with charged and crit badges.
                                     </p>
                                 </div>
 

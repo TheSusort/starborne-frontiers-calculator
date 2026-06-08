@@ -644,7 +644,10 @@ const HealingCalculatorPage: React.FC = () => {
                         <p className="text-sm text-theme-text-secondary mb-4">
                             Cumulative effective healing across rounds. Effective healing excludes
                             overheal, so a config that out-heals incoming damage plateaus once the
-                            target is topped up.
+                            target is topped up. Hover a round to see every config&apos;s output for
+                            that round (direct heal, HoT, shield, effective vs overheal, cleanses,
+                            incoming damage) in the chart card, and the enemy effects active that
+                            round in the panel beside it.
                         </p>
                         <HealingCumulativeChart
                             healers={configs
@@ -655,21 +658,15 @@ const HealingCalculatorPage: React.FC = () => {
                                 }))
                                 .filter((h) => h.result)}
                             rounds={rounds}
+                            enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
                         />
                         {bestResult && bestConfig && (
                             <div className="mt-6 pt-6 border-t border-dark-border">
                                 <h4 className="text-md font-bold mb-2">Best Config Timeline</h4>
-                                <p className="text-sm text-theme-text-secondary mb-2">
-                                    Hover a round to see the healer&apos;s output for that round
-                                    (direct heal, HoT, shield, effective vs overheal, cleanses,
-                                    incoming damage) in the chart card, and the enemy effects active
-                                    that round in the panel beside it.
-                                </p>
                                 <HealingTimelineChart
                                     result={bestResult}
                                     name={bestConfig.name}
                                     rounds={rounds}
-                                    enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
                                 />
                             </div>
                         )}

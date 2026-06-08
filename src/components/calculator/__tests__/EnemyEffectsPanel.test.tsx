@@ -51,7 +51,7 @@ describe('EnemyEffectsPanel', () => {
     it('shows the empty "hover a round" state when nothing is hovered', () => {
         render(
             <EnemyEffectsPanel
-                roundData={null}
+                configs={[{ name: 'Healer 1', roundData: null }]}
                 totalRounds={20}
                 hoveredRound={null}
                 enemyName={enemyName}
@@ -64,7 +64,7 @@ describe('EnemyEffectsPanel', () => {
     it('shows the hovered round number in the header ("Round X of Y")', () => {
         render(
             <EnemyEffectsPanel
-                roundData={twoEnemyRound()}
+                configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
                 enemyName={enemyName}
@@ -76,7 +76,7 @@ describe('EnemyEffectsPanel', () => {
     it('groups the hovered round effects by the source enemy, labelled with its resolved name', () => {
         render(
             <EnemyEffectsPanel
-                roundData={twoEnemyRound()}
+                configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
                 enemyName={enemyName}
@@ -95,7 +95,7 @@ describe('EnemyEffectsPanel', () => {
     it('renders each enemy group with its own Self-Buffs and Debuffs sub-sections', () => {
         render(
             <EnemyEffectsPanel
-                roundData={twoEnemyRound()}
+                configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
                 enemyName={enemyName}
@@ -105,10 +105,44 @@ describe('EnemyEffectsPanel', () => {
         expect(screen.getAllByText('Debuffs on Target').length).toBe(2);
     });
 
-    it('shows a "no enemy effects" note for a hovered round with no enemy effects', () => {
+    it('renders a section per healer config, each with the config name and its own enemy effects', () => {
         render(
             <EnemyEffectsPanel
-                roundData={row({ round: 5, enemyEffects: [] })}
+                configs={[
+                    { name: 'Healer A', color: '#111', roundData: twoEnemyRound() },
+                    {
+                        name: 'Healer B',
+                        color: '#222',
+                        roundData: row({
+                            round: 3,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e3',
+                                    selfBuffs: [{ buffName: 'Speed Up', turnsRemaining: 2 }],
+                                    debuffs: [],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={(id) => ({ ...NAMES, e3: 'Drone' })[id] ?? id}
+            />
+        );
+        // Both config headers render.
+        expect(screen.getByText('Healer A')).toBeInTheDocument();
+        expect(screen.getByText('Healer B')).toBeInTheDocument();
+        // Config A's enemies + Config B's distinct enemy all appear.
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        expect(screen.getByText('Drone')).toBeInTheDocument();
+        expect(screen.getByText('Speed Up')).toBeInTheDocument();
+    });
+
+    it('shows a "no enemy effects" note for a config with no enemy effects this round', () => {
+        render(
+            <EnemyEffectsPanel
+                configs={[{ name: 'Healer 1', roundData: row({ round: 5, enemyEffects: [] }) }]}
                 totalRounds={20}
                 hoveredRound={5}
                 enemyName={enemyName}
@@ -120,7 +154,7 @@ describe('EnemyEffectsPanel', () => {
     it('falls back to the raw enemy id when no name is resolved', () => {
         render(
             <EnemyEffectsPanel
-                roundData={twoEnemyRound()}
+                configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
                 enemyName={(id) => id}
