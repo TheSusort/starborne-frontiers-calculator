@@ -1301,10 +1301,9 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(tankTimed.map((s) => s.payload.buffName)).toEqual(['Armor Break']);
         });
 
-        it('activeAbilityStatuses enemy aura side target isolation is NOT in scope (aura remains singular)', () => {
-            // auraEnemy stays a single list (shared across all targets in this task).
-            // This test verifies that an aura registered without a targetId is visible
-            // in the default call regardless.
+        it('activeAbilityStatuses enemy aura is visible via default call (byte-identical baseline)', () => {
+            // An aura registered with no targetId goes to the DEFAULT_ENEMY_TARGET store.
+            // activeAbilityStatuses('enemy', ctx) — no 4th arg — reads the default store.
             const aura: RegisteredAbilityStatus = {
                 kind: 'aura',
                 side: 'enemy',
@@ -1320,6 +1319,28 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(active[0].payload.buffName).toBe('GlobalWeaken');
         });
 
+        it('accumulating enemy status is visible via default call (byte-identical baseline)', () => {
+            // An accumulating enemy-side status registered with no targetId goes to
+            // DEFAULT_ENEMY_TARGET. activeAbilityStatuses('enemy', ctx) — no 4th arg —
+            // reads the default store.
+            const accum: RegisteredAbilityStatus = {
+                kind: 'accumulating',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                stackTrigger: 'per-round',
+                maxStacks: 10,
+                payload: { buffName: 'WeakenAccum', stacks: 1, parsedEffects: { defense: -3 } },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([accum]);
+            eng.beginRound(1); // per-round: stacks become 1
+            const active = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(active).toHaveLength(1);
+            expect(active[0].payload.buffName).toBe('WeakenAccum');
+            expect(active[0].active.stacks).toBe(1);
+        });
+
         it('scheduled timed enemy debuffs (sourceFired) go to the default target and not to tank', () => {
             const debuff = makeBuff('Def Down', { skillSource: 'active', skillDuration: 2 });
             const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
@@ -1329,6 +1350,73 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(eng.snapshot().activeEnemyDebuffs).toHaveLength(1);
             // Tank target snapshot has nothing
             expect(eng.snapshot('attacker', 'tank').activeEnemyDebuffs).toHaveLength(0);
+        });
+
+        // --- New tests: accum + aura per-target isolation (Task 1 gap) ---
+
+        it('accumulating enemy status registered for tank is absent from the default-key read', () => {
+            // Register an accumulating enemy-side status explicitly under 'tank'.
+            // activeAbilityStatuses('enemy', ctx, undefined, 'tank') must return it;
+            // activeAbilityStatuses('enemy', ctx) — default key — must NOT.
+            const accum: RegisteredAbilityStatus = {
+                kind: 'accumulating',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                stackTrigger: 'per-round',
+                maxStacks: 10,
+                payload: {
+                    buffName: 'TankWeaken',
+                    stacks: 1,
+                    parsedEffects: { defense: -5 },
+                },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            // Register under 'tank' — 3rd param of registerAbilityStatuses is now overloaded
+            // via the new registerAbilityStatuses(statuses, ownerId?, enemyTargetId?) signature
+            // (enemy-side statuses route by enemyTargetId; self-side by ownerId).
+            eng.registerAbilityStatuses([accum], undefined, 'tank');
+            eng.beginRound(1); // per-round: stacks become 1 under 'tank'
+
+            // 'tank' key reads the accum
+            const tankActive = eng.activeAbilityStatuses('enemy', () => baseCtx, undefined, 'tank');
+            expect(tankActive).toHaveLength(1);
+            expect(tankActive[0].payload.buffName).toBe('TankWeaken');
+            expect(tankActive[0].active.stacks).toBe(1);
+
+            // Default key reads nothing for this buff
+            const defaultActive = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(defaultActive.find((s) => s.payload.buffName === 'TankWeaken')).toBeUndefined();
+        });
+
+        it('aura enemy status registered for tank is absent from the default-key read', () => {
+            // Register an aura enemy-side status explicitly under 'tank'.
+            // activeAbilityStatuses('enemy', ctx, undefined, 'tank') must return it;
+            // activeAbilityStatuses('enemy', ctx) — default key — must NOT.
+            const aura: RegisteredAbilityStatus = {
+                kind: 'aura',
+                side: 'enemy',
+                sourceSlot: 'passive',
+                conditions: [],
+                payload: {
+                    buffName: 'TankAura',
+                    stacks: 1,
+                    parsedEffects: { defense: -8 },
+                },
+            };
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.registerAbilityStatuses([aura], undefined, 'tank');
+            eng.beginRound(1);
+
+            // 'tank' key sees the aura
+            const tankActive = eng.activeAbilityStatuses('enemy', () => baseCtx, undefined, 'tank');
+            expect(tankActive).toHaveLength(1);
+            expect(tankActive[0].payload.buffName).toBe('TankAura');
+            expect(tankActive[0].active.turnsRemaining).toBe('recurring');
+
+            // Default key does NOT see this aura
+            const defaultActive = eng.activeAbilityStatuses('enemy', () => baseCtx);
+            expect(defaultActive.find((s) => s.payload.buffName === 'TankAura')).toBeUndefined();
         });
     });
 });
