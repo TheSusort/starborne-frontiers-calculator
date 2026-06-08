@@ -1134,11 +1134,18 @@ export function runCombat(input: CombatEngineInput): {
                 reactiveAbilities: teamRuntimeById.get(t.id)!.reactiveAbilities,
             })),
     ];
+    // Enemy-side actor ids: the singular dummy wall enemy AND every enemy ATTACKER (healing
+    // mode). Enemy attackers now walk runPlayerTurn (commit 6c456a14) and emit the full reactive
+    // event suite with side === 'enemy'; ally-scoped player listeners MUST treat all of these as
+    // non-allies, not just the dummy. seenEnemyAttackerIds holds the attacker ids (empty for a
+    // DPS/attacker-only run → only the dummy is enemy-side).
+    const isEnemySide = (actorId: string): boolean =>
+        actorId === enemy.id || seenEnemyAttackerIds.has(actorId);
     registerReactiveListeners({
         bus,
         perOwner: reactivePerOwner,
         enqueue: (intent) => intentQueue.push(intent),
-        enemyId: enemy.id,
+        isEnemySide,
     });
 
     // Owner-routed executor context (Task 6): the executor resolves an intent's owner runtime
@@ -1795,7 +1802,13 @@ export function runCombat(input: CombatEngineInput): {
                     enemyType: undefined,
                     bus,
                     round: r,
-                    grantAllyCharges,
+                    // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
+                    // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
+                    // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
+                    // the player team. Inert today (the synthesized manual enemy is damage-only with
+                    // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
+                    // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
+                    grantAllyCharges: undefined,
                     healing: healingCtx,
                     selfHpPct: enemySelfHpPct,
                 });

@@ -1279,7 +1279,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = { round: 1, amount: 1000 };
 
@@ -1339,7 +1339,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = {
             round: 1,
@@ -1387,7 +1387,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
 
@@ -2099,5 +2099,126 @@ describe('healing — Defiant shield-on-Stasis (control-applied → on-stasis-ap
         );
         expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000]);
         expect(focusHeal(result, 'shield')).toBe(9000);
+    });
+});
+
+// ── Emission-scoping regression: enemy-side actors never trigger player ally reactions ──
+//
+// Commit 6c456a14 made the healing-mode enemy attacker walk runPlayerTurn (same pipeline as
+// players), so it now EMITS the full reactive event suite — including `ability-performed` with
+// crit info and `side === 'enemy'`. A player ship's `on-ally-crit` listener treats "any other
+// player actor" as an ally; before this fix its exclusion only filtered the singular dummy wall
+// enemy, so a CRITTING enemy attacker's ability-performed leaked through and wrongly fired the
+// player's on-ally-crit reaction. The fix passes an isEnemySide predicate that excludes EVERY
+// enemy-side id (dummy + enemy attackers). These tests assert the negative (enemy crit does NOT
+// fire the reaction) AND the positive (a real player ally's crit STILL does — no over-exclusion).
+describe('healing — emission scoping: enemy crit does not trigger player on-ally-crit', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    // A manual flat-card enemy that ALWAYS crits (crit 100). The builder synthesizes a
+    // crit-eligible basic attack → it emits ability-performed with didCrit/critHits.
+    const crittingEnemy = (id: string, attack = 2000, speed = 50): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 100, critDamage: 100, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // Focus heal target: crit 0 (so the focus itself never crits → its own ability-performed can
+    // never be mistaken for an ally crit), carrying an on-ally-crit reactive SHIELD. When the
+    // listener fires, the executor credits the focus's `shield` bucket (observable proxy for the
+    // reaction firing). basis hp → 10% of the focus's 10000 max HP = 1000 per fire.
+    const onAllyCritShield = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'shield',
+                        target: 'self',
+                        trigger: 'on-ally-crit',
+                        config: { type: 'shield', pct: 10, basis: 'hp' },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    it('negative: a critting enemy attacker does NOT fire the focus on-ally-crit shield', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                crit: 0, // focus never crits
+                critDamage: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [crittingEnemy('atk1')],
+                shipSkills: onAllyCritShield(),
+            })
+        );
+        // The ONLY critting actor is the enemy attacker. Its ability-performed crit must be
+        // treated as an enemy event (NOT an ally crit) → the on-ally-crit shield never fires.
+        expect(focusHeal(result, 'shield')).toBe(0);
+    });
+
+    it('positive: a real player ally crit STILL fires the focus on-ally-crit shield', () => {
+        idCounter = 0;
+        // A team ally that ALWAYS crits and casts a damage active → emits an ally ability-performed
+        // with crits. speed 200 so it acts (and crits) before the focus's start-of-round drain.
+        const crittingAlly: TeamActorEngineInput = {
+            id: 'ally1',
+            speed: 200,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            walk: {
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    config: { type: 'damage', multiplier: 100, hits: 1 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+                stats: {
+                    attack: 5000,
+                    crit: 100,
+                    critDamage: 100,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 1000,
+                    hp: 10000,
+                },
+                debuffLandingChance: 1,
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                crit: 0, // focus never crits → the only ALLY crit is the team ship's
+                critDamage: 0,
+                speed: 100, // focus acts after the ally (200) so the ally's crit lands first
+                healTargetId: 'attacker',
+                teamActors: [crittingAlly],
+                shipSkills: onAllyCritShield(),
+            })
+        );
+        // The team ally's crit IS an ally crit → the on-ally-crit shield fires (10% of 10000).
+        expect(focusHeal(result, 'shield')).toBeGreaterThan(0);
     });
 });

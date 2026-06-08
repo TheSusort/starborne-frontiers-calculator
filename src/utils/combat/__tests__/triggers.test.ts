@@ -1459,7 +1459,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner,
             enqueue: (i) => intents.push(i),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         bus.emit(event);
         return intents;
@@ -1528,7 +1528,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner: [{ ownerId: 't', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         // Before any event: no intents enqueued
         expect(intents).toHaveLength(0);
