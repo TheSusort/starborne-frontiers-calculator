@@ -45,12 +45,12 @@ export type AbilityTrigger =
 
 /**
  * Triggers the Phase 3 combat engine consumes via listeners (the machinery lives
- * in src/utils/combat/triggers.ts). Everything else (on-attacked,
- * on-ally-destroyed, on-destroyed) is annotation-only: those abilities stay in
- * the normal on-cast pipelines with manual assume-active conditions. Defined
- * here next to AbilityTrigger (not in the engine module) so UI consumers — e.g.
- * the editor's Trigger select note — don't pull the combat engine's module
- * graph in for one constant.
+ * in src/utils/combat/triggers.ts). Everything else (on-ally-destroyed,
+ * on-destroyed) is annotation-only: those abilities stay in the normal on-cast
+ * pipelines with manual assume-active conditions. Defined here next to
+ * AbilityTrigger (not in the engine module) so UI consumers — e.g. the editor's
+ * Trigger select note — don't pull the combat engine's module graph in for one
+ * constant.
  */
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
@@ -62,6 +62,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-crit',
     'on-stasis-applied',
     'on-bomb-detonated',
+    'on-attacked',
 ]);
 
 export type ConditionSubject =

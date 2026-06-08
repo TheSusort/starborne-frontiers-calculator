@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { MAX_INTENT_GENERATIONS } from '../triggers';
+import {
+    MAX_INTENT_GENERATIONS,
+    registerReactiveListeners,
+    Intent,
+    ReactiveAbility,
+} from '../triggers';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 
@@ -1414,5 +1419,136 @@ describe('Phase 3 reactive triggers', () => {
             .find((b) => b.buffName === 'Defense Shred');
         expect(resistedRow).toBeDefined();
         expect(resistedRow!.turnsRemaining).toBe('permanent');
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-attacked live trigger: unit-level tests for the pure listener.
+// These tests drive registerReactiveListeners + createEventBus directly
+// (nothing emits `attacked` from the engine yet — Task 8). They verify
+// the listener fires only for the matching target, is target-scoped (not
+// attacker-scoped), and is pure (no state mutation before drain).
+// ----------------------------------------------------------------------
+describe('on-attacked live trigger (Task 4)', () => {
+    // Build a minimal on-attacked reactive ability.
+    const onAttackedBuff = (): Ability => ({
+        id: 'oa1',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-attacked',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Counterready',
+            stacks: 1,
+            parsedEffects: { attack: 20 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    // Helper: wire up the bus, register listeners for the given owners, emit
+    // an `attacked` event, and return the collected intents.
+    function emitAttacked(
+        perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[],
+        event: Extract<CombatEvent, { type: 'attacked' }>
+    ): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner,
+            enqueue: (i) => intents.push(i),
+            enemyId: 'enemy',
+        });
+        bus.emit(event);
+        return intents;
+    }
+
+    it('emits exactly one intent for the matching target owner when attacked', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('t');
+        expect(intents[0].ability.trigger).toBe('on-attacked');
+    });
+
+    it('enqueues nothing for an actor with no on-attacked ability', () => {
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('does NOT fire the listener when targetId does not match ownerId', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        // ownerId is 't' but the event targets 'other-actor'
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 'other-actor',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('fires only the matching owner when multiple owners are registered', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const raOther: ReactiveAbility = {
+            ability: { ...onAttackedBuff(), id: 'oa2' },
+            sourceSlot: 'passive',
+        };
+        const intents = emitAttacked(
+            [
+                { ownerId: 't', reactiveAbilities: [ra] },
+                { ownerId: 'u', reactiveAbilities: [raOther] },
+            ],
+            { type: 'attacked', targetId: 't', attackerId: 'enemy', round: 1 }
+        );
+        // Only owner 't' should fire — 'u' is not the target
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('t');
+    });
+
+    it('listener is pure: enqueues only, no state mutation before drain', () => {
+        // Verify that the intent array is empty before the event is emitted
+        // (the listener produces no side-effects on registration).
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 't', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            enemyId: 'enemy',
+        });
+        // Before any event: no intents enqueued
+        expect(intents).toHaveLength(0);
+        // Emit a non-matching event: still nothing
+        bus.emit({ type: 'attacked', targetId: 'other', attackerId: 'enemy', round: 1 });
+        expect(intents).toHaveLength(0);
+        // Emit matching: exactly one
+        bus.emit({ type: 'attacked', targetId: 't', attackerId: 'enemy', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+
+    it('optional didCrit field is accepted: event with didCrit still fires the listener', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 2,
+            didCrit: true,
+        });
+        expect(intents).toHaveLength(1);
     });
 });

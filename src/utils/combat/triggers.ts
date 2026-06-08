@@ -227,6 +227,15 @@ export function registerReactiveListeners(args: {
                         if (e.effect === 'stasis' && e.casterId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'on-attacked':
+                    bus.on('attacked', (e) => {
+                        // Target-scoped: fires when THIS OWNER (the target) is attacked.
+                        // NOTE: the engine does not yet emit `attacked` events (Task 8);
+                        // the listener is registered here so `on-attacked` abilities
+                        // partition as reactive, but nothing fires until Task 8.
+                        if (e.targetId === ownerId) enqueue(intent);
+                    });
+                    break;
                 default:
                     // Non-live triggers are never registered (filtered at partition time).
                     break;

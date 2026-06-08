@@ -119,7 +119,18 @@ export type CombatEvent =
      *  does NOT simulate the control's combat effect. */
     | { type: 'control-applied'; casterId: string; effect: ControlEffect; round: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
-    | { type: 'ship-destroyed'; actorId: string; round: number };
+    | { type: 'ship-destroyed'; actorId: string; round: number }
+    /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
+     *  `attackerId` is the attacker. `didCrit` is present only when the attack
+     *  critted. NOTE: as of Task 4 this event is defined and wired (on-attacked is
+     *  a live trigger) but the engine does NOT yet emit it — that is Task 8. */
+    | {
+          type: 'attacked';
+          targetId: string;
+          attackerId: string;
+          round: number;
+          didCrit?: boolean;
+      };
 
 export type CombatEventType = CombatEvent['type'];
 
