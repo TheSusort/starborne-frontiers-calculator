@@ -840,7 +840,7 @@ describe('healingGoldenParity', () => {
     //     6000 incoming. duration 3 → an entry applied on round N ticks on rounds N+1, N+2, N+3
     //     then expires. The enemy re-applies every round, so the live entry count climbs to a
     //     steady 3 (then holds — the 4-rounds-ago entry has expired). The debuff/self-buff DO
-    //     surface as NAMES in targetDebuffs / enemySelfBuffs (display only).
+    //     surface as NAMES in enemyEffects[e1].debuffs / .selfBuffs (display only).
     // Per-round (target speed 100 > enemy speed 50, so the target acts FIRST each round; its DoT
     // ticks at turn-start, BEFORE its heal, then the enemy attacks last). HP enters R1 at 100%:
     //   R1 enter 100%: 0 inferno entries → tick 0. heal 5000 (deficit 0 → all overheal). Enemy
@@ -858,8 +858,8 @@ describe('healingGoldenParity', () => {
     //       HP 23000. Enemy 6000 → HP 17000. incoming R6 = 24000.
     //   ⇒ incomingDamage = 6000, 12000, 18000, 24000, 24000, 24000. directHeal 5000 every round
     //     (effective 0/overheal 5000 on R1; effective 5000/overheal 0 from R2 — the DoT tick
-    //     opens a full deficit before the heal). targetDebuffs=['Defense Down'],
-    //     enemySelfBuffs=['Attack Up'] every round. cumulativeHealing 5000,10000,…,30000. The
+    //     opens a full deficit before the heal). enemyEffects[e1]={ debuffs:['Defense Down'],
+    //     selfBuffs:['Attack Up'] } every round. cumulativeHealing 5000,10000,…,30000. The
     //     target SURVIVES all 6 rounds (HP 17000 at the end). targetHpPct entering: 100, 94, 87,
     //     74, 55, 36.
     const scenario14Input = () =>
@@ -943,8 +943,10 @@ describe('healingGoldenParity', () => {
         const result = simulateHealing(scenario14Input());
         expect(result.rounds[0].incomingDamage).toBe(6000);
         expect(result.rounds[0].directHeal).toBe(5000);
-        expect(result.rounds[0].enemySelfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
-        expect(result.rounds[0].targetDebuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
+        // The names surface in the round overview, attributed to the source enemy (e1).
+        const r1e1 = result.rounds[0].enemyEffects.find((e) => e.enemyId === 'e1');
+        expect(r1e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+        expect(r1e1?.debuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
     });
 
     // Supplementary: the inferno DoT is applied every round (dot-applied ×6) AND ticks on the
@@ -1117,7 +1119,7 @@ describe('healingGoldenParity', () => {
     //   R2 enter 94%:  enemyBuffNames=['Attack Up'] → heal 10000 (deficit 6000 → effective 6000,
     //                  overheal 4000) → HP 100000. Enemy 6000 → HP 94000 → 94%.
     //   R3…: steady — enter 94%, heal 10000 (effective 6000 / overheal 4000), back to 94%.
-    //   ⇒ directHeal 0 on R1, 10000 on R2-R6. enemySelfBuffs=['Attack Up'] every round.
+    //   ⇒ directHeal 0 on R1, 10000 on R2-R6. enemyEffects[e1].selfBuffs=['Attack Up'] every round.
     //     incomingDamage 6000 every round (the enemy self-buff applies round 1 too).
     const scenario17Input = () =>
         BASE({
@@ -1177,7 +1179,8 @@ describe('healingGoldenParity', () => {
         const result = simulateHealing(scenario17Input());
         const healByRound = result.rounds.map((r) => r.directHeal);
         expect(healByRound).toEqual([0, 10000, 10000, 10000, 10000, 10000]);
-        expect(result.rounds[1].enemySelfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+        const r2e1 = result.rounds[1].enemyEffects.find((e) => e.enemyId === 'e1');
+        expect(r2e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
     });
 
     // ── Scenario 18 (e): on-attacked reactive fires off the enemy attack ─────
@@ -1237,5 +1240,86 @@ describe('healingGoldenParity', () => {
         expect(result.rounds.map((r) => r.shieldAbsorbed)).toEqual([
             0, 4000, 4000, 4000, 4000, 4000,
         ]);
+    });
+
+    // ── Scenario 19 (Task 10a): per-enemy effect attribution ─────────────────
+    // TWO ship-backed enemy attackers bombard the heal target, each carrying a DISTINCT
+    // self-buff + a DISTINCT debuff. The round-overview enemyEffects must attribute each
+    // enemy's effects to ITS OWN actor id (no cross-enemy fold): e1 → Attack Up / Defense
+    // Down; e2 → Crit Up / Vulnerability. Numeric output is irrelevant here (this asserts the
+    // attribution shape only) — the target is given a huge pool so it never dies.
+    it('scenario 19: enemyEffects attributes each enemy’s self-buff + debuff to its own id', () => {
+        idCounter = 0;
+        const enemyKit = (selfBuff: string, debuff: string): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                        }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: debuff,
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 3,
+                            },
+                        }),
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: selfBuff,
+                                parsedEffects: { attack: 10 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const result = simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetId: 'healer',
+                shipSkills: { slots: [] },
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyKit('Attack Up', 'Defense Down'),
+                    },
+                    {
+                        id: 'e2',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 40 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyKit('Crit Up', 'Vulnerability'),
+                    },
+                ],
+            })
+        );
+        const r1 = result.rounds[0].enemyEffects;
+        const e1 = r1.find((e) => e.enemyId === 'e1');
+        const e2 = r1.find((e) => e.enemyId === 'e2');
+        // Each enemy carries ONLY its own effects (no cross-enemy contamination).
+        expect(e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+        expect(e1?.debuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
+        expect(e2?.selfBuffs.map((b) => b.buffName)).toEqual(['Crit Up']);
+        expect(e2?.debuffs.map((b) => b.buffName)).toEqual(['Vulnerability']);
     });
 });

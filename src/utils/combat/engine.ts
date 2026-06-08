@@ -598,20 +598,28 @@ export interface CombatEngineInput {
  *  damage map. incomingDamage/shieldAbsorbed stay 0 until enemy attacks (Task 8).
  *  targetHpPctStart/targetShieldStart are captured at the ROUND TOP (raw floats — the
  *  adapter owns any rounding). */
+/** One enemy attacker's effects for a single round, attributed to its actor id (Task 10a).
+ *  selfBuffs = the self-buffs active on that enemy this round; debuffs = the debuffs/DoTs it
+ *  landed on the heal target. Both are de-duped by buffName WITHIN this enemy (so the same
+ *  status from two attackers stays distinct per source). The UI resolves enemyId → the enemy
+ *  attacker's ship name (or its manual label) for the per-enemy round overview. */
+export interface EnemyRoundEffects {
+    enemyId: string;
+    selfBuffs: ActiveBuff[];
+    debuffs: ActiveBuff[];
+}
+
 export interface HealingRoundEngine {
     perActor: Map<string, ActorHealing>;
     targetHpPctStart: number;
     targetShieldStart: number;
     incomingDamage: number;
     shieldAbsorbed: number;
-    /** Self-buffs active on enemy attackers this round (union across all enemy attacker
-     *  turns — Task 10). Surfaced for the UI's enemy-effects round overview. Empty for a
-     *  bare/manual enemy with no self-buffs. */
-    enemySelfBuffs: ActiveBuff[];
-    /** Debuffs/DoTs the enemy attackers landed on the heal target this round (union across
-     *  all enemy attacker turns — Task 10). Surfaced for the UI's enemy-effects round
-     *  overview. Empty for a bare/manual enemy that lands nothing. */
-    targetDebuffs: ActiveBuff[];
+    /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
+     *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
+     *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
+     *  Empty for a bare/manual enemy with no effects. NAMES ONLY — never folded into a sim value. */
+    enemyEffects: EnemyRoundEffects[];
 }
 
 /**
@@ -1372,12 +1380,15 @@ export function runCombat(input: CombatEngineInput): {
         // to these via the shield-first drain below.
         let roundIncomingDamage = 0;
         let roundShieldAbsorbed = 0;
-        // Enemy-effects accounting (healing mode, Task 10): the self-buffs active on enemy
-        // attackers and the debuffs they land on the heal target this round, surfaced for the
-        // UI's enemy-effects round overview. Accumulated across enemy attacker turns; de-duped
-        // by buffName at the post-round push. Empty for a bare/manual enemy → no UI rows.
-        const roundEnemySelfBuffs: ActiveBuff[] = [];
-        const roundTargetDebuffs: ActiveBuff[] = [];
+        // Enemy-effects accounting (healing mode, Task 10a): per-enemy self-buffs + the debuffs
+        // each enemy lands on the heal target this round, surfaced for the UI's enemy-effects
+        // round overview ATTRIBUTED to the source enemy ship. Keyed by the enemy actor id; an
+        // entry is created the first time an enemy contributes an effect this round. De-duped by
+        // buffName WITHIN each enemy at the post-round push. Empty for a bare/manual enemy → no UI rows.
+        const roundEnemyEffects = new Map<
+            string,
+            { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }
+        >();
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
@@ -1575,6 +1586,7 @@ export function runCombat(input: CombatEngineInput): {
                         dotsLanded: true,
                         activeSelfBuffs: [],
                         landedEnemyDebuffs: [],
+                        inflictedEnemyDebuffs: [],
                         resistedEnemyDebuffs: [],
                         directDamage: 0,
                         secondaryDamage: 0,
@@ -1998,11 +2010,25 @@ export function runCombat(input: CombatEngineInput): {
                     // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                     // its own future DoT entries would tick with this ctx).
                     lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
-                    // Surface this enemy attacker's effects for the UI's round overview (Task 10):
-                    // its own active self-buffs and the debuffs it landed on the heal target. NAMES
-                    // ONLY for display — never folded into any sim value. Empty for a bare enemy.
-                    roundEnemySelfBuffs.push(...enemyTurn.activeSelfBuffs);
-                    roundTargetDebuffs.push(...enemyTurn.landedEnemyDebuffs);
+                    // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
+                    // its own active self-buffs and the debuffs it landed on the heal target,
+                    // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
+                    // into any sim value. Empty for a bare enemy → no entry recorded for it.
+                    // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
+                    // applied this turn) rather than landedEnemyDebuffs (the shared per-target
+                    // window, which would leak other attackers' debuffs into this enemy's group).
+                    if (
+                        enemyTurn.activeSelfBuffs.length > 0 ||
+                        enemyTurn.inflictedEnemyDebuffs.length > 0
+                    ) {
+                        let entry = roundEnemyEffects.get(actor.id);
+                        if (!entry) {
+                            entry = { selfBuffs: [], debuffs: [] };
+                            roundEnemyEffects.set(actor.id, entry);
+                        }
+                        entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                        entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
+                    }
                     // Extra-action grants: re-insert this enemy into the remaining queue for an extra
                     // turn (full-actor completeness — mirrors the attacker and walked-team branches).
                     // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
@@ -2267,10 +2293,14 @@ export function runCombat(input: CombatEngineInput): {
                 targetShieldStart,
                 incomingDamage: roundIncomingDamage,
                 shieldAbsorbed: roundShieldAbsorbed,
-                // De-dupe by buffName (multiple enemy attackers can carry the same status) —
-                // keep the first occurrence so the UI shows each effect once per round.
-                enemySelfBuffs: dedupeByBuffName(roundEnemySelfBuffs),
-                targetDebuffs: dedupeByBuffName(roundTargetDebuffs),
+                // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
+                // (keep the first occurrence so the UI shows each effect once per enemy per round),
+                // preserving the order enemies first acted this round.
+                enemyEffects: Array.from(roundEnemyEffects, ([enemyId, e]) => ({
+                    enemyId,
+                    selfBuffs: dedupeByBuffName(e.selfBuffs),
+                    debuffs: dedupeByBuffName(e.debuffs),
+                })),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

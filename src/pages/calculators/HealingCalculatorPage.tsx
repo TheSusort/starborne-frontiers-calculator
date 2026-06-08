@@ -673,10 +673,14 @@ const HealingCalculatorPage: React.FC = () => {
                         <div className="card">
                             <h3 className="text-lg font-bold mb-2">Enemy Effects</h3>
                             <p className="text-sm text-theme-text-secondary mb-4">
-                                Per round, the self-buffs active on the enemy attackers and the
-                                debuffs or DoTs they landed on the heal target.
+                                Per round, grouped by each enemy attacker: the self-buffs active on
+                                that enemy and the debuffs or DoTs it landed on the heal target.
                             </p>
-                            <EnemyEffectsOverview result={bestResult} rounds={rounds} />
+                            <EnemyEffectsOverview
+                                result={bestResult}
+                                rounds={rounds}
+                                enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
+                            />
                         </div>
                     )}
 

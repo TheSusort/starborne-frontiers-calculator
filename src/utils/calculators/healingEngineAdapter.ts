@@ -3,7 +3,7 @@ import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
-import { runCombat } from '../combat/engine';
+import { runCombat, EnemyRoundEffects } from '../combat/engine';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
@@ -73,12 +73,11 @@ export interface HealingRoundData {
     cumulativeHealing: number;
     teamHealing?: number; // non-focus actors' raw (direct+HoT) healing; only when team actors exist
     activeSelfBuffs: ActiveBuff[];
-    /** Self-buffs active on the enemy attackers this round (Task 10) — for the UI's
-     *  enemy-effects round overview. Empty for a bare/manual enemy with no self-buffs. */
-    enemySelfBuffs: ActiveBuff[];
-    /** Debuffs/DoTs the enemy attackers landed on the heal target this round (Task 10) —
-     *  for the UI's enemy-effects round overview. Empty when the enemy lands nothing. */
-    targetDebuffs: ActiveBuff[];
+    /** Per-enemy effects this round (Task 10a) — one entry per enemy attacker that produced an
+     *  effect, carrying its own self-buffs + the debuffs it landed on the heal target, keyed by
+     *  the enemy's actor id. For the UI's enemy-effects round overview, grouped/attributed to the
+     *  source enemy ship. Empty for a bare/manual enemy with no effects. */
+    enemyEffects: EnemyRoundEffects[];
     extraTurns?: number;
 }
 
@@ -286,9 +285,9 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             cumulativeHealing: Math.round(cumulativeRaw),
             ...(hasTeamActors ? { teamHealing: Math.round(teamRoundRaw) } : {}),
             activeSelfBuffs: rd.activeSelfBuffs,
-            // Enemy-effects overview (Task 10): names only, never folded into any value.
-            enemySelfBuffs: hr?.enemySelfBuffs ?? [],
-            targetDebuffs: hr?.targetDebuffs ?? [],
+            // Enemy-effects overview (Task 10a): per-enemy, attributed by enemy id. Names only,
+            // never folded into any value.
+            enemyEffects: hr?.enemyEffects ?? [],
             ...(rd.extraTurns !== undefined ? { extraTurns: rd.extraTurns } : {}),
         };
     });

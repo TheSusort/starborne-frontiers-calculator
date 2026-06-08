@@ -7,15 +7,23 @@ interface EnemyEffectsOverviewProps {
     result: HealingSimulationResult;
     /** Number of rounds simulated (rows are clamped to the available round data). */
     rounds: number;
+    /** Resolves an enemy attacker's id to its display name (ship name or its manual label,
+     *  e.g. "Enemy 1"). Falls back to the raw id if the lookup is missing. */
+    enemyName: (enemyId: string) => string;
 }
 
 /**
- * Per-round overview of the enemy attackers' effects in healing mode: the self-buffs active
- * on the enemies and the debuffs/DoTs they landed on the heal target. Reuses the shared
- * BuffRow status primitive (same visual language as the DPS round overview). Names only —
- * never folded into any sim value.
+ * Per-round overview of the enemy attackers' effects in healing mode, ATTRIBUTED to the
+ * source enemy ship: each enemy that acted gets a sub-header (its ship name / manual label)
+ * with its own self-buffs and the debuffs/DoTs it landed on the heal target underneath.
+ * Reuses the shared BuffRow status primitive (same visual language as the DPS round overview).
+ * Names only — never folded into any sim value.
  */
-export const EnemyEffectsOverview: React.FC<EnemyEffectsOverviewProps> = ({ result, rounds }) => {
+export const EnemyEffectsOverview: React.FC<EnemyEffectsOverviewProps> = ({
+    result,
+    rounds,
+    enemyName,
+}) => {
     const count = Math.min(rounds, result.rounds.length);
 
     return (
@@ -26,9 +34,10 @@ export const EnemyEffectsOverview: React.FC<EnemyEffectsOverviewProps> = ({ resu
             <div className="max-h-72 overflow-y-auto">
                 {Array.from({ length: count }, (_, i) => {
                     const rd = result.rounds[i];
-                    const selfBuffs = rd.enemySelfBuffs ?? [];
-                    const targetDebuffs = rd.targetDebuffs ?? [];
-                    const isEmpty = selfBuffs.length === 0 && targetDebuffs.length === 0;
+                    const enemyEffects = (rd.enemyEffects ?? []).filter(
+                        (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0
+                    );
+                    const isEmpty = enemyEffects.length === 0;
                     return (
                         <div
                             key={rd.round}
@@ -37,34 +46,41 @@ export const EnemyEffectsOverview: React.FC<EnemyEffectsOverviewProps> = ({ resu
                             <div className="text-xs font-semibold uppercase tracking-wide mb-1.5 text-theme-text-secondary">
                                 Round {rd.round}
                             </div>
-                            {selfBuffs.length > 0 && (
-                                <>
-                                    <div className="text-xs text-theme-text-secondary mb-1">
-                                        Enemy Self-Buffs
+                            {enemyEffects.map((enemy) => (
+                                <div key={enemy.enemyId} className="mb-2 last:mb-0">
+                                    <div className="text-xs font-semibold text-theme-text-primary mb-1">
+                                        {enemyName(enemy.enemyId)}
                                     </div>
-                                    {selfBuffs.map((b, j) => (
-                                        <BuffRow
-                                            key={`eself-${b.buffName}-${j}`}
-                                            buff={b}
-                                            variant="self"
-                                        />
-                                    ))}
-                                </>
-                            )}
-                            {targetDebuffs.length > 0 && (
-                                <>
-                                    <div className="text-xs text-theme-text-secondary mt-2 mb-1">
-                                        Debuffs on Target
-                                    </div>
-                                    {targetDebuffs.map((b, j) => (
-                                        <BuffRow
-                                            key={`tdeb-${b.buffName}-${j}`}
-                                            buff={b}
-                                            variant="enemy"
-                                        />
-                                    ))}
-                                </>
-                            )}
+                                    {enemy.selfBuffs.length > 0 && (
+                                        <>
+                                            <div className="text-xs text-theme-text-secondary mb-1">
+                                                Self-Buffs
+                                            </div>
+                                            {enemy.selfBuffs.map((b, j) => (
+                                                <BuffRow
+                                                    key={`eself-${b.buffName}-${j}`}
+                                                    buff={b}
+                                                    variant="self"
+                                                />
+                                            ))}
+                                        </>
+                                    )}
+                                    {enemy.debuffs.length > 0 && (
+                                        <>
+                                            <div className="text-xs text-theme-text-secondary mt-1 mb-1">
+                                                Debuffs on Target
+                                            </div>
+                                            {enemy.debuffs.map((b, j) => (
+                                                <BuffRow
+                                                    key={`tdeb-${b.buffName}-${j}`}
+                                                    buff={b}
+                                                    variant="enemy"
+                                                />
+                                            ))}
+                                        </>
+                                    )}
+                                </div>
+                            ))}
                             {isEmpty && (
                                 <p className="text-xs text-dark-border italic">
                                     No enemy effects this round

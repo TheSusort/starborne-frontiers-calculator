@@ -108,6 +108,10 @@ export interface PlayerTurnResult {
     dotsLanded: boolean;
     activeSelfBuffs: ActiveBuff[];
     landedEnemyDebuffs: ActiveBuff[];
+    /** Debuffs THIS actor discretely inflicted on the target THIS turn (source-accurate, unlike
+     *  the shared-per-target landedEnemyDebuffs window). Used by the healing enemy-effects
+     *  overview to attribute each debuff to the enemy that applied it (Task 10a). */
+    inflictedEnemyDebuffs: ActiveBuff[];
     resistedEnemyDebuffs: ActiveBuff[];
     directDamage: number;
     secondaryDamage: number;
@@ -834,6 +838,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (no status stored), recorded resisted with its would-be duration, and emitted.
     // Landed → emit debuff-applied ONCE at this infliction site (Phase 3 retiming).
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
+    // Debuffs THIS actor discretely inflicted on the target this turn (source-accurate
+    // attribution for the enemy-effects overview — Task 10a). Unlike landedEnemyDebuffs,
+    // which reflects the whole per-target window (shared across all attackers of one target),
+    // this captures only the applications THIS actor made at their own infliction sites.
+    // Seed with the newly-applied SCHEDULED timed enemy debuffs (this actor's own manual
+    // lists, owner-scoped): the intersection of the window snapshot with the names that fired
+    // this turn (appliedScheduledTimedNames). Empty for enemy attackers (no manual debuffs).
+    const appliedScheduledSet = new Set(appliedScheduledTimedNames);
+    const inflictedEnemyDebuffs: ActiveBuff[] = scheduledEnemy.landedEnemyDebuffs.filter((ab) =>
+        appliedScheduledSet.has(ab.buffName)
+    );
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
@@ -841,6 +856,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
             // Discrete infliction event — emit ONCE at this application site.
             emitDebuffApplied(actor.id, status.payload.buffName);
+            inflictedEnemyDebuffs.push({
+                buffName: status.payload.buffName,
+                turnsRemaining: status.duration,
+            });
         } else {
             // status.duration is guaranteed numeric by the timed variant.
             resistedAbilityTimedEnemy.push({
@@ -1557,6 +1576,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         dotsLanded,
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,
+        inflictedEnemyDebuffs,
         resistedEnemyDebuffs,
         directDamage,
         secondaryDamage,
