@@ -20,6 +20,7 @@
 - **Commits:** stage explicit per-file paths (`git add <path>` — never `git add -A`; a separate agent may share the tree). Pre-commit runs the full suite (~2 min) + ESLint zero-warnings. No `--no-verify` for code commits (docs-only commits may skip).
 - **Branch:** `feat/combat-engine-phase4a-enemy-offense` (already created; spec committed).
 - Reference @superpowers:test-driven-development and @superpowers:verification-before-completion.
+- **Test-file locations (important — the per-task `Test:` paths are indicative, not literal):** there is **no** `src/utils/combat/__tests__/engine.test.ts` or `playerTurn.test.ts`. Engine/turn behaviour is split across files like `engine.events.test.ts`, `teamWalk.test.ts`, `healing.test.ts`, `leech.test.ts` under `src/utils/combat/__tests__/`. The **golden parity suites live under `src/utils/calculators/__tests__/`** (`dpsGoldenParity.test.ts`, `healingGoldenParity.test.ts`). For each task, `grep -rln "<relevant symbol>" src/utils/combat/__tests__ src/utils/calculators/__tests__` to find the right existing file, or create a focused new one — do not assume the literal path in the task.
 
 ## File structure (what changes, and why)
 
@@ -110,8 +111,8 @@
 - [ ] **Step 2: Run red.** FAIL (`attacked` not in the union; `on-attacked` not live).
 - [ ] **Step 3: Implement.**
   - `events.ts`: add `| { type: 'attacked'; targetId: string; attackerId: string; round: number; didCrit?: boolean }` (`didCrit` present-only-when-true).
-  - `abilities.ts`: add `'on-attacked'` to `LIVE_TRIGGERS` (this also makes `partitionReactiveAbilities` route `on-attacked` abilities to the reactive list — verify the partition test still passes).
-  - `triggers.ts`: register a pure listener that, on `attacked`, enqueues intents for the **target's** `on-attacked` reactive abilities (mirror the existing `on-crit`/`on-bomb-detonated` listener shape; enqueue-only).
+  - `abilities.ts`: add `'on-attacked'` to `LIVE_TRIGGERS` (this also makes `partitionReactiveAbilities` route `on-attacked` abilities to the reactive list — verify the partition test still passes). **Also update the stale doc comment at `abilities.ts:48-49`** that still lists `on-attacked` among the annotation-only triggers.
+  - `triggers.ts`: add a `case 'on-attacked':` to the `registerReactiveListeners` switch (`~:151`), scoped to fire on the **target** (`e.targetId === ownerId`), enqueuing intents for that owner's `on-attacked` reactive abilities (mirror the existing `on-crit`/`on-bomb-detonated` listener shape; **enqueue-only / pure**).
 - [ ] **Step 4: Run green.** PASS.
 - [ ] **Step 5: Guard goldens.** Byte-identical (no `attacked` event is emitted yet — Task 8 wires the emission).
 - [ ] **Step 6: Commit.** `git add src/utils/combat/events.ts src/types/abilities.ts src/utils/combat/triggers.ts src/utils/combat/__tests__/triggers.test.ts && git commit -m "feat(combat): attacked event + on-attacked live trigger (pure listener)"`
@@ -135,28 +136,46 @@
 
 ---
 
-## Task 6: Dispatch enemy turns through `runPlayerTurn` bound to the heal target; retire `runEnemyAttackerTurn`
+## Task 6: Thread an explicit target key through `runPlayerTurn`'s enemy-side status application
 
-**Goal:** the enemy branch calls `runPlayerTurn` with the **heal target passed as the `enemy` target arg** (its defence/HP/containers/type). Damage drains into the target via the existing shield-first intake + `damage-taken` procs. Self-buffs land in the enemy's own owner store; debuffs/DoTs land on the target (per-target store from Task 1). Delete `enemyTurn.ts`.
+**Goal (PREREQUISITE for Task 6b — do this first):** `runPlayerTurn` applies/reads enemy-side debuff/aura/accum statuses via `applyTimedAbilityStatus(r, status, actor.id)`, `timedAbilityStatuses('enemy', actor.id)`, and `activeAbilityStatuses('enemy', …, actor.id)` (`playerTurn.ts:~815, ~866-867, ~930`), where the owner arg is the **applier** and the underlying enemy maps are singular. For an enemy actor's debuffs to land on the **tank's** per-target key (Task 1), the **target id** must flow into those calls. Add it to `PlayerTurnArgs` and route it, defaulting to `enemy.id` so the player→enemy path is byte-identical.
 
 **Files:**
-- Modify: `src/utils/combat/engine.ts:1594-1670` (enemy branch) + post-turn decrement `:1685-1696`
+- Modify: `src/utils/combat/playerTurn.ts` (add `targetId` to `PlayerTurnArgs`; thread it into the enemy-side `applyTimedAbilityStatus` / `timedAbilityStatuses('enemy', …)` / `activeAbilityStatuses('enemy', …)` calls and the per-target debuff snapshot/decrement read — replacing the applier-id owner arg on the **enemy side only**; DoTs/bombs already route by the passed container arrays, leave them)
+- Modify: `src/utils/combat/engine.ts` (pass `targetId: enemy.id` at the existing attacker + team `runPlayerTurn` call sites — `:~1355-1419`, `:~1420-1475`)
+- Test: the appropriate existing engine test file (e.g. `teamWalk.test.ts`/`healing.test.ts` — `grep -rln "runCombat" src/utils/combat/__tests__` to pick) or a new focused file
+
+- [ ] **Step 1: Write failing test.** With `targetId` defaulting to `enemy.id`, two player actors applying enemy debuffs both land them under `enemy.id` (current behaviour). Then a debuff applied with `targetId: 'tank'` lands under the `'tank'` per-target key and is absent from the `enemy.id` snapshot. (This is the playerTurn-level counterpart to Task 1's statusEngine test.)
+- [ ] **Step 2: Run red.** FAIL (`targetId` not on `PlayerTurnArgs`; enemy-side calls ignore it).
+- [ ] **Step 3: Implement.** Add `targetId: string` to `PlayerTurnArgs` (default `enemy.id` if you prefer an optional+`?? enemy.id` to minimise call-site churn). Route it as the **target** key into every enemy-side status call. Player call sites pass `enemy.id` → byte-identical.
+- [ ] **Step 4: Run green.** PASS.
+- [ ] **Step 5: Guard goldens.** `npm test -- dpsGoldenParity healingGoldenParity` → byte-identical.
+- [ ] **Step 6: Commit.** `git add src/utils/combat/playerTurn.ts src/utils/combat/engine.ts <test file> && git commit -m "feat(combat): thread targetId through runPlayerTurn enemy-side status application (enemy.id default byte-identical)"`
+
+---
+
+## Task 6b: Dispatch enemy turns through `runPlayerTurn` bound to the heal target; retire `runEnemyAttackerTurn`
+
+**Goal:** the enemy branch calls `runPlayerTurn` with the **heal target passed as the `enemy` target arg** and `targetId: healTarget.id` (from Task 6). Damage drains into the target via the existing shield-first intake + `damage-taken` procs. Self-buffs land in the enemy's own owner store; debuffs/DoTs land on the target. Delete `enemyTurn.ts` and its test.
+
+**Files:**
+- Modify: `src/utils/combat/engine.ts:1594-1670` (enemy branch) + post-turn decrement `:1685-1696` + the `enemyTurn` import at `:10`
 - Delete: `src/utils/combat/enemyTurn.ts`
-- Modify: `src/utils/combat/engine.ts:10` (drop the `enemyTurn` import)
-- Test: `src/utils/combat/__tests__/engine.test.ts`
+- Delete/migrate: `src/utils/combat/__tests__/enemyTurn.test.ts` (fold its damage-formula coverage into the damage-parity test below, then `git rm` it)
+- Test: the appropriate existing engine test file (pick via `grep -rln "enemyAttackers" src/utils/combat/__tests__`)
 
 - [ ] **Step 1: Write failing tests.**
-  - **Damage parity:** a damage-only, neutral-affinity, no-buff enemy attacker deals the **same per-round damage** through `runPlayerTurn` as it did through `runEnemyAttackerTurn` (capture the old number first, e.g. from an existing healing fixture, and assert equality). This is the byte-identical gate.
-  - **New behaviour:** an enemy whose kit applies a debuff to the target results in that debuff appearing in the target's per-target debuff store; an enemy that grants itself a self-buff has it in `snapshot(enemyId).activeSelfBuffs` (via the ability-status path).
+  - **Damage parity:** a damage-only, neutral-affinity, no-buff enemy attacker deals the **same per-round damage** through `runPlayerTurn` as it did through `runEnemyAttackerTurn` (capture the old number first from an existing healing fixture/snapshot, then assert equality). This is the byte-identical gate.
+  - **New behaviour:** an enemy whose kit applies a debuff to the target → that debuff appears in the target's per-target debuff store; an enemy that grants itself a self-buff → it appears in `snapshot(enemyId).activeSelfBuffs` (via the ability-status path).
 - [ ] **Step 2: Run red.** FAIL.
 - [ ] **Step 3: Implement.**
-  - In the enemy branch, build the per-turn `runPlayerTurn` args binding the target = `healTarget`: pass `enemy: healTarget`, `enemyDefense: <target effective defence>` (reuse the existing `lastTurnCtxByActor.get(healTarget.id)?.effectiveDefence ?? baseDefenceFor(...)`), `enemyHp`/`enemyHpDecline` = the target's pool/decline, the **target's** DoT/bomb/accumulator containers, `enemyType` = the target's class (or undefined), and the enemy's own runtime.
-  - Route `runPlayerTurn`'s returned damage into the **existing** shield-first drain + `ship-destroyed` + `damage-taken` proc code already in this branch (keep that intake; only the damage *source* changes from `runEnemyAttackerTurn` to `runPlayerTurn`). Credit it as incoming damage to the tank, **not** player damage rows.
-  - Post-turn: the enemy attacker now decrements its **own** statuses (`decrementPlayer(enemyAttacker.id)` for self-buffs) and the per-target debuff store for the target it afflicts. The singular `enemy.id` path keeps `decrementEnemy()`.
-  - Delete `enemyTurn.ts` and its import.
+  - In the enemy branch, build per-turn `runPlayerTurn` args binding target = `healTarget`: `enemy: healTarget`, `targetId: healTarget.id`, `enemyDefense` from `lastTurnCtxByActor.get(healTarget.id)?.effectiveDefence ?? baseDefenceFor(...)`, `enemyHp`/`enemyHpDecline` = target pool/decline, the **target's** DoT/bomb/accumulator containers, `enemyType` = target class (or undefined), the enemy's own runtime (Task 5), and the enemy's own `selfHpPct` (Task 3).
+  - Route `runPlayerTurn`'s returned damage into the **existing** shield-first drain + `ship-destroyed` + `damage-taken` proc code already in this branch (only the damage *source* changes). Credit as incoming damage to the tank, **not** player rows.
+  - Post-turn: the enemy attacker now decrements its **own** statuses (`decrementPlayer(enemyAttacker.id)` for self-buffs) + the per-target debuff store for the target. The singular `enemy.id` path keeps `decrementEnemy()`.
+  - Delete `enemyTurn.ts`, its test, and the import.
 - [ ] **Step 4: Run green.** PASS.
-- [ ] **Step 5: Guard goldens.** `npm test -- dpsGoldenParity healingGoldenParity` → DPS byte-identical; **healing byte-identical** (existing fixtures are damage-only, neutral affinity). If any healing golden diverges, STOP: trace whether it's a genuine formula difference (document as a hand-verified KNOWN-DIFF with the arithmetic) or a bug (fix it). Do not regenerate blindly.
-- [ ] **Step 6: Commit.** `git add src/utils/combat/engine.ts src/utils/combat/__tests__/engine.test.ts && git rm src/utils/combat/enemyTurn.ts && git commit -m "feat(combat): enemy walks runPlayerTurn vs the heal target; retire runEnemyAttackerTurn"`
+- [ ] **Step 5: Guard goldens.** `npm test -- dpsGoldenParity healingGoldenParity` → DPS byte-identical; **healing byte-identical** (existing fixtures are damage-only, neutral affinity). If a healing golden diverges, STOP: trace whether it's a genuine formula difference (document as a hand-verified KNOWN-DIFF with arithmetic) or a bug (fix it). Never regenerate blindly.
+- [ ] **Step 6: Commit.** `git add src/utils/combat/engine.ts <test file> && git rm src/utils/combat/enemyTurn.ts src/utils/combat/__tests__/enemyTurn.test.ts && git commit -m "feat(combat): enemy walks runPlayerTurn vs the heal target; retire runEnemyAttackerTurn"`
 
 ---
 
@@ -205,7 +224,7 @@
 **Goal:** enemy attackers attack with their affinity matchup vs the target; the adapter builds them with their full kit (not damage-only).
 
 **Files:**
-- Modify: `src/utils/calculators/healingEngineAdapter.ts:22-29` (`EnemyAttackerInput` gains `affinity?: AffinityName`), `:146` (`deriveTeamEngineActors`), `:166-168` (replace hardcoded neutral affinity)
+- Modify: `src/utils/calculators/healingEngineAdapter.ts:22-29` (`EnemyAttackerInput` gains `affinity?: AffinityName` — enemy attackers carry **no affinity fields today**, so this is net-new; the existing `:166-168` neutral block is the *focus healer's* affinity, not the attackers' — don't conflate), `:146` (`deriveTeamEngineActors`)
 - Test: `src/utils/calculators/__tests__/healingEngineAdapter.test.ts`
 
 - [ ] **Step 1: Write failing test.** An enemy attacker with `affinity` at advantage vs the target deals `+25%` damage vs neutral; the four affinity fields on the built enemy runtime come from `computeAffinityModifiers(enemyAffinity, targetAffinity)`. (Mind the matchup direction — verify against `computeAffinityModifiers`'s `(attacker, enemy)` argument order in `affinityUtils.ts:23-31`; the enemy is the attacker here.)
@@ -239,13 +258,13 @@
 **Goal:** lock the genuinely new behaviour with hand-built, hand-verified golden scenarios.
 
 **Files:**
-- Modify: `src/utils/combat/__tests__/healingGoldenParity.test.ts`
+- Modify: `src/utils/calculators/__tests__/healingGoldenParity.test.ts` (the golden suites live under `calculators/__tests__/`, NOT `combat/__tests__/`)
 - Test: the scenarios themselves
 
 - [ ] **Step 1: Add scenarios** (hand-built `ab()` fixtures, NOT `buildShipAbilities`): (a) enemy applies a debuff + DoT to the tank + grants itself a self-buff; (b) affinity-advantage enemy damage; (c) `selfHpPct` gate activation — a below-40%-gated heal target dropping under threshold mid-fight; (d) an `enemy-buff` condition on a player firing off the enemy's self-buff; (e) `on-attacked` firing on the tank.
 - [ ] **Step 2: Hand-derive** the expected numbers for each (document the arithmetic in a comment, as the existing healing goldens do). Run once to generate the snapshot, then **manually verify** each number against the hand-derivation before committing.
 - [ ] **Step 3: Run green.** `npm test -- healingGoldenParity`.
-- [ ] **Step 4: Commit.** `git add src/utils/combat/__tests__/healingGoldenParity.test.ts src/utils/combat/__tests__/__snapshots__/* && git commit -m "test(combat): golden scenarios for enemy full-kit, affinity, selfHpPct, on-attacked"`
+- [ ] **Step 4: Commit.** `git add src/utils/calculators/__tests__/healingGoldenParity.test.ts src/utils/calculators/__tests__/__snapshots__/* && git commit -m "test(combat): golden scenarios for enemy full-kit, affinity, selfHpPct, on-attacked"`
 
 ---
 
