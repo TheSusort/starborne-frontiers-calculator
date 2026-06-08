@@ -1814,6 +1814,9 @@ export function runCombat(input: CombatEngineInput): {
                 const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
                 const targetDead = healTarget!.currentHp <= 0;
                 let damage = 0;
+                // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
+                // scoped inside the else block below; this flag carries its roundCrit out.
+                let enemyTurnDidCrit = false;
                 if (targetDead) {
                     // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                     // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -1885,6 +1888,8 @@ export function runCombat(input: CombatEngineInput): {
                     // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
                     // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
                     damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                    // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
+                    enemyTurnDidCrit = enemyTurn.roundCrit;
                     // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                     // its own future DoT entries would tick with this ctx).
                     lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -1914,7 +1919,7 @@ export function runCombat(input: CombatEngineInput): {
                     // punch-through gate (requiresHpDamage): shield present at attack start
                     // AND HP damage dealt; Malvex is unconditional.
                     // Per-attack (not per-hit): per-hit application would restructure the
-                    // shield-drain arithmetic and risk float-level golden churn; the accuracy
+                    // shield-drain arithmetic and risk float-float golden churn; the accuracy
                     // delta is below the fidelity of the flat enemy model — on the in-game
                     // verify list (spec §5).
                     // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
@@ -1944,6 +1949,24 @@ export function runCombat(input: CombatEngineInput): {
                             }
                         }
                     }
+
+                    // Emit `attacked` after the drain so the target's HP/shield state
+                    // is already updated when on-attacked reactive listeners fire. The
+                    // event is per ATTACK TURN (aggregate — not per-hit), consistent
+                    // with the existing per-attack `damage-taken` proc model above.
+                    // `didCrit` is present-only-when-true (Task 4 spec); value hoisted
+                    // from enemyTurn.roundCrit (enemyTurnDidCrit set in the else block).
+                    // Only emitted when the target was ALIVE at attack start (damage > 0
+                    // is only reachable on the live-target path — the dead-target guard
+                    // above routes to the cadence-only block and never reaches here).
+                    // drainIntents() at point (b) below drains the on-attacked intent.
+                    bus.emit({
+                        type: 'attacked',
+                        targetId: healTarget!.id,
+                        attackerId: actor.id,
+                        round: r,
+                        ...(enemyTurnDidCrit ? { didCrit: true } : {}),
+                    });
                 }
             }
 
