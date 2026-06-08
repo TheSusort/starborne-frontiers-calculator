@@ -146,14 +146,22 @@ the `enemy.id`-keyed path must reproduce current behaviour exactly.
 ### 5. Affinity (ii) — pre-resolved in the adapter
 
 Affinity modifiers are **not** computed inside `runPlayerTurn`; they are pre-resolved per-actor
-in the adapter (`dpsSimulator.ts` resolves the matchup → `affinityDamageModifier` /
-`affinityCritCap` / `affinityCritPenalty` / `affinityDisadvantage`) and consumed by the
-pipeline. Team actors already do this (`engine.ts:699-733`).
+in the adapter via `computeAffinityModifiers(...)` → `affinityDamageModifier` /
+`affinityCritCap` / `affinityCritPenalty` / `affinityDisadvantage`, then consumed by the
+pipeline. Team actors already do this — the pattern to mirror is
+`src/utils/calculators/dpsSimulator.ts:175` (team-actor matchup), and the pipeline consuming
+the pre-resolved fields is confirmed at `engine.ts:699-733`.
 
-The enemy actor gets the **same treatment**: the adapter resolves the enemy's matchup
-(`enemyAffinity` vs the **target's** affinity) and passes the four fields into the enemy's
-runtime. No pipeline change — only one more matchup resolution in the adapter, plus an affinity
-field on the enemy-attacker input.
+**The code that changes is in `src/utils/calculators/healingEngineAdapter.ts`** — the adapter
+that builds enemy-attacker inputs for the Healing Calculator (decision #4). DPS mode has no
+enemy attackers, so `dpsSimulator.ts` is the *pattern*, not the edit site. Today the healing
+adapter **hardcodes neutral affinity** for enemy attackers (`affinityDamageModifier: 0`,
+`affinityCritCap: 100`, `affinityCritPenalty: 0` — ~`healingEngineAdapter.ts:166-168`) and
+derives the team walk with `deriveTeamEngineActors(..., undefined)` ("affinity IGNORED this
+increment" — ~`:146`). Both of those are what change: resolve the enemy's matchup
+(`enemyAffinity` vs the **target's** affinity) with `computeAffinityModifiers` and pass the four
+fields into the enemy's runtime. No pipeline change — only the adapter resolution, plus an
+affinity field on the enemy-attacker input.
 
 ### 6. Condition-context population (the payoff)
 
@@ -170,8 +178,10 @@ DPS-assumption defaults are unchanged:
 
 **Payload-carrying status visibility (known wiring point, not a new concept):** the enemy's
 self-buffs are ability-sourced → they carry a `payload` → `snapshot()` **excludes** them (the
-`!s.payload` guards at `statusEngine.ts:593,601,617`; exclusion exists to avoid double-folding
-their effects, which are folded via `activeAbilityStatuses`/`timedAbilityStatuses`). To expose
+`!s.payload` guards at `statusEngine.ts:593,601,617` for accum/persistent, and the timed-map
+guards at `:642,654` — the implementer must respect **all** of these for both `enemyBuffNames`
+and `selfDebuffNames`; exclusion exists to avoid double-folding their effects, which are folded
+via `activeAbilityStatuses`/`timedAbilityStatuses`). To expose
 them as `enemyBuffNames`, extend the existing `includeAbility…Names`-style inclusion path
 (today `includeAbilitySelfNames` pulls `timedAbilityStatuses('self', ownerId)`) to the enemy
 owner — being careful to pull only the **names** for condition gating, never re-folding the
