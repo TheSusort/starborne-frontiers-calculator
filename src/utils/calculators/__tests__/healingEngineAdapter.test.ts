@@ -3,6 +3,8 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { createEventBus, CombatEvent } from '../../combat/events';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
+import { buildEnemyPlayerActorRuntime, EnemyActorInput } from '../../combat/engine';
+import { createStatusEngine } from '../../combat/statusEngine';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -381,5 +383,172 @@ describe('simulateHealing adapter', () => {
         );
         expect(perfs).toHaveLength(2);
         expect(perfs[0].amount).toBe(1000);
+    });
+});
+
+// ── Task 9: affinity threading — enemy matchup vs heal target ─────────────────
+describe('Task 9: enemy affinity threading', () => {
+    // Helper: build a statusEngine context for buildEnemyPlayerActorRuntime
+    const makeCtx = () => {
+        const statusEngine = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            landsTimedEnemyApplication: () => true,
+        });
+        return {
+            statusEngine,
+            playerIds: ['attacker'],
+            enemyDebuffLookup: new Map(),
+        };
+    };
+
+    // ── Test 9a: buildEnemyPlayerActorRuntime threads advantage matchup correctly ─
+    it('9a: advantage matchup → affinityDamageModifier +25, critCap 100, critPenalty 0, no disadvantage', () => {
+        // thermal (enemy attacker) vs chemical (target) → ADVANTAGE for the attacker
+        // computeAffinityModifiers('thermal', 'chemical') → { damageModifier: 25, critCap: 100, critPenalty: 0 }
+        const input: EnemyActorInput = {
+            id: 'e-adv',
+            stats: { attack: 4000, crit: 30, critDamage: 100, speed: 50 },
+            chargeCount: 0,
+            startCharged: false,
+            affinityDamageModifier: 25,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+        };
+        const runtime = buildEnemyPlayerActorRuntime(input, makeCtx());
+        expect(runtime.affinityDamageModifier).toBe(25);
+        expect(runtime.affinityCritCap).toBe(100);
+        expect(runtime.affinityCritPenalty).toBe(0);
+        expect(runtime.affinityDisadvantage).toBe(false);
+    });
+
+    // ── Test 9b: buildEnemyPlayerActorRuntime threads disadvantage matchup correctly ─
+    it('9b: disadvantage matchup → affinityDamageModifier -25, critCap 75, critPenalty 25, disadvantage true', () => {
+        const input: EnemyActorInput = {
+            id: 'e-dis',
+            stats: { attack: 4000, crit: 30, critDamage: 100, speed: 50 },
+            chargeCount: 0,
+            startCharged: false,
+            affinityDamageModifier: -25,
+            affinityCritCap: 75,
+            affinityCritPenalty: 25,
+        };
+        const runtime = buildEnemyPlayerActorRuntime(input, makeCtx());
+        expect(runtime.affinityDamageModifier).toBe(-25);
+        expect(runtime.affinityCritCap).toBe(75);
+        expect(runtime.affinityCritPenalty).toBe(25);
+        expect(runtime.affinityDisadvantage).toBe(true);
+    });
+
+    // ── Test 9c: neutral default when affinity fields omitted ────────────────
+    it('9c: neutral default when affinityDamageModifier/Cap/Penalty absent on EnemyActorInput', () => {
+        const input: EnemyActorInput = {
+            id: 'e-neutral',
+            stats: { attack: 4000, crit: 30, critDamage: 100, speed: 50 },
+            chargeCount: 0,
+            startCharged: false,
+            // no affinity fields
+        };
+        const runtime = buildEnemyPlayerActorRuntime(input, makeCtx());
+        expect(runtime.affinityDamageModifier).toBe(0);
+        expect(runtime.affinityCritCap).toBe(100);
+        expect(runtime.affinityCritPenalty).toBe(0);
+        expect(runtime.affinityDisadvantage).toBe(false);
+    });
+
+    // ── Test 9d: simulateHealing routes advantage → enemy deals +25% more damage ─
+    // thermal enemy (ADVANTAGE) vs chemical heal target: enemy attack 4000, target hp 10000,
+    // defence 0. With +25% advantage, effective attack ≈ 4000 × 1.25 = 5000 per round.
+    // Neutral: 4000/round. Advantage: 5000/round. Delta = 1000.
+    it('9d: advantage enemy deals +25% more damage vs same enemy neutral', () => {
+        idCounter = 0;
+        // neutral matchup: enemy thermal, target thermal (same → neutral)
+        const neutralResult = simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, defence: 0, hp: 20000 },
+                healTargetAffinity: 'thermal',
+                enemies: [
+                    {
+                        id: 'en1',
+                        stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        affinity: 'thermal', // thermal vs thermal → neutral
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+
+        idCounter = 0;
+        // advantage matchup: enemy thermal, target chemical (thermal beats chemical)
+        const advantageResult = simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, defence: 0, hp: 20000 },
+                healTargetAffinity: 'chemical',
+                enemies: [
+                    {
+                        id: 'en1',
+                        stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        affinity: 'thermal', // thermal beats chemical → +25%
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+
+        const neutralDamage = neutralResult.rounds[0].incomingDamage;
+        const advantageDamage = advantageResult.rounds[0].incomingDamage;
+        // +25% more damage
+        expect(advantageDamage).toBe(Math.round(neutralDamage * 1.25));
+    });
+
+    // ── Test 9e: existing fixtures (no affinity) remain byte-identical (neutral default) ─
+    it('9e: omitting affinity on enemy attacker yields neutral matchup (no change vs prior behaviour)', () => {
+        idCounter = 0;
+        const withoutAffinity = simulateHealing(
+            BASE({
+                rounds: 2,
+                healer: { ...HEALER, defence: 0, hp: 20000 },
+                enemies: [
+                    {
+                        id: 'en1',
+                        stats: { attack: 3000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        // no affinity field
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+
+        idCounter = 0;
+        const withNeutralAffinity = simulateHealing(
+            BASE({
+                rounds: 2,
+                healer: { ...HEALER, defence: 0, hp: 20000 },
+                healTargetAffinity: 'thermal',
+                enemies: [
+                    {
+                        id: 'en1',
+                        stats: { attack: 3000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        affinity: 'thermal', // thermal vs thermal → neutral
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+
+        // Both should produce identical damage per round
+        expect(withNeutralAffinity.summary.totalIncomingDamage).toBe(
+            withoutAffinity.summary.totalIncomingDamage
+        );
     });
 });

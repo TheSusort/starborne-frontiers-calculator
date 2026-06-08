@@ -233,6 +233,12 @@ export interface EnemyActorInput {
     chargeCount: number;
     startCharged: boolean;
     shipSkills?: ShipSkills;
+    /** Pre-resolved affinity damage modifier (from computeAffinityModifiers). Default 0 (neutral). */
+    affinityDamageModifier?: number;
+    /** Pre-resolved crit cap (from computeAffinityModifiers). Default 100 (neutral). */
+    affinityCritCap?: number;
+    /** Pre-resolved crit penalty (from computeAffinityModifiers). Default 0 (neutral). */
+    affinityCritPenalty?: number;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -310,10 +316,13 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
     });
 
-    // Neutral affinity placeholder — Task 9 wires the real matchup after the
-    // affinity selector is added to the adapter. Zero modifier = no damage penalty/
-    // bonus; cap 100 = no crit suppression; penalty 0; disadvantage false.
-    const affinityDisadvantage = false;
+    // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
+    // (enemy as attacker, heal target as defender). Absent → neutral defaults (damageMod 0,
+    // cap 100, penalty 0), preserving byte-identical behaviour for fixtures without affinity.
+    const resolvedDamageMod = e.affinityDamageModifier ?? 0;
+    const resolvedCritCap = e.affinityCritCap ?? 100;
+    const resolvedCritPenalty = e.affinityCritPenalty ?? 0;
+    const affinityDisadvantage = resolvedDamageMod < 0;
     // Own gate instances — separate draw streams so this enemy's crit/heal-crit/debuff/extend
     // rolls are fully isolated from every other actor's deterministic schedule.
     const enemyActiveCritGate = makeRateGate();
@@ -343,9 +352,9 @@ export function buildEnemyPlayerActorRuntime(
         debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
-        affinityDamageModifier: 0,
-        affinityCritCap: 100,
-        affinityCritPenalty: 0,
+        affinityDamageModifier: resolvedDamageMod,
+        affinityCritCap: resolvedCritCap,
+        affinityCritPenalty: resolvedCritPenalty,
         affinityDisadvantage,
         allyChargePerRound: undefined,
         activeCritGate: enemyActiveCritGate,
@@ -560,6 +569,12 @@ export interface CombatEngineInput {
         chargeCount: number;
         startCharged: boolean;
         shipSkills?: ShipSkills;
+        /** Pre-resolved affinity damage modifier vs the heal target. Default 0 (neutral). */
+        affinityDamageModifier?: number;
+        /** Pre-resolved crit cap vs the heal target. Default 100 (neutral). */
+        affinityCritCap?: number;
+        /** Pre-resolved crit penalty vs the heal target. Default 0 (neutral). */
+        affinityCritPenalty?: number;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
