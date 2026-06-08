@@ -31,6 +31,8 @@ import {
     parseAllyCritDot,
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
+    detectStasisAppliedTrigger,
+    parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
     parseAllyInflictsDebuff,
@@ -825,6 +827,29 @@ function abilitiesFromText(
         });
     }
 
+    // Control inflictions — conservative: only Stasis ("inflicts/applies Stasis"). Provoke/Taunt
+    // stay handled as targeting-status CONDITIONS (statusEffectCondition), not control abilities.
+    // The engine does NOT simulate the control (Stasis stays unmodelled); the cast-path emission
+    // (playerTurn.ts) turns this into a `control-applied` event so reactions (Defiant's
+    // shield-on-Stasis) can fire. DPS unchanged: a control ability on a firing skill carries no
+    // damage/modifier, so the damage pipeline ignores it.
+    const controlEffect = parseControlInflict(text);
+    if (controlEffect) {
+        const controlPos = text.search(/<unit-skill>\s*Stasis\b/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'control', effect: controlEffect },
+                autoFilled: true,
+            },
+            pos: controlPos >= 0 ? controlPos : MAX_POS,
+        });
+    }
+
     // Heal / shield grants (and cleanse) — parsed narrowly (on-cast, percentage-of-stat only;
     // damage-reactive and revive shapes emit nothing, see parseHealAbilities). The combat engine
     // ignores these types for now (DPS unchanged); they carry the model for the healing calculator.
@@ -843,7 +868,12 @@ function abilitiesFromText(
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
         const reactiveTrigger =
             detectCritRepairTrigger(text, healPos) ??
-            (h.kind === 'shield' ? detectDebuffInflictedTrigger(text, healPos) : undefined);
+            (h.kind === 'shield'
+                ? (detectDebuffInflictedTrigger(text, healPos) ??
+                  // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
+                  // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
+                  detectStasisAppliedTrigger(text, healPos))
+                : undefined);
         // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
         // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
         // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).

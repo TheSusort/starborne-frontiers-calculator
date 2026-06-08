@@ -135,6 +135,12 @@ export function chargeAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'charge') ?? [];
 }
 
+/** `control` abilities on the skill (e.g. Defiant's charged Stasis inflict). The engine does
+ *  NOT simulate the control effect; the cast path emits `control-applied` so reactions fire. */
+export function controlAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
+    return skill?.abilities.filter((a) => a.type === 'control') ?? [];
+}
+
 /** `detonate-dot` abilities on the skill, as {dotType, powerPct} pairs. */
 export function detonationsFromSkill(
     skill: Skill | undefined

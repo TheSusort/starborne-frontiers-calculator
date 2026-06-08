@@ -2034,3 +2034,70 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
         expect(focusHeal(noCrit, 'directHeal')).toBeCloseTo(750, 6);
     });
 });
+
+// ── Defiant shield-on-Stasis: control-applied → on-stasis-applied shield (engine end-to-end) ──
+describe('healing — Defiant shield-on-Stasis (control-applied → on-stasis-applied)', () => {
+    it('charged Stasis cast grows the focus shield pool by 30% of max HP via on-stasis-applied', () => {
+        idCounter = 0;
+        // Focus = heal target. Charged slot carries a damage + a stasis control ability; the
+        // passive shield reacts to the focus's OWN Stasis application. chargeCount 1 +
+        // startCharged → charged fires rounds 1,3,5 (3 of 5 rounds); shield 30% × 10000 = 3000
+        // each of those rounds. Active rounds (2,4) fire the inert active cast → no shield.
+        const result = runCombat(
+            BASE({
+                numRounds: 5,
+                hp: 10000,
+                healTargetId: 'attacker',
+                hasChargedSkill: true,
+                chargeCount: 1,
+                startCharged: true,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 145 },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'charged',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 195 },
+                                }),
+                                ab({
+                                    type: 'control',
+                                    target: 'enemy',
+                                    config: { type: 'control', effect: 'stasis' },
+                                }),
+                            ],
+                        },
+                        {
+                            slot: 'passive',
+                            abilities: [
+                                ab({
+                                    type: 'shield',
+                                    target: 'self',
+                                    trigger: 'on-stasis-applied',
+                                    config: { type: 'shield', pct: 30, basis: 'hp' },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+            })
+        );
+        // Shield bucket counts the raw 3000 grant on each charged (Stasis) round: rounds 1,3,5.
+        const shieldByRound = (result.healing?.rounds ?? []).map(
+            (rd) => rd.perActor.get('attacker')?.shield ?? 0
+        );
+        expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000]);
+        expect(focusHeal(result, 'shield')).toBe(9000);
+    });
+});

@@ -1629,4 +1629,72 @@ describe('buildShipAbilities', () => {
             ).toBe(false);
         });
     });
+
+    describe('Defiant shield-on-Stasis (control ability + on-stasis-applied)', () => {
+        it('charged "inflicts Stasis for 1 turn" parses a control ability with effect stasis', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+                chargeSkillText:
+                    'This Unit deals <unit-damage>195% damage</unit-damage> and inflicts <unit-skill>Stasis</unit-skill> for 1 turn.',
+                chargeSkillCharge: 2,
+            });
+            const charged = buildShipAbilities(s).slots.find((sl) => sl.slot === 'charged');
+            const control = charged?.abilities.find((a) => a.type === 'control');
+            expect(control).toMatchObject({
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'control', effect: 'stasis' },
+            });
+            // The charged damage is unaffected (control rider does not alter the damage ability).
+            const dmg = abilityOfType(charged!.abilities, 'damage');
+            expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 195 } });
+        });
+
+        it('active "applies Provoke" does NOT produce a stasis control ability', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+            });
+            const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+            const control = active?.abilities.find(
+                (a) => a.type === 'control' && a.config.type === 'control'
+            );
+            expect(control).toBeUndefined();
+        });
+
+        it('R0 passive "Shield equal to 30% of Max HP when applying Stasis" → shield on-stasis-applied', () => {
+            const s = ship({
+                refits: [],
+                firstPassiveSkillText:
+                    'This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+            });
+            const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-stasis-applied',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+            });
+        });
+
+        it('R2 passive parses ONLY the shield-on-Stasis clause (adjacency HP grant left unparsed)', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.',
+            });
+            const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+            const shield = passive?.abilities.find((a) => a.type === 'shield');
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-stasis-applied',
+                config: { type: 'shield', pct: 30, basis: 'hp' },
+            });
+        });
+    });
 });

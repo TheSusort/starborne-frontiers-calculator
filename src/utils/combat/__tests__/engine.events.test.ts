@@ -84,6 +84,7 @@ const collect = (input: CombatEngineInput) => {
         'dot-ticked',
         'dot-detonated',
         'bomb-detonated',
+        'control-applied',
         'hp-changed',
         'ship-destroyed',
     ];
@@ -905,5 +906,59 @@ describe('accumulate-detonate display in activeEnemyDebuffs', () => {
         // Round 1 applied the accumulator, no detonation yet.
         const r1 = rounds.find((r) => r.round === 1)!;
         expect(r1.detonationDamage).toBe(0);
+    });
+});
+
+describe('control-applied event (Defiant charged Stasis inflict)', () => {
+    // A charged skill carrying a stasis control ability. startCharged → round 1 fires charged.
+    const controlSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 145 } })],
+            },
+            {
+                slot: 'charged',
+                abilities: [
+                    ab({ type: 'damage', config: { type: 'damage', multiplier: 195 } }),
+                    ab({
+                        type: 'control',
+                        target: 'enemy',
+                        config: { type: 'control', effect: 'stasis' },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    it('emits control-applied {effect:stasis, casterId:attacker} when the charged skill fires', () => {
+        const { events } = collect(
+            baseInput({
+                shipSkills: controlSkills(),
+                startCharged: true,
+                chargeCount: 99, // never re-charges → only the round-1 charged cast fires
+                numRounds: 3,
+            })
+        );
+        const controls = events.filter((e) => e.type === 'control-applied');
+        expect(controls).toHaveLength(1);
+        expect(controls[0]).toMatchObject({
+            type: 'control-applied',
+            effect: 'stasis',
+            casterId: 'attacker',
+            round: 1,
+        });
+    });
+
+    it('does NOT emit control-applied on active-only rounds (no control on the active skill)', () => {
+        const { events } = collect(
+            baseInput({
+                shipSkills: controlSkills(),
+                startCharged: false,
+                chargeCount: 99, // never charges → only active casts fire
+                numRounds: 3,
+            })
+        );
+        expect(events.some((e) => e.type === 'control-applied')).toBe(false);
     });
 });

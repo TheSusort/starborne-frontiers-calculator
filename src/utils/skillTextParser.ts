@@ -10,7 +10,7 @@ import {
     EnemyBaseClass,
     DoTType,
 } from '../types/calculator';
-import { AbilityTrigger, Condition, ConditionSubject } from '../types/abilities';
+import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
 import { getShipSkillRows } from './ship/skillRows';
 
 /**
@@ -847,6 +847,37 @@ export function detectDebuffInflictedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
+}
+
+// "inflicts/applies Stasis" — a control infliction. Conservative: ONLY Stasis (the one control
+// any ship reacts to today, via Defiant's shield-on-Stasis). Provoke/Taunt stay handled as
+// targeting-status CONDITIONS (statusEffectCondition), NOT control abilities. The <unit-skill>
+// tags don't bracket the verb, so matching on raw text is safe.
+const STASIS_INFLICT_RE = /\b(?:inflicts?|applies|applying)\b[^.]*?<unit-skill>\s*Stasis\b/i;
+
+/** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
+ *  docs/ship-skills.csv (Defiant charged "inflicts Stasis for 1 turn"). */
+export function parseControlInflict(text: string | null | undefined): ControlEffect | null {
+    if (!text) return null;
+    return STASIS_INFLICT_RE.test(text) ? 'stasis' : null;
+}
+
+// "when applying Stasis" — the reactive trigger for a grant that procs when THIS unit applies
+// Stasis (Defiant's "gains Shield equal to 30% of its Max HP when applying Stasis"). Position-
+// scoped (mirrors detectDebuffInflictedTrigger); no lookbehind.
+const APPLYING_STASIS_RE = /\bwhen\s+applying\s+stasis\b/i;
+
+/**
+ * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "when applying Stasis" phrase; otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectDebuffInflictedTrigger). Reference data:
+ * docs/ship-skills.csv (Defiant passive).
+ */
+export function detectStasisAppliedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, APPLYING_STASIS_RE, anchorPos, 'on-stasis-applied');
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
