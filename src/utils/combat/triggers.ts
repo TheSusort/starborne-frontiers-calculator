@@ -321,6 +321,12 @@ export function buildActorConditionContext(
         enemyHpPct: number;
         effectiveCritRate?: number;
         includeAbilitySelfNames?: boolean;
+        /** Self HP% (0..100). Default 100 (DPS-assumption). Populated by live engine in Task 3+. */
+        selfHpPct?: number;
+        /** Active buff names on the enemy. Default [] (DPS-assumption). Populated in Task 7+. */
+        enemyBuffNames?: string[];
+        /** Active debuff names on self. Default [] (DPS-assumption). Populated in Task 7+. */
+        selfDebuffNames?: string[];
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -343,6 +349,9 @@ export function buildActorConditionContext(
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
         enemyHpPct: shared.enemyHpPct,
+        selfHpPct: shared.selfHpPct,
+        enemyBuffNames: shared.enemyBuffNames,
+        selfDebuffNames: shared.selfDebuffNames,
     });
 }
 
