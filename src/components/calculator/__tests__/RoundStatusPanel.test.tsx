@@ -22,6 +22,7 @@ const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
     totalRoundHealing: 0,
     cumulativeHealing: 0,
     activeSelfBuffs: [],
+    healTargetBuffs: [],
     enemyEffects: [],
     ...over,
 });
@@ -86,12 +87,13 @@ describe('RoundStatusPanel', () => {
         );
         expect(screen.getByText('Makoli')).toBeInTheDocument();
         expect(screen.getByText('Enemy 2')).toBeInTheDocument();
-        // First enemy's own effects.
+        // First enemy's own effects (self-buff is per-enemy only; debuffs also appear once in the
+        // aggregated Heal Target section, hence getAllByText).
         expect(screen.getByText('Attack Up')).toBeInTheDocument();
-        expect(screen.getByText('Defense Down')).toBeInTheDocument();
+        expect(screen.getAllByText('Defense Down').length).toBeGreaterThanOrEqual(1);
         // Second enemy's own effects, attributed separately.
         expect(screen.getByText('Crit Up')).toBeInTheDocument();
-        expect(screen.getByText('Corrosion')).toBeInTheDocument();
+        expect(screen.getAllByText('Corrosion').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders each enemy group with its own Self-Buffs and Debuffs sub-sections', () => {
@@ -271,7 +273,8 @@ describe('RoundStatusPanel', () => {
         // DoT-only enemy still surfaces, with its DoTs-on-Target sub-section + the labelled stack.
         expect(screen.getByText('Makoli')).toBeInTheDocument();
         expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
-        expect(screen.getByText('Inferno I ×3')).toBeInTheDocument();
+        // The DoT label appears in the per-enemy group AND the aggregated Heal Target section.
+        expect(screen.getAllByText('Inferno I ×3').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders DoTs alongside self-buffs and debuffs in the same enemy group', () => {
@@ -299,10 +302,11 @@ describe('RoundStatusPanel', () => {
             />
         );
         expect(screen.getByText('Attack Up')).toBeInTheDocument();
-        expect(screen.getByText('Defense Down')).toBeInTheDocument();
+        // Debuffs/DoTs appear per-enemy AND in the aggregated Heal Target section.
+        expect(screen.getAllByText('Defense Down').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
         // Single stack → no ×N suffix.
-        expect(screen.getByText('Corrosion I')).toBeInTheDocument();
+        expect(screen.getAllByText('Corrosion I').length).toBeGreaterThanOrEqual(1);
     });
 
     it('falls back to the raw enemy id when no name is resolved', () => {
@@ -316,5 +320,71 @@ describe('RoundStatusPanel', () => {
         );
         expect(screen.getByText('e1')).toBeInTheDocument();
         expect(screen.getByText('e2')).toBeInTheDocument();
+    });
+
+    it('renders a Heal Target section with the target name, its own buffs, and the aggregated debuffs/DoTs on it', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 3,
+                            healTargetBuffs: [
+                                { buffName: 'Cheat Death', turnsRemaining: 'recurring' },
+                                { buffName: 'Barrier', turnsRemaining: 2, stacks: 1 },
+                            ],
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [{ buffName: 'Attack Up', turnsRemaining: 2 }],
+                                    debuffs: [{ buffName: 'Defense Down', turnsRemaining: 3 }],
+                                    dots: [{ type: 'inferno', tier: 15, stacks: 2 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        // The Heal Target sub-header with the threaded name.
+        expect(screen.getByText('Aegis')).toBeInTheDocument();
+        // Its OWN buffs render (incl. recurring Cheat Death) — these are unique to the target.
+        expect(screen.getByText('Cheat Death')).toBeInTheDocument();
+        expect(screen.getByText('Barrier')).toBeInTheDocument();
+        // The aggregated debuffs/DoTs on the target render under the Heal Target section
+        // (also shown per-enemy, hence getAllByText — at least one of each is the Heal Target one).
+        expect(screen.getAllByText('Defense Down').length).toBe(2);
+        expect(screen.getAllByText('Inferno I ×2').length).toBe(2);
+    });
+
+    it('hides zero-stack heal-target buffs and omits the section when the target has nothing', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            healTargetBuffs: [
+                                { buffName: 'Spent Target Stack', turnsRemaining: 2, stacks: 0 },
+                            ],
+                            enemyEffects: [],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        expect(screen.queryByText('Spent Target Stack')).not.toBeInTheDocument();
+        // No buffs + no debuffs/dots on target → the Heal Target sub-header does not render.
+        expect(screen.queryByText('Aegis')).not.toBeInTheDocument();
     });
 });

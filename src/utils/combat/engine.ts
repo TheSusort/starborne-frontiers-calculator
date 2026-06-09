@@ -709,6 +709,12 @@ export interface HealingRoundEngine {
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
      *  Empty for a bare/manual enemy with no effects. NAMES ONLY — never folded into a sim value. */
     enemyEffects: EnemyRoundEffects[];
+    /** The HEAL TARGET's OWN active self-buffs this round, captured from the target actor's turn
+     *  (PlayerTurnResult.activeSelfBuffs — comprehensive, so recurring/always-active buffs like
+     *  Cheat Death / Everliving Regeneration are included). Empty when there is no heal target,
+     *  the target never acted this round, or the target is destroyed. NAMES ONLY for the UI's
+     *  round overview — never folded into any sim value. */
+    healTargetBuffs: ActiveBuff[];
 }
 
 /**
@@ -1539,6 +1545,13 @@ export function runCombat(input: CombatEngineInput): {
             corrosion: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
             inferno: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
         } = { corrosion: [], inferno: [] };
+        // The heal target's OWN active self-buffs this round, captured from ITS turn result
+        // (whichever branch processes it — focus, walked-team, or the dead-target synthesized
+        // focus turn). PlayerTurnResult.activeSelfBuffs is comprehensive for the acting actor, so
+        // it includes the target's recurring buffs (Cheat Death / Everliving Regeneration). Take
+        // the LAST such turn if the target acts more than once; a destroyed target → []. Surfaced
+        // to the UI's Heal Target round overview. NAMES ONLY — never folded into any sim value.
+        let healTargetBuffs: ActiveBuff[] = [];
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
@@ -1818,6 +1831,8 @@ export function runCombat(input: CombatEngineInput): {
                 // act) carrying the entering-round enemyHpPct and a zeroed/last-known ctx, just enough
                 // for row assembly.
                 if (healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0) {
+                    // A destroyed heal target shows no buffs this round.
+                    healTargetBuffs = [];
                     if (actor.id === focusActorId) {
                         const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
                         const enemyHpPct =
@@ -1976,6 +1991,12 @@ export function runCombat(input: CombatEngineInput): {
                     creditDamage(actor.id, 'detonation', turn.detonationDamage);
                     focusTurns.push(turn);
 
+                    // Heal-target buffs: if this focus actor IS the heal target (self-heal case),
+                    // its comprehensive activeSelfBuffs are the target's own buffs for the round.
+                    if (healTarget && actor.id === healTarget.id) {
+                        healTargetBuffs = turn.activeSelfBuffs;
+                    }
+
                     // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                     lastTurnCtxByActor.set(actor.id, turn.turnCtx);
 
@@ -2049,6 +2070,12 @@ export function runCombat(input: CombatEngineInput): {
                     // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
                     // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
                     lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
+
+                    // Heal-target buffs: a walked team actor that IS the heal target surfaces its
+                    // own comprehensive activeSelfBuffs (incl. recurring Cheat Death/Everliving Regen).
+                    if (healTarget && actor.id === healTarget.id) {
+                        healTargetBuffs = teamTurn.activeSelfBuffs;
+                    }
 
                     processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
                 } else if (actor.kind === 'team') {
@@ -2598,6 +2625,7 @@ export function runCombat(input: CombatEngineInput): {
                     mergeDoTsForDisplay(tankDotSnapshot.corrosion, healTarget.corrosionEntries),
                     mergeDoTsForDisplay(tankDotSnapshot.inferno, healTarget.infernoEntries)
                 ),
+                healTargetBuffs,
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

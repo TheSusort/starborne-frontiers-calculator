@@ -49,6 +49,7 @@ const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
     totalRoundHealing: 0,
     cumulativeHealing: 0,
     activeSelfBuffs: [],
+    healTargetBuffs: [],
     enemyEffects: [],
     ...over,
 });

@@ -73,6 +73,12 @@ export interface HealingRoundData {
     cumulativeHealing: number;
     teamHealing?: number; // non-focus actors' raw (direct+HoT) healing; only when team actors exist
     activeSelfBuffs: ActiveBuff[];
+    /** The HEAL TARGET's OWN active self-buffs this round (Cheat Death, Everliving Regeneration,
+     *  Barrier, etc.) — captured comprehensively from the target's turn (PlayerTurnResult.
+     *  activeSelfBuffs), so recurring/always-active buffs are included. Empty when there is no
+     *  heal target, the target never acted, or the target is destroyed. NAMES ONLY for the
+     *  round-overview panel — never folded into any heal value. */
+    healTargetBuffs: ActiveBuff[];
     /** Per-enemy effects this round (Task 10a) — one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target, keyed by
      *  the enemy's actor id. For the UI's enemy-effects round overview, grouped/attributed to the
@@ -285,6 +291,10 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             cumulativeHealing: Math.round(cumulativeRaw),
             ...(hasTeamActors ? { teamHealing: Math.round(teamRoundRaw) } : {}),
             activeSelfBuffs: rd.activeSelfBuffs,
+            // Heal-target's OWN active buffs this round (Cheat Death, Everliving Regen, Barrier,
+            // etc.), captured from the target's turn in the engine. Names only — never folded
+            // into any heal value. Default [] when absent (DPS mode / no heal target).
+            healTargetBuffs: hr?.healTargetBuffs ?? [],
             // Enemy-effects overview (Task 10a): per-enemy, attributed by enemy id. Names only,
             // never folded into any value.
             enemyEffects: hr?.enemyEffects ?? [],
