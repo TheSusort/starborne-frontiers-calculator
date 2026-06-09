@@ -33,6 +33,7 @@ import {
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
+    detectDestroyedTrigger,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
@@ -880,6 +881,11 @@ function abilitiesFromText(
             // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
             // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
             detectCheatDeathActivatedTrigger(text, healPos) ??
+            // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
+            // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
+            // position-scoped). The parser only emits this all-allies heal when that shape is
+            // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
+            detectDestroyedTrigger(text, healPos) ??
             (h.kind === 'shield'
                 ? (detectDebuffInflictedTrigger(text, healPos) ??
                   // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the

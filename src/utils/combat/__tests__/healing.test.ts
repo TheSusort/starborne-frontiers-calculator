@@ -2764,3 +2764,89 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(r2).toEqual(['corrosion', 'inferno']);
     });
 });
+
+// ── Task 9: Salvation on-destroyed ally-heal (Phase 4b) ───────────────────────
+// Salvation's refit-active (R4 / 3rd) passive: "When this Unit is destroyed it repairs 80%
+// of its max HP to all allies." Built via buildShipAbilities so the on-destroyed all-allies
+// heal comes straight from the parser. When Salvation (the heal target) is destroyed, the
+// Task-5 on-destroyed listener enqueues the heal and the reactive executor credits an
+// all-allies repair THAT round — proving the parse→trigger→executor wiring fires only on
+// death (not every round). The crux: before this task the heal was disqualified (on-destroyed
+// was not live) so it never parsed; now it parses AND rides the on-destroyed trigger.
+describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const manualEnemy = (id: string, attack: number, speed = 50): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // A slow, do-nothing walked ally so playerIds = ['attacker', 't1'] (two all-allies
+    // recipients). It never acts (speed 5) and never takes damage (enemy only hits the target).
+    const idleAlly = (id: string, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 5,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('Salvation dies → on-destroyed 80% all-allies repair fires that round (parser-built)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const salvation: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+        } as Ship;
+        const salvationSkills = buildShipAbilities(salvation);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit (no Cheat Death)
+                defence: 0,
+                healTargetId: 'attacker',
+                speed: 100, // focus would act first, but it dies on the enemy turn this round
+                bus,
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                teamActors: [idleAlly('t1', 50000)],
+                shipSkills: salvationSkills,
+            })
+        );
+        // Salvation (the focus/heal target) was destroyed this round.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
+        expect(result.healing!.destroyedRound).toBe(1);
+        // The on-destroyed all-allies heal fired ONCE: basis = caster (Salvation) max HP 2000,
+        // pct 80 → 1600 raw per recipient. Recipients = ['attacker', 't1'] → directHeal 3200,
+        // all credited to the owner 'attacker'. (A phantom on-cast heal firing every round
+        // would still only run once here — numRounds 1 — but the directHeal magnitude proves
+        // BOTH all-allies recipients were repaired, i.e. the heal parsed and reached allies.)
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(3200, 6);
+    });
+});

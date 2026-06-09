@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Healing Calculator: the hover-gated round panel now also shows each healer's own active buffs (including ability-granted buffs like a Defense Up) for the hovered round, listed above that config's enemy effects — matching how the DPS calculator surfaces each attacker's self-buffs.",
     "Healing Calculator: fixed phantom healing from reactive passives. Heals gated on triggers the engine doesn't simulate yet — when this Unit is destroyed (Salvation), when a buff is purged from an ally (Salvation), or when directly damaged (Makoli, Guardian, Heliodor, Warden, Isha, Cultivator) — were firing every round and massively inflating a healer's per-round output. These reactive repairs are now excluded until the trigger is modelled. Lifesteal-style heals that repair a percentage of damage taken/dealt, and active cleanse-and-repair skills, are unaffected.",
     "Healing Calculator: Yazid's Cheat Death follow-on is now simulated — when a lethal hit triggers Cheat Death, Yazid repairs 60% of its Max HP and gains Barrier (once per battle), shown in the same round the save happens.",
+    "Healing Calculator: Salvation's on-destroyed ally-heal is now simulated — when Salvation is destroyed it repairs all allies for a percentage of its Max HP, credited in the round it dies (instead of being excluded as an unmodelled trigger).",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

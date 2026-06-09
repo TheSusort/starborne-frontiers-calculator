@@ -1696,4 +1696,40 @@ describe('buildShipAbilities', () => {
             });
         });
     });
+
+    // Phase 4b Task 9: Salvation's on-destroyed ally-heal. The refit-active (R4 / 3rd) passive
+    // "When this Unit is destroyed it repairs 80% of its max HP to all allies" parses as a heal
+    // ability stamped with trigger 'on-destroyed' so it fires only on death (via the Task-5
+    // listener), NOT every round. The conjoined "when a buff is purged … repairs that ally 5%"
+    // on-buff-purged heal is NOT modeled this phase and must stay disqualified (not emitted).
+    describe('Salvation 3rd passive: on-destroyed ally-heal (Task 9)', () => {
+        const salvation = () =>
+            ship({
+                thirdPassiveSkillText:
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+            });
+
+        it('emits an all-allies 80%-max-HP repair on trigger on-destroyed', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const heals = passive.abilities.filter((a) => a.type === 'heal');
+            // Only the on-destroyed 80% heal is emitted — the 5% on-buff-purged heal stays
+            // disqualified (its trigger is not live this phase).
+            expect(heals).toHaveLength(1);
+            const heal = heals[0];
+            expect(heal.target).toBe('all-allies');
+            expect(heal.trigger).toBe('on-destroyed');
+            if (heal.config.type === 'heal') {
+                expect(heal.config.pct).toBe(80);
+                expect(heal.config.basis).toBe('hp');
+            }
+        });
+
+        it('does NOT emit the on-buff-purged 5% repair (trigger not live this phase)', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const fivePct = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
+            );
+            expect(fivePct).toBeUndefined();
+        });
+    });
 });
