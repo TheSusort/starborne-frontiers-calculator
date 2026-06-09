@@ -194,20 +194,22 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([]);
 
 ## Task 8: `cheat-death-activated` follow-ons (Yazid repair + Barrier)
 
-**Goal:** a `on-cheat-death-activated` listener + parser for "once per battle, when Cheat Death activates, repairs X% … and gains Barrier" (Yazid) and Tycho's Barrier. Rides the existing `heal`/`buff` reactive executors; the repair is once-per-combat.
+**Goal:** a `on-cheat-death-activated` listener + parser for **Yazid only**: "Once per battle, when Cheat Death activates, this Unit repairs itself for 60% of its Max HP and gains Barrier for 1 turn." Rides the existing `heal`/`buff` reactive executors; the repair is once-per-combat.
+
+**⚠️ SCOPE CORRECTION:** Tycho's Barrier is **NOT** on Cheat-Death activation — Tycho's text is "Once per battle, when **HP drops below 40%** it gains Barrier" (an HP-threshold reactive, same class as Shelter/Los/Kafa/Redeemer). That belongs to **4c** (below-X%-HP reactives), NOT this task. Yazid is the only ship with a genuine "when Cheat Death activates" clause — so this task parses Yazid's follow-on only (+ any future ship with that exact phrasing).
 
 **Files:**
 - Modify: `src/utils/combat/triggers.ts` (listener + a once-per-combat guard)
 - Modify: `src/utils/skillTextParser.ts` + `buildShipAbilities.ts` (parse the activated clause)
 - Test: `src/utils/combat/__tests__/triggers.test.ts` + parser test + `healing.test.ts`
 
-**Drain point (spec):** the follow-ons must drain BEFORE the engine continues resolving the interrupted attack — same drain point the death path uses. Implement the intercept (Task 7) so `cheat-death-activated` is emitted, then the intent drain runs, before the intake returns.
+**Drain point (verified):** Task 7's intercept emits `cheat-death-activated` from inside `applyIncomingToTarget`, which runs during the ENEMY's attack turn. The enqueued follow-on intent drains at the existing post-turn-body `drainIntents()` (engine.ts:2220) for that enemy turn — same round, after the tank has survived at 1 HP. **No new drain point is needed.** Just verify via test that the tank's HP rises above 1 in the SAME round the intercept fired (the heal applied) and the Barrier buff name is present. If you find the heal drains a round late or not at all, report it (don't add a bespoke drain without checking the 2220 path first).
 
 - [ ] **Step 1: Write failing tests.**
-  - Parser: Yazid 2nd-passive activated clause → a `heal` ability (self, % Max HP) + a `buff` ability (`buffName: 'Barrier'`, no payload) both on `on-cheat-death-activated`; Tycho → Barrier buff on the same trigger.
+  - Parser: Yazid's activated clause → a `heal` ability (self, 60% Max HP) + a `buff` ability (`buffName: 'Barrier'`, no payload) both on `on-cheat-death-activated`. (No Tycho assertion — Tycho's Barrier is a 4c below-40%-HP reactive, out of scope.)
   - Listener: a `cheat-death-activated{actorId: 'A'}` enqueues the owner-`'A'` activated abilities once; another owner's activation does not fire `'A'`'s.
   - Once-per-combat: two activations fire the repair only ONCE.
-  - Engine: after Task-7 activation, the tank's HP rises by the repair % (above 1 HP) and a `Barrier` buff name is present (effect unmodeled).
+  - Engine: after Task-7 activation, the tank's HP rises by the 60% repair (above 1 HP) and a `Barrier` buff name is present (effect unmodeled).
 - [ ] **Step 2: Run red.** FAIL.
 - [ ] **Step 3: Implement.** Parser: recognize the "when Cheat Death activates" clause → emit `heal` + `buff` abilities with `trigger: 'on-cheat-death-activated'`; carry "once per battle" as an ability flag the executor honours. Listener: `bus.on('cheat-death-activated', (e) => { if (e.actorId === ownerId) enqueue(intent) })`. Once-per-combat: a per-(owner,abilityId) `Set` that is **combat-scoped, NOT round-scoped**. ⚠️ Do not place it like `extraActionFired` (engine.ts:1547), which is declared INSIDE the round loop and resets each round. The combat-lifetime set must be owned by the engine outside the round loop and threaded through `IntentExecContext` (the ctx is rebuilt per drain, so the set must live above it). `heal`/`buff` need no new executor branch.
 - [ ] **Step 4: Run green.** PASS.
