@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Cleaned up the Damage Deconstruction calculator with a side-by-side attacker/defender layout and clearer result cards.',
     "Healing Calculator: the per-round healer output now lives in the Healing Over Time chart's hover card (matching the DPS calculator) — hover any round to see every config's direct heal, heal-over-time, shield granted, effective vs overheal, cleanses, and the incoming damage / target HP% it faced, with charged and crit badges. The Enemy Effects breakdown is a hover-gated panel beside that chart, grouped per config, showing the hovered round's per-enemy self-buffs and the debuffs or DoTs landed on the target.",
     'Healing Calculator: the Enemy Effects panel now also shows the damage-over-time effects (Inferno and Corrosion) each enemy has active on the target — so DoT-focused attackers like Torcher or Belladonna no longer appear with an empty panel. Each DoT is attributed to the enemy that applied it, with its tier name and current stack count.',
+    "Healing Calculator: the hover-gated round panel now also shows each healer's own active buffs (including ability-granted buffs like a Defense Up) for the hovered round, listed above that config's enemy effects — matching how the DPS calculator surfaces each attacker's self-buffs.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

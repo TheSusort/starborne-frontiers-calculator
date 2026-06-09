@@ -12,7 +12,7 @@ import {
     HealingSimulationResult,
     HealingRoundData,
 } from '../../utils/calculators/healingEngineAdapter';
-import { EnemyEffectsPanel } from './EnemyEffectsPanel';
+import { RoundStatusPanel } from './RoundStatusPanel';
 
 interface HealerSimResult {
     id: string;
@@ -165,8 +165,9 @@ const RoundTooltip: React.FC<RoundTooltipProps> = ({ active, label, healers }) =
 
 /** Cumulative EFFECTIVE healing comparison across configs (one line per healer). Mirrors the DPS
  *  calculator's DPSRoundChart: a hover-driven rich tooltip surfaces every config's per-round
- *  numbers, and a right-hand hover-gated panel (EnemyEffectsPanel, mirroring DPSBuffPanel) shows
- *  the hovered round's per-config enemy effects. The hover state is internal and shared. */
+ *  numbers, and a right-hand hover-gated panel (RoundStatusPanel, mirroring DPSBuffPanel) shows
+ *  the hovered round's per-config status — each healer's own active buffs plus the enemy effects.
+ *  The hover state is internal and shared. */
 export const HealingCumulativeChart: React.FC<HealingCumulativeChartProps> = ({
     healers,
     rounds,
@@ -259,7 +260,7 @@ export const HealingCumulativeChart: React.FC<HealingCumulativeChartProps> = ({
                     }))}
                 />
             </div>
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={healers.map((h, i) => ({
                     name: h.name,
                     color: CHART_LINE_COLORS[i % CHART_LINE_COLORS.length],

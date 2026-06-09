@@ -2410,10 +2410,11 @@ const DocumentationPage: React.FC = () => {
                                         abilities) or quick manual attack/defense lines. Each enemy
                                         attacker has an affinity selector matched against the
                                         target&apos;s affinity to scale their incoming damage. A
-                                        hover-gated Enemy Effects panel beside the Healing Over Time
-                                        chart shows, for the hovered round, which self-buffs are
-                                        active on each enemy and which debuffs or DoTs they have
-                                        landed on the target — grouped per healer config.
+                                        hover-gated round status panel beside the Healing Over Time
+                                        chart shows, for the hovered round and grouped per healer
+                                        config, the healer&apos;s own active buffs as well as which
+                                        self-buffs are active on each enemy and which debuffs or
+                                        DoTs they have landed on the target.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

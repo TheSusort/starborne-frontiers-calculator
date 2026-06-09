@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { EnemyEffectsPanel } from '../EnemyEffectsPanel';
+import { RoundStatusPanel } from '../RoundStatusPanel';
 import { HealingRoundData } from '../../../utils/calculators/healingEngineAdapter';
 
 const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
@@ -49,10 +49,10 @@ const twoEnemyRound = (): HealingRoundData =>
 const NAMES: Record<string, string> = { e1: 'Makoli', e2: 'Enemy 2' };
 const enemyName = (id: string) => NAMES[id] ?? id;
 
-describe('EnemyEffectsPanel', () => {
+describe('RoundStatusPanel', () => {
     it('shows the empty "hover a round" state when nothing is hovered', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[{ name: 'Healer 1', roundData: null }]}
                 totalRounds={20}
                 hoveredRound={null}
@@ -60,12 +60,12 @@ describe('EnemyEffectsPanel', () => {
             />
         );
         expect(screen.getByText('Hover a round')).toBeInTheDocument();
-        expect(screen.getByText(/Hover a round to see enemy effects/i)).toBeInTheDocument();
+        expect(screen.getByText(/Hover a round to see buffs and effects/i)).toBeInTheDocument();
     });
 
     it('shows the hovered round number in the header ("Round X of Y")', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
@@ -77,7 +77,7 @@ describe('EnemyEffectsPanel', () => {
 
     it('groups the hovered round effects by the source enemy, labelled with its resolved name', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
@@ -96,7 +96,7 @@ describe('EnemyEffectsPanel', () => {
 
     it('renders each enemy group with its own Self-Buffs and Debuffs sub-sections', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
@@ -109,7 +109,7 @@ describe('EnemyEffectsPanel', () => {
 
     it('renders a section per healer config, each with the config name and its own enemy effects', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[
                     { name: 'Healer A', color: '#111', roundData: twoEnemyRound() },
                     {
@@ -142,21 +142,111 @@ describe('EnemyEffectsPanel', () => {
         expect(screen.getByText('Speed Up')).toBeInTheDocument();
     });
 
-    it('shows a "no enemy effects" note for a config with no enemy effects this round', () => {
+    it('shows a "no buffs or effects" note for a config with neither healer buffs nor enemy effects', () => {
         render(
-            <EnemyEffectsPanel
-                configs={[{ name: 'Healer 1', roundData: row({ round: 5, enemyEffects: [] }) }]}
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({ round: 5, activeSelfBuffs: [], enemyEffects: [] }),
+                    },
+                ]}
                 totalRounds={20}
                 hoveredRound={5}
                 enemyName={enemyName}
             />
         );
-        expect(screen.getByText(/no enemy effects this round/i)).toBeInTheDocument();
+        expect(screen.getByText(/no buffs or effects this round/i)).toBeInTheDocument();
+    });
+
+    it("renders the healer's own active buffs under a Buffs sub-section, above the enemy effects", () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 3,
+                            activeSelfBuffs: [
+                                { buffName: 'Defense Up II', turnsRemaining: 2 },
+                                { buffName: 'Repair Over Time', turnsRemaining: 3, stacks: 1 },
+                            ],
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [{ buffName: 'Attack Up', turnsRemaining: 2 }],
+                                    debuffs: [],
+                                    dots: [],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={enemyName}
+            />
+        );
+        // Healer's own buffs render under a "Buffs" sub-section.
+        expect(screen.getByText('Buffs')).toBeInTheDocument();
+        expect(screen.getByText('Defense Up II')).toBeInTheDocument();
+        expect(screen.getByText('Repair Over Time')).toBeInTheDocument();
+        // The enemy effects still render alongside (e1 resolves to "Makoli").
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        expect(screen.getByText('Attack Up')).toBeInTheDocument();
+    });
+
+    it('does NOT mark a config as empty when it has healer buffs but no enemy effects', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            activeSelfBuffs: [{ buffName: 'Defense Up II', turnsRemaining: 2 }],
+                            enemyEffects: [],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        expect(screen.queryByText(/no buffs or effects this round/i)).not.toBeInTheDocument();
+        expect(screen.getByText('Buffs')).toBeInTheDocument();
+        expect(screen.getByText('Defense Up II')).toBeInTheDocument();
+    });
+
+    it('hides zero-stack healer buffs from the Buffs sub-section', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            activeSelfBuffs: [
+                                { buffName: 'Spent Stack', turnsRemaining: 2, stacks: 0 },
+                            ],
+                            enemyEffects: [],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        expect(screen.queryByText('Spent Stack')).not.toBeInTheDocument();
+        // Nothing else this round → falls back to the empty note.
+        expect(screen.getByText(/no buffs or effects this round/i)).toBeInTheDocument();
     });
 
     it("renders an enemy's active DoTs on the target with the DPS DoT label (×stacks)", () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[
                     {
                         name: 'Healer 1',
@@ -186,7 +276,7 @@ describe('EnemyEffectsPanel', () => {
 
     it('renders DoTs alongside self-buffs and debuffs in the same enemy group', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[
                     {
                         name: 'Healer 1',
@@ -217,7 +307,7 @@ describe('EnemyEffectsPanel', () => {
 
     it('falls back to the raw enemy id when no name is resolved', () => {
         render(
-            <EnemyEffectsPanel
+            <RoundStatusPanel
                 configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
                 totalRounds={20}
                 hoveredRound={3}
