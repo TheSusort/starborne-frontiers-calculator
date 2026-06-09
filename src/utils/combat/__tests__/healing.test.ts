@@ -2528,11 +2528,49 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         // Not destroyed (saved by Cheat Death).
         expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
         expect(result.healing!.destroyedRound).toBeUndefined();
-        // The repair drained SAME round: the tank was at 1 HP, the 60%-max repair (1200)
-        // consumed against the 1999 deficit → effectiveHeal ~1200 credited to the tank.
-        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1200, 6);
+        // The repair drained SAME round: the tank was at 1 HP, the 60%-max repair — scaled by
+        // Everliving Regeneration II's +20% Incoming Repair (60% × 2000 × 1.20 = 1440) —
+        // consumed against the 1999 deficit → effectiveHeal ~1440 credited to the tank.
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
         // A Barrier buff was granted to the tank (effect unmodeled — name only).
         expect(buffs.some((e) => e.actorId === 'attacker' && e.buffName === 'Barrier')).toBe(true);
+    });
+
+    // ── Reactive repair scales with the recipient's Incoming Repair (parity fix) ──
+    // Yazid's kit grants Everliving Regeneration II (+20% Incoming Repair) AT START OF
+    // COMBAT and Cheat Death. When Cheat Death fires, the 60%-of-max reactive repair must
+    // scale with that +20% — exactly like a CAST repair does — so the effective heal is
+    // 60% × 2000 × 1.20 = 1440, NOT the un-amplified 1200. (No crit on reactive heals.)
+    it('Yazid: cheat-death reactive repair scales with the recipient Incoming Repair (+20%)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const yazid: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+        } as Ship;
+        const yazidSkills = buildShipAbilities(yazid);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: yazidSkills,
+            })
+        );
+        expect(cheated).toHaveLength(1);
+        // 60% × 2000 × 1.20 (Everliving Regeneration II incoming repair) = 1440. The 1999 HP
+        // deficit (1 HP after the lethal hit) fully absorbs the 1440, so effectiveHeal = 1440.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(1440, 6);
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
     });
 
     // ── Consumed (flag): a SECOND lethal hit destroys the carrier normally ────

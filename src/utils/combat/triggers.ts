@@ -748,6 +748,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'heal' || cfg.type === 'shield') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        const healing = ctx.healing; // local binding preserves narrowing inside the closure below
         // Once-per-combat cap (Task 8): a flagged repair (Yazid's on-cheat-death-activated 60%
         // repair) fires AT MOST ONCE per combat. The Set is engine-owned (combat lifetime), so
         // a key present here means this owner+ability already fired this battle → silent skip.
@@ -758,12 +759,23 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         }
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
-        // turn, fall back to runtime base stats. The fold is DELIBERATELY simplified vs the
-        // cast path (which folds outgoingHeal + recipient incomingHeal): heal applies the
-        // owner's healModifier only; shield is basis×pct (shields aren't repairs). The
-        // owner's standing heal buffs are not re-derived at drain time.
-        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this simplified mirror.
+        // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
+        // path: owner healModifier × owner outgoingHeal × recipient incomingHeal — so a
+        // reactive repair (e.g. Yazid's Cheat-Death 60%) scales with the recipient's Incoming
+        // Repair (Everliving Regeneration) just like a cast repair. The ONLY deliberate
+        // simplification vs the cast path is the no-crit approximation above. Shield stays
+        // basis×pct (shields aren't repairs — no heal-modifier channels). The owner's standing
+        // heal buffs are not re-derived at drain time (the last-turn ctx values are used).
+        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this mirror.
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+        // Owner outgoing-repair %; and recipient incoming-repair % (self → owner's own ctx,
+        // any other recipient → its last-turn ctx via the runtime accessor). Mirrors the cast
+        // path's incomingPctFor (playerTurn.ts).
+        const ownerOutgoing = ownerCtx?.outgoingHealPct ?? 0;
+        const incomingPctFor = (rid: string): number =>
+            rid === intent.ownerId
+                ? (ownerCtx?.incomingHealPct ?? 0)
+                : healing.recipientIncomingHealPct(rid);
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
         // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
@@ -785,7 +797,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
             const raw =
                 cfg.type === 'heal'
-                    ? basisValue * (cfg.pct / 100) * (1 + owner.healModifier / 100)
+                    ? basisValue *
+                      (cfg.pct / 100) *
+                      (1 + owner.healModifier / 100) *
+                      (1 + ownerOutgoing / 100) *
+                      (1 + incomingPctFor(rid) / 100)
                     : basisValue * (cfg.pct / 100);
             if (cfg.type === 'heal') {
                 ctx.healing.credit(intent.ownerId, 'directHeal', raw);
