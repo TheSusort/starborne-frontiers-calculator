@@ -1322,4 +1322,136 @@ describe('healingGoldenParity', () => {
         expect(e2?.selfBuffs.map((b) => b.buffName)).toEqual(['Crit Up']);
         expect(e2?.debuffs.map((b) => b.buffName)).toEqual(['Vulnerability']);
     });
+
+    // =========================================================================
+    // PHASE 4b (death & revive increment) — NEW BEHAVIOUR GOLDEN (Task 12).
+    // The Cheat Death intercept (Task 7) saves a heal target from an otherwise-
+    // lethal hit ONCE per combat: the killing blow floors HP at 1 instead of
+    // destroying the ship, so the run continues and NO destroyedRound is recorded.
+    // Detection routes through selfBuffNamesForOwners, which surfaces the
+    // ABILITY-SOURCED recurring Cheat Death buff (the real ship path), not just a
+    // top-level input selfBuff — so this scenario grants Cheat Death via the tank's
+    // own parsed kit (a recurring self-buff ability), mirroring Task 7's parser shape.
+    // =========================================================================
+
+    // ── Scenario 20 (Phase 4b): Cheat Death tank survives an otherwise-lethal spike ──
+    // HAND-VERIFIED. The heal target (tank, hp 10000, defence 0, speed 100) carries an
+    // ABILITY-SOURCED recurring Cheat Death (a `buff` ability { buffName:'Cheat Death',
+    // duration:'recurring', trigger:'on-cast', target:'self' } — Task 6's parser shape)
+    // alongside a self-heal (30% of its own max HP = 3000/round). A ship-backed charged-nuke
+    // enemy (attack 3000, chargeCount 5, startCharged TRUE → charged fires round 1 only, then
+    // needs 5 charges to re-arm; never re-arms within 6 rounds) bombards it: the round-1
+    // charged hit (mult 400 → 12000) is otherwise-lethal vs the 10000 pool; every later round
+    // is a survivable active hit (mult 100 → 3000). The tank (speed 100) heals BEFORE the enemy
+    // (speed 50) each round.
+    //   R1 enter 100% (10000): heal 3000 → full HP (deficit 0 → effective 0, overheal 3000),
+    //       HP 10000. Enemy CHARGED 12000 → would drop HP to −2000 → CHEAT DEATH intercepts →
+    //       HP floored at 1 (NOT destroyed). incomingDamage 12000. (cheat-death-activated R1.)
+    //   R2 enter ~0% (HP 1): heal 3000 → deficit 9999 → effective 3000, HP 3001. Enemy ACTIVE
+    //       3000 → HP 1 (3001 − 3000; survivable, NOT lethal). incomingDamage 3000.
+    //   R3-R6: identical to R2 — HP cycles 1 → 3001 → 1 every round (enter ~0%, heal 3000 →
+    //       effective 3000, active hit 3000 → HP 1). The tank SURVIVES all 6 rounds.
+    //   ⇒ Cheat Death fires ONCE (round 1); summary records NO destroyedRound (survival).
+    //     incomingDamage 12000 (R1) then 3000 (R2-R6). directHeal 3000 every round (effective 0
+    //     / overheal 3000 on R1; effective 3000 / overheal 0 from R2 — the floored HP opens a
+    //     full deficit). targetHpPct entering: 100 (R1) then 0 (R2-R6, HP 1 rounds to 0%).
+    const scenario20Input = () => {
+        const cheatDeathTankKit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'heal',
+                            target: 'self',
+                            config: { type: 'heal', pct: 30, basis: 'hp' },
+                        }),
+                        // Ability-sourced recurring Cheat Death (Task 6 parser shape) — the
+                        // REAL ship path surfaced via selfBuffNamesForOwners, NOT a top-level
+                        // input selfBuff.
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Cheat Death',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 'recurring',
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const enemySkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 400, hits: 1 },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 10000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: cheatDeathTankKit,
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 3000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 5,
+                    startCharged: true, // charged fires round 1 only; never re-arms in 6 rounds
+                    shipSkills: enemySkills,
+                },
+            ],
+        });
+    };
+
+    snap(
+        'Cheat Death tank survives an otherwise-lethal spike (HP floors at 1, no death)',
+        scenario20Input
+    );
+
+    // Supplementary: the tank SURVIVES the whole run via Cheat Death — no destroyedRound, the
+    // run completes all 6 rounds, the lethal round-1 spike (12000) floors HP (entering R2 at 0%),
+    // and a single cheat-death-activated fires on round 1.
+    it('scenario 20: Cheat Death survival — no destroyedRound, run completes, intercept fires once on round 1', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: { round: number }[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e as { round: number }));
+        const result = simulateHealing({ ...scenario20Input(), bus });
+        // No death recorded; the run continues for all configured rounds.
+        expect(result.summary.destroyedRound).toBeUndefined();
+        expect(result.rounds).toHaveLength(6);
+        // The otherwise-lethal spike lands round 1 (12000), then survivable active hits (3000).
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([
+            12000, 3000, 3000, 3000, 3000, 3000,
+        ]);
+        // HP floors at 1 after the round-1 intercept → enters round 2 at 0%, holds at 0% (the
+        // self-heal lifts it to 3001 each round but the 3000 active hit drops it back to 1).
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 0, 0, 0, 0, 0]);
+        // The intercept fires exactly once, on the lethal round.
+        expect(cheated.map((c) => c.round)).toEqual([1]);
+    });
 });
