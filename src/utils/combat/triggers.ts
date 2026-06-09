@@ -130,6 +130,14 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
+ *  - on-attacked → attacked where targetId === ownerId (target-scoped; fires when THIS OWNER is
+ *    attacked). One enqueue per enemy attack turn.
+ *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
+ *    target-scoped guard). One enqueue per destruction event.
+ *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
+ *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
+ *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
+ *    (any enemy-side actor — dummy wall + walked enemy attackers).
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
