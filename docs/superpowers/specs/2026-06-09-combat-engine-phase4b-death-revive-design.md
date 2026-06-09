@@ -58,6 +58,12 @@ golden snapshots byte-identical** (any churn gets a documented KNOWN-DIFF review
 - **Barrier shield simulation, Everliving Regeneration HoT simulation** — named buff-grants
   fire; their numeric effects stay unmodeled (existing convention).
 - **Tithonus purge-count extra action** (§6 item 9c) → 4e (needs purge consumption).
+- **Hermes conditional Cheat Death gate** (impl note, 2026-06-09): Hermes's "if the target has
+  less than 40% HP, it grants Cheat Death" parses as an unconditional `all-allies` Cheat Death
+  grant — the "below X% HP" reactive gate is NOT attached (the HP-threshold classifier only
+  matches damage clauses; fabricating a grant-condition classifier is out of scope and risks
+  the audit/goldens). Consequence: a Hermes teammate over-grants Cheat Death (unconditionally)
+  in-sim. Deferred to **4c** alongside the other below-X%-HP reactive conditions (Makoli/Guardian).
 
 ## User decisions (2026-06-09, do not re-litigate)
 
