@@ -6,8 +6,9 @@ import {
     registerReactiveListeners,
     Intent,
     ReactiveAbility,
+    LIVE_TRIGGERS,
 } from '../triggers';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 
 let idCounter = 0;
@@ -1701,5 +1702,42 @@ describe('on-attacked engine integration (Task 8)', () => {
         // Rounds 2-4 the dead-target guard skips the attack entirely.
         const laterEvents = attackedEvents.filter((e) => (e as { round?: number }).round! > 1);
         expect(laterEvents.length).toBe(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4b — death/revive trigger promotion to LIVE_TRIGGERS.
+// All four death/revive triggers must be in LIVE_TRIGGERS so that
+// partitionReactiveAbilities routes abilities carrying them into the
+// reactive partition (not the on-cast path).
+// Type-level: AbilityTrigger must include the new values so they compile.
+// ----------------------------------------------------------------------
+describe('Phase 4b: death/revive triggers in LIVE_TRIGGERS', () => {
+    it('LIVE_TRIGGERS contains on-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-ally-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-ally-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-enemy-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-enemy-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-cheat-death-activated', () => {
+        expect(LIVE_TRIGGERS.has('on-cheat-death-activated')).toBe(true);
+    });
+
+    it('AbilityTrigger includes on-enemy-destroyed (type-level compile check)', () => {
+        // If AbilityTrigger does not include this value the assignment below causes a
+        // TypeScript compile error (ts(2322)), which Vitest surfaces as a type error.
+        const _trigger: AbilityTrigger = 'on-enemy-destroyed';
+        expect(_trigger).toBe('on-enemy-destroyed');
+    });
+
+    it('AbilityTrigger includes on-cheat-death-activated (type-level compile check)', () => {
+        const _trigger: AbilityTrigger = 'on-cheat-death-activated';
+        expect(_trigger).toBe('on-cheat-death-activated');
     });
 });

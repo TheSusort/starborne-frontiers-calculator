@@ -245,7 +245,7 @@ describe('AbilityCard', () => {
             expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'on-crit' }));
         });
 
-        it('shows a not-simulated note for a non-live, non-on-cast trigger (on-ally-destroyed)', () => {
+        it('shows no note for on-ally-destroyed (now a live trigger since Phase 4b)', () => {
             render(
                 <AbilityCard
                     ability={buffWithTrigger('on-ally-destroyed')}
@@ -254,8 +254,8 @@ describe('AbilityCard', () => {
                 />
             );
             expect(
-                screen.getByText(/not simulated — treated as assume-active/i)
-            ).toBeInTheDocument();
+                screen.queryByText(/not simulated — treated as assume-active/i)
+            ).not.toBeInTheDocument();
         });
 
         it('shows no note for on-attacked (now a live trigger since Task 4)', () => {
