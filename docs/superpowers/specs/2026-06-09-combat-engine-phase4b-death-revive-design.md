@@ -156,6 +156,19 @@ all **removable** buffs and debuffs (timed + recurring) while preserving unremov
 by the Cheat Death wipe now; designed to be reused by 4e cleanse/purge (which will remove
 *selected* removable statuses rather than all).
 
+**Removability rule (user, 2026-06-09):** effects are **removable by default**; the unremovable
+ones **state it in their in-game buff description** (example: **Acidic Decay**). So
+`UNREMOVABLE_STATUSES` is the curated set of description-marked-unremovable effects (Acidic Decay
++ the persistent-stacking debuffs, which already sit in the StatusEngine permanent/persistent-stack
+maps and are preserved by construction). The Cheat Death wipe must clear removable effects across
+**both** stores: (a) StatusEngine timed buffs/debuffs via `clearRemovable`, AND (b) the engine's
+**actor-state DoT containers** (`corrosionEntries`/`infernoEntries` — standard removable DoTs),
+which `clearRemovable` does NOT reach. Pending **bomb** stacks are left untouched in 4b (separate
+mechanic; Blast treated as persistent — documented boundary). Unremovable DoT *variants* (e.g. an
+Acidic-Decay-branded corrosion) are not separately tracked in the tier/stack DoT model; since
+Acidic Decay is a distinct named debuff (StatusEngine + `UNREMOVABLE_STATUSES`), clearing generic
+corrosion/inferno does not touch it.
+
 ### Component 4 — Cheat-Death-activated follow-ons
 
 **Event + trigger.** Add `cheat-death-activated{actorId, round}` to `CombatEvent`. Add
