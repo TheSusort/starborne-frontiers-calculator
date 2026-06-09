@@ -94,8 +94,8 @@ describe('reactive extra-action bridge', () => {
         // Round 2 (R+1): the buffered grant is flushed into the queue → exactly ONE
         // extra action. The enemy dies once → the grant fires at most once.
         expect(result.rounds[1].extraTurns).toBe(1);
-        // Round 3+: no new kill (enemy already dead) → the pending buffer is drained,
-        // and oncePerRound on a re-fired grant is bounded; no further extra turns.
+        // Round 3+: the buffer was already cleared at the R+1 flush, and the enemy is
+        // already dead → no new grant is buffered → no further extra turns.
         expect(result.rounds[2].extraTurns).toBeUndefined();
         expect(result.rounds[3].extraTurns).toBeUndefined();
     });
