@@ -2863,6 +2863,24 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
                 "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
         } as Ship;
         const salvationSkills = buildShipAbilities(salvation);
+        // Control: identical setup but no enemy attackers → Salvation survives, so the
+        // on-destroyed heal must NOT fire (proves the heal is gated on destruction, not
+        // an always-on parse). Salvation has no active heal, so directHeal must be 0.
+        const aliveControl = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000,
+                defence: 0,
+                healTargetId: 'attacker',
+                speed: 100,
+                bus: createEventBus(),
+                selfBuffs: [],
+                enemyAttackers: [],
+                teamActors: [idleAlly('t1', 50000)],
+                shipSkills: salvationSkills,
+            })
+        );
+        expect(focusHeal(aliveControl, 'directHeal')).toBe(0);
         const result = runCombat(
             BASE({
                 numRounds: 1,

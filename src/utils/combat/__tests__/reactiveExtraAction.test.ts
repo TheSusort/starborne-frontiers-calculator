@@ -148,10 +148,28 @@ describe('reactive extra-action bridge', () => {
             enemyHp: 10000,
             shipSkills: liberatorSkills,
         });
+        // Baseline: identical run but with ONLY the active damage ability (no reactive
+        // charge passive). Its round-1 charges reflect only the chargeCount 5 cadence.
+        const baseline = simulateDPS({
+            ...BASE,
+            rounds: 3,
+            chargeCount: 5,
+            enemyHp: 10000,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        ],
+                    },
+                ],
+            },
+        });
         // Round 1: enemy dies post-round; the post-emit drainIntents applies the all-allies
         // charge to the attacker. The round-end `charges` field reflects the bumped counter.
-        // Without the reactive charge the attacker would have only its per-round cadence charge.
-        expect(result.rounds[0].charges).toBeGreaterThanOrEqual(1);
+        // The reactive charge must add beyond the baseline per-round cadence.
+        expect(result.rounds[0].charges).toBeGreaterThan(baseline.rounds[0].charges);
     });
 
     // ── Path A: Harvester on-ally-destroyed → SAME-round extra action ────────

@@ -705,7 +705,9 @@ buff/charge-aura), source it from firing + passive.
   1. *Hermes Cheat-Death grant ignores its HP gate.* Hermes's "if the target is below 40% HP,
      grants Cheat Death" parses as an UNCONDITIONAL all-allies Cheat Death grant — the
      below-X%-HP gate is NOT attached (the HP-threshold classifier only matches damage clauses).
-     Deferred to **4c** with the other below-X%-HP reactives.
+     Deferred to **4c** with the other below-X%-HP reactives. (Hermes is intentionally omitted
+     from the user-facing changelog Cheat-Death ship list because its grant currently over-fires
+     — the below-40%-HP gate is deferred to 4c; do not advertise it as working.)
   2. *Tycho's Barrier is an HP-threshold reactive, not on Cheat-Death-activation.* Tycho grants
      Barrier "when its HP drops below 40%" — an `hp-threshold` reactive, not an
      `on-cheat-death-activated` follow-on. Not modeled in 4b; deferred to **4c**.
