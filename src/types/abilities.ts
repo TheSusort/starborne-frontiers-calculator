@@ -204,6 +204,11 @@ export type AbilityConfig =
            *  Shield"): proc only when the attack started with shield > 0 AND dealt HP
            *  damage (punched through the pool). Absent → unconditional (Malvex). */
           requiresHpDamage?: boolean;
+          /** "Once per battle" reactive repair (Yazid's on-cheat-death-activated 60%
+           *  repair): the executor fires its consumption AT MOST ONCE per combat, tracked
+           *  by a combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
+           *  Absent → unbounded (fires on every qualifying trigger). */
+          oncePerCombat?: boolean;
       }
     | { type: 'cleanse' | 'purge'; count: number }
     | {

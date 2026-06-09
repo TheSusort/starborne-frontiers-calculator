@@ -32,6 +32,7 @@ import {
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
+    detectCheatDeathActivatedTrigger,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
@@ -875,6 +876,10 @@ function abilitiesFromText(
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
         const reactiveTrigger =
             detectCritRepairTrigger(text, healPos) ??
+            // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
+            // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
+            // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
+            detectCheatDeathActivatedTrigger(text, healPos) ??
             (h.kind === 'shield'
                 ? (detectDebuffInflictedTrigger(text, healPos) ??
                   // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -887,6 +892,11 @@ function abilitiesFromText(
         const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
+        // "Once per battle" reactive repair (Yazid): the engine fires it at most once per combat.
+        // Scoped to a cheat-death-activated trigger so an unrelated "once per battle" elsewhere
+        // doesn't flag a generic heal.
+        const oncePerCombat =
+            reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
         const healTarget =
             h.kind === 'heal'
                 ? flipBareSupportTarget(
@@ -917,6 +927,7 @@ function abilitiesFromText(
                         ? { leechScope: h.leechScope ?? 'all' }
                         : {}),
                     ...(h.requiresHpDamage ? { requiresHpDamage: true } : {}),
+                    ...(oncePerCombat ? { oncePerCombat: true } : {}),
                 },
                 autoFilled: true,
             },

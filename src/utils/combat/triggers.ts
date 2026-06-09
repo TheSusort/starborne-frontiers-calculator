@@ -280,6 +280,15 @@ export function registerReactiveListeners(args: {
                         if (isEnemySide(e.actorId)) enqueue(intent);
                     });
                     break;
+                case 'on-cheat-death-activated':
+                    bus.on('cheat-death-activated', (e) => {
+                        // Self-scoped: fires when THIS OWNER's own Cheat Death intercept saves
+                        // it (Yazid's "when Cheat Death activates" follow-on). Pure — enqueue
+                        // only; the executor's once-per-combat cap (oncePerCombat config flag +
+                        // oncePerCombatFired Set) keeps the repair to once per battle.
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
                 default:
                     // Non-live triggers are never registered (filtered at partition time).
                     break;
@@ -332,6 +341,12 @@ export interface IntentExecContext {
      *  over the live target). When undefined, the heal/shield/cleanse executor branches
      *  are inert (not-simulated follow-up) — DPS goldens stay byte-identical. */
     healing?: HealingRuntimeCtx;
+    /** Combat-lifetime "once per battle" guard (Task 8). Owned by the engine OUTSIDE the
+     *  round loop (alongside cheatDeathConsumed) so it persists across rounds. A heal whose
+     *  config carries `oncePerCombat` records `${ownerId}:${abilityId}` here on its first
+     *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
+     *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
+    oncePerCombatFired?: Set<string>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -726,6 +741,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'heal' || cfg.type === 'shield') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        // Once-per-combat cap (Task 8): a flagged repair (Yazid's on-cheat-death-activated 60%
+        // repair) fires AT MOST ONCE per combat. The Set is engine-owned (combat lifetime), so
+        // a key present here means this owner+ability already fired this battle → silent skip.
+        if (cfg.oncePerCombat) {
+            const key = `${intent.ownerId}:${intent.ability.id}`;
+            if (ctx.oncePerCombatFired?.has(key)) return;
+            ctx.oncePerCombatFired?.add(key);
+        }
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The fold is DELIBERATELY simplified vs the

@@ -90,6 +90,66 @@ describe('Cheat Death grant parsing', () => {
         if (elr.config.type === 'buff') expect(elr.config.duration).toBe(6);
     });
 
+    // Yazid's REFIT-ACTIVE (R4 / 3rd passive) follow-on: "Once per battle, when Cheat Death
+    // activates, this Unit repairs itself for 60% of its Max HP and gains Barrier for 1 turn."
+    // → a heal (self, basis hp, pct 60, trigger on-cheat-death-activated, oncePerCombat) +
+    // a Barrier buff (no payload, trigger on-cheat-death-activated). The existing Cheat Death
+    // grant + Everliving Regeneration II grant in the same passive must NOT regress.
+    describe('Yazid 3rd passive: when-Cheat-Death-activates follow-on (Task 8)', () => {
+        const yazid = () =>
+            ship({
+                thirdPassiveSkillText:
+                    'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+            });
+
+        it('emits a self 60%-max-HP repair on on-cheat-death-activated (once per combat)', () => {
+            const passive = slot(buildShipAbilities(yazid()).slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal')!;
+            expect(heal).toBeDefined();
+            expect(heal.target).toBe('self');
+            expect(heal.trigger).toBe('on-cheat-death-activated');
+            if (heal.config.type === 'heal') {
+                expect(heal.config.pct).toBe(60);
+                expect(heal.config.basis).toBe('hp');
+                expect(heal.config.oncePerCombat).toBe(true);
+            }
+        });
+
+        it('emits a Barrier buff on on-cheat-death-activated (no payload)', () => {
+            const passive = slot(buildShipAbilities(yazid()).slots, 'passive')!;
+            const barrier = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
+            )!;
+            expect(barrier).toBeDefined();
+            expect(barrier.target).toBe('self');
+            expect(barrier.trigger).toBe('on-cheat-death-activated');
+            if (barrier.config.type === 'buff') {
+                expect(barrier.config.parsedEffects).toEqual({});
+            }
+        });
+
+        it('does NOT regress the existing Cheat Death + Everliving Regeneration II grants', () => {
+            const passive = slot(buildShipAbilities(yazid()).slots, 'passive')!;
+            // Cheat Death grant still recurring, self, on-cast (the start-of-combat grant).
+            const cd = cheatDeath(passive.abilities)!;
+            expect(cd).toBeDefined();
+            expect(cd.target).toBe('self');
+            expect(cd.trigger).toBe('on-cast');
+            if (cd.config.type === 'buff') {
+                expect(cd.config.parsedEffects).toEqual({});
+                expect(cd.config.duration).toBe('recurring');
+            }
+            // Everliving Regeneration II keeps its 9-turn window and on-cast trigger.
+            const elr = passive.abilities.find(
+                (a) =>
+                    a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration II'
+            )!;
+            expect(elr).toBeDefined();
+            expect(elr.trigger).toBe('on-cast');
+            if (elr.config.type === 'buff') expect(elr.config.duration).toBe(9);
+        });
+    });
+
     it('Hermes charged: "If the target has less than 40% HP, it grants Cheat Death" → no payload, recurring', () => {
         const s = ship({
             chargeSkillText:

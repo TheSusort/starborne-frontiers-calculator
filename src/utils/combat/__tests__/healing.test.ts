@@ -6,6 +6,8 @@ import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { Ship } from '../../../types/ship';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -2481,6 +2483,56 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(result.healing!.destroyedRound).toBeUndefined();
         expect(cheated).toHaveLength(1);
         expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+    });
+
+    // ── Yazid follow-on (Task 8): when Cheat Death activates → 60% repair + Barrier ──
+    // Yazid's REFIT-ACTIVE (R4) passive grants Cheat Death AND, "once per battle, when
+    // Cheat Death activates, repairs itself for 60% of its Max HP and gains Barrier for 1
+    // turn." Built via buildShipAbilities so the on-cheat-death-activated heal/buff abilities
+    // come straight from the parser. The repair must drain in the SAME round the intercept
+    // fired (the tank rises ~60% of max above the 1-HP floor) and a Barrier buff is granted.
+    it('Yazid: cheat-death-activated repairs 60% same round + grants Barrier (parser-built)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        const buffs: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        bus.on('buff-applied', (e) => buffs.push(e));
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const yazid: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+        } as Ship;
+        const yazidSkills = buildShipAbilities(yazid);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                // Cheat Death is granted by the parsed kit (recurring self-buff ability),
+                // NOT seeded as a top-level input selfBuff.
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: yazidSkills,
+            })
+        );
+        // Intercept fired once on round 1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+        // Not destroyed (saved by Cheat Death).
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        // The repair drained SAME round: the tank was at 1 HP, the 60%-max repair (1200)
+        // consumed against the 1999 deficit → effectiveHeal ~1200 credited to the tank.
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1200, 6);
+        // A Barrier buff was granted to the tank (effect unmodeled — name only).
+        expect(buffs.some((e) => e.actorId === 'attacker' && e.buffName === 'Barrier')).toBe(true);
     });
 
     // ── Consumed (flag): a SECOND lethal hit destroys the carrier normally ────

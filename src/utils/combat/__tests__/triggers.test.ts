@@ -4,12 +4,17 @@ import { createEventBus, CombatEvent } from '../events';
 import {
     MAX_INTENT_GENERATIONS,
     registerReactiveListeners,
+    executeIntent,
     Intent,
+    IntentExecContext,
     ReactiveAbility,
     LIVE_TRIGGERS,
 } from '../triggers';
 import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { createStatusEngine } from '../statusEngine';
+import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
+import type { CombatActor } from '../state';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1663,6 +1668,155 @@ describe('death-trigger live listeners (Task 5)', () => {
         expect(intents).toHaveLength(0);
         bus.emit({ type: 'ship-destroyed', actorId: 'B', round: 1 });
         expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-cheat-death-activated live listener (Task 8): the engine emits
+// `cheat-death-activated{actorId, round}` when a Cheat Death intercept saves
+// an actor; the owner-scoped listener enqueues that owner's activated abilities.
+// ----------------------------------------------------------------------
+describe('on-cheat-death-activated live listener (Task 8)', () => {
+    // A minimal reactive heal ability carrying the on-cheat-death-activated trigger.
+    const cheatDeathHeal = (): Ability => ({
+        id: 'cda-heal',
+        type: 'heal',
+        target: 'self',
+        trigger: 'on-cheat-death-activated',
+        conditions: [],
+        config: { type: 'heal', pct: 60, basis: 'hp', oncePerCombat: true },
+    });
+
+    function emitActivated(ownerId: string, activatedActorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: cheatDeathHeal(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId, reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'cheat-death-activated', actorId: activatedActorId, round: 1 });
+        return intents;
+    }
+
+    it('enqueues the owner own activated ability when its own Cheat Death activates', () => {
+        const intents = emitActivated('A', 'A');
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('A');
+        expect(intents[0].ability.trigger).toBe('on-cheat-death-activated');
+    });
+
+    it('does NOT fire when a DIFFERENT owner Cheat Death activates', () => {
+        expect(emitActivated('A', 'B')).toHaveLength(0);
+    });
+
+    it('listener is pure: no enqueue on registration, only on a matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: cheatDeathHeal(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'cheat-death-activated', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'cheat-death-activated', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Once-per-combat repair cap (Task 8): a heal ability flagged oncePerCombat
+// fires its consumption at most ONCE across the whole combat — even if its
+// intent is executed twice. The cap is a combat-lifetime Set keyed
+// `${ownerId}:${abilityId}`, threaded into the executor via IntentExecContext.
+// ----------------------------------------------------------------------
+describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
+    // A self repair (60% of caster max HP) flagged once-per-combat.
+    const repairIntent = (): Intent => ({
+        ownerId: 'A',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'cda-repair',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cheat-death-activated',
+            conditions: [],
+            config: { type: 'heal', pct: 60, basis: 'hp', oncePerCombat: true },
+        },
+    });
+
+    // Minimal runtime for the heal branch (it reads healModifier + base stats only).
+    const runtime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'A' } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    // Build a healing-on ctx that records every applyHealToTarget call (the consumption).
+    const buildCtx = (oncePerCombatFired: Set<string>) => {
+        const applied: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'A',
+            credit: () => {},
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: ['A'],
+        };
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy' } as CombatActor,
+            enemyId: 'enemy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['A', runtime()]]),
+            grantAllyCharges: () => {},
+            playerIds: ['A'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            healing,
+            oncePerCombatFired,
+        };
+        return { ctx, applied };
+    };
+
+    it('applies the repair only ONCE when the same intent executes twice', () => {
+        const fired = new Set<string>();
+        const { ctx, applied } = buildCtx(fired);
+        executeIntent(repairIntent(), ctx);
+        executeIntent(repairIntent(), ctx);
+        // 60% of 1000 = 600, applied exactly once.
+        expect(applied).toEqual([600]);
+        expect(fired.has('A:cda-repair')).toBe(true);
+    });
+
+    it('applies a NON-flagged repair every time (no cap)', () => {
+        const fired = new Set<string>();
+        const { ctx, applied } = buildCtx(fired);
+        const uncapped = repairIntent();
+        if (uncapped.ability.config.type === 'heal') uncapped.ability.config.oncePerCombat = false;
+        executeIntent(uncapped, ctx);
+        executeIntent(uncapped, ctx);
+        expect(applied).toEqual([600, 600]);
     });
 });
 

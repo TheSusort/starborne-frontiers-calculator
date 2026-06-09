@@ -1239,6 +1239,11 @@ export function runCombat(input: CombatEngineInput): {
     // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
     // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
     const cheatDeathConsumed = new Set<string>();
+    // Once-per-combat reactive repairs (Phase 4b, Task 8). Keyed `${ownerId}:${abilityId}`.
+    // Declared OUTSIDE the round loop (combat lifetime, like cheatDeathConsumed) so a flagged
+    // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
+    // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
+    const oncePerCombatFired = new Set<string>();
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -1691,6 +1696,9 @@ export function runCombat(input: CombatEngineInput): {
                         // mutates the same live target. Undefined in DPS mode → the executor's
                         // heal/shield/cleanse branches stay inert (goldens byte-identical).
                         healing: healingCtx,
+                        // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
+                        // repair (Yazid) fires at most once across the whole combat.
+                        oncePerCombatFired,
                     });
                 }
             }

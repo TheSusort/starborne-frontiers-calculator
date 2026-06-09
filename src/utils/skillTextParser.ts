@@ -720,6 +720,10 @@ export function detectReactiveTrigger(
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
+    // "when Cheat Death activates" → on-cheat-death-activated (Yazid's Barrier grant in the
+    // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
+    // only matches the literal activation phrasing.
+    if (CHEAT_DEATH_ACTIVATES_RE.test(clause)) return 'on-cheat-death-activated';
     return undefined;
 }
 
@@ -881,6 +885,26 @@ export function detectStasisAppliedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, APPLYING_STASIS_RE, anchorPos, 'on-stasis-applied');
+}
+
+// "when Cheat Death activates" — the reactive trigger for Yazid's follow-on ("Once per battle,
+// when Cheat Death activates, this Unit repairs itself for 60% of its Max HP and gains Barrier
+// for 1 turn"). Position-scoped (mirrors detectStasisAppliedTrigger); no lookbehind. ONLY the
+// literal "when Cheat Death activates" — Tycho's "when HP drops below 40%" Barrier is a
+// below-X%-HP reactive (deferred), NOT this trigger.
+const CHEAT_DEATH_ACTIVATES_RE = /\bwhen\b[^.;]*\bcheat death\b[^.;]*\bactivates\b/i;
+
+/**
+ * Returns 'on-cheat-death-activated' when `anchorPos` (the ability's raw-text anchor position)
+ * falls inside the sentence carrying the "when Cheat Death activates" phrase; otherwise
+ * undefined. Position-scoped on the RAW text (mirrors detectStasisAppliedTrigger). Reference
+ * data: docs/ship-skills.csv (Yazid 3rd passive).
+ */
+export function detectCheatDeathActivatedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, CHEAT_DEATH_ACTIVATES_RE, anchorPos, 'on-cheat-death-activated');
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
@@ -1203,8 +1227,13 @@ function sentenceBoundsAround(
 //       modeled via the engine's per-attack proc and MUST still parse, even though their sentence
 //       says "when … damaged". The caller gates this against `leechBasis` (see usage below).
 // NO lookbehind (iOS Safari 15) — all alternations use plain `\b`/word-boundary anchors.
+// `\bcheat death\b(?!\s+activates)` (Task 8): a heal sentence merely MENTIONING Cheat Death
+// stays disqualified (unmodeled revive/grant content), but Yazid's MODELED follow-on — "when
+// Cheat Death activates, this Unit repairs itself for 60% …" — is exempt so its 60% repair
+// parses (and rides the on-cheat-death-activated reactive trigger). Negative LOOKAHEAD only
+// (lookbehind is banned for iOS Safari 15).
 const HEAL_DISQUALIFY_RE =
-    /\brevives?\b|\bcheat death\b|when an enemy uses|when\b[^.;]*\bis\s+destroyed\b|when\s+destroyed\b|upon\s+being\s+destroyed\b|\bon\s+death\b|when\s+it\s+destroys\b|when\s+a\s+buff\s+is\s+purged\b|when\b[^.;]*\bis\s+purged\b|when\b[^.;]*\bis\s+cleansed\b/i;
+    /\brevives?\b|\bcheat death\b(?!\s+activates)|when an enemy uses|when\b[^.;]*\bis\s+destroyed\b|when\s+destroyed\b|upon\s+being\s+destroyed\b|\bon\s+death\b|when\s+it\s+destroys\b|when\s+a\s+buff\s+is\s+purged\b|when\b[^.;]*\bis\s+purged\b|when\b[^.;]*\bis\s+cleansed\b/i;
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
 // directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is
