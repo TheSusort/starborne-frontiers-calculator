@@ -909,10 +909,18 @@ export function detectCheatDeathActivatedTrigger(
 
 // "when this Unit is destroyed it repairs X% … to all allies" — Salvation's on-destroyed ally
 // heal (Phase 4b, Task 9). Position-scoped (mirrors detectCheatDeathActivatedTrigger); no
-// lookbehind. Requires the repair-to-all-allies shape so it ONLY stamps the modeled ally-heal,
-// never the on-kill ("when it destroys an enemy") or on-buff-purged reactives in the same kit.
-const DESTROYED_ALLY_REPAIR_RE =
-    /\bwhen\b[^.;]*\bis\s+destroyed\b[^.;]*\brepairs?\b[^.;]*\ball\s+allies\b/i;
+// lookbehind. Requires (a) a SELF reference ("this unit" / "it") BEFORE "is destroyed" so it
+// routes ONLY a SELF-destruction heal to on-destroyed (a hypothetical "when an ALLY is destroyed,
+// repairs all allies" must NOT mis-route to on-destroyed → it stays an on-ally-destroyed/
+// disqualified reactive), and (b) the repair-to-all-allies shape so it never stamps the on-kill
+// ("when it destroys an enemy") or on-buff-purged reactives in the same kit.
+// Shared self-reference: "this unit" / bare "it" appearing BEFORE "is destroyed" (no lookbehind).
+const SELF_REF_SRC = '\\b(?:this\\s+unit|it)\\b';
+// SELF "is destroyed" tail (assumes a preceding `when`): self-ref then "is destroyed".
+const SELF_DESTROYED_TAIL_SRC = `[^.;]*${SELF_REF_SRC}[^.;]*\\bis\\s+destroyed\\b`;
+// The full SELF-destruction repair-to-all-allies shape (sans the leading `when`).
+const SELF_DESTROYED_ALL_ALLIES_TAIL_SRC = `${SELF_DESTROYED_TAIL_SRC}[^.;]*\\brepairs?\\b[^.;]*\\ball\\s+allies\\b`;
+const DESTROYED_ALLY_REPAIR_RE = new RegExp(`\\bwhen\\b${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC}`, 'i');
 
 /**
  * Returns 'on-destroyed' when `anchorPos` (the ability's raw-text anchor position) falls inside
@@ -1307,14 +1315,21 @@ function sentenceBoundsAround(
 // Cheat Death activates, this Unit repairs itself for 60% …" — is exempt so its 60% repair
 // parses (and rides the on-cheat-death-activated reactive trigger). Negative LOOKAHEAD only
 // (lookbehind is banned for iOS Safari 15).
-// `when\b[^.;]*\bis\s+destroyed\b(?!…repairs…all allies)` (Task 9): an "is destroyed" sentence
-// stays disqualified UNLESS it is Salvation's MODELED on-destroyed ally-heal — "when this Unit
-// is destroyed it repairs X% … to all allies" — which now parses and rides the on-destroyed
-// reactive trigger (a live trigger via Phase 4b). The negative lookahead exempts ONLY the
-// repair-to-all-allies shape, so the on-kill ("when it destroys an enemy"), on-buff-purged, and
-// reactive-cleansed heals all stay disqualified. Negative LOOKAHEAD only (no lookbehind).
-const HEAL_DISQUALIFY_RE =
-    /\brevives?\b|\bcheat death\b(?!\s+activates)|when an enemy uses|when\b[^.;]*\bis\s+destroyed\b(?![^.;]*\brepairs?\b[^.;]*\ball\s+allies\b)|when\s+destroyed\b|upon\s+being\s+destroyed\b|\bon\s+death\b|when\s+it\s+destroys\b|when\s+a\s+buff\s+is\s+purged\b|when\b[^.;]*\bis\s+purged\b|when\b[^.;]*\bis\s+cleansed\b/i;
+// `when\b(?!…SELF is destroyed…repairs…all allies)[^.;]*\bis\s+destroyed\b` (Task 9): an "is
+// destroyed" sentence stays disqualified UNLESS it is Salvation's MODELED on-destroyed ally-heal —
+// "when this Unit is destroyed it repairs X% … to all allies" — which now parses and rides the
+// on-destroyed reactive trigger (a live trigger via Phase 4b). The negative lookahead exempts ONLY
+// the SELF-destruction repair-to-all-allies shape (kept ALIGNED with DESTROYED_ALLY_REPAIR_RE via
+// SELF_DESTROYED_RE_SRC), so a hypothetical ally-death heal ("when an ALLY is destroyed, repairs
+// all allies") stays disqualified here (it never routes to on-destroyed), alongside the on-kill
+// ("when it destroys an enemy"), on-buff-purged, and reactive-cleansed heals. Negative LOOKAHEAD
+// only (no lookbehind — iOS Safari 15).
+const HEAL_DISQUALIFY_RE = new RegExp(
+    '\\brevives?\\b|\\bcheat death\\b(?!\\s+activates)|when an enemy uses|' +
+        `when\\b(?!${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC})[^.;]*\\bis\\s+destroyed\\b|` +
+        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b|when\\b[^.;]*\\bis\\s+purged\\b|when\\b[^.;]*\\bis\\s+cleansed\\b',
+    'i'
+);
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
 // directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is

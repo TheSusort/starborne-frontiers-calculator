@@ -1102,6 +1102,59 @@ describe('healing mode — enemy attackers and target intake', () => {
         expect(rounds[3].targetHpPctStart).toBeCloseTo(0, 6);
     });
 
+    // ── Test 5b: a turn-start DoT tick that KILLS the tank skips its turn ──────
+    // Dead-is-dead: if the heal target's OWN turn-start Corrosion/Inferno tick is lethal,
+    // the tank dies BEFORE its turn body runs — so its self-heal must NOT be credited that
+    // round (the turn was skipped post-tick), and destroyedRound is that round.
+    //
+    // Setup (per round, fastest first): tank (focus, speed 100) ticks its DoTs at turn-start,
+    // then would heal. dotEnemy (speed 50) seeds a dot-only inferno (tier 100, 1 stack, dur 5;
+    // no direct → its synthesized basic is suppressed). No Cheat Death. Tank hp 5000.
+    //   R1: tank tick → 0 (no DoTs yet); tank self-heals (alive). dotEnemy seeds inferno.
+    //   R2: tank turn-start tick = 5000 (≥ 5000 hp) → LETHAL → tank dies → turn body MUST be
+    //       skipped → NO R2 self-heal credited. destroyedRound = 2.
+    it('lethal turn-start DoT tick skips the tank turn: no self-heal credited the round it dies', () => {
+        idCounter = 0;
+        const infernoDot = () =>
+            ab({
+                type: 'dot',
+                target: 'enemy',
+                config: { type: 'dot', dotType: 'inferno', tier: 100, stacks: 1, duration: 5 },
+            });
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 5000, // R2 turn-start inferno tick (5000) is exactly lethal
+                defence: 0,
+                healTargetId: 'attacker',
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [infernoDot()] }],
+                        },
+                    }),
+                ],
+                // The tank self-heals each round on its active turn (raw directHeal always
+                // credited when the turn runs). It must NOT be credited the round it dies.
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 50, basis: 'target-hp' },
+                    }),
+                ]),
+            })
+        );
+        // Tank dies on round 2 from the turn-start DoT tick.
+        expect(result.healing!.destroyedRound).toBe(2);
+        const rounds = result.healing!.rounds;
+        // R1: alive → self-heal credited (raw directHeal > 0).
+        expect(rounds[0].perActor.get('attacker')!.directHeal).toBeGreaterThan(0);
+        // R2: the DoT tick killed it BEFORE its turn body → turn skipped → NO heal credited.
+        expect(rounds[1].perActor.get('attacker')?.directHeal ?? 0).toBe(0);
+    });
+
     // ── Test 6: enemyAttackers without healTargetId throws ────────────────────
     it('throws when enemyAttackers provided without healTargetId', () => {
         idCounter = 0;

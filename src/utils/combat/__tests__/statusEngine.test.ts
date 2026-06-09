@@ -1,16 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { ConditionContext } from '../../abilities/evaluateConditions';
 
-// Inject a name into UNREMOVABLE_STATUSES so the name-set branch of clearRemovable is
-// exercised against real engine logic (the shipped set is empty). CHEAT_DEATH_BUFFS is
-// kept real. No existing test applies a buff named 'Immune Status', so this is inert
-// everywhere except the dedicated clearRemovable case below.
-vi.mock('../cheatDeathBuffs', () => ({
-    CHEAT_DEATH_BUFFS: new Set(['Cheat Death']),
-    UNREMOVABLE_STATUSES: new Set(['Immune Status']),
-}));
+// statusEngine only consumes the REAL UNREMOVABLE_STATUSES (which now contains
+// 'Acidic Decay'); the clearRemovable test below exercises that shipped contract directly.
 
 function makeBuff(id: string, overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: {}, isStackable: false, ...overrides };
@@ -1489,17 +1483,18 @@ describe('clearRemovable', () => {
         expect(remaining[0].active.turnsRemaining).toBe('permanent');
     });
 
-    it('preserves a buff named in UNREMOVABLE_STATUSES', () => {
+    it('preserves a buff named in UNREMOVABLE_STATUSES (real shipped set: Acidic Decay)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        // 'Immune Status' is injected into UNREMOVABLE_STATUSES via the module mock above.
-        eng.applyTimedAbilityStatus(1, timedSelfStatus('Immune Status', 3), 'tank');
+        // 'Acidic Decay' is a REAL member of the shipped UNREMOVABLE_STATUSES set.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Acidic Decay', 3), 'tank');
+        // A removable buff so we confirm the wipe actually ran.
         eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'tank');
 
         eng.clearRemovable('tank');
 
         const remaining = eng.timedAbilityStatuses('self', 'tank');
-        expect(remaining.map((s) => s.payload.buffName)).toEqual(['Immune Status']);
+        expect(remaining.map((s) => s.payload.buffName)).toEqual(['Acidic Decay']);
     });
 
     it('is a no-op on an unknown id', () => {

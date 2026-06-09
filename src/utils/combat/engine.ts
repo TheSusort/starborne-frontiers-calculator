@@ -1637,6 +1637,59 @@ export function runCombat(input: CombatEngineInput): {
         // teamResistedEnemyDebuffs staging).
         const pendingResisted: ActiveBuff[] = [];
 
+        // Dead-target turn skip (healing mode): a destroyed heal target does not act. We skip
+        // the ENTIRE turn body for that actor — including turn-started/turn-ended emissions and
+        // the post-turn status decrement (a dead ship has no live status to tick). Enemy attacker
+        // turns are NOT skipped (they keep banking charges and the dead-target damage path returns
+        // 0). When the dead actor IS the focus actor a round would otherwise produce ZERO focus
+        // turns and the focusTurns.length throw below would fire — so we synthesize a minimal dead
+        // focus-turn result (no sourceFired: it did not act) carrying the entering-round
+        // enemyHpPct and a zeroed/last-known ctx, just enough for row assembly.
+        //
+        // Called at TWO sites with identical behavior: (a) the top-of-turn guard (target already
+        // dead entering its turn), and (b) immediately after the heal target's OWN turn-start DoT
+        // tick (a lethal Corrosion/Inferno tick kills it mid-turn → it must not fall through and
+        // act). Returns true when the actor is the dead heal target and the caller must `continue`.
+        const handleDeadTargetSkip = (actor: CombatActor): boolean => {
+            if (!(healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0)) {
+                return false;
+            }
+            // A destroyed heal target shows no buffs this round.
+            healTargetBuffs = [];
+            if (actor.id === focusActorId) {
+                const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+                const enemyHpPct =
+                    enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+                const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
+                focusTurns.push({
+                    action: 'active',
+                    roundCrit: false,
+                    enemyHpPct,
+                    dotsConfig: [],
+                    dotsLanded: true,
+                    activeSelfBuffs: [],
+                    landedEnemyDebuffs: [],
+                    inflictedEnemyDebuffs: [],
+                    resistedEnemyDebuffs: [],
+                    directDamage: 0,
+                    secondaryDamage: 0,
+                    conditionalDamage: 0,
+                    detonationDamage: 0,
+                    extraActionGrants: [],
+                    turnCtx: lastKnownCtx ?? {
+                        effectiveAttack: 0,
+                        dotMult: 1,
+                        affinityMult: 1,
+                        effectiveDefence: 0,
+                        effectiveMaxHp: 0,
+                        outgoingHealPct: 0,
+                        incomingHealPct: 0,
+                    },
+                });
+            }
+            return true;
+        };
+
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
         // per actor per round (key `${actorId}:${abilityId}`); total insertions are
         // backstopped. The queue is MUTABLE within the round — grants splice the
@@ -1821,49 +1874,9 @@ export function runCombat(input: CombatEngineInput): {
                 currentQi = qi;
                 const actor = queue[qi];
 
-                // Dead-target turn skip (healing mode): a destroyed heal target does not act.
-                // We skip the ENTIRE turn body for that actor — including turn-started/turn-ended
-                // emissions and the post-turn status decrement (a dead ship has no live status to
-                // tick). Enemy attacker turns are NOT skipped (they keep banking charges and the
-                // dead-target damage path returns 0). When the dead actor IS the focus actor a round
-                // would otherwise produce ZERO focus turns and the focusTurns.length throw below would
-                // fire — so we synthesize a minimal dead focus-turn result (no sourceFired: it did not
-                // act) carrying the entering-round enemyHpPct and a zeroed/last-known ctx, just enough
-                // for row assembly.
-                if (healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0) {
-                    // A destroyed heal target shows no buffs this round.
-                    healTargetBuffs = [];
-                    if (actor.id === focusActorId) {
-                        const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
-                        const enemyHpPct =
-                            enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
-                        const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                        focusTurns.push({
-                            action: 'active',
-                            roundCrit: false,
-                            enemyHpPct,
-                            dotsConfig: [],
-                            dotsLanded: true,
-                            activeSelfBuffs: [],
-                            landedEnemyDebuffs: [],
-                            inflictedEnemyDebuffs: [],
-                            resistedEnemyDebuffs: [],
-                            directDamage: 0,
-                            secondaryDamage: 0,
-                            conditionalDamage: 0,
-                            detonationDamage: 0,
-                            extraActionGrants: [],
-                            turnCtx: lastKnownCtx ?? {
-                                effectiveAttack: 0,
-                                dotMult: 1,
-                                affinityMult: 1,
-                                effectiveDefence: 0,
-                                effectiveMaxHp: 0,
-                                outgoingHealPct: 0,
-                                incomingHealPct: 0,
-                            },
-                        });
-                    }
+                // Dead-target turn skip (top-of-turn): the heal target is already destroyed
+                // entering its turn → skip the turn body (see handleDeadTargetSkip above).
+                if (handleDeadTargetSkip(actor)) {
                     continue;
                 }
 
@@ -1918,6 +1931,14 @@ export function runCombat(input: CombatEngineInput): {
                     });
                     if (tankDotDamage > 0) {
                         applyIncomingToTarget(tankDotDamage);
+                    }
+                    // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
+                    // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
+                    // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
+                    // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
+                    // acts normally.)
+                    if (handleDeadTargetSkip(actor)) {
+                        continue;
                     }
                 }
 
