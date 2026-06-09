@@ -1788,6 +1788,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             pendingBombs: [],
             runtimes: new Map([['A', runtime()]]),
             grantAllyCharges: () => {},
+            grantExtraAction: () => {},
             playerIds: ['A'],
             lastTurnCtxByActor: new Map(),
             enemyHp: 100000,

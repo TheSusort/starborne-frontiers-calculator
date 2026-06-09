@@ -1806,11 +1806,15 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Liberator: unconditional, once per round', () => {
+    it('Liberator: on-enemy-destroyed, once per round', () => {
         const r = parseExtraAction(
             'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.'
         );
-        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+        expect(r).toEqual({
+            oncePerRound: true,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 
     it('Tygr: enemy-debuff presence approximation, once per round', () => {
@@ -1830,20 +1834,26 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('disqualified: Sokol on-kill', () => {
-        expect(
-            parseExtraAction(
-                'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
-            )
-        ).toBeNull();
+    it('Sokol: on-enemy-destroyed (upon a kill), once per round', () => {
+        const r = parseExtraAction(
+            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
+        );
+        expect(r).toEqual({
+            oncePerRound: true,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 
-    it('disqualified: Harvester ally-destroyed', () => {
-        expect(
-            parseExtraAction(
-                'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
-            )
-        ).toBeNull();
+    it('Harvester: on-ally-destroyed', () => {
+        const r = parseExtraAction(
+            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
+        );
+        expect(r).toEqual({
+            oncePerRound: false,
+            conditions: [],
+            trigger: 'on-ally-destroyed',
+        });
     });
 
     it('disqualified: Tithonus purge-count', () => {

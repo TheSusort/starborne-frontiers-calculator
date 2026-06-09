@@ -1018,7 +1018,7 @@ describe('buildShipAbilities', () => {
     });
 
     describe('extra-action abilities from text', () => {
-        it('Liberator third passive: unconditional once-per-round extra action in passive slot', () => {
+        it('Liberator third passive: once-per-round extra action on-enemy-destroyed in passive slot', () => {
             const s = ship({
                 thirdPassiveSkillText:
                     'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
@@ -1028,9 +1028,11 @@ describe('buildShipAbilities', () => {
             const passive = slot(slots, 'passive');
             expect(passive).toBeDefined();
             const extraAction = abilityOfType(passive!.abilities, 'extra-action');
+            // Phase 4b Task 10: the sentence's "When an enemy dies" scopes the grant to the
+            // on-enemy-destroyed death trigger (previously stamped on-cast pre-Task-10).
             expect(extraAction).toMatchObject({
                 target: 'self',
-                trigger: 'on-cast',
+                trigger: 'on-enemy-destroyed',
                 conditions: [],
                 config: { type: 'extra-action', oncePerRound: true },
             });
@@ -1730,6 +1732,83 @@ describe('buildShipAbilities', () => {
                 (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
             );
             expect(fivePct).toBeUndefined();
+        });
+    });
+
+    // Phase 4b Task 10: death-triggered extra-action abilities. The refit-active passive's
+    // extra-action grant is stamped with the death trigger detected from its clause so it fires
+    // only on the corresponding death (via the Task-5 listener + the engine's grantExtraAction
+    // bridge), NOT on cast. Liberator additionally emits an all-allies on-enemy-destroyed charge.
+    describe('death-triggered extra actions (Task 10)', () => {
+        it('Sokol 3rd passive: extra-action on-enemy-destroyed, once per round', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
+            expect(extra).toBeDefined();
+            expect(extra.target).toBe('self');
+            expect(extra.trigger).toBe('on-enemy-destroyed');
+            if (extra.config.type === 'extra-action') {
+                expect(extra.config.oncePerRound).toBe(true);
+            }
+        });
+
+        it('Harvester 3rd passive: extra-action on-ally-destroyed', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
+            expect(extra).toBeDefined();
+            expect(extra.target).toBe('self');
+            expect(extra.trigger).toBe('on-ally-destroyed');
+        });
+
+        it('Liberator 3rd passive: all-allies charge + self extra-action, both on-enemy-destroyed', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+
+            const charge = passive.abilities.find((a) => a.type === 'charge')!;
+            expect(charge).toBeDefined();
+            expect(charge.target).toBe('all-allies');
+            expect(charge.trigger).toBe('on-enemy-destroyed');
+            if (charge.config.type === 'charge') {
+                expect(charge.config.amount).toBe(1);
+            }
+
+            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
+            expect(extra).toBeDefined();
+            expect(extra.target).toBe('self');
+            expect(extra.trigger).toBe('on-enemy-destroyed');
+            if (extra.config.type === 'extra-action') {
+                expect(extra.config.oncePerRound).toBe(true);
+            }
+        });
+
+        it('Liberator (constants phrasing): "grants N charge to all allies" also emits the all-allies charge', () => {
+            // The in-app ship text (constants/ships.ts) reads "this unit grants 1 charge to all
+            // allies" (verb-first), distinct from the CSV's "all allies add 1 charge". Both must
+            // emit the same all-allies on-enemy-destroyed charge ability.
+            const s = ship({
+                secondPassiveSkillText:
+                    'When an enemy dies, this unit grants 1 charge to all allies, and once per round, it gains 1 extra action.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const charge = passive.abilities.find((a) => a.type === 'charge')!;
+            expect(charge).toBeDefined();
+            expect(charge.target).toBe('all-allies');
+            expect(charge.trigger).toBe('on-enemy-destroyed');
+            if (charge.config.type === 'charge') {
+                expect(charge.config.amount).toBe(1);
+            }
+            const extra = passive.abilities.find((a) => a.type === 'extra-action')!;
+            expect(extra.trigger).toBe('on-enemy-destroyed');
         });
     });
 });

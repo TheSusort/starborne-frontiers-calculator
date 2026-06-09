@@ -1245,6 +1245,42 @@ export function runCombat(input: CombatEngineInput): {
     // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
     const oncePerCombatFired = new Set<string>();
 
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
+    // extra-action grant in DIFFERENT rounds; the engine's grantExtraAction (below) dispatches
+    // by whether the round-local turn queue is still being walked:
+    //
+    //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
+    //    These fire from applyIncomingToTarget / the general death path, which run DURING an
+    //    actor's turn. They are followed by the per-turn drainIntents() (drain point (b)) while
+    //    the round-local `queue`/`qi` are still live → the grant CAN splice into the current
+    //    round via processExtraActionGrants(currentQi, granter, …). `currentQi` is a ROUND-SCOPED
+    //    mutable cursor updated at the top of each `for (qi…)` iteration (NOT a closure over the
+    //    loop binding — drainIntents is defined above the loop and also runs pre-loop where qi
+    //    doesn't exist). `inTurnLoop` is true only while the loop body walks; the pre-loop /
+    //    post-round drains see it false → Path B.
+    //
+    //  PATH B — post-round enemy death (on-enemy-destroyed → Sokol, Liberator). The enemy is a
+    //    cumulative-damage wall whose death is reconciled AFTER the turn loop closed and after
+    //    the round's last per-turn drainIntents(). There is NO live queue there. So:
+    //      1. A drainIntents() runs immediately after the enemy ship-destroyed emit (post-
+    //         reconciliation) — this lets on-enemy-destroyed CHARGE reactives (Liberator's "all
+    //         allies add 1 charge") apply immediately; charges carry into the next round → correct.
+    //      2. Extra-action grants from on-enemy-destroyed have no queue to splice this round.
+    //         grantExtraAction (inTurnLoop false) buffers them onto `pendingExtraActions`; at the
+    //         START of the NEXT round's queue construction each buffered granter is inserted one
+    //         extra time into that round's queue (respecting once-per-round via the SAME round
+    //         extraActionFired set). So the on-kill extra action lands the round AFTER the kill is
+    //         registered — deliberate and faithful given the enemy's death is computed post-round
+    //         in this DPS sim. The enemy dies exactly once → the grant fires at most once.
+    //
+    // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
+    // end of round R survives into round R+1's queue build. Each entry is flushed (and removed)
+    // exactly once at the next round's start.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    const pendingExtraActions: { granterId: string; abilityId: string; oncePerRound: boolean }[] =
+        [];
+
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
@@ -1626,6 +1662,35 @@ export function runCombat(input: CombatEngineInput): {
             }
         };
 
+        // Round-scoped turn-loop cursor (Path A — see the timing-analysis block above). Updated
+        // at the top of each `for (qi…)` iteration; `inTurnLoop` is true only while the loop body
+        // walks. The pre-loop and post-round drains see inTurnLoop=false → Path B (buffer). The
+        // -1 sentinel is harmless: the pre-loop drain never enqueues a death-triggered extra
+        // action (no actor has died yet), and Path B ignores currentQi entirely.
+        let currentQi = -1;
+        let inTurnLoop = false;
+
+        // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): splice the granter into
+        // the LIVE queue at its speed position among the remaining actors (same machinery the
+        // attacker/team turn branches use), so a during-turn death grants a SAME-round extra turn.
+        // PATH B (no live queue — post-round enemy death): buffer onto pendingExtraActions; the
+        // next round's queue build flushes it. The granter is always a player actor (the ship
+        // whose death-passive fired); a missing id is impossible (the reactive owner ids ARE
+        // player ids) → skip defensively rather than throw mid-drain.
+        const grantExtraAction = (
+            granterId: string,
+            abilityId: string,
+            oncePerRound: boolean
+        ): void => {
+            const granter = allPlayerActorsById.get(granterId);
+            if (!granter) return;
+            if (inTurnLoop) {
+                processExtraActionGrants(currentQi, granter, [{ abilityId, oncePerRound }]);
+            } else {
+                pendingExtraActions.push({ granterId, abilityId, oncePerRound });
+            }
+        };
+
         // Drain the intent queue FIFO. Listeners may have enqueued during the emission
         // that triggered this drain; executed intents may emit events (chaining) that
         // enqueue MORE — those form the next generation. A generation is the batch
@@ -1655,6 +1720,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingBombs,
                         runtimes: runtimesById,
                         grantAllyCharges,
+                        grantExtraAction,
                         playerIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
@@ -1704,6 +1770,24 @@ export function runCombat(input: CombatEngineInput): {
             }
         };
 
+        // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
+        // (on-enemy-destroyed → Sokol/Liberator) are inserted into THIS round's freshly-built
+        // queue at the granter's speed position (qi=-1 → from the queue head among all actors).
+        // The round's extraActionFired set + MAX_EXTRA_TURNS_PER_ROUND backstop still bound them.
+        // The buffer is drained (cleared) here — each pending grant lands exactly one round after
+        // its kill was registered. Insertion happens BEFORE the pre-loop drain/turn loop so the
+        // granter takes its extra turn in queue order. Empty in normal DPS/healing runs → no-op.
+        if (pendingExtraActions.length > 0) {
+            const flush = pendingExtraActions.splice(0, pendingExtraActions.length);
+            for (const g of flush) {
+                const granter = allPlayerActorsById.get(g.granterId);
+                if (!granter) continue;
+                processExtraActionGrants(-1, granter, [
+                    { abilityId: g.abilityId, oncePerRound: g.oncePerRound },
+                ]);
+            }
+        }
+
         // round-started: the canonical start-of-round trigger (Phase 3). Fires once per
         // round, before any turn-started of that round. Documented deviation from the
         // Phase 1 contract's turn-started mapping: in a multi-actor round turn-started fires
@@ -1715,7 +1799,12 @@ export function runCombat(input: CombatEngineInput): {
         // Drain point (a): start-of-round intents execute before the first turn.
         drainIntents();
 
+        inTurnLoop = true;
         for (let qi = 0; qi < queue.length; qi++) {
+            // Path-A cursor (Task 10): a during-turn death's grantExtraAction splices into the
+            // live queue relative to THIS position. Updated each iteration (queue.length grows as
+            // grants splice in, so the for-condition re-reads it).
+            currentQi = qi;
             const actor = queue[qi];
 
             // Dead-target turn skip (healing mode): a destroyed heal target does not act.
@@ -2311,6 +2400,9 @@ export function runCombat(input: CombatEngineInput): {
 
             bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
         }
+        // The turn loop is closed: no live queue remains. Any extra-action grant from here on
+        // (the post-round enemy-death drain below) is Path B → buffered for next round.
+        inTurnLoop = false;
 
         // The row's attacker fields come from the LAST focus turn this round. Rounds
         // always have exactly one focus turn today (the attacker is in every queue),
@@ -2398,6 +2490,14 @@ export function runCombat(input: CombatEngineInput): {
             // Shared helper: stamps enemy.destroyedRound + emits ship-destroyed exactly once
             // (idempotent), replacing the old destroyedEmitted boolean.
             recordDestroyed(enemy, r, bus);
+            // Path-B drain (Task 10): the enemy died POST-round — the turn loop is closed and no
+            // per-turn drain follows. Drain the on-enemy-destroyed intents now: CHARGE reactives
+            // (Liberator's "all allies add 1 charge") apply immediately (charges carry into the
+            // next round → correct); EXTRA-ACTION grants see inTurnLoop=false → buffer for next
+            // round (cross-round pending grant). recordDestroyed is idempotent so this drains at
+            // most once per combat. With NO on-enemy-destroyed listener registered the intent
+            // queue is empty → this is a NO-OP (goldens byte-identical).
+            drainIntents();
         }
 
         // Report stacks after expiry (state going into next round)

@@ -40,7 +40,8 @@ export type ReactiveAbilityType =
     | 'charge'
     | 'heal'
     | 'shield'
-    | 'cleanse';
+    | 'cleanse'
+    | 'extra-action';
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -51,6 +52,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'heal',
     'shield',
     'cleanse',
+    'extra-action',
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -319,6 +321,11 @@ export interface IntentExecContext {
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
      *  already iterates `allPlayerActors` with the correct chargeCount guard. */
     grantAllyCharges: (amount: number) => void;
+    /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
+     *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
+     *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
+     *  round when there is no live queue — the post-round enemy-death case). */
+    grantExtraAction: (granterId: string, abilityId: string, oncePerRound: boolean) => void;
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
@@ -801,6 +808,16 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'cleanse') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         ctx.healing.credit(intent.ownerId, 'cleanseCount', cfg.count);
+        return;
+    }
+
+    if (cfg.type === 'extra-action') {
+        // Reactive extra-action bridge (Task 10): hand the grant to the engine, which decides
+        // Path A (splice into the live round queue — during-turn deaths) vs Path B (buffer for
+        // the next round — post-round enemy death, no live queue). The owner is the GRANTER (the
+        // ship whose death-triggered passive fired): Sokol/Liberator gain the extra turn, not the
+        // dead enemy. The engine's processExtraActionGrants enforces oncePerRound + the backstop.
+        ctx.grantExtraAction(intent.ownerId, intent.ability.id, cfg.oncePerRound);
         return;
     }
 

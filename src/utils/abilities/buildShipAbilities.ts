@@ -22,6 +22,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    parseAllyChargeOnEnemyDeath,
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
@@ -994,6 +995,27 @@ function abilitiesFromText(
         });
     }
 
+    // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
+    // Charged Skills" → an all-allies charge ability on the on-enemy-destroyed reactive trigger
+    // (rides the existing charge executor's ally/all-allies path). Emitted BEFORE the extra-action
+    // block so the slot keeps text-position order (the charge phrase precedes the extra-action one).
+    const allyCharge = parseAllyChargeOnEnemyDeath(text);
+    if (allyCharge) {
+        const allyChargePos = text.search(/all allies/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'charge',
+                target: 'all-allies',
+                trigger: 'on-enemy-destroyed',
+                conditions: [],
+                config: { type: 'charge', amount: allyCharge.amount },
+                autoFilled: true,
+            },
+            pos: allyChargePos >= 0 ? allyChargePos : MAX_POS,
+        });
+    }
+
     const extra = parseExtraAction(text);
     if (extra) {
         // Raw-text anchor, matching the charge block's convention (text.search) —
@@ -1004,7 +1026,11 @@ function abilitiesFromText(
                 id: nextId(),
                 type: 'extra-action',
                 target: 'self',
-                trigger: 'on-cast',
+                // Death-triggered grants (Task 10) carry the trigger detected from the clause
+                // (Sokol/Liberator on-enemy-destroyed, Harvester on-ally-destroyed) so they fire
+                // via the death listener + the engine's grantExtraAction bridge, NOT on cast.
+                // Default on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) keep trigger on-cast.
+                trigger: extra.trigger ?? 'on-cast',
                 conditions: extra.conditions,
                 config: { type: 'extra-action', oncePerRound: extra.oncePerRound },
                 autoFilled: true,

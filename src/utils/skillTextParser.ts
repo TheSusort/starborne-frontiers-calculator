@@ -1102,14 +1102,45 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     };
 }
 
+// Liberator (Phase 4b Task 10): an all-allies charge grant gated on the enemy's death —
+// distinct from parseChargeGain's self-targeted contract (which disqualifies "all allies" /
+// "when an enemy dies"). Two real phrasings:
+//   • docs/ship-skills.csv: "When an enemy dies, all allies add N charge to their Charged Skills"
+//   • constants/ships.ts:    "When an enemy dies, this unit grants N charge to all allies"
+// Both forms appear within the same "when an enemy dies …" sentence (no '.' between). The two
+// alternatives below cover "all allies add/gain N" and "grants N charge … all allies".
+// Returns the per-ally charge amount, or null. Lookbehind-free.
+const ALLY_CHARGE_ON_ENEMY_DEATH_RE =
+    /when an enemy dies[^.]*?(?:all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?|(?:grants?|adds?|gives?)\s+(\d+|a|an)\s+charges?[^.]*?all allies)/i;
+
+/** Parses Liberator's on-enemy-death "all allies add N charge" grant. Returns `{ amount }`
+ *  (per-ally charge count) or null. The trigger is implicitly on-enemy-destroyed. */
+export function parseAllyChargeOnEnemyDeath(
+    text: string | null | undefined
+): { amount: number } | null {
+    if (!text) return null;
+    const m = ALLY_CHARGE_ON_ENEMY_DEATH_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    const raw = (m[1] ?? m[2]).toLowerCase();
+    const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+    if (!amount || isNaN(amount)) return null;
+    return { amount };
+}
+
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
-// Phrasings we deliberately DO NOT parse (annotation-only seams): on-kill (the enemy's
-// death ends the sim), ally-destroyed (Phase 4 trigger), purge-count (purges are not
-// modeled). The user can still add the ability manually in the editor. Reference:
-// docs/ship-skills.csv (Sokol, Harvester, Tithonus).
-const EXTRA_ACTION_DISQUALIFY_RE =
-    /upon a kill|when an enemy dies|killing an enemy|allied unit is destroyed|ally is destroyed|\bpurg/i;
+// Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges
+// are not modeled — Tithonus stays disqualified). The on-kill / ally-destroyed phrasings
+// are now MODELED as death-triggered extra actions (Phase 4b Task 10) — detected by
+// EXTRA_ACTION_TRIGGER_RE below, NOT disqualified. The user can still add a disqualified
+// ability manually in the editor. Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
+const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
+
+// Death-trigger detection (Phase 4b Task 10) on the matched clause: an on-kill phrasing
+// (Sokol "upon a kill", Liberator "when an enemy dies") → on-enemy-destroyed; an
+// ally-destroyed phrasing (Harvester) → on-ally-destroyed. Default (no match) → on-cast.
+const EXTRA_ACTION_ENEMY_DESTROYED_RE = /upon a kill|when an enemy dies|killing an enemy/i;
+const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
@@ -1123,6 +1154,10 @@ const EXTRA_ACTION_SELF_HP_RE = /\b(?:its|this unit'?s?)\s+hp\s+is\s+below\s+(\d
 export interface ExtraActionParse {
     oncePerRound: boolean;
     conditions: Condition[];
+    /** Death trigger detected from the clause (Phase 4b Task 10): on-enemy-destroyed
+     *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
+     *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
+    trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
 }
 
 /**
@@ -1173,7 +1208,26 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
             countThreshold: 1,
         });
     }
-    return { oncePerRound: /once per round/i.test(clause), conditions };
+    // Death trigger (Task 10): on-kill → on-enemy-destroyed; ally-destroyed → on-ally-destroyed;
+    // no death phrasing → on-cast (trigger omitted; builder defaults). Detected on the FULL
+    // SENTENCE, not the grant subclause: Liberator's death phrase ("When an enemy dies") sits in
+    // a sibling subclause ("…, and once per round, this unit gains 1 extra action") and the
+    // trigger scopes the whole sentence. (oncePerRound/conditions stay clause-scoped — they DO
+    // belong to the grant subclause.) Sokol/Harvester carry the death phrase in the grant clause
+    // itself, so sentence-level detection covers all three.
+    const sentenceUnmasked = sentence.split(ABBR_MARK).join(' ');
+    const trigger: ExtraActionParse['trigger'] = EXTRA_ACTION_ENEMY_DESTROYED_RE.test(
+        sentenceUnmasked
+    )
+        ? 'on-enemy-destroyed'
+        : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentenceUnmasked)
+          ? 'on-ally-destroyed'
+          : undefined;
+    return {
+        oncePerRound: /once per round/i.test(clause),
+        conditions,
+        ...(trigger ? { trigger } : {}),
+    };
 }
 
 // --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
