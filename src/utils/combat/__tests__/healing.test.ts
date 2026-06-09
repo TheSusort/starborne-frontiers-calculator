@@ -2423,6 +2423,66 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(result.healing!.rounds[0].incomingDamage).toBeCloseTo(3000, 6);
     });
 
+    // ── Ability-sourced Cheat Death (the REAL ship path) ─────────────────────
+    // A real Yazid/Tycho/Hayyan-granted Cheat Death is NOT a top-level input selfBuff.
+    // It is an ability-sourced 'recurring' self-buff parsed off the ship's kit (Task 6's
+    // parser shape: a `buff` ability with buffName 'Cheat Death', duration 'recurring',
+    // trigger 'on-cast', target 'self'). That registers as an AURA status surfaced via
+    // activeAbilityStatuses('self', …, ownerId) — NOT via snapshot().activeSelfBuffs.
+    // The old snapshot-based detection MISSES it (snapshot.activeSelfBuffs only carries
+    // scheduled always-active buffs, and only for the 'attacker' owner). This test fires
+    // RED against the old detection (the tank dies, no cheat-death-activated) and GREEN
+    // once detection routes through selfBuffNamesForOwners (which folds the ability reads).
+    it('fires for an ability-sourced (parsed-kit) Cheat Death, not just an input selfBuff', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        // Cheat Death granted by the tank's own kit as a recurring self-buff ability —
+        // the shape Task 6's parser emits. No top-level selfBuffs entry.
+        const cheatDeathFromKit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Cheat Death',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 'recurring',
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // NOT seeded via input — the kit grants it
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: cheatDeathFromKit,
+            })
+        );
+        // Survives at 1 HP: no ship-destroyed, destroyedRound unset, one intercept.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+    });
+
     // ── Consumed (flag): a SECOND lethal hit destroys the carrier normally ────
     // Proves flag-based consumption (NOT store-deletion): the recurring Cheat Death
     // buff is STILL in the snapshot on round 2, but cheatDeathConsumed blocks re-trigger.

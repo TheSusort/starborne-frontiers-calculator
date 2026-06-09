@@ -1516,16 +1516,26 @@ export function runCombat(input: CombatEngineInput): {
             healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
-            // it surfaces in the snapshot's activeSelfBuffs but is never stored/timed — consumption
-            // is the per-actor cheatDeathConsumed flag (NOT a store mutation). On intercept we floor
-            // HP at 1 (overriding the Math.max(0, …) above), mark consumed, wipe the actor's
-            // REMOVABLE timed statuses (DoTs/timed self-buffs; persistent-stack + unremovable
-            // preserved), emit cheat-death-activated, and DO NOT record a destroy.
+            // it is never stored/timed — consumption is the per-actor cheatDeathConsumed flag
+            // (NOT a store mutation). On intercept we floor HP at 1 (overriding the Math.max(0, …)
+            // above), mark consumed, wipe the actor's REMOVABLE timed statuses (DoTs/timed
+            // self-buffs; persistent-stack + unremovable preserved), emit cheat-death-activated,
+            // and DO NOT record a destroy.
+            //
+            // Detection MUST go through selfBuffNamesForOwners, NOT snapshot().activeSelfBuffs:
+            // a real (Yazid/Tycho/Hayyan-granted) Cheat Death is an ability-sourced recurring
+            // self-buff that surfaces via activeAbilityStatuses('self', …, ownerId) — snapshot's
+            // activeSelfBuffs only carries SCHEDULED always-active buffs, and only for the
+            // 'attacker' owner (empty for any other owner). Since the heal target's owner id is
+            // often a team-actor id (not 'attacker'), snapshot alone misses both the
+            // ability-sourced case AND the non-attacker-owner case. selfBuffNamesForOwners
+            // aggregates snapshot + timed + active ability self statuses keyed by the actor's
+            // own id, covering every Cheat Death source.
             if (healTarget!.currentHp <= 0) {
                 const targetId = healTarget!.id;
-                const carriesCheatDeath = statusEngine
-                    .snapshot(targetId)
-                    .activeSelfBuffs.some((b) => CHEAT_DEATH_BUFFS.has(b.buffName));
+                const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
+                    (n) => CHEAT_DEATH_BUFFS.has(n)
+                );
                 if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
                     healTarget!.currentHp = 1;
                     cheatDeathConsumed.add(targetId);
