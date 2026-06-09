@@ -725,6 +725,23 @@ buff/charge-aura), source it from firing + passive.
   6. *On-kill extra action lands the round AFTER the kill.* Sokol / Liberator's on-kill extra
      action resolves a round late because enemy death is reconciled post-round in the DPS sim —
      a deliberate, documented model.
+  7. *Cheat Death does NOT wipe passive-granted finite-duration buffs (e.g. Everliving Regeneration),
+     because they are mis-modeled as infinite auras.* `clearRemovable` sweeps only the TIMED
+     `selfMaps`/`enemyMaps` (+ the actor-state DoTs); it does NOT touch auras. But a buff granted on
+     a **passive slot** is classified as an aura **regardless of its explicit duration**
+     (`isAura = … || slot.slot === 'passive'`, engine.ts) — so Yazid's "Everliving Regeneration II
+     **for 9 turns**" is modeled as an infinite recurring aura that never expires and survives Cheat
+     Death's wipe. Consequence: Yazid's `on-cheat-death-activated` 60% repair keeps Everliving Regen's
+     **+20% Incoming Repair** (≈48,437 on a 67,273-HP Yazid / 1440 in the unit test) — internally
+     consistent with the current (buggy) buff model, but wrong vs the game: Everliving Regen is a
+     **one-time start-of-combat grant**, so once Cheat Death (or a purge) removes it, it should NOT
+     return. **Root-cause fix (deferred to its own increment — broad, churns DPS+healing goldens):**
+     classify passive-granted buffs with an explicit finite duration as **TIMED** (one-shot, expire
+     after N turns, no re-derive), not auras. That single change makes Everliving Regen last its 9
+     turns AND lets the existing timed `clearRemovable` wipe it (→ follow-on flat 60%), with the
+     post-wipe heal-channel recompute already prototyped. NOT done in 4b: it reclassifies every
+     ship's "at start of combat, gain X for N turns" passive and needs its own golden review.
+     The reactive-heal incoming/outgoing-repair scaling (PR #93) is correct under either model.
 
   **Goldens byte-identical.** This increment is engine + docs + labels; the 22 DPS golden parity
   scenarios remain byte-identical.
