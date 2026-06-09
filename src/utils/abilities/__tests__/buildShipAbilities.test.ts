@@ -1322,7 +1322,10 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Cultivator clause 2: ally-damaged-trigger passive repair → ally heal', () => {
+        it('Cultivator clause 2: on-ally-directly-damaged passive repair is an unmodeled reactive trigger → NOT emitted', () => {
+            // The engine doesn't model an on-ally-damaged trigger, so emitting this heal would
+            // make it fire EVERY round (phantom). It's disqualified in parseHealAbilities until a
+            // live trigger exists (Phase 4b/4c). The HP basis (not leech) is what makes it a phantom.
             const s = ship({
                 type: 'SUPPORTER',
                 thirdPassiveSkillText:
@@ -1330,11 +1333,7 @@ describe('buildShipAbilities', () => {
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
-            expect(heal).toMatchObject({
-                type: 'heal',
-                target: 'ally',
-                config: { type: 'heal', pct: 8, basis: 'hp' },
-            });
+            expect(heal).toBeUndefined();
         });
 
         it('Morao: cleanse-trigger on a DEFENDER passive → both repairs stay self', () => {

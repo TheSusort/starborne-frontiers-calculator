@@ -1184,9 +1184,34 @@ function sentenceBoundsAround(
 }
 
 // Phase-4 / reactive disqualifiers — clause-scoped. Damage-leech phrases ("of the
-// damage taken/dealt") are now PARSED (basis 'damage-dealt'/'damage-taken'); only
-// revive content and enemy-action reactions ("when an enemy uses ...") stay out.
-const HEAL_DISQUALIFY_RE = /\brevives?\b|\bcheat death\b|when an enemy uses/i;
+// damage taken/dealt") are PARSED (basis 'damage-dealt'/'damage-taken'); revive content
+// and enemy-action reactions ("when an enemy uses ...") stay out.
+//
+// UNMODELED reactive triggers (no live engine listener yet — they go live via Phase 4b/4c)
+// are disqualified here so a gated heal is NOT emitted as an UNCONDITIONAL on-cast heal that
+// would fire EVERY round (phantom healing). Two groups:
+//   (1) Always-disqualify, regardless of heal basis:
+//       - on-destroyed / death: "when … is destroyed", "when destroyed", "upon being
+//         destroyed", "on death"; on-kill: "when it destroys [an enemy]".
+//       - on-buff-purged: "when a buff is purged", "when … is purged".
+//       - reactive on-cleansed (PASSIVE form only): "when … is cleansed". The ACTIVE verb
+//         "cleanses"/"repairs" (Makoli/Morao/Cultivator active cleanse+repair) is NOT matched.
+//   (2) Damage-reaction (on-directly-damaged / attacked / takes-damage / is-hit) — disqualified
+//       ONLY when the heal's basis is a plain HP/attack/defense stat, NOT a damage-leech basis.
+//       Leech reactions (Cultivator/Malvex/Isha "repairs X% of the damage taken/dealt") ARE
+//       modeled via the engine's per-attack proc and MUST still parse, even though their sentence
+//       says "when … damaged". The caller gates this against `leechBasis` (see usage below).
+// NO lookbehind (iOS Safari 15) — all alternations use plain `\b`/word-boundary anchors.
+const HEAL_DISQUALIFY_RE =
+    /\brevives?\b|\bcheat death\b|when an enemy uses|when\b[^.;]*\bis\s+destroyed\b|when\s+destroyed\b|upon\s+being\s+destroyed\b|\bon\s+death\b|when\s+it\s+destroys\b|when\s+a\s+buff\s+is\s+purged\b|when\b[^.;]*\bis\s+purged\b|when\b[^.;]*\bis\s+cleansed\b/i;
+// Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
+// (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
+// directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is
+// captured (not just tested) so the caller can reject an ENEMY-subject trigger — "when an enemy
+// takes damage from a DoT" (Anemone) is an on-DoT-tick trigger, NOT a self/ally damage reaction,
+// so it must not be disqualified by this rule. No lookbehind (iOS Safari 15).
+const HEAL_DAMAGE_REACTION_RE =
+    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
 
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
@@ -1294,6 +1319,17 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
+            // Damage-reaction reactive triggers ("when … directly damaged", "when attacked",
+            // "when … is hit", "when … takes … damage") are unmodeled for PLAIN heals → drop
+            // them so they don't fire every round (phantom). Leech reactions (basis
+            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc and
+            // MUST still parse, so only disqualify when the heal is NOT a leech (guard #1).
+            // An ENEMY-subject trigger ("when an enemy takes damage from a DoT", Anemone) is an
+            // on-DoT-tick trigger, not a self/ally damage reaction, so it is NOT disqualified.
+            if (!leechBasis) {
+                const dmgReaction = HEAL_DAMAGE_REACTION_RE.exec(sentence);
+                if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) continue;
+            }
             const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
