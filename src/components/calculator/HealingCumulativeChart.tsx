@@ -72,7 +72,7 @@ const ConfigBlock: React.FC<{ name: string; color: string; rd: HealingRoundData 
 
     return (
         <div className="mb-1.5 last:mb-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-0.5">
                 <span className="font-medium" style={{ color }}>
                     {name}
                 </span>
@@ -84,14 +84,14 @@ const ConfigBlock: React.FC<{ name: string; color: string; rd: HealingRoundData 
                 {rd.didCrit && (
                     <span className="text-[10px] text-red-400 uppercase tracking-wide">Crit</span>
                 )}
+            </div>
+            <div className="flex items-center gap-3 mb-1 text-[10px] text-theme-text-secondary uppercase tracking-wide">
                 {rd.chargeCount > 0 && (
-                    <span className="text-[10px] text-theme-text-secondary uppercase tracking-wide">
+                    <span>
                         Charges {rd.charges}/{rd.chargeCount}
                     </span>
                 )}
-                <span className="ml-auto text-[10px] text-theme-text-secondary">
-                    Target HP {rd.targetHpPct}%
-                </span>
+                <span>Target HP {rd.targetHpPct}%</span>
             </div>
             {isEmpty ? (
                 <p className="text-xs text-dark-border italic">No healer output this round</p>
