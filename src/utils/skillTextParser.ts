@@ -12,6 +12,7 @@ import {
 } from '../types/calculator';
 import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
 import { getShipSkillRows } from './ship/skillRows';
+import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
 /**
  * Represents a parsed segment of skill text
@@ -1833,6 +1834,15 @@ export function parseSkillEffects(
             duration = 'recurring';
         }
 
+        // Cheat Death (and any CHEAT_DEATH_BUFFS member) is an until-triggered, no-payload
+        // named buff: it is consumed only on a lethal hit, never by the StatusEngine's per-turn
+        // decrement. Force a non-decrementing 'recurring' duration regardless of any nearby
+        // "for N turns" text — e.g. Tycho's "gains Cheat Death and Everliving Regeneration I for
+        // 6 turns" must NOT leak the 6-turn window onto Cheat Death via the shared-duration scan.
+        if (CHEAT_DEATH_BUFFS.has(buffName)) {
+            duration = 'recurring';
+        }
+
         // Detect accumulating buffs: stacks gained per trigger with a recurring duration.
         // passive sources → per-round; active/charge → per-active/per-charge.
         let stackTrigger: StackTrigger | undefined;
@@ -1872,7 +1882,10 @@ export function parseSkillEffects(
         effects.push({
             buffName: canonical,
             target: 'self',
-            duration: parseInt(conjoined[2], 10),
+            // Cheat Death never expires on a timer (see segment-loop note above); keep the
+            // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
+            // a finite window either.
+            duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
             source,
         });
     }
