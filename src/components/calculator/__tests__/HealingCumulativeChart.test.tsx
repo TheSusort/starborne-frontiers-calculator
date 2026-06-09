@@ -172,6 +172,12 @@ describe('HealingCumulativeChart', () => {
             expect(screen.getByText(/charged/i)).toBeInTheDocument(); // Config B
         });
 
+        it('shows the charge bank for configs with a charged skill', () => {
+            renderTooltip(1);
+            // Config B has chargeCount 3 → "Charges 0/3"; Config A (chargeCount 0) shows none.
+            expect(screen.getByText(/Charges 0\/3/)).toBeInTheDocument();
+        });
+
         it('shows each config target HP%', () => {
             renderTooltip(1);
             expect(screen.getByText(/Target HP 60%/)).toBeInTheDocument();

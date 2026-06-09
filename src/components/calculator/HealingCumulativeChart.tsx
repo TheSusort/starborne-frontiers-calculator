@@ -84,6 +84,11 @@ const ConfigBlock: React.FC<{ name: string; color: string; rd: HealingRoundData 
                 {rd.didCrit && (
                     <span className="text-[10px] text-red-400 uppercase tracking-wide">Crit</span>
                 )}
+                {rd.chargeCount > 0 && (
+                    <span className="text-[10px] text-theme-text-secondary uppercase tracking-wide">
+                        Charges {rd.charges}/{rd.chargeCount}
+                    </span>
+                )}
                 <span className="ml-auto text-[10px] text-theme-text-secondary">
                     Target HP {rd.targetHpPct}%
                 </span>
