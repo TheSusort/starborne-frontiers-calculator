@@ -1,7 +1,52 @@
 import React from 'react';
 import { BuffRow } from '../ui/BuffRow';
 import { HealingRoundData } from '../../utils/calculators/healingEngineAdapter';
+import { EnemyDoTState } from '../../utils/combat/engine';
+import { ActiveBuff } from '../../utils/combat/statusEngine';
 import { dotStateLabel } from './dotLabels';
+
+/** One DoT status row: an orange marker dot + the shared DPS DoT label (`Inferno I ×3`). Keyed by
+ *  the caller. Shared by the per-enemy DoT list and the aggregated Heal Target DoT list. */
+const DotRow: React.FC<{ dot: EnemyDoTState }> = ({ dot }) => (
+    <div className="flex items-center gap-1.5 mb-1">
+        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
+        <span className="flex-1 text-xs text-theme-text-primary truncate">
+            {dotStateLabel(dot)}
+        </span>
+    </div>
+);
+
+/** Treat 'permanent'/'recurring' as the longest possible duration so a persistent/recurring debuff
+ *  always wins the dedup over any timed one of the same name. */
+const turnsRank = (t: ActiveBuff['turnsRemaining']): number =>
+    typeof t === 'number' ? t : Number.POSITIVE_INFINITY;
+
+/** Dedup debuffs by buffName for the target-centric Heal Target roll-up, keeping the entry with the
+ *  largest turnsRemaining (the same debuff landed by two enemies collapses to one row). */
+const mergeTargetDebuffs = (debuffs: ActiveBuff[]): ActiveBuff[] => {
+    const byName = new Map<string, ActiveBuff>();
+    for (const b of debuffs) {
+        const existing = byName.get(b.buffName);
+        if (!existing || turnsRank(b.turnsRemaining) > turnsRank(existing.turnsRemaining)) {
+            byName.set(b.buffName, b);
+        }
+    }
+    return Array.from(byName.values());
+};
+
+/** Merge DoTs for the Heal Target roll-up by type+tier, summing stacks (matches the engine's
+ *  `mergeDoTsForDisplay`/`buildEnemyRoundEffects` type+tier+sum-stacks semantics) so the same DoT
+ *  type/tier applied by two enemies shows as one summed-stack row instead of two. */
+const mergeTargetDots = (dots: EnemyDoTState[]): EnemyDoTState[] => {
+    const byKey = new Map<string, EnemyDoTState>();
+    for (const d of dots) {
+        const key = `${d.type}-${d.tier}`;
+        const existing = byKey.get(key);
+        if (existing) existing.stacks += d.stacks;
+        else byKey.set(key, { ...d });
+    }
+    return Array.from(byKey.values());
+};
 
 interface RoundStatusPanelProps {
     /** Per-config sections — one per healer config, mirroring DPSBuffPanel's `ships`. Each carries
@@ -41,13 +86,16 @@ const ConfigSection: React.FC<{
         (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0 || e.dots.length > 0
     );
     // Heal Target section: the target's OWN active buffs (Cheat Death, Barrier, etc.) plus the
-    // debuffs/DoTs on it AGGREGATED (flattened) across every enemy for a target-centric view —
-    // the per-enemy attribution above stays intact. Names only — never folded into any value.
+    // debuffs/DoTs on it AGGREGATED across every enemy for a target-centric view, then DEDUPED/
+    // MERGED (debuffs by name, DoTs by type+tier summing stacks) so a debuff/DoT landed by two
+    // enemies surfaces as ONE row here — the per-enemy attribution above stays intact. Names only.
     const targetBuffs = (roundData?.healTargetBuffs ?? []).filter(
         (b) => b.stacks === undefined || b.stacks > 0
     );
-    const targetDebuffs = (roundData?.enemyEffects ?? []).flatMap((e) => e.debuffs);
-    const targetDots = (roundData?.enemyEffects ?? []).flatMap((e) => e.dots);
+    const targetDebuffs = mergeTargetDebuffs(
+        (roundData?.enemyEffects ?? []).flatMap((e) => e.debuffs)
+    );
+    const targetDots = mergeTargetDots((roundData?.enemyEffects ?? []).flatMap((e) => e.dots));
     const hasTargetSection =
         targetBuffs.length > 0 || targetDebuffs.length > 0 || targetDots.length > 0;
     const isEmpty = selfBuffs.length === 0 && enemyEffects.length === 0 && !hasTargetSection;
@@ -111,15 +159,10 @@ const ConfigSection: React.FC<{
                                         DoTs
                                     </div>
                                     {targetDots.map((dot, j) => (
-                                        <div
+                                        <DotRow
                                             key={`tagg-dot-${dot.type}-${dot.tier}-${j}`}
-                                            className="flex items-center gap-1.5 mb-1"
-                                        >
-                                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
-                                            <span className="flex-1 text-xs text-theme-text-primary truncate">
-                                                {dotStateLabel(dot)}
-                                            </span>
-                                        </div>
+                                            dot={dot}
+                                        />
                                     ))}
                                 </>
                             )}
@@ -164,15 +207,10 @@ const ConfigSection: React.FC<{
                                         DoTs on Target
                                     </div>
                                     {enemy.dots.map((dot, j) => (
-                                        <div
+                                        <DotRow
                                             key={`tdot-${dot.type}-${dot.tier}-${j}`}
-                                            className="flex items-center gap-1.5 mb-1"
-                                        >
-                                            <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
-                                            <span className="flex-1 text-xs text-theme-text-primary truncate">
-                                                {dotStateLabel(dot)}
-                                            </span>
-                                        </div>
+                                            dot={dot}
+                                        />
                                     ))}
                                 </>
                             )}

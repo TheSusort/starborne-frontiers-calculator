@@ -2079,6 +2079,10 @@ export function runCombat(input: CombatEngineInput): {
 
                     processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
                 } else if (actor.kind === 'team') {
+                    // No healTargetBuffs capture here: the heal target is always a WALKED actor
+                    // (HealingCalculatorPage builds it with shipSkills+stats, so it takes the
+                    // walked-team branch above), never this legacy branch. Revisit if heal-target
+                    // actor construction ever changes.
                     // ====================================================================
                     // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
                     // job is to notify the status engine that ITS source fired this round so
