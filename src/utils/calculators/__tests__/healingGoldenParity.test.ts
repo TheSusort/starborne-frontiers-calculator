@@ -38,6 +38,7 @@ import { describe, expect, it } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
+import { createEventBus } from '../../combat/events';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -807,5 +808,518 @@ describe('healingGoldenParity', () => {
         const result = simulateHealing(scenario13Input());
         const shieldByRound = result.rounds.map((r) => r.shield);
         expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000, 0, 3000, 0, 3000, 0]);
+    });
+
+    // =========================================================================
+    // PHASE 4a (enemy-offense increment) — NEW BEHAVIOUR GOLDENS (Task 11).
+    // The enemy attacker is now a full runPlayerTurn actor: it deals affinity-
+    // modified damage to the heal target, applies debuffs/DoTs to it, grants
+    // itself self-buffs, and triggers on-attacked reactions on the target. Real
+    // selfHpPct gates the target's own abilities. Player condition contexts read
+    // the live enemyBuffNames/selfDebuffNames arrays (derivable conditions only).
+    //
+    // Damage reminder for these scenarios (target defence 0 → calculateDamageReduction(0)
+    // path returns 0, so postDefenseFactor's defence term is 1; enemy crit 0 → no crit
+    // fold): enemy hit = enemyAttack × multiplier/100 × affinityMult, where
+    // affinityMult = 1 + affinityDamageModifier/100 (neutral 0 → 1, advantage +25 → 1.25).
+    // The heal target (focus, speed 100) ACTS BEFORE every enemy (speed 50) each round,
+    // so its heal/shield this round lands BEFORE that round's incoming damage.
+    // =========================================================================
+
+    // ── Scenario 14 (a): enemy full-kit (debuff + DoT + self-buff) ───────────
+    // HAND-VERIFIED. A ship-backed enemy whose ACTIVE slot is: a 100% damage cast, a
+    // 'Defense Down' debuff (inflict, 2 turns), an inferno DoT (tier 100, 1 stack, 3 turns),
+    // and a SELF 'Attack Up' buff (+50% attack, 2 turns). The self-buff is an on-cast active
+    // self-buff → it folds into THIS turn's effectiveAttack before the damage assembly:
+    //   enemy hit = 4000 × 1.50 (Attack Up) × 100% × 1 (defence 0, crit 0, neutral aff) = 6000.
+    // The heal target (hp 100000, defence 0) self-heals 5% of its own max HP = 5000/round.
+    //   • DoT TICK (Task 11b): the enemy applies the inferno to the TARGET's DoT container, and
+    //     the engine ticks the TARGET's own containers at the TARGET's turn-start (the afflicted
+    //     ship's turn). The applier (the enemy) carries effectiveAttack 6000 (Attack Up folded),
+    //     so each inferno tick = 1 stack × (tier 100/100) × 6000 × dotMult 1 × affinityMult 1 =
+    //     6000 incoming. duration 3 → an entry applied on round N ticks on rounds N+1, N+2, N+3
+    //     then expires. The enemy re-applies every round, so the live entry count climbs to a
+    //     steady 3 (then holds — the 4-rounds-ago entry has expired). The debuff/self-buff DO
+    //     surface as NAMES in enemyEffects[e1].debuffs / .selfBuffs (display only).
+    // Per-round (target speed 100 > enemy speed 50, so the target acts FIRST each round; its DoT
+    // ticks at turn-start, BEFORE its heal, then the enemy attacks last). HP enters R1 at 100%:
+    //   R1 enter 100%: 0 inferno entries → tick 0. heal 5000 (deficit 0 → all overheal). Enemy
+    //       hit 6000 → HP 94000; apply inferno A (rem 3). incoming R1 = 6000 (hit only).
+    //   R2 enter 94%:  entries [A:3] → tick 6000 → HP 88000 (A→2). heal 5000 (deficit 6000 →
+    //       effective 5000) → HP 93000. Enemy hit 6000 → HP 87000; apply B (rem 3).
+    //       incoming R2 = 6000 (DoT) + 6000 (hit) = 12000.
+    //   R3 enter 87%:  [A:2,B:3] → tick 12000 → HP 75000 (A→1,B→2). heal 5000 → HP 80000. Enemy
+    //       6000 → HP 74000; apply C (rem 3). incoming R3 = 12000 + 6000 = 18000.
+    //   R4 enter 74%:  [A:1,B:2,C:3] → tick 18000 → HP 56000 (A expires; B→1,C→2). heal 5000 →
+    //       HP 61000. Enemy 6000 → HP 55000; apply D (rem 3). incoming R4 = 18000 + 6000 = 24000.
+    //   R5 enter 55%:  [B:1,C:2,D:3] → tick 18000 → HP 37000 (B expires; C→1,D→2). heal 5000 →
+    //       HP 42000. Enemy 6000 → HP 36000; apply E. incoming R5 = 24000.
+    //   R6 enter 36%:  [C:1,D:2,E:3] → tick 18000 → HP 18000 (C expires; D→1,E→2). heal 5000 →
+    //       HP 23000. Enemy 6000 → HP 17000. incoming R6 = 24000.
+    //   ⇒ incomingDamage = 6000, 12000, 18000, 24000, 24000, 24000. directHeal 5000 every round
+    //     (effective 0/overheal 5000 on R1; effective 5000/overheal 0 from R2 — the DoT tick
+    //     opens a full deficit before the heal). enemyEffects[e1]={ debuffs:['Defense Down'],
+    //     selfBuffs:['Attack Up'] } every round. cumulativeHealing 5000,10000,…,30000. The
+    //     target SURVIVES all 6 rounds (HP 17000 at the end). targetHpPct entering: 100, 94, 87,
+    //     74, 55, 36.
+    const scenario14Input = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: healSkills([
+                ab({
+                    type: 'heal',
+                    target: 'self',
+                    config: { type: 'heal', pct: 5, basis: 'hp' },
+                }),
+            ]),
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 1 },
+                                    }),
+                                    ab({
+                                        type: 'debuff',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'debuff',
+                                            buffName: 'Defense Down',
+                                            parsedEffects: {},
+                                            stacks: 1,
+                                            isStackable: false,
+                                            application: 'inflict',
+                                            duration: 2,
+                                        },
+                                    }),
+                                    ab({
+                                        type: 'dot',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'dot',
+                                            dotType: 'inferno',
+                                            tier: 100,
+                                            stacks: 1,
+                                            duration: 3,
+                                        },
+                                    }),
+                                    ab({
+                                        type: 'buff',
+                                        target: 'self',
+                                        config: {
+                                            type: 'buff',
+                                            buffName: 'Attack Up',
+                                            parsedEffects: { attack: 50 },
+                                            stacks: 1,
+                                            isStackable: false,
+                                            duration: 2,
+                                        },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+    snap('enemy full-kit (debuff + DoT + self-buff bombard the heal target)', scenario14Input);
+
+    // Supplementary: round-1 incoming is the self-buffed 6000, heal is 5000, and the
+    // debuff/self-buff names surface in the round overview buckets.
+    it('scenario 14: R1 incoming 6000 (4000 × 1.5 Attack Up), heal 5000, names surfaced', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario14Input());
+        expect(result.rounds[0].incomingDamage).toBe(6000);
+        expect(result.rounds[0].directHeal).toBe(5000);
+        // The names surface in the round overview, attributed to the source enemy (e1).
+        const r1e1 = result.rounds[0].enemyEffects.find((e) => e.enemyId === 'e1');
+        expect(r1e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+        expect(r1e1?.debuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
+    });
+
+    // Supplementary: the inferno DoT is applied every round (dot-applied ×6) AND ticks on the
+    // target at its turn-start (Task 11b), adding 6000 incoming per live entry. The live entry
+    // count climbs (duration 3, re-applied every round) → incoming grows 6000 → 12000 → 18000
+    // → 24000 then holds (3 live entries in steady state). dot-ticked fires on the TARGET from
+    // round 2 (the round-1 application's first tick).
+    it('scenario 14: enemy inferno DoT applied ×6 AND ticks on the target (incoming grows with live entries)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const dotApplied: number[] = [];
+        const dotTicked: { round: number; targetId: string; damage: number }[] = [];
+        bus.on('dot-applied', (e) => {
+            if ((e as { dotType?: string }).dotType === 'inferno') {
+                dotApplied.push((e as { round: number }).round);
+            }
+        });
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { dotType?: string; round: number; targetId: string; damage: number };
+            if (ev.dotType === 'inferno') {
+                dotTicked.push({ round: ev.round, targetId: ev.targetId, damage: ev.damage });
+            }
+        });
+        const result = simulateHealing({ ...scenario14Input(), bus });
+        expect(dotApplied).toEqual([1, 2, 3, 4, 5, 6]);
+        // DoT-tick bleed: hit 6000 every round + 6000 per live inferno entry at the target's
+        // turn-start (0,1,2,3,3,3 live entries on rounds 1–6).
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([
+            6000, 12000, 18000, 24000, 24000, 24000,
+        ]);
+        // The tick lands on the TARGET (the focus actor id is 'attacker'; healTargetId 'healer'
+        // resolves to it), summed per dotType = 6000 × live-entry-count, from round 2.
+        expect(dotTicked).toEqual([
+            { round: 2, targetId: 'attacker', damage: 6000 },
+            { round: 3, targetId: 'attacker', damage: 12000 },
+            { round: 4, targetId: 'attacker', damage: 18000 },
+            { round: 5, targetId: 'attacker', damage: 18000 },
+            { round: 6, targetId: 'attacker', damage: 18000 },
+        ]);
+    });
+
+    // ── Scenario 15 (b): affinity-advantage enemy damage (+25%) ──────────────
+    // HAND-VERIFIED. A bare (manual) enemy attacker bombards the heal target with one basic
+    // hit/round. Two runs, identical except affinity:
+    //   • neutral  (no affinity either side): enemy hit = 4000 × 1.00 = 4000.
+    //   • advantage (enemy thermal vs target chemical → damageModifier +25 → affinityMult 1.25):
+    //       enemy hit = 4000 × 1.25 = 5000.
+    // No heals (empty kit), hp 100000, defence 0 → HP declines purely by the incoming hit:
+    //   neutral:   100 → 96 → 92 → 88 → 84 → 80 (−4%/round; 4000/100000).
+    //   advantage: 100 → 95 → 90 → 85 → 80 → 75 (−5%/round; 5000/100000).
+    // The ADVANTAGE snapshot locks the elevated 5000 incoming / faster survival decline; the
+    // neutral snapshot is the 4000 baseline it is measured against (the ×1.25 is the headline).
+    const scenario15NeutralInput = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: { slots: [] },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+
+    const scenario15AdvantageInput = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            // target chemical; enemy thermal → thermal ADVANTAGE over chemical → +25% damage.
+            healTargetAffinity: 'chemical',
+            shipSkills: { slots: [] },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    affinity: 'thermal',
+                },
+            ],
+        });
+
+    snap('affinity NEUTRAL enemy damage (4000 baseline)', scenario15NeutralInput);
+    snap('affinity ADVANTAGE enemy damage (4000 × 1.25 = 5000)', scenario15AdvantageInput);
+
+    // Supplementary: advantage incoming is exactly ×1.25 the neutral incoming, every round.
+    it('scenario 15: advantage incoming (5000) is exactly 1.25× neutral incoming (4000)', () => {
+        idCounter = 0;
+        const neutral = simulateHealing(scenario15NeutralInput());
+        idCounter = 0;
+        const advantage = simulateHealing(scenario15AdvantageInput());
+        expect(neutral.rounds.every((r) => r.incomingDamage === 4000)).toBe(true);
+        expect(advantage.rounds.every((r) => r.incomingDamage === 5000)).toBe(true);
+        expect(advantage.rounds[0].incomingDamage).toBe(neutral.rounds[0].incomingDamage * 1.25);
+    });
+
+    // ── Scenario 16 (c): live selfHpPct gate activation mid-fight ────────────
+    // HAND-VERIFIED. The heal target (hp 10000, defence 0) carries a self-heal (10% hp = 1000)
+    // GATED on `hp-threshold self below 40%` (derivable). A bare enemy hits 1500/round. The gate
+    // reads the target's HP% ENTERING the round (its live currentHp this turn). The heal fires
+    // ONLY when entering below 40% — closing the earlier coverage gap (a target taking real
+    // engine damage driving a LIVE selfHpPct gate). Heal acts before damage each round:
+    //   R1 enter 100%: 100<40 false → no heal. Enemy 1500 → HP 8500 → 85%.
+    //   R2 enter 85%:  no heal → HP 7000 → 70%.
+    //   R3 enter 70%:  no heal → HP 5500 → 55%.
+    //   R4 enter 55%:  no heal → HP 4000 → 40%.
+    //   R5 enter 40%:  40<40 FALSE (strict below) → no heal → HP 2500 → 25%.
+    //   R6 enter 25%:  25<40 TRUE → heal 1000 (deficit 7500 → effective 1000) → HP 3500;
+    //                  enemy 1500 → HP 2000 → 20%.
+    //   R7 enter 20%:  heal 1000 → HP 3000; enemy 1500 → HP 1500 → 15%.
+    //   R8 enter 15%:  heal 1000 → HP 2500; enemy 1500 → HP 1000 → 10% (next-round entry).
+    //   ⇒ directHeal 0 on R1-R5, then 1000 on R6,R7,R8. The gate SWITCHES ON at round 6
+    //     (the first round entering strictly below 40%). incomingDamage 1500 every round.
+    const scenario16Input = () =>
+        BASE({
+            rounds: 8,
+            healer: { ...HEALER, hp: 10000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: healSkills([
+                ab({
+                    type: 'heal',
+                    target: 'self',
+                    conditions: [
+                        {
+                            subject: 'hp-threshold',
+                            derivable: true,
+                            hpSubject: 'self',
+                            hpComparator: 'below',
+                            hpPercent: 40,
+                        },
+                    ],
+                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                }),
+            ]),
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 1500, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+
+    snap('selfHpPct gate activates mid-fight (heal fires only below 40%)', scenario16Input);
+
+    // Supplementary: the gate is off (directHeal 0) until the target enters below 40% on round 6.
+    it('scenario 16: heal fires from round 6 (first entry below 40%)', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario16Input());
+        const healByRound = result.rounds.map((r) => r.directHeal);
+        expect(healByRound).toEqual([0, 0, 0, 0, 0, 1000, 1000, 1000]);
+    });
+
+    // ── Scenario 17 (d): enemy-buff condition fires off a live enemy self-buff ─
+    // HAND-VERIFIED. A PLAYER ship self-heal (10% hp = 10000 of its 100000) GATED on a
+    // DERIVABLE `enemy-buff: 'Attack Up'` condition (hand-built — ship-data enemy-buff gates are
+    // non-derivable/manual, so this exercises the LIVE enemy-buff path). The enemy grants ITSELF
+    // 'Attack Up' (+50% attack, 10 turns) on every cast → its hit = 4000 × 1.5 = 6000. The
+    // player gate reads the enemyBuffNames union sourced from the PRIOR state: the focus (speed
+    // 100) acts BEFORE the enemy (speed 50), so on round 1 the enemy has not yet applied Attack
+    // Up → gate empty → no heal. From round 2 the buff is live → the gate fires:
+    //   R1 enter 100%: enemyBuffNames empty → 10<… no heal (directHeal 0). Enemy 6000 → HP
+    //                  94000 → 94%.
+    //   R2 enter 94%:  enemyBuffNames=['Attack Up'] → heal 10000 (deficit 6000 → effective 6000,
+    //                  overheal 4000) → HP 100000. Enemy 6000 → HP 94000 → 94%.
+    //   R3…: steady — enter 94%, heal 10000 (effective 6000 / overheal 4000), back to 94%.
+    //   ⇒ directHeal 0 on R1, 10000 on R2-R6. enemyEffects[e1].selfBuffs=['Attack Up'] every round.
+    //     incomingDamage 6000 every round (the enemy self-buff applies round 1 too).
+    const scenario17Input = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: healSkills([
+                ab({
+                    type: 'heal',
+                    target: 'self',
+                    conditions: [{ subject: 'enemy-buff', derivable: true, buffName: 'Attack Up' }],
+                    config: { type: 'heal', pct: 10, basis: 'hp' },
+                }),
+            ]),
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 1 },
+                                    }),
+                                    ab({
+                                        type: 'buff',
+                                        target: 'self',
+                                        config: {
+                                            type: 'buff',
+                                            buffName: 'Attack Up',
+                                            parsedEffects: { attack: 50 },
+                                            stacks: 1,
+                                            isStackable: false,
+                                            duration: 10,
+                                        },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+    snap('enemy-buff condition fires (player heal gated on live enemy Attack Up)', scenario17Input);
+
+    // Supplementary: the conditional heal is OFF round 1 (enemy buff not yet live) and ON from
+    // round 2 once the enemy's ability-sourced self-buff is held.
+    it('scenario 17: conditional heal engages from round 2 (enemy holds Attack Up)', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario17Input());
+        const healByRound = result.rounds.map((r) => r.directHeal);
+        expect(healByRound).toEqual([0, 10000, 10000, 10000, 10000, 10000]);
+        const r2e1 = result.rounds[1].enemyEffects.find((e) => e.enemyId === 'e1');
+        expect(r2e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+    });
+
+    // ── Scenario 18 (e): on-attacked reactive fires off the enemy attack ─────
+    // HAND-VERIFIED. The heal target carries a PASSIVE on-attacked self-shield (30% hp = 30000
+    // of its 100000 max). A bare enemy hits 4000/round. The engine emits `attacked` AFTER the
+    // hit's shield-first drain, so the reactive shield is granted AFTER that round's incoming
+    // damage has already landed on HP (it cannot absorb its own trigger):
+    //   R1 enter 100%, shield 0: enemy hit 4000 lands on HP (no shield yet) → absorbed 0,
+    //      HP 96000. on-attacked → shield +30000 → pool 30000. ⇒ shield 30000, absorbed 0,
+    //      incoming 4000, hpPct entering next round 96%.
+    //   R2 enter 96%, shield 30000: enemy hit 4000 fully absorbed (pool 30000 → 26000) →
+    //      absorbed 4000, HP unchanged (96%). on-attacked → shield +30000, pool re-capped at
+    //      max HP 100000. ⇒ shield 30000, absorbed 4000.
+    //   R3…: steady — enter 96%, absorbed 4000, shield +30000 (pool stays capped at 100000).
+    //   ⇒ shield 30000 every round; shieldAbsorbed 0 on R1 then 4000 R2-R6; HP holds at 96%
+    //     from R2 (every hit fully absorbed). incomingDamage 4000 every round.
+    const scenario18Input = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                trigger: 'on-attacked',
+                                config: { type: 'shield', pct: 30, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+
+    snap('on-attacked reactive shield fires when the enemy attacks', scenario18Input);
+
+    // Supplementary: the on-attacked shield (30000) is granted every round; absorption is 0 on
+    // round 1 (shield granted AFTER that round's hit) then 4000 once the pool is standing.
+    it('scenario 18: on-attacked shield 30000/round; absorb 0 then 4000', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario18Input());
+        expect(result.rounds.map((r) => r.shield)).toEqual([
+            30000, 30000, 30000, 30000, 30000, 30000,
+        ]);
+        expect(result.rounds.map((r) => r.shieldAbsorbed)).toEqual([
+            0, 4000, 4000, 4000, 4000, 4000,
+        ]);
+    });
+
+    // ── Scenario 19 (Task 10a): per-enemy effect attribution ─────────────────
+    // TWO ship-backed enemy attackers bombard the heal target, each carrying a DISTINCT
+    // self-buff + a DISTINCT debuff. The round-overview enemyEffects must attribute each
+    // enemy's effects to ITS OWN actor id (no cross-enemy fold): e1 → Attack Up / Defense
+    // Down; e2 → Crit Up / Vulnerability. Numeric output is irrelevant here (this asserts the
+    // attribution shape only) — the target is given a huge pool so it never dies.
+    it('scenario 19: enemyEffects attributes each enemy’s self-buff + debuff to its own id', () => {
+        idCounter = 0;
+        const enemyKit = (selfBuff: string, debuff: string): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                        }),
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: debuff,
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 3,
+                            },
+                        }),
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: selfBuff,
+                                parsedEffects: { attack: 10 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+        const result = simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetId: 'healer',
+                shipSkills: { slots: [] },
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyKit('Attack Up', 'Defense Down'),
+                    },
+                    {
+                        id: 'e2',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 40 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyKit('Crit Up', 'Vulnerability'),
+                    },
+                ],
+            })
+        );
+        const r1 = result.rounds[0].enemyEffects;
+        const e1 = r1.find((e) => e.enemyId === 'e1');
+        const e2 = r1.find((e) => e.enemyId === 'e2');
+        // Each enemy carries ONLY its own effects (no cross-enemy contamination).
+        expect(e1?.selfBuffs.map((b) => b.buffName)).toEqual(['Attack Up']);
+        expect(e1?.debuffs.map((b) => b.buffName)).toEqual(['Defense Down']);
+        expect(e2?.selfBuffs.map((b) => b.buffName)).toEqual(['Crit Up']);
+        expect(e2?.debuffs.map((b) => b.buffName)).toEqual(['Vulnerability']);
     });
 });

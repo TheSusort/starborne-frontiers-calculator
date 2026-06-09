@@ -2404,8 +2404,17 @@ const DocumentationPage: React.FC = () => {
                                         another of your ships, or a manual stat line — then add up
                                         to four enemy attackers that bombard it each round. Enemies
                                         can be real ships (their charged skills produce realistic
-                                        damage spikes through the same combat walk as the DPS
-                                        Calculator) or quick manual attack/defense lines.
+                                        damage spikes, and they apply their real debuffs and
+                                        damage-over-time effects to the target — which tick for
+                                        damage each round — and buff themselves with their own
+                                        abilities) or quick manual attack/defense lines. Each enemy
+                                        attacker has an affinity selector matched against the
+                                        target&apos;s affinity to scale their incoming damage. A
+                                        hover-gated round status panel beside the Healing Over Time
+                                        chart shows, for the hovered round and grouped per healer
+                                        config, the healer&apos;s own active buffs as well as which
+                                        self-buffs are active on each enemy and which debuffs or
+                                        DoTs they have landed on the target.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2456,6 +2465,16 @@ const DocumentationPage: React.FC = () => {
                                         an ally). The timeline chart shows HP, shield pool, incoming
                                         damage, and effective healing per round, with a cumulative
                                         comparison between configurations.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">
+                                            Per-Round Healer Overview:
+                                        </span>{' '}
+                                        Hover any round on the Healing Over Time chart to see every
+                                        config&apos;s output for that round in the chart&apos;s
+                                        hover card — direct heal, heal-over-time, shield granted,
+                                        effective vs overheal, cleanses, and the incoming damage /
+                                        target HP% each faced — with charged and crit badges.
                                     </p>
                                 </div>
 

@@ -119,7 +119,18 @@ export type CombatEvent =
      *  does NOT simulate the control's combat effect. */
     | { type: 'control-applied'; casterId: string; effect: ControlEffect; round: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
-    | { type: 'ship-destroyed'; actorId: string; round: number };
+    | { type: 'ship-destroyed'; actorId: string; round: number }
+    /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
+     *  `attackerId` is the attacker. `didCrit` is present only when the attack
+     *  critted. Emitted once per enemy attack TURN (aggregate — not per-hit) from
+     *  the enemy intake in engine.ts, after the shield-first drain (Task 8). */
+    | {
+          type: 'attacked';
+          targetId: string;
+          attackerId: string;
+          round: number;
+          didCrit?: boolean;
+      };
 
 export type CombatEventType = CombatEvent['type'];
 

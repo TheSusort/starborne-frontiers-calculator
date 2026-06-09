@@ -35,6 +35,7 @@ import {
     PendingAccumulator,
     PendingBomb,
     CombatActor,
+    advanceChargeCadence,
 } from './state';
 import {
     ActiveBuff,
@@ -107,6 +108,10 @@ export interface PlayerTurnResult {
     dotsLanded: boolean;
     activeSelfBuffs: ActiveBuff[];
     landedEnemyDebuffs: ActiveBuff[];
+    /** Debuffs THIS actor discretely inflicted on the target THIS turn (source-accurate, unlike
+     *  the shared-per-target landedEnemyDebuffs window). Used by the healing enemy-effects
+     *  overview to attribute each debuff to the enemy that applied it (Task 10a). */
+    inflictedEnemyDebuffs: ActiveBuff[];
     resistedEnemyDebuffs: ActiveBuff[];
     directDamage: number;
     secondaryDamage: number;
@@ -200,6 +205,27 @@ export interface PlayerTurnArgs {
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
     healing?: HealingRuntimeCtx;
+    /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
+     *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
+     *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
+    selfHpPct?: number;
+    /** Enemy-side debuff target key (Task 6). Passed as the `enemyTargetId` arg to the three
+     *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
+     *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
+     *  (pre-Task-6 path, byte-identical). The real tank id is supplied only by the enemy-dispatch
+     *  branch (Task 6b); all player-side call sites in engine.ts leave this unset. */
+    targetId?: string;
+    /** Active buff names on the OPPOSING side (Task 7) for this actor's `enemy-buff` condition
+     *  gates. For a player actor this is the UNION of the enemy attacker(s)' self-buff names;
+     *  for the enemy-dispatch walk it is symmetric (the player team's buffs). NAMES ONLY — these
+     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
+     *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
+    enemyBuffNames?: string[];
+    /** Active debuff names on THIS actor (Task 7) for its `self-debuff` condition gates. For a
+     *  player heal target these are the enemy-applied debuffs in its per-target store (keyed by
+     *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
+     *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
+    selfDebuffNames?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +621,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         round: r,
         enemyHpDecline,
         grantAllyCharges,
+        selfHpPct: selfHpPctArg = 100,
+        targetId,
+        enemyBuffNames: enemyBuffNamesArg = [],
+        selfDebuffNames: selfDebuffNamesArg = [],
     } = args;
 
     const {
@@ -641,13 +671,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let action: 'active' | 'charged';
     if (hasChargedSkill && actor.charges >= chargeCount) {
         action = 'charged';
-        actor.charges = 0;
     } else {
         action = 'active';
-        if (hasChargedSkill) {
-            actor.charges += 1;
-        }
     }
+    advanceChargeCadence(actor, hasChargedSkill);
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
@@ -799,6 +826,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
@@ -808,13 +838,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (no status stored), recorded resisted with its would-be duration, and emitted.
     // Landed → emit debuff-applied ONCE at this infliction site (Phase 3 retiming).
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
+    // Debuffs THIS actor discretely inflicted on the target this turn (source-accurate
+    // attribution for the enemy-effects overview — Task 10a). Unlike landedEnemyDebuffs,
+    // which reflects the whole per-target window (shared across all attackers of one target),
+    // this captures only the applications THIS actor made at their own infliction sites.
+    // Seed with the newly-applied SCHEDULED timed enemy debuffs (this actor's own manual
+    // lists, owner-scoped): the intersection of the window snapshot with the names that fired
+    // this turn (appliedScheduledTimedNames). Empty for enemy attackers (no manual debuffs).
+    const appliedScheduledSet = new Set(appliedScheduledTimedNames);
+    const inflictedEnemyDebuffs: ActiveBuff[] = scheduledEnemy.landedEnemyDebuffs.filter((ab) =>
+        appliedScheduledSet.has(ab.buffName)
+    );
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
         if (landsTimedEnemyApplication(status.payload.application)) {
-            statusEngine.applyTimedAbilityStatus(r, status, actor.id);
+            statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
             // Discrete infliction event — emit ONCE at this application site.
             emitDebuffApplied(actor.id, status.payload.buffName);
+            inflictedEnemyDebuffs.push({
+                buffName: status.payload.buffName,
+                turnsRemaining: status.duration,
+            });
         } else {
             // status.duration is guaranteed numeric by the timed variant.
             resistedAbilityTimedEnemy.push({
@@ -863,11 +908,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //    persist their window unconditionally → folded WITHOUT a landing re-roll.
     //  - aura/accumulating (activeAbilityStatuses): conceptually re-applied each
     //    round → KEEP the per-round landing re-roll, with application respected.
-    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id);
+    const timedAbilityEnemy = statusEngine.timedAbilityStatuses('enemy', actor.id, targetId);
     const recurringAbilityEnemy = statusEngine.activeAbilityStatuses(
         'enemy',
         resolveCtx(preDebuffGateCtx),
-        actor.id
+        actor.id,
+        targetId
     );
     const landedAbilityEnemy: ActiveBuff[] = [];
     const resistedAbilityEnemy: ActiveBuff[] = [...resistedAbilityTimedEnemy];
@@ -914,6 +960,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -987,6 +1036,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveCritRate: cappedCrit(critBuff),
         enemyType,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [
@@ -1058,6 +1110,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         roundCrit,
         enemyHpPct,
+        selfHpPct: selfHpPctArg,
+        enemyBuffNames: enemyBuffNamesArg,
+        selfDebuffNames: selfDebuffNamesArg,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
@@ -1521,6 +1576,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         dotsLanded,
         activeSelfBuffs: activeSelfBuffsForRound,
         landedEnemyDebuffs,
+        inflictedEnemyDebuffs,
         resistedEnemyDebuffs,
         directDamage,
         secondaryDamage,

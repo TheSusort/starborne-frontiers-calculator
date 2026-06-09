@@ -187,7 +187,7 @@ describe('allyCritDot – Task 2: on-ally-crit-dot reactive listener', () => {
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
 
         const baseEvent = {

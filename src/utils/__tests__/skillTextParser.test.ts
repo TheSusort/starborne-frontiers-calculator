@@ -2143,6 +2143,108 @@ describe('damage-leech parsing', () => {
     });
 });
 
+// Unmodeled reactive triggers (on-destroyed/on-kill, on-buff-purged, reactive on-cleansed,
+// on-directly-damaged/attacked/takes-damage) must NOT be emitted as on-cast heals — the engine
+// doesn't model them yet, so emitting them makes the heal fire EVERY round (phantom healing).
+// They become live later via Phase 4b/4c. Guards: leech heals, ACTIVE cleanse+repair, and
+// modeled reactive heals (on-ally-critically-repaired) MUST still parse.
+describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', () => {
+    it('Salvation R0 passive: "when this Unit is destroyed … repairs 60%" is NOT extracted', () => {
+        expect(
+            parseHealAbilities(
+                'When this Unit is destroyed it repairs 60% of its max HP to all allies.'
+            )
+        ).toEqual([]);
+    });
+
+    it('Salvation R2 passive: both the on-destroyed 80% and the on-purged 5% are NOT extracted', () => {
+        expect(
+            parseHealAbilities(
+                "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP."
+            )
+        ).toEqual([]);
+    });
+
+    it('Salvation active heal (repairs 25%) still parses', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit repairs 25% of its Max HP and grants Binderburg Resilience II for 1 turn.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 25, basis: 'hp', target: 'self', explicitTarget: false }]);
+    });
+
+    it('Salvation charged heal (repairs 30%) still parses', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit repairs 30% of its Max HP and grants Inc. Damage Down II for 2 turns.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: false }]);
+    });
+
+    it('Makoli passive: "when directly damaged while below 40% HP, repairs 20%" is NOT extracted', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged while below 40% HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn.'
+            )
+        ).toEqual([]);
+    });
+
+    it('Makoli ACTIVE cleanse+repair (cleanses 1 debuff, repairs 5% + 100% Defense) still parses', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit cleanses 1 debuff, repairs 5% of its Max HP with an additional repair equal to 100% of its Defense, and grants Inc. Damage Down II for 2 turns.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false },
+            { kind: 'heal', pct: 100, basis: 'defense', target: 'self', explicitTarget: false },
+        ]);
+    });
+
+    it('Cultivator: active-cleanse repair (4%) stays; on-ally-directly-damaged repair (8%) drops', () => {
+        expect(
+            parseHealAbilities(
+                "When this Unit cleanses a Debuff, it also repairs that ally for 4% of this Unit's Max HP. Additionally, when an ally is directly damaged within the active pattern, this Unit repairs that ally for 8% of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
+    });
+
+    it('GUARD: leech heal "repairs X% of the damage it deals" still parses (basis damage-dealt)', () => {
+        const r = parseHealAbilities(
+            'This Unit repairs itself for 40% of the damage it deals to enemies.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'heal', pct: 40, basis: 'damage-dealt' });
+    });
+
+    it('GUARD: damage-taken leech reaction (Malvex "when directly damaged … shield … of damage dealt to them") still parses', () => {
+        const r = parseHealAbilities(
+            'When directly damaged as a primary target, this Unit gains a Shield equal to 15% of the Damage dealt to them.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
+    });
+
+    it('GUARD: modeled reactive heal "when this Unit critically repairs an ally" still parses', () => {
+        const r = parseHealAbilities(
+            "When this Unit critically repairs an ally, it also repairs that ally for 5% of this Unit's Max HP."
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'heal', pct: 5, basis: 'hp' });
+    });
+
+    it('on-kill trigger ("when it destroys an enemy, repairs X%") is NOT extracted', () => {
+        expect(
+            parseHealAbilities('When it destroys an enemy, this Unit repairs 30% of its Max HP.')
+        ).toEqual([]);
+    });
+
+    it('reactive on-cleansed ("when this Unit is cleansed, repairs X%") is NOT extracted', () => {
+        expect(
+            parseHealAbilities('When this Unit is cleansed, it repairs 10% of its Max HP.')
+        ).toEqual([]);
+    });
+});
+
 describe('parseHealAbilities explicitTarget', () => {
     // The parser keeps defaulting bare repairs to target 'self' (the slot/damage-aware FLIP to
     // 'ally' lives in buildShipAbilities, not here). explicitTarget records whether a target

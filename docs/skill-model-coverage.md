@@ -9,6 +9,7 @@
 > Updated **2026-06-06** after the ally-crit-dot reactive trigger (branch `feat/combat-engine-ally-crit-dot`).
 > Updated **2026-06-07** after the Healing Calculator engine rebuild (branch `feat/healing-calc-engine`).
 > Updated **2026-06-07** after the damage-leech heals & shields ship (branch `feat/damage-leech`): the ~14 leech text cells (~11 ships) now parse + simulate (see §5 LEECH, §6).
+> Updated **2026-06-08** after the Phase 4a enemy-offense increment (branch `feat/combat-engine-phase4a-enemy-offense`): enemy is now a full `runPlayerTurn` actor vs the heal target; per-target status stores; affinity symmetry on enemy attacks; real `selfHpPct`; `attacked` event + live `on-attacked` trigger; enemy-applied DoTs tick on the tank (see §5 PHASE 4a, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -69,7 +70,7 @@ round (as `modifierCtx` and `ctx`), both **before Step-3 DoT application**.
 | `enemy-debuff` | ✅ | landed debuffs + DoT entries — **name-agnostic, `buffName` ignored** (`evaluateConditions.ts:31-35`) | real | ✅ |
 | `enemy-type` | ✅ (incl. negation, anyOf OR-lists) | global page-level `enemyType` | real | ✅ |
 | `self-crit` | ✅ | binary per-round outcome from deterministic crit schedule (in payload ctx); `effectiveCritRate / 100` probability in modifier ctx | real | ✅ |
-| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct` fixed 100; `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self fixed 100, enemy live | ✅ enemy HP-threshold gates now switch mid-fight; self remains fixed |
+| `hp-threshold` | ✅ (below/above, self/enemy) | `selfHpPct`: live for the heal target in healing mode (bombarded tank's current HP%); fixed 100 in DPS mode and for un-targeted actors. `enemyHpPct` derived from cumulative damage vs configured enemy HP pool — declines each round | self live in healing mode (tank), fixed 100 in DPS | ✅ enemy HP-threshold gates switch mid-fight; DERIVABLE self HP-threshold gates (at-full-HP off-switch, extra-action HP<N, modifier HP<N) now switch for the tank in healing mode. **Non-derivable** self HP-threshold gates (Makoli/Guardian-style reactive heals) stay manual — the parser marks "below X% HP" on reactive heals as non-derivable, and the "when directly damaged" trigger is unmodeled (4c). |
 | `enemy-hp-pct` / `enemy-hp-missing-pct` | ✅ (`hpProportionalScaling`: "up to X% based on the target's current/missing HP" — Akula/Tithonus) | count = live `enemyHpPct` (or `100 −` it) | real | ✅ HP-proportional scaling modifiers track the declining pool |
 | `adjacent-ally` | ✅ (for-each scaling) | `adjacentAllyCount` | **0** | ❌ manual only |
 | `enemy-adjacent` | ✅ (charge classifier) | `enemyAdjacentCount` | **0** | ❌ manual only |
@@ -578,6 +579,88 @@ buff/charge-aura), source it from firing + passive.
   enemy") — hp-basis shield with an unparseable trigger; pre-existing behaviour untouched. Both
   noted as known Phase-4 cells. Revive/Cheat Death guard retained.
 
+- **Phase 4a: Enemy as a full `runPlayerTurn` actor (2026-06-08, branch `feat/combat-engine-phase4a-enemy-offense`).**
+  The healing-mode enemy became a FULL combat actor on the shared `runPlayerTurn` pipeline.
+  The damage-only `runEnemyAttackerTurn` / `enemyTurn.ts` was retired.
+
+  **Single-target focus-fire model.** The enemy targets the configured heal target (tank) on
+  every turn. DEFERRED: positional rows / front-back-skip targeting / AoE patterns,
+  death-fallback re-targeting, multi-enemy. These are Phase 4b/4d scope items.
+
+  **Full parsed kit vs the tank.** The enemy walks its complete ability set:
+  affinity-modified damage, debuffs/DoTs applied to the tank, and self-buffs to itself.
+  The same `runPlayerTurn(PlayerActorRuntime)` pipeline handles both player and enemy actors;
+  no separate code path remains.
+
+  **Affinity symmetry on enemy attacks.** Enemy attacks resolve
+  `computeAffinityModifiers(enemyAffinity, targetAffinity)` — the enemy's matchup against the
+  heal target — scaling damage by the same affinity formula the player side uses. Affinity is
+  configured per enemy attacker in the UI; auto-filled when picking a ship.
+
+  **Real `selfHpPct` for the tank.** The heal target's current HP percentage is now live and
+  fed as `selfHpPct` in the actor's condition context. This activates the DERIVABLE self-HP
+  gates the parser emits: (1) **at-full-HP / above-99% gates** now correctly switch OFF when
+  the actor is below full HP; (2) **Tormenter-style extra-action HP<N gates**
+  (`EXTRA_ACTION_SELF_HP_RE`) switch ON when the actor's HP drops below the threshold; and
+  (3) **`hpThresholdFromSentence` modifier clauses** (e.g. Los's "30% more damage when its HP
+  is below 50%") become live. These are the `hp-threshold` conditions the parser marks
+  derivable. **NOT activated by 4a:** Makoli/Guardian-style "below X% HP" REACTIVE HEALS
+  ("When directly damaged while below 40% HP, repairs 20%") — the parser keeps "below X% HP"
+  gates on REACTIVE heals MANUAL (non-derivable; see `skillTextParser.ts:485,599`), and the
+  "when directly damaged" trigger itself is not yet modeled (deferred to **4c**). Real
+  `selfHpPct` does not reach those repair abilities.
+
+  **`attacked` event + live `on-attacked` trigger.** A new additive `attacked` event is
+  emitted each time an actor takes damage from an enemy turn. The `on-attacked` trigger is
+  now in `LIVE_TRIGGERS`: when a player actor is attacked, its `on-attacked` reactive
+  abilities execute via the normal intent-queue drain. This makes the heal target's reactive
+  defenses (shields, heals, charge gains triggered by being hit) fire from real combat events
+  rather than being silently assume-active.
+
+  **Per-target status stores in `statusEngine`.** The StatusEngine's debuff side was
+  generalized to per-target keyed stores. The lone enemy is keyed by an `ENEMY_TARGET_ID`
+  sentinel; the heal target (tank) has its own debuff store. Enemy self-buffs live in their
+  own per-owner buff store. This ensures the tank's landed debuffs and the enemy's self-buffs
+  are fully isolated and each conditions context reads only its own side.
+
+  **Player condition contexts — live `enemyBuffNames` + `selfDebuffNames`.** Player actors
+  now read live `enemyBuffNames` (the names of the opposing side's currently-active
+  self-buffs) and `selfDebuffNames` (their own currently-landed debuffs) from the per-target
+  status stores. These are name-only arrays (no double-fold with other count fields).
+
+  **Enemy-applied DoTs tick on the tank.** DoTs that the enemy inflicts on the heal target
+  now tick each round during the enemy's turn, crediting incoming damage to the tank. The
+  existing DoT-tick machinery from the player side is reused. This means Corrosion, Inferno,
+  and Bomb DoTs from enemy attackers deal their damage over time correctly, making survival
+  estimates against DoT-heavy enemies accurate.
+
+  **Healing UI additions.** The enemy attacker panel gains an affinity selector per enemy
+  (auto-filled from the ship's affinity when a ship is selected). A new Enemy Effects round
+  overview panel shows, per round, the enemy attacker's active self-buffs and the debuffs /
+  DoTs they have landed on the tank.
+
+  **KNOWN LIMITATIONS (Phase 4a — documented follow-ups, NOT bugs).**
+
+  1. *`enemy-buff` / Provoke `self-debuff` conditions stay manual-count (not live)*. The
+     engine plumbing now feeds live `enemyBuffNames` and `selfDebuffNames` through to every
+     condition context. However, the ship-data conditions that gate on `enemy-buff` or on the
+     Provoke-style `self-debuff` subject are emitted with `derivable: false` in
+     `buildShipAbilities.ts` and the parser. Only `derivable: true` conditions (e.g. the
+     "for each debuff on self" count-scaling path) consume the new live data. Flipping those
+     ship gates to `derivable: true` would make the `enemy-buff`/`self-debuff` gates live,
+     but would churn the 22 DPS golden snapshots (ships with those conditions would now see 0
+     enemy buffs / 0 self-debuffs rather than assume-active-1). This is a deliberate
+     follow-up, not done in Phase 4a.
+
+  2. *Enemy debuffs land at 100% on the tank.* Enemy attacker ships carry no hacking stat,
+     so there is no hacking-vs-security landing roll for debuffs they inflict. All enemy
+     debuffs land unconditionally (`debuffLandingChance: 1`). A proper enemy hacking stat
+     (and a configurable tank security stat for enemy debuff landing) is a follow-up item.
+
+  **DPS Calculator unchanged.** No DPS goldens were touched; the 22 DPS golden parity
+  scenarios are byte-identical throughout this increment. The healing result type grew
+  additively (`enemySelfBuffs` / `targetDebuffs`).
+
 ---
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
@@ -734,11 +817,46 @@ configure it and it looks like it works, but it does nothing".
 >   shield and Laika's shield-on-shield-remove remain unmodeled (Phase-4 enemy-action / hp-basis
 >   trigger cells); confirm they are intentionally absent until Phase 4.
 >
-> **Phase 4 pointer (not yet started):**
-> - Enemy offensive actions (DPS side), `on-attacked`/`on-ally-destroyed`/`on-destroyed` consumption,
->   targeting/taunt/stealth, multi-enemy, NON-damage enemy abilities in the healing walk,
->   revive / Cheat Death, damage-reactive shields, cleanse debuff consumption (currently output-count
->   only), purge/control consumption, self-HP realism.
+> **Shipped 2026-06-08 (Phase 4a — enemy as full offensive actor, branch `feat/combat-engine-phase4a-enemy-offense`):**
+> - Enemy is now a full `runPlayerTurn` actor (single-target focus-fire vs the heal target).
+>   `runEnemyAttackerTurn` / `enemyTurn.ts` retired.
+> - Full parsed kit: affinity-modified damage, debuffs/DoTs to the tank, self-buffs to itself.
+> - Affinity symmetry: enemy resolves `computeAffinityModifiers(enemyAffinity, targetAffinity)`.
+> - Real `selfHpPct` for the tank: activates the DERIVABLE self-HP gates (at-full-HP
+>   off-switch, Tormenter HP<50 extra-action, Los-style modifier HP<N). Makoli/Guardian
+>   "below X% HP" REACTIVE heals are NOT activated — the parser keeps those gates
+>   manual + the "when directly damaged" trigger is unmodeled (deferred to 4c).
+> - `attacked` event + `on-attacked` trigger moved from annotation-only to LIVE (`LIVE_TRIGGERS`).
+> - Per-target status stores: each target's debuffs are isolated in the StatusEngine; enemy
+>   self-buffs in their own per-owner store.
+> - Player condition contexts read live `enemyBuffNames` + `selfDebuffNames` (names only).
+> - Enemy-applied DoTs tick on the tank each round (existing DoT-tick machinery reused).
+> - UI: affinity selector per enemy attacker + Enemy Effects round overview panel.
+> - DPS goldens byte-identical (22 scenarios); healing result type grew additively.
+>
+> **Phase 4a KNOWN LIMITATIONS (backlog follow-ups):**
+> - *`enemy-buff` / Provoke `self-debuff` conditions still manual* — the live `enemyBuffNames`/
+>   `selfDebuffNames` arrays are plumbed and correct, but the ship-data conditions that gate on
+>   these subjects are emitted `derivable: false` (parser / `buildShipAbilities.ts`). Only
+>   `derivable: true` paths (count-scaling) consume the live data. Making the ship gates live
+>   requires flipping them to `derivable: true`, which would churn the 22 DPS goldens. Tracked
+>   as item 11 below (renumbered from the items 11/12 that shipped in the healing-backlog batch).
+> - *Enemy debuffs land at 100%* — no hacking stat on enemy actors → no hacking-vs-security
+>   landing roll; `debuffLandingChance: 1` hard-coded. Tracked as item 12 below.
+>
+> **Phase 4b–4f and simulator page (pending):**
+> - **4b Death & revive modeling** — `on-destroyed`/`on-ally-destroyed` live triggers,
+>   death events for all actors, revive/Cheat Death (Hayyan/Yazid/Tycho), Sokol/Harvester
+>   extra-action seams (§6 item 9).
+> - **4c Enemy-action reactions + generic damage triggers** — `on-attacked` consumer ships
+>   (Zosimos/Arum/Yarrow/Larkspur/Grif), generic `on-self-damaged`/`on-ally-damaged`,
+>   Isha onCritHit (per-hit decision), Graphite/Refine.
+> - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
+>   AoE; death-fallback re-targeting.
+> - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
+>   purge, control effect simulation (stasis/taunt/provoke effects), damage reduction/reflect.
+> - **4f Defense-calc adoption** — defense calculator on the engine.
+> - **5 Simulator page** — per-round damage/healing/defense per actor; own UX spec.
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
@@ -807,6 +925,27 @@ configure it and it looks like it works, but it does nothing".
 > *Items 11 (Hermes Everliving-Regeneration grant — formerly mislabelled "Pallas") and 12
 > (team-actor healModifier) shipped 2026-06-08 in the healing backlog batch — see the shipped
 > block above.*
+
+11. **`enemy-buff` / Provoke `self-debuff` conditions still manual-count (Phase 4a follow-up)** —
+    The engine now feeds live `enemyBuffNames` (enemy's active self-buff names) and
+    `selfDebuffNames` (tank's own debuff names) into every player condition context. However,
+    the ship-data conditions that gate on the `enemy-buff` subject (e.g. "if the enemy has
+    Stealth") and the Provoke-style `self-debuff` gates are emitted `derivable: false` in
+    `buildShipAbilities.ts` and the parser; only `derivable: true` conditions (the
+    count-scaling path) consume the live arrays. Making the ship gates live requires flipping
+    them to `derivable: true`, which would churn all 22 DPS golden snapshots (those ships
+    would then see 0 enemy-buffs / 0 self-debuffs instead of the previous assume-active-1
+    treatment). Deliberately deferred: the live plumbing exists; the golden-churn cost is the
+    blocker. Resolution: flip `derivable` in the parser / `buildShipAbilities.ts`, regenerate
+    the 22 DPS goldens under a controlled KNOWN-DIFF review (medium cost; meaningful accuracy
+    gain for any ship with an enemy-buff or self-debuff gate).
+
+12. **Enemy debuffs land at 100% on the tank (Phase 4a simplification)** — Enemy attacker
+    actors carry no hacking stat, so there is no hacking-vs-security landing roll when they
+    inflict debuffs on the heal target; `debuffLandingChance` is hard-coded to `1` (always
+    land). Resolution: add an optional `enemyHacking` stat to the enemy attacker config and
+    apply the normal landing formula. Medium cost; relevant for security-stacked tanks facing
+    debuff-heavy enemies.
 
 ---
 

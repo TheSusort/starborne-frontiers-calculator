@@ -1,6 +1,7 @@
 import React from 'react';
-import { ActiveBuff, ActiveDoTState, RoundData } from '../../utils/calculators/dpsSimulator';
-import { DoTApplicationEntry, DoTType } from '../../types/calculator';
+import { RoundData } from '../../utils/calculators/dpsSimulator';
+import { BuffRow } from '../ui/BuffRow';
+import { dotStateLabel } from './dotLabels';
 
 interface DPSBuffPanelProps {
     ships: Array<{
@@ -12,51 +13,6 @@ interface DPSBuffPanelProps {
     totalRounds: number;
     hoveredRound: number | null;
 }
-
-function formatTurns(t: ActiveBuff['turnsRemaining']): string {
-    // 'recurring' = always-on aura; 'permanent' = persistent stacking status
-    // (Defense Shred et al.) — both render as unbounded.
-    return t === 'recurring' || t === 'permanent' ? '∞' : `${t}t`;
-}
-
-const DOT_NAMES: Record<DoTType, Record<number, string>> = {
-    corrosion: { 3: 'Corrosion I', 6: 'Corrosion II', 9: 'Corrosion III' },
-    inferno: { 15: 'Inferno I', 30: 'Inferno II', 45: 'Inferno III' },
-    bomb: { 100: 'Bomb I', 200: 'Bomb II', 300: 'Bomb III' },
-};
-
-function dotLabel(dot: DoTApplicationEntry): string {
-    const name = DOT_NAMES[dot.type]?.[dot.tier] ?? `${dot.type} (${dot.tier})`;
-    return dot.stacks > 1 ? `${name} ×${dot.stacks}` : name;
-}
-
-function activeDoTLabel(dot: ActiveDoTState): string {
-    const name = DOT_NAMES[dot.type]?.[dot.tier] ?? `${dot.type} (${dot.tier})`;
-    return dot.stacks > 1 ? `${name} ×${dot.stacks}` : name;
-}
-
-const BuffRow: React.FC<{
-    buff: ActiveBuff;
-    variant: 'self' | 'enemy';
-    resisted?: boolean;
-}> = ({ buff, variant, resisted }) => (
-    <div className={`flex items-center gap-1.5 mb-1 ${resisted ? 'opacity-40' : ''}`}>
-        <div
-            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${resisted ? 'bg-dark-border' : variant === 'self' ? 'bg-blue-500' : 'bg-red-500'}`}
-        />
-        <span className="flex-1 text-xs text-theme-text-primary truncate">{buff.buffName}</span>
-        {buff.stacks !== undefined && (
-            <span className="text-xs text-theme-text-secondary">×{buff.stacks}</span>
-        )}
-        {resisted ? (
-            <span className="text-xs text-theme-text-secondary italic">resisted</span>
-        ) : (
-            <span className="text-xs text-theme-text-secondary">
-                {formatTurns(buff.turnsRemaining)}
-            </span>
-        )}
-    </div>
-);
 
 const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData | null }> = ({
     name,
@@ -118,7 +74,7 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                                 className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dotsLanded ? 'bg-orange-500' : 'bg-dark-border'}`}
                             />
                             <span className="flex-1 text-xs text-theme-text-primary truncate">
-                                {dotLabel(dot)}
+                                {dotStateLabel(dot)}
                             </span>
                             {dotsLanded ? (
                                 <span className="text-xs text-theme-text-secondary">
@@ -140,7 +96,7 @@ const ShipSection: React.FC<{ name: string; color: string; roundData: RoundData 
                         <div key={`adot-${i}`} className="flex items-center gap-1.5 mb-1">
                             <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-yellow-500" />
                             <span className="flex-1 text-xs text-theme-text-primary truncate">
-                                {activeDoTLabel(dot)}
+                                {dotStateLabel(dot)}
                             </span>
                             <span className="text-xs text-theme-text-secondary">
                                 {dot.type === 'bomb'

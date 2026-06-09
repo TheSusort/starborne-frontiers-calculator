@@ -125,6 +125,44 @@ describe('EnemyAttackersPanel', () => {
         expect(screen.queryByText('+ Add enemy attacker')).not.toBeInTheDocument();
     });
 
+    it('renders an affinity selector defaulting to Antimatter', () => {
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[manual]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        // The shared Affinity Select renders its label and the selected option text.
+        expect(screen.getByText('Affinity')).toBeInTheDocument();
+        expect(screen.getByText('Antimatter')).toBeInTheDocument();
+    });
+
+    it('reflects the enemy affinity field and calls onUpdate with the chosen affinity', () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[{ ...manual, affinity: 'thermal' }]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        // Selected value is reflected.
+        expect(screen.getByText('Thermal')).toBeInTheDocument();
+        // Open the affinity Select and pick Electric.
+        fireEvent.click(screen.getByLabelText('Affinity'));
+        fireEvent.click(screen.getByText('Electric'));
+        expect(onUpdate).toHaveBeenCalledWith('1', { affinity: 'electric' });
+    });
+
     it('propagates manual edits and removal', () => {
         const onUpdate = vi.fn();
         const onRemove = vi.fn();
@@ -143,5 +181,23 @@ describe('EnemyAttackersPanel', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
         fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
         expect(onRemove).toHaveBeenCalledWith('1');
+    });
+
+    it('renders correctly with zero enemies and still shows the Add button', () => {
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={noop}
+            />
+        );
+        // No enemy cards rendered.
+        expect(screen.queryByLabelText('Remove enemy attacker')).not.toBeInTheDocument();
+        // Add button still visible (0 < MAX_ENEMY_ATTACKERS).
+        expect(screen.getByText('+ Add enemy attacker')).toBeInTheDocument();
     });
 });

@@ -1,9 +1,11 @@
 import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
+import { AffinityName } from '../../types/ship';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
-import { runCombat } from '../combat/engine';
+import { runCombat, EnemyRoundEffects } from '../combat/engine';
 import { selectFiringSkill } from '../abilities/applyAbilities';
+import { computeAffinityModifiers } from './affinityUtils';
 import { toDotAndPenModifiers } from './dpsBuffHelpers';
 import { deriveTeamEngineActors } from './dpsSimulator';
 
@@ -24,8 +26,12 @@ export interface EnemyAttackerInput {
     stats: { attack: number; crit: number; critDamage: number; speed: number };
     chargeCount: number;
     startCharged: boolean;
-    /** Basics walk (damage abilities only). Absent → one basic attack per turn. */
+    /** Full kit walk. Absent → one synthesized basic attack per turn. */
     shipSkills?: ShipSkills;
+    /** Enemy attacker's affinity. Combined with the heal target's affinity via
+     *  computeAffinityModifiers(enemyAffinity, targetAffinity) to produce the matchup.
+     *  Absent → neutral defaults (modifier 0, cap 100, penalty 0). */
+    affinity?: AffinityName;
 }
 
 export interface HealingSimulationInput {
@@ -36,6 +42,10 @@ export interface HealingSimulationInput {
     selfBuffs: SelectedGameBuff[];
     /** Which player actor the enemies bombard: 'healer' or a team actor id. */
     healTargetId: string;
+    /** Affinity of the heal target — used to compute each enemy attacker's matchup via
+     *  computeAffinityModifiers(enemyAffinity, targetAffinity). Absent → neutral for all
+     *  enemies (byte-identical to prior behaviour when enemy affinity was also absent). */
+    healTargetAffinity?: AffinityName;
     teamActors?: TeamActorInput[];
     enemies: EnemyAttackerInput[];
     rounds: number;
@@ -63,6 +73,11 @@ export interface HealingRoundData {
     cumulativeHealing: number;
     teamHealing?: number; // non-focus actors' raw (direct+HoT) healing; only when team actors exist
     activeSelfBuffs: ActiveBuff[];
+    /** Per-enemy effects this round (Task 10a) — one entry per enemy attacker that produced an
+     *  effect, carrying its own self-buffs + the debuffs it landed on the heal target, keyed by
+     *  the enemy's actor id. For the UI's enemy-effects round overview, grouped/attributed to the
+     *  source enemy ship. Empty for a bare/manual enemy with no effects. */
+    enemyEffects: EnemyRoundEffects[];
     extraTurns?: number;
 }
 
@@ -96,9 +111,13 @@ const FOCUS_ID = 'attacker';
  * walk (shared `deriveTeamEngineActors`) — then calls `runCombat` and assembles the public
  * result from the additive `healing` block.
  *
- * Affinity is IGNORED this increment (healing ignores affinity): affinityDamageModifier 0,
- * affinityCritCap 100, affinityCritPenalty 0, and the team walk is derived with no enemy
- * affinity. The dummy enemy is a pure DoT carrier / player-offense target (enemySpeed 0 →
+ * Enemy affinity IS resolved per attacker via computeAffinityModifiers(enemyAffinity,
+ * healTargetAffinity) (the enemy is the attacker, the heal target the defender) — producing
+ * each enemy's affinityDamageModifier / affinityCritCap / affinityCritPenalty. Absent enemy
+ * or target affinity → neutral (modifier 0, cap 100, penalty 0). The HEALER's own offense vs
+ * the dummy enemy still passes affinityDamageModifier 0 / cap 100 / penalty 0 (its damage is
+ * irrelevant to healing), and the team walk is derived with no enemy affinity. The dummy enemy
+ * is a pure DoT carrier / player-offense target (enemySpeed 0 →
  * it acts last) — player offense vs it is irrelevant to healing output, but the cadence and
  * DoT machinery still run as in DPS mode.
  *
@@ -115,6 +134,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         enemies,
         rounds: numRounds,
         teamActors,
+        healTargetAffinity,
     } = input;
 
     // Dummy-enemy defaults: a high-defence, huge-HP punching bag that never dies and acts last.
@@ -140,11 +160,27 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // a team actor id — the engine throws on an unknown id, which we let propagate).
     const healTargetId = input.healTargetId === 'healer' ? FOCUS_ID : input.healTargetId;
 
-    // Walked team actors via the shared helper (security 100, no enemy affinity — healing
-    // ignores affinity this increment). healModifier IS threaded from CombatStatBlock.healModifier
+    // Walked team actors via the shared helper (security 100, no enemy affinity — the
+    // player team's affinity matchup vs the dummy punching-bag enemy is irrelevant to
+    // healing output). healModifier IS threaded from CombatStatBlock.healModifier
     // (default 0 when absent), so walked team actors fold their own heal-modifier into heal casts.
     const engineTeamActors = deriveTeamEngineActors(teamActors, ENEMY_SECURITY, undefined);
     const hasTeamActors = !!teamActors && teamActors.length > 0;
+
+    // Pre-resolve each enemy attacker's affinity matchup vs the heal target (Task 9).
+    // Argument order: computeAffinityModifiers(ATTACKER affinity, DEFENDER affinity) —
+    // the enemy is the attacker and the heal target is the defender.
+    // Absent enemy or target affinity → neutral (damageMod 0, cap 100, penalty 0):
+    // byte-identical to prior behaviour for all fixtures that omit affinity.
+    const engineEnemyAttackers = enemies.map((e) => {
+        const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
+        return {
+            ...e,
+            affinityDamageModifier: aff.damageModifier,
+            affinityCritCap: aff.critCap,
+            affinityCritPenalty: aff.critPenalty,
+        };
+    });
 
     const { rounds: engineRounds, healing } = runCombat({
         attack: healer.attack,
@@ -172,7 +208,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         enemySpeed: 0,
         healModifier: healer.healModifier,
         healTargetId,
-        enemyAttackers: enemies,
+        enemyAttackers: engineEnemyAttackers,
         teamActors: engineTeamActors,
         bus: input.bus,
     });
@@ -249,6 +285,9 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             cumulativeHealing: Math.round(cumulativeRaw),
             ...(hasTeamActors ? { teamHealing: Math.round(teamRoundRaw) } : {}),
             activeSelfBuffs: rd.activeSelfBuffs,
+            // Enemy-effects overview (Task 10a): per-enemy, attributed by enemy id. Names only,
+            // never folded into any value.
+            enemyEffects: hr?.enemyEffects ?? [],
             ...(rd.extraTurns !== undefined ? { extraTurns: rd.extraTurns } : {}),
         };
     });

@@ -21,6 +21,12 @@ export function buildRoundContext(state: {
     roundCrit?: boolean;
     /** Derived enemy HP% (0..100): 100 × max(0, 1 − cumulativeDamage/enemyHp). Default 100. */
     enemyHpPct?: number;
+    /** Self HP% (0..100). Default 100 (DPS-assumption: self never takes damage). */
+    selfHpPct?: number;
+    /** Active buff names on the enemy. Default [] (DPS-assumption: no enemy buffs). */
+    enemyBuffNames?: string[];
+    /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
+    selfDebuffNames?: string[];
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -31,13 +37,13 @@ export function buildRoundContext(state: {
             state.bombCount,
         effectiveCritRate: state.effectiveCritRate,
         enemyType: state.enemyType,
-        // DPS-assumption defaults
-        selfDebuffNames: [],
-        enemyBuffNames: [],
+        // DPS-assumption defaults (overridable for live-engine population)
+        selfDebuffNames: state.selfDebuffNames ?? [],
+        enemyBuffNames: state.enemyBuffNames ?? [],
         adjacentAllyCount: 0,
         enemyAdjacentCount: 0,
         enemyDestroyedCount: 0,
-        selfHpPct: 100,
+        selfHpPct: state.selfHpPct ?? 100,
         enemyHpPct: state.enemyHpPct ?? 100,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };

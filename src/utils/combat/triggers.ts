@@ -114,15 +114,18 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once per CRITTING HIT (critHits field; falls back to the didCrit binary for events without it)
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied with `sourceId !== ownerId &&
- *    sourceId !== enemyId` (any OTHER player's infliction is an ally-infliction from this
+ *    !isEnemySide(sourceId)` (any OTHER PLAYER's infliction is an ally-infliction from this
  *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
- *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
- *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER player actor (ally crit-cast DoT)
+ *    Every enemy-side actor (dummy wall + enemy attackers) is excluded — an enemy is never an
+ *    ally. The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER PLAYER actor (ally crit-cast DoT;
+ *    enemy-side sources excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
- *    fires once PER CRITTING HIT; the owner's own casts and the enemy are excluded.
+ *    fires once PER CRITTING HIT; the owner's own casts and every enemy-side actor are excluded
+ *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
@@ -142,9 +145,17 @@ export function registerReactiveListeners(args: {
     bus: CombatEventBus;
     perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
     enqueue: (intent: Intent) => void;
-    enemyId: string;
+    /** True for ANY enemy-side actor id: the singular dummy wall enemy AND every enemy
+     *  ATTACKER (healing mode). Enemy attackers now walk runPlayerTurn (commit 6c456a14) and
+     *  therefore emit the full reactive event suite (`ability-performed` with crits,
+     *  `dot-applied`, `debuff-applied`, …) with `side === 'enemy'`. Ally-scoped player
+     *  listeners treat "any OTHER player actor" as an ally, so they MUST exclude every
+     *  enemy-side id — not just the dummy — or an enemy's crit/debuff wrongly fires a
+     *  player's on-ally-* reaction. The engine passes a predicate closing over the dummy id
+     *  + all enemy-attacker ids; for an attacker-only/DPS run only the dummy is enemy-side. */
+    isEnemySide: (actorId: string) => boolean;
 }): void {
-    const { bus, perOwner, enqueue, enemyId } = args;
+    const { bus, perOwner, enqueue, isEnemySide } = args;
     for (const { ownerId, reactiveAbilities } of perOwner) {
         for (const ra of reactiveAbilities) {
             const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
@@ -170,23 +181,24 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
                         // Ally = ANY OTHER player's infliction. Exclude this owner (own
-                        // inflictions go to on-debuff-inflicted) AND the enemy.
-                        if (e.sourceId !== ownerId && e.sourceId !== enemyId) enqueue(intent);
+                        // inflictions go to on-debuff-inflicted) AND every enemy-side actor
+                        // (dummy wall + enemy attackers — an enemy is never an ally).
+                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications now emit dot-applied with the team sourceId
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
-                        if (e.sourceId !== ownerId && e.sourceId !== enemyId) enqueue(intent);
+                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
                     });
                     break;
                 case 'on-ally-crit-dot':
                     bus.on('dot-applied', (e) => {
                         // Ally DoT infliction whose cast crit (viaCrit): any OTHER
-                        // player's crit-cast DoT. Own casts and the enemy are excluded
-                        // (mirrors on-ally-debuff-inflicted's ally scoping). One enqueue
-                        // per qualifying infliction EVENT (per-infliction-event rule).
-                        if (e.viaCrit && e.sourceId !== ownerId && e.sourceId !== enemyId) {
+                        // player's crit-cast DoT. Own casts and every enemy-side actor are
+                        // excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
+                        // enqueue per qualifying infliction EVENT (per-infliction-event rule).
+                        if (e.viaCrit && e.sourceId !== ownerId && !isEnemySide(e.sourceId)) {
                             enqueue(intent);
                         }
                     });
@@ -208,8 +220,10 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
                         // An ALLY's critting hits (mirrors on-crit with ally scoping):
-                        // fires once PER CRITTING HIT, own casts and the enemy excluded.
-                        if (e.actorId === ownerId || e.actorId === enemyId) return;
+                        // fires once PER CRITTING HIT, own casts and every enemy-side actor
+                        // (dummy wall + enemy attackers) excluded — an enemy crit is NOT an
+                        // ally crit, even though a walked enemy now emits ability-performed.
+                        if (e.actorId === ownerId || isEnemySide(e.actorId)) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
                         for (let i = 0; i < n; i++) enqueue(intent);
                     });
@@ -225,6 +239,14 @@ export function registerReactiveListeners(args: {
                         // Defiant: the OWNER's OWN Stasis application (own-cast scoped). The
                         // existing `shield` follow-up applies the grant — no new executor branch.
                         if (e.effect === 'stasis' && e.casterId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-attacked':
+                    bus.on('attacked', (e) => {
+                        // Target-scoped: fires when THIS OWNER (the target) is attacked.
+                        // The engine emits `attacked` once per enemy attack turn from the
+                        // enemy intake in engine.ts (Task 8) — after the shield-first drain.
+                        if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;
                 default:
@@ -260,6 +282,10 @@ export interface IntentExecContext {
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
+    /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
+     *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
+     *  here. Empty/omitted in DPS mode (no enemy attackers) → drain `enemyBuffNames` stays []. */
+    enemyAttackerIds?: string[];
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
@@ -321,6 +347,12 @@ export function buildActorConditionContext(
         enemyHpPct: number;
         effectiveCritRate?: number;
         includeAbilitySelfNames?: boolean;
+        /** Self HP% (0..100). Default 100 (DPS-assumption). Populated by live engine in Task 3+. */
+        selfHpPct?: number;
+        /** Active buff names on the enemy. Default [] (DPS-assumption). Populated in Task 7+. */
+        enemyBuffNames?: string[];
+        /** Active debuff names on self. Default [] (DPS-assumption). Populated in Task 7+. */
+        selfDebuffNames?: string[];
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -343,6 +375,9 @@ export function buildActorConditionContext(
         effectiveCritRate: shared.effectiveCritRate ?? 0,
         enemyType: shared.enemyType,
         enemyHpPct: shared.enemyHpPct,
+        selfHpPct: shared.selfHpPct,
+        enemyBuffNames: shared.enemyBuffNames,
+        selfDebuffNames: shared.selfDebuffNames,
     });
 }
 
@@ -361,7 +396,95 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         bombCount: ctx.pendingBombs.length,
         enemyType: ctx.enemyType,
         enemyHpPct,
+        // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
+        // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
+        // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
+        // (no enemy attackers, no debuffs on player actors) → drain gating byte-identical.
+        enemyBuffNames: selfBuffNamesForOwners(ctx.statusEngine, ctx.enemyAttackerIds ?? []),
+        selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
     });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NAMES-ONLY status exposure (Task 7) — for the player-side `enemy-buff` /
+// `self-debuff` condition gates. These read buff/debuff NAMES from the status
+// engine WITHOUT folding any effect. Effects are folded exactly once elsewhere
+// (snapshot()'s active lists + activeAbilityStatuses/timedAbilityStatuses); these
+// helpers add ONLY names to a condition context, so there is no double-fold.
+//
+// Payload-exclusion rule: ability-sourced statuses carry a payload and are
+// excluded from snapshot() (the `!s.payload` guards). To surface their names we
+// pull them from timedAbilityStatuses/activeAbilityStatuses (which DO return
+// payload-carriers) — names only, never re-applying the payload effect.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Neutral resolver for the names-only aura/accum reads: a status's own conditions
+// are evaluated against a default (full-HP, no-debuff) round context. This is a
+// deliberate names-existence approximation — an "enemy has a buff" / "self has a
+// debuff" gate only needs to know the status is present, not re-derive its full
+// live gate. No fixture exercises a conditional enemy aura/accum, so this is inert
+// for current goldens (YAGNI: the gated full-kit enemy lands in a later task).
+const NEUTRAL_NAMES_CTX = buildRoundContext({
+    selfBuffNames: [],
+    landedEnemyDebuffCount: 0,
+    corrosionEntryCount: 0,
+    infernoEntryCount: 0,
+    bombCount: 0,
+    effectiveCritRate: 0,
+});
+
+/** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).
+ *  Scheduled non-payload buffs come from snapshot().activeSelfBuffs; payload-carrying
+ *  ability self statuses (timed window-persisting + aura/accum) come from the
+ *  ability-status reads. Used to populate `enemyBuffNames` for a player actor's
+ *  `enemy-buff` gates: the OPPOSING side from a player gate's view is the enemy
+ *  attacker(s). Aggregation choice: UNION across all enemy owners (the condition is
+ *  conceptually "does an enemy have a buff", not "does THIS enemy" — the simplest
+ *  correct interpretation for multi-enemy healing mode). De-duplicated. */
+export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: string[]): string[] {
+    const names = new Set<string>();
+    for (const ownerId of ownerIds) {
+        const snap = statusEngine.snapshot(ownerId);
+        for (const ab of snap.activeSelfBuffs) {
+            if (ab.stacks === undefined || ab.stacks > 0) names.add(ab.buffName);
+        }
+        for (const s of statusEngine.timedAbilityStatuses('self', ownerId)) {
+            names.add(s.active.buffName);
+        }
+        for (const s of statusEngine.activeAbilityStatuses(
+            'self',
+            () => NEUTRAL_NAMES_CTX,
+            ownerId
+        )) {
+            names.add(s.active.buffName);
+        }
+    }
+    return [...names];
+}
+
+/** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
+ *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
+ *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads
+ *  keyed by the same target. Used to populate `selfDebuffNames` for a player actor whose own
+ *  enemy-applied debuffs live under its id (the heal target / tank). De-duplicated. */
+export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string): string[] {
+    const names = new Set<string>();
+    const snap = statusEngine.snapshot(undefined, targetId);
+    for (const ab of snap.activeEnemyDebuffs) {
+        if (ab.stacks === undefined || ab.stacks > 0) names.add(ab.buffName);
+    }
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, targetId)) {
+        names.add(s.active.buffName);
+    }
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        targetId
+    )) {
+        names.add(s.active.buffName);
+    }
+    return [...names];
 }
 
 function payloadFromConfig(cfg: {

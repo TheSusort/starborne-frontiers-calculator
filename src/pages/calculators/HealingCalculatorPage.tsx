@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
-import { Ship } from '../../types/ship';
+import { Ship, AffinityName } from '../../types/ship';
 import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
@@ -145,6 +145,9 @@ const HealingCalculatorPage: React.FC = () => {
     const [targetShipSkills, setTargetShipSkills] = useState<ShipSkills | undefined>(undefined);
     const [targetChargeCount, setTargetChargeCount] = useState(0);
     const [targetStartCharged, setTargetStartCharged] = useState(false);
+    // Selected heal-target ship's affinity (explicit-target case). Drives each enemy attacker's
+    // matchup vs the target. Undefined → neutral. Self-heal resolves from the healer ship instead.
+    const [targetAffinity, setTargetAffinity] = useState<AffinityName | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
         undefined
     );
@@ -239,6 +242,7 @@ const HealingCalculatorPage: React.FC = () => {
         setTargetShipSkills(buildShipAbilities(ship));
         setTargetChargeCount(ship.chargeSkillCharge ?? 0);
         setTargetStartCharged(detectShipCharged(ship));
+        setTargetAffinity(ship.affinity);
         setTargetCombatStats({
             attack: Math.round(final.attack ?? 0),
             crit: Math.round(final.crit ?? 0),
@@ -270,7 +274,7 @@ const HealingCalculatorPage: React.FC = () => {
     };
 
     const removeEnemy = (id: string) => {
-        setEnemies((prev) => (prev.length <= 1 ? prev : prev.filter((e) => e.id !== id)));
+        setEnemies((prev) => prev.filter((e) => e.id !== id));
     };
 
     const selectEnemyShip = (id: string, ship: Ship) => {
@@ -289,6 +293,7 @@ const HealingCalculatorPage: React.FC = () => {
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
                     shipSkills: buildShipAbilities(ship),
+                    affinity: ship.affinity,
                 };
             })
         );
@@ -426,6 +431,7 @@ const HealingCalculatorPage: React.FC = () => {
                 chargeCount: e.chargeCount,
                 startCharged: e.startCharged,
                 shipSkills: e.shipSkills,
+                affinity: e.affinity,
             })),
         [enemies]
     );
@@ -435,6 +441,13 @@ const HealingCalculatorPage: React.FC = () => {
         const allTeamActors = targetActor ? [...teamActors, targetActor] : teamActors;
         const healTargetId = target.useHealerAsTarget ? 'healer' : HEAL_TARGET_ID;
         configs.forEach((config) => {
+            // Heal-target affinity drives each enemy attacker's matchup. When self-healing the
+            // target IS this config's healer ship; otherwise it's the selected heal-target ship.
+            const healTargetAffinity = target.useHealerAsTarget
+                ? config.shipId
+                    ? getShipById(config.shipId)?.affinity
+                    : undefined
+                : targetAffinity;
             map.set(
                 config.id,
                 simulateHealing({
@@ -454,6 +467,7 @@ const HealingCalculatorPage: React.FC = () => {
                     shipSkills: config.shipSkills,
                     selfBuffs: healerBuffs,
                     healTargetId,
+                    healTargetAffinity,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
                     rounds,
@@ -467,6 +481,8 @@ const HealingCalculatorPage: React.FC = () => {
         teamActors,
         targetActor,
         target.useHealerAsTarget,
+        targetAffinity,
+        getShipById,
         enemyInputs,
         rounds,
     ]);
@@ -628,7 +644,10 @@ const HealingCalculatorPage: React.FC = () => {
                         <p className="text-sm text-theme-text-secondary mb-4">
                             Cumulative effective healing across rounds. Effective healing excludes
                             overheal, so a config that out-heals incoming damage plateaus once the
-                            target is topped up.
+                            target is topped up. Hover a round to see every config&apos;s output for
+                            that round (direct heal, HoT, shield, effective vs overheal, cleanses,
+                            incoming damage) in the chart card, and the enemy effects active that
+                            round in the panel beside it.
                         </p>
                         <HealingCumulativeChart
                             healers={configs
@@ -639,6 +658,7 @@ const HealingCalculatorPage: React.FC = () => {
                                 }))
                                 .filter((h) => h.result)}
                             rounds={rounds}
+                            enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
                         />
                         {bestResult && bestConfig && (
                             <div className="mt-6 pt-6 border-t border-dark-border">
@@ -690,7 +710,8 @@ const HealingCalculatorPage: React.FC = () => {
                             <strong>Fully deterministic.</strong> The simulation contains no
                             randomness — identical inputs always produce identical results. Crits
                             use a fractional-accumulator schedule at the healer&apos;s effective
-                            crit rate. Affinity is ignored for healing this release.
+                            crit rate. Each enemy attacker&apos;s affinity is matched against the
+                            heal target&apos;s affinity to scale its incoming damage.
                         </p>
                     </div>
                 </div>

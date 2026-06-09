@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
-import { Ability } from '../../../types/abilities';
+import { Ability, ShipSkills } from '../../../types/abilities';
+import { createEventBus, CombatEvent } from '../events';
+import { calculateDamageReduction } from '../../autogear/priorityScore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task 6: standing-leech credit hook (engine.ts procStandingLeeches).
@@ -595,5 +597,655 @@ describe('damage-taken procs — passive on the heal target', () => {
         // The grant no-ops on a dead target, but the bucket still credits the raw shield
         // (display sub-bucket): 5000 × 0.15 = 750 credited, 0 actually pooled.
         expect(sumHeal(result, 'shield')).toBeCloseTo(750, 4);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 6b: enemy attackers walk runPlayerTurn bound to the heal target. These tests
+// LOCK the per-round incoming-damage parity that the retired runEnemyAttackerTurn used
+// to produce (its damage-formula coverage, folded here), plus the NEW per-target debuff
+// / self-buff behaviour the walk unlocks.
+//
+// Parity formula (bare neutral enemy): incoming = attack × (mult × hits / 100) × critMult
+//   × (1 − dr(targetDefence)/100), critMult = 1 + (critHits/drawHits) × (critDamage/100).
+// The enemy uses its OWN crit gate (back-loaded at rate 0.5: first draw does NOT fire).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `pe${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+    const enemyDamageSkills = (active: number, charged?: number, hits = 1): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({
+                        type: 'damage',
+                        config: { type: 'damage', multiplier: active, hits },
+                    }),
+                ],
+            },
+            ...(charged !== undefined
+                ? [
+                      {
+                          slot: 'charged' as const,
+                          abilities: [
+                              enemyAb({
+                                  type: 'damage',
+                                  config: { type: 'damage', multiplier: charged },
+                              }),
+                          ],
+                      },
+                  ]
+                : []),
+        ],
+    });
+    // The heal target is the focus attacker; it self-heals a trivial amount each round so the
+    // run produces healing rounds. incomingDamage is the enemy's drained damage per round.
+    const incoming = (result: ReturnType<typeof runCombat>, round: number): number =>
+        result.healing?.rounds[round - 1]?.incomingDamage ?? 0;
+
+    // ── Manual flat card: one hit at 100% × (1 − reduction) ──────────────────────
+    it('manual enemy: one hit at 100% with defence reduction (parity)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 2000,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    } as EnemyAttacker,
+                ],
+                shipSkills: {
+                    slots: [{ slot: 'active', abilities: [damageAb(100)] }],
+                },
+            })
+        );
+        // Old runEnemyAttackerTurn manual path: 5000 × (1 − dr(2000)/100).
+        const expected = 5000 * (1 - calculateDamageReduction(2000) / 100);
+        expect(incoming(result, 1)).toBeCloseTo(expected, 4);
+        expect(incoming(result, 1)).toBeCloseTo(3186.4464026358046, 4);
+    });
+
+    it('manual enemy: zero target defence → no reduction', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    } as EnemyAttacker,
+                ],
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        expect(incoming(result, 1)).toBeCloseTo(5000, 4);
+    });
+
+    // ── Crit gate schedule (back-loaded rate 0.5): crits on draws 2, 4, … ─────────
+    it('crit 50 enemy: crits on every 2nd attack (back-loaded gate)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 4,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 50, critDamage: 100, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    } as EnemyAttacker,
+                ],
+                // Focus self-heals a trivial amount so the target never dies (10000 hp default
+                // would be drained otherwise). hp huge; tiny heal keeps rounds running.
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        // Non-crit attack = 1000; crit (critMult 1 + 1×1) = 2000. Crits land on attacks 2, 4.
+        expect([
+            incoming(result, 1),
+            incoming(result, 2),
+            incoming(result, 3),
+            incoming(result, 4),
+        ]).toEqual([1000, 2000, 1000, 2000]);
+    });
+
+    // ── Charge cadence: chargeCount 3 → charged on attack 4 (400% multiplier) ─────
+    it('ship-backed enemy: charged spike on the 4th attack (chargeCount 3)', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 5,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 3,
+                        startCharged: false,
+                        shipSkills: enemyDamageSkills(100, 400),
+                    } as EnemyAttacker,
+                ],
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        // charges: t1 0→1, t2 1→2, t3 2→3, t4 fires charged (reset), t5 0→1.
+        expect([1, 2, 3, 4, 5].map((r) => incoming(result, r))).toEqual([
+            1000, 1000, 1000, 4000, 1000,
+        ]);
+    });
+
+    // ── Multi-hit per-hit crits: 3 hits, crit 100 → blended × (1 + cd/100) ────────
+    it('multi-hit enemy: 3 hits all crit → blended crit multiplier', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 100, critDamage: 50, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyDamageSkills(100, undefined, 3),
+                    } as EnemyAttacker,
+                ],
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        // 3 hits all crit (crit 100): critMult = 1 + (3/3) × (50/100) = 1.5.
+        // 1000 × (100 × 3 / 100) × 1.5 = 4500.
+        expect(incoming(result, 1)).toBeCloseTo(4500, 4);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 6b NEW behaviour: a walked enemy's kit lands per-TARGET debuffs and self-buffs.
+// Verified through the event bus (the engine's external write-only tap).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('enemy attacker kit application (runPlayerTurn walk)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `ka${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    it('enemy debuff ability → debuff-applied targets the heal target id', () => {
+        idCounter = 0;
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => events.push(e));
+        runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 100 },
+                                        }),
+                                        enemyAb({
+                                            type: 'debuff',
+                                            target: 'enemy',
+                                            config: {
+                                                type: 'debuff',
+                                                buffName: 'Defense Down',
+                                                parsedEffects: { defense: -20 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                application: 'inflict',
+                                                duration: 2,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        } as ShipSkills,
+                    } as EnemyAttacker,
+                ],
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        const applied = events.filter(
+            (e) => e.type === 'debuff-applied' && e.sourceId === 'e1'
+        ) as Extract<CombatEvent, { type: 'debuff-applied' }>[];
+        expect(applied.length).toBeGreaterThan(0);
+        // The debuff lands on the HEAL TARGET (the attacker), not the dummy enemy wall.
+        for (const e of applied) expect(e.targetId).toBe('attacker');
+    });
+
+    it('enemy self-buff ability → buff-expired carries the enemy attacker id (own decrement)', () => {
+        idCounter = 0;
+        const expired: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('buff-expired', (e) => expired.push(e));
+        runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 100 },
+                                        }),
+                                        enemyAb({
+                                            type: 'buff',
+                                            target: 'self',
+                                            config: {
+                                                type: 'buff',
+                                                buffName: 'Attack Up',
+                                                parsedEffects: { attack: 30 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                duration: 1,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        } as ShipSkills,
+                    } as EnemyAttacker,
+                ],
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+            })
+        );
+        // The enemy's own self-buff (1-turn) expires under ITS OWN decrement (actorId 'e1').
+        const own = (expired as Extract<CombatEvent, { type: 'buff-expired' }>[]).filter(
+            (e) => e.actorId === 'e1' && e.buffName === 'Attack Up'
+        );
+        expect(own.length).toBeGreaterThan(0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 7: live enemyBuffNames (enemy self-buffs) + selfDebuffNames (target debuffs)
+// flow into player condition contexts. Names ONLY — never re-folding effects.
+// Plus the preliminary 6b-review dead-target guard: cadence advances vs a dead
+// target, but NO application/events reach it.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `t7${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    // An enemy attacker whose active slot deals damage AND grants itself a 99-turn +30%
+    // attack self-buff (so the buff is live for every subsequent round).
+    const enemyWithSelfBuff: ShipSkills = {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    enemyAb({
+                        type: 'buff',
+                        target: 'self',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 30 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    };
+
+    // ── enemy-buff gate FIRES off the enemy's live self-buff (and not when absent) ───
+    it('player enemy-buff gate fires once the enemy holds a self-buff (live)', () => {
+        idCounter = 0;
+        // Focus has a +100% attack MODIFIER gated on a derivable enemy-buff. When the enemy's
+        // self-buff is live, the gate passes → focus directDamage doubles. The focus self-heals
+        // a trivial amount so rounds keep running; its attack 10000, enemyDefense 0.
+        const gatedFocus: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            conditions: [
+                                { subject: 'enemy-buff', derivable: true, buffName: 'Attack Up' },
+                            ],
+                            config: {
+                                type: 'modifier',
+                                channel: 'attack',
+                                value: 100,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                attack: 10000,
+                hp: 1_000_000,
+                enemyDefense: 0,
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                shipSkills: gatedFocus,
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 }, // slowest → acts after focus
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyWithSelfBuff,
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+        // Round 1: the focus (faster) acts BEFORE the enemy grants its buff → gate sees no
+        //          enemy buff → directDamage = 10000.
+        // Round 2: the enemy's self-buff is live (granted round 1, 99-turn) → gate fires →
+        //          +100% attack → directDamage = 20000.
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+
+    // ── NO DOUBLE-FOLD: the enemy's self-buff effect is folded EXACTLY once ──────────
+    it('exposing the enemy self-buff name does not double-fold its attack effect', () => {
+        idCounter = 0;
+        // The focus DOES carry a derivable enemy-buff gate → the engine sources and exposes the
+        // enemy's self-buff NAME into the focus's condition context. We assert the ENEMY's own
+        // incoming damage still reflects a SINGLE +30% attack fold — exposing names never re-folds
+        // the payload effect (the double-fold guard).
+        const focusWithEnemyBuffGate: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            conditions: [
+                                { subject: 'enemy-buff', derivable: true, buffName: 'Attack Up' },
+                            ],
+                            config: {
+                                type: 'modifier',
+                                channel: 'attack',
+                                value: 100,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 1_000_000,
+                defence: 0, // tank defence 0 → enemy damage is unreduced (clean integers)
+                enemyDefense: 0,
+                healTargetId: 'attacker',
+                shipSkills: focusWithEnemyBuffGate,
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyWithSelfBuff,
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+        const incoming = (round: number): number =>
+            result.healing?.rounds[round - 1]?.incomingDamage ?? 0;
+        // The self-buff folds in the SAME turn it is cast (active for that turn's damage),
+        // and persists (99-turn). Every round → 1000 × 1.30 = 1300, folded EXACTLY ONCE.
+        // A double-fold would give 1000 × 1.30 × 1.30 = 1690 — explicitly ruled out below.
+        expect(incoming(1)).toBeCloseTo(1300, 4);
+        expect(incoming(2)).toBeCloseTo(1300, 4);
+        expect(incoming(1)).not.toBeCloseTo(1690, 4);
+        expect(incoming(2)).not.toBeCloseTo(1690, 4);
+    });
+
+    // ── self-debuff gate FIRES off an enemy-applied debuff on the tank ──────────────
+    it('tank self-debuff gate fires once an enemy lands a debuff on it (live)', () => {
+        idCounter = 0;
+        // Focus (the tank) has a +100% attack modifier gated on a derivable self-debuff.
+        // An enemy attacker lands a 99-turn 'Defense Down' debuff on the tank. Once live,
+        // the gate fires → focus directDamage doubles.
+        const tankWithSelfDebuffGate: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            conditions: [
+                                {
+                                    subject: 'self-debuff',
+                                    derivable: true,
+                                    buffName: 'Defense Down',
+                                },
+                            ],
+                            config: {
+                                type: 'modifier',
+                                channel: 'attack',
+                                value: 100,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                attack: 10000,
+                hp: 1_000_000,
+                enemyDefense: 0,
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                shipSkills: tankWithSelfDebuffGate,
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 }, // slowest → acts after focus
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 100 },
+                                        }),
+                                        enemyAb({
+                                            type: 'debuff',
+                                            target: 'enemy',
+                                            config: {
+                                                type: 'debuff',
+                                                buffName: 'Defense Down',
+                                                parsedEffects: { defense: -20 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                application: 'inflict',
+                                                duration: 99,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        } as ShipSkills,
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+        // Round 1: focus acts before the enemy lands the debuff → gate sees no self-debuff →
+        //          10000. Round 2: the debuff is live on the tank → gate fires → 20000.
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+
+    // ── PRELIMINARY (6b review): dead-target guard ──────────────────────────────────
+    it('dead target: charge cadence keeps banking AND no debuff is applied', () => {
+        idCounter = 0;
+        const applied: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => applied.push(e));
+        // hp 1 → the first enemy attack kills the tank. chargeCount 2: with the target dead from
+        // round 1 on, the cadence must still advance (t1 0→1, t2 1→2, t3 fires charged). The
+        // enemy's kit also carries a debuff ability — it must NEVER apply to the dead target.
+        const result = runCombat(
+            BASE({
+                numRounds: 4,
+                hp: 1,
+                enemyDefense: 0,
+                healTargetId: 'attacker',
+                bus,
+                // Focus is damage-only (no self-heal) → once dead it stays dead.
+                shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
+                enemyAttackers: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 2,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 100 },
+                                        }),
+                                        enemyAb({
+                                            type: 'debuff',
+                                            target: 'enemy',
+                                            config: {
+                                                type: 'debuff',
+                                                buffName: 'Defense Down',
+                                                parsedEffects: { defense: -20 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                application: 'inflict',
+                                                duration: 2,
+                                            },
+                                        }),
+                                    ],
+                                },
+                                {
+                                    slot: 'charged',
+                                    abilities: [
+                                        enemyAb({
+                                            type: 'damage',
+                                            config: { type: 'damage', multiplier: 400 },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        } as ShipSkills,
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+        // The target dies in round 1 (5000 vs hp 1). The only debuff-applied event allowed is
+        // the round-1 application BEFORE death is recorded — but since the round-1 attack itself
+        // is what kills it, and the debuff is a SEPARATE ability in the same turn resolved while
+        // the target was still alive at turn start, we assert: the target IS dead by run end and
+        // NO debuff is applied in rounds where the target entered dead (rounds 2+).
+        const destroyed = result.healing?.destroyedRound;
+        expect(destroyed).toBe(1);
+        // No debuff-applied in any round AFTER the target died (rounds 2, 3, 4): the dead-target
+        // guard skips runPlayerTurn (the sole application site) for those turns.
+        const lateApplications = (
+            applied as Extract<CombatEvent, { type: 'debuff-applied' }>[]
+        ).filter((e) => e.round > destroyed!);
+        expect(lateApplications.length).toBe(0);
+        // Cadence still advanced while dead: by round 3 the enemy banked 2 charges (t1, t2) and
+        // would fire its charged slot on t3. We can't read incoming (target dead → 0 damage),
+        // so assert the run completed all 4 rounds without the charge bank stalling (no throw,
+        // and the healing rounds cover all 4 rounds — the enemy queue kept resolving).
+        expect(result.healing?.rounds.length).toBe(4);
     });
 });

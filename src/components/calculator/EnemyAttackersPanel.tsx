@@ -4,8 +4,10 @@ import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
-import { Ship } from '../../types/ship';
+import { Select } from '../ui/Select';
+import { Ship, AffinityName } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
+import { AFFINITY_OPTIONS } from '../../constants/affinities';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
@@ -21,6 +23,9 @@ export interface EnemyAttackerConfig {
     speed: number;
     chargeCount: number;
     startCharged: boolean;
+    /** Affinity for the matchup vs the heal target. Default 'antimatter' (neutral when the
+     *  target's affinity is unknown). */
+    affinity?: AffinityName;
     /** Walked basics for the damage walk; present only when a ship is picked. */
     shipSkills?: ShipSkills;
 }
@@ -108,6 +113,14 @@ const EnemyCard: React.FC<{
                     />
                 </div>
             </div>
+            <Select
+                label="Affinity"
+                value={enemy.affinity ?? 'antimatter'}
+                onChange={(v) => onUpdate({ affinity: v as AffinityName })}
+                options={AFFINITY_OPTIONS}
+                className="w-full"
+                helpLabel="The enemy's affinity vs the heal target — drives the damage matchup."
+            />
             {selectedShip && (
                 <p className="text-xs text-theme-text-secondary">
                     Damage abilities are simulated; other abilities are not yet.

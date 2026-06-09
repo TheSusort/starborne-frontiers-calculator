@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { MAX_INTENT_GENERATIONS } from '../triggers';
+import {
+    MAX_INTENT_GENERATIONS,
+    registerReactiveListeners,
+    Intent,
+    ReactiveAbility,
+} from '../triggers';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 
@@ -1414,5 +1419,287 @@ describe('Phase 3 reactive triggers', () => {
             .find((b) => b.buffName === 'Defense Shred');
         expect(resistedRow).toBeDefined();
         expect(resistedRow!.turnsRemaining).toBe('permanent');
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-attacked live trigger: unit-level tests for the pure listener.
+// These tests drive registerReactiveListeners + createEventBus directly
+// (nothing emits `attacked` from the engine yet — Task 8). They verify
+// the listener fires only for the matching target, is target-scoped (not
+// attacker-scoped), and is pure (no state mutation before drain).
+// ----------------------------------------------------------------------
+describe('on-attacked live trigger (Task 4)', () => {
+    // Build a minimal on-attacked reactive ability.
+    const onAttackedBuff = (): Ability => ({
+        id: 'oa1',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-attacked',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Counterready',
+            stacks: 1,
+            parsedEffects: { attack: 20 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    // Helper: wire up the bus, register listeners for the given owners, emit
+    // an `attacked` event, and return the collected intents.
+    function emitAttacked(
+        perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[],
+        event: Extract<CombatEvent, { type: 'attacked' }>
+    ): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner,
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        bus.emit(event);
+        return intents;
+    }
+
+    it('emits exactly one intent for the matching target owner when attacked', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('t');
+        expect(intents[0].ability.trigger).toBe('on-attacked');
+    });
+
+    it('enqueues nothing for an actor with no on-attacked ability', () => {
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('does NOT fire the listener when targetId does not match ownerId', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        // ownerId is 't' but the event targets 'other-actor'
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 'other-actor',
+            attackerId: 'enemy',
+            round: 1,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('fires only the matching owner when multiple owners are registered', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const raOther: ReactiveAbility = {
+            ability: { ...onAttackedBuff(), id: 'oa2' },
+            sourceSlot: 'passive',
+        };
+        const intents = emitAttacked(
+            [
+                { ownerId: 't', reactiveAbilities: [ra] },
+                { ownerId: 'u', reactiveAbilities: [raOther] },
+            ],
+            { type: 'attacked', targetId: 't', attackerId: 'enemy', round: 1 }
+        );
+        // Only owner 't' should fire — 'u' is not the target
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('t');
+    });
+
+    it('listener is pure: enqueues only, no state mutation before drain', () => {
+        // Verify that the intent array is empty before the event is emitted
+        // (the listener produces no side-effects on registration).
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 't', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        // Before any event: no intents enqueued
+        expect(intents).toHaveLength(0);
+        // Emit a non-matching event: still nothing
+        bus.emit({ type: 'attacked', targetId: 'other', attackerId: 'enemy', round: 1 });
+        expect(intents).toHaveLength(0);
+        // Emit matching: exactly one
+        bus.emit({ type: 'attacked', targetId: 't', attackerId: 'enemy', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+
+    it('optional didCrit field is accepted: event with didCrit still fires the listener', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy',
+            round: 2,
+            didCrit: true,
+        });
+        expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Scenario 15 — on-attacked engine integration (Task 8): the engine emits
+// the `attacked` event from the enemy intake so `on-attacked` reactive
+// abilities on the heal target actually fire during a real run.
+// ----------------------------------------------------------------------
+describe('on-attacked engine integration (Task 8)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    // A heal target with an on-attacked timed self-buff (duration 1 → active the round
+    // it was triggered). The focus actor is also the heal target (simplest setup).
+    const onAttackedSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'on-attacked',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Counter Shield',
+                            stacks: 1,
+                            parsedEffects: { attack: 10 },
+                            isStackable: false,
+                            duration: 1,
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    // Minimal enemy attacker: flat-card (no shipSkills), 1 attack per turn.
+    const flatEnemy = (): EnemyAttacker => ({
+        id: 'ea1',
+        stats: { attack: 100, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    it('scenario 15a: on-attacked fires once per enemy attack turn for the heal target', () => {
+        idCounter = 0;
+        // The focus actor is the heal target; it has an on-attacked buff. An enemy attacker
+        // hits it every round. The buff (duration 1) should be present from the round
+        // the enemy attacks through to the next, which means it appears in activeSelfBuffs
+        // of the round it was triggered (drain runs within the same turn body).
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('attacked', (e) => events.push(e as CombatEvent));
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+
+        runCombat(
+            baseInput({
+                shipSkills: onAttackedSkills(),
+                hasChargedSkill: false,
+                chargeCount: 0,
+                hp: 1_000_000, // large HP so target survives
+                defence: 0,
+                healTargetId: 'attacker',
+                numRounds: 3,
+                bus,
+                enemyAttackers: [flatEnemy()],
+            })
+        );
+
+        // One `attacked` event per round (one enemy attacker, one turn per round).
+        const attackedEvents = events.filter((e) => e.type === 'attacked');
+        expect(attackedEvents.length).toBe(3);
+
+        // Every attacked event targets the heal target and names the enemy attacker.
+        for (const e of attackedEvents) {
+            expect((e as { targetId?: string }).targetId).toBe('attacker');
+            expect((e as { attackerId?: string }).attackerId).toBe('ea1');
+        }
+
+        // The on-attacked buff was applied at least once (the reactive ability fired).
+        const buffApplied = events.filter(
+            (e) =>
+                e.type === 'buff-applied' &&
+                (e as { buffName?: string }).buffName === 'Counter Shield'
+        );
+        expect(buffApplied.length).toBeGreaterThan(0);
+    });
+
+    it('scenario 15b: target WITHOUT an on-attacked ability is unaffected (no buff applied)', () => {
+        idCounter = 0;
+        // Focus has NO on-attacked ability; the enemy still attacks.
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+
+        runCombat(
+            baseInput({
+                shipSkills: { slots: [] }, // no abilities
+                hasChargedSkill: false,
+                chargeCount: 0,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'attacker',
+                numRounds: 3,
+                bus,
+                enemyAttackers: [flatEnemy()],
+            })
+        );
+
+        // No 'Counter Shield' buff should appear.
+        const counterBuff = events.filter(
+            (e) =>
+                e.type === 'buff-applied' &&
+                (e as { buffName?: string }).buffName === 'Counter Shield'
+        );
+        expect(counterBuff.length).toBe(0);
+    });
+
+    it('scenario 15c: no attacked event emitted when heal target is dead (dead-target guard)', () => {
+        idCounter = 0;
+        // hp 1: target dies round 1. Rounds 2+ the dead-target guard should prevent
+        // runPlayerTurn from running for the enemy attacker → no `attacked` events after round 1.
+        const attackedEvents: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('attacked', (e) => attackedEvents.push(e as CombatEvent));
+
+        runCombat(
+            baseInput({
+                shipSkills: { slots: [] },
+                hasChargedSkill: false,
+                chargeCount: 0,
+                hp: 1, // dies immediately
+                defence: 0,
+                healTargetId: 'attacker',
+                numRounds: 4,
+                bus,
+                enemyAttackers: [
+                    {
+                        id: 'ea2',
+                        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    } as EnemyAttacker,
+                ],
+            })
+        );
+
+        // At most 1 `attacked` event (round 1, before/when target dies).
+        // Rounds 2-4 the dead-target guard skips the attack entirely.
+        const laterEvents = attackedEvents.filter((e) => (e as { round?: number }).round! > 1);
+        expect(laterEvents.length).toBe(0);
     });
 });

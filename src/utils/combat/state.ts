@@ -205,3 +205,23 @@ export function orderByTurnPriority<T extends { speed: number; side: 'player' | 
         })
         .map((x) => x.item);
 }
+
+/**
+ * Advance an actor's charge bank by one turn: fire+reset at cap, else +1.
+ * No-op when `hasChargedSkill` is false or the actor's chargeCount is 0 (belt-and-suspenders).
+ *
+ * Each call site supplies its OWN guard boolean so the helper unifies the
+ * arithmetic without changing any site's existing activation semantics:
+ *   - playerTurn preTurn:  pass `hasChargedSkill`
+ *   - engine team branch:  pass `teamHasCharged` (= actor.chargeCount > 0)
+ *   - engine dead-target:  pass `hasChargedSkill` (the redundant `&& chargeCount>0`
+ *                          is absorbed by the internal guard below)
+ */
+export function advanceChargeCadence(actor: CombatActor, hasChargedSkill: boolean): void {
+    if (!hasChargedSkill || actor.chargeCount <= 0) return;
+    if (actor.charges >= actor.chargeCount) {
+        actor.charges = 0;
+    } else {
+        actor.charges += 1;
+    }
+}

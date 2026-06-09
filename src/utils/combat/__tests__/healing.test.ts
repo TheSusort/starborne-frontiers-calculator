@@ -1240,6 +1240,143 @@ describe('healing mode — enemy attackers and target intake', () => {
         // Full overheal at the cap.
         expect(applyHealClamp(5000, 10000, 10000)).toEqual({ consumed: 0, overheal: 5000 });
     });
+
+    // ── Task 11b: enemy-applied DoT ticks on the tank (credits incoming) ──────
+    // An enemy attacker (attack 5000, defence 0, neutral affinity, speed 50) hits the heal
+    // target for a 100% direct (5000) AND applies an inferno DoT (tier 100, 1 stack, duration
+    // 1). The target (focus, speed 100) acts FIRST each round; its DoT entries tick at its
+    // turn-start. No heals (hp 100000 → never dies, isolates the DoT bleed).
+    //
+    // Inferno tick = stacks 1 × (tier 100/100) × applier effectiveAttack 5000 × dotMult 1 ×
+    //   affinityMult 1 = 5000. duration 1 → exactly ONE tick per application (no compounding):
+    //   the entry applied on round N ticks once at round N+1's tank turn-start, then expires.
+    //
+    //   R1: tank tick — no entries yet → 0. enemy: direct 5000 → HP 95000; apply inferno
+    //       (rem 1). incoming R1 = 5000 (direct only).
+    //   R2: tank tick — 1 entry (rem 1) → 5000 incoming; HP 95000−5000 = 90000; entry expires.
+    //       enemy: direct 5000 → HP 85000; re-apply inferno (rem 1). incoming R2 =
+    //       5000 (DoT) + 5000 (direct) = 10000.
+    //   R3: same as R2 → incoming 10000; HP 75000.
+    // The DoT bleed adds 5000 incoming from R2 onward (vs the inert-DoT behaviour that would
+    // report 5000 every round). The single-entry-per-round invariant proves it expires.
+    it('enemy-applied inferno DoT ticks on the tank at its turn-start (credits incoming, expires)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const dotTicks: { round: number; targetId: string; damage: number }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; damage: number; dotType: string };
+            if (ev.dotType === 'inferno') {
+                dotTicks.push({ round: ev.round, targetId: ev.targetId, damage: ev.damage });
+            }
+        });
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 100_000, // never dies — isolates the DoT bleed
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                enemyAttackers: [
+                    manualEnemy('atk1', 5000, 50, {
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'damage',
+                                            target: 'enemy',
+                                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                                        }),
+                                        ab({
+                                            type: 'dot',
+                                            target: 'enemy',
+                                            config: {
+                                                type: 'dot',
+                                                dotType: 'inferno',
+                                                tier: 100,
+                                                stacks: 1,
+                                                duration: 1,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    }),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        const rounds = result.healing!.rounds;
+        // R1: direct only (no DoT tick yet). R2+: direct 5000 + DoT tick 5000 = 10000.
+        expect(rounds[0].incomingDamage).toBeCloseTo(5000, 6);
+        expect(rounds[1].incomingDamage).toBeCloseTo(10000, 6);
+        expect(rounds[2].incomingDamage).toBeCloseTo(10000, 6);
+        // Survival declines faster than the inert-DoT case: HP enters R3 below the
+        // direct-only floor (85000 → 85%, not 90000 → 90%).
+        expect(rounds[2].targetHpPctStart).toBeCloseTo(85, 6);
+        // The DoT ticks on the TANK (targetId = the heal target), 5000 each, from R2.
+        expect(dotTicks).toEqual([
+            { round: 2, targetId: 'attacker', damage: 5000 },
+            { round: 3, targetId: 'attacker', damage: 5000 },
+        ]);
+    });
+
+    // ── Test: enemy extra-action grants are processed (CodeRabbit fix) ────────
+    // An enemy attacker with a once-per-round extra-action passive MUST take an extra
+    // turn each round via processExtraActionGrants. Without the fix, the extra grant is
+    // silently dropped → enemy only attacks once per round (2000 damage). With the fix,
+    // the enemy attacks twice (4000 damage).
+    //
+    // Setup: attack 2000, target defence 0 → 2000 per turn; once-per-round extra-action
+    //        passive → 2 enemy turns per round → 4000 incomingDamage/round.
+    // Baseline (no extra-action passive): 2000/round.
+    it('enemy extra-action passive doubles incoming damage per round', () => {
+        idCounter = 0;
+        const enemyWithExtraAction: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'extra-action',
+                            target: 'self',
+                            config: { type: 'extra-action', oncePerRound: true },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 1_000_000, // never dies
+                defence: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'atk1',
+                        stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyWithExtraAction,
+                    },
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Each round: 2 enemy turns × 2000/turn = 4000 incomingDamage.
+        for (const round of result.healing!.rounds) {
+            expect(round.incomingDamage).toBeCloseTo(4000, 6);
+        }
+    });
 });
 
 // ── Task 9: on-ally-critically-repaired + on-ally-crit reactive listeners ───────────────
@@ -1279,7 +1416,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = { round: 1, amount: 1000 };
 
@@ -1339,7 +1476,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = {
             round: 1,
@@ -1387,7 +1524,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            enemyId: 'enemy',
+            isEnemySide: (id) => id === 'enemy',
         });
         const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
 
@@ -2099,5 +2236,126 @@ describe('healing — Defiant shield-on-Stasis (control-applied → on-stasis-ap
         );
         expect(shieldByRound).toEqual([3000, 0, 3000, 0, 3000]);
         expect(focusHeal(result, 'shield')).toBe(9000);
+    });
+});
+
+// ── Emission-scoping regression: enemy-side actors never trigger player ally reactions ──
+//
+// Commit 6c456a14 made the healing-mode enemy attacker walk runPlayerTurn (same pipeline as
+// players), so it now EMITS the full reactive event suite — including `ability-performed` with
+// crit info and `side === 'enemy'`. A player ship's `on-ally-crit` listener treats "any other
+// player actor" as an ally; before this fix its exclusion only filtered the singular dummy wall
+// enemy, so a CRITTING enemy attacker's ability-performed leaked through and wrongly fired the
+// player's on-ally-crit reaction. The fix passes an isEnemySide predicate that excludes EVERY
+// enemy-side id (dummy + enemy attackers). These tests assert the negative (enemy crit does NOT
+// fire the reaction) AND the positive (a real player ally's crit STILL does — no over-exclusion).
+describe('healing — emission scoping: enemy crit does not trigger player on-ally-crit', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    // A manual flat-card enemy that ALWAYS crits (crit 100). The builder synthesizes a
+    // crit-eligible basic attack → it emits ability-performed with didCrit/critHits.
+    const crittingEnemy = (id: string, attack = 2000, speed = 50): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 100, critDamage: 100, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // Focus heal target: crit 0 (so the focus itself never crits → its own ability-performed can
+    // never be mistaken for an ally crit), carrying an on-ally-crit reactive SHIELD. When the
+    // listener fires, the executor credits the focus's `shield` bucket (observable proxy for the
+    // reaction firing). basis hp → 10% of the focus's 10000 max HP = 1000 per fire.
+    const onAllyCritShield = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'shield',
+                        target: 'self',
+                        trigger: 'on-ally-crit',
+                        config: { type: 'shield', pct: 10, basis: 'hp' },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    it('negative: a critting enemy attacker does NOT fire the focus on-ally-crit shield', () => {
+        idCounter = 0;
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 10000,
+                crit: 0, // focus never crits
+                critDamage: 0,
+                healTargetId: 'attacker',
+                enemyAttackers: [crittingEnemy('atk1')],
+                shipSkills: onAllyCritShield(),
+            })
+        );
+        // The ONLY critting actor is the enemy attacker. Its ability-performed crit must be
+        // treated as an enemy event (NOT an ally crit) → the on-ally-crit shield never fires.
+        expect(focusHeal(result, 'shield')).toBe(0);
+    });
+
+    it('positive: a real player ally crit STILL fires the focus on-ally-crit shield', () => {
+        idCounter = 0;
+        // A team ally that ALWAYS crits and casts a damage active → emits an ally ability-performed
+        // with crits. speed 200 so it acts (and crits) before the focus's start-of-round drain.
+        const crittingAlly: TeamActorEngineInput = {
+            id: 'ally1',
+            speed: 200,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            walk: {
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    trigger: 'on-cast',
+                                    config: { type: 'damage', multiplier: 100, hits: 1 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+                stats: {
+                    attack: 5000,
+                    crit: 100,
+                    critDamage: 100,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 1000,
+                    hp: 10000,
+                },
+                debuffLandingChance: 1,
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 10000,
+                crit: 0, // focus never crits → the only ALLY crit is the team ship's
+                critDamage: 0,
+                speed: 100, // focus acts after the ally (200) so the ally's crit lands first
+                healTargetId: 'attacker',
+                teamActors: [crittingAlly],
+                shipSkills: onAllyCritShield(),
+            })
+        );
+        // The team ally's crit IS an ally crit → the on-ally-crit shield fires (10% of 10000).
+        expect(focusHeal(result, 'shield')).toBeGreaterThan(0);
     });
 });

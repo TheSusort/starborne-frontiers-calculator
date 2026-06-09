@@ -4,6 +4,7 @@ import {
     selectNextActor,
     buildTurnQueue,
     orderByTurnPriority,
+    advanceChargeCadence,
     ActorStats,
     CombatActor,
     TURN_METER_THRESHOLD,
@@ -206,6 +207,44 @@ describe('buildTurnQueue', () => {
         const input = [actor('attacker', 'attacker', 100), actor('t1', 'team', 140)];
         buildTurnQueue(input);
         expect(input.map((a) => a.id)).toEqual(['attacker', 't1']);
+    });
+});
+
+describe('advanceChargeCadence', () => {
+    const actorWith = (charges: number, chargeCount: number): CombatActor => {
+        const a = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...baseStats, hp: 1 },
+            chargeCount,
+        });
+        a.charges = charges;
+        return a;
+    };
+
+    it('increments charges when below cap', () => {
+        const a = actorWith(1, 3);
+        advanceChargeCadence(a, true);
+        expect(a.charges).toBe(2);
+    });
+
+    it('resets charges to 0 when at cap', () => {
+        const a = actorWith(3, 3);
+        advanceChargeCadence(a, true);
+        expect(a.charges).toBe(0);
+    });
+
+    it('is a no-op when hasChargedSkill is false', () => {
+        const a = actorWith(2, 3);
+        advanceChargeCadence(a, false);
+        expect(a.charges).toBe(2);
+    });
+
+    it('is a no-op when chargeCount is 0 (belt-and-suspenders)', () => {
+        const a = actorWith(0, 0);
+        advanceChargeCadence(a, true);
+        expect(a.charges).toBe(0);
     });
 });
 
