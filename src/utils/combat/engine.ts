@@ -29,6 +29,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
+import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import {
@@ -1231,6 +1232,13 @@ export function runCombat(input: CombatEngineInput): {
     // attacks, which land in Task 8 — the detection just never fires this task).
     const healingRounds: HealingRoundEngine[] = [];
     let healTargetDestroyedRound: number | undefined;
+    // Cheat Death consumption (Phase 4b). A 'recurring'/always-active Cheat Death buff is
+    // re-derived every round and is NOT stored in the StatusEngine's timed maps, so it cannot
+    // be consumed by deleting it from a store (it would regenerate next round). Consumption is
+    // therefore a per-actor ENGINE FLAG with combat lifetime: once an actor's intercept fires,
+    // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
+    // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
+    const cheatDeathConsumed = new Set<string>();
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -1506,12 +1514,31 @@ export function runCombat(input: CombatEngineInput): {
             roundShieldAbsorbed += absorbed;
             const hpDamage = damage - absorbed;
             healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
-            // First reach 0 → record the destroyed round + emit ship-destroyed once (shared
-            // helper; idempotent via the per-actor destroyedRound field). The healing result
-            // reads the destroyed round back off the heal target's runtime field below.
+            // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
+            // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
+            // it surfaces in the snapshot's activeSelfBuffs but is never stored/timed — consumption
+            // is the per-actor cheatDeathConsumed flag (NOT a store mutation). On intercept we floor
+            // HP at 1 (overriding the Math.max(0, …) above), mark consumed, wipe the actor's
+            // REMOVABLE timed statuses (DoTs/timed self-buffs; persistent-stack + unremovable
+            // preserved), emit cheat-death-activated, and DO NOT record a destroy.
             if (healTarget!.currentHp <= 0) {
-                recordDestroyed(healTarget!, r, bus);
-                healTargetDestroyedRound = healTarget!.destroyedRound;
+                const targetId = healTarget!.id;
+                const carriesCheatDeath = statusEngine
+                    .snapshot(targetId)
+                    .activeSelfBuffs.some((b) => CHEAT_DEATH_BUFFS.has(b.buffName));
+                if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
+                    healTarget!.currentHp = 1;
+                    cheatDeathConsumed.add(targetId);
+                    statusEngine.clearRemovable(targetId);
+                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
+                } else {
+                    // First reach 0 (no intercept) → record the destroyed round + emit
+                    // ship-destroyed once (shared helper; idempotent via the per-actor
+                    // destroyedRound field). The healing result reads the destroyed round back
+                    // off the heal target's runtime field below.
+                    recordDestroyed(healTarget!, r, bus);
+                    healTargetDestroyedRound = healTarget!.destroyedRound;
+                }
             }
             return { shieldBefore, absorbed, hpDamage };
         };

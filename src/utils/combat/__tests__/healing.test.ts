@@ -2359,3 +2359,191 @@ describe('healing — emission scoping: enemy crit does not trigger player on-al
         expect(focusHeal(result, 'shield')).toBeGreaterThan(0);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 7 (Phase 4b): Cheat Death intercept — survive at 1 HP, once per combat.
+// The heal target is the focus actor ('attacker') so its always-active/'recurring'
+// Cheat Death self-buff surfaces in snapshot('attacker').activeSelfBuffs. Cheat Death
+// is seeded as a no-payload recurring top-level selfBuff (the always-active source list);
+// the engine reads it off the snapshot, NOT a timed store, so consumption is a per-actor
+// flag — a SECOND lethal hit destroys the carrier even though the buff is still snapshot-live.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const manualEnemy = (
+        id: string,
+        attack: number,
+        speed = 50,
+        extra: Partial<EnemyAttacker> = {}
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        ...extra,
+    });
+
+    // A no-payload, always-active Cheat Death self-buff — surfaces in the snapshot as
+    // 'recurring' (never stored in a timed map; re-derived every round).
+    const cheatDeathBuff = () => ({
+        id: 'cheat-death',
+        buffName: 'Cheat Death',
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: {},
+    });
+
+    // ── Survive: a lethal hit leaves the carrier at 1 HP, not destroyed ───────
+    it('survives a lethal hit at 1 HP: no ship-destroyed, destroyedRound unset, one cheat-death-activated', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Not destroyed: no ship-destroyed for the tank, destroyedRound stays unset.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        // Exactly one cheat-death-activated for the tank, on round 1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+        // R1 still records the full incoming damage (the intake math is intact).
+        expect(result.healing!.rounds[0].incomingDamage).toBeCloseTo(3000, 6);
+    });
+
+    // ── Consumed (flag): a SECOND lethal hit destroys the carrier normally ────
+    // Proves flag-based consumption (NOT store-deletion): the recurring Cheat Death
+    // buff is STILL in the snapshot on round 2, but cheatDeathConsumed blocks re-trigger.
+    it('is consumed by the flag: second lethal hit destroys normally despite the buff still being live', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // 3000/round → lethal each round
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        // R1 intercept fires once; R2 the carrier is destroyed normally.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        const tankDestroyed = destroyed.filter((e) => e.actorId === 'attacker');
+        expect(tankDestroyed).toHaveLength(1);
+        expect(tankDestroyed[0].round).toBe(2);
+        expect(result.healing!.destroyedRound).toBe(2);
+    });
+
+    // ── Wipe: the intercept invokes clearRemovable on the carrier ─────────────
+    // A standing TIMED self-buff (StatusEngine-tracked) on the tank is wiped when Cheat
+    // Death fires: it no longer appears in the next round's activeSelfBuffs. The buff is
+    // cast ONCE (charged slot, chargeCount 1 + startCharged → charged R1, active R2) so its
+    // R2 presence reflects the STANDING status (duration 3), not a re-cast. clearRemovable's
+    // wipe-timed / preserve-persistent / preserve-unremovable semantics are unit-tested
+    // directly in statusEngine.test.ts; here we only prove the engine CALLS it on the
+    // intercept path.
+    //
+    // NOTE (architecture): enemy-applied DoTs on the tank are stored as actor-state DoT
+    // stacks (healTarget.corrosionEntries/infernoEntries), NOT in the StatusEngine — so
+    // clearRemovable (StatusEngine-only) does not wipe them. The wipe is verified here
+    // against a StatusEngine-tracked timed self-buff, which is what clearRemovable governs.
+    it('wipes a StatusEngine-tracked timed self-buff on the carrier (gone next round)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        // Tank casts a duration-3 "Fortify" self-buff on its CHARGED turn (R1 only). The enemy
+        // (speed 50) then lethal-hits → Cheat Death (HP→1) → clearRemovable wipes "Fortify".
+        const fortifyOnCharge: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [] },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Fortify',
+                                parsedEffects: { defense: 30 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // enemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                chargeCount: 1,
+                startCharged: true,
+                hasChargedSkill: true,
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: fortifyOnCharge,
+            })
+        );
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        const rounds = result.rounds;
+        // R1: charged cast applies "Fortify" → present in the round's self-buffs.
+        expect(rounds[0].activeSelfBuffs.map((b) => b.buffName)).toContain('Fortify');
+        // R2: the standing duration-3 "Fortify" would normally still be active — but
+        // clearRemovable wiped it on the R1 intercept, so it is gone (only the recurring
+        // Cheat Death buff remains).
+        expect(rounds[1].activeSelfBuffs.map((b) => b.buffName)).not.toContain('Fortify');
+    });
+
+    // ── Regression: a carrier WITHOUT Cheat Death dies normally ───────────────
+    it('regression: a tank without Cheat Death dies normally (ship-destroyed + destroyedRound)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000,
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        expect(cheated).toHaveLength(0);
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
+        expect(result.healing!.destroyedRound).toBe(1);
+    });
+});
