@@ -1236,8 +1236,9 @@ function sentenceBoundsAround(
 // are disqualified here so a gated heal is NOT emitted as an UNCONDITIONAL on-cast heal that
 // would fire EVERY round (phantom healing). Two groups:
 //   (1) Always-disqualify, regardless of heal basis:
-//       - on-destroyed / death: "when … is destroyed", "when destroyed", "upon being
-//         destroyed", "on death"; on-kill: "when it destroys [an enemy]".
+//       - on-destroyed / death: "when … is destroyed" (EXCEPT the Salvation all-allies
+//         repair shape — see the Task 9 lookahead + note below), "when destroyed", "upon
+//         being destroyed", "on death"; on-kill: "when it destroys [an enemy]".
 //       - on-buff-purged: "when a buff is purged", "when … is purged".
 //       - reactive on-cleansed (PASSIVE form only): "when … is cleansed". The ACTIVE verb
 //         "cleanses"/"repairs" (Makoli/Morao/Cultivator active cleanse+repair) is NOT matched.
