@@ -654,4 +654,87 @@ describe('Task 4a: enemy-applied DoTs surface in enemyEffects[].dots', () => {
         expect(e1?.dots.some((d) => d.type === 'inferno' && d.tier === 100)).toBe(true);
         expect(e2?.dots.some((d) => d.type === 'inferno' && d.tier === 100)).toBe(true);
     });
+
+    // ── CodeRabbit fix: tick-and-expire DoTs must still appear in enemyEffects ──
+    // A 1-turn inferno DoT ticks (and expires) at the tank's turn-start in the SAME
+    // round the enemy applied it, when the enemy acts FASTER than the tank.
+    // Before the fix, buildEnemyRoundEffects read the LIVE containers at end-of-round —
+    // after expireStacks had already removed the entry — so enemyEffects[].dots was
+    // empty for any round where a short DoT ticked and expired.  After the fix a
+    // snapshot is captured BEFORE the tick/expire, so the DoT appears even though it
+    // expired by round-end.
+    //
+    // Turn order: enemy speed 150 > tank speed 100 → enemy acts first every round.
+    //   R1: enemy applies inferno (rem 1).  Then tank turn-start: tickDoTs → 1 entry
+    //       ticks → expireStacks removes it.  R1 end: infernoEntries = [].
+    //       Before fix: enemyEffects[].dots = [] (BUG).
+    //       After fix:  enemyEffects[].dots shows {type:'inferno', tier:100, stacks:1}.
+    //   R2+: same pattern — fresh entry applied, ticks, expires; snapshot shows it.
+    //
+    // Incoming damage is ALWAYS correct (tickDoTs credits the damage regardless).
+    // Only the display dots field is affected and verified here.
+    it('1-turn inferno: enemyEffects[].dots shows the DoT even in the tick-and-expire round', () => {
+        idCounter = 0;
+        const shortInfernoEnemy = (id: string) => ({
+            id,
+            // Speed 150 > healer speed 100 → enemy acts BEFORE the tank each round,
+            // so the DoT applied this round ticks AND expires at the tank's turn-start
+            // in the same round (the critical bug scenario).
+            stats: { attack: 4000, crit: 0, critDamage: 0, speed: 150 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            ab({
+                                type: 'dot',
+                                target: 'enemy',
+                                config: {
+                                    type: 'dot',
+                                    dotType: 'inferno',
+                                    tier: 100,
+                                    stacks: 1,
+                                    duration: 1, // expires in 1 tick — the bug scenario
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+        });
+
+        const result = simulateHealing(
+            BASE({
+                rounds: 3,
+                // Beefy target that never dies (so all 3 rounds run cleanly).
+                healer: { ...HEALER, hp: 1_000_000, speed: 100, defence: 0 },
+                healTargetId: 'healer',
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 10, basis: 'hp' },
+                    }),
+                ]),
+                enemies: [shortInfernoEnemy('e1')],
+            })
+        );
+
+        const rounds = result.rounds;
+
+        // All 3 rounds: enemy applied inferno (rem 1), tank ticked + expired it.
+        // The snapshot fix means all rounds must show the DoT in enemyEffects[].dots.
+        for (let i = 0; i < 3; i++) {
+            const eff = rounds[i].enemyEffects.find((x) => x.enemyId === 'e1');
+            expect(
+                eff?.dots.some((d) => d.type === 'inferno' && d.tier === 100 && d.stacks >= 1),
+                `R${i + 1}: enemyEffects dots must include the 1-turn inferno even though it expired`
+            ).toBe(true);
+        }
+
+        // Sanity: numeric incoming damage is positive (the DoT DID tick correctly).
+        expect(result.summary.totalIncomingDamage).toBeGreaterThan(0);
+    });
 });

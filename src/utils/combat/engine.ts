@@ -387,6 +387,20 @@ function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
     return out;
 }
 
+/** Merge a pre-tick DoT snapshot with the live (post-tick) container for display purposes.
+ *  Live entries take precedence (they reflect the current state after the tick). Snapshot
+ *  entries whose (sourceId, tier) key is absent from live are appended — those are the DoTs
+ *  that ticked AND expired within this round (the tick-and-expire case: CodeRabbit finding). */
+function mergeDoTsForDisplay(
+    snapshot: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[],
+    live: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[]
+): Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[] {
+    if (snapshot.length === 0) return live;
+    const liveKeys = new Set(live.map((e) => `${e.sourceId}-${e.tier}`));
+    const expiredOnly = snapshot.filter((e) => !liveKeys.has(`${e.sourceId}-${e.tier}`));
+    return expiredOnly.length === 0 ? live : [...live, ...expiredOnly];
+}
+
 /** Assemble the per-round `EnemyRoundEffects[]` for the healing UI (Task 4a). Each enemy that acted
  *  (in `roundEnemyEffects`, keyed by actor id) keeps its de-duped self-buffs/debuffs; on top, the
  *  DoTs ACTIVE on the heal target this round are attributed to their applier via the stack
@@ -395,12 +409,15 @@ function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
  *  still surface. NAMES/COUNTS ONLY for display — never folded into a sim value. */
 function buildEnemyRoundEffects(
     roundEnemyEffects: Map<string, { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }>,
-    corrosionEntries: ActiveDoTStack[],
-    infernoEntries: ActiveDoTStack[]
+    corrosionEntries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[],
+    infernoEntries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[]
 ): EnemyRoundEffects[] {
     // Sum active stacks per source → type → tier, preserving first-seen source order.
     const dotsBySource = new Map<string, Map<string, EnemyDoTState>>();
-    const accumulate = (type: 'corrosion' | 'inferno', entries: ActiveDoTStack[]): void => {
+    const accumulate = (
+        type: 'corrosion' | 'inferno',
+        entries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[]
+    ): void => {
         for (const e of entries) {
             let byKey = dotsBySource.get(e.sourceId);
             if (!byKey) {
@@ -1459,6 +1476,19 @@ export function runCombat(input: CombatEngineInput): {
             string,
             { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }
         >();
+        // Display snapshot of the heal target's DoT containers, captured BEFORE the
+        // tank's turn-start tickDoTs/expireStacks run.  Merged with the live containers
+        // via mergeDoTsForDisplay at end-of-round so that short DoTs (e.g. duration 1)
+        // that ticked AND expired in the same round (enemy faster than tank) still appear
+        // in enemyEffects[].dots.  Only the display shape is snapshotted (sourceId, tier,
+        // stacks); numeric ticking uses the live containers unchanged.  Starts empty
+        // every round — mergeDoTsForDisplay's fast-path (snapshot.length === 0) means
+        // rounds where the tank never acts (DPS mode, destroyed tank) fall back to live
+        // containers automatically, preserving pre-fix behaviour.
+        let tankDotSnapshot: {
+            corrosion: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
+            inferno: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
+        } = { corrosion: [], inferno: [] };
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
@@ -1691,6 +1721,20 @@ export function runCombat(input: CombatEngineInput): {
             // so the tank is alive here. DPS mode / no enemy-applied DoTs → empty containers →
             // a no-op (goldens byte-identical).
             if (healTarget && actor.id === healTarget.id) {
+                // Snapshot BEFORE tickDoTs so expiring entries still appear in the
+                // display panel (mergeDoTsForDisplay + buildEnemyRoundEffects read it).
+                tankDotSnapshot = {
+                    corrosion: healTarget.corrosionEntries.map((e) => ({
+                        sourceId: e.sourceId,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                    })),
+                    inferno: healTarget.infernoEntries.map((e) => ({
+                        sourceId: e.sourceId,
+                        tier: e.tier,
+                        stacks: e.stacks,
+                    })),
+                };
                 let tankDotDamage = 0;
                 tickDoTs({
                     corrosionEntries: healTarget.corrosionEntries,
@@ -2368,10 +2412,16 @@ export function runCombat(input: CombatEngineInput): {
                 // preserving the order enemies first acted this round. Active enemy-applied DoTs on
                 // the target are attributed by stack `sourceId` and merged in below — a DoT-only
                 // enemy that produced no self-buffs/debuffs still gets an entry so its DoTs show.
+                // mergeDoTsForDisplay combines the pre-tick snapshot with the live containers:
+                // live entries (post-tick/newly-applied) take precedence; snapshot entries absent
+                // from live (tick-and-expire case) are appended so the display panel always shows
+                // DoTs that were active this round even if they expired before this call.
+                // When the tank never acted (DPS mode or destroyed tank) the snapshot is empty
+                // and mergeDoTsForDisplay returns the live containers unchanged.
                 enemyEffects: buildEnemyRoundEffects(
                     roundEnemyEffects,
-                    healTarget.corrosionEntries,
-                    healTarget.infernoEntries
+                    mergeDoTsForDisplay(tankDotSnapshot.corrosion, healTarget.corrosionEntries),
+                    mergeDoTsForDisplay(tankDotSnapshot.inferno, healTarget.infernoEntries)
                 ),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
