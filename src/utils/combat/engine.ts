@@ -19,6 +19,7 @@ import {
     emptyActorDamage,
     emptyActorHealing,
     advanceChargeCadence,
+    recordDestroyed,
 } from './state';
 import {
     ActiveBuff,
@@ -1102,9 +1103,9 @@ export function runCombat(input: CombatEngineInput): {
     const infernoEntries = enemy.infernoEntries;
     const pendingBombs = enemy.pendingBombs;
     const pendingAccumulators = enemy.pendingAccumulators;
-    // hp-changed / ship-destroyed event tracking (emission-only, no sim effect).
+    // hp-changed event tracking (emission-only, no sim effect). ship-destroyed is owned by
+    // the shared recordDestroyed helper, keyed on the per-actor destroyedRound field.
     let lastEnemyHpPctInt = 100;
-    let destroyedEmitted = false;
 
     const roundData: RoundData[] = [];
 
@@ -1504,12 +1505,13 @@ export function runCombat(input: CombatEngineInput): {
             healTarget!.shieldPool -= absorbed;
             roundShieldAbsorbed += absorbed;
             const hpDamage = damage - absorbed;
-            const wasAlive = healTarget!.currentHp > 0;
             healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
-            // First reach 0 → record the destroyed round + emit ship-destroyed once.
-            if (wasAlive && healTarget!.currentHp <= 0) {
-                healTargetDestroyedRound = r;
-                bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+            // First reach 0 → record the destroyed round + emit ship-destroyed once (shared
+            // helper; idempotent via the per-actor destroyedRound field). The healing result
+            // reads the destroyed round back off the heal target's runtime field below.
+            if (healTarget!.currentHp <= 0) {
+                recordDestroyed(healTarget!, r, bus);
+                healTargetDestroyedRound = healTarget!.destroyedRound;
             }
             return { shieldBefore, absorbed, hpDamage };
         };
@@ -2339,9 +2341,10 @@ export function runCombat(input: CombatEngineInput): {
             });
             lastEnemyHpPctInt = newEnemyHpPctInt;
         }
-        if (!destroyedEmitted && enemy.currentHp <= 0) {
-            bus.emit({ type: 'ship-destroyed', actorId: enemy.id, round: r });
-            destroyedEmitted = true;
+        if (enemy.currentHp <= 0) {
+            // Shared helper: stamps enemy.destroyedRound + emits ship-destroyed exactly once
+            // (idempotent), replacing the old destroyedEmitted boolean.
+            recordDestroyed(enemy, r, bus);
         }
 
         // Report stacks after expiry (state going into next round)

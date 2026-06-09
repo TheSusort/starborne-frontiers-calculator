@@ -1,3 +1,5 @@
+import type { CombatEventBus } from './events';
+
 /** Per-actor damage contributions within one round (spec: per-actor accounting —
  *  the simulator-page seam). secondary/conditional are sub-buckets of direct
  *  (mirroring rawTotals); corrosion/inferno/detonation are the enemy-turn channels
@@ -107,6 +109,8 @@ export interface CombatActor {
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
+    /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
+    destroyedRound?: number;
 }
 
 export function createActor(
@@ -131,6 +135,16 @@ export function createActor(
         pendingBombs: [],
         pendingAccumulators: [],
     };
+}
+
+/** Record an actor's destruction exactly once: stamp `destroyedRound` (first call wins)
+ *  and emit a single `ship-destroyed` for it. Idempotent — repeat calls are no-ops, so
+ *  the "set once" guard doubles as the single-emit guard. Callers floor `currentHp` to 0
+ *  themselves; this helper only owns the destroyed-round bookkeeping + the emission. */
+export function recordDestroyed(actor: CombatActor, round: number, bus: CombatEventBus): void {
+    if (actor.destroyedRound !== undefined) return;
+    actor.destroyedRound = round;
+    bus.emit({ type: 'ship-destroyed', actorId: actor.id, round });
 }
 
 /** Turn meter an actor must reach to act (docs/combat-system.md section 1). */

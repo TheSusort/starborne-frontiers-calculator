@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
+import { createActor, recordDestroyed } from '../state';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 
@@ -962,3 +963,47 @@ describe('control-applied event (Defiant charged Stasis inflict)', () => {
         expect(events.some((e) => e.type === 'control-applied')).toBe(false);
     });
 });
+
+describe('recordDestroyed helper (shared all-actor ship-destroyed)', () => {
+    const seedDeadActor = () => {
+        const actor = createActor({
+            id: 'synthetic-1',
+            side: 'player',
+            kind: 'team',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1000,
+                speed: 0,
+            },
+        });
+        actor.currentHp = 0; // floored this round
+        return actor;
+    };
+
+    it('sets destroyedRound and emits ship-destroyed exactly once even if called twice', () => {
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const actor = seedDeadActor();
+
+        recordDestroyed(actor, 3, bus);
+        recordDestroyed(actor, 5, bus); // second call must be a no-op (already destroyed)
+
+        expect(actor.destroyedRound).toBe(3);
+        expect(destroyed).toHaveLength(1);
+        expect(destroyed[0]).toMatchObject({
+            type: 'ship-destroyed',
+            actorId: 'synthetic-1',
+            round: 3,
+        });
+    });
+});
+
+// Note: the existing healing-mode heal-target death regression (exactly one
+// ship-destroyed{actorId: tankId} + healing.destroyedRound set) is guarded by
+// healing.test.ts → "lethal: destroyedRound set, ship-destroyed emitted once,
+// post-death flatline". This file adds the focused recordDestroyed unit guard above.
