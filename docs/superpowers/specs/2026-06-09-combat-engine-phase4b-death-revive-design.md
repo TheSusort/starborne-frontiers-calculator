@@ -169,6 +169,10 @@ Yazid's Barrier survives the wipe (it is a fresh post-activation grant).
 Cheat Death buff's own consume-on-use). After it fires once, subsequent `cheat-death-activated`
 events for that owner do not re-fire the capped reactive.
 
+**Drain point (plan to nail down).** The `cheat-death-activated` follow-ons must drain before
+the engine continues the interrupted attack resolution, mirroring the death-path drain — the
+plan must state this drain point explicitly (the data-flow diagram implies it).
+
 ### Component 5 — Reactive extra-action bridge
 
 **Problem.** `extra-action` is not a `ReactiveAbilityType`, and extra actions are **engine-owned**
@@ -197,6 +201,14 @@ them as `extra-action` abilities with the right trigger:
 **Where it fires.** `on-enemy-destroyed` fires in DPS mode the round the enemy dummy floors to 0
 (one `ship-destroyed` event), so Sokol/Liberator gain one extra action that round (once-per-round
 naturally bounds it).
+
+**Timing the plan must resolve first.** The listener runs during `ship-destroyed` emission,
+which may land inside or outside the engine's round-local extra-action queue/closure window
+(`processExtraActionGrants`, ~engine.ts:1549, splices into a round-local `queue` keyed by index
+`qi`). The plan must pin down the relationship between a `ship-destroyed` emission, the intent
+drain, and that round-local queue so a death **late in a round** still inserts the extra action
+correctly (or is explicitly deferred to the next round's bookkeeping). This is the first thing
+the plan resolves.
 
 ## Data flow
 
