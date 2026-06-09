@@ -1530,6 +1530,14 @@ export function runCombat(input: CombatEngineInput): {
                     healTarget!.currentHp = 1;
                     cheatDeathConsumed.add(targetId);
                     statusEngine.clearRemovable(targetId);
+                    // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
+                    // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
+                    // them here so the survivor takes no further ticks. These are the SAME arrays
+                    // the turn-start DoT-tick intake reads (healTarget.corrosion/infernoEntries).
+                    // Both DoT types are removable; bombs (Blast, treated as persistent here) and
+                    // accumulators are intentionally left untouched.
+                    healTarget!.corrosionEntries.length = 0;
+                    healTarget!.infernoEntries.length = 0;
                     bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit

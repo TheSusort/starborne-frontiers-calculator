@@ -2546,4 +2546,109 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
         expect(result.healing!.destroyedRound).toBe(1);
     });
+
+    // ── DoT clear: Cheat Death wipes the tank's removable Corrosion/Inferno ────
+    // Enemy-applied DoTs on the tank are stored as actor-state stacks
+    // (healTarget.corrosionEntries/infernoEntries), NOT in the StatusEngine — so
+    // clearRemovable alone does NOT clear them. The intercept must empty those same
+    // arrays the tank's turn-start DoT-tick intake reads, so a Cheat-Death survivor
+    // takes NO further Corrosion/Inferno ticks.
+    //
+    // Setup (per round, fastest first): tank (focus, speed 100) ticks its DoTs at
+    // turn-start → dotEnemy (speed 50) applies inferno+corrosion (duration 5, NO
+    // direct — it has only a dot ability so the synthesized basic is suppressed) →
+    // killEnemy (speed 40) deals a lethal 3000 direct (no DoT, so it never re-seeds).
+    //   R1: tank tick → 0 (no DoTs yet). dotEnemy seeds inferno+corrosion. killEnemy
+    //       3000 → lethal → Cheat Death (HP→1) → clears the DoT arrays.
+    //   R2: tank turn-start tick → arrays EMPTY → 0 DoT damage (the fix). Without the
+    //       clear, the seeded DoTs would tick here.
+    const inferno = () =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'inferno', tier: 100, stacks: 1, duration: 5 },
+        });
+    const corrosion = () =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'corrosion', tier: 100, stacks: 1, duration: 5 },
+        });
+
+    it('clears the tank Corrosion/Inferno DoTs on Cheat Death: no DoT ticks next round', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const dotTicks: { round: number; dotType: string }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; dotType: string };
+            if (ev.targetId === 'attacker') dotTicks.push({ round: ev.round, dotType: ev.dotType });
+        });
+        runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // killEnemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [
+                    // dot-only (no damage ability → no direct), applies BOTH DoTs.
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [inferno(), corrosion()] }],
+                        },
+                    }),
+                    // lethal direct, NO DoT (never re-seeds after the clear).
+                    manualEnemy('killEnemy', 3000, 40),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Cheat Death fires once on R1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        // R1 has no DoT ticks (DoTs seeded mid-round, tick at NEXT turn-start). The fix
+        // empties the arrays on the R1 intercept → R2 turn-start tick sees no DoTs.
+        expect(dotTicks.filter((t) => t.round === 2)).toEqual([]);
+    });
+
+    // ── Control: WITHOUT Cheat Death (and surviving), the same DoTs DO tick R2 ─
+    // Proves the setup genuinely seeds ticking DoTs — so the zero in the test above is
+    // the array-clear, not a dead setup. Tank has huge HP (survives, no Cheat Death);
+    // the seeded inferno+corrosion tick at its R2 turn-start.
+    it('control: without Cheat Death the seeded Corrosion/Inferno DoTs tick next round', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const dotTicks: { round: number; dotType: string }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; dotType: string };
+            if (ev.targetId === 'attacker') dotTicks.push({ round: ev.round, dotType: ev.dotType });
+        });
+        runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 1_000_000, // never dies, no Cheat Death — isolates the DoT bleed
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [inferno(), corrosion()] }],
+                        },
+                    }),
+                    manualEnemy('killEnemy', 3000, 40),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        const r2 = dotTicks
+            .filter((t) => t.round === 2)
+            .map((t) => t.dotType)
+            .sort();
+        expect(r2).toEqual(['corrosion', 'inferno']);
+    });
 });
