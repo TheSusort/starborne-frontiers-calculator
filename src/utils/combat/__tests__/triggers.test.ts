@@ -1555,6 +1555,118 @@ describe('on-attacked live trigger (Task 4)', () => {
 });
 
 // ----------------------------------------------------------------------
+// Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
+// on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
+// createEventBus directly. Owner is always 'A' (a player actor); 'B' is
+// another player actor; 'enemy' is enemy-side per the isEnemySide predicate.
+// ----------------------------------------------------------------------
+describe('death-trigger live listeners (Task 5)', () => {
+    // Build a minimal reactive ability carrying the given death trigger.
+    const deathAbility = (trigger: AbilityTrigger): Ability => ({
+        id: `d-${trigger}`,
+        type: 'buff',
+        target: 'self',
+        trigger,
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Vengeance',
+            stacks: 1,
+            parsedEffects: { attack: 20 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    // Wire up the bus, register the owner's listener, emit a ship-destroyed
+    // event for `actorId`, and return the collected intents.
+    function emitDestroyed(trigger: AbilityTrigger, destroyedActorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: deathAbility(trigger), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'ship-destroyed', actorId: destroyedActorId, round: 1 });
+        return intents;
+    }
+
+    describe('on-destroyed (own death, self-scoped)', () => {
+        it('enqueues exactly one intent when the owner itself is destroyed', () => {
+            const intents = emitDestroyed('on-destroyed', 'A');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-destroyed');
+        });
+
+        it('enqueues nothing when another player actor is destroyed', () => {
+            expect(emitDestroyed('on-destroyed', 'B')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when an enemy is destroyed', () => {
+            expect(emitDestroyed('on-destroyed', 'enemy')).toHaveLength(0);
+        });
+    });
+
+    describe('on-ally-destroyed (another player actor dies)', () => {
+        it('enqueues one intent when another player actor is destroyed', () => {
+            const intents = emitDestroyed('on-ally-destroyed', 'B');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-ally-destroyed');
+        });
+
+        it('enqueues nothing on the owner own death', () => {
+            expect(emitDestroyed('on-ally-destroyed', 'A')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when an enemy-side actor is destroyed', () => {
+            expect(emitDestroyed('on-ally-destroyed', 'enemy')).toHaveLength(0);
+        });
+    });
+
+    describe('on-enemy-destroyed (an enemy-side actor dies)', () => {
+        it('enqueues one intent when an enemy-side actor is destroyed', () => {
+            const intents = emitDestroyed('on-enemy-destroyed', 'enemy');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-enemy-destroyed');
+        });
+
+        it('enqueues nothing when the owner itself is destroyed', () => {
+            expect(emitDestroyed('on-enemy-destroyed', 'A')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when another player actor is destroyed', () => {
+            expect(emitDestroyed('on-enemy-destroyed', 'B')).toHaveLength(0);
+        });
+    });
+
+    it('listeners are pure: no enqueue on registration, only on matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = {
+            ability: deathAbility('on-ally-destroyed'),
+            sourceSlot: 'passive',
+        };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'ship-destroyed', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
 // Scenario 15 — on-attacked engine integration (Task 8): the engine emits
 // the `attacked` event from the enemy intake so `on-attacked` reactive
 // abilities on the heal target actually fire during a real run.

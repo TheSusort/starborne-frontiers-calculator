@@ -249,6 +249,29 @@ export function registerReactiveListeners(args: {
                         if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'on-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Self-scoped: fires when THIS OWNER itself is destroyed (mirrors
+                        // on-crit's own-id scoping). One enqueue per destruction event.
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Ally-scoped: any OTHER player actor's destruction. Exclude this
+                        // owner (own death goes to on-destroyed) AND every enemy-side actor
+                        // (dummy wall + enemy attackers — an enemy is never an ally), mirroring
+                        // on-ally-crit's scoping.
+                        if (e.actorId !== ownerId && !isEnemySide(e.actorId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Enemy-scoped: fires when any enemy-side actor (dummy wall + enemy
+                        // attackers) is destroyed. One enqueue per destruction event.
+                        if (isEnemySide(e.actorId)) enqueue(intent);
+                    });
+                    break;
                 default:
                     // Non-live triggers are never registered (filtered at partition time).
                     break;
