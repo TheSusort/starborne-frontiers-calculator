@@ -106,6 +106,12 @@ StatusEngine construction vs. an explicit round-1 step in the engine. Either reu
 `applyTimedAbilityStatus`/the timed maps; the requirement is "applied exactly once at combat
 start, then decremented normally."
 
+The seeding must gate each status through `conditionsMet` against the round-1 context, for parity
+with the cast path / `executeIntent` (a co-gated grant must respect its gate). The
+affected-ship enumeration (below) should surface whether any affected buff carries a co-gate that
+only the per-turn `postDebuffGateCtx` can evaluate; the "at start of combat … for N turns" buffs
+are typically unconditional, so this is expected to be a no-op in practice.
+
 ### 3. Death survival via removability (no new machinery)
 
 `clearRemovable` (statusEngine.ts:840-856) already preserves entries that are
@@ -137,7 +143,7 @@ verification below.
 - No-duration named buffs (`undefined`/`'recurring'`) — still `aura`.
 - Persistent stacking buffs (Blast/Overload — separate accumulating/persistent maps).
 - **Cheat Death** — special-cased in the parser (forced `'recurring'`, never timer-decremented;
-  `skillTextParser.ts:1967`) and consumed by the Phase-4b interceptor. Untouched.
+  `skillTextParser.ts:1968`) and consumed by the Phase-4b interceptor. Untouched.
 - Enemy-side timed debuffs (applied via `sourceFired`, not this aura branch).
 
 ## Testing
