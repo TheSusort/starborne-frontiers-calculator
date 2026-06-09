@@ -45,6 +45,7 @@ const result: HealingSimulationResult = {
             totalRoundHealing: 5000,
             cumulativeHealing: 5000,
             activeSelfBuffs: [],
+            healTargetBuffs: [],
             enemyEffects: [],
         },
     ],

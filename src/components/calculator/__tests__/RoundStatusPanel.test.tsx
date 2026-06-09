@@ -22,11 +22,13 @@ const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
     totalRoundHealing: 0,
     cumulativeHealing: 0,
     activeSelfBuffs: [],
+    healTargetBuffs: [],
     enemyEffects: [],
     ...over,
 });
 
-// Round with TWO enemies, each producing distinct self-buffs and debuffs on the target.
+// Round with TWO enemies. BOTH land 'Defense Down' on the target (with different turnsRemaining) so
+// the Heal Target roll-up has a dedup case to prove; each enemy also has a distinct self-buff.
 const twoEnemyRound = (): HealingRoundData =>
     row({
         round: 3,
@@ -40,7 +42,7 @@ const twoEnemyRound = (): HealingRoundData =>
             {
                 enemyId: 'e2',
                 selfBuffs: [{ buffName: 'Crit Up', turnsRemaining: 1 }],
-                debuffs: [{ buffName: 'Corrosion', turnsRemaining: 2 }],
+                debuffs: [{ buffName: 'Defense Down', turnsRemaining: 1, stacks: 1 }],
                 dots: [],
             },
         ],
@@ -86,12 +88,12 @@ describe('RoundStatusPanel', () => {
         );
         expect(screen.getByText('Makoli')).toBeInTheDocument();
         expect(screen.getByText('Enemy 2')).toBeInTheDocument();
-        // First enemy's own effects.
+        // Each enemy's own self-buff is per-enemy only.
         expect(screen.getByText('Attack Up')).toBeInTheDocument();
-        expect(screen.getByText('Defense Down')).toBeInTheDocument();
-        // Second enemy's own effects, attributed separately.
         expect(screen.getByText('Crit Up')).toBeInTheDocument();
-        expect(screen.getByText('Corrosion')).toBeInTheDocument();
+        // The shared debuff appears under both enemies plus once in the aggregated Heal Target
+        // section (deduped), hence getAllByText.
+        expect(screen.getAllByText('Defense Down').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders each enemy group with its own Self-Buffs and Debuffs sub-sections', () => {
@@ -271,7 +273,8 @@ describe('RoundStatusPanel', () => {
         // DoT-only enemy still surfaces, with its DoTs-on-Target sub-section + the labelled stack.
         expect(screen.getByText('Makoli')).toBeInTheDocument();
         expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
-        expect(screen.getByText('Inferno I ×3')).toBeInTheDocument();
+        // The DoT label appears in the per-enemy group AND the aggregated Heal Target section.
+        expect(screen.getAllByText('Inferno I ×3').length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders DoTs alongside self-buffs and debuffs in the same enemy group', () => {
@@ -299,10 +302,11 @@ describe('RoundStatusPanel', () => {
             />
         );
         expect(screen.getByText('Attack Up')).toBeInTheDocument();
-        expect(screen.getByText('Defense Down')).toBeInTheDocument();
+        // Debuffs/DoTs appear per-enemy AND in the aggregated Heal Target section.
+        expect(screen.getAllByText('Defense Down').length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText('DoTs on Target')).toBeInTheDocument();
         // Single stack → no ×N suffix.
-        expect(screen.getByText('Corrosion I')).toBeInTheDocument();
+        expect(screen.getAllByText('Corrosion I').length).toBeGreaterThanOrEqual(1);
     });
 
     it('falls back to the raw enemy id when no name is resolved', () => {
@@ -316,5 +320,125 @@ describe('RoundStatusPanel', () => {
         );
         expect(screen.getByText('e1')).toBeInTheDocument();
         expect(screen.getByText('e2')).toBeInTheDocument();
+    });
+
+    it('renders a Heal Target section with the target name, its own buffs, and the aggregated debuffs/DoTs on it', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 3,
+                            healTargetBuffs: [
+                                { buffName: 'Cheat Death', turnsRemaining: 'recurring' },
+                                { buffName: 'Barrier', turnsRemaining: 2, stacks: 1 },
+                            ],
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [{ buffName: 'Attack Up', turnsRemaining: 2 }],
+                                    debuffs: [{ buffName: 'Defense Down', turnsRemaining: 3 }],
+                                    dots: [{ type: 'inferno', tier: 15, stacks: 2 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        // The Heal Target sub-header with the threaded name.
+        expect(screen.getByText('Aegis')).toBeInTheDocument();
+        // Its OWN buffs render (incl. recurring Cheat Death) — these are unique to the target.
+        expect(screen.getByText('Cheat Death')).toBeInTheDocument();
+        expect(screen.getByText('Barrier')).toBeInTheDocument();
+        // The aggregated debuffs/DoTs on the target render under the Heal Target section
+        // (also shown per-enemy, hence getAllByText — at least one of each is the Heal Target one).
+        expect(screen.getAllByText('Defense Down').length).toBe(2);
+        expect(screen.getAllByText('Inferno I ×2').length).toBe(2);
+    });
+
+    it('dedupes a debuff landed by two enemies to ONE row in the Heal Target section (kept per-enemy)', () => {
+        render(
+            <RoundStatusPanel
+                configs={[{ name: 'Healer 1', roundData: twoEnemyRound() }]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        // BOTH enemies land 'Defense Down': it appears under each enemy (2) plus exactly ONE merged
+        // row in the Heal Target roll-up — 3 total, NOT 4 (which would mean the aggregate duplicated
+        // it). The merge keeps the larger turnsRemaining (e1's 3, stacks 2).
+        expect(screen.getAllByText('Defense Down').length).toBe(3);
+    });
+
+    it('merges same type+tier DoTs from two enemies into one summed-stack row in the Heal Target section', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 3,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [],
+                                    dots: [{ type: 'inferno', tier: 15, stacks: 2 }],
+                                },
+                                {
+                                    enemyId: 'e2',
+                                    selfBuffs: [],
+                                    debuffs: [],
+                                    dots: [{ type: 'inferno', tier: 15, stacks: 3 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={3}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        // Per-enemy rows keep their own attribution (2 and 3 stacks).
+        expect(screen.getByText('Inferno I ×2')).toBeInTheDocument();
+        expect(screen.getByText('Inferno I ×3')).toBeInTheDocument();
+        // The Heal Target roll-up merges them into a single summed row (2 + 3 = 5 stacks).
+        expect(screen.getByText('Inferno I ×5')).toBeInTheDocument();
+    });
+
+    it('hides zero-stack heal-target buffs and omits the section when the target has nothing', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            healTargetBuffs: [
+                                { buffName: 'Spent Target Stack', turnsRemaining: 2, stacks: 0 },
+                            ],
+                            enemyEffects: [],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+                healTargetName="Aegis"
+            />
+        );
+        expect(screen.queryByText('Spent Target Stack')).not.toBeInTheDocument();
+        // No buffs + no debuffs/dots on target → the Heal Target sub-header does not render.
+        expect(screen.queryByText('Aegis')).not.toBeInTheDocument();
     });
 });

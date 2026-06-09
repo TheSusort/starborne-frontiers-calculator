@@ -40,7 +40,8 @@ export type ReactiveAbilityType =
     | 'charge'
     | 'heal'
     | 'shield'
-    | 'cleanse';
+    | 'cleanse'
+    | 'extra-action';
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -51,6 +52,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'heal',
     'shield',
     'cleanse',
+    'extra-action',
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -130,6 +132,14 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
+ *  - on-attacked → attacked where targetId === ownerId (target-scoped; fires when THIS OWNER is
+ *    attacked). One enqueue per enemy attack turn.
+ *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
+ *    target-scoped guard). One enqueue per destruction event.
+ *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
+ *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
+ *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
+ *    (any enemy-side actor — dummy wall + walked enemy attackers).
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
@@ -249,6 +259,38 @@ export function registerReactiveListeners(args: {
                         if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'on-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Self-scoped: fires when THIS OWNER itself is destroyed (mirrors
+                        // on-crit's own-id scoping). One enqueue per destruction event.
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-ally-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Ally-scoped: any OTHER player actor's destruction. Exclude this
+                        // owner (own death goes to on-destroyed) AND every enemy-side actor
+                        // (dummy wall + enemy attackers — an enemy is never an ally), mirroring
+                        // on-ally-crit's scoping.
+                        if (e.actorId !== ownerId && !isEnemySide(e.actorId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-destroyed':
+                    bus.on('ship-destroyed', (e) => {
+                        // Enemy-scoped: fires when any enemy-side actor (dummy wall + enemy
+                        // attackers) is destroyed. One enqueue per destruction event.
+                        if (isEnemySide(e.actorId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-cheat-death-activated':
+                    bus.on('cheat-death-activated', (e) => {
+                        // Self-scoped: fires when THIS OWNER's own Cheat Death intercept saves
+                        // it (Yazid's "when Cheat Death activates" follow-on). Pure — enqueue
+                        // only; the executor's once-per-combat cap (oncePerCombat config flag +
+                        // oncePerCombatFired Set) keeps the repair to once per battle.
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
                 default:
                     // Non-live triggers are never registered (filtered at partition time).
                     break;
@@ -279,6 +321,11 @@ export interface IntentExecContext {
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
      *  already iterates `allPlayerActors` with the correct chargeCount guard. */
     grantAllyCharges: (amount: number) => void;
+    /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
+     *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
+     *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
+     *  round when there is no live queue — the post-round enemy-death case). */
+    grantExtraAction: (granterId: string, abilityId: string, oncePerRound: boolean) => void;
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
@@ -301,6 +348,12 @@ export interface IntentExecContext {
      *  over the live target). When undefined, the heal/shield/cleanse executor branches
      *  are inert (not-simulated follow-up) — DPS goldens stay byte-identical. */
     healing?: HealingRuntimeCtx;
+    /** Combat-lifetime "once per battle" guard (Task 8). Owned by the engine OUTSIDE the
+     *  round loop (alongside cheatDeathConsumed) so it persists across rounds. A heal whose
+     *  config carries `oncePerCombat` records `${ownerId}:${abilityId}` here on its first
+     *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
+     *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
+    oncePerCombatFired?: Set<string>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -695,14 +748,34 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'heal' || cfg.type === 'shield') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        const healing = ctx.healing; // local binding preserves narrowing inside the closure below
+        // Once-per-combat cap (Task 8): a flagged repair (Yazid's on-cheat-death-activated 60%
+        // repair) fires AT MOST ONCE per combat. The Set is engine-owned (combat lifetime), so
+        // a key present here means this owner+ability already fired this battle → silent skip.
+        if (cfg.oncePerCombat) {
+            const key = `${intent.ownerId}:${intent.ability.id}`;
+            if (ctx.oncePerCombatFired?.has(key)) return;
+            ctx.oncePerCombatFired?.add(key);
+        }
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
-        // turn, fall back to runtime base stats. The fold is DELIBERATELY simplified vs the
-        // cast path (which folds outgoingHeal + recipient incomingHeal): heal applies the
-        // owner's healModifier only; shield is basis×pct (shields aren't repairs). The
-        // owner's standing heal buffs are not re-derived at drain time.
-        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this simplified mirror.
+        // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
+        // path: owner healModifier × owner outgoingHeal × recipient incomingHeal — so a
+        // reactive repair (e.g. Yazid's Cheat-Death 60%) scales with the recipient's Incoming
+        // Repair (Everliving Regeneration) just like a cast repair. The ONLY deliberate
+        // simplification vs the cast path is the no-crit approximation above. Shield stays
+        // basis×pct (shields aren't repairs — no heal-modifier channels). The owner's standing
+        // heal buffs are not re-derived at drain time (the last-turn ctx values are used).
+        // If the cast-path fold in playerTurn.ts (heal block) changes, revisit this mirror.
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+        // Owner outgoing-repair %; and recipient incoming-repair % (self → owner's own ctx,
+        // any other recipient → its last-turn ctx via the runtime accessor). Mirrors the cast
+        // path's incomingPctFor (playerTurn.ts).
+        const ownerOutgoing = ownerCtx?.outgoingHealPct ?? 0;
+        const incomingPctFor = (rid: string): number =>
+            rid === intent.ownerId
+                ? (ownerCtx?.incomingHealPct ?? 0)
+                : healing.recipientIncomingHealPct(rid);
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
         // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
@@ -724,7 +797,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
             const raw =
                 cfg.type === 'heal'
-                    ? basisValue * (cfg.pct / 100) * (1 + owner.healModifier / 100)
+                    ? basisValue *
+                      (cfg.pct / 100) *
+                      (1 + owner.healModifier / 100) *
+                      (1 + ownerOutgoing / 100) *
+                      (1 + incomingPctFor(rid) / 100)
                     : basisValue * (cfg.pct / 100);
             if (cfg.type === 'heal') {
                 ctx.healing.credit(intent.ownerId, 'directHeal', raw);
@@ -747,6 +824,16 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'cleanse') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         ctx.healing.credit(intent.ownerId, 'cleanseCount', cfg.count);
+        return;
+    }
+
+    if (cfg.type === 'extra-action') {
+        // Reactive extra-action bridge (Task 10): hand the grant to the engine, which decides
+        // Path A (splice into the live round queue — during-turn deaths) vs Path B (buffer for
+        // the next round — post-round enemy death, no live queue). The owner is the GRANTER (the
+        // ship whose death-triggered passive fired): Sokol/Liberator gain the extra turn, not the
+        // dead enemy. The engine's processExtraActionGrants enforces oncePerRound + the backstop.
+        ctx.grantExtraAction(intent.ownerId, intent.ability.id, cfg.oncePerRound);
         return;
     }
 

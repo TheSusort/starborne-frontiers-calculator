@@ -37,4 +37,22 @@ describe('createEventBus', () => {
             bus.emit({ type: 'ship-destroyed', actorId: 'enemy', round: 3 })
         ).not.toThrow();
     });
+
+    it('ship-destroyed round-trips with an arbitrary actorId (generalized contract)', () => {
+        const bus = createEventBus();
+        const received: { actorId: string; round: number }[] = [];
+        bus.on('ship-destroyed', (e) => received.push({ actorId: e.actorId, round: e.round }));
+        bus.emit({ type: 'ship-destroyed', actorId: 'team-actor-1', round: 5 });
+        expect(received).toEqual([{ actorId: 'team-actor-1', round: 5 }]);
+    });
+
+    it('cheat-death-activated round-trips through the bus', () => {
+        const bus = createEventBus();
+        const received: { actorId: string; round: number }[] = [];
+        bus.on('cheat-death-activated', (e) =>
+            received.push({ actorId: e.actorId, round: e.round })
+        );
+        bus.emit({ type: 'cheat-death-activated', actorId: 'tank', round: 2 });
+        expect(received).toEqual([{ actorId: 'tank', round: 2 }]);
+    });
 });

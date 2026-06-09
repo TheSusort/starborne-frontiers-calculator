@@ -3,6 +3,9 @@ import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { ConditionContext } from '../../abilities/evaluateConditions';
 
+// statusEngine only consumes the REAL UNREMOVABLE_STATUSES (which now contains
+// 'Acidic Decay'); the clearRemovable test below exercises that shipped contract directly.
+
 function makeBuff(id: string, overrides: Partial<SelectedGameBuff> = {}): SelectedGameBuff {
     return { id, buffName: id, stacks: 1, parsedEffects: {}, isStackable: false, ...overrides };
 }
@@ -1418,5 +1421,88 @@ describe('per-target debuff stores (Task 1)', () => {
             const defaultActive = eng.activeAbilityStatuses('enemy', () => baseCtx);
             expect(defaultActive.find((s) => s.payload.buffName === 'TankAura')).toBeUndefined();
         });
+    });
+});
+
+describe('clearRemovable', () => {
+    // A persistent-stacking debuff fixture (Defense Shred) on the default enemy target.
+    const persistentShred = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration: 2, // ignored — name routes to the persistent map
+        payload: {
+            buffName: 'Defense Shred',
+            stacks: 1,
+            parsedEffects: { defense: -2 },
+            application: 'inflict',
+        },
+    });
+
+    // A timed enemy-side debuff fixture keyed to the default enemy target.
+    const timedEnemyStatus = (
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
+    });
+
+    it('removes a timed self-buff and a timed enemy-debuff for the id', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'tank');
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3), undefined, 'tank');
+        // Sanity: both present before the wipe.
+        expect(eng.timedAbilityStatuses('self', 'tank')).toHaveLength(1);
+        expect(eng.timedAbilityStatuses('enemy', 'tank', 'tank')).toHaveLength(1);
+
+        eng.clearRemovable('tank');
+
+        expect(eng.timedAbilityStatuses('self', 'tank')).toEqual([]);
+        expect(eng.timedAbilityStatuses('enemy', 'tank', 'tank')).toEqual([]);
+    });
+
+    it('preserves a persistent-stack debuff (Defense Shred)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // Apply the persistent debuff to the 'tank' enemy target store.
+        eng.applyTimedAbilityStatus(1, persistentShred(), undefined, 'tank');
+        // Also a removable timed debuff so we confirm the wipe ran.
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3), undefined, 'tank');
+
+        eng.clearRemovable('tank');
+
+        const remaining = eng.timedAbilityStatuses('enemy', 'tank', 'tank');
+        expect(remaining.map((s) => s.active.buffName)).toEqual(['Defense Shred']);
+        expect(remaining[0].active.turnsRemaining).toBe('permanent');
+    });
+
+    it('preserves a buff named in UNREMOVABLE_STATUSES (real shipped set: Acidic Decay)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Acidic Decay' is a REAL member of the shipped UNREMOVABLE_STATUSES set.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Acidic Decay', 3), 'tank');
+        // A removable buff so we confirm the wipe actually ran.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'tank');
+
+        eng.clearRemovable('tank');
+
+        const remaining = eng.timedAbilityStatuses('self', 'tank');
+        expect(remaining.map((s) => s.payload.buffName)).toEqual(['Acidic Decay']);
+    });
+
+    it('is a no-op on an unknown id', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'tank');
+        // Wiping a different id must not touch 'tank'.
+        expect(() => eng.clearRemovable('someone-else')).not.toThrow();
+        expect(eng.timedAbilityStatuses('self', 'tank')).toHaveLength(1);
     });
 });

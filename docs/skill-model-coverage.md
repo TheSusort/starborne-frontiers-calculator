@@ -10,6 +10,7 @@
 > Updated **2026-06-07** after the Healing Calculator engine rebuild (branch `feat/healing-calc-engine`).
 > Updated **2026-06-07** after the damage-leech heals & shields ship (branch `feat/damage-leech`): the ~14 leech text cells (~11 ships) now parse + simulate (see §5 LEECH, §6).
 > Updated **2026-06-08** after the Phase 4a enemy-offense increment (branch `feat/combat-engine-phase4a-enemy-offense`): enemy is now a full `runPlayerTurn` actor vs the heal target; per-target status stores; affinity symmetry on enemy attacks; real `selfHpPct`; `attacked` event + live `on-attacked` trigger; enemy-applied DoTs tick on the tank (see §5 PHASE 4a, §6).
+> Updated **2026-06-09** after the Phase 4b death & revive increment (branch `feat/combat-engine-phase4b-death-revive`): three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) + `on-cheat-death-activated`; Cheat Death survives a lethal hit at 1 HP once per combat (clearing removable statuses); new `unremovable` concept; Salvation on-destroyed ally-heal re-enabled; on-kill/on-ally-destroyed extra-action bridge (Sokol/Liberator/Harvester) (see §5 PHASE 4b, §6 item 9).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -661,6 +662,90 @@ buff/charge-aura), source it from firing + passive.
   scenarios are byte-identical throughout this increment. The healing result type grew
   additively (`enemySelfBuffs` / `targetDebuffs`).
 
+- **Phase 4b: Death & revive — Cheat Death + death triggers (2026-06-09, branch `feat/combat-engine-phase4b-death-revive`).**
+  Ship destruction became a first-class combat event and the reactive machinery learned to
+  fire on it. Cheat Death (survive-a-lethal-hit) is now modeled.
+
+  **Three live death triggers + Cheat-Death signal.** `on-destroyed` (self),
+  `on-ally-destroyed` (ally), and `on-enemy-destroyed` (enemy) joined `LIVE_TRIGGERS`,
+  alongside a new `on-cheat-death-activated` trigger. A general `ship-destroyed` event fires
+  for every actor (player, team, enemy) via `recordDestroyed`, carrying a per-actor
+  `destroyedRound`. The death/revive triggers drain through the same intent-queue machinery as
+  the other reactive triggers; they were previously annotation-only (assume-active, §6 item 5).
+
+  **Cheat Death.** Recognized named buffs (`CHEAT_DEATH_BUFFS` in
+  `src/utils/combat/cheatDeathBuffs.ts`) let an actor survive an otherwise-lethal hit **at 1 HP,
+  once per combat** (a per-actor `cheatDeathConsumed` flag), detected via `selfBuffNamesForOwners`.
+  On activation the engine wipes the actor's REMOVABLE statuses (`statusEngine.clearRemovable`
+  for StatusEngine timed buffs/debuffs, plus the tank's `corrosionEntries` / `infernoEntries`
+  DoTs) and emits `cheat-death-activated`. Ships: Yazid, Tycho, Hayyan (grants the whole team),
+  Hermes.
+
+  **Removability — new `unremovable` concept.** Effects are now removable BY DEFAULT;
+  unremovable ones are description-marked via the `UNREMOVABLE_STATUSES` name-set (seeded with
+  **Acidic Decay**), and persistent-stacking debuffs are unremovable by construction. Bombs /
+  Blast are left untouched (persistent). `clearRemovable` + `isUnremovable` are the reusable
+  primitives 4e (cleanse/purge consumption) will build on.
+
+  **Yazid `on-cheat-death-activated` follow-on.** Yazid repairs 60% of Max HP (once per combat)
+  and gains Barrier (name-only; the shield effect is UNMODELED) in the round Cheat Death fires.
+
+  **Salvation `on-destroyed` ally-heal re-enabled.** Salvation's "when destroyed, repair all
+  allies" heal now fires on the live `on-destroyed` trigger (it was disqualified as an unmodeled
+  reactive in PR #92's phantom-heal cleanup).
+
+  **Reactive extra-action bridge.** On-kill / on-ally-destroyed extra actions are wired through
+  the reactive machinery: Sokol (on-kill, once per round, DPS — the extra action lands the round
+  AFTER the kill), Liberator (on-kill extra action + all-allies charge), and Harvester
+  (on-ally-destroyed — WIRED BUT DORMANT in healing mode, since allies aren't attacked until 4d's
+  multi-target targeting).
+
+  **KNOWN LIMITATIONS (Phase 4b — documented follow-ups, NOT bugs).**
+
+  1. *Hermes Cheat-Death grant ignores its HP gate.* Hermes's "if the target is below 40% HP,
+     grants Cheat Death" parses as an UNCONDITIONAL all-allies Cheat Death grant — the
+     below-X%-HP gate is NOT attached (the HP-threshold classifier only matches damage clauses).
+     Deferred to **4c** with the other below-X%-HP reactives. (Hermes is intentionally omitted
+     from the user-facing changelog Cheat-Death ship list because its grant currently over-fires
+     — the below-40%-HP gate is deferred to 4c; do not advertise it as working.)
+  2. *Tycho's Barrier is an HP-threshold reactive, not on Cheat-Death-activation.* Tycho grants
+     Barrier "when its HP drops below 40%" — an `hp-threshold` reactive, not an
+     `on-cheat-death-activated` follow-on. Not modeled in 4b; deferred to **4c**.
+  3. *Harvester on-ally-destroyed extra action is wired-but-DORMANT until 4d.* In single-target
+     focus-fire healing mode no ally is attacked, so the ally-destroyed event never fires; the
+     listener is in place and will activate once 4d introduces multi-target targeting.
+  4. *Barrier shield effect UNMODELED.* Only the named buff-grant fires (Yazid/Tycho Barrier) —
+     the shield amount is not simulated, the same emitted-not-simulated convention as control
+     buffs.
+  5. *Salvation on-destroyed dead-caster-recipient edge.* The heal's `all-allies` scope resolves
+     to all player ids with NO dead-actor filtering, so a dead caster counts as a recipient in
+     `directHeal` (gross) — this only surfaces in the synthetic Salvation-as-tank case;
+     `effectiveHeal` / `overheal` credit only the live target. Dead-recipient filtering is a
+     **4d** concern.
+  6. *On-kill extra action lands the round AFTER the kill.* Sokol / Liberator's on-kill extra
+     action resolves a round late because enemy death is reconciled post-round in the DPS sim —
+     a deliberate, documented model.
+  7. *Cheat Death does NOT wipe passive-granted finite-duration buffs (e.g. Everliving Regeneration),
+     because they are mis-modeled as infinite auras.* `clearRemovable` sweeps only the TIMED
+     `selfMaps`/`enemyMaps` (+ the actor-state DoTs); it does NOT touch auras. But a buff granted on
+     a **passive slot** is classified as an aura **regardless of its explicit duration**
+     (`isAura = … || slot.slot === 'passive'`, engine.ts) — so Yazid's "Everliving Regeneration II
+     **for 9 turns**" is modeled as an infinite recurring aura that never expires and survives Cheat
+     Death's wipe. Consequence: Yazid's `on-cheat-death-activated` 60% repair keeps Everliving Regen's
+     **+20% Incoming Repair** (≈48,437 on a 67,273-HP Yazid / 1440 in the unit test) — internally
+     consistent with the current (buggy) buff model, but wrong vs the game: Everliving Regen is a
+     **one-time start-of-combat grant**, so once Cheat Death (or a purge) removes it, it should NOT
+     return. **Root-cause fix (deferred to its own increment — broad, churns DPS+healing goldens):**
+     classify passive-granted buffs with an explicit finite duration as **TIMED** (one-shot, expire
+     after N turns, no re-derive), not auras. That single change makes Everliving Regen last its 9
+     turns AND lets the existing timed `clearRemovable` wipe it (→ follow-on flat 60%), with the
+     post-wipe heal-channel recompute already prototyped. NOT done in 4b: it reclassifies every
+     ship's "at start of combat, gain X for N turns" passive and needs its own golden review.
+     The reactive-heal incoming/outgoing-repair scaling (PR #93) is correct under either model.
+
+  **Goldens byte-identical.** This increment is engine + docs + labels; the 22 DPS golden parity
+  scenarios remain byte-identical.
+
 ---
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
@@ -844,10 +929,29 @@ configure it and it looks like it works, but it does nothing".
 > - *Enemy debuffs land at 100%* — no hacking stat on enemy actors → no hacking-vs-security
 >   landing roll; `debuffLandingChance: 1` hard-coded. Tracked as item 12 below.
 >
-> **Phase 4b–4f and simulator page (pending):**
-> - **4b Death & revive modeling** — `on-destroyed`/`on-ally-destroyed` live triggers,
->   death events for all actors, revive/Cheat Death (Hayyan/Yazid/Tycho), Sokol/Harvester
->   extra-action seams (§6 item 9).
+> **Shipped 2026-06-09 (Phase 4b — death & revive, branch `feat/combat-engine-phase4b-death-revive`):**
+> - Three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) +
+>   `on-cheat-death-activated`, all in `LIVE_TRIGGERS`; general `ship-destroyed` event for all
+>   actors via `recordDestroyed` + per-actor `destroyedRound`.
+> - Cheat Death: survive a lethal hit at 1 HP, once per combat (`cheatDeathConsumed`), recognized
+>   named buffs (`CHEAT_DEATH_BUFFS`: Yazid/Tycho/Hayyan-grants-all/Hermes); on activation clears
+>   removable statuses (`clearRemovable` + tank DoTs) and emits `cheat-death-activated`.
+> - New `unremovable` concept: effects removable by default; `UNREMOVABLE_STATUSES` name-set
+>   (seeded Acidic Decay) + persistent-stacking debuffs unremovable; Bombs/Blast left untouched.
+> - Yazid `on-cheat-death-activated` follow-on: 60% self-repair (once per combat) + Barrier
+>   (name-only; shield UNMODELED). Salvation `on-destroyed` ally-heal re-enabled.
+> - Reactive extra-action bridge: Sokol (on-kill, lands the round after), Liberator (on-kill +
+>   all-allies charge), Harvester (on-ally-destroyed — wired but dormant until 4d). §6 item 9a/9b.
+> - DPS goldens byte-identical (22 scenarios).
+>
+> **Phase 4b KNOWN LIMITATIONS (deferrals):** Hermes Cheat-Death grant drops its below-40%-HP
+> gate (parses unconditional → 4c); Tycho's Barrier is an HP-threshold reactive, not on
+> Cheat-Death (→ 4c); Harvester ally-destroyed dormant until 4d; Barrier shield UNMODELED;
+> Salvation on-destroyed `all-allies` has no dead-recipient filter (dead caster counts in gross
+> `directHeal`; effective/overheal credit only the live target → 4d); on-kill extra action lands
+> the round after the kill (post-round enemy-death reconciliation — deliberate).
+>
+> **Phase 4c–4f and simulator page (pending):**
 > - **4c Enemy-action reactions + generic damage triggers** — `on-attacked` consumer ships
 >   (Zosimos/Arum/Yarrow/Larkspur/Grif), generic `on-self-damaged`/`on-ally-damaged`,
 >   Isha onCritHit (per-hit decision), Graphite/Refine.
@@ -872,12 +976,13 @@ configure it and it looks like it works, but it does nothing".
 4. **Self HP-threshold realism** — `selfHpPct` is still fixed at 100. A declining
    self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
    self-execute-style gates meaningful.
-5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06)* — six
-   live triggers (`start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
-   `on-bomb-detonated`, `on-ally-crit-dot`) are fully consumed via the reactive machinery. Three
-   non-derivable triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) remain
-   annotation-only (assume-active manual conditions) until Phase 4 brings enemy offensive actions
-   and ship-death modeling.
+5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06; `on-attacked`
+   shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09)* — the reactive machinery
+   now consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
+   `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a), and the four death/revive
+   triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` / `on-cheat-death-activated`
+   (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. Remaining annotation-only triggers are
+   the below-X%-HP / generic-damage reactives deferred to 4c.
 6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
    and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
    (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4
@@ -903,15 +1008,19 @@ configure it and it looks like it works, but it does nothing".
    analogue, but enabling it churns all locked drain goldens (medium cost; low user-visible impact
    given how few ships gate on enemy-debuff counts via ability-sourced statuses).
    Flagged by CodeRabbit on the team-walk PR; accepted as pre-existing Phase-3 drain semantics.
-9. **Annotation-only extra-action seams (Phase 4 / purge modeling)** — three extra-action
-   phrasings are deliberate annotation stubs, not yet simulated:
-   - *Sokol on-kill*: extra action granted after destroying an enemy — requires ship-death
-     modeling (Phase 4).
-   - *Harvester ally-destroyed*: extra action after an ally is destroyed — requires ally-death
-     events (Phase 4).
-   - *Tithonus purge-count*: extra action after purging 4+ buffs in a single skill — requires
-     purge mechanics (cleanse/purge modeling, also Phase 4 / Healing-calc seam).
-   Until those events are derivable these three remain assume-active annotation abilities.
+9. **Extra-action seams (death modeling + purge modeling)** — three extra-action phrasings:
+   - *9a. Sokol on-kill* — **CLOSED, shipped Phase 4b (2026-06-09).** Extra action granted after
+     destroying an enemy; now wired through the `on-enemy-destroyed` reactive (once per round,
+     DPS). The extra action lands the round AFTER the kill (enemy death is reconciled post-round
+     in the DPS sim) — a deliberate, documented model. Liberator's on-kill extra action +
+     all-allies charge shipped in the same bridge.
+   - *9b. Harvester ally-destroyed* — **CLOSED, shipped Phase 4b (2026-06-09).** Extra action
+     after an ally is destroyed; now wired through the `on-ally-destroyed` reactive. WIRED BUT
+     DORMANT in single-target focus-fire healing mode (no ally is attacked until 4d's
+     multi-target targeting), so the event does not yet fire — the listener activates with 4d.
+   - *9c. Tithonus purge-count* — DEFERRED to **4e**. Extra action after purging 4+ buffs in a
+     single skill — requires purge mechanics (cleanse/purge consumption modeling). Remains an
+     assume-active annotation ability until then.
 10. **Chakara lowest-speed buff-condition gap** — Chakara's third passive applies Attack Up II
     and Defense Up II at round start when it has the lowest Speed among allies. The parser
     currently emits only the passive damage ability (60% to the highest Speed Enemy); the two

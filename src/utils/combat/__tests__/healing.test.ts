@@ -6,6 +6,8 @@ import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { Ship } from '../../../types/ship';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1098,6 +1100,59 @@ describe('healing mode — enemy attackers and target intake', () => {
         const rounds = result.healing!.rounds;
         expect(rounds[2].incomingDamage).toBe(0);
         expect(rounds[3].targetHpPctStart).toBeCloseTo(0, 6);
+    });
+
+    // ── Test 5b: a turn-start DoT tick that KILLS the tank skips its turn ──────
+    // Dead-is-dead: if the heal target's OWN turn-start Corrosion/Inferno tick is lethal,
+    // the tank dies BEFORE its turn body runs — so its self-heal must NOT be credited that
+    // round (the turn was skipped post-tick), and destroyedRound is that round.
+    //
+    // Setup (per round, fastest first): tank (focus, speed 100) ticks its DoTs at turn-start,
+    // then would heal. dotEnemy (speed 50) seeds a dot-only inferno (tier 100, 1 stack, dur 5;
+    // no direct → its synthesized basic is suppressed). No Cheat Death. Tank hp 5000.
+    //   R1: tank tick → 0 (no DoTs yet); tank self-heals (alive). dotEnemy seeds inferno.
+    //   R2: tank turn-start tick = 5000 (≥ 5000 hp) → LETHAL → tank dies → turn body MUST be
+    //       skipped → NO R2 self-heal credited. destroyedRound = 2.
+    it('lethal turn-start DoT tick skips the tank turn: no self-heal credited the round it dies', () => {
+        idCounter = 0;
+        const infernoDot = () =>
+            ab({
+                type: 'dot',
+                target: 'enemy',
+                config: { type: 'dot', dotType: 'inferno', tier: 100, stacks: 1, duration: 5 },
+            });
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                hp: 5000, // R2 turn-start inferno tick (5000) is exactly lethal
+                defence: 0,
+                healTargetId: 'attacker',
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [infernoDot()] }],
+                        },
+                    }),
+                ],
+                // The tank self-heals each round on its active turn (raw directHeal always
+                // credited when the turn runs). It must NOT be credited the round it dies.
+                shipSkills: healSkills([
+                    ab({
+                        type: 'heal',
+                        target: 'self',
+                        config: { type: 'heal', pct: 50, basis: 'target-hp' },
+                    }),
+                ]),
+            })
+        );
+        // Tank dies on round 2 from the turn-start DoT tick.
+        expect(result.healing!.destroyedRound).toBe(2);
+        const rounds = result.healing!.rounds;
+        // R1: alive → self-heal credited (raw directHeal > 0).
+        expect(rounds[0].perActor.get('attacker')!.directHeal).toBeGreaterThan(0);
+        // R2: the DoT tick killed it BEFORE its turn body → turn skipped → NO heal credited.
+        expect(rounds[1].perActor.get('attacker')?.directHeal ?? 0).toBe(0);
     });
 
     // ── Test 6: enemyAttackers without healTargetId throws ────────────────────
@@ -2357,5 +2412,550 @@ describe('healing — emission scoping: enemy crit does not trigger player on-al
         );
         // The team ally's crit IS an ally crit → the on-ally-crit shield fires (10% of 10000).
         expect(focusHeal(result, 'shield')).toBeGreaterThan(0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 7 (Phase 4b): Cheat Death intercept — survive at 1 HP, once per combat.
+// The heal target is the focus actor ('attacker') so its always-active/'recurring'
+// Cheat Death self-buff surfaces in snapshot('attacker').activeSelfBuffs. Cheat Death
+// is seeded as a no-payload recurring top-level selfBuff (the always-active source list);
+// the engine reads it off the snapshot, NOT a timed store, so consumption is a per-actor
+// flag — a SECOND lethal hit destroys the carrier even though the buff is still snapshot-live.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const manualEnemy = (
+        id: string,
+        attack: number,
+        speed = 50,
+        extra: Partial<EnemyAttacker> = {}
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        ...extra,
+    });
+
+    // A no-payload, always-active Cheat Death self-buff — surfaces in the snapshot as
+    // 'recurring' (never stored in a timed map; re-derived every round).
+    const cheatDeathBuff = () => ({
+        id: 'cheat-death',
+        buffName: 'Cheat Death',
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: {},
+    });
+
+    // ── Survive: a lethal hit leaves the carrier at 1 HP, not destroyed ───────
+    it('survives a lethal hit at 1 HP: no ship-destroyed, destroyedRound unset, one cheat-death-activated', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Not destroyed: no ship-destroyed for the tank, destroyedRound stays unset.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        // Exactly one cheat-death-activated for the tank, on round 1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+        // R1 still records the full incoming damage (the intake math is intact).
+        expect(result.healing!.rounds[0].incomingDamage).toBeCloseTo(3000, 6);
+    });
+
+    // ── Ability-sourced Cheat Death (the REAL ship path) ─────────────────────
+    // A real Yazid/Tycho/Hayyan-granted Cheat Death is NOT a top-level input selfBuff.
+    // It is an ability-sourced 'recurring' self-buff parsed off the ship's kit (Task 6's
+    // parser shape: a `buff` ability with buffName 'Cheat Death', duration 'recurring',
+    // trigger 'on-cast', target 'self'). That registers as an AURA status surfaced via
+    // activeAbilityStatuses('self', …, ownerId) — NOT via snapshot().activeSelfBuffs.
+    // The old snapshot-based detection MISSES it (snapshot.activeSelfBuffs only carries
+    // scheduled always-active buffs, and only for the 'attacker' owner). This test fires
+    // RED against the old detection (the tank dies, no cheat-death-activated) and GREEN
+    // once detection routes through selfBuffNamesForOwners (which folds the ability reads).
+    it('fires for an ability-sourced (parsed-kit) Cheat Death, not just an input selfBuff', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        // Cheat Death granted by the tank's own kit as a recurring self-buff ability —
+        // the shape Task 6's parser emits. No top-level selfBuffs entry.
+        const cheatDeathFromKit: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Cheat Death',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 'recurring',
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // NOT seeded via input — the kit grants it
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: cheatDeathFromKit,
+            })
+        );
+        // Survives at 1 HP: no ship-destroyed, destroyedRound unset, one intercept.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+    });
+
+    // ── Yazid follow-on (Task 8): when Cheat Death activates → 60% repair + Barrier ──
+    // Yazid's REFIT-ACTIVE (R4) passive grants Cheat Death AND, "once per battle, when
+    // Cheat Death activates, repairs itself for 60% of its Max HP and gains Barrier for 1
+    // turn." Built via buildShipAbilities so the on-cheat-death-activated heal/buff abilities
+    // come straight from the parser. The repair must drain in the SAME round the intercept
+    // fired (the tank rises ~60% of max above the 1-HP floor) and a Barrier buff is granted.
+    it('Yazid: cheat-death-activated repairs 60% same round + grants Barrier (parser-built)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        const buffs: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        bus.on('buff-applied', (e) => buffs.push(e));
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const yazid: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+        } as Ship;
+        const yazidSkills = buildShipAbilities(yazid);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                // Cheat Death is granted by the parsed kit (recurring self-buff ability),
+                // NOT seeded as a top-level input selfBuff.
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: yazidSkills,
+            })
+        );
+        // Intercept fired once on round 1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+        // Not destroyed (saved by Cheat Death).
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(0);
+        expect(result.healing!.destroyedRound).toBeUndefined();
+        // The repair drained SAME round: the tank was at 1 HP, the 60%-max repair — scaled by
+        // Everliving Regeneration II's +20% Incoming Repair (60% × 2000 × 1.20 = 1440) —
+        // consumed against the 1999 deficit → effectiveHeal ~1440 credited to the tank.
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
+        // A Barrier buff was granted to the tank (effect unmodeled — name only).
+        expect(buffs.some((e) => e.actorId === 'attacker' && e.buffName === 'Barrier')).toBe(true);
+    });
+
+    // ── Reactive repair scales with the recipient's Incoming Repair (parity fix) ──
+    // Yazid's kit grants Everliving Regeneration II (+20% Incoming Repair) AT START OF
+    // COMBAT and Cheat Death. When Cheat Death fires, the 60%-of-max reactive repair must
+    // scale with that +20% — exactly like a CAST repair does — so the effective heal is
+    // 60% × 2000 × 1.20 = 1440, NOT the un-amplified 1200. (No crit on reactive heals.)
+    it('Yazid: cheat-death reactive repair scales with the recipient Incoming Repair (+20%)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const yazid: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+        } as Ship;
+        const yazidSkills = buildShipAbilities(yazid);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit, drop to 1 HP
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: yazidSkills,
+            })
+        );
+        expect(cheated).toHaveLength(1);
+        // 60% × 2000 × 1.20 (Everliving Regeneration II incoming repair) = 1440. The 1999 HP
+        // deficit (1 HP after the lethal hit) fully absorbs the 1440, so effectiveHeal = 1440.
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(1440, 6);
+        expect(focusHeal(result, 'effectiveHeal')).toBeCloseTo(1440, 6);
+    });
+
+    // ── Consumed (flag): a SECOND lethal hit destroys the carrier normally ────
+    // Proves flag-based consumption (NOT store-deletion): the recurring Cheat Death
+    // buff is STILL in the snapshot on round 2, but cheatDeathConsumed blocks re-trigger.
+    it('is consumed by the flag: second lethal hit destroys normally despite the buff still being live', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // 3000/round → lethal each round
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        // R1 intercept fires once; R2 the carrier is destroyed normally.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        const tankDestroyed = destroyed.filter((e) => e.actorId === 'attacker');
+        expect(tankDestroyed).toHaveLength(1);
+        expect(tankDestroyed[0].round).toBe(2);
+        expect(result.healing!.destroyedRound).toBe(2);
+    });
+
+    // ── Wipe: the intercept invokes clearRemovable on the carrier ─────────────
+    // A standing TIMED self-buff (StatusEngine-tracked) on the tank is wiped when Cheat
+    // Death fires: it no longer appears in the next round's activeSelfBuffs. The buff is
+    // cast ONCE (charged slot, chargeCount 1 + startCharged → charged R1, active R2) so its
+    // R2 presence reflects the STANDING status (duration 3), not a re-cast. clearRemovable's
+    // wipe-timed / preserve-persistent / preserve-unremovable semantics are unit-tested
+    // directly in statusEngine.test.ts; here we only prove the engine CALLS it on the
+    // intercept path.
+    //
+    // NOTE (architecture): enemy-applied DoTs on the tank are stored as actor-state DoT
+    // stacks (healTarget.corrosionEntries/infernoEntries), NOT in the StatusEngine — so
+    // clearRemovable (StatusEngine-only) does not wipe them. The wipe is verified here
+    // against a StatusEngine-tracked timed self-buff, which is what clearRemovable governs.
+    it('wipes a StatusEngine-tracked timed self-buff on the carrier (gone next round)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        // Tank casts a duration-3 "Fortify" self-buff on its CHARGED turn (R1 only). The enemy
+        // (speed 50) then lethal-hits → Cheat Death (HP→1) → clearRemovable wipes "Fortify".
+        const fortifyOnCharge: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [] },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Fortify',
+                                parsedEffects: { defense: 30 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const result = runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // enemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                chargeCount: 1,
+                startCharged: true,
+                hasChargedSkill: true,
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: fortifyOnCharge,
+            })
+        );
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        const rounds = result.rounds;
+        // R1: charged cast applies "Fortify" → present in the round's self-buffs.
+        expect(rounds[0].activeSelfBuffs.map((b) => b.buffName)).toContain('Fortify');
+        // R2: the standing duration-3 "Fortify" would normally still be active — but
+        // clearRemovable wiped it on the R1 intercept, so it is gone (only the recurring
+        // Cheat Death buff remains).
+        expect(rounds[1].activeSelfBuffs.map((b) => b.buffName)).not.toContain('Fortify');
+    });
+
+    // ── Regression: a carrier WITHOUT Cheat Death dies normally ───────────────
+    it('regression: a tank without Cheat Death dies normally (ship-destroyed + destroyedRound)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000,
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        expect(cheated).toHaveLength(0);
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
+        expect(result.healing!.destroyedRound).toBe(1);
+    });
+
+    // ── DoT clear: Cheat Death wipes the tank's removable Corrosion/Inferno ────
+    // Enemy-applied DoTs on the tank are stored as actor-state stacks
+    // (healTarget.corrosionEntries/infernoEntries), NOT in the StatusEngine — so
+    // clearRemovable alone does NOT clear them. The intercept must empty those same
+    // arrays the tank's turn-start DoT-tick intake reads, so a Cheat-Death survivor
+    // takes NO further Corrosion/Inferno ticks.
+    //
+    // Setup (per round, fastest first): tank (focus, speed 100) ticks its DoTs at
+    // turn-start → dotEnemy (speed 50) applies inferno+corrosion (duration 5, NO
+    // direct — it has only a dot ability so the synthesized basic is suppressed) →
+    // killEnemy (speed 40) deals a lethal 3000 direct (no DoT, so it never re-seeds).
+    //   R1: tank tick → 0 (no DoTs yet). dotEnemy seeds inferno+corrosion. killEnemy
+    //       3000 → lethal → Cheat Death (HP→1) → clears the DoT arrays.
+    //   R2: tank turn-start tick → arrays EMPTY → 0 DoT damage (the fix). Without the
+    //       clear, the seeded DoTs would tick here.
+    const inferno = () =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'inferno', tier: 100, stacks: 1, duration: 5 },
+        });
+    const corrosion = () =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'corrosion', tier: 100, stacks: 1, duration: 5 },
+        });
+
+    it('clears the tank Corrosion/Inferno DoTs on Cheat Death: no DoT ticks next round', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const dotTicks: { round: number; dotType: string }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; dotType: string };
+            if (ev.targetId === 'attacker') dotTicks.push({ round: ev.round, dotType: ev.dotType });
+        });
+        runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 2000, // killEnemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [
+                    // dot-only (no damage ability → no direct), applies BOTH DoTs.
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [inferno(), corrosion()] }],
+                        },
+                    }),
+                    // lethal direct, NO DoT (never re-seeds after the clear).
+                    manualEnemy('killEnemy', 3000, 40),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Cheat Death fires once on R1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+        // R1 has no DoT ticks (DoTs seeded mid-round, tick at NEXT turn-start). The fix
+        // empties the arrays on the R1 intercept → R2 turn-start tick sees no DoTs.
+        expect(dotTicks.filter((t) => t.round === 2)).toEqual([]);
+    });
+
+    // ── Control: WITHOUT Cheat Death (and surviving), the same DoTs DO tick R2 ─
+    // Proves the setup genuinely seeds ticking DoTs — so the zero in the test above is
+    // the array-clear, not a dead setup. Tank has huge HP (survives, no Cheat Death);
+    // the seeded inferno+corrosion tick at its R2 turn-start.
+    it('control: without Cheat Death the seeded Corrosion/Inferno DoTs tick next round', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const dotTicks: { round: number; dotType: string }[] = [];
+        bus.on('dot-ticked', (e) => {
+            const ev = e as { round: number; targetId: string; dotType: string };
+            if (ev.targetId === 'attacker') dotTicks.push({ round: ev.round, dotType: ev.dotType });
+        });
+        runCombat(
+            BASE({
+                numRounds: 2,
+                hp: 1_000_000, // never dies, no Cheat Death — isolates the DoT bleed
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // no Cheat Death
+                enemyAttackers: [
+                    manualEnemy('dotEnemy', 5000, 50, {
+                        shipSkills: {
+                            slots: [{ slot: 'active', abilities: [inferno(), corrosion()] }],
+                        },
+                    }),
+                    manualEnemy('killEnemy', 3000, 40),
+                ],
+                shipSkills: { slots: [] },
+            })
+        );
+        const r2 = dotTicks
+            .filter((t) => t.round === 2)
+            .map((t) => t.dotType)
+            .sort();
+        expect(r2).toEqual(['corrosion', 'inferno']);
+    });
+});
+
+// ── Task 9: Salvation on-destroyed ally-heal (Phase 4b) ───────────────────────
+// Salvation's refit-active (R4 / 3rd) passive: "When this Unit is destroyed it repairs 80%
+// of its max HP to all allies." Built via buildShipAbilities so the on-destroyed all-allies
+// heal comes straight from the parser. When Salvation (the heal target) is destroyed, the
+// Task-5 on-destroyed listener enqueues the heal and the reactive executor credits an
+// all-allies repair THAT round — proving the parse→trigger→executor wiring fires only on
+// death (not every round). The crux: before this task the heal was disqualified (on-destroyed
+// was not live) so it never parsed; now it parses AND rides the on-destroyed trigger.
+describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const manualEnemy = (id: string, attack: number, speed = 50): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // A slow, do-nothing walked ally so playerIds = ['attacker', 't1'] (two all-allies
+    // recipients). It never acts (speed 5) and never takes damage (enemy only hits the target).
+    const idleAlly = (id: string, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 5,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('Salvation dies → on-destroyed 80% all-allies repair fires that round (parser-built)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        const salvation: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+        } as Ship;
+        const salvationSkills = buildShipAbilities(salvation);
+        // Control: identical setup but no enemy attackers → Salvation survives, so the
+        // on-destroyed heal must NOT fire (proves the heal is gated on destruction, not
+        // an always-on parse). Salvation has no active heal, so directHeal must be 0.
+        const aliveControl = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000,
+                defence: 0,
+                healTargetId: 'attacker',
+                speed: 100,
+                bus: createEventBus(),
+                selfBuffs: [],
+                enemyAttackers: [],
+                teamActors: [idleAlly('t1', 50000)],
+                shipSkills: salvationSkills,
+            })
+        );
+        expect(focusHeal(aliveControl, 'directHeal')).toBe(0);
+        const result = runCombat(
+            BASE({
+                numRounds: 1,
+                hp: 2000, // enemy hits for 3000 → lethal in one hit (no Cheat Death)
+                defence: 0,
+                healTargetId: 'attacker',
+                speed: 100, // focus would act first, but it dies on the enemy turn this round
+                bus,
+                selfBuffs: [],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                teamActors: [idleAlly('t1', 50000)],
+                shipSkills: salvationSkills,
+            })
+        );
+        // Salvation (the focus/heal target) was destroyed this round.
+        expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
+        expect(result.healing!.destroyedRound).toBe(1);
+        // The on-destroyed all-allies heal fired ONCE: basis = caster (Salvation) max HP 2000,
+        // pct 80 → 1600 raw per recipient. Recipients = ['attacker', 't1'] → directHeal 3200,
+        // all credited to the owner 'attacker'. (A phantom on-cast heal firing every round
+        // would still only run once here — numRounds 1 — but the directHeal magnitude proves
+        // BOTH all-allies recipients were repaired, i.e. the heal parsed and reached allies.)
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(3200, 6);
     });
 });

@@ -12,6 +12,7 @@ import {
 } from '../types/calculator';
 import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
 import { getShipSkillRows } from './ship/skillRows';
+import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
 /**
  * Represents a parsed segment of skill text
@@ -719,6 +720,10 @@ export function detectReactiveTrigger(
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
+    // "when Cheat Death activates" → on-cheat-death-activated (Yazid's Barrier grant in the
+    // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
+    // only matches the literal activation phrasing.
+    if (CHEAT_DEATH_ACTIVATES_RE.test(clause)) return 'on-cheat-death-activated';
     return undefined;
 }
 
@@ -880,6 +885,54 @@ export function detectStasisAppliedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, APPLYING_STASIS_RE, anchorPos, 'on-stasis-applied');
+}
+
+// "when Cheat Death activates" — the reactive trigger for Yazid's follow-on ("Once per battle,
+// when Cheat Death activates, this Unit repairs itself for 60% of its Max HP and gains Barrier
+// for 1 turn"). Position-scoped (mirrors detectStasisAppliedTrigger); no lookbehind. ONLY the
+// literal "when Cheat Death activates" — Tycho's "when HP drops below 40%" Barrier is a
+// below-X%-HP reactive (deferred), NOT this trigger.
+const CHEAT_DEATH_ACTIVATES_RE = /\bwhen\b[^.;]*\bcheat death\b[^.;]*\bactivates\b/i;
+
+/**
+ * Returns 'on-cheat-death-activated' when `anchorPos` (the ability's raw-text anchor position)
+ * falls inside the sentence carrying the "when Cheat Death activates" phrase; otherwise
+ * undefined. Position-scoped on the RAW text (mirrors detectStasisAppliedTrigger). Reference
+ * data: docs/ship-skills.csv (Yazid 3rd passive).
+ */
+export function detectCheatDeathActivatedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, CHEAT_DEATH_ACTIVATES_RE, anchorPos, 'on-cheat-death-activated');
+}
+
+// "when this Unit is destroyed it repairs X% … to all allies" — Salvation's on-destroyed ally
+// heal (Phase 4b, Task 9). Position-scoped (mirrors detectCheatDeathActivatedTrigger); no
+// lookbehind. Requires (a) a SELF reference ("this unit" / "it") BEFORE "is destroyed" so it
+// routes ONLY a SELF-destruction heal to on-destroyed (a hypothetical "when an ALLY is destroyed,
+// repairs all allies" must NOT mis-route to on-destroyed → it stays an on-ally-destroyed/
+// disqualified reactive), and (b) the repair-to-all-allies shape so it never stamps the on-kill
+// ("when it destroys an enemy") or on-buff-purged reactives in the same kit.
+// Shared self-reference: "this unit" / bare "it" appearing BEFORE "is destroyed" (no lookbehind).
+const SELF_REF_SRC = '\\b(?:this\\s+unit|it)\\b';
+// SELF "is destroyed" tail (assumes a preceding `when`): self-ref then "is destroyed".
+const SELF_DESTROYED_TAIL_SRC = `[^.;]*${SELF_REF_SRC}[^.;]*\\bis\\s+destroyed\\b`;
+// The full SELF-destruction repair-to-all-allies shape (sans the leading `when`).
+const SELF_DESTROYED_ALL_ALLIES_TAIL_SRC = `${SELF_DESTROYED_TAIL_SRC}[^.;]*\\brepairs?\\b[^.;]*\\ball\\s+allies\\b`;
+const DESTROYED_ALLY_REPAIR_RE = new RegExp(`\\bwhen\\b${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC}`, 'i');
+
+/**
+ * Returns 'on-destroyed' when `anchorPos` (the ability's raw-text anchor position) falls inside
+ * the sentence carrying the "when this Unit is destroyed … repairs … to all allies" phrase;
+ * otherwise undefined. Position-scoped on the RAW text (mirrors detectCheatDeathActivatedTrigger).
+ * Reference data: docs/ship-skills.csv (Salvation 2nd/3rd passive).
+ */
+export function detectDestroyedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
@@ -1057,14 +1110,45 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     };
 }
 
+// Liberator (Phase 4b Task 10): an all-allies charge grant gated on the enemy's death —
+// distinct from parseChargeGain's self-targeted contract (which disqualifies "all allies" /
+// "when an enemy dies"). Two real phrasings:
+//   • docs/ship-skills.csv: "When an enemy dies, all allies add N charge to their Charged Skills"
+//   • constants/ships.ts:    "When an enemy dies, this unit grants N charge to all allies"
+// Both forms appear within the same "when an enemy dies …" sentence (no '.' between). The two
+// alternatives below cover "all allies add/gain N" and "grants N charge … all allies".
+// Returns the per-ally charge amount, or null. Lookbehind-free.
+const ALLY_CHARGE_ON_ENEMY_DEATH_RE =
+    /when an enemy dies[^.]*?(?:all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?|(?:grants?|adds?|gives?)\s+(\d+|a|an)\s+charges?[^.]*?all allies)/i;
+
+/** Parses Liberator's on-enemy-death "all allies add N charge" grant. Returns `{ amount }`
+ *  (per-ally charge count) or null. The trigger is implicitly on-enemy-destroyed. */
+export function parseAllyChargeOnEnemyDeath(
+    text: string | null | undefined
+): { amount: number } | null {
+    if (!text) return null;
+    const m = ALLY_CHARGE_ON_ENEMY_DEATH_RE.exec(stripUnitTags(text));
+    if (!m) return null;
+    const raw = (m[1] ?? m[2]).toLowerCase();
+    const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+    if (!amount || isNaN(amount)) return null;
+    return { amount };
+}
+
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
-// Phrasings we deliberately DO NOT parse (annotation-only seams): on-kill (the enemy's
-// death ends the sim), ally-destroyed (Phase 4 trigger), purge-count (purges are not
-// modeled). The user can still add the ability manually in the editor. Reference:
-// docs/ship-skills.csv (Sokol, Harvester, Tithonus).
-const EXTRA_ACTION_DISQUALIFY_RE =
-    /upon a kill|when an enemy dies|killing an enemy|allied unit is destroyed|ally is destroyed|\bpurg/i;
+// Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges
+// are not modeled — Tithonus stays disqualified). The on-kill / ally-destroyed phrasings
+// are now MODELED as death-triggered extra actions (Phase 4b Task 10) — detected by
+// EXTRA_ACTION_TRIGGER_RE below, NOT disqualified. The user can still add a disqualified
+// ability manually in the editor. Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
+const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
+
+// Death-trigger detection (Phase 4b Task 10) on the matched clause: an on-kill phrasing
+// (Sokol "upon a kill", Liberator "when an enemy dies") → on-enemy-destroyed; an
+// ally-destroyed phrasing (Harvester) → on-ally-destroyed. Default (no match) → on-cast.
+const EXTRA_ACTION_ENEMY_DESTROYED_RE = /upon a kill|when an enemy dies|killing an enemy/i;
+const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
 // imperative "give one extra action". Lookbehind-free.
@@ -1078,6 +1162,10 @@ const EXTRA_ACTION_SELF_HP_RE = /\b(?:its|this unit'?s?)\s+hp\s+is\s+below\s+(\d
 export interface ExtraActionParse {
     oncePerRound: boolean;
     conditions: Condition[];
+    /** Death trigger detected from the clause (Phase 4b Task 10): on-enemy-destroyed
+     *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
+     *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
+    trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
 }
 
 /**
@@ -1128,7 +1216,26 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
             countThreshold: 1,
         });
     }
-    return { oncePerRound: /once per round/i.test(clause), conditions };
+    // Death trigger (Task 10): on-kill → on-enemy-destroyed; ally-destroyed → on-ally-destroyed;
+    // no death phrasing → on-cast (trigger omitted; builder defaults). Detected on the FULL
+    // SENTENCE, not the grant subclause: Liberator's death phrase ("When an enemy dies") sits in
+    // a sibling subclause ("…, and once per round, this unit gains 1 extra action") and the
+    // trigger scopes the whole sentence. (oncePerRound/conditions stay clause-scoped — they DO
+    // belong to the grant subclause.) Sokol/Harvester carry the death phrase in the grant clause
+    // itself, so sentence-level detection covers all three.
+    const sentenceUnmasked = sentence.split(ABBR_MARK).join(' ');
+    const trigger: ExtraActionParse['trigger'] = EXTRA_ACTION_ENEMY_DESTROYED_RE.test(
+        sentenceUnmasked
+    )
+        ? 'on-enemy-destroyed'
+        : EXTRA_ACTION_ALLY_DESTROYED_RE.test(sentenceUnmasked)
+          ? 'on-ally-destroyed'
+          : undefined;
+    return {
+        oncePerRound: /once per round/i.test(clause),
+        conditions,
+        ...(trigger ? { trigger } : {}),
+    };
 }
 
 // --- Healing-calculator parsers: heal / shield / cleanse -----------------------------
@@ -1191,8 +1298,9 @@ function sentenceBoundsAround(
 // are disqualified here so a gated heal is NOT emitted as an UNCONDITIONAL on-cast heal that
 // would fire EVERY round (phantom healing). Two groups:
 //   (1) Always-disqualify, regardless of heal basis:
-//       - on-destroyed / death: "when … is destroyed", "when destroyed", "upon being
-//         destroyed", "on death"; on-kill: "when it destroys [an enemy]".
+//       - on-destroyed / death: "when … is destroyed" (EXCEPT the Salvation all-allies
+//         repair shape — see the Task 9 lookahead + note below), "when destroyed", "upon
+//         being destroyed", "on death"; on-kill: "when it destroys [an enemy]".
 //       - on-buff-purged: "when a buff is purged", "when … is purged".
 //       - reactive on-cleansed (PASSIVE form only): "when … is cleansed". The ACTIVE verb
 //         "cleanses"/"repairs" (Makoli/Morao/Cultivator active cleanse+repair) is NOT matched.
@@ -1202,8 +1310,26 @@ function sentenceBoundsAround(
 //       modeled via the engine's per-attack proc and MUST still parse, even though their sentence
 //       says "when … damaged". The caller gates this against `leechBasis` (see usage below).
 // NO lookbehind (iOS Safari 15) — all alternations use plain `\b`/word-boundary anchors.
-const HEAL_DISQUALIFY_RE =
-    /\brevives?\b|\bcheat death\b|when an enemy uses|when\b[^.;]*\bis\s+destroyed\b|when\s+destroyed\b|upon\s+being\s+destroyed\b|\bon\s+death\b|when\s+it\s+destroys\b|when\s+a\s+buff\s+is\s+purged\b|when\b[^.;]*\bis\s+purged\b|when\b[^.;]*\bis\s+cleansed\b/i;
+// `\bcheat death\b(?!\s+activates)` (Task 8): a heal sentence merely MENTIONING Cheat Death
+// stays disqualified (unmodeled revive/grant content), but Yazid's MODELED follow-on — "when
+// Cheat Death activates, this Unit repairs itself for 60% …" — is exempt so its 60% repair
+// parses (and rides the on-cheat-death-activated reactive trigger). Negative LOOKAHEAD only
+// (lookbehind is banned for iOS Safari 15).
+// `when\b(?!…SELF is destroyed…repairs…all allies)[^.;]*\bis\s+destroyed\b` (Task 9): an "is
+// destroyed" sentence stays disqualified UNLESS it is Salvation's MODELED on-destroyed ally-heal —
+// "when this Unit is destroyed it repairs X% … to all allies" — which now parses and rides the
+// on-destroyed reactive trigger (a live trigger via Phase 4b). The negative lookahead exempts ONLY
+// the SELF-destruction repair-to-all-allies shape (kept ALIGNED with DESTROYED_ALLY_REPAIR_RE via
+// SELF_DESTROYED_RE_SRC), so a hypothetical ally-death heal ("when an ALLY is destroyed, repairs
+// all allies") stays disqualified here (it never routes to on-destroyed), alongside the on-kill
+// ("when it destroys an enemy"), on-buff-purged, and reactive-cleansed heals. Negative LOOKAHEAD
+// only (no lookbehind — iOS Safari 15).
+const HEAL_DISQUALIFY_RE = new RegExp(
+    '\\brevives?\\b|\\bcheat death\\b(?!\\s+activates)|when an enemy uses|' +
+        `when\\b(?!${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC})[^.;]*\\bis\\s+destroyed\\b|` +
+        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b|when\\b[^.;]*\\bis\\s+purged\\b|when\\b[^.;]*\\bis\\s+cleansed\\b',
+    'i'
+);
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
 // directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is
@@ -1833,6 +1959,15 @@ export function parseSkillEffects(
             duration = 'recurring';
         }
 
+        // Cheat Death (and any CHEAT_DEATH_BUFFS member) is an until-triggered, no-payload
+        // named buff: it is consumed only on a lethal hit, never by the StatusEngine's per-turn
+        // decrement. Force a non-decrementing 'recurring' duration regardless of any nearby
+        // "for N turns" text — e.g. Tycho's "gains Cheat Death and Everliving Regeneration I for
+        // 6 turns" must NOT leak the 6-turn window onto Cheat Death via the shared-duration scan.
+        if (CHEAT_DEATH_BUFFS.has(buffName)) {
+            duration = 'recurring';
+        }
+
         // Detect accumulating buffs: stacks gained per trigger with a recurring duration.
         // passive sources → per-round; active/charge → per-active/per-charge.
         let stackTrigger: StackTrigger | undefined;
@@ -1872,7 +2007,10 @@ export function parseSkillEffects(
         effects.push({
             buffName: canonical,
             target: 'self',
-            duration: parseInt(conjoined[2], 10),
+            // Cheat Death never expires on a timer (see segment-loop note above); keep the
+            // conjoined path consistent so a trailing "and Cheat Death for N turns" can't stamp
+            // a finite window either.
+            duration: CHEAT_DEATH_BUFFS.has(canonical) ? 'recurring' : parseInt(conjoined[2], 10),
             source,
         });
     }

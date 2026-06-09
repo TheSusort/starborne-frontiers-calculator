@@ -119,7 +119,12 @@ export type CombatEvent =
      *  does NOT simulate the control's combat effect. */
     | { type: 'control-applied'; casterId: string; effect: ControlEffect; round: number }
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
+    /** Emitted once per actor when its HP first reaches 0. `actorId` may be any
+     *  participating actor: 'attacker', a team actor id, or 'enemy'. */
     | { type: 'ship-destroyed'; actorId: string; round: number }
+    /** Emitted when a Cheat Death passive intercepts what would have been a lethal
+     *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
+    | { type: 'cheat-death-activated'; actorId: string; round: number }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is present only when the attack
      *  critted. Emitted once per enemy attack TURN (aggregate — not per-hit) from

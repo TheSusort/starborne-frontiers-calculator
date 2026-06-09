@@ -4,11 +4,17 @@ import { createEventBus, CombatEvent } from '../events';
 import {
     MAX_INTENT_GENERATIONS,
     registerReactiveListeners,
+    executeIntent,
     Intent,
+    IntentExecContext,
     ReactiveAbility,
+    LIVE_TRIGGERS,
 } from '../triggers';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { createStatusEngine } from '../statusEngine';
+import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
+import type { CombatActor } from '../state';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1554,6 +1560,268 @@ describe('on-attacked live trigger (Task 4)', () => {
 });
 
 // ----------------------------------------------------------------------
+// Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
+// on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
+// createEventBus directly. Owner is always 'A' (a player actor); 'B' is
+// another player actor; 'enemy' is enemy-side per the isEnemySide predicate.
+// ----------------------------------------------------------------------
+describe('death-trigger live listeners (Task 5)', () => {
+    // Build a minimal reactive ability carrying the given death trigger.
+    const deathAbility = (trigger: AbilityTrigger): Ability => ({
+        id: `d-${trigger}`,
+        type: 'buff',
+        target: 'self',
+        trigger,
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Vengeance',
+            stacks: 1,
+            parsedEffects: { attack: 20 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    // Wire up the bus, register the owner's listener, emit a ship-destroyed
+    // event for `actorId`, and return the collected intents.
+    function emitDestroyed(trigger: AbilityTrigger, destroyedActorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: deathAbility(trigger), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'ship-destroyed', actorId: destroyedActorId, round: 1 });
+        return intents;
+    }
+
+    describe('on-destroyed (own death, self-scoped)', () => {
+        it('enqueues exactly one intent when the owner itself is destroyed', () => {
+            const intents = emitDestroyed('on-destroyed', 'A');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-destroyed');
+        });
+
+        it('enqueues nothing when another player actor is destroyed', () => {
+            expect(emitDestroyed('on-destroyed', 'B')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when an enemy is destroyed', () => {
+            expect(emitDestroyed('on-destroyed', 'enemy')).toHaveLength(0);
+        });
+    });
+
+    describe('on-ally-destroyed (another player actor dies)', () => {
+        it('enqueues one intent when another player actor is destroyed', () => {
+            const intents = emitDestroyed('on-ally-destroyed', 'B');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-ally-destroyed');
+        });
+
+        it('enqueues nothing on the owner own death', () => {
+            expect(emitDestroyed('on-ally-destroyed', 'A')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when an enemy-side actor is destroyed', () => {
+            expect(emitDestroyed('on-ally-destroyed', 'enemy')).toHaveLength(0);
+        });
+    });
+
+    describe('on-enemy-destroyed (an enemy-side actor dies)', () => {
+        it('enqueues one intent when an enemy-side actor is destroyed', () => {
+            const intents = emitDestroyed('on-enemy-destroyed', 'enemy');
+            expect(intents).toHaveLength(1);
+            expect(intents[0].ownerId).toBe('A');
+            expect(intents[0].ability.trigger).toBe('on-enemy-destroyed');
+        });
+
+        it('enqueues nothing when the owner itself is destroyed', () => {
+            expect(emitDestroyed('on-enemy-destroyed', 'A')).toHaveLength(0);
+        });
+
+        it('enqueues nothing when another player actor is destroyed', () => {
+            expect(emitDestroyed('on-enemy-destroyed', 'B')).toHaveLength(0);
+        });
+    });
+
+    it('listeners are pure: no enqueue on registration, only on matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = {
+            ability: deathAbility('on-ally-destroyed'),
+            sourceSlot: 'passive',
+        };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'ship-destroyed', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-cheat-death-activated live listener (Task 8): the engine emits
+// `cheat-death-activated{actorId, round}` when a Cheat Death intercept saves
+// an actor; the owner-scoped listener enqueues that owner's activated abilities.
+// ----------------------------------------------------------------------
+describe('on-cheat-death-activated live listener (Task 8)', () => {
+    // A minimal reactive heal ability carrying the on-cheat-death-activated trigger.
+    const cheatDeathHeal = (): Ability => ({
+        id: 'cda-heal',
+        type: 'heal',
+        target: 'self',
+        trigger: 'on-cheat-death-activated',
+        conditions: [],
+        config: { type: 'heal', pct: 60, basis: 'hp', oncePerCombat: true },
+    });
+
+    function emitActivated(ownerId: string, activatedActorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: cheatDeathHeal(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId, reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'cheat-death-activated', actorId: activatedActorId, round: 1 });
+        return intents;
+    }
+
+    it('enqueues the owner own activated ability when its own Cheat Death activates', () => {
+        const intents = emitActivated('A', 'A');
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('A');
+        expect(intents[0].ability.trigger).toBe('on-cheat-death-activated');
+    });
+
+    it('does NOT fire when a DIFFERENT owner Cheat Death activates', () => {
+        expect(emitActivated('A', 'B')).toHaveLength(0);
+    });
+
+    it('listener is pure: no enqueue on registration, only on a matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: cheatDeathHeal(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'cheat-death-activated', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'cheat-death-activated', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Once-per-combat repair cap (Task 8): a heal ability flagged oncePerCombat
+// fires its consumption at most ONCE across the whole combat — even if its
+// intent is executed twice. The cap is a combat-lifetime Set keyed
+// `${ownerId}:${abilityId}`, threaded into the executor via IntentExecContext.
+// ----------------------------------------------------------------------
+describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
+    // A self repair (60% of caster max HP) flagged once-per-combat.
+    const repairIntent = (): Intent => ({
+        ownerId: 'A',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'cda-repair',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cheat-death-activated',
+            conditions: [],
+            config: { type: 'heal', pct: 60, basis: 'hp', oncePerCombat: true },
+        },
+    });
+
+    // Minimal runtime for the heal branch (it reads healModifier + base stats only).
+    const runtime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'A' } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    // Build a healing-on ctx that records every applyHealToTarget call (the consumption).
+    const buildCtx = (oncePerCombatFired: Set<string>) => {
+        const applied: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'A',
+            credit: () => {},
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: ['A'],
+        };
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy' } as CombatActor,
+            enemyId: 'enemy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['A', runtime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['A'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            healing,
+            oncePerCombatFired,
+        };
+        return { ctx, applied };
+    };
+
+    it('applies the repair only ONCE when the same intent executes twice', () => {
+        const fired = new Set<string>();
+        const { ctx, applied } = buildCtx(fired);
+        executeIntent(repairIntent(), ctx);
+        executeIntent(repairIntent(), ctx);
+        // 60% of 1000 = 600, applied exactly once.
+        expect(applied).toEqual([600]);
+        expect(fired.has('A:cda-repair')).toBe(true);
+    });
+
+    it('applies a NON-flagged repair every time (no cap)', () => {
+        const fired = new Set<string>();
+        const { ctx, applied } = buildCtx(fired);
+        const uncapped = repairIntent();
+        if (uncapped.ability.config.type === 'heal') uncapped.ability.config.oncePerCombat = false;
+        executeIntent(uncapped, ctx);
+        executeIntent(uncapped, ctx);
+        expect(applied).toEqual([600, 600]);
+    });
+});
+
+// ----------------------------------------------------------------------
 // Scenario 15 — on-attacked engine integration (Task 8): the engine emits
 // the `attacked` event from the enemy intake so `on-attacked` reactive
 // abilities on the heal target actually fire during a real run.
@@ -1701,5 +1969,42 @@ describe('on-attacked engine integration (Task 8)', () => {
         // Rounds 2-4 the dead-target guard skips the attack entirely.
         const laterEvents = attackedEvents.filter((e) => (e as { round?: number }).round! > 1);
         expect(laterEvents.length).toBe(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4b — death/revive trigger promotion to LIVE_TRIGGERS.
+// All four death/revive triggers must be in LIVE_TRIGGERS so that
+// partitionReactiveAbilities routes abilities carrying them into the
+// reactive partition (not the on-cast path).
+// Type-level: AbilityTrigger must include the new values so they compile.
+// ----------------------------------------------------------------------
+describe('Phase 4b: death/revive triggers in LIVE_TRIGGERS', () => {
+    it('LIVE_TRIGGERS contains on-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-ally-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-ally-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-enemy-destroyed', () => {
+        expect(LIVE_TRIGGERS.has('on-enemy-destroyed')).toBe(true);
+    });
+
+    it('LIVE_TRIGGERS contains on-cheat-death-activated', () => {
+        expect(LIVE_TRIGGERS.has('on-cheat-death-activated')).toBe(true);
+    });
+
+    it('AbilityTrigger includes on-enemy-destroyed (type-level compile check)', () => {
+        // If AbilityTrigger does not include this value the assignment below causes a
+        // TypeScript compile error (ts(2322)), which Vitest surfaces as a type error.
+        const _trigger: AbilityTrigger = 'on-enemy-destroyed';
+        expect(_trigger).toBe('on-enemy-destroyed');
+    });
+
+    it('AbilityTrigger includes on-cheat-death-activated (type-level compile check)', () => {
+        const _trigger: AbilityTrigger = 'on-cheat-death-activated';
+        expect(_trigger).toBe('on-cheat-death-activated');
     });
 });

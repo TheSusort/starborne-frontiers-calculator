@@ -25,6 +25,9 @@ interface HealingCumulativeChartProps {
     rounds: number;
     /** Resolves an enemy attacker's id to its display name for the right-hand effects panel. */
     enemyName: (enemyId: string) => string;
+    /** Display name for the heal target — header of the Heal Target sub-section in the panel.
+     *  Falls back to "Heal Target" when absent. */
+    healTargetName?: string;
     height?: number;
 }
 
@@ -177,6 +180,7 @@ export const HealingCumulativeChart: React.FC<HealingCumulativeChartProps> = ({
     healers,
     rounds,
     enemyName,
+    healTargetName,
     height = 400,
 }) => {
     const colors = useThemeColors();
@@ -275,6 +279,7 @@ export const HealingCumulativeChart: React.FC<HealingCumulativeChartProps> = ({
                 totalRounds={rounds}
                 hoveredRound={hoveredRound}
                 enemyName={enemyName}
+                healTargetName={healTargetName}
             />
         </div>
     );

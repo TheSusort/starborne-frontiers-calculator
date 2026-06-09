@@ -659,6 +659,12 @@ const HealingCalculatorPage: React.FC = () => {
                                 .filter((h) => h.result)}
                             rounds={rounds}
                             enemyName={(id) => enemies.find((e) => e.id === id)?.name ?? id}
+                            healTargetName={
+                                target.useHealerAsTarget
+                                    ? 'Heal Target (self)'
+                                    : (target.shipId && getShipById(target.shipId)?.name) ||
+                                      'Heal Target'
+                            }
                         />
                         {bestResult && bestConfig && (
                             <div className="mt-6 pt-6 border-t border-dark-border">

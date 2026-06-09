@@ -22,6 +22,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    parseAllyChargeOnEnemyDeath,
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
@@ -32,6 +33,8 @@ import {
     detectCritRepairTrigger,
     detectDebuffInflictedTrigger,
     detectStasisAppliedTrigger,
+    detectCheatDeathActivatedTrigger,
+    detectDestroyedTrigger,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
@@ -875,6 +878,15 @@ function abilitiesFromText(
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
         const reactiveTrigger =
             detectCritRepairTrigger(text, healPos) ??
+            // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
+            // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
+            // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
+            detectCheatDeathActivatedTrigger(text, healPos) ??
+            // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
+            // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
+            // position-scoped). The parser only emits this all-allies heal when that shape is
+            // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
+            detectDestroyedTrigger(text, healPos) ??
             (h.kind === 'shield'
                 ? (detectDebuffInflictedTrigger(text, healPos) ??
                   // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -887,6 +899,11 @@ function abilitiesFromText(
         const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
+        // "Once per battle" reactive repair (Yazid): the engine fires it at most once per combat.
+        // Scoped to a cheat-death-activated trigger so an unrelated "once per battle" elsewhere
+        // doesn't flag a generic heal.
+        const oncePerCombat =
+            reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
         const healTarget =
             h.kind === 'heal'
                 ? flipBareSupportTarget(
@@ -917,6 +934,7 @@ function abilitiesFromText(
                         ? { leechScope: h.leechScope ?? 'all' }
                         : {}),
                     ...(h.requiresHpDamage ? { requiresHpDamage: true } : {}),
+                    ...(oncePerCombat ? { oncePerCombat: true } : {}),
                 },
                 autoFilled: true,
             },
@@ -977,6 +995,27 @@ function abilitiesFromText(
         });
     }
 
+    // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
+    // Charged Skills" → an all-allies charge ability on the on-enemy-destroyed reactive trigger
+    // (rides the existing charge executor's ally/all-allies path). Emitted BEFORE the extra-action
+    // block so the slot keeps text-position order (the charge phrase precedes the extra-action one).
+    const allyCharge = parseAllyChargeOnEnemyDeath(text);
+    if (allyCharge) {
+        const allyChargePos = text.search(/all allies/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'charge',
+                target: 'all-allies',
+                trigger: 'on-enemy-destroyed',
+                conditions: [],
+                config: { type: 'charge', amount: allyCharge.amount },
+                autoFilled: true,
+            },
+            pos: allyChargePos >= 0 ? allyChargePos : MAX_POS,
+        });
+    }
+
     const extra = parseExtraAction(text);
     if (extra) {
         // Raw-text anchor, matching the charge block's convention (text.search) —
@@ -987,7 +1026,11 @@ function abilitiesFromText(
                 id: nextId(),
                 type: 'extra-action',
                 target: 'self',
-                trigger: 'on-cast',
+                // Death-triggered grants (Task 10) carry the trigger detected from the clause
+                // (Sokol/Liberator on-enemy-destroyed, Harvester on-ally-destroyed) so they fire
+                // via the death listener + the engine's grantExtraAction bridge, NOT on cast.
+                // Default on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) keep trigger on-cast.
+                trigger: extra.trigger ?? 'on-cast',
                 conditions: extra.conditions,
                 config: { type: 'extra-action', oncePerRound: extra.oncePerRound },
                 autoFilled: true,

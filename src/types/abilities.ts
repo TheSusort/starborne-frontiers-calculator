@@ -26,7 +26,7 @@ export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enem
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
 // mapping — in a multi-actor round `turn-started` fires once per actor, so
 // `round-started` is the canonical "start of round" signal). See LIVE_TRIGGERS
-// below for which values the Phase 3 engine consumes; the rest are
+// below for which values the Phase 4b engine consumes via listeners; the rest are
 // annotation-only (assume-active conditions, normal on-cast pipelines).
 export type AbilityTrigger =
     | 'on-cast'
@@ -41,16 +41,17 @@ export type AbilityTrigger =
     | 'on-bomb-detonated'
     | 'on-attacked'
     | 'on-ally-destroyed'
-    | 'on-destroyed';
+    | 'on-destroyed'
+    | 'on-enemy-destroyed'
+    | 'on-cheat-death-activated';
 
 /**
- * Triggers the Phase 3 combat engine consumes via listeners (the machinery lives
- * in src/utils/combat/triggers.ts). Everything else (on-ally-destroyed,
- * on-destroyed) is annotation-only: those abilities stay in the normal on-cast
- * pipelines with manual assume-active conditions. Defined here next to
- * AbilityTrigger (not in the engine module) so UI consumers — e.g. the editor's
- * Trigger select note — don't pull the combat engine's module graph in for one
- * constant.
+ * Triggers the combat engine consumes via listeners (the machinery lives in
+ * src/utils/combat/triggers.ts). All four death/revive triggers are live as of
+ * Phase 4b: on-destroyed, on-ally-destroyed, on-enemy-destroyed, and
+ * on-cheat-death-activated. Defined here next to AbilityTrigger (not in the
+ * engine module) so UI consumers — e.g. the editor's Trigger select note — don't
+ * pull the combat engine's module graph in for one constant.
  */
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
@@ -63,6 +64,10 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-stasis-applied',
     'on-bomb-detonated',
     'on-attacked',
+    'on-destroyed',
+    'on-ally-destroyed',
+    'on-enemy-destroyed',
+    'on-cheat-death-activated',
 ]);
 
 export type ConditionSubject =
@@ -199,6 +204,11 @@ export type AbilityConfig =
            *  Shield"): proc only when the attack started with shield > 0 AND dealt HP
            *  damage (punched through the pool). Absent → unconditional (Malvex). */
           requiresHpDamage?: boolean;
+          /** "Once per battle" reactive repair (Yazid's on-cheat-death-activated 60%
+           *  repair): the executor fires its consumption AT MOST ONCE per combat, tracked
+           *  by a combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
+           *  Absent → unbounded (fires on every qualifying trigger). */
+          oncePerCombat?: boolean;
       }
     | { type: 'cleanse' | 'purge'; count: number }
     | {

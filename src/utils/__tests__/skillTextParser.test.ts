@@ -19,6 +19,7 @@ import {
     detectReactiveTrigger,
     detectCritRepairTrigger,
     detectAllyCritTrigger,
+    detectDestroyedTrigger,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -1447,6 +1448,31 @@ describe('detectAllyCritTrigger', () => {
     });
 });
 
+describe('detectDestroyedTrigger', () => {
+    it('returns on-destroyed when the anchor is in the "when this Unit is destroyed … repairs … to all allies" sentence', () => {
+        const text = 'When this Unit is destroyed it repairs 80% of its max HP to all allies.';
+        expect(detectDestroyedTrigger(text, text.indexOf('repairs'))).toBe('on-destroyed');
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped', () => {
+        // The first sentence's repair anchor is OUTSIDE the on-destroyed sentence.
+        const text =
+            'This Unit repairs 30% of its Max HP. When this Unit is destroyed it repairs 80% of its max HP to all allies.';
+        expect(detectDestroyedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
+    });
+
+    it('returns undefined when the on-destroyed phrase is absent', () => {
+        const text = 'This Unit repairs 30% of its Max HP.';
+        expect(detectDestroyedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
+    });
+
+    it('does NOT stamp the on-purged 5% repair (a different, still-disqualified reactive)', () => {
+        const text =
+            "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP.";
+        expect(detectDestroyedTrigger(text, text.indexOf('that ally for 5%'))).toBeUndefined();
+    });
+});
+
 describe('parseAllSkillEffects', () => {
     it('returns [] for a ship with no skill text', () => {
         const ship = { activeSkillText: undefined, chargeSkillText: undefined } as unknown as Ship;
@@ -1780,11 +1806,15 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('Liberator: unconditional, once per round', () => {
+    it('Liberator: on-enemy-destroyed, once per round', () => {
         const r = parseExtraAction(
             'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills, and once per round, this unit gains 1 extra action.'
         );
-        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+        expect(r).toEqual({
+            oncePerRound: true,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 
     it('Tygr: enemy-debuff presence approximation, once per round', () => {
@@ -1804,20 +1834,26 @@ describe('parseExtraAction', () => {
         });
     });
 
-    it('disqualified: Sokol on-kill', () => {
-        expect(
-            parseExtraAction(
-                'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
-            )
-        ).toBeNull();
+    it('Sokol: on-enemy-destroyed (upon a kill), once per round', () => {
+        const r = parseExtraAction(
+            'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn and grants one extra end of round action upon a kill, once per round.'
+        );
+        expect(r).toEqual({
+            oncePerRound: true,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 
-    it('disqualified: Harvester ally-destroyed', () => {
-        expect(
-            parseExtraAction(
-                'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
-            )
-        ).toBeNull();
+    it('Harvester: on-ally-destroyed', () => {
+        const r = parseExtraAction(
+            'When an allied Unit is destroyed, this Unit gains 1 extra end of round action and <unit-skill>Speed Up I</unit-skill> for 6 turns.'
+        );
+        expect(r).toEqual({
+            oncePerRound: false,
+            conditions: [],
+            trigger: 'on-ally-destroyed',
+        });
     });
 
     it('disqualified: Tithonus purge-count', () => {
@@ -2149,20 +2185,28 @@ describe('damage-leech parsing', () => {
 // They become live later via Phase 4b/4c. Guards: leech heals, ACTIVE cleanse+repair, and
 // modeled reactive heals (on-ally-critically-repaired) MUST still parse.
 describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', () => {
-    it('Salvation R0 passive: "when this Unit is destroyed … repairs 60%" is NOT extracted', () => {
+    // Phase 4b Task 9: the "when this Unit is destroyed … repairs X% … to all allies"
+    // on-destroyed ally-heal is now RE-ENABLED (on-destroyed is a live trigger). It parses
+    // as a normal all-allies heal here; buildShipAbilities stamps trigger 'on-destroyed' so
+    // it fires only on death (see detectDestroyedTrigger below + buildShipAbilities test).
+    it('Salvation R0 passive: "when this Unit is destroyed … repairs 60% … to all allies" IS extracted', () => {
         expect(
             parseHealAbilities(
                 'When this Unit is destroyed it repairs 60% of its max HP to all allies.'
             )
-        ).toEqual([]);
+        ).toEqual([
+            { kind: 'heal', pct: 60, basis: 'hp', target: 'all-allies', explicitTarget: true },
+        ]);
     });
 
-    it('Salvation R2 passive: both the on-destroyed 80% and the on-purged 5% are NOT extracted', () => {
+    it('Salvation R2 passive: the on-destroyed 80% all-allies heal IS extracted; the on-purged 5% stays disqualified', () => {
         expect(
             parseHealAbilities(
                 "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP."
             )
-        ).toEqual([]);
+        ).toEqual([
+            { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
+        ]);
     });
 
     it('Salvation active heal (repairs 25%) still parses', () => {

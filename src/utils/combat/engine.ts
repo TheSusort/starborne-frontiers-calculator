@@ -19,6 +19,7 @@ import {
     emptyActorDamage,
     emptyActorHealing,
     advanceChargeCadence,
+    recordDestroyed,
 } from './state';
 import {
     ActiveBuff,
@@ -28,6 +29,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
+import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import {
@@ -707,6 +709,12 @@ export interface HealingRoundEngine {
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
      *  Empty for a bare/manual enemy with no effects. NAMES ONLY — never folded into a sim value. */
     enemyEffects: EnemyRoundEffects[];
+    /** The HEAL TARGET's OWN active self-buffs this round, captured from the target actor's turn
+     *  (PlayerTurnResult.activeSelfBuffs — comprehensive, so recurring/always-active buffs like
+     *  Cheat Death / Everliving Regeneration are included). Empty when there is no heal target,
+     *  the target never acted this round, or the target is destroyed. NAMES ONLY for the UI's
+     *  round overview — never folded into any sim value. */
+    healTargetBuffs: ActiveBuff[];
 }
 
 /**
@@ -1102,9 +1110,9 @@ export function runCombat(input: CombatEngineInput): {
     const infernoEntries = enemy.infernoEntries;
     const pendingBombs = enemy.pendingBombs;
     const pendingAccumulators = enemy.pendingAccumulators;
-    // hp-changed / ship-destroyed event tracking (emission-only, no sim effect).
+    // hp-changed event tracking (emission-only, no sim effect). ship-destroyed is owned by
+    // the shared recordDestroyed helper, keyed on the per-actor destroyedRound field.
     let lastEnemyHpPctInt = 100;
-    let destroyedEmitted = false;
 
     const roundData: RoundData[] = [];
 
@@ -1230,6 +1238,54 @@ export function runCombat(input: CombatEngineInput): {
     // attacks, which land in Task 8 — the detection just never fires this task).
     const healingRounds: HealingRoundEngine[] = [];
     let healTargetDestroyedRound: number | undefined;
+    // Cheat Death consumption (Phase 4b). A 'recurring'/always-active Cheat Death buff is
+    // re-derived every round and is NOT stored in the StatusEngine's timed maps, so it cannot
+    // be consumed by deleting it from a store (it would regenerate next round). Consumption is
+    // therefore a per-actor ENGINE FLAG with combat lifetime: once an actor's intercept fires,
+    // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
+    // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
+    const cheatDeathConsumed = new Set<string>();
+    // Once-per-combat reactive repairs (Phase 4b, Task 8). Keyed `${ownerId}:${abilityId}`.
+    // Declared OUTSIDE the round loop (combat lifetime, like cheatDeathConsumed) so a flagged
+    // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
+    // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
+    const oncePerCombatFired = new Set<string>();
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
+    // extra-action grant in DIFFERENT rounds; the engine's grantExtraAction (below) dispatches
+    // by whether the round-local turn queue is still being walked:
+    //
+    //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
+    //    These fire from applyIncomingToTarget / the general death path, which run DURING an
+    //    actor's turn. They are followed by the per-turn drainIntents() (drain point (b)) while
+    //    the round-local `queue`/`qi` are still live → the grant CAN splice into the current
+    //    round via processExtraActionGrants(currentQi, granter, …). `currentQi` is a ROUND-SCOPED
+    //    mutable cursor updated at the top of each `for (qi…)` iteration (NOT a closure over the
+    //    loop binding — drainIntents is defined above the loop and also runs pre-loop where qi
+    //    doesn't exist). `inTurnLoop` is true only while the loop body walks; the pre-loop /
+    //    post-round drains see it false → Path B.
+    //
+    //  PATH B — post-round enemy death (on-enemy-destroyed → Sokol, Liberator). The enemy is a
+    //    cumulative-damage wall whose death is reconciled AFTER the turn loop closed and after
+    //    the round's last per-turn drainIntents(). There is NO live queue there. So:
+    //      1. A drainIntents() runs immediately after the enemy ship-destroyed emit (post-
+    //         reconciliation) — this lets on-enemy-destroyed CHARGE reactives (Liberator's "all
+    //         allies add 1 charge") apply immediately; charges carry into the next round → correct.
+    //      2. Extra-action grants from on-enemy-destroyed have no queue to splice this round.
+    //         grantExtraAction (inTurnLoop false) buffers them onto `pendingExtraActions`; at the
+    //         START of the NEXT round's queue construction each buffered granter is inserted one
+    //         extra time into that round's queue (respecting once-per-round via the SAME round
+    //         extraActionFired set). So the on-kill extra action lands the round AFTER the kill is
+    //         registered — deliberate and faithful given the enemy's death is computed post-round
+    //         in this DPS sim. The enemy dies exactly once → the grant fires at most once.
+    //
+    // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
+    // end of round R survives into round R+1's queue build. Each entry is flushed (and removed)
+    // exactly once at the next round's start.
+    // ═══════════════════════════════════════════════════════════════════════════════════════
+    const pendingExtraActions: { granterId: string; abilityId: string; oncePerRound: boolean }[] =
+        [];
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -1489,6 +1545,13 @@ export function runCombat(input: CombatEngineInput): {
             corrosion: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
             inferno: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[];
         } = { corrosion: [], inferno: [] };
+        // The heal target's OWN active self-buffs this round, captured from ITS turn result
+        // (whichever branch processes it — focus, walked-team, or the dead-target synthesized
+        // focus turn). PlayerTurnResult.activeSelfBuffs is comprehensive for the acting actor, so
+        // it includes the target's recurring buffs (Cheat Death / Everliving Regeneration). Take
+        // the LAST such turn if the target acts more than once; a destroyed target → []. Surfaced
+        // to the UI's Heal Target round overview. NAMES ONLY — never folded into any sim value.
+        let healTargetBuffs: ActiveBuff[] = [];
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
@@ -1504,12 +1567,50 @@ export function runCombat(input: CombatEngineInput): {
             healTarget!.shieldPool -= absorbed;
             roundShieldAbsorbed += absorbed;
             const hpDamage = damage - absorbed;
-            const wasAlive = healTarget!.currentHp > 0;
             healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
-            // First reach 0 → record the destroyed round + emit ship-destroyed once.
-            if (wasAlive && healTarget!.currentHp <= 0) {
-                healTargetDestroyedRound = r;
-                bus.emit({ type: 'ship-destroyed', actorId: healTarget!.id, round: r });
+            // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
+            // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
+            // it is never stored/timed — consumption is the per-actor cheatDeathConsumed flag
+            // (NOT a store mutation). On intercept we floor HP at 1 (overriding the Math.max(0, …)
+            // above), mark consumed, wipe the actor's REMOVABLE timed statuses (DoTs/timed
+            // self-buffs; persistent-stack + unremovable preserved), emit cheat-death-activated,
+            // and DO NOT record a destroy.
+            //
+            // Detection MUST go through selfBuffNamesForOwners, NOT snapshot().activeSelfBuffs:
+            // a real (Yazid/Tycho/Hayyan-granted) Cheat Death is an ability-sourced recurring
+            // self-buff that surfaces via activeAbilityStatuses('self', …, ownerId) — snapshot's
+            // activeSelfBuffs only carries SCHEDULED always-active buffs, and only for the
+            // 'attacker' owner (empty for any other owner). Since the heal target's owner id is
+            // often a team-actor id (not 'attacker'), snapshot alone misses both the
+            // ability-sourced case AND the non-attacker-owner case. selfBuffNamesForOwners
+            // aggregates snapshot + timed + active ability self statuses keyed by the actor's
+            // own id, covering every Cheat Death source.
+            if (healTarget!.currentHp <= 0) {
+                const targetId = healTarget!.id;
+                const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
+                    (n) => CHEAT_DEATH_BUFFS.has(n)
+                );
+                if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
+                    healTarget!.currentHp = 1;
+                    cheatDeathConsumed.add(targetId);
+                    statusEngine.clearRemovable(targetId);
+                    // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
+                    // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
+                    // them here so the survivor takes no further ticks. These are the SAME arrays
+                    // the turn-start DoT-tick intake reads (healTarget.corrosion/infernoEntries).
+                    // Both DoT types are removable; bombs (Blast, treated as persistent here) and
+                    // accumulators are intentionally left untouched.
+                    healTarget!.corrosionEntries.length = 0;
+                    healTarget!.infernoEntries.length = 0;
+                    bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
+                } else {
+                    // First reach 0 (no intercept) → record the destroyed round + emit
+                    // ship-destroyed once (shared helper; idempotent via the per-actor
+                    // destroyedRound field). The healing result reads the destroyed round back
+                    // off the heal target's runtime field below.
+                    recordDestroyed(healTarget!, r, bus);
+                    healTargetDestroyedRound = healTarget!.destroyedRound;
+                }
             }
             return { shieldBefore, absorbed, hpDamage };
         };
@@ -1535,6 +1636,59 @@ export function runCombat(input: CombatEngineInput): {
         // attacker turn's list (same observable order as the old attackerHasActed +
         // teamResistedEnemyDebuffs staging).
         const pendingResisted: ActiveBuff[] = [];
+
+        // Dead-target turn skip (healing mode): a destroyed heal target does not act. We skip
+        // the ENTIRE turn body for that actor — including turn-started/turn-ended emissions and
+        // the post-turn status decrement (a dead ship has no live status to tick). Enemy attacker
+        // turns are NOT skipped (they keep banking charges and the dead-target damage path returns
+        // 0). When the dead actor IS the focus actor a round would otherwise produce ZERO focus
+        // turns and the focusTurns.length throw below would fire — so we synthesize a minimal dead
+        // focus-turn result (no sourceFired: it did not act) carrying the entering-round
+        // enemyHpPct and a zeroed/last-known ctx, just enough for row assembly.
+        //
+        // Called at TWO sites with identical behavior: (a) the top-of-turn guard (target already
+        // dead entering its turn), and (b) immediately after the heal target's OWN turn-start DoT
+        // tick (a lethal Corrosion/Inferno tick kills it mid-turn → it must not fall through and
+        // act). Returns true when the actor is the dead heal target and the caller must `continue`.
+        const handleDeadTargetSkip = (actor: CombatActor): boolean => {
+            if (!(healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0)) {
+                return false;
+            }
+            // A destroyed heal target shows no buffs this round.
+            healTargetBuffs = [];
+            if (actor.id === focusActorId) {
+                const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+                const enemyHpPct =
+                    enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+                const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
+                focusTurns.push({
+                    action: 'active',
+                    roundCrit: false,
+                    enemyHpPct,
+                    dotsConfig: [],
+                    dotsLanded: true,
+                    activeSelfBuffs: [],
+                    landedEnemyDebuffs: [],
+                    inflictedEnemyDebuffs: [],
+                    resistedEnemyDebuffs: [],
+                    directDamage: 0,
+                    secondaryDamage: 0,
+                    conditionalDamage: 0,
+                    detonationDamage: 0,
+                    extraActionGrants: [],
+                    turnCtx: lastKnownCtx ?? {
+                        effectiveAttack: 0,
+                        dotMult: 1,
+                        affinityMult: 1,
+                        effectiveDefence: 0,
+                        effectiveMaxHp: 0,
+                        outgoingHealPct: 0,
+                        incomingHealPct: 0,
+                    },
+                });
+            }
+            return true;
+        };
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
         // per actor per round (key `${actorId}:${abilityId}`); total insertions are
@@ -1574,6 +1728,35 @@ export function runCombat(input: CombatEngineInput): {
             }
         };
 
+        // Round-scoped turn-loop cursor (Path A — see the timing-analysis block above). Updated
+        // at the top of each `for (qi…)` iteration; `inTurnLoop` is true only while the loop body
+        // walks. The pre-loop and post-round drains see inTurnLoop=false → Path B (buffer). The
+        // -1 sentinel is harmless: the pre-loop drain never enqueues a death-triggered extra
+        // action (no actor has died yet), and Path B ignores currentQi entirely.
+        let currentQi = -1;
+        let inTurnLoop = false;
+
+        // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): splice the granter into
+        // the LIVE queue at its speed position among the remaining actors (same machinery the
+        // attacker/team turn branches use), so a during-turn death grants a SAME-round extra turn.
+        // PATH B (no live queue — post-round enemy death): buffer onto pendingExtraActions; the
+        // next round's queue build flushes it. The granter is always a player actor (the ship
+        // whose death-passive fired); a missing id is impossible (the reactive owner ids ARE
+        // player ids) → skip defensively rather than throw mid-drain.
+        const grantExtraAction = (
+            granterId: string,
+            abilityId: string,
+            oncePerRound: boolean
+        ): void => {
+            const granter = allPlayerActorsById.get(granterId);
+            if (!granter) return;
+            if (inTurnLoop) {
+                processExtraActionGrants(currentQi, granter, [{ abilityId, oncePerRound }]);
+            } else {
+                pendingExtraActions.push({ granterId, abilityId, oncePerRound });
+            }
+        };
+
         // Drain the intent queue FIFO. Listeners may have enqueued during the emission
         // that triggered this drain; executed intents may emit events (chaining) that
         // enqueue MORE — those form the next generation. A generation is the batch
@@ -1603,6 +1786,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingBombs,
                         runtimes: runtimesById,
                         grantAllyCharges,
+                        grantExtraAction,
                         playerIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
@@ -1644,10 +1828,31 @@ export function runCombat(input: CombatEngineInput): {
                         // mutates the same live target. Undefined in DPS mode → the executor's
                         // heal/shield/cleanse branches stay inert (goldens byte-identical).
                         healing: healingCtx,
+                        // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
+                        // repair (Yazid) fires at most once across the whole combat.
+                        oncePerCombatFired,
                     });
                 }
             }
         };
+
+        // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
+        // (on-enemy-destroyed → Sokol/Liberator) are inserted into THIS round's freshly-built
+        // queue at the granter's speed position (qi=-1 → from the queue head among all actors).
+        // The round's extraActionFired set + MAX_EXTRA_TURNS_PER_ROUND backstop still bound them.
+        // The buffer is drained (cleared) here — each pending grant lands exactly one round after
+        // its kill was registered. Insertion happens BEFORE the pre-loop drain/turn loop so the
+        // granter takes its extra turn in queue order. Empty in normal DPS/healing runs → no-op.
+        if (pendingExtraActions.length > 0) {
+            const flush = pendingExtraActions.splice(0, pendingExtraActions.length);
+            for (const g of flush) {
+                const granter = allPlayerActorsById.get(g.granterId);
+                if (!granter) continue;
+                processExtraActionGrants(-1, granter, [
+                    { abilityId: g.abilityId, oncePerRound: g.oncePerRound },
+                ]);
+            }
+        }
 
         // round-started: the canonical start-of-round trigger (Phase 3). Fires once per
         // round, before any turn-started of that round. Documented deviation from the
@@ -1660,601 +1865,614 @@ export function runCombat(input: CombatEngineInput): {
         // Drain point (a): start-of-round intents execute before the first turn.
         drainIntents();
 
-        for (let qi = 0; qi < queue.length; qi++) {
-            const actor = queue[qi];
+        inTurnLoop = true;
+        try {
+            for (let qi = 0; qi < queue.length; qi++) {
+                // Path-A cursor (Task 10): a during-turn death's grantExtraAction splices into the
+                // live queue relative to THIS position. Updated each iteration (queue.length grows as
+                // grants splice in, so the for-condition re-reads it).
+                currentQi = qi;
+                const actor = queue[qi];
 
-            // Dead-target turn skip (healing mode): a destroyed heal target does not act.
-            // We skip the ENTIRE turn body for that actor — including turn-started/turn-ended
-            // emissions and the post-turn status decrement (a dead ship has no live status to
-            // tick). Enemy attacker turns are NOT skipped (they keep banking charges and the
-            // dead-target damage path returns 0). When the dead actor IS the focus actor a round
-            // would otherwise produce ZERO focus turns and the focusTurns.length throw below would
-            // fire — so we synthesize a minimal dead focus-turn result (no sourceFired: it did not
-            // act) carrying the entering-round enemyHpPct and a zeroed/last-known ctx, just enough
-            // for row assembly.
-            if (healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0) {
-                if (actor.id === focusActorId) {
-                    const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
-                    const enemyHpPct =
-                        enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
-                    const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                    focusTurns.push({
-                        action: 'active',
-                        roundCrit: false,
-                        enemyHpPct,
-                        dotsConfig: [],
-                        dotsLanded: true,
-                        activeSelfBuffs: [],
-                        landedEnemyDebuffs: [],
-                        inflictedEnemyDebuffs: [],
-                        resistedEnemyDebuffs: [],
-                        directDamage: 0,
-                        secondaryDamage: 0,
-                        conditionalDamage: 0,
-                        detonationDamage: 0,
-                        extraActionGrants: [],
-                        turnCtx: lastKnownCtx ?? {
-                            effectiveAttack: 0,
-                            dotMult: 1,
-                            affinityMult: 1,
-                            effectiveDefence: 0,
-                            effectiveMaxHp: 0,
-                            outgoingHealPct: 0,
-                            incomingHealPct: 0,
+                // Dead-target turn skip (top-of-turn): the heal target is already destroyed
+                // entering its turn → skip the turn body (see handleDeadTargetSkip above).
+                if (handleDeadTargetSkip(actor)) {
+                    continue;
+                }
+
+                bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+
+                // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
+                // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's
+                // turn-start). An enemy attacker lands inferno/corrosion in the tank's containers
+                // (Task 6b); without this tick they would never deal damage. Routes the ticked
+                // damage into the INCOMING-damage accounting (shield-first → HP → ship-destroyed →
+                // roundIncoming/roundShield) — NOT the player→enemy damage path. Reuses tickDoTs:
+                // the applier's effectiveAttack/dotMult/affinityMult come from the entry's sourceId
+                // (the enemy) via lastTurnCtxByActor; corrosion scales with the AFFLICTED ship's
+                // (the tank's) max HP. The dead-target guard above already skipped a destroyed tank,
+                // so the tank is alive here. DPS mode / no enemy-applied DoTs → empty containers →
+                // a no-op (goldens byte-identical).
+                if (healTarget && actor.id === healTarget.id) {
+                    // Snapshot BEFORE tickDoTs so expiring entries still appear in the
+                    // display panel (mergeDoTsForDisplay + buildEnemyRoundEffects read it).
+                    tankDotSnapshot = {
+                        corrosion: healTarget.corrosionEntries.map((e) => ({
+                            sourceId: e.sourceId,
+                            tier: e.tier,
+                            stacks: e.stacks,
+                        })),
+                        inferno: healTarget.infernoEntries.map((e) => ({
+                            sourceId: e.sourceId,
+                            tier: e.tier,
+                            stacks: e.stacks,
+                        })),
+                    };
+                    let tankDotDamage = 0;
+                    tickDoTs({
+                        corrosionEntries: healTarget.corrosionEntries,
+                        infernoEntries: healTarget.infernoEntries,
+                        // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
+                        enemyHp: recipientMaxHp(healTarget.id),
+                        ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                        emitTicked: (dotType, damage) =>
+                            bus.emit({
+                                type: 'dot-ticked',
+                                targetId: healTarget.id,
+                                round: r,
+                                dotType,
+                                damage,
+                            }),
+                        // Sum the ticked damage across all appliers; route it as INCOMING to the tank
+                        // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
+                        credit: (_sourceId, _dotType, damage) => {
+                            tankDotDamage += damage;
                         },
                     });
-                }
-                continue;
-            }
-
-            bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
-
-            // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
-            // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's
-            // turn-start). An enemy attacker lands inferno/corrosion in the tank's containers
-            // (Task 6b); without this tick they would never deal damage. Routes the ticked
-            // damage into the INCOMING-damage accounting (shield-first → HP → ship-destroyed →
-            // roundIncoming/roundShield) — NOT the player→enemy damage path. Reuses tickDoTs:
-            // the applier's effectiveAttack/dotMult/affinityMult come from the entry's sourceId
-            // (the enemy) via lastTurnCtxByActor; corrosion scales with the AFFLICTED ship's
-            // (the tank's) max HP. The dead-target guard above already skipped a destroyed tank,
-            // so the tank is alive here. DPS mode / no enemy-applied DoTs → empty containers →
-            // a no-op (goldens byte-identical).
-            if (healTarget && actor.id === healTarget.id) {
-                // Snapshot BEFORE tickDoTs so expiring entries still appear in the
-                // display panel (mergeDoTsForDisplay + buildEnemyRoundEffects read it).
-                tankDotSnapshot = {
-                    corrosion: healTarget.corrosionEntries.map((e) => ({
-                        sourceId: e.sourceId,
-                        tier: e.tier,
-                        stacks: e.stacks,
-                    })),
-                    inferno: healTarget.infernoEntries.map((e) => ({
-                        sourceId: e.sourceId,
-                        tier: e.tier,
-                        stacks: e.stacks,
-                    })),
-                };
-                let tankDotDamage = 0;
-                tickDoTs({
-                    corrosionEntries: healTarget.corrosionEntries,
-                    infernoEntries: healTarget.infernoEntries,
-                    // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
-                    enemyHp: recipientMaxHp(healTarget.id),
-                    ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                    emitTicked: (dotType, damage) =>
-                        bus.emit({
-                            type: 'dot-ticked',
-                            targetId: healTarget.id,
-                            round: r,
-                            dotType,
-                            damage,
-                        }),
-                    // Sum the ticked damage across all appliers; route it as INCOMING to the tank
-                    // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
-                    credit: (_sourceId, _dotType, damage) => {
-                        tankDotDamage += damage;
-                    },
-                });
-                if (tankDotDamage > 0) {
-                    applyIncomingToTarget(tankDotDamage);
-                }
-            }
-
-            if (actor.kind === 'attacker') {
-                // ====================================================================
-                // ATTACKER TURN — the full damage/buff/DoT-application pipeline lives
-                // in runPlayerTurn (playerTurn.ts), minus the DoT-processing calls
-                // (tickDoTs / processBombs / processAccumulators) which run on the enemy
-                // turn. It returns everything the round's RoundData row needs from this
-                // turn; the numeric damage fields fold into the round accumulator below.
-                // The attacker's per-actor config/gates/stats are bundled in
-                // attackerRuntime (built once at setup); Task 4 adds team runtimes.
-                // ====================================================================
-                const attackerMaxHp = baseHpFor(actor.id);
-                const turn = runPlayerTurn({
-                    runtime: attackerRuntime,
-                    enemy,
-                    statusEngine,
-                    corrosionEntries,
-                    infernoEntries,
-                    pendingBombs,
-                    pendingAccumulators,
-                    enemyDefense,
-                    enemyHp,
-                    enemyType,
-                    bus,
-                    round: r,
-                    // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
-                    // reflects all players' damage so far (gates/HP% column react to it).
-                    enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
-                    grantAllyCharges,
-                    // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
-                    // block inert, goldens byte-identical).
-                    healing: healingCtx,
-                    // Live HP% for self-HP-threshold gates. In DPS mode the attacker never
-                    // takes damage (currentHp === maxHp → 100%) so gates don't fire →
-                    // goldens byte-identical. In healing mode the acting actor may be
-                    // below full HP (Task 8 enemy attacks reduce currentHp).
-                    selfHpPct:
-                        attackerMaxHp > 0
-                            ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
-                            : 100,
-                    // Task 7: enemy-buff gates read the UNION of enemy attackers' self-buffs;
-                    // self-debuff gates read this actor's own enemy-applied debuffs (names only).
-                    // Both empty in DPS mode (no enemy attackers, no debuffs on the focus) →
-                    // byte-identical goldens.
-                    enemyBuffNames: playerEnemyBuffNames(),
-                    selfDebuffNames: ownerDebuffNames(actor.id),
-                });
-
-                // Drain any team-turn resisted entries staged BEFORE this attacker turn
-                // (faster team actors) into the HEAD of this turn's resisted list — same
-                // observable order as the old teamResistedEnemyDebuffs fold-in.
-                if (pendingResisted.length > 0) {
-                    turn.resistedEnemyDebuffs.unshift(...pendingResisted);
-                    pendingResisted.length = 0;
-                }
-
-                // Fold the focus turn's numeric damage into the round accumulator.
-                // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
-                // accumulator bursts ran earlier this round — a plain assignment would
-                // clobber them. direct/secondary/conditional are single-focus-turn
-                // today; += keeps the 0..N-turn seam additive.
-                const d = dmg(actor.id);
-                // secondary/conditional are display sub-buckets already rolled into
-                // turn.directDamage — they must NOT be routed through creditDamage or the
-                // standing-leech hook would double-count them.
-                d.secondary += turn.secondaryDamage;
-                d.conditional += turn.conditionalDamage;
-                creditDamage(actor.id, 'direct', turn.directDamage);
-                creditDamage(actor.id, 'detonation', turn.detonationDamage);
-                focusTurns.push(turn);
-
-                // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
-                lastTurnCtxByActor.set(actor.id, turn.turnCtx);
-
-                // Extra-action grants from this turn re-insert the attacker into the
-                // remaining queue (full extra turn — charge cadence, post-turn
-                // decrement, and triggers all run again on the inserted iteration).
-                // The extra turn intentionally re-fires statusEngine.sourceFired too:
-                // re-applying timed buffs, adding persistent stacks, and ticking
-                // accumulators are all correct for a real second turn.
-                processExtraActionGrants(qi, actor, turn.extraActionGrants);
-            } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
-                // ====================================================================
-                // WALKED TEAM TURN — a real speed-ordered ally that runs the FULL
-                // runPlayerTurn pipeline (its own gates/stats/skills). Its damage reduces
-                // enemy HP but is reported separately (teamDamage); runPlayerTurn also calls
-                // statusEngine.sourceFired(actor.id, …) internally, so this actor's manual
-                // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
-                // the legacy sourceFired block below is fully superseded for walked actors.
-                // ====================================================================
-                const teamMaxHp = baseHpFor(actor.id);
-                const teamTurn = runPlayerTurn({
-                    runtime: teamRuntimeById.get(actor.id)!,
-                    enemy,
-                    statusEngine,
-                    corrosionEntries,
-                    infernoEntries,
-                    pendingBombs,
-                    pendingAccumulators,
-                    enemyDefense,
-                    enemyHp,
-                    enemyType,
-                    bus,
-                    round: r,
-                    enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
-                    grantAllyCharges,
-                    // Healing mode only — walked team turns heal/shield through the same ctx.
-                    healing: healingCtx,
-                    // Live HP% for self-HP-threshold gates (same logic as attacker above).
-                    selfHpPct:
-                        teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
-                    // Task 7: same as the attacker branch — enemy-buff = union of enemy attackers'
-                    // self-buffs; self-debuff = this team actor's own enemy-applied debuffs (names
-                    // only). Empty in DPS mode → byte-identical goldens.
-                    enemyBuffNames: playerEnemyBuffNames(),
-                    selfDebuffNames: ownerDebuffNames(actor.id),
-                });
-
-                // Fold the team turn's damage into ITS OWN map entry (post-round assembly
-                // sums all non-focus entries into teamDamage). secondary/conditional are
-                // sub-buckets of direct (do NOT double-add) but kept distinct for the
-                // simulator-page seam.
-                const td = dmg(actor.id);
-                td.secondary += teamTurn.secondaryDamage;
-                td.conditional += teamTurn.conditionalDamage;
-                creditDamage(actor.id, 'direct', teamTurn.directDamage);
-                creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
-
-                // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
-                // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
-                // EXACTLY like the legacy team block: before any focus turn → pendingResisted;
-                // after → the last focus turn's list.
-                if (teamTurn.resistedEnemyDebuffs.length > 0) {
-                    const lastTurn = focusTurns[focusTurns.length - 1];
-                    if (lastTurn) {
-                        lastTurn.resistedEnemyDebuffs.push(...teamTurn.resistedEnemyDebuffs);
-                    } else {
-                        pendingResisted.push(...teamTurn.resistedEnemyDebuffs);
+                    if (tankDotDamage > 0) {
+                        applyIncomingToTarget(tankDotDamage);
+                    }
+                    // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
+                    // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
+                    // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
+                    // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
+                    // acts normally.)
+                    if (handleDeadTargetSkip(actor)) {
+                        continue;
                     }
                 }
 
-                // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
-                // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
-                lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
-
-                processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
-            } else if (actor.kind === 'team') {
-                // ====================================================================
-                // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
-                // job is to notify the status engine that ITS source fired this round so
-                // its timed buffs (keyed by this actor's id) upsert onto the maps. preTurn
-                // mirrors the attacker's charge cadence on the actor's OWN fields; bonus
-                // charges do not apply (team actors have no charge abilities). A FASTER
-                // team actor runs before the attacker's snapshot() → its buffs are visible
-                // this round; a SLOWER one upserts after → visible from the next round.
-                // ====================================================================
-                const teamHasCharged = actor.chargeCount > 0;
-                let teamAction: 'active' | 'charged';
-                if (teamHasCharged && actor.charges >= actor.chargeCount) {
-                    teamAction = 'charged';
-                } else {
-                    teamAction = 'active';
-                }
-                advanceChargeCadence(actor, teamHasCharged);
-
-                bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: teamAction });
-
-                const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
-                    actor.id,
-                    teamAction === 'charged' ? 'charge' : 'active',
-                    r
-                );
-                // Emit debuff-applied ONCE per landed timed enemy application (discrete-
-                // infliction event — Phase 3 retiming). sourceId = this team actor's id.
-                for (const buffName of appliedEnemy) {
-                    bus.emit({
-                        type: 'debuff-applied',
-                        sourceId: actor.id,
-                        targetId: enemy.id,
-                        round: r,
-                        buffName,
-                    });
-                }
-                // Synthesize + record this team turn's resisted timed enemy applications
-                // (mirror the attacker's resisted-synthesis). A FASTER team actor (before
-                // any attacker turn) stages into pendingResisted, drained into the next
-                // attacker turn's resisted head. A SLOWER team actor (after an attacker
-                // turn) appends directly to the LAST attacker turn's resisted list — same
-                // observable order as the old attackerHasActed split.
-                const teamResisted = synthesizeResisted(resistedEnemy, enemyDebuffLookup, (n) =>
-                    bus.emit({
-                        type: 'debuff-resisted',
-                        targetId: enemy.id,
-                        round: r,
-                        buffName: n,
-                    })
-                );
-                if (teamResisted.length > 0) {
-                    const lastTurn = focusTurns[focusTurns.length - 1];
-                    if (lastTurn) {
-                        // Slower team turn: append to the last attacker turn's resisted list.
-                        lastTurn.resistedEnemyDebuffs.push(...teamResisted);
-                    } else {
-                        // Faster team turn: no attacker turn yet this round; stage here.
-                        pendingResisted.push(...teamResisted);
-                    }
-                }
-            } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
-                // ====================================================================
-                // ENEMY TURN — ticks the DoT containers it carries, per-entry attributed
-                // to the entry's APPLIER. DoTs tick at the start of the afflicted ship's
-                // turn. At default speeds every player acted earlier THIS round (apply/
-                // detonate done, ctx set), so the enemy ticks with this round's contexts.
-                // An entry whose applier has no ctx yet (faster-enemy round 1) is skipped.
-                // Per-entry `+=` into dmg(sourceId): at attacker-only there is exactly one
-                // applier per round → identical totals to the old single-writer assignment.
-                // ====================================================================
-                tickDoTs({
-                    corrosionEntries,
-                    infernoEntries,
-                    enemyHp,
-                    ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                    emitTicked: (dotType, damage) =>
-                        bus.emit({
-                            type: 'dot-ticked',
-                            targetId: enemy.id,
-                            round: r,
-                            dotType,
-                            damage,
-                        }),
-                    credit: (sourceId, dotType, damage) => creditDamage(sourceId, dotType, damage),
-                });
-
-                // Bombs: per-entry burst credited to the applier's detonation channel,
-                // using the applier's snapshotted affinityMult. bomb-detonated actorId is
-                // the applier (per-actor attribution).
-                processBombs({
-                    pendingBombs,
-                    emitBombDetonated: (actorId, stacks, damage) =>
-                        bus.emit({
-                            type: 'bomb-detonated',
-                            actorId,
-                            round: r,
-                            stacks,
-                            damage,
-                        }),
-                    creditDetonation: (sourceId, damage) =>
-                        creditDamage(sourceId, 'detonation', damage),
-                });
-
-                // Accumulators: the gather INPUT is the summed direct damage of ALL players
-                // this round (spec: Echoing Burst gathers all players' direct); each burst is
-                // credited to its applier's detonation channel.
-                const allPlayersDirect = [...roundDamage.values()].reduce(
-                    (s, d) => s + d.direct,
-                    0
-                );
-                processAccumulators({
-                    pendingAccumulators,
-                    allPlayersDirect,
-                    creditDetonation: (sourceId, damage) =>
-                        creditDamage(sourceId, 'detonation', damage),
-                });
-            } else if (actor.kind === 'enemy') {
-                // ====================================================================
-                // ENEMY ATTACKER TURN (healing mode) — a bare-stat offense actor that
-                // bombards the heal target by walking the FULL runPlayerTurn pipeline with
-                // the TARGET bound as the `enemy` arg (Task 6b). Its damage drains shield-first
-                // into the live target via the intake below; self-buffs land in its OWN owner
-                // store; debuffs/DoTs land on the target's per-target store (targetId).
-                // Healing mode is guaranteed here (enemyAttackers require healTargetId), so
-                // healTarget is defined whenever this branch runs.
-                //
-                // DEAD-TARGET GUARD (restores the retired runEnemyAttackerTurn semantic): vs a
-                // dead heal target the enemy must NOT apply debuffs/DoTs or emit application
-                // events to it — but the charge cadence must STILL advance (charges keep banking,
-                // so a revived/re-spawned target would face a correctly-charged attacker). We
-                // therefore SKIP runPlayerTurn entirely when the target is dead (runPlayerTurn is
-                // the sole site that resolves the attack + applies the kit + emits events) and
-                // advance the cadence manually here, mirroring runPlayerTurn's preTurn step
-                // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
-                // ====================================================================
-                const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
-                const targetDead = healTarget!.currentHp <= 0;
-                let damage = 0;
-                // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
-                // scoped inside the else block below; this flag carries its roundCrit out.
-                let enemyTurnDidCrit = false;
-                if (targetDead) {
-                    // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
-                    // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
-                    // application events — a dead target is untouched (old short-circuit).
-                    // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
-                    // implies chargeCount >= 1); the helper's internal guard handles it.
-                    advanceChargeCadence(actor, enemyRuntime.hasChargedSkill);
-                    // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
-                    // produced no ctx either; this actor has no live DoTs to attribute).
-                } else {
-                    // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
-                    // else its base defence (pre-first-turn fallback).
-                    const targetDefence =
-                        lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
-                        baseDefenceFor(healTarget!.id);
-                    // Target's max-HP pool + its damage-so-far → the enemyHpPct the enemy's OWN
-                    // condition gates read (a bare neutral enemy has no such gates, so this is inert
-                    // for current fixtures; computed for correctness when Task 7+ adds gated kits).
-                    const targetMaxHpForEnemy = recipientMaxHp(healTarget!.id);
-                    const targetHpDecline = Math.max(
-                        0,
-                        targetMaxHpForEnemy - healTarget!.currentHp
-                    );
-                    // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
-                    const enemyActorMaxHp = enemyRuntime.hp;
-                    const enemySelfHpPct =
-                        enemyActorMaxHp > 0
-                            ? (100 * Math.max(0, enemyRuntime.actor.currentHp)) / enemyActorMaxHp
-                            : 100;
-                    const enemyTurn = runPlayerTurn({
-                        runtime: enemyRuntime,
-                        // The heal target is the enemy's victim — bind it as the `enemy` arg so
-                        // damage/debuffs resolve against it and route to its per-target store.
-                        enemy: healTarget!,
-                        targetId: healTarget!.id,
+                if (actor.kind === 'attacker') {
+                    // ====================================================================
+                    // ATTACKER TURN — the full damage/buff/DoT-application pipeline lives
+                    // in runPlayerTurn (playerTurn.ts), minus the DoT-processing calls
+                    // (tickDoTs / processBombs / processAccumulators) which run on the enemy
+                    // turn. It returns everything the round's RoundData row needs from this
+                    // turn; the numeric damage fields fold into the round accumulator below.
+                    // The attacker's per-actor config/gates/stats are bundled in
+                    // attackerRuntime (built once at setup); Task 4 adds team runtimes.
+                    // ====================================================================
+                    const attackerMaxHp = baseHpFor(actor.id);
+                    const turn = runPlayerTurn({
+                        runtime: attackerRuntime,
+                        enemy,
                         statusEngine,
-                        // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
-                        corrosionEntries: healTarget!.corrosionEntries,
-                        infernoEntries: healTarget!.infernoEntries,
-                        pendingBombs: healTarget!.pendingBombs,
-                        pendingAccumulators: healTarget!.pendingAccumulators,
-                        enemyDefense: targetDefence,
-                        enemyHp: targetMaxHpForEnemy,
-                        enemyHpDecline: targetHpDecline,
-                        // No class is carried on a CombatActor → undefined (no enemyType matchup).
-                        enemyType: undefined,
+                        corrosionEntries,
+                        infernoEntries,
+                        pendingBombs,
+                        pendingAccumulators,
+                        enemyDefense,
+                        enemyHp,
+                        enemyType,
                         bus,
                         round: r,
-                        // Opposing side from the ENEMY's view = the player team (Task 7). UNION of
-                        // player self-buff names for the enemy's own `enemy-buff` gates. A bare enemy
-                        // has no such gate, so this is inert today — computed for the full-kit enemy.
-                        enemyBuffNames: enemyEnemyBuffNames(),
-                        // This enemy's OWN debuffs (a player ability could land some onto it), keyed
-                        // by THIS actor's id (its per-target store). Empty for the current fixtures —
-                        // no player ability targets enemy attackers — but threaded for the full kit.
-                        selfDebuffNames: ownerDebuffNames(actor.id),
-                        // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
-                        // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
-                        // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
-                        // the player team. Inert today (the synthesized manual enemy is damage-only with
-                        // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
-                        // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
-                        grantAllyCharges: undefined,
+                        // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
+                        // reflects all players' damage so far (gates/HP% column react to it).
+                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        grantAllyCharges,
+                        // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
+                        // block inert, goldens byte-identical).
                         healing: healingCtx,
-                        selfHpPct: enemySelfHpPct,
+                        // Live HP% for self-HP-threshold gates. In DPS mode the attacker never
+                        // takes damage (currentHp === maxHp → 100%) so gates don't fire →
+                        // goldens byte-identical. In healing mode the acting actor may be
+                        // below full HP (Task 8 enemy attacks reduce currentHp).
+                        selfHpPct:
+                            attackerMaxHp > 0
+                                ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
+                                : 100,
+                        // Task 7: enemy-buff gates read the UNION of enemy attackers' self-buffs;
+                        // self-debuff gates read this actor's own enemy-applied debuffs (names only).
+                        // Both empty in DPS mode (no enemy attackers, no debuffs on the focus) →
+                        // byte-identical goldens.
+                        enemyBuffNames: playerEnemyBuffNames(),
+                        selfDebuffNames: ownerDebuffNames(actor.id),
                     });
-                    // Total damage the enemy dealt to the bound target this turn. secondary/
-                    // conditional are display sub-buckets ALREADY inside directDamage (do NOT
-                    // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
-                    // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
-                    damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
-                    // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
-                    enemyTurnDidCrit = enemyTurn.roundCrit;
-                    // Record the enemy actor's round-scoped ctx (parity with player/team branches;
-                    // its own future DoT entries would tick with this ctx).
-                    lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
-                    // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
-                    // its own active self-buffs and the debuffs it landed on the heal target,
-                    // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
-                    // into any sim value. Empty for a bare enemy → no entry recorded for it.
-                    // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
-                    // applied this turn) rather than landedEnemyDebuffs (the shared per-target
-                    // window, which would leak other attackers' debuffs into this enemy's group).
-                    if (
-                        enemyTurn.activeSelfBuffs.length > 0 ||
-                        enemyTurn.inflictedEnemyDebuffs.length > 0
-                    ) {
-                        let entry = roundEnemyEffects.get(actor.id);
-                        if (!entry) {
-                            entry = { selfBuffs: [], debuffs: [] };
-                            roundEnemyEffects.set(actor.id, entry);
-                        }
-                        entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
-                        entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
-                    }
-                    // Extra-action grants: re-insert this enemy into the remaining queue for an extra
-                    // turn (full-actor completeness — mirrors the attacker and walked-team branches).
-                    // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
-                    // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
-                    // undefined (enemy's "allies" are enemy-side, not the player team).
-                    processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
-                }
-                if (damage > 0) {
-                    // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
-                    // shieldBefore/absorbed are captured for the punch-through gate (Quixilver) below.
-                    const { shieldBefore, absorbed } = applyIncomingToTarget(damage);
 
-                    // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
-                    // AFTER this attack's drain so the proc never absorbs its own trigger.
-                    // raw scales from the FULL attack damage, not the HP portion. Quixilver's
-                    // punch-through gate (requiresHpDamage): shield present at attack start
-                    // AND HP damage dealt; Malvex is unconditional.
-                    // Per-attack (not per-hit): per-hit application would restructure the
-                    // shield-drain arithmetic and risk float-float golden churn; the accuracy
-                    // delta is below the fidelity of the flat enemy model — on the in-game
-                    // verify list (spec §5).
-                    // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
-                    // to the heal target (enemy attacks only ever hit it).
-                    if (takenLeeches.length > 0 && healingCtx) {
-                        const hpDamage = damage - absorbed;
-                        const rt = runtimesById.get(healTarget!.id);
-                        for (const e of takenLeeches) {
-                            if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
-                                continue;
+                    // Drain any team-turn resisted entries staged BEFORE this attacker turn
+                    // (faster team actors) into the HEAD of this turn's resisted list — same
+                    // observable order as the old teamResistedEnemyDebuffs fold-in.
+                    if (pendingResisted.length > 0) {
+                        turn.resistedEnemyDebuffs.unshift(...pendingResisted);
+                        pendingResisted.length = 0;
+                    }
+
+                    // Fold the focus turn's numeric damage into the round accumulator.
+                    // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
+                    // accumulator bursts ran earlier this round — a plain assignment would
+                    // clobber them. direct/secondary/conditional are single-focus-turn
+                    // today; += keeps the 0..N-turn seam additive.
+                    const d = dmg(actor.id);
+                    // secondary/conditional are display sub-buckets already rolled into
+                    // turn.directDamage — they must NOT be routed through creditDamage or the
+                    // standing-leech hook would double-count them.
+                    d.secondary += turn.secondaryDamage;
+                    d.conditional += turn.conditionalDamage;
+                    creditDamage(actor.id, 'direct', turn.directDamage);
+                    creditDamage(actor.id, 'detonation', turn.detonationDamage);
+                    focusTurns.push(turn);
+
+                    // Heal-target buffs: if this focus actor IS the heal target (self-heal case),
+                    // its comprehensive activeSelfBuffs are the target's own buffs for the round.
+                    if (healTarget && actor.id === healTarget.id) {
+                        healTargetBuffs = turn.activeSelfBuffs;
+                    }
+
+                    // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
+                    lastTurnCtxByActor.set(actor.id, turn.turnCtx);
+
+                    // Extra-action grants from this turn re-insert the attacker into the
+                    // remaining queue (full extra turn — charge cadence, post-turn
+                    // decrement, and triggers all run again on the inserted iteration).
+                    // The extra turn intentionally re-fires statusEngine.sourceFired too:
+                    // re-applying timed buffs, adding persistent stacks, and ticking
+                    // accumulators are all correct for a real second turn.
+                    processExtraActionGrants(qi, actor, turn.extraActionGrants);
+                } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
+                    // ====================================================================
+                    // WALKED TEAM TURN — a real speed-ordered ally that runs the FULL
+                    // runPlayerTurn pipeline (its own gates/stats/skills). Its damage reduces
+                    // enemy HP but is reported separately (teamDamage); runPlayerTurn also calls
+                    // statusEngine.sourceFired(actor.id, …) internally, so this actor's manual
+                    // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
+                    // the legacy sourceFired block below is fully superseded for walked actors.
+                    // ====================================================================
+                    const teamMaxHp = baseHpFor(actor.id);
+                    const teamTurn = runPlayerTurn({
+                        runtime: teamRuntimeById.get(actor.id)!,
+                        enemy,
+                        statusEngine,
+                        corrosionEntries,
+                        infernoEntries,
+                        pendingBombs,
+                        pendingAccumulators,
+                        enemyDefense,
+                        enemyHp,
+                        enemyType,
+                        bus,
+                        round: r,
+                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        grantAllyCharges,
+                        // Healing mode only — walked team turns heal/shield through the same ctx.
+                        healing: healingCtx,
+                        // Live HP% for self-HP-threshold gates (same logic as attacker above).
+                        selfHpPct:
+                            teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
+                        // Task 7: same as the attacker branch — enemy-buff = union of enemy attackers'
+                        // self-buffs; self-debuff = this team actor's own enemy-applied debuffs (names
+                        // only). Empty in DPS mode → byte-identical goldens.
+                        enemyBuffNames: playerEnemyBuffNames(),
+                        selfDebuffNames: ownerDebuffNames(actor.id),
+                    });
+
+                    // Fold the team turn's damage into ITS OWN map entry (post-round assembly
+                    // sums all non-focus entries into teamDamage). secondary/conditional are
+                    // sub-buckets of direct (do NOT double-add) but kept distinct for the
+                    // simulator-page seam.
+                    const td = dmg(actor.id);
+                    td.secondary += teamTurn.secondaryDamage;
+                    td.conditional += teamTurn.conditionalDamage;
+                    creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                    creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
+
+                    // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
+                    // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
+                    // EXACTLY like the legacy team block: before any focus turn → pendingResisted;
+                    // after → the last focus turn's list.
+                    if (teamTurn.resistedEnemyDebuffs.length > 0) {
+                        const lastTurn = focusTurns[focusTurns.length - 1];
+                        if (lastTurn) {
+                            lastTurn.resistedEnemyDebuffs.push(...teamTurn.resistedEnemyDebuffs);
+                        } else {
+                            pendingResisted.push(...teamTurn.resistedEnemyDebuffs);
+                        }
+                    }
+
+                    // Record this team actor's ctx for the enemy's per-entry DoT-tick attribution
+                    // (its inferno entries tick with ITS effectiveAttack/dotMult/affinityMult).
+                    lastTurnCtxByActor.set(actor.id, teamTurn.turnCtx);
+
+                    // Heal-target buffs: a walked team actor that IS the heal target surfaces its
+                    // own comprehensive activeSelfBuffs (incl. recurring Cheat Death/Everliving Regen).
+                    if (healTarget && actor.id === healTarget.id) {
+                        healTargetBuffs = teamTurn.activeSelfBuffs;
+                    }
+
+                    processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
+                } else if (actor.kind === 'team') {
+                    // No healTargetBuffs capture here: the heal target is always a WALKED actor
+                    // (HealingCalculatorPage builds it with shipSkills+stats, so it takes the
+                    // walked-team branch above), never this legacy branch. Revisit if heal-target
+                    // actor construction ever changes.
+                    // ====================================================================
+                    // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
+                    // job is to notify the status engine that ITS source fired this round so
+                    // its timed buffs (keyed by this actor's id) upsert onto the maps. preTurn
+                    // mirrors the attacker's charge cadence on the actor's OWN fields; bonus
+                    // charges do not apply (team actors have no charge abilities). A FASTER
+                    // team actor runs before the attacker's snapshot() → its buffs are visible
+                    // this round; a SLOWER one upserts after → visible from the next round.
+                    // ====================================================================
+                    const teamHasCharged = actor.chargeCount > 0;
+                    let teamAction: 'active' | 'charged';
+                    if (teamHasCharged && actor.charges >= actor.chargeCount) {
+                        teamAction = 'charged';
+                    } else {
+                        teamAction = 'active';
+                    }
+                    advanceChargeCadence(actor, teamHasCharged);
+
+                    bus.emit({
+                        type: 'skill-fired',
+                        actorId: actor.id,
+                        round: r,
+                        slot: teamAction,
+                    });
+
+                    const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
+                        actor.id,
+                        teamAction === 'charged' ? 'charge' : 'active',
+                        r
+                    );
+                    // Emit debuff-applied ONCE per landed timed enemy application (discrete-
+                    // infliction event — Phase 3 retiming). sourceId = this team actor's id.
+                    for (const buffName of appliedEnemy) {
+                        bus.emit({
+                            type: 'debuff-applied',
+                            sourceId: actor.id,
+                            targetId: enemy.id,
+                            round: r,
+                            buffName,
+                        });
+                    }
+                    // Synthesize + record this team turn's resisted timed enemy applications
+                    // (mirror the attacker's resisted-synthesis). A FASTER team actor (before
+                    // any attacker turn) stages into pendingResisted, drained into the next
+                    // attacker turn's resisted head. A SLOWER team actor (after an attacker
+                    // turn) appends directly to the LAST attacker turn's resisted list — same
+                    // observable order as the old attackerHasActed split.
+                    const teamResisted = synthesizeResisted(resistedEnemy, enemyDebuffLookup, (n) =>
+                        bus.emit({
+                            type: 'debuff-resisted',
+                            targetId: enemy.id,
+                            round: r,
+                            buffName: n,
+                        })
+                    );
+                    if (teamResisted.length > 0) {
+                        const lastTurn = focusTurns[focusTurns.length - 1];
+                        if (lastTurn) {
+                            // Slower team turn: append to the last attacker turn's resisted list.
+                            lastTurn.resistedEnemyDebuffs.push(...teamResisted);
+                        } else {
+                            // Faster team turn: no attacker turn yet this round; stage here.
+                            pendingResisted.push(...teamResisted);
+                        }
+                    }
+                } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
+                    // ====================================================================
+                    // ENEMY TURN — ticks the DoT containers it carries, per-entry attributed
+                    // to the entry's APPLIER. DoTs tick at the start of the afflicted ship's
+                    // turn. At default speeds every player acted earlier THIS round (apply/
+                    // detonate done, ctx set), so the enemy ticks with this round's contexts.
+                    // An entry whose applier has no ctx yet (faster-enemy round 1) is skipped.
+                    // Per-entry `+=` into dmg(sourceId): at attacker-only there is exactly one
+                    // applier per round → identical totals to the old single-writer assignment.
+                    // ====================================================================
+                    tickDoTs({
+                        corrosionEntries,
+                        infernoEntries,
+                        enemyHp,
+                        ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                        emitTicked: (dotType, damage) =>
+                            bus.emit({
+                                type: 'dot-ticked',
+                                targetId: enemy.id,
+                                round: r,
+                                dotType,
+                                damage,
+                            }),
+                        credit: (sourceId, dotType, damage) =>
+                            creditDamage(sourceId, dotType, damage),
+                    });
+
+                    // Bombs: per-entry burst credited to the applier's detonation channel,
+                    // using the applier's snapshotted affinityMult. bomb-detonated actorId is
+                    // the applier (per-actor attribution).
+                    processBombs({
+                        pendingBombs,
+                        emitBombDetonated: (actorId, stacks, damage) =>
+                            bus.emit({
+                                type: 'bomb-detonated',
+                                actorId,
+                                round: r,
+                                stacks,
+                                damage,
+                            }),
+                        creditDetonation: (sourceId, damage) =>
+                            creditDamage(sourceId, 'detonation', damage),
+                    });
+
+                    // Accumulators: the gather INPUT is the summed direct damage of ALL players
+                    // this round (spec: Echoing Burst gathers all players' direct); each burst is
+                    // credited to its applier's detonation channel.
+                    const allPlayersDirect = [...roundDamage.values()].reduce(
+                        (s, d) => s + d.direct,
+                        0
+                    );
+                    processAccumulators({
+                        pendingAccumulators,
+                        allPlayersDirect,
+                        creditDetonation: (sourceId, damage) =>
+                            creditDamage(sourceId, 'detonation', damage),
+                    });
+                } else if (actor.kind === 'enemy') {
+                    // ====================================================================
+                    // ENEMY ATTACKER TURN (healing mode) — a bare-stat offense actor that
+                    // bombards the heal target by walking the FULL runPlayerTurn pipeline with
+                    // the TARGET bound as the `enemy` arg (Task 6b). Its damage drains shield-first
+                    // into the live target via the intake below; self-buffs land in its OWN owner
+                    // store; debuffs/DoTs land on the target's per-target store (targetId).
+                    // Healing mode is guaranteed here (enemyAttackers require healTargetId), so
+                    // healTarget is defined whenever this branch runs.
+                    //
+                    // DEAD-TARGET GUARD (restores the retired runEnemyAttackerTurn semantic): vs a
+                    // dead heal target the enemy must NOT apply debuffs/DoTs or emit application
+                    // events to it — but the charge cadence must STILL advance (charges keep banking,
+                    // so a revived/re-spawned target would face a correctly-charged attacker). We
+                    // therefore SKIP runPlayerTurn entirely when the target is dead (runPlayerTurn is
+                    // the sole site that resolves the attack + applies the kit + emits events) and
+                    // advance the cadence manually here, mirroring runPlayerTurn's preTurn step
+                    // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
+                    // ====================================================================
+                    const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
+                    const targetDead = healTarget!.currentHp <= 0;
+                    let damage = 0;
+                    // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
+                    // scoped inside the else block below; this flag carries its roundCrit out.
+                    let enemyTurnDidCrit = false;
+                    if (targetDead) {
+                        // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
+                        // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
+                        // application events — a dead target is untouched (old short-circuit).
+                        // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
+                        // implies chargeCount >= 1); the helper's internal guard handles it.
+                        advanceChargeCadence(actor, enemyRuntime.hasChargedSkill);
+                        // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
+                        // produced no ctx either; this actor has no live DoTs to attribute).
+                    } else {
+                        // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
+                        // else its base defence (pre-first-turn fallback).
+                        const targetDefence =
+                            lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
+                            baseDefenceFor(healTarget!.id);
+                        // Target's max-HP pool + its damage-so-far → the enemyHpPct the enemy's OWN
+                        // condition gates read (a bare neutral enemy has no such gates, so this is inert
+                        // for current fixtures; computed for correctness when Task 7+ adds gated kits).
+                        const targetMaxHpForEnemy = recipientMaxHp(healTarget!.id);
+                        const targetHpDecline = Math.max(
+                            0,
+                            targetMaxHpForEnemy - healTarget!.currentHp
+                        );
+                        // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
+                        const enemyActorMaxHp = enemyRuntime.hp;
+                        const enemySelfHpPct =
+                            enemyActorMaxHp > 0
+                                ? (100 * Math.max(0, enemyRuntime.actor.currentHp)) /
+                                  enemyActorMaxHp
+                                : 100;
+                        const enemyTurn = runPlayerTurn({
+                            runtime: enemyRuntime,
+                            // The heal target is the enemy's victim — bind it as the `enemy` arg so
+                            // damage/debuffs resolve against it and route to its per-target store.
+                            enemy: healTarget!,
+                            targetId: healTarget!.id,
+                            statusEngine,
+                            // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
+                            corrosionEntries: healTarget!.corrosionEntries,
+                            infernoEntries: healTarget!.infernoEntries,
+                            pendingBombs: healTarget!.pendingBombs,
+                            pendingAccumulators: healTarget!.pendingAccumulators,
+                            enemyDefense: targetDefence,
+                            enemyHp: targetMaxHpForEnemy,
+                            enemyHpDecline: targetHpDecline,
+                            // No class is carried on a CombatActor → undefined (no enemyType matchup).
+                            enemyType: undefined,
+                            bus,
+                            round: r,
+                            // Opposing side from the ENEMY's view = the player team (Task 7). UNION of
+                            // player self-buff names for the enemy's own `enemy-buff` gates. A bare enemy
+                            // has no such gate, so this is inert today — computed for the full-kit enemy.
+                            enemyBuffNames: enemyEnemyBuffNames(),
+                            // This enemy's OWN debuffs (a player ability could land some onto it), keyed
+                            // by THIS actor's id (its per-target store). Empty for the current fixtures —
+                            // no player ability targets enemy attackers — but threaded for the full kit.
+                            selfDebuffNames: ownerDebuffNames(actor.id),
+                            // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
+                            // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
+                            // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
+                            // the player team. Inert today (the synthesized manual enemy is damage-only with
+                            // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
+                            // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
+                            grantAllyCharges: undefined,
+                            healing: healingCtx,
+                            selfHpPct: enemySelfHpPct,
+                        });
+                        // Total damage the enemy dealt to the bound target this turn. secondary/
+                        // conditional are display sub-buckets ALREADY inside directDamage (do NOT
+                        // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
+                        // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
+                        damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                        // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
+                        enemyTurnDidCrit = enemyTurn.roundCrit;
+                        // Record the enemy actor's round-scoped ctx (parity with player/team branches;
+                        // its own future DoT entries would tick with this ctx).
+                        lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
+                        // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
+                        // its own active self-buffs and the debuffs it landed on the heal target,
+                        // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
+                        // into any sim value. Empty for a bare enemy → no entry recorded for it.
+                        // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
+                        // applied this turn) rather than landedEnemyDebuffs (the shared per-target
+                        // window, which would leak other attackers' debuffs into this enemy's group).
+                        if (
+                            enemyTurn.activeSelfBuffs.length > 0 ||
+                            enemyTurn.inflictedEnemyDebuffs.length > 0
+                        ) {
+                            let entry = roundEnemyEffects.get(actor.id);
+                            if (!entry) {
+                                entry = { selfBuffs: [], debuffs: [] };
+                                roundEnemyEffects.set(actor.id, entry);
                             }
-                            let raw = damage * (e.pct / 100);
-                            if (e.kind === 'heal' && rt) {
-                                raw *= 1 + rt.healModifier / 100;
-                                if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
-                                    raw *= 1 + rt.critDamage / 100;
+                            entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
+                            entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
+                        }
+                        // Extra-action grants: re-insert this enemy into the remaining queue for an extra
+                        // turn (full-actor completeness — mirrors the attacker and walked-team branches).
+                        // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
+                        // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
+                        // undefined (enemy's "allies" are enemy-side, not the player team).
+                        processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
+                    }
+                    if (damage > 0) {
+                        // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
+                        // shieldBefore/absorbed are captured for the punch-through gate (Quixilver) below.
+                        const { shieldBefore, absorbed } = applyIncomingToTarget(damage);
+
+                        // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
+                        // AFTER this attack's drain so the proc never absorbs its own trigger.
+                        // raw scales from the FULL attack damage, not the HP portion. Quixilver's
+                        // punch-through gate (requiresHpDamage): shield present at attack start
+                        // AND HP damage dealt; Malvex is unconditional.
+                        // Per-attack (not per-hit): per-hit application would restructure the
+                        // shield-drain arithmetic and risk float-float golden churn; the accuracy
+                        // delta is below the fidelity of the flat enemy model — on the in-game
+                        // verify list (spec §5).
+                        // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
+                        // to the heal target (enemy attacks only ever hit it).
+                        if (takenLeeches.length > 0 && healingCtx) {
+                            const hpDamage = damage - absorbed;
+                            const rt = runtimesById.get(healTarget!.id);
+                            for (const e of takenLeeches) {
+                                if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
+                                    continue;
+                                }
+                                let raw = damage * (e.pct / 100);
+                                if (e.kind === 'heal' && rt) {
+                                    raw *= 1 + rt.healModifier / 100;
+                                    if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
+                                        raw *= 1 + rt.critDamage / 100;
+                                    }
+                                }
+                                if (e.kind === 'heal') {
+                                    healingCtx.credit(healTarget!.id, 'directHeal', raw);
+                                    const { consumed, overheal } =
+                                        healingCtx.applyHealToTarget(raw);
+                                    healingCtx.credit(healTarget!.id, 'effectiveHeal', consumed);
+                                    healingCtx.credit(healTarget!.id, 'overheal', overheal);
+                                } else {
+                                    healingCtx.credit(healTarget!.id, 'shield', raw);
+                                    healingCtx.grantShieldToTarget(raw);
                                 }
                             }
-                            if (e.kind === 'heal') {
-                                healingCtx.credit(healTarget!.id, 'directHeal', raw);
-                                const { consumed, overheal } = healingCtx.applyHealToTarget(raw);
-                                healingCtx.credit(healTarget!.id, 'effectiveHeal', consumed);
-                                healingCtx.credit(healTarget!.id, 'overheal', overheal);
-                            } else {
-                                healingCtx.credit(healTarget!.id, 'shield', raw);
-                                healingCtx.grantShieldToTarget(raw);
-                            }
                         }
+
+                        // Emit `attacked` after the drain so the target's HP/shield state
+                        // is already updated when on-attacked reactive listeners fire. The
+                        // event is per ATTACK TURN (aggregate — not per-hit), consistent
+                        // with the existing per-attack `damage-taken` proc model above.
+                        // `didCrit` is present-only-when-true (Task 4 spec); value hoisted
+                        // from enemyTurn.roundCrit (enemyTurnDidCrit set in the else block).
+                        // Only emitted when the target was ALIVE at attack start (damage > 0
+                        // is only reachable on the live-target path — the dead-target guard
+                        // above routes to the cadence-only block and never reaches here).
+                        // drainIntents() at point (b) below drains the on-attacked intent.
+                        bus.emit({
+                            type: 'attacked',
+                            targetId: healTarget!.id,
+                            attackerId: actor.id,
+                            round: r,
+                            ...(enemyTurnDidCrit ? { didCrit: true } : {}),
+                        });
                     }
+                }
 
-                    // Emit `attacked` after the drain so the target's HP/shield state
-                    // is already updated when on-attacked reactive listeners fire. The
-                    // event is per ATTACK TURN (aggregate — not per-hit), consistent
-                    // with the existing per-attack `damage-taken` proc model above.
-                    // `didCrit` is present-only-when-true (Task 4 spec); value hoisted
-                    // from enemyTurn.roundCrit (enemyTurnDidCrit set in the else block).
-                    // Only emitted when the target was ALIVE at attack start (damage > 0
-                    // is only reachable on the live-target path — the dead-target guard
-                    // above routes to the cadence-only block and never reaches here).
-                    // drainIntents() at point (b) below drains the on-attacked intent.
-                    bus.emit({
-                        type: 'attacked',
-                        targetId: healTarget!.id,
-                        attackerId: actor.id,
-                        round: r,
-                        ...(enemyTurnDidCrit ? { didCrit: true } : {}),
-                    });
-                }
-            }
+                // Drain point (b): follow-ups triggered by this actor's turn body run as
+                // "consecutive actions" within the turn — BEFORE the owner Post Turn, so any
+                // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
+                // below decrements it). A triggered effect therefore never boosts the hit that
+                // triggered it (the hit's damage was already computed in the turn body).
+                drainIntents();
 
-            // Drain point (b): follow-ups triggered by this actor's turn body run as
-            // "consecutive actions" within the turn — BEFORE the owner Post Turn, so any
-            // status they apply obeys the same-turn decrement rule (the carrier's Post Turn
-            // below decrements it). A triggered effect therefore never boosts the hit that
-            // triggered it (the hit's damage was already computed in the turn body).
-            drainIntents();
-
-            // Post Turn (combat-system.md section 4): the status CARRIER decrements.
-            // Player-side actors call decrementPlayer(actor.id) — team actors have empty
-            // maps now and calling on an empty owner is a safe no-op. The DUMMY enemy calls
-            // decrementEnemy() (it carries the singular enemy status maps).
-            if (actor.kind === 'enemy' && actor.id === enemy.id) {
-                for (const buffName of statusEngine.decrementEnemy().expired) {
-                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                }
-            } else if (actor.kind === 'enemy') {
-                // Enemy ATTACKER (Task 6b): now a runPlayerTurn walker. It carries its OWN
-                // player-side status map (self-buffs land under its actor id) — decrement that
-                // exactly like an attacker/team owner. An attacker with an empty self map (manual
-                // enemy → no self-buffs) is a safe no-op. The enemy debuffs it lands on the heal
-                // target live in the enemy-side per-target store keyed by the TARGET's id; those
-                // decrement when the TARGET takes its Post Turn (the player-side branch below).
-                for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
-                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                }
-            } else {
-                // 'attacker' and 'team' kinds: decrement this actor's player-side self map.
-                for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
-                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                }
-                // Heal target also carries the enemy-side debuffs an enemy attacker landed on it
-                // (per-target store keyed by its id — Task 1/6b). Decrement that store on its
-                // own Post Turn (the afflicted ship is the carrier, combat-system §4). Empty for
-                // damage-only enemies → no-op (goldens unaffected); the default '__enemy__' store
-                // is decremented separately on the dummy enemy's turn (above), never here.
-                if (healTarget && actor.id === healTarget.id) {
-                    for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
+                // Post Turn (combat-system.md section 4): the status CARRIER decrements.
+                // Player-side actors call decrementPlayer(actor.id) — team actors have empty
+                // maps now and calling on an empty owner is a safe no-op. The DUMMY enemy calls
+                // decrementEnemy() (it carries the singular enemy status maps).
+                if (actor.kind === 'enemy' && actor.id === enemy.id) {
+                    for (const buffName of statusEngine.decrementEnemy().expired) {
                         bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                     }
+                } else if (actor.kind === 'enemy') {
+                    // Enemy ATTACKER (Task 6b): now a runPlayerTurn walker. It carries its OWN
+                    // player-side status map (self-buffs land under its actor id) — decrement that
+                    // exactly like an attacker/team owner. An attacker with an empty self map (manual
+                    // enemy → no self-buffs) is a safe no-op. The enemy debuffs it lands on the heal
+                    // target live in the enemy-side per-target store keyed by the TARGET's id; those
+                    // decrement when the TARGET takes its Post Turn (the player-side branch below).
+                    for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
+                        bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
+                    }
+                } else {
+                    // 'attacker' and 'team' kinds: decrement this actor's player-side self map.
+                    for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
+                        bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
+                    }
+                    // Heal target also carries the enemy-side debuffs an enemy attacker landed on it
+                    // (per-target store keyed by its id — Task 1/6b). Decrement that store on its
+                    // own Post Turn (the afflicted ship is the carrier, combat-system §4). Empty for
+                    // damage-only enemies → no-op (goldens unaffected); the default '__enemy__' store
+                    // is decremented separately on the dummy enemy's turn (above), never here.
+                    if (healTarget && actor.id === healTarget.id) {
+                        for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
+                            bus.emit({
+                                type: 'buff-expired',
+                                actorId: actor.id,
+                                round: r,
+                                buffName,
+                            });
+                        }
+                    }
                 }
-            }
 
-            bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
+                bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
+            }
+        } finally {
+            // The turn loop is closed: no live queue remains. The reset lives in `finally` so it
+            // is structurally guaranteed on ANY loop exit (normal, break, return, throw) — a future
+            // early exit added to the round loop can no longer leave `inTurnLoop` stuck true and
+            // mis-dispatch the post-round drain as Path A. Any extra-action grant from here on (the
+            // post-round enemy-death drain below) sees inTurnLoop=false → Path B (buffered for next round).
+            inTurnLoop = false;
         }
 
         // The row's attacker fields come from the LAST focus turn this round. Rounds
@@ -2339,9 +2557,18 @@ export function runCombat(input: CombatEngineInput): {
             });
             lastEnemyHpPctInt = newEnemyHpPctInt;
         }
-        if (!destroyedEmitted && enemy.currentHp <= 0) {
-            bus.emit({ type: 'ship-destroyed', actorId: enemy.id, round: r });
-            destroyedEmitted = true;
+        if (enemy.currentHp <= 0) {
+            // Shared helper: stamps enemy.destroyedRound + emits ship-destroyed exactly once
+            // (idempotent), replacing the old destroyedEmitted boolean.
+            recordDestroyed(enemy, r, bus);
+            // Path-B drain (Task 10): the enemy died POST-round — the turn loop is closed and no
+            // per-turn drain follows. Drain the on-enemy-destroyed intents now: CHARGE reactives
+            // (Liberator's "all allies add 1 charge") apply immediately (charges carry into the
+            // next round → correct); EXTRA-ACTION grants see inTurnLoop=false → buffer for next
+            // round (cross-round pending grant). recordDestroyed is idempotent so this drains at
+            // most once per combat. With NO on-enemy-destroyed listener registered the intent
+            // queue is empty → this is a NO-OP (goldens byte-identical).
+            drainIntents();
         }
 
         // Report stacks after expiry (state going into next round)
@@ -2423,6 +2650,7 @@ export function runCombat(input: CombatEngineInput): {
                     mergeDoTsForDisplay(tankDotSnapshot.corrosion, healTarget.corrosionEntries),
                     mergeDoTsForDisplay(tankDotSnapshot.inferno, healTarget.infernoEntries)
                 ),
+                healTargetBuffs,
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;
