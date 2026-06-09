@@ -2,6 +2,7 @@ import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/c
 import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
+import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
 
 export interface ActiveBuff {
     buffName: string;
@@ -137,6 +138,15 @@ export interface StatusEngine {
      *  `targetId` (defaults to the singular default enemy target — pre-Task-1 path,
      *  byte-identical). Returns expired buff names so the engine can emit buff-expired. */
     decrementEnemy(targetId?: string): { expired: string[] };
+    /** Remove every REMOVABLE timed status carried by this id, across both the player-side
+     *  self store (keyed by ownerId) and the enemy-side store (keyed by targetId). Preserves:
+     *  persistent-stacking entries (separate maps, never touched), entries flagged
+     *  `turnsRemaining === 'permanent'`, and entries whose buffName ∈ UNREMOVABLE_STATUSES.
+     *  Standing always-active/aura source lists are NOT touched — they re-derive each round
+     *  from ship data, so a wipe of applied statuses is the model and auras re-apply next round.
+     *  Calling on an unknown id (lazy-empty maps) is a safe no-op. Pure: mutates only this
+     *  engine's own stores. */
+    clearRemovable(id: string): void;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -823,6 +833,34 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return { expired };
     };
 
+    /** Classify whether a timed status entry survives a cleanse/purge/Cheat-Death wipe.
+     *  Reusable by a later phase's cleanse/purge. A status is unremovable when it is a
+     *  persistent stack (the 'permanent' sentinel — those also live in separate maps that
+     *  clearRemovable never visits, so this is a belt-and-braces guard) or its buffName is
+     *  named in UNREMOVABLE_STATUSES. Persistent-stacking debuffs are unremovable by
+     *  construction (separate maps); UNREMOVABLE_STATUSES names any ADDITIONAL effects. */
+    const isUnremovable = (
+        buffName: string,
+        turnsRemaining: number | 'recurring' | 'permanent'
+    ): boolean => turnsRemaining === 'permanent' || UNREMOVABLE_STATUSES.has(buffName);
+
+    /** Remove every removable timed entry for `id` across the player-side self store
+     *  (keyed by ownerId) and the enemy-side store (keyed by targetId). Persistent-stack
+     *  maps are not visited (unremovable by construction). Unknown id → lazy-empty maps →
+     *  no-op. Always/aura source lists are intentionally left intact (they re-derive each
+     *  round from ship data). */
+    const clearRemovable = (id: string): void => {
+        const sweep = (map: Map<string, BuffState> | undefined): void => {
+            if (!map) return;
+            for (const [key, s] of map) {
+                if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+                map.delete(key);
+            }
+        };
+        sweep(selfMaps.get(id));
+        sweep(enemyMaps.get(id));
+    };
+
     // --- Ability-status API (Task 6) ---
 
     const registerAbilityStatuses = (
@@ -1027,6 +1065,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         snapshot,
         decrementPlayer,
         decrementEnemy,
+        clearRemovable,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,
