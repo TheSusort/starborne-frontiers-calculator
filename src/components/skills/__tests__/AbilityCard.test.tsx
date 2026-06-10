@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AbilityCard } from '../AbilityCard';
 import { Ability } from '../../../types/abilities';
 
@@ -826,6 +826,35 @@ describe('AbilityCard', () => {
             expect(updated.trigger).toBe('on-attacked');
             expect(updated.triggerCritFilter).toBe('crit');
             expect(Object.prototype.hasOwnProperty.call(updated, 'roleFilter')).toBe(false);
+        });
+
+        it('clicking Attacker in the SECOND card fires only the second card onChange (no duplicate-id collision)', () => {
+            const onChange1 = vi.fn();
+            const onChange2 = vi.fn();
+            const card1: Ability = { ...buffOnAllyAttacked, id: 'card1' };
+            const card2: Ability = { ...buffOnAllyAttacked, id: 'card2' };
+
+            const { container } = render(
+                <div>
+                    <div data-testid="card1">
+                        <AbilityCard ability={card1} onChange={onChange1} onRemove={vi.fn()} />
+                    </div>
+                    <div data-testid="card2">
+                        <AbilityCard ability={card2} onChange={onChange2} onRemove={vi.fn()} />
+                    </div>
+                </div>
+            );
+
+            // Click the "Attacker" label that lives inside the second card only.
+            const card2El = container.querySelector('[data-testid="card2"]') as HTMLElement;
+            // getAllByLabelText across the whole document would return 2 inputs with the same id.
+            // Scoping to card2 proves the label targets the right input.
+            const attackerInCard2 = within(card2El).getByLabelText('Attacker');
+            fireEvent.click(attackerInCard2);
+
+            // Only the second card's onChange should fire.
+            expect(onChange2).toHaveBeenCalledOnce();
+            expect(onChange1).not.toHaveBeenCalled();
         });
     });
 

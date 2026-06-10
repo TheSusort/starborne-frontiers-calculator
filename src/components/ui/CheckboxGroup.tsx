@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { Checkbox } from './Checkbox';
 import { Tooltip } from './layout/Tooltip';
 import { InfoIcon } from './icons/InfoIcon';
@@ -22,6 +22,7 @@ export const CheckboxGroup: React.FC<Props> = ({
     disabled = false,
     helpLabel,
 }) => {
+    const uid = useId();
     const [showHelpTooltip, setShowHelpTooltip] = useState(false);
     const infoIconRef = useRef<HTMLDivElement>(null);
 
@@ -59,6 +60,7 @@ export const CheckboxGroup: React.FC<Props> = ({
                 {options.map((option) => (
                     <Checkbox
                         key={option.value}
+                        id={`${uid}-${option.value}`}
                         label={option.label}
                         checked={values.includes(option.value)}
                         onChange={() => handleChange(option.value)}
