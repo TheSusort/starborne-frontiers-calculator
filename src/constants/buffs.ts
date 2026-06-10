@@ -702,7 +702,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Magnetized Shielding',
-        description: 'Increase DEF by 10x Unit Security',
+        description: 'Increase DEF by 10x Unit Security. Unremovable.',
         type: 'buff',
     },
     {

@@ -1497,6 +1497,21 @@ describe('clearRemovable', () => {
         expect(remaining.map((s) => s.payload.buffName)).toEqual(['Acidic Decay']);
     });
 
+    it('preserves a buff named in UNREMOVABLE_STATUSES (Magnetized Shielding)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Magnetized Shielding' is marked "Unremovable" in-game and is a member of
+        // the shipped UNREMOVABLE_STATUSES set.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Magnetized Shielding', 3), 'tank');
+        // A removable buff so we confirm the wipe actually ran.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'tank');
+
+        eng.clearRemovable('tank');
+
+        const remaining = eng.timedAbilityStatuses('self', 'tank');
+        expect(remaining.map((s) => s.payload.buffName)).toEqual(['Magnetized Shielding']);
+    });
+
     it('is a no-op on an unknown id', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);

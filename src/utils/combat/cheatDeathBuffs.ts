@@ -10,4 +10,6 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     // Description-marked-unremovable effect (e.g. "Acidic Decay" states it in-game) — if it
     // lands in the StatusEngine it survives clearRemovable (and a Cheat Death wipe).
     'Acidic Decay',
+    // Marked "Unremovable" in its in-game description — survives cleanse/purge/Cheat Death.
+    'Magnetized Shielding',
 ]);
