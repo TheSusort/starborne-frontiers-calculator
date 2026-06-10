@@ -34,7 +34,7 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Nayra',
         rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when directly damaged.',
+        reason: 'Source typo "When directly damage" (missing -d) — outside the parser\'s self-damage-reaction phrasing (DR_DIRECT_DAMAGE_RE matches "damaged"), so Terran Bolster III stays unmodeled; the enemy-repair reaction (Out. Repair Down) is also unmodeled.',
     },
     {
         ship: 'Curator',

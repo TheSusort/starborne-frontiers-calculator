@@ -13,6 +13,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
+import { detectDamageReactionTrigger } from '../src/utils/skillTextParser';
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
 import { ALLOWLIST } from './auditSkills.allowlist';
@@ -85,9 +86,10 @@ const ungatedEffects = (abilities: Ability[]) =>
         (a) =>
             (a.config.type === 'buff' || a.config.type === 'debuff') &&
             a.conditions.length === 0 &&
-            // A reactive trigger (on-crit / start-of-round / bomb-detonated / …) IS the gate —
-            // the parser routes these through the engine's trigger machinery instead of a
-            // condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie, Lingshe).
+            // A reactive trigger (on-crit / start-of-round / bomb-detonated / on-attacked / …)
+            // IS the gate — the parser routes these through the engine's trigger machinery
+            // instead of a condition, so they aren't "ungated" (Enforcer, Wusheng, Valkyrie,
+            // Lingshe, and the Phase 4c damage-reaction ships: Warden, Guardian, Makoli, …).
             a.trigger === 'on-cast' &&
             // Recurring per-turn grants are unconditional by design (not a missing gate).
             a.config.duration !== 'recurring'
@@ -173,6 +175,16 @@ const TRIGGER_RE =
 // Reactive / roster / recurring triggers we deliberately don't model (the user sets these
 // manually). When a clause is gated ONLY by one of these, an ungated buff is expected — skip it
 // so the report highlights gaps we could actually close.
+//
+// Damage-reaction nuance (Phase 4c PR 1): SELF-subject "when directly damaged" / "when
+// critically hit" clauses ARE parser-modeled now (on-attacked trigger — Warden, Isha, Makoli,
+// Guardian, Heliodor, Shepherd, Opal, Flamel, Iridium, Panguan, Stalwart, Cultivator), so
+// their effects never reach `ungatedEffects` (the trigger IS the gate). The "damaged|attacked|
+// hit" words below only skip the phrasings the parser still leaves unmodeled: ALLY-subject
+// reactions (Heliodor passive2, Cultivator's ally clause, Refine, Graphite — 4c PR 2 deferral)
+// and non-"when" variants (Panon's "If directly damaged"). A self-subject clause the parser
+// SHOULD have classified is caught by the detectDamageReactionTrigger parity guard in
+// `ungatedFinding` before this regex is consulted.
 const INTENTIONAL_REACTIVE_RE =
     /\b(directly )?(damaged|attacked|hit)\b|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp (drops|falls|is) below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets debuffed|cleansing|critically hit by/i;
 
@@ -193,14 +205,23 @@ function clauseFor(plain: string, name: string): string {
 /**
  * Clause-scoped: a produced buff/debuff with NO conditions whose own sentence carries trigger
  * phrasing — a likely missing condition (caught Sha Xing/Yuyan/Pallas/Lodolite). Slot-wide
- * trigger words that gate a different effect don't count.
+ * trigger words that gate a different effect don't count. Exported for unit tests.
  */
-function ungatedFinding(abilities: Ability[], plain: string): string | null {
+export function ungatedFinding(abilities: Ability[], plain: string): string | null {
     for (const a of ungatedEffects(abilities)) {
         const name =
             a.config.type === 'buff' || a.config.type === 'debuff' ? a.config.buffName : '';
         if (!name) continue;
         const clause = clauseFor(plain, name);
+        // Parity guard (Phase 4c PR 1): self-subject damage reactions are parser-modeled
+        // (on-attacked trigger), so an effect that parsed UNGATED on-cast from a clause the
+        // parser's own detector classifies is a regression — flag it BEFORE the blanket
+        // reactive skip below can hide it. detectDamageReactionTrigger does its own
+        // sentence-scoping with Inc./Out. abbreviation masking (same discipline as clauseFor),
+        // anchored at the buff name's position in the full text. Ally-subject sentences
+        // return undefined from the detector (4c PR 2) and fall through to the skip.
+        const namePos = plain.toLowerCase().indexOf(name.toLowerCase());
+        if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
         if (INTENTIONAL_REACTIVE_RE.test(clause)) continue;
         if (TRIGGER_RE.test(clause)) return clause.trim().slice(0, 160);
     }
