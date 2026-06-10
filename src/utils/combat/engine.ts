@@ -2309,7 +2309,7 @@ export function runCombat(input: CombatEngineInput): {
                     // Hoisted for per-hit `attacked` emission (Phase 4c Task 3): populated from
                     // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
                     // path and on the manual flat-enemy path (which has no hitCrits to surface).
-                    let hitCrits: boolean[] = [];
+                    let enemyHitCrits: boolean[] = [];
                     if (targetDead) {
                         // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                         // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -2385,7 +2385,7 @@ export function runCombat(input: CombatEngineInput): {
                         // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
                         enemyTurnDidCrit = enemyTurn.roundCrit;
                         // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
-                        hitCrits = enemyTurn.hitCrits;
+                        enemyHitCrits = enemyTurn.hitCrits;
                         // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                         // its own future DoT entries would tick with this ctx).
                         lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -2462,10 +2462,11 @@ export function runCombat(input: CombatEngineInput): {
                         // damage ability, each carrying ITS OWN hit's crit outcome. Emitted after the
                         // aggregate shield-first drain (damage application stays per-attack — spec §3.1),
                         // so every event observes the same post-drain HP/shield state. A turn with
-                        // damage > 0 but an empty hitCrits (manual flat enemy, or a noCrit damage
-                        // ability) falls back to one event with the roundCrit binary — the pre-4c
-                        // contract.
-                        const hitOutcomes = hitCrits.length > 0 ? hitCrits : [enemyTurnDidCrit];
+                        // damage > 0 but an empty enemyHitCrits (manual flat enemy, a noCrit damage
+                        // ability, or a cast with no damage ability) falls back to one event with the
+                        // roundCrit binary — the pre-4c contract.
+                        const hitOutcomes =
+                            enemyHitCrits.length > 0 ? enemyHitCrits : [enemyTurnDidCrit];
                         for (const hitCrit of hitOutcomes) {
                             bus.emit({
                                 type: 'attacked',

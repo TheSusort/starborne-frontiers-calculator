@@ -1170,6 +1170,7 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
     // correct implementations emit identical events. This test uses crit:50 with a
     // 3-hit ability to produce a MIXED per-hit pattern that can distinguish the two.
     //
+    // Gate behaviour (rate accumulator): see makeRateGate in its source module — trace below is implementation-derived.
     // makeRateGate rule (from rateAccumulator.ts):
     //   acc starts at 0; each call: acc += rate; if acc >= 1-EPS → fire, acc -= 1.
     //   Rate = 50/100 = 0.5. Back-loaded: first fire on call 2.
