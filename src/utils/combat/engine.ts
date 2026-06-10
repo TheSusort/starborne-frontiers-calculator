@@ -7,6 +7,7 @@ import {
     selectFiringSkill,
     damageInputsFromSkill,
 } from '../abilities/applyAbilities';
+import { conditionsMet } from '../abilities/evaluateConditions';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -42,6 +43,7 @@ import {
 import {
     Intent,
     MAX_INTENT_GENERATIONS,
+    buildActorConditionContext,
     executeIntent,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
@@ -61,8 +63,10 @@ const MAX_EXTRA_TURNS_PER_ROUND = 8;
 // (Task 4); Task 5 makes the routing real (see below).
 //
 // Classification (spec): accumulating (stackTrigger && isStackable) → accumulating maps,
-// effect inclusion aura-gated; aura (recurring/undefined duration OR passive slot) → per-round
-// effect gate; timed (finite duration) → gated at application.
+// effect inclusion aura-gated; aura (recurring/undefined duration) → per-round effect gate;
+// timed (finite duration) → gated at application. A finite-duration passive buff is timed (NOT
+// an aura): it is a one-time combat-start window ("gains X for N turns"), seeded once in the
+// round-1 loop and then decrementing on the owner's normal timed lifecycle.
 //
 // TARGET ROUTING (Task 5): the binary side computation becomes recipient routing —
 //   enemy/all-enemies → 'enemy' side (recipients ignored, enemy maps are singular);
@@ -128,10 +132,7 @@ function registerActorAbilityStatuses(
                       : [ownerId];
             const accumulating = !!cfg.stackTrigger && cfg.isStackable;
             const isAura =
-                !accumulating &&
-                (cfg.duration === 'recurring' ||
-                    cfg.duration === undefined ||
-                    slot.slot === 'passive');
+                !accumulating && (cfg.duration === 'recurring' || cfg.duration === undefined);
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
                 stacks: cfg.stacks,
@@ -168,8 +169,9 @@ function registerActorAbilityStatuses(
                 status = { ...base, kind: 'aura' };
             } else {
                 // timed: cfg.duration is a number here (NOT accumulating, NOT aura — i.e.
-                // not recurring/undefined duration and not a passive slot). The classification
-                // branches above exhaustively exclude non-numeric durations from reaching this arm.
+                // not recurring/undefined duration). A finite-duration passive buff lands here
+                // too (seeded at combat start by the round-1 loop). The classification branches
+                // above exhaustively exclude non-numeric durations from reaching this arm.
                 status = { ...base, kind: 'timed', duration: cfg.duration as number };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
@@ -197,6 +199,49 @@ function registerActorAbilityStatuses(
         statusEngine.registerAbilityStatuses(statuses, rid === 'enemy' ? ownerId : rid);
     }
     return { timedSelfBySlot, timedEnemyBySlot };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Combat-start seeding for PASSIVE-sourced finite (timed) self-statuses.
+//
+// The passive slot never fires as an action, so these would otherwise never apply; they
+// are a one-time window from combat start ("gains X for N turns"), NOT a per-turn refresh.
+// Apply once at round start, then the normal timed lifecycle (timedAbilityStatuses fold +
+// decrementPlayer + clearRemovable) expires them and wipes them on death. Gated by
+// conditionsMet for parity with the cast path (executeIntent).
+function seedPassiveTimedStatuses(
+    runtimes: PlayerActorRuntime[],
+    statusEngine: ReturnType<typeof createStatusEngine>,
+    bus: CombatEventBus,
+    enemyType: EnemyBaseClass | undefined,
+    round: number
+): void {
+    for (const rt of runtimes) {
+        const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            enemyHpPct: 100,
+            enemyType, // `enemy-type` survives liveGateConditions, so omitting it would
+            // wrongly skip an enemy-class-gated passive buff.
+        });
+        for (const status of rt.timedSelfBySlot) {
+            if (status.sourceSlot !== 'passive') continue;
+            if (!conditionsMet(status.conditions, seedCtx)) continue;
+            // recipients is populated by registerActorAbilityStatuses for every timed-by-slot
+            // status; the [rt.actor.id] fallback only guards test fixtures that omit it.
+            for (const rid of status.recipients ?? [rt.actor.id]) {
+                statusEngine.applyTimedAbilityStatus(round, status, rid);
+                bus.emit({
+                    type: 'buff-applied',
+                    actorId: rid,
+                    round,
+                    buffName: status.payload.buffName,
+                    duration: status.duration,
+                });
+            }
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1480,6 +1525,17 @@ export function runCombat(input: CombatEngineInput): {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
+
+        // Combat-start seeding (round 1) for PASSIVE-sourced finite (timed) self-statuses.
+        if (r === 1) {
+            seedPassiveTimedStatuses(
+                [...runtimesById.values(), ...enemyPlayerRuntimes],
+                statusEngine,
+                bus,
+                enemyType,
+                r
+            );
+        }
 
         // Team actors listed BEFORE the attacker so the input-order tiebreak yields
         // team → attacker → enemy at equal speeds (buildTurnQueue requirement). Enemy
