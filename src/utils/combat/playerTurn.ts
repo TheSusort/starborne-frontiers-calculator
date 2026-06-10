@@ -117,6 +117,10 @@ export interface PlayerTurnResult {
     secondaryDamage: number;
     conditionalDamage: number;
     detonationDamage: number; // the player-turn detonate() portion
+    /** Per-hit crit outcomes of THIS turn's fired damage ability, in hit order
+     *  (length = the ability's hit count; [] when the cast had no damage ability).
+     *  Same draws that feed critHits/roundCrit — collected, not re-drawn. */
+    hitCrits: boolean[];
     /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
      *  re-insertion + the oncePerRound/backstop bookkeeping. */
     extraActionGrants: ExtraActionGrant[];
@@ -688,7 +692,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Assumes one base-damage ability per skill (true for all parser output); a
     // gated-off first damage ability with a differently-flagged second one would
     // read the wrong flag — not representable from skill text today.
-    const damageNoCrit = damageInputsFromSkill(firingSkill).noCrit;
+    const { noCrit: damageNoCrit, scalingAbility: damageAbility } =
+        damageInputsFromSkill(firingSkill);
+    const hasDamageAbility = damageAbility !== undefined;
 
     const emitDebuffResisted = (buffName: string) =>
         bus.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
@@ -1071,8 +1077,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
     const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
     let critHits = 0;
+    const hitCrits: boolean[] = [];
     for (let h = 0; h < drawHits; h++) {
-        if (critGate(effectiveCrit / 100)) critHits += 1;
+        const didCritHit = critGate(effectiveCrit / 100);
+        if (didCritHit) critHits += 1;
+        // Only collect per-hit outcomes when a damage ability actually exists.
+        // The draw still advances the gate regardless (determinism preserved).
+        if (hasDamageAbility) hitCrits.push(didCritHit);
     }
     // Any-hit binary: feeds ctx self-crit gates, the RoundData row, and didCrit.
     // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
@@ -1571,6 +1582,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     return {
         action,
         roundCrit,
+        hitCrits,
         enemyHpPct,
         dotsConfig,
         dotsLanded,

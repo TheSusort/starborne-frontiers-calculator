@@ -1718,6 +1718,7 @@ export function runCombat(input: CombatEngineInput): {
                 focusTurns.push({
                     action: 'active',
                     roundCrit: false,
+                    hitCrits: [],
                     enemyHpPct,
                     dotsConfig: [],
                     dotsLanded: true,
