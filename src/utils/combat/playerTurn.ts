@@ -118,7 +118,8 @@ export interface PlayerTurnResult {
     conditionalDamage: number;
     detonationDamage: number; // the player-turn detonate() portion
     /** Per-hit crit outcomes of THIS turn's fired damage ability, in hit order
-     *  (length = the ability's hit count; [] when the cast had no damage ability).
+     *  (length = the ability's hit count; [] when the cast had no damage ability,
+     *  or when it is noCrit — the hit loop doesn't run for noCrit abilities).
      *  Same draws that feed critHits/roundCrit — collected, not re-drawn. */
     hitCrits: boolean[];
     /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue

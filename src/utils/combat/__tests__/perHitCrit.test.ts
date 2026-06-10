@@ -345,7 +345,6 @@ function makeHitCritArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
 describe('hitCrits on PlayerTurnResult', () => {
     // ── Test 7: 100% crit, 3-hit → hitCrits = [true, true, true] ─────────────
     it('100% crit 3-hit: hitCrits has length 3 and all true', () => {
-        idCounter = 0;
         const skills: ShipSkills = {
             slots: [
                 {
@@ -373,7 +372,6 @@ describe('hitCrits on PlayerTurnResult', () => {
 
     // ── Test 8: 0% crit, 3-hit → hitCrits = [false, false, false] ────────────
     it('0% crit 3-hit: hitCrits has length 3 and all false', () => {
-        idCounter = 0;
         const skills: ShipSkills = {
             slots: [
                 {
@@ -401,7 +399,6 @@ describe('hitCrits on PlayerTurnResult', () => {
 
     // ── Test 9: no damage ability → hitCrits = [] ────────────────────────────
     it('skill with no damage ability: hitCrits is empty array', () => {
-        idCounter = 0;
         // A skill with only a charge ability (no damage) — no damage ability fired.
         const skills: ShipSkills = {
             slots: [
@@ -427,7 +424,6 @@ describe('hitCrits on PlayerTurnResult', () => {
 
     // ── Test 10: consistency for single-hit 100% crit ────────────────────────
     it('1-hit 100% crit: hitCrits = [true], roundCrit = true, consistency holds', () => {
-        idCounter = 0;
         const skills: ShipSkills = {
             slots: [
                 {

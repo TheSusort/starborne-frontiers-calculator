@@ -1062,3 +1062,137 @@ describe('recordDestroyed helper (shared all-actor ship-destroyed)', () => {
 // ship-destroyed{actorId: tankId} + healing.destroyedRound set) is guarded by
 // healing.test.ts → "lethal: destroyedRound set, ship-destroyed emitted once,
 // post-death flatline". This file adds the focused recordDestroyed unit guard above.
+
+// ---------------------------------------------------------------------------
+// Phase 4c Task 3: per-hit `attacked` emission
+// ---------------------------------------------------------------------------
+
+/**
+ * Helpers for the per-hit attacked emission tests.
+ *
+ * Ship-backed enemy: carries a real ShipSkills with a 3-hit damage ability.
+ * With crit=100 every hit crits (gate always fires) → hitCrits=[true,true,true]
+ * every round → 3 `attacked` events, all with didCrit:true.
+ *
+ * Manual flat enemy: no shipSkills → synthesized 1-hit basic attack → hitCrits=[]
+ * in the engine (flat-enemy path) → falls back to [enemyTurnDidCrit] → 1 event.
+ */
+
+/** Ship-backed enemy attacker with a 3-hit damage ability at 100% crit. */
+const threeHitEnemy = (id: string, speed = 50) => ({
+    id,
+    stats: { attack: 1000, crit: 100, critDamage: 100, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active' as const,
+                abilities: [
+                    ab({
+                        type: 'damage' as const,
+                        target: 'enemy' as const,
+                        config: { type: 'damage' as const, multiplier: 100, hits: 3 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
+
+/** Collect `attacked` events from a healing-mode run. */
+const collectAttacked = (input: CombatEngineInput) => {
+    idCounter = 0;
+    const bus = createEventBus();
+    const attacked: Extract<CombatEvent, { type: 'attacked' }>[] = [];
+    bus.on('attacked', (e) => attacked.push(e));
+    runCombat({ ...input, bus });
+    return attacked;
+};
+
+/** Base healing-mode input: focus attacker is the heal target, huge HP so it never dies. */
+const healBase = (): CombatEngineInput => ({
+    attack: 1000,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [] },
+    enemyDefense: 0,
+    enemyHp: 10_000_000,
+    numRounds: 2,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    debuffLandingChance: 1,
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 100_000, // huge so the target survives both enemy attacks
+    healTargetId: 'attacker',
+});
+
+describe('Phase 4c Task 3 — per-hit attacked emission', () => {
+    // ── Test 1: ship-backed enemy with 3-hit ability → 3 events per round ───────
+    // The enemy fires a 3-hit damage ability at 100% crit → hitCrits=[true,true,true].
+    // With 2 rounds of combat the engine emits 3×2 = 6 `attacked` events total,
+    // each with didCrit:true. All share the same targetId/attackerId/round within
+    // each group of 3.
+    it('ship-backed 3-hit enemy emits 3 attacked events per round, each with per-hit didCrit', () => {
+        const attacked = collectAttacked({
+            ...healBase(),
+            numRounds: 2,
+            enemyAttackers: [threeHitEnemy('atk1')],
+        });
+
+        // 3 hits × 2 rounds = 6 total events.
+        expect(attacked).toHaveLength(6);
+
+        // Group by round and verify shape.
+        for (const r of [1, 2]) {
+            const roundEvents = attacked.filter((e) => e.round === r);
+            expect(roundEvents).toHaveLength(3);
+            for (const e of roundEvents) {
+                expect(e.targetId).toBe('attacker');
+                expect(e.attackerId).toBe('atk1');
+                expect(e.didCrit).toBe(true); // 100% crit → every hit crits
+            }
+        }
+    });
+
+    // ── Test 2: manual flat enemy → 1 event per round (unchanged contract) ──────
+    // A manual flat enemy (no shipSkills) synthesizes a single-hit basic attack.
+    // The engine falls back to [enemyTurnDidCrit] (hitCrits=[]) → exactly 1
+    // `attacked` event per round — the pre-4c contract.
+    it('manual flat enemy (no shipSkills) emits exactly 1 attacked event per round', () => {
+        const attacked = collectAttacked({
+            ...healBase(),
+            numRounds: 2,
+            enemyAttackers: [
+                {
+                    id: 'flat1',
+                    stats: { attack: 500, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    // no shipSkills → synthesized 1-hit basic attack
+                },
+            ],
+        });
+
+        // 1 hit × 2 rounds = 2 total events.
+        expect(attacked).toHaveLength(2);
+
+        for (const r of [1, 2]) {
+            const roundEvents = attacked.filter((e) => e.round === r);
+            expect(roundEvents).toHaveLength(1);
+            expect(roundEvents[0].targetId).toBe('attacker');
+            expect(roundEvents[0].attackerId).toBe('flat1');
+            // crit=0 → didCrit absent
+            expect(roundEvents[0].didCrit).toBeUndefined();
+        }
+    });
+});
