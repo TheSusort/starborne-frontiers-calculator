@@ -1034,16 +1034,20 @@ configure it and it looks like it works, but it does nothing".
 >   `damageReaction` parser; Warden/Isha/Makoli/Guardian/Heliodor self-damage reactives live;
 >   phantom over-fires removed for Shepherd/Opal/Flamel/Iridium/Panguan/Stalwart (see §5
 >   PHASE 4c PR 1).
-> - **4c PR 2 — pending** — ally-subject damage reactions (Heliodor 2nd passive, Cultivator,
->   Refine, Graphite); Guardian ally-Provoke; remaining ally-damaged family.
-> - **4c PR 3 — pending** — `hp-changed`/hp-crossing reactive (Tycho Barrier below-40%;
->   Hermes Cheat-Death grant below-40% gate fix); result-surface for counter-debuffs on enemy
->   attackers.
-> - **4c PR 4 — pending** — enemy-action reactions: FrontLine R4 "when enemy uses Charged
->   skill"; Panon "If directly damaged" (phrasing gap); Purifier cleanse-on-damaged phantom.
-> - **4c PR 5 — pending** — Heliodor "reduce debuff durations by 1" (cleanse-duration family,
->   partial 4e prerequisite).
-> - **4c PR 6 — pending** — remaining on-attacked corpus: Zosimos/Arum/Yarrow/Larkspur/Grif.
+> - **4c PR 2 — pending** — `on-ally-attacked` reactives (Heliodor 2nd passive, Cultivator,
+>   Refine, Graphite role-filtered); Guardian ally-crit-hit Provoke.
+> - **4c PR 3 — pending** — `on-hp-threshold-crossed` reactives via tank-side `hp-changed`
+>   (Tycho Barrier below-40% once-per-battle; Hermes Cheat-Death grant below-40% gate fix).
+> - **4c PR 4 — pending** — enemy-action reactions (event-only enemy heal/cleanse emission,
+>   `cleanse-performed`, reactive `damage` executor branch): Zosimos/Arum/Yarrow/Larkspur/Grif.
+> - **4c PR 5 — pending** — enemy realism pair: §6 item 11 `derivable` flip for
+>   `enemy-buff`/Provoke `self-debuff` gates (controlled DPS-golden regeneration) + item 12
+>   enemy hacking landing roll.
+> - **4c PR 6 — pending** — §6 item 10 Chakara `lowest-speed-ally` condition subject.
+> - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
+>   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
+>   FrontLine R4 enemy-charged-skill leech shield; result-surface for counter-debuffs on
+>   enemy attackers (4d/simulator-page concern).
 > - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
 >   AoE; death-fallback re-targeting.
 > - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
