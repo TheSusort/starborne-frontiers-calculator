@@ -680,15 +680,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
         };
+        // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
+        // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
+        // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
+        const counterTargetId = intent.eventCtx?.counterTargetId;
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
         if (owner.landsTimedEnemyApplication(cfg.application)) {
-            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status);
+            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
             // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({
                 type: 'debuff-applied',
                 sourceId: intent.ownerId,
-                targetId: ctx.enemy.id,
+                targetId: counterTargetId ?? ctx.enemy.id,
                 round: ctx.round,
                 buffName: cfg.buffName,
             });

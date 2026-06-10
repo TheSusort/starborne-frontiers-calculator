@@ -2289,3 +2289,104 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
         expect(intent.eventCtx).toBeUndefined();
     });
 });
+
+// ----------------------------------------------------------------------
+// Task 5 (Phase 4c PR 1): counter-debuff routing to the attacker's store
+//
+// A debuff intent carrying eventCtx.counterTargetId must:
+//   - apply the timed status to THAT enemy's per-target store
+//   - emit `debuff-applied` with targetId === counterTargetId
+// Without eventCtx the default store and ctx.enemy.id are used (lock
+// existing behaviour).
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId', () => {
+    // Minimal PlayerActorRuntime that always lands (debuffLandingChance=1).
+    const makeRuntime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'attacker' } as CombatActor,
+            landsTimedEnemyApplication: () => true,
+            debuffLandingGate: (_rate: number) => true,
+            debuffLandingChance: 1,
+        }) as unknown as PlayerActorRuntime;
+
+    const makeDebuffIntent = (counterTargetId?: string): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'counter-debuff',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Counter Corrosion',
+                stacks: 1,
+                parsedEffects: { defense: -5 },
+                isStackable: false,
+                application: 'inflict',
+                duration: 2,
+            },
+        },
+        ...(counterTargetId !== undefined ? { eventCtx: { counterTargetId } } : {}),
+    });
+
+    const buildCtx = (): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['attacker', makeRuntime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('routes debuff to the counterTargetId store when eventCtx carries one', () => {
+        const ctx = buildCtx();
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        ctx.bus.on('debuff-applied', (e) => emitted.push(e as { type: string; targetId?: string }));
+
+        executeIntent(makeDebuffIntent('enemy-1'), ctx);
+
+        // The timed ability status lands on the 'enemy-1' per-target store, not the default.
+        const timedEnemy1 = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, 'enemy-1');
+        expect(timedEnemy1.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(true);
+
+        // The default store must NOT have received the debuff.
+        const timedDefault = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, undefined);
+        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(false);
+
+        // debuff-applied event targets 'enemy-1'.
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-1');
+    });
+
+    it('uses the default store and ctx.enemy.id when no eventCtx is present', () => {
+        const ctx = buildCtx();
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        ctx.bus.on('debuff-applied', (e) => emitted.push(e as { type: string; targetId?: string }));
+
+        executeIntent(makeDebuffIntent(), ctx);
+
+        // The timed ability status lands on the default enemy store.
+        const timedDefault = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, undefined);
+        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(true);
+
+        // debuff-applied event targets the default enemy (ctx.enemy.id).
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-default');
+    });
+});
