@@ -220,6 +220,9 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         // sentence-scoping with Inc./Out. abbreviation masking (same discipline as clauseFor),
         // anchored at the buff name's position in the full text. Ally-subject sentences
         // return undefined from the detector (4c PR 2) and fall through to the skip.
+        // Note: indexOf anchors at the FIRST occurrence of the buff name; if the same
+        // name appears in multiple clauses the anchor may scope the wrong sentence.
+        // Acceptable — duplicate buff names within one skill text are rare in the corpus.
         const namePos = plain.toLowerCase().indexOf(name.toLowerCase());
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
         if (INTENTIONAL_REACTIVE_RE.test(clause)) continue;
