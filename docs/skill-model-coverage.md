@@ -1047,7 +1047,10 @@ configure it and it looks like it works, but it does nothing".
 > - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
 >   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
 >   FrontLine R4 enemy-charged-skill leech shield; result-surface for counter-debuffs on
->   enemy attackers (4d/simulator-page concern).
+>   enemy attackers (4d/simulator-page concern); noCrit MULTI-hit enemy attacks degrade to a
+>   single aggregate `attacked` event (hitCrits is [] for noCrit — unreachable today, no
+>   corpus skill combines "cannot critically hit" with a hit count; fix = fill(false), no
+>   gate draws).
 > - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
 >   AoE; death-fallback re-targeting.
 > - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
