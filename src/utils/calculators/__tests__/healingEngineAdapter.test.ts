@@ -738,3 +738,164 @@ describe('Task 4a: enemy-applied DoTs surface in enemyEffects[].dots', () => {
         expect(result.summary.totalIncomingDamage).toBeGreaterThan(0);
     });
 });
+
+// ── Task 6 (Phase 4c PR 2): ship-role threading through the adapter ──────────
+// Two paths into the engine's roleOf lookup for role-filtered on-ally-attacked
+// reactions (Graphite "when an ally Attacker or Debuffer is directly damaged"):
+//   (1) TeamActorInput.role rides through deriveTeamEngineActors untouched
+//       (the walk derivation spreads the input actor), and
+//   (2) HealingSimulationInput.healerRole maps to the engine's focus-actor
+//       `input.role` — the Task 5 carry-forward: the focus branch of the
+//       engine-built roleByActorId map, exercised end-to-end here with the
+//       healer AS the heal target.
+// Each path gets a matching-role firing case and a dormancy case (non-matching
+// or absent role → conservative no-fire).
+describe('Task 6: role threading for role-filtered on-ally-attacked reactions', () => {
+    // Walked team actor (shipSkills + stats → deriveTeamEngineActors builds the
+    // walk; reactive listeners only register for WALKED owners). Optional role.
+    const walkedActor = (
+        id: string,
+        speed: number,
+        hp: number,
+        shipSkills: ShipSkills,
+        role?: TeamActorInput['role']
+    ): TeamActorInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        shipSkills,
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        ...(role ? { role } : {}),
+    });
+
+    // Graphite shape: passive on-ally-attacked ally buff, role-filtered to
+    // Attacker/Debuffer allies. Fires once per attack turn on the damaged ally.
+    const reactivePlatingSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'ally',
+                        trigger: 'on-ally-attacked',
+                        roleFilter: ['ATTACKER', 'DEBUFFER'],
+                        config: {
+                            type: 'buff',
+                            buffName: 'Reactive Plating',
+                            stacks: 1,
+                            parsedEffects: { defense: 15 },
+                            isStackable: false,
+                            duration: 2,
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    // Flat-card enemy: one basic attack per turn at the heal target.
+    const flatEnemy = (id: string) => ({
+        id,
+        stats: { attack: 100, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // Bus tap collecting 'Reactive Plating' buff-applied events (actorId = recipient).
+    const collectPlating = () => {
+        const bus = createEventBus();
+        const plating: Array<{ actorId: string }> = [];
+        bus.on('buff-applied', (e) => {
+            if ((e as { buffName?: string }).buffName === 'Reactive Plating')
+                plating.push(e as unknown as { actorId: string });
+        });
+        return { bus, plating };
+    };
+
+    it('team-actor role path: heal-target team actor with a matching role → reaction fires on it every attack turn', () => {
+        idCounter = 0;
+        const { bus, plating } = collectPlating();
+        simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, speed: 200 },
+                healTargetId: 'tank',
+                teamActors: [
+                    walkedActor('graphite', 120, 50_000, reactivePlatingSkills()),
+                    walkedActor('tank', 80, 1_000_000, { slots: [] }, 'ATTACKER'),
+                ],
+                enemies: [flatEnemy('ea1')],
+                bus,
+            })
+        );
+        expect(plating.length).toBe(3);
+        expect(plating.every((e) => e.actorId === 'tank')).toBe(true);
+    });
+
+    it('team-actor role path: non-matching role (DEFENDER outside the filter) → dormant', () => {
+        idCounter = 0;
+        const { bus, plating } = collectPlating();
+        simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, speed: 200 },
+                healTargetId: 'tank',
+                teamActors: [
+                    walkedActor('graphite', 120, 50_000, reactivePlatingSkills()),
+                    walkedActor('tank', 80, 1_000_000, { slots: [] }, 'DEFENDER'),
+                ],
+                enemies: [flatEnemy('ea1')],
+                bus,
+            })
+        );
+        expect(plating.length).toBe(0);
+    });
+
+    it('focus-healer role path: healer-as-target with matching healerRole → reaction fires on the focus actor (engine input.role)', () => {
+        idCounter = 0;
+        const { bus, plating } = collectPlating();
+        simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, speed: 200 },
+                healerRole: 'ATTACKER',
+                healTargetId: 'healer',
+                teamActors: [walkedActor('graphite', 120, 50_000, reactivePlatingSkills())],
+                enemies: [flatEnemy('ea1')],
+                bus,
+            })
+        );
+        // The damaged ally is the FOCUS actor (engine id 'attacker') — its role
+        // comes ONLY from healerRole → input.role (the focus branch of roleByActorId).
+        expect(plating.length).toBe(3);
+        expect(plating.every((e) => e.actorId === 'attacker')).toBe(true);
+    });
+
+    it('focus-healer role path: healerRole absent → dormant (conservative; unknown role never matches)', () => {
+        idCounter = 0;
+        const { bus, plating } = collectPlating();
+        simulateHealing(
+            BASE({
+                rounds: 3,
+                healer: { ...HEALER, speed: 200 },
+                healTargetId: 'healer',
+                teamActors: [walkedActor('graphite', 120, 50_000, reactivePlatingSkills())],
+                enemies: [flatEnemy('ea1')],
+                bus,
+            })
+        );
+        expect(plating.length).toBe(0);
+    });
+});
