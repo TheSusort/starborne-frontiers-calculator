@@ -17,6 +17,7 @@ import {
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
+    detectDamageReactionTrigger,
     detectCritRepairTrigger,
     detectAllyCritTrigger,
     detectDestroyedTrigger,
@@ -2306,7 +2307,9 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
 // ALLY-subject reactions (and self triggers whose heal RECIPIENT is not self) stay
 // disqualified — they are PR 2 routing scope. All texts below are real CSV rows.
 describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)', () => {
-    it('Makoli first passive: below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
+    // Makoli and Guardian share this CSV text BYTE-IDENTICALLY (both ships'
+    // first_passive_skill_text column) — one test covers both.
+    it('Makoli/Guardian first passive (identical CSV text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
@@ -2323,24 +2326,7 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
         ]);
     });
 
-    it('Guardian first passive: same below-40% shape as Makoli', () => {
-        expect(
-            parseHealAbilities(
-                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
-            )
-        ).toEqual([
-            {
-                kind: 'heal',
-                pct: 20,
-                basis: 'hp',
-                target: 'self',
-                explicitTarget: false,
-                damageReaction: { hpBelowPct: 40 },
-            },
-        ]);
-    });
-
-    it('Isha third passive: instead-on-crit pair → 3% non-crit + 6% crit (tolerates the "criticall" typo)', () => {
+    it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair → 3% non-crit + 6% crit (tolerates the "criticall" typo)', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
@@ -2446,6 +2432,114 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
         expect(r).toHaveLength(1);
         expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
         expect(r[0].damageReaction).toBeUndefined();
+    });
+});
+
+// Phase 4c PR 1 (Task 8): self-subject damage-reaction trigger for NON-HEAL clauses
+// (buff grants, debuff/DoT inflictions). Sentence-scoped around `pos` on the RAW text
+// (same masked bounds as phrasePosTrigger). Passive-voice "is critically hit" is the
+// crit-filtered variant; ally-subject sentences stay undefined (PR 2).
+describe('detectDamageReactionTrigger', () => {
+    const at = (text: string, needle: string) =>
+        detectDamageReactionTrigger(text, text.indexOf(needle));
+
+    it('Warden passive: Corrosion infliction sentence → bare on-attacked', () => {
+        expect(
+            at(
+                'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+                'Corrosion I'
+            )
+        ).toEqual({ trigger: 'on-attacked' });
+    });
+
+    it('Guardian second passive: "is critically hit" grant → on-attacked with crit filter', () => {
+        expect(
+            at(
+                'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+                'Binderburg Resilience I'
+            )
+        ).toEqual({ trigger: 'on-attacked', critFilter: 'crit' });
+    });
+
+    it('Guardian second passive: ally-subject Provoke sentence → undefined (PR 2)', () => {
+        expect(
+            at(
+                'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+                'Provoke'
+            )
+        ).toBeUndefined();
+    });
+
+    it('Yarrow active: plain on-cast Corrosion infliction → undefined', () => {
+        expect(
+            at(
+                'This Unit deals <unit-damage>110% damage</unit-damage> and inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns.',
+                'Corrosion I'
+            )
+        ).toBeUndefined();
+    });
+
+    it('Panguan: trailing "when directly damaged" → on-attacked', () => {
+        expect(
+            at(
+                'This Unit Gains <unit-skill>Stealth</unit-skill> for 2 turns when directly damaged.',
+                'Stealth'
+            )
+        ).toEqual({ trigger: 'on-attacked' });
+    });
+
+    it('Stalwart: "When this Unit is directly damaged as a primary target" → on-attacked', () => {
+        expect(
+            at(
+                'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.',
+                'Legion Discipline II'
+            )
+        ).toEqual({ trigger: 'on-attacked' });
+    });
+
+    it('Provider: "another ally" subject with a "cannont critically hit" rider → undefined', () => {
+        // BOTH guards matter here: "when ANOTHER ally inflicts …" is an ally-subject
+        // sentence, and the typo'd crit-suppression rider ("cannont critically hit")
+        // must not read as a crit reaction.
+        expect(
+            at(
+                'This Unit has 20% Shield Penetration. When another ally inflicts a debuff onto an enemy, this unit deals <unit-damage>50% damage</unit-damage> to that enemy that cannont critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.',
+                'Crit Rate Down II'
+            )
+        ).toBeUndefined();
+    });
+
+    it('Grif-style "cannot critically hit" rider inside a when-sentence → undefined', () => {
+        expect(
+            at(
+                'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.',
+                '75% Damage'
+            )
+        ).toBeUndefined();
+    });
+
+    it('Panon: "If this Unit is directly damaged" (if, not when) → undefined', () => {
+        expect(
+            at(
+                'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.',
+                'Barrier'
+            )
+        ).toBeUndefined();
+    });
+
+    it('sentence scoping: a grant in a DIFFERENT <br>-separated sentence is not co-triggered', () => {
+        // Isha second passive: the start-of-round buffs precede the damage-reaction repair
+        // sentence — their positions must not pick up the reaction trigger.
+        expect(
+            at(
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP.',
+                'Offensive Affinity Override'
+            )
+        ).toBeUndefined();
+    });
+
+    it('negative pos → undefined', () => {
+        expect(detectDamageReactionTrigger('When directly damaged, …', -1)).toBeUndefined();
     });
 });
 

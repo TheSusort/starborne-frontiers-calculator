@@ -26,6 +26,7 @@ import {
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
+    detectDamageReactionTrigger,
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
@@ -1188,13 +1189,28 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // and bomb-detonate phrasings produce no condition from detectGrantConditions). Any other
         // conditions (e.g. an enemy-type co-gate) are preserved.
         const reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
-        if (reactiveTrigger) {
-            ability.trigger = reactiveTrigger;
-            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
-        }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
         const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        if (reactiveTrigger) {
+            ability.trigger = reactiveTrigger;
+            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
+        } else {
+            // Phase 4c PR 1 (Task 8): a SELF-subject damage-reaction grant/infliction ("When
+            // directly damaged, … inflicts Speed Down I"; Guardian's "When this Unit is
+            // critically hit, it gains …") rides the LIVE on-attacked trigger (+ crit filter)
+            // instead of registering as an unconditional per-round aura (a phantom — the
+            // reactive partition routes it OUT of registerActorAbilityStatuses and into the
+            // executor, which lands enemy-target counter-debuffs on the attacking enemy via
+            // eventCtx.counterTargetId). Sentence-scoped at the buff's own anchor, so grants
+            // in other sentences of the same row are never co-triggered.
+            const reaction =
+                rowText && pos >= 0 ? detectDamageReactionTrigger(rowText, pos) : undefined;
+            if (reaction) {
+                ability.trigger = reaction.trigger;
+                if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+            }
+        }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
     // Player-side grants carry their parser ally-scope (self/ally/all-allies) so the engine
@@ -1207,6 +1223,48 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     for (const buff of enemyDebuffs) {
         if (isAccumulateDetonateEffect(buff.buffName)) continue;
         mergeBuff(buff, 'enemy');
+    }
+
+    // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden
+    // "When directly damaged, this Unit inflicts Corrosion I … on that enemy", Shepherd) are
+    // NOT DoTs. Spec decision (§3.5): counter-DoT tick damage against an enemy ATTACKER is
+    // deliberately unsimulated — only the focus enemy's incoming DoTs tick, so emitting a dot
+    // here would phantom-credit tick damage the sim never resolves. The named status still
+    // matters (visible in the editor, condition-relevant for enemy-debuff gates), so emit a
+    // name-only DEBUFF (empty parsedEffects → no payload) riding the live on-attacked trigger;
+    // the executor lands it on the attacking enemy via eventCtx.counterTargetId. DoT-named
+    // effects are excluded from BOTH buff auto-fill (isDoTBuffName) and the active/charge DoT
+    // merge above (passive sources skipped), so without this pass they emit nothing.
+    const passiveRowText = getSkillRowForSlot(ship, 'passive')?.text ?? '';
+    if (passiveRowText) {
+        // Source tag is irrelevant here (it only drives stackTrigger classification, which a
+        // reaction-sentence DoT infliction never carries) — 'passive1' is a neutral stand-in.
+        for (const eff of parseSkillEffects(passiveRowText, 'passive1')) {
+            if (eff.target !== 'enemy' || !DOT_TIER_MAP[eff.buffName]) continue;
+            const pos = passiveRowText.indexOf(eff.buffName);
+            const reaction =
+                pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
+            if (!reaction) continue;
+            const ability: Ability = {
+                id: nextId(),
+                type: 'debuff',
+                target: 'enemy',
+                trigger: reaction.trigger,
+                ...(reaction.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: eff.buffName,
+                    parsedEffects: {},
+                    stacks: eff.stacks ?? 1,
+                    isStackable: false,
+                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                    application: eff.application ?? 'inflict',
+                },
+                autoFilled: true,
+            };
+            pushToSlot(bySlot, 'passive', [{ ability, pos }]);
+        }
     }
 
     // Sort each slot's abilities by their text position (stable sort preserves insertion

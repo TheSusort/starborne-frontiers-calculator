@@ -946,32 +946,81 @@ function phrasePosTrigger(
     anchorPos: number,
     trigger: AbilityTrigger
 ): AbilityTrigger | undefined {
-    if (!text || anchorPos < 0) return undefined;
-    // Mask "Inc."/"Out." abbreviation periods (same sentinel as resolveBuffClause/parseExtraAction)
-    // before the boundary scan so a buff name like "Inc. Damage Up" does not split the sentence
-    // mid-name. The placeholder is the same byte length as the replaced space, so anchorPos (which
-    // points into the raw unmasked text) stays stable and needs no adjustment.
+    if (!text) return undefined;
+    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && phraseRe.test(sentence) ? trigger : undefined;
+}
+
+// The RAW-text sentence containing `anchorPos` (masked — see below), or undefined when the
+// position is invalid. Shared by phrasePosTrigger and detectDamageReactionTrigger so the
+// masking + boundary rules live in ONE place.
+//
+// Masking: "Inc."/"Out." abbreviation periods are masked (same sentinel as resolveBuffClause/
+// parseExtraAction) before the boundary scan so a buff name like "Inc. Damage Up" does not
+// split the sentence mid-name. The placeholder is the same byte length as the replaced space,
+// so anchorPos (which points into the raw unmasked text) stays stable and needs no adjustment.
+//
+// Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
+// <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
+// <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
+// raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
+// (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
+function rawSentenceAround(text: string, anchorPos: number): string | undefined {
+    if (anchorPos < 0) return undefined;
     const masked = maskAbbrev(text);
-    // Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
-    // <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
-    // <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
-    // raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
-    // (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
     const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
     let start = 0;
     let m: RegExpExecArray | null;
-    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
     while ((m = boundary.exec(masked)) !== null) {
         const end = m.index + m[0].length;
         if (anchorPos < end) {
-            return phraseRe.test(masked.slice(start, end)) && anchorPos >= start
-                ? trigger
-                : undefined;
+            return anchorPos >= start ? masked.slice(start, end) : undefined;
         }
         start = end;
     }
     // Anchor is in the final (unterminated) sentence.
-    return phraseRe.test(masked.slice(start)) && anchorPos >= start ? trigger : undefined;
+    return anchorPos >= start ? masked.slice(start) : undefined;
+}
+
+// detectDamageReactionTrigger rules (Phase 4c PR 1, Task 8). Ally-subject guard covers BOTH
+// "when an ally …" and "when another ally …" (Provider) — those reactions are PR 2 scope.
+const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
+// Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
+// "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
+// carrying such a rider (Provider, Grif) never reads as crit-gated.
+const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/gi;
+// Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit"; the
+// missing "y" in the live CSV's "criticall hit" is tolerated). DISTINCT from the ACTIVE-voice
+// self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
+// which "hit\b" deliberately does not match (no trailing "s").
+const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
+// Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
+// trailing clause) / "when attacked". "If directly damaged" (Panon) is deliberately NOT
+// matched — only the "when" phrasing classifies this phase.
+const DR_DIRECT_DAMAGE_RE =
+    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b/i;
+
+/**
+ * Self-subject damage-reaction trigger for non-heal clauses (Phase 4c PR 1). Matches the
+ * sentence around `pos` (RAW-text position, same masked bounds as phrasePosTrigger).
+ * Passive-voice "is critically hit" is the CRIT-FILTERED variant — distinct from the
+ * ACTIVE-voice self-crit condition, which detectGrantConditions still rejects in passive
+ * voice. Ally-subject sentences return undefined (PR 2). NO lookbehind (iOS Safari 15).
+ * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
+ * Panguan, Stalwart, Makoli).
+ */
+export function detectDamageReactionTrigger(
+    text: string,
+    pos: number
+): { trigger: 'on-attacked'; critFilter?: 'crit' } | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    if (DR_ALLY_SUBJECT_RE.test(sentence)) return undefined;
+    const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
+    if (DR_CRIT_HIT_RE.test(scrubbed)) return { trigger: 'on-attacked', critFilter: 'crit' };
+    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) return { trigger: 'on-attacked' };
+    return undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
@@ -1263,7 +1312,8 @@ export interface ParsedHealAbility {
      *  damaged", "when attacked", "when (critically) hit"). buildShipAbilities maps
      *  it to trigger 'on-attacked' (+ triggerCritFilter / derivable self
      *  hp-threshold). Ally-subject reactions never carry this — they stay
-     *  disqualified until Phase 4c PR 2. */
+     *  disqualified until Phase 4c PR 2. May be present-but-empty: an empty object
+     *  signals an ungated reaction (Heliodor first-listed passive, Warden). */
     damageReaction?: { critFilter?: 'crit' | 'non-crit'; hpBelowPct?: number };
 }
 
@@ -1495,7 +1545,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
             // must not apply (Malvex). (resolveHealTarget was hoisted above the
-            // damage-reaction block so the recipient gate can read it.)
+            // damage-reaction block so the recipient gate can read it — the gate MUST read
+            // the SAME `resolved` object this target assignment uses, or the two could
+            // disagree on who receives the heal.)
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
             // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
             // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max

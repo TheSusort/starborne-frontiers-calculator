@@ -1372,7 +1372,8 @@ describe('buildShipAbilities', () => {
     // condition (evaluated against live tank HP at drain time); Isha's instead-on-crit
     // pair maps to triggerCritFilter 'non-crit' / 'crit'.
     describe('self-subject damage-reaction heals → on-attacked (Phase 4c)', () => {
-        it('Makoli first passive: heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
+        // Makoli and Guardian share this CSV first_passive_skill_text byte-identically.
+        it('Makoli/Guardian first passive (identical CSV text): heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
@@ -1397,7 +1398,7 @@ describe('buildShipAbilities', () => {
             ]);
         });
 
-        it('Isha third passive: instead-on-crit pair maps to triggerCritFilter non-crit (3%) / crit (6%)', () => {
+        it('Isha second passive (CSV second_passive_skill_text): instead-on-crit pair maps to triggerCritFilter non-crit (3%) / crit (6%)', () => {
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
@@ -1450,6 +1451,236 @@ describe('buildShipAbilities', () => {
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
             expect(heal).toBeUndefined();
+        });
+    });
+
+    // Phase 4c PR 1 (Task 8): non-heal damage reactions. Self-subject reaction sentences
+    // route their buff grants / debuff inflictions through the LIVE on-attacked trigger
+    // (+ triggerCritFilter for "is critically hit") instead of registering as unconditional
+    // per-round auras. A damage-reaction DoT infliction (Warden/Shepherd Corrosion) becomes a
+    // name-only DEBUFF — counter-DoT tick damage against the enemy attacker is deliberately
+    // unsimulated (spec §3.5); the named status stays visible + condition-relevant.
+    describe('non-heal damage reactions → on-attacked (Phase 4c Task 8)', () => {
+        const passiveOf = (s: Ship): Skill | undefined =>
+            buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+
+        it('Warden passive: Corrosion I is a name-only on-attacked DEBUFF, not a dot', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+            });
+            const passive = passiveOf(s);
+            const debuff = passive?.abilities.find((a) => a.type === 'debuff');
+            expect(debuff).toMatchObject({
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Corrosion I',
+                    parsedEffects: {},
+                    duration: 2,
+                    application: 'inflict',
+                },
+            });
+            expect(debuff!.triggerCritFilter).toBeUndefined();
+            // NO dot ability anywhere (the counter-DoT tick is unsimulated), and the
+            // repair still rides on-attacked (Task 7) — no on-cast/recurring phantom.
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'dot')).toHaveLength(0);
+            expect(all.filter((a) => a.trigger === 'on-cast')).toHaveLength(0);
+            expect(passive?.abilities.find((a) => a.type === 'heal')).toMatchObject({
+                trigger: 'on-attacked',
+            });
+        });
+
+        it('Warden charged: on-cast Corrosion II still parses as a dot (no debuff card)', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 3 turns.',
+                chargeSkillCharge: 2,
+            });
+            const charged = buildShipAbilities(s).slots.find((x) => x.slot === 'charged');
+            expect(charged?.abilities.find((a) => a.type === 'dot')).toMatchObject({
+                trigger: 'on-cast',
+                config: { type: 'dot', dotType: 'corrosion', tier: 6, duration: 3 },
+            });
+            expect(charged?.abilities.find((a) => a.type === 'debuff')).toBeUndefined();
+        });
+
+        it('Yarrow active (negative guard): plain on-cast Corrosion I stays a dot exactly as today', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>110% damage</unit-damage> and inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            expect(active?.abilities.find((a) => a.type === 'dot')).toMatchObject({
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'dot', dotType: 'corrosion', tier: 3, stacks: 1, duration: 2 },
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'debuff')).toHaveLength(0);
+        });
+
+        it('Guardian second passive: Binderburg grant rides on-attacked with crit filter; ally-Provoke sentence emits nothing new', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+            });
+            const passive = passiveOf(s);
+            const buff = passive?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-attacked',
+                triggerCritFilter: 'crit',
+                conditions: [],
+                config: { type: 'buff', buffName: 'Binderburg Resilience I', duration: 1 },
+            });
+            // The ally-subject Provoke sentence is PR 2 scope: the debuff keeps its
+            // pre-existing on-cast emission with the manual (off-by-default) self-debuff
+            // Provoke condition — no on-attacked trigger, no crit filter, nothing new.
+            const provoke = passive?.abilities.find(
+                (a) =>
+                    a.type === 'debuff' &&
+                    (a.config as { buffName?: string }).buffName === 'Provoke'
+            );
+            expect(provoke).toMatchObject({
+                trigger: 'on-cast',
+                conditions: [{ subject: 'self-debuff', buffName: 'Provoke', derivable: false }],
+            });
+            expect(provoke!.triggerCritFilter).toBeUndefined();
+        });
+
+        it('Shepherd passive: Corrosion I name-only debuff AND Attack Down I both ride on-attacked', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> and <unit-skill>Attack Down I</unit-skill> on its attacker for 1 turn.',
+            });
+            const passive = passiveOf(s);
+            const debuffs = passive?.abilities.filter((a) => a.type === 'debuff') ?? [];
+            expect(
+                debuffs.map((a) => [(a.config as { buffName: string }).buffName, a.trigger])
+            ).toEqual(
+                expect.arrayContaining([
+                    ['Corrosion I', 'on-attacked'],
+                    ['Attack Down I', 'on-attacked'],
+                ])
+            );
+            expect(passive?.abilities.find((a) => a.type === 'dot')).toBeUndefined();
+        });
+
+        it('Opal second passive: counter-debuff AND self-buff in the reaction sentence both flip', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'When directly damaged, this Unit Inflicts <unit-skill>Attack Down II</unit-skill> for 3 turns and Gains <unit-skill>Defense Up II</unit-skill> for 1 turn.',
+            });
+            const passive = passiveOf(s);
+            expect(passive?.abilities.find((a) => a.type === 'debuff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Attack Down II' },
+            });
+            expect(passive?.abilities.find((a) => a.type === 'buff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Defense Up II' },
+            });
+        });
+
+        it('Flamel first passive: trailing "when directly damaged" flips Speed Down I', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit inflicts <unit-skill>Speed Down I</unit-skill> for 2 turns when directly damaged.',
+            });
+            const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
+            expect(debuff).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Speed Down I', duration: 2 },
+            });
+        });
+
+        it('Iridium first passive: Speed Down I flips; Panguan Stealth flips (aura phantom removed)', () => {
+            const iridium = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+            expect(passiveOf(iridium)?.abilities.find((a) => a.type === 'debuff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Speed Down I' },
+            });
+            const panguan = ship({
+                firstPassiveSkillText:
+                    'This Unit Gains <unit-skill>Stealth</unit-skill> for 2 turns when directly damaged.',
+            });
+            expect(passiveOf(panguan)?.abilities.find((a) => a.type === 'buff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Stealth' },
+            });
+        });
+
+        it('Stalwart: Legion Discipline II grant in the reaction sentence flips to on-attacked', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.',
+            });
+            expect(passiveOf(s)?.abilities.find((a) => a.type === 'buff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Legion Discipline II' },
+            });
+        });
+
+        it('Makoli second passive: the Disable counter-infliction flips to on-attacked', () => {
+            // NOTE: the "while below 40% HP" gate stays on the HEAL only (Task 7's
+            // damageReaction.hpBelowPct); the detector deliberately carries no hp gate, so
+            // Disable fires on every received attack. Still strictly better than the
+            // previous unconditional per-round aura.
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+            });
+            expect(passiveOf(s)?.abilities.find((a) => a.type === 'debuff')).toMatchObject({
+                trigger: 'on-attacked',
+                config: { buffName: 'Disable' },
+            });
+        });
+
+        it('Provider (negative): ally-inflicts sentence with "cannont critically hit" is unchanged', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'This Unit has 20% Shield Penetration. When another ally inflicts a debuff onto an enemy, this unit deals <unit-damage>50% damage</unit-damage> to that enemy that cannont critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.',
+            });
+            const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
+            expect(debuff?.trigger).toBe('on-cast');
+            expect(debuff?.triggerCritFilter).toBeUndefined();
+            expect(debuff?.conditions).toEqual([
+                { subject: 'ally-inflicts-debuff', derivable: false },
+            ]);
+        });
+
+        it('Refine (negative): ally-subject reaction grant stays unchanged (PR 2)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.',
+            });
+            const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
+            expect(buff?.trigger).toBe('on-cast');
+            expect(buff?.triggerCritFilter).toBeUndefined();
+        });
+
+        it('Wusheng (negative): active-voice self-crit Stealth keeps on-crit, not on-attacked', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'This Unit gains <unit-skill>Stealth</unit-skill> for 1 turn after critically damaging an enemy.<br /><br />This Unit reduces direct damage by 25% while <unit-skill>Stealth</unit-skill> is active. If directly damaged while <unit-skill>Stealth</unit-skill> is active, remove <unit-skill>Stealth</unit-skill>.<br /><br />This Unit starts combat fully charged.',
+            });
+            const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({ trigger: 'on-crit', config: { buffName: 'Stealth' } });
         });
     });
 
