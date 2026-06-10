@@ -829,7 +829,8 @@ buff/charge-aura), source it from firing + passive.
     sentences classify as `on-ally-attacked`. The CRIT shape REQUIRES passive voice
     (`DR_ALLY_CRIT_HIT_RE`, "is critically hit") — Crocus's ACTIVE-voice "inflicts a DoT with a
     critical hit" stays `on-ally-crit-dot` (guarded by a lock test). Role words after "an ally"
-    ("an Attacker or Debuffer ally" etc.) extract into `roleFilter`. `parseHealAbilities` now
+    ("when an ally attacker or debuffer is directly damaged" — roles AFTER "ally", the only
+    order `DR_ALLY_ROLES_RE` matches) extract into `roleFilter`. `parseHealAbilities` now
     emits ally-subject heals (flagged `damageReaction.allySubject`) and non-self-recipient
     self-subject heals (PR 1 only emitted self-recipient ones); `resolveHealTarget` resolves
     "them" with an "all allies" antecedent → `all-allies` (Heliodor p2's "repairs them").

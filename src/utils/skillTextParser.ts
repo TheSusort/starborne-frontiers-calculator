@@ -998,6 +998,9 @@ const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
 // Role words inside an ally-subject phrase ("when an ally attacker or debuffer is
 // directly damaged" — Graphite) → ShipRoleCategory filter, CATEGORY semantics
 // ('debuffer' covers every DEBUFFER_* variant; matching happens in the engine).
+// LIMITATION: only "or"-joined lists parse; a comma list ("an ally attacker,
+// defender or supporter") would capture only the first role and silently
+// UNDER-fire — widen the repetition group if such a CSV variant ever lands.
 const DR_ALLY_ROLES_RE =
     /when\s+an(?:other)?\s+ally\s+((?:attacker|defender|debuffer|supporter)s?(?:\s+or\s+(?:attacker|defender|debuffer|supporter)s?)*)\b/i;
 const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
@@ -1406,7 +1409,11 @@ export interface ParsedHealAbility {
          *  damaged", Cultivator's 8% repair) rather than this unit — routes to
          *  on-ally-attacked. Only PASSIVE-voice ally shapes set this; ally-OUTGOING
          *  sentences (Crocus "when another ally inflicts a DoT … with a critical
-         *  hit") never match HEAL_DAMAGE_REACTION_RE and stay unannotated. */
+         *  hit") never match HEAL_DAMAGE_REACTION_RE and stay unannotated.
+         *  NOTE: no roleFilter channel here (asymmetry vs the buff/debuff detector)
+         *  — a role-filtered reaction HEAL would parse unfiltered and over-fire;
+         *  no corpus ship needs it (Graphite's role-filtered payload is a buff).
+         *  Add the channel if such a ship ever appears. */
         allySubject?: boolean;
     };
 }
