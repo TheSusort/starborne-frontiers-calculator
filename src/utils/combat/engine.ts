@@ -1886,6 +1886,24 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
+                        // Healing mode: the heal target's current/max HP is read from the SAME
+                        // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure
+                        // always sees post-drain HP state. Any non-tank id returns 100 (pre-4c
+                        // default). DPS mode: no healTarget → every id returns 100 → byte-identical.
+                        ...(healTarget
+                            ? {
+                                  selfHpPctFor: (ownerId: string): number => {
+                                      if (ownerId !== healTarget.id) return 100;
+                                      const maxHp = recipientMaxHp(healTarget.id);
+                                      if (maxHp <= 0) return 100;
+                                      return Math.max(
+                                          0,
+                                          Math.min(100, (healTarget.currentHp / maxHp) * 100)
+                                      );
+                                  },
+                              }
+                            : {}),
                     });
                 }
             }

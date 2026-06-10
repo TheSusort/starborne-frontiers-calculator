@@ -369,6 +369,11 @@ export interface IntentExecContext {
      *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
      *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
     oncePerCombatFired?: Set<string>;
+    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
+     *  PR 1). The engine closes over the heal target's current/max HP (healing mode);
+     *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
+     *  keeping all existing drain gating byte-identical. */
+    selfHpPctFor?: (ownerId: string) => number;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -464,6 +469,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         bombCount: ctx.pendingBombs.length,
         enemyType: ctx.enemyType,
         enemyHpPct,
+        // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
+        // closes over the heal target's current/max HP; every non-tank id and DPS mode report 100
+        // (the pre-4c default) → all existing drain gating stays byte-identical.
+        selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
         // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
@@ -707,6 +716,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
             ctx.bus.emit({
                 type: 'debuff-resisted',
+                // debuff-resisted feeds the round display only — no per-target counter routing needed.
                 targetId: ctx.enemy.id,
                 round: ctx.round,
                 buffName: cfg.buffName,

@@ -2390,3 +2390,183 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
         expect(emitted[0].targetId).toBe('enemy-default');
     });
 });
+
+// ----------------------------------------------------------------------
+// Phase 4c Task 6: live drain-time selfHpPct
+//
+// buildDrainContext must forward the owner's REAL HP% to the condition gate
+// via ctx.selfHpPctFor?(ownerId). A heal intent gated on below-40% HP:
+//   - is SKIPPED when the delegate reports 80%
+//   - EXECUTES when the delegate reports 30%
+//   - when no delegate is provided (legacy ctx), defaults to 100 → gate
+//     never met for below-threshold conditions.
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
+    // A heal intent gated on "self HP below 40%".
+    const makeHealIntent = (): Intent => ({
+        ownerId: 'A',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'low-hp-heal',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 40,
+                    hpSubject: 'self',
+                },
+            ],
+            config: { type: 'heal', pct: 50, basis: 'hp' },
+        },
+    });
+
+    const runtime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'A' } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const buildCtx = (
+        selfHpPctFor?: (ownerId: string) => number
+    ): { ctx: IntentExecContext; applied: number[] } => {
+        const applied: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'A',
+            credit: () => {},
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: ['A'],
+        };
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy' } as CombatActor,
+            enemyId: 'enemy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['A', runtime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['A'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            healing,
+            ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
+        };
+        return { ctx, applied };
+    };
+
+    it('SKIPS the heal when the delegate reports HP 80% (above the 40% gate)', () => {
+        const { ctx, applied } = buildCtx(() => 80);
+        executeIntent(makeHealIntent(), ctx);
+        expect(applied).toHaveLength(0);
+    });
+
+    it('EXECUTES the heal when the delegate reports HP 30% (below the 40% gate)', () => {
+        const { ctx, applied } = buildCtx(() => 30);
+        executeIntent(makeHealIntent(), ctx);
+        // 50% of owner hp (1000) = 500
+        expect(applied).toEqual([500]);
+    });
+
+    it('defaults to selfHpPct 100 (gate never met) when no delegate is provided', () => {
+        // No selfHpPctFor → buildDrainContext falls back to 100, which is above 40 → skip.
+        const { ctx, applied } = buildCtx(undefined);
+        executeIntent(makeHealIntent(), ctx);
+        expect(applied).toHaveLength(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c Task 6 (incidental cleanup — Task 5 code review):
+//
+// A debuff intent WITH eventCtx.counterTargetId whose owner's
+// landsTimedEnemyApplication returns false must emit `debuff-resisted`
+// with targetId === ctx.enemy.id (locks the deliberate resisted-path
+// asymmetry: the resisted path always uses the default ctx.enemy.id,
+// not counterTargetId).
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 cleanup lock)', () => {
+    const makeResistableDebuffIntent = (counterTargetId: string): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'counter-debuff-resisted',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Counter Shred',
+                stacks: 1,
+                parsedEffects: { defense: -5 },
+                isStackable: false,
+                application: 'inflict',
+                duration: 2,
+            },
+        },
+        eventCtx: { counterTargetId },
+    });
+
+    it('debuff-resisted emits with targetId === ctx.enemy.id even when counterTargetId is set', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([
+                [
+                    'attacker',
+                    {
+                        actor: { id: 'attacker' } as CombatActor,
+                        // landsTimedEnemyApplication returns false → resist path
+                        landsTimedEnemyApplication: () => false,
+                        debuffLandingGate: (_rate: number) => false,
+                        debuffLandingChance: 1,
+                    } as unknown as PlayerActorRuntime,
+                ],
+            ]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+        ctx.bus.on('debuff-resisted', (e) =>
+            emitted.push(e as { type: string; targetId?: string })
+        );
+
+        executeIntent(makeResistableDebuffIntent('enemy-attacker-99'), ctx);
+
+        // debuff-resisted must point at ctx.enemy.id, not the counterTargetId.
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-default');
+    });
+});
