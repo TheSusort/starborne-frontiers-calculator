@@ -2021,12 +2021,9 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
     it('Ability accepts triggerCritFilter "crit" and the value round-trips', () => {
         // If triggerCritFilter is not on the Ability interface this line causes a
         // TypeScript compile error (ts(2353)), which Vitest surfaces as a type error.
-        const ability: Ability = {
-            id: 'tcf-test',
+        const ability = ab({
             type: 'buff',
-            target: 'self',
             trigger: 'on-attacked',
-            conditions: [],
             triggerCritFilter: 'crit',
             config: {
                 type: 'buff',
@@ -2036,17 +2033,14 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
                 isStackable: false,
                 duration: 1,
             },
-        };
+        });
         expect(ability.triggerCritFilter).toBe('crit');
     });
 
     it('Ability accepts triggerCritFilter "non-crit" and the value round-trips', () => {
-        const ability: Ability = {
-            id: 'tcf-test-nc',
+        const ability = ab({
             type: 'buff',
-            target: 'self',
             trigger: 'on-attacked',
-            conditions: [],
             triggerCritFilter: 'non-crit',
             config: {
                 type: 'buff',
@@ -2056,17 +2050,14 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
                 isStackable: false,
                 duration: 1,
             },
-        };
+        });
         expect(ability.triggerCritFilter).toBe('non-crit');
     });
 
     it('Ability with no triggerCritFilter has the field undefined (absent → fires on any hit)', () => {
-        const ability: Ability = {
-            id: 'tcf-absent',
+        const ability = ab({
             type: 'buff',
-            target: 'self',
             trigger: 'on-attacked',
-            conditions: [],
             config: {
                 type: 'buff',
                 buffName: 'Any Hit Buff',
@@ -2075,7 +2066,7 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
                 isStackable: false,
                 duration: 1,
             },
-        };
+        });
         expect(ability.triggerCritFilter).toBeUndefined();
     });
 
@@ -2120,7 +2111,9 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
             },
             eventCtx: {},
         };
-        expect(intent.eventCtx?.counterTargetId).toBeUndefined();
+        // eventCtx must be present (object present, key absent) — not just "undefined chain"
+        expect(intent.eventCtx).toBeDefined();
+        expect('counterTargetId' in intent.eventCtx!).toBe(false);
     });
 
     it('Intent without eventCtx has the field undefined (normal non-event-context intent)', () => {
