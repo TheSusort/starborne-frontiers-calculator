@@ -1525,7 +1525,7 @@ describe('buildShipAbilities', () => {
             expect(all.filter((a) => a.type === 'debuff')).toHaveLength(0);
         });
 
-        it('Guardian second passive: Binderburg grant rides on-attacked with crit filter; ally-Provoke sentence emits nothing new', () => {
+        it('Guardian second passive: Binderburg grant rides on-attacked with crit filter; ally-Provoke sentence rides on-ally-attacked', () => {
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
@@ -1541,19 +1541,20 @@ describe('buildShipAbilities', () => {
                 conditions: [],
                 config: { type: 'buff', buffName: 'Binderburg Resilience I', duration: 1 },
             });
-            // The ally-subject Provoke sentence is PR 2 scope: the debuff keeps its
-            // pre-existing on-cast emission with the manual (off-by-default) self-debuff
-            // Provoke condition — no on-attacked trigger, no crit filter, nothing new.
+            // Trigger flips here (Task 7: the detector now classifies ally-subject
+            // sentences as on-ally-attacked, and the buff path consumes it directly);
+            // roleFilter/target wiring + dropping the stale manual self-debuff Provoke
+            // condition land in Task 9.
             const provoke = passive?.abilities.find(
                 (a) =>
                     a.type === 'debuff' &&
                     (a.config as { buffName?: string }).buffName === 'Provoke'
             );
             expect(provoke).toMatchObject({
-                trigger: 'on-cast',
+                trigger: 'on-ally-attacked',
+                triggerCritFilter: 'crit',
                 conditions: [{ subject: 'self-debuff', buffName: 'Provoke', derivable: false }],
             });
-            expect(provoke!.triggerCritFilter).toBeUndefined();
         });
 
         it('Shepherd passive: Corrosion I name-only debuff AND Attack Down I both ride on-attacked', () => {
@@ -1698,13 +1699,14 @@ describe('buildShipAbilities', () => {
             ]);
         });
 
-        it('Refine (negative): ally-subject reaction grant stays unchanged (PR 2)', () => {
+        it('Refine: ally-subject reaction grant rides on-ally-attacked', () => {
+            // Trigger flips here (Task 7); roleFilter/target wiring lands in Task 9.
             const s = ship({
                 firstPassiveSkillText:
                     'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.',
             });
             const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
-            expect(buff?.trigger).toBe('on-cast');
+            expect(buff?.trigger).toBe('on-ally-attacked');
             expect(buff?.triggerCritFilter).toBeUndefined();
         });
 

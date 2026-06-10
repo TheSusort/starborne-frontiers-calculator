@@ -2515,7 +2515,8 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
 // Phase 4c PR 1 (Task 8): self-subject damage-reaction trigger for NON-HEAL clauses
 // (buff grants, debuff/DoT inflictions). Sentence-scoped around `pos` on the RAW text
 // (same masked bounds as phrasePosTrigger). Passive-voice "is critically hit" is the
-// crit-filtered variant; ally-subject sentences stay undefined (PR 2).
+// crit-filtered variant; ally-subject sentences classify as on-ally-attacked (PR 2 Task 7,
+// see the sibling describe below).
 describe('detectDamageReactionTrigger', () => {
     const at = (text: string, needle: string) =>
         detectDamageReactionTrigger(text, text.indexOf(needle));
@@ -2538,13 +2539,16 @@ describe('detectDamageReactionTrigger', () => {
         ).toEqual({ trigger: 'on-attacked', critFilter: 'crit' });
     });
 
-    it('Guardian second passive: ally-subject Provoke sentence → undefined (PR 2)', () => {
+    it('Guardian second passive: ally-subject Provoke sentence → on-ally-attacked (PR 2 Task 7)', () => {
+        // Was pinned undefined in PR 1; the full two-sentence row also locks sentence
+        // scoping (the Provoke anchor must not pick up the self-subject crit sentence's
+        // trigger — both classify, but each from its OWN sentence).
         expect(
             at(
                 'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
                 'Provoke'
             )
-        ).toBeUndefined();
+        ).toEqual({ trigger: 'on-ally-attacked', critFilter: 'crit' });
     });
 
     it('Yarrow active: plain on-cast Corrosion infliction → undefined', () => {
@@ -2639,6 +2643,52 @@ describe('detectDamageReactionTrigger', () => {
             trigger: 'on-attacked',
             critFilter: 'crit',
         });
+    });
+});
+
+// Phase 4c PR 2 (Task 7): ALLY-subject damage reactions classify as on-ally-attacked
+// (Guardian's Provoke counter, Refine, Graphite) instead of returning undefined. Role
+// nouns right after "ally" (Graphite "ally attacker or debuffer") become a CATEGORY
+// roleFilter; hpBelowPct stays self-subject-only (DR_HP_BELOW_RE reads the OWNER's HP —
+// no corpus ally-reaction carries an HP gate).
+describe('detectDamageReactionTrigger — ally-subject (on-ally-attacked)', () => {
+    const at = (text: string, needle: string) =>
+        detectDamageReactionTrigger(text, text.indexOf(needle));
+
+    it('Guardian: "When an ally is critically hit by an enemy" → on-ally-attacked + crit filter', () => {
+        expect(
+            at(
+                'When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+                'Provoke'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked', critFilter: 'crit' });
+    });
+
+    it('Refine: "When an ally is directly damaged" → bare on-ally-attacked', () => {
+        expect(
+            at(
+                'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.',
+                'Inc. Damage Down I'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked' });
+    });
+
+    it('Graphite: "ally attacker or debuffer is directly damaged" → on-ally-attacked + role filter', () => {
+        expect(
+            at(
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns.',
+                'Repair Over Time III'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked', roleFilter: ['ATTACKER', 'DEBUFFER'] });
+    });
+
+    it('self-subject regression (Warden, byte-identical to the PR 1 pin): bare on-attacked', () => {
+        expect(
+            at(
+                'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+                'Corrosion I'
+            )
+        ).toEqual({ trigger: 'on-attacked' });
     });
 });
 

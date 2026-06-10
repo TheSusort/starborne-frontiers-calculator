@@ -48,9 +48,13 @@ describe('ungatedFinding damage-reaction parity', () => {
         expect(ungatedFinding([ungatedBuff('Defense Up III')], plain)).toContain('Defense Up III');
     });
 
-    it('still skips ally-subject damage-reaction clauses (4c PR 2 deferral)', () => {
+    it('flags an ally-subject damage-reaction clause whose effect parsed ungated on-cast', () => {
+        // Flipped in 4c PR 2 Task 7: the detector now classifies ally-subject reactions
+        // (on-ally-attacked), so the parity guard covers them too — buildShipAbilities
+        // assigns the trigger, meaning a real-corpus build never parses these ungated.
+        // auditSkills' own ally-reaction comments/skip-list get reconciled in Task 10.
         const plain = 'When an ally is directly damaged, this Unit gains Fortify II for 1 turn.';
-        expect(ungatedFinding([ungatedBuff('Fortify II')], plain)).toBeNull();
+        expect(ungatedFinding([ungatedBuff('Fortify II')], plain)).toContain('Fortify II');
     });
 
     it('still skips reactive triggers the parser does not model (on-kill)', () => {

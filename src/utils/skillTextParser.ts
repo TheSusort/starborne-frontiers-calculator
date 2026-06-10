@@ -11,6 +11,7 @@ import {
     DoTType,
 } from '../types/calculator';
 import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
+import type { ShipRoleCategory } from '../constants/shipTypes';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
@@ -985,9 +986,23 @@ function rawSentenceAround(text: string, anchorPos: number): string | undefined 
     return anchorPos >= start ? masked.slice(start) : undefined;
 }
 
-// detectDamageReactionTrigger rules (Phase 4c PR 1, Task 8). Ally-subject guard covers BOTH
-// "when an ally …" and "when another ally …" (Provider) — those reactions are PR 2 scope.
+// detectDamageReactionTrigger rules (Phase 4c PR 1 Task 8 + PR 2 Task 7). Ally-subject
+// detector covers BOTH "when an ally …" and "when another ally …" (Provider) — a matching
+// sentence classifies as on-ally-attacked when it also carries a damage-reaction shape
+// (Guardian's Provoke counter, Refine, Graphite); other ally-subject "when" sentences
+// (Provider's inflicts-a-debuff reaction) still return undefined.
 const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
+// Role words inside an ally-subject phrase ("when an ally attacker or debuffer is
+// directly damaged" — Graphite) → ShipRoleCategory filter, CATEGORY semantics
+// ('debuffer' covers every DEBUFFER_* variant; matching happens in the engine).
+const DR_ALLY_ROLES_RE =
+    /when\s+an(?:other)?\s+ally\s+((?:attacker|defender|debuffer|supporter)s?(?:\s+or\s+(?:attacker|defender|debuffer|supporter)s?)*)\b/i;
+const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
+    attacker: 'ATTACKER',
+    defender: 'DEFENDER',
+    debuffer: 'DEBUFFER',
+    supporter: 'SUPPORTER',
+};
 // Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
 // "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
 // carrying such a rider (Provider, Grif) never reads as crit-gated.
@@ -1010,36 +1025,71 @@ const DR_DIRECT_DAMAGE_RE =
 const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
 
 /**
- * Self-subject damage-reaction trigger for non-heal clauses (Phase 4c PR 1). Matches the
+ * Damage-reaction trigger for non-heal clauses (Phase 4c PR 1 + PR 2 Task 7). Matches the
  * sentence around `pos` (RAW-text position, same masked bounds as phrasePosTrigger).
  * Passive-voice "is critically hit" is the CRIT-FILTERED variant — distinct from the
  * ACTIVE-voice self-crit condition, which detectGrantConditions still rejects in passive
- * voice. Ally-subject sentences return undefined (PR 2). NO lookbehind (iOS Safari 15).
- * `hpBelowPct` is set when the reaction sentence also carries a "while below N% HP" self
- * HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold condition so the
- * executor evaluates the gate at drain time rather than firing on every received attack.
+ * voice. NO lookbehind (iOS Safari 15).
+ *
+ * Subject decides the trigger: a self-subject reaction sentence → on-attacked; an
+ * ALLY-subject one ("when an(other) ally … is critically hit / directly damaged") →
+ * on-ally-attacked (Guardian's Provoke counter, Refine's Inc. Damage Down grant). Role
+ * nouns right after "ally" (Graphite "when an ally attacker or debuffer is directly
+ * damaged") become `roleFilter`, CATEGORY-semantic ShipRoleCategory values the engine's
+ * listener matches against the damaged ally's role. The ally branch needs its own
+ * direct-damage acceptance because DR_DIRECT_DAMAGE_RE only spans "when (this Unit is)
+ * directly damaged" — the ally/role words between "when" and "directly" fall outside it.
+ *
+ * `hpBelowPct` is set when a SELF-subject reaction sentence also carries a "while below
+ * N% HP" self HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold
+ * condition so the executor evaluates the gate at drain time rather than firing on every
+ * received attack. Ally-subject sentences never get it: DR_HP_BELOW_RE reads the OWNER's
+ * HP, and no corpus ally-reaction carries an HP gate.
  * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
- * Panguan, Stalwart, Makoli).
+ * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite).
  */
 export function detectDamageReactionTrigger(
     text: string,
     pos: number
-): { trigger: 'on-attacked'; critFilter?: 'crit'; hpBelowPct?: number } | undefined {
+):
+    | {
+          trigger: 'on-attacked' | 'on-ally-attacked';
+          critFilter?: 'crit';
+          hpBelowPct?: number;
+          roleFilter?: ShipRoleCategory[];
+      }
+    | undefined {
     const sentence = rawSentenceAround(text, pos);
     if (sentence === undefined) return undefined;
-    if (DR_ALLY_SUBJECT_RE.test(sentence)) return undefined;
+    const allySubject = DR_ALLY_SUBJECT_RE.test(sentence);
     const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
+    const roleM = allySubject ? DR_ALLY_ROLES_RE.exec(sentence) : null;
+    const roleFilter = roleM
+        ? roleM[1]
+              .toLowerCase()
+              .split(/\s+or\s+/)
+              .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
+        : undefined;
+    const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
     if (DR_CRIT_HIT_RE.test(scrubbed)) {
-        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+        const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
-            trigger: 'on-attacked',
+            trigger,
             critFilter: 'crit',
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+            ...(roleFilter ? { roleFilter } : {}),
         };
     }
-    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) {
-        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
-        return { trigger: 'on-attacked', ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}) };
+    if (
+        DR_DIRECT_DAMAGE_RE.test(scrubbed) ||
+        (allySubject && /\bdirectly\s+damaged\b/i.test(scrubbed))
+    ) {
+        const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
+        return {
+            trigger,
+            ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+            ...(roleFilter ? { roleFilter } : {}),
+        };
     }
     return undefined;
 }
