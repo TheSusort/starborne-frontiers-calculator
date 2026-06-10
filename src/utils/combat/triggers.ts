@@ -138,7 +138,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
  *  - on-attacked → attacked where targetId === ownerId (target-scoped; fires when THIS OWNER is
- *    attacked). One enqueue per enemy attack turn.
+ *    attacked). Per-HIT since Phase 4c PR 1 (the engine emits one event per hit). The ability's
+ *    triggerCritFilter discriminates on the hit's own crit outcome: 'crit' → critting hits only,
+ *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
+ *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
  *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
@@ -258,10 +261,17 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-attacked':
                     bus.on('attacked', (e) => {
-                        // Target-scoped: fires when THIS OWNER (the target) is attacked.
-                        // The engine emits `attacked` once per enemy attack turn from the
-                        // enemy intake in engine.ts (Task 8) — after the shield-first drain.
-                        if (e.targetId === ownerId) enqueue(intent);
+                        // Target-scoped: fires when THIS OWNER is attacked. Per-HIT since
+                        // Phase 4c PR 1 (the engine emits one event per hit). The ability's
+                        // triggerCritFilter discriminates on the hit's own crit outcome:
+                        // 'crit' → critting hits only, 'non-crit' → non-critting only,
+                        // absent → every hit. The intent is per-EVENT (not the shared const):
+                        // eventCtx captures the attacker for "on that enemy" counter routing.
+                        if (e.targetId !== ownerId) return;
+                        const filter = ra.ability.triggerCritFilter;
+                        if (filter === 'crit' && !e.didCrit) return;
+                        if (filter === 'non-crit' && e.didCrit) return;
+                        enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
                     });
                     break;
                 case 'on-destroyed':

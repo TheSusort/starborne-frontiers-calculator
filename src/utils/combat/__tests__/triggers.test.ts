@@ -1557,6 +1557,163 @@ describe('on-attacked live trigger (Task 4)', () => {
         });
         expect(intents).toHaveLength(1);
     });
+
+    // ------------------------------------------------------------------
+    // Task 4 (Phase 4c PR 1): crit filter + per-event eventCtx
+    // ------------------------------------------------------------------
+
+    // (a) triggerCritFilter 'crit' fires only on critting hits
+    it('triggerCritFilter "crit": enqueues only for didCrit:true events targeting the owner', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'crit-only',
+            triggerCritFilter: 'crit',
+        };
+        const ra: ReactiveAbility = { ability: critAbility, sourceSlot: 'passive' };
+
+        // critting hit → should enqueue
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+
+        // non-critting hit (didCrit absent) → should NOT enqueue
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(0);
+    });
+
+    // (b) triggerCritFilter 'non-crit' fires only on non-critting hits
+    it('triggerCritFilter "non-crit": enqueues only for events WITHOUT didCrit', () => {
+        const nonCritAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'non-crit-only',
+            triggerCritFilter: 'non-crit',
+        };
+        const ra: ReactiveAbility = { ability: nonCritAbility, sourceSlot: 'passive' };
+
+        // non-critting hit (didCrit absent) → should enqueue
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+
+        // critting hit (didCrit: true) → should NOT enqueue
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(0);
+    });
+
+    // (c) unfiltered ability (no triggerCritFilter) enqueues for both critting and non-critting hits
+    it('unfiltered ability (no triggerCritFilter): enqueues for both critting and non-critting hits', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+    });
+
+    // (d) every enqueued intent carries eventCtx.counterTargetId === e.attackerId
+    it('every enqueued intent carries eventCtx.counterTargetId equal to the attackerId', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy-attacker-42',
+            round: 1,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('enemy-attacker-42');
+    });
+
+    it('eventCtx.counterTargetId follows the attackerId for critting hits too', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'crit-ctx',
+            triggerCritFilter: 'crit',
+        };
+        const ra: ReactiveAbility = { ability: critAbility, sourceSlot: 'passive' };
+
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy-42',
+            round: 1,
+            didCrit: true,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('enemy-42');
+    });
+
+    // (e) mutually exclusive pair: one 'crit' + one 'non-crit' ability on the same owner
+    //     never double-fires — exactly one intent per event
+    it('mutually exclusive crit+non-crit pair: exactly one intent per event (never double-fires)', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'pair-crit',
+            triggerCritFilter: 'crit',
+        };
+        const nonCritAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'pair-non-crit',
+            triggerCritFilter: 'non-crit',
+        };
+        const ras: ReactiveAbility[] = [
+            { ability: critAbility, sourceSlot: 'passive' },
+            { ability: nonCritAbility, sourceSlot: 'passive' },
+        ];
+
+        // critting hit: only crit fires
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: ras }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+        expect(critIntents[0].ability.triggerCritFilter).toBe('crit');
+
+        // non-critting hit: only non-crit fires
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: ras }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+        expect(nonCritIntents[0].ability.triggerCritFilter).toBe('non-crit');
+    });
 });
 
 // ----------------------------------------------------------------------
