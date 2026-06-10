@@ -1637,9 +1637,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             if (!leechBasis) {
                 const dmgReaction = HEAL_DAMAGE_REACTION_RE.exec(sentence);
                 if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) {
-                    // Mirrors the detector's DR_ALLY_SUBJECT_RE ("when an ally" / "when
-                    // another ally", Provider phrasing included).
-                    const allySubject = /when\s+an(?:other)?\s+ally\b/i.test(dmgReaction[0]);
+                    const allySubject = DR_ALLY_SUBJECT_RE.test(dmgReaction[0]);
                     // "while below N% HP" reads the OWNER's HP — never applied to
                     // ally-subject reactions (same rule as the detector; no corpus
                     // ally-reaction carries an HP gate).
