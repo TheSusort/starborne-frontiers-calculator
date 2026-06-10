@@ -558,7 +558,14 @@ export function detectDamageReactionTrigger(
               .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
         : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
-    if (DR_CRIT_HIT_RE.test(scrubbed)) {
+    // AMENDED after Task 7 code review: the ally branch MUST require PASSIVE voice for the
+    // crit acceptance — `/\bis\s+criticall?y?\s+hit\b/i` — NOT the bare DR_CRIT_HIT_RE.
+    // Crocus p2 ("When another ally INFLICTS a DoT effect WITH A CRITICAL HIT…") is an
+    // ally-OUTGOING reaction (on-ally-crit-dot) and matches bare DR_CRIT_HIT_RE; without
+    // the passive-voice guard it misclassifies as on-ally-attacked and emits a phantom
+    // Corrosion II debuff. Guardian ("When an ally IS critically hit by an enemy") passes
+    // the passive form. Lock test required: Crocus p2 sentence → undefined.
+    if (allySubject ? /\bis\s+criticall?y?\s+hit\b/i.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
             trigger,
@@ -688,6 +695,8 @@ it('Malvex "Damage dealt to them" leech still resolves target self (them-rule re
 ```
 
 NOTE: keep the existing instead-clause/crit-filter logic untouched — it applies to ally sentences too if a future ship needs it. `HEAL_DAMAGE_REACTION_RE` already matches the ally phrasings (the PR 1 skip proved it — it tested `dmgReaction[0]`); verify Graphite's "when an ally attacker or debuffer is directly damaged" also matches it — if the regex requires "ally" directly before the verb, widen it the same way as Task 7's detector. (Graphite is a BUFF, not a heal, so this only matters if the regex is shared — check.)
+
+FORWARD WARNING from Task 7's code review (Crocus trap): Crocus p2 reads "When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts Corrosion II…". That is an ally-OUTGOING reaction (already modeled as `on-ally-crit-dot`), NOT an ally-damaged reaction. When the heal parser's ally disqualifier drops, verify the "repairs itself for 3%" clause does NOT acquire an allySubject damage-reaction annotation (the `allySubject` test must be passive-voice-aware or the heal keeps its existing on-ally-crit-dot routing). Add a Crocus p2 lock test pinning current heal behavior.
 
 - [ ] **Step 5: Run the full parser suite** — `npx vitest run src/utils/__tests__/skillTextParser.test.ts`
 Expected: PASS. If any EXISTING ship's heal parse changed (the removed `resolved.target !== 'self'` guard could newly admit a self-subject/non-self-recipient ship beyond Heliodor), STOP and audit that ship's text against the spec before proceeding — do not blindly re-pin.
