@@ -732,9 +732,14 @@ export const AbilityCard: React.FC<Props> = ({
                         label="Trigger"
                         value={ability.trigger}
                         options={TRIGGER_OPTIONS}
-                        onChange={(value) =>
-                            onChange({ ...ability, trigger: value as AbilityTrigger })
-                        }
+                        onChange={(value) => {
+                            if (value === 'on-attacked') {
+                                onChange({ ...ability, trigger: value as AbilityTrigger });
+                            } else {
+                                const { triggerCritFilter: _removed, ...rest } = ability;
+                                onChange({ ...rest, trigger: value as AbilityTrigger });
+                            }
+                        }}
                     />
                     {ability.trigger !== 'on-cast' && !LIVE_TRIGGERS.has(ability.trigger) && (
                         <p className="text-xs text-theme-text-secondary">
@@ -752,7 +757,6 @@ export const AbilityCard: React.FC<Props> = ({
                             ]}
                             onChange={(value) => {
                                 if (value === 'any') {
-                                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
                                     const { triggerCritFilter: _removed, ...rest } = ability;
                                     onChange(rest as Ability);
                                 } else {

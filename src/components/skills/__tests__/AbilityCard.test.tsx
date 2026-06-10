@@ -296,6 +296,29 @@ describe('AbilityCard', () => {
                 screen.queryByText(/not simulated — treated as assume-active/i)
             ).not.toBeInTheDocument();
         });
+
+        it('strips triggerCritFilter when trigger is changed away from on-attacked', () => {
+            const abilityWithCritFilter: Ability = {
+                ...buffAbility,
+                trigger: 'on-attacked',
+                triggerCritFilter: 'crit',
+            };
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={abilityWithCritFilter}
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            // Open the Trigger dropdown and switch to "on-crit"
+            fireEvent.click(screen.getByLabelText('Trigger'));
+            fireEvent.click(screen.getByText('On critical hit'));
+            expect(onChange).toHaveBeenCalledOnce();
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.trigger).toBe('on-crit');
+            expect(Object.prototype.hasOwnProperty.call(updated, 'triggerCritFilter')).toBe(false);
+        });
     });
 
     describe('extra-action ability', () => {
