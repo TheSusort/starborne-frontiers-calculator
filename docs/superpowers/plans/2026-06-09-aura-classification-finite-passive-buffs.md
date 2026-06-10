@@ -269,12 +269,26 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 - `src/utils/calculators/__tests__/dpsGoldenParity.test.ts` + `__snapshots__/dpsGoldenParity.test.ts.snap`
 - (any healing golden snapshot that moves)
 
-**Affected-ship delta checklist (fill from Task 1 output):**
-- Yazid — Everliving Regeneration II (9t)
-- Tycho — Everliving Regeneration I/II (6t/9t)
-- Crucialis / IonScorp — Atlas Coordination I/II (6t/12t)
-- Iridium — Taunt (1t)
-- _(append any others Task 1 surfaced)_
+**Affected-ship delta checklist (from Task 1 diagnostic — authoritative scope):**
+
+Task 1 enumerated 116 passive buff/debuff rows with numeric duration + non-reactive trigger across ~60 ships (per-ship the refit-active passive is what fires in-game; durations below are the R0/R2 values surfaced). `liveGateConditions` neutralized nothing — pre/post-gate conditions are identical. The "start-of-combat" named buffs (Everliving Regeneration, Atlas Coordination, Iridium Taunt, Harvester Speed Up, Barrier, Legion Discipline, Terran Tenacity, Defense Up families) are all **unconditional**; 40 rows carry real conditions (enemy-buff/-debuff counts, enemy-type, hp-threshold, ally-* reactive) where the round-1 `conditionsMet` seeding gate matters.
+
+Required-confirmation ships present: Yazid & Tycho (Everliving Regeneration), Crucialis & IonScorp (Atlas Coordination), Iridium (Taunt). No unremovable-marked buffs in the affected set (Magnetized Shielding is NOT in this list — Task 4 is independent, driven by the in-game "Unremovable" wording the user added to its buff description).
+
+Full affected-ship set (any golden delta MUST be a ship on this list — anything off-list is a bug):
+
+```
+Kafa, Nuqtu, AEGIS, Gallant, Anjian, Bizon, Bayah, Iridium, Ravager, Mangler,
+Panon, Morao, Nayra, Flamel, Ripper, Makoli, Butcher, Berserker, Sansi, Crucialis,
+Shelter, Rys, IonScorp, Torcher, Quixilver, APEX, Warden, Guardian, Shepherd, Medved,
+Curator, Provider, Harvester, Paracelsus, Prospect, Pallas, Yazid, Tycho, Stalwart,
+Redeemer, Arum, Yarrow, Larkspur, Oleander, Cobalt, Opal, Refine, Meiying, Panguan,
+Sha Xing, Shashou, Yuyan, Huanying, Los, Nosorog
+```
+
+Affected buff/debuff families: Everliving Regeneration, Atlas Coordination, Taunt, Barrier/Barrier Recharging, Stealth, Marauder Rage, Defense Up, Legion Discipline, Terran Tenacity, Terran Bolster, XAOC Swiftness, Tianchao Precision, Speed Down/Up, Out./Inc. Damage Down, Attack Down/Up, Crit Rate Down, Repair Over Time, Out./Inc. Repair Down, Gelecek Contagion, Binderburg Resilience, Provoke, Disable, Stasis, Block Buff/Shield, Hacking Module Overdrive, Leech.
+
+Note: many conditioned rows (Marauder Rage gated on enemy-debuff count, Stealth gated on enemy-type, Pallas/Provider/Oleander on ally-reactive conditions) will NOT seed at round-1 because the gate is unmet at combat start — so they may produce **no** golden delta. That is expected, not a miss.
 
 - [ ] **Step 1: Run the golden parity suite and inspect the diff (do NOT update yet)**
 
