@@ -2008,3 +2008,134 @@ describe('Phase 4b: death/revive triggers in LIVE_TRIGGERS', () => {
         expect(_trigger).toBe('on-cheat-death-activated');
     });
 });
+
+// ----------------------------------------------------------------------
+// Task 1 (Phase 4c): type-layer additions
+//   - Ability.triggerCritFilter?: 'crit' | 'non-crit'
+//   - Intent.eventCtx?: { counterTargetId?: string }
+// These are structural tests: construct typed literals with the new fields
+// and assert the values round-trip correctly. The tests FAIL until the
+// fields are added to their respective interfaces.
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () => {
+    it('Ability accepts triggerCritFilter "crit" and the value round-trips', () => {
+        // If triggerCritFilter is not on the Ability interface this line causes a
+        // TypeScript compile error (ts(2353)), which Vitest surfaces as a type error.
+        const ability: Ability = {
+            id: 'tcf-test',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            triggerCritFilter: 'crit',
+            config: {
+                type: 'buff',
+                buffName: 'Crit Only Buff',
+                stacks: 1,
+                parsedEffects: { attack: 10 },
+                isStackable: false,
+                duration: 1,
+            },
+        };
+        expect(ability.triggerCritFilter).toBe('crit');
+    });
+
+    it('Ability accepts triggerCritFilter "non-crit" and the value round-trips', () => {
+        const ability: Ability = {
+            id: 'tcf-test-nc',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            triggerCritFilter: 'non-crit',
+            config: {
+                type: 'buff',
+                buffName: 'NonCrit Only Buff',
+                stacks: 1,
+                parsedEffects: { attack: 5 },
+                isStackable: false,
+                duration: 1,
+            },
+        };
+        expect(ability.triggerCritFilter).toBe('non-crit');
+    });
+
+    it('Ability with no triggerCritFilter has the field undefined (absent → fires on any hit)', () => {
+        const ability: Ability = {
+            id: 'tcf-absent',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Any Hit Buff',
+                stacks: 1,
+                parsedEffects: { attack: 5 },
+                isStackable: false,
+                duration: 1,
+            },
+        };
+        expect(ability.triggerCritFilter).toBeUndefined();
+    });
+
+    it('Intent accepts eventCtx with counterTargetId and the value round-trips', () => {
+        // If eventCtx is not on the Intent interface this line causes a TypeScript
+        // compile error (ts(2353)), which Vitest surfaces as a type error.
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'ctx-test',
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Counter Debuff',
+                    stacks: 1,
+                    parsedEffects: { defense: -10 },
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 2,
+                },
+            },
+            eventCtx: { counterTargetId: 'enemy-1' },
+        };
+        expect(intent.eventCtx?.counterTargetId).toBe('enemy-1');
+    });
+
+    it('Intent with eventCtx but no counterTargetId has counterTargetId undefined', () => {
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'ctx-empty',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            },
+            eventCtx: {},
+        };
+        expect(intent.eventCtx?.counterTargetId).toBeUndefined();
+    });
+
+    it('Intent without eventCtx has the field undefined (normal non-event-context intent)', () => {
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'no-ctx',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            },
+        };
+        expect(intent.eventCtx).toBeUndefined();
+    });
+});

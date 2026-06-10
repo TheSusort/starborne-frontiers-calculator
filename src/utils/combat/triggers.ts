@@ -71,6 +71,11 @@ export interface Intent {
     ability: Ability;
     sourceSlot: SkillSlot;
     ownerId: string;
+    /** Event context captured by the listener at enqueue time (per-event intents).
+     *  `counterTargetId`: the attacking enemy's actor id for "on that enemy"
+     *  counter-inflictions (Warden) — the executor's debuff branch routes the
+     *  application to THIS enemy's per-target store instead of the default. */
+    eventCtx?: { counterTargetId?: string };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
