@@ -1757,4 +1757,274 @@ describe('healingGoldenParity', () => {
             },
         ]);
     });
+
+    // =========================================================================
+    // PHASE 4c PR 2 (on-ally-attacked reactives) — NEW BEHAVIOUR GOLDENS
+    // (Task 12). The engine now reacts to attacks on OTHER player actors: the
+    // on-ally-attacked listener fires per HIT on any non-owner, non-enemy
+    // target (triggers.ts), optionally filtered by the damaged ally's role
+    // category (roleFilter — unknown role never matches, conservative). The
+    // per-event intent carries eventCtx.damagedAllyId; the executor routes an
+    // 'ally'-target heal/buff payload to exactly THAT ally. Reactive-heal fold
+    // (executor): basis × pct/100 × healModifier × outgoing × incoming (all 0
+    // here → bare), basis 'hp' = the OWNER's effectiveMaxHp from its last-turn
+    // ctx; reactive heals NEVER crit. Reactive buffs stamp casterId = the
+    // granting owner, so a granted Repair Over Time ticks on the HOLDER's turn
+    // for the APPLIER's maxHp × hotPct% (foreign-applier ctx rule: the applier
+    // must have taken a turn, else the tick is skipped).
+    // =========================================================================
+
+    // ── Scenario 24 (A): ally-damage repair routes to the damaged tank (per hit) ──
+    // HAND-VERIFIED. The FOCUS healer (hp 10000, speed 100) carries a passive
+    // on-ally-attacked 'ally'-target heal (pct 8, basis 'hp'). The heal target is a separate
+    // walked team actor ('tank', hp 240000, defence 0, speed 80). A ship-backed enemy
+    // (attack 2000, crit 0, speed 50) fires a 2-HIT active damage ability (multiplier 100 →
+    // effectiveMultiplier 200) at the tank → TWO `attacked` events per round → the unfiltered
+    // reaction fires TWICE per round, each routed to eventCtx.damagedAllyId = 'tank'.
+    //
+    // Reactive heal per event (executor fold): owner effectiveMaxHp 10000 × 8% = 800;
+    // healModifier 0 × outgoingHeal 0 × tank incomingHeal 0 → bare 800 (reactive heals never
+    // crit). 2 events/round → directHeal 1600/round, credited to the FOCUS owner; consumption
+    // routes to the tank (damagedAllyId === healTargetId).
+    // Enemy damage: 2000 × 200% = 4000/round (defence 0, crit 0, neutral affinity). The
+    // reactive heals drain AFTER the enemy's turn body → full deficit at drain time →
+    // effective 1600, overheal 0, every round.
+    // Tank HP: net −4000 + 1600 = −2400/round = exactly 1% of 240000 →
+    //   targetHpPct entering [100, 99, 98, 97, 96, 95]. cumulativeHealing 1600 × n.
+    // teamHealing 0 (the tank has no kit; all healing is the focus's reaction).
+    const scenario24Input = () => {
+        const tank: TeamActorInput = {
+            id: 'tank',
+            speed: 80, // acts after the healer (100), before the enemy (50)
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 240000, // net −2400/round = 1% → clean entering percentages
+            },
+        };
+        return BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 10000 },
+            healTargetId: 'tank',
+            teamActors: [tank],
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'ally',
+                                trigger: 'on-ally-attacked',
+                                config: { type: 'heal', pct: 8, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 2 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+    };
+
+    snap(
+        'ally-damage repair routes to the damaged tank (per hit: 2-hit enemy → 2 reactions/round)',
+        scenario24Input
+    );
+
+    // Supplementary: the per-hit contract — 2 hits/round → 2 × 800 = 1600 directHeal credited
+    // to the focus healer, all effective on the tank (heals drain into the post-attack deficit).
+    it('scenario 24: per-round reaction heal is 2 × 8% of healer max HP (1600), all effective', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario24Input());
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([
+            1600, 1600, 1600, 1600, 1600, 1600,
+        ]);
+        expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([
+            1600, 1600, 1600, 1600, 1600, 1600,
+        ]);
+        expect(result.rounds.map((r) => r.overheal)).toEqual([0, 0, 0, 0, 0, 0]);
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([
+            4000, 4000, 4000, 4000, 4000, 4000,
+        ]);
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 98, 97, 96, 95]);
+    });
+
+    // ── Scenario 25 (B): role-filtered RoT grant — dormant vs live (Graphite) ──
+    // HAND-VERIFIED. A walked team owner ('graphite', hp 50000, speed 120) carries a passive
+    // on-ally-attacked 'ally'-target BUFF roleFilter ['ATTACKER','DEBUFFER']: Repair Over Time
+    // III (hotPct 5, duration 2). The heal target is a second team actor ('tank', hp 100000,
+    // defence 0, speed 80) whose `role` is the experiment variable; a bare enemy (attack 1000,
+    // speed 10) hits it once per round. The focus healer (speed 200) has an empty kit — it
+    // only anchors the run.
+    //
+    // DORMANT (role 'DEFENDER', outside the filter): the listener's role gate rejects every
+    // event → no grant, no ticks → teamTotalHealing 0; the tank bleeds 1000/round
+    // (targetHpPct entering [100, 99, 98, 97]).
+    //
+    // LIVE (role 'ATTACKER'): each round's enemy hit grants the RoT to the tank with
+    // casterId = 'graphite' (re-granted every round, isStackable false → 1 stack standing).
+    // HoT tick contract (playerTurn.ts): the buff ticks on the HOLDER's (tank's) turn for
+    // applierMaxHp × hotPct% × stacks × (1 + holderIncomingHeal%) = 50000 × 5% × 1 × 1 = 2500,
+    // credited to GRAPHITE's hotHeal bucket → the adapter folds it into teamHealing (graphite
+    // is not the focus), NOT rounds[].hotHeal.
+    // Turn order / foreign-applier ctx (verified empirically, matches expectation): the
+    // round-1 grant lands on the ENEMY's turn (last in the round, speed 10), AFTER the tank's
+    // round-1 turn → the first tick is on the tank's ROUND-2 turn. Graphite (speed 120) acts
+    // before the tank every round and already acted in round 1, so applierMaxHp('graphite')
+    // resolves from its last-turn ctx (50000) — the tick is never skipped from round 2 on.
+    //   ⇒ teamHealing [0, 2500, 2500, 2500]; teamTotalHealing 7500. Tank HP: R1 −1000 →
+    //     99000 (enter R2 at 99%); from R2 the tick (deficit 1000 → consumed 1000, overheal
+    //     1500, credited to graphite) restores full HP before the hit → entering pct holds
+    //     at 99. Focus buckets (directHeal/hotHeal/effectiveHealing) stay 0 throughout.
+    const scenario25Input = (tankRole: TeamActorInput['role']) => {
+        const graphite: TeamActorInput = {
+            id: 'graphite',
+            speed: 120, // acts before the tank (80) every round → applier ctx always resolves
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'buff',
+                                target: 'ally',
+                                trigger: 'on-ally-attacked',
+                                roleFilter: ['ATTACKER', 'DEBUFFER'],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Repair Over Time III',
+                                    parsedEffects: { hotPct: 5 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 50000, // applier basis for the HoT tick → 50000 × 5% = 2500
+            },
+        };
+        const tank: TeamActorInput = {
+            id: 'tank',
+            speed: 80,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 100000,
+            },
+            ...(tankRole ? { role: tankRole } : {}),
+        };
+        return BASE({
+            rounds: 4,
+            healer: { ...HEALER, speed: 200 },
+            healTargetId: 'tank',
+            teamActors: [graphite, tank],
+            shipSkills: { slots: [] },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+    };
+
+    snap('role-filtered RoT grant DORMANT (tank role DEFENDER outside the filter)', () =>
+        scenario25Input('DEFENDER')
+    );
+    snap('role-filtered RoT grant LIVE (tank role ATTACKER → graphite HoT ticks)', () =>
+        scenario25Input('ATTACKER')
+    );
+
+    // Supplementary: dormant variant — the role gate keeps the reaction silent end-to-end
+    // (no grant event, zero team healing, the tank just bleeds).
+    it('scenario 25: DEFENDER tank → no RoT grant, zero team healing (dormant)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        let grants = 0;
+        bus.on('buff-applied', (e) => {
+            if ((e as { buffName?: string }).buffName === 'Repair Over Time III') grants++;
+        });
+        const result = simulateHealing({ ...scenario25Input('DEFENDER'), bus });
+        expect(grants).toBe(0);
+        expect(result.summary.teamTotalHealing).toBe(0);
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 98, 97]);
+    });
+
+    // Supplementary: live variant — the grant lands on the tank every round; the HoT ticks on
+    // the tank's turn from ROUND 2 (round-1 grant lands AFTER the tank's round-1 turn) for
+    // graphite's maxHp × 5% = 2500, surfaced as teamHealing (graphite is a non-focus applier).
+    it('scenario 25: ATTACKER tank → RoT granted each round, 2500 team HoT/round from round 2', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const grants: Array<{ actorId: string }> = [];
+        bus.on('buff-applied', (e) => {
+            if ((e as { buffName?: string }).buffName === 'Repair Over Time III')
+                grants.push(e as unknown as { actorId: string });
+        });
+        const result = simulateHealing({ ...scenario25Input('ATTACKER'), bus });
+        expect(grants.length).toBe(4); // one grant per enemy attack turn
+        expect(grants.every((g) => g.actorId === 'tank')).toBe(true);
+        expect(result.rounds.map((r) => r.teamHealing)).toEqual([0, 2500, 2500, 2500]);
+        expect(result.summary.teamTotalHealing).toBe(7500);
+        // The tick is credited to graphite (non-focus) → focus buckets stay empty.
+        expect(result.rounds.map((r) => r.hotHeal)).toEqual([0, 0, 0, 0]);
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 0]);
+        // The 2500 tick out-heals the 1000 hit from round 2 → entering HP holds at 99%.
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 99, 99]);
+    });
 });
