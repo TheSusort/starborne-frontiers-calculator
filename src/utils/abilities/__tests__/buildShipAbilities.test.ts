@@ -1333,10 +1333,13 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Cultivator clause 2: on-ally-directly-damaged passive repair is an unmodeled reactive trigger → NOT emitted', () => {
-            // The engine doesn't model an on-ally-damaged trigger, so emitting this heal would
-            // make it fire EVERY round (phantom). It's disqualified in parseHealAbilities until a
-            // live trigger exists (Phase 4b/4c). The HP basis (not leech) is what makes it a phantom.
+        it('Cultivator clause 2: on-ally-directly-damaged passive repair IS emitted, healing the damaged ally', () => {
+            // Phase 4c PR 2 (Task 8): parseHealAbilities now parses ally-subject damage
+            // reactions with damageReaction.allySubject, so the heal is emitted and the
+            // ally-damage trigger shape flips the bare repair to the damaged ally.
+            // TODO(Task 9): buildShipAbilities still routes any damageReaction heal to
+            // 'on-attacked' — Task 9 consumes allySubject and reroutes this to
+            // 'on-ally-attacked'; update the trigger expectation then.
             const s = ship({
                 type: 'SUPPORTER',
                 thirdPassiveSkillText:
@@ -1344,7 +1347,13 @@ describe('buildShipAbilities', () => {
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
-            expect(heal).toBeUndefined();
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
         });
 
         it('Morao: cleanse-trigger on a DEFENDER passive → both repairs stay self', () => {
@@ -1452,14 +1461,25 @@ describe('buildShipAbilities', () => {
             expect(heal!.triggerCritFilter).toBeUndefined();
         });
 
-        it('Heliodor SECOND passive (ally recipient): still emits NO heal (PR 2 scope)', () => {
+        it('Heliodor SECOND passive (all-allies recipient): emits an on-attacked heal to all allies (Task 8)', () => {
+            // Phase 4c PR 2 (Task 8): self-subject trigger with a NON-SELF recipient now
+            // parses — "them" resolves to "all allies" (antecedent earlier in the sentence),
+            // so the self-damage reaction heals the whole team. Correctly on-attacked (the
+            // OWNER is the damaged unit); no Task 9 change expected here.
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
-            expect(heal).toBeUndefined();
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'all-allies',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+            expect(heal!.triggerCritFilter).toBeUndefined();
         });
     });
 
