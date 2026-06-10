@@ -580,7 +580,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Bomb III',
-        description: '300% Damage',
+        description: '300% Attack',
         type: 'debuff',
     },
     {

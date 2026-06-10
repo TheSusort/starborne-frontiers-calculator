@@ -1718,6 +1718,7 @@ export function runCombat(input: CombatEngineInput): {
                 focusTurns.push({
                     action: 'active',
                     roundCrit: false,
+                    hitCrits: [],
                     enemyHpPct,
                     dotsConfig: [],
                     dotsLanded: true,
@@ -1885,6 +1886,27 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
+                        // Healing mode: the heal target's current/max HP is read from the SAME
+                        // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure
+                        // always sees post-drain HP state. Any non-tank id returns 100 (pre-4c
+                        // default). DPS mode: no healTarget → every id returns 100 → byte-identical.
+                        ...(healTarget
+                            ? {
+                                  selfHpPctFor: (ownerId: string): number => {
+                                      if (ownerId !== healTarget.id) return 100;
+                                      // Same denominator as the cast-path selfHpPct (baseHpFor) —
+                                      // a buffed max HP must not make the gate flip at different
+                                      // thresholds at cast vs drain time.
+                                      const maxHp = baseHpFor(healTarget.id);
+                                      if (maxHp <= 0) return 100;
+                                      return Math.max(
+                                          0,
+                                          Math.min(100, (healTarget.currentHp / maxHp) * 100)
+                                      );
+                                  },
+                              }
+                            : {}),
                     });
                 }
             }
@@ -2305,6 +2327,10 @@ export function runCombat(input: CombatEngineInput): {
                     // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                     // scoped inside the else block below; this flag carries its roundCrit out.
                     let enemyTurnDidCrit = false;
+                    // Hoisted for per-hit `attacked` emission (Phase 4c Task 3): populated from
+                    // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
+                    // path and on the manual flat-enemy path (which has no hitCrits to surface).
+                    let enemyHitCrits: boolean[] = [];
                     if (targetDead) {
                         // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                         // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -2379,6 +2405,8 @@ export function runCombat(input: CombatEngineInput): {
                         damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
                         // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
                         enemyTurnDidCrit = enemyTurn.roundCrit;
+                        // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
+                        enemyHitCrits = enemyTurn.hitCrits;
                         // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                         // its own future DoT entries would tick with this ctx).
                         lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -2451,23 +2479,24 @@ export function runCombat(input: CombatEngineInput): {
                             }
                         }
 
-                        // Emit `attacked` after the drain so the target's HP/shield state
-                        // is already updated when on-attacked reactive listeners fire. The
-                        // event is per ATTACK TURN (aggregate — not per-hit), consistent
-                        // with the existing per-attack `damage-taken` proc model above.
-                        // `didCrit` is present-only-when-true (Task 4 spec); value hoisted
-                        // from enemyTurn.roundCrit (enemyTurnDidCrit set in the else block).
-                        // Only emitted when the target was ALIVE at attack start (damage > 0
-                        // is only reachable on the live-target path — the dead-target guard
-                        // above routes to the cadence-only block and never reaches here).
-                        // drainIntents() at point (b) below drains the on-attacked intent.
-                        bus.emit({
-                            type: 'attacked',
-                            targetId: healTarget!.id,
-                            attackerId: actor.id,
-                            round: r,
-                            ...(enemyTurnDidCrit ? { didCrit: true } : {}),
-                        });
+                        // Per-hit `attacked` (Phase 4c PR 1): one event per hit of the enemy's fired
+                        // damage ability, each carrying ITS OWN hit's crit outcome. Emitted after the
+                        // aggregate shield-first drain (damage application stays per-attack — spec §3.1),
+                        // so every event observes the same post-drain HP/shield state. A turn with
+                        // damage > 0 but an empty enemyHitCrits (manual flat enemy, a noCrit damage
+                        // ability, or a cast with no damage ability) falls back to one event with the
+                        // roundCrit binary — the pre-4c contract.
+                        const hitOutcomes =
+                            enemyHitCrits.length > 0 ? enemyHitCrits : [enemyTurnDidCrit];
+                        for (const hitCrit of hitOutcomes) {
+                            bus.emit({
+                                type: 'attacked',
+                                targetId: healTarget!.id,
+                                attackerId: actor.id,
+                                round: r,
+                                ...(hitCrit ? { didCrit: true } : {}),
+                            });
+                        }
                     }
                 }
 

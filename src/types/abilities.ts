@@ -227,6 +227,10 @@ export interface Ability {
     target: AbilityTarget;
     trigger: AbilityTrigger;
     conditions: Condition[];
+    /** Hit filter for attacked-family reactive triggers (on-attacked): 'crit' fires only
+     *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
+     *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
+    triggerCritFilter?: 'crit' | 'non-crit';
     scaling?: ScalingRule;
     config: AbilityConfig;
     autoFilled?: boolean;

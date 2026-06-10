@@ -26,6 +26,7 @@ import {
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
+    detectDamageReactionTrigger,
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
@@ -871,28 +872,50 @@ function abilitiesFromText(
         const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
+        // Phase 4c PR 1: a SELF-subject damage-reaction heal (parser annotation
+        // `damageReaction`) rides the on-attacked reactive trigger. It takes PRECEDENCE
+        // over the position-scoped detector chain below — the annotation is
+        // SENTENCE-scoped by the parser (set only when the heal's own sentence carries
+        // the trigger), where the detectors infer from an anchor position that can land
+        // on the wrong tag when pcts repeat.
+        //
         // Pallas: a heal/shield whose anchor falls in the "when this unit critically repairs an
         // ally" sentence rides the on-ally-critically-repaired reactive trigger (position-scoped;
         // undefined → on-cast). APEX: a SHIELD whose anchor falls in the "when an enemy gets
         // debuffed" sentence rides on-debuff-inflicted (own inflictions; position-scoped). Both
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
-        const reactiveTrigger =
-            detectCritRepairTrigger(text, healPos) ??
-            // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
-            // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
-            // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
-            detectCheatDeathActivatedTrigger(text, healPos) ??
-            // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
-            // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
-            // position-scoped). The parser only emits this all-allies heal when that shape is
-            // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
-            detectDestroyedTrigger(text, healPos) ??
-            (h.kind === 'shield'
-                ? (detectDebuffInflictedTrigger(text, healPos) ??
-                  // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
-                  // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
-                  detectStasisAppliedTrigger(text, healPos))
-                : undefined);
+        const reactiveTrigger = h.damageReaction
+            ? ('on-attacked' as const)
+            : (detectCritRepairTrigger(text, healPos) ??
+              // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
+              // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
+              // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
+              detectCheatDeathActivatedTrigger(text, healPos) ??
+              // Salvation: a repair anchored in the "when this Unit is destroyed … repairs … to
+              // all allies" sentence rides the on-destroyed reactive trigger (self-death scoped;
+              // position-scoped). The parser only emits this all-allies heal when that shape is
+              // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
+              detectDestroyedTrigger(text, healPos) ??
+              (h.kind === 'shield'
+                  ? (detectDebuffInflictedTrigger(text, healPos) ??
+                    // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
+                    // on-stasis-applied reactive trigger (own-cast scoped; position-scoped).
+                    detectStasisAppliedTrigger(text, healPos))
+                  : undefined));
+        // The "while below N% HP" gate is DERIVABLE: the executor evaluates the self
+        // hp-threshold against live tank HP at drain time (Phase 4c Task 6).
+        const damageReactionConditions: Condition[] =
+            h.damageReaction?.hpBelowPct !== undefined
+                ? [
+                      {
+                          subject: 'hp-threshold',
+                          derivable: true,
+                          hpComparator: 'below',
+                          hpPercent: h.damageReaction.hpBelowPct,
+                          hpSubject: 'self',
+                      },
+                  ]
+                : [];
         // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
         // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
         // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
@@ -921,7 +944,12 @@ function abilitiesFromText(
                 type: h.kind,
                 target: healTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
-                conditions: [],
+                // Isha's instead-on-crit pair: 'non-crit' fires only on non-critting hits,
+                // 'crit' only on critting hits (omitted → fires on any hit).
+                ...(h.damageReaction?.critFilter
+                    ? { triggerCritFilter: h.damageReaction.critFilter }
+                    : {}),
+                conditions: damageReactionConditions,
                 config: {
                     type: h.kind,
                     pct: h.pct,
@@ -1161,13 +1189,47 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // and bomb-detonate phrasings produce no condition from detectGrantConditions). Any other
         // conditions (e.g. an enemy-type co-gate) are preserved.
         const reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
-        if (reactiveTrigger) {
-            ability.trigger = reactiveTrigger;
-            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
-        }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
         const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        if (reactiveTrigger) {
+            ability.trigger = reactiveTrigger;
+            ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
+        } else {
+            // Phase 4c PR 1 (Task 8): a SELF-subject damage-reaction grant/infliction ("When
+            // directly damaged, … inflicts Speed Down I"; Guardian's "When this Unit is
+            // critically hit, it gains …") rides the LIVE on-attacked trigger (+ crit filter)
+            // instead of registering as an unconditional per-round aura (a phantom — the
+            // reactive partition routes it OUT of registerActorAbilityStatuses and into the
+            // executor, which lands enemy-target counter-debuffs on the attacking enemy via
+            // eventCtx.counterTargetId). Sentence-scoped at the buff's own anchor, so grants
+            // in other sentences of the same row are never co-triggered.
+            const reaction =
+                rowText && pos >= 0 ? detectDamageReactionTrigger(rowText, pos) : undefined;
+            if (reaction) {
+                ability.trigger = reaction.trigger;
+                if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+                // "while below N% HP" gate on the reaction sentence (Makoli Disable): attach a
+                // derivable self hp-threshold condition so the executor evaluates the gate at
+                // drain time (live selfHpPct from Task 6) rather than firing on every hit.
+                if (reaction.hpBelowPct !== undefined) {
+                    // Safe overwrite: on a damage-reaction sentence the below-X% gate is the
+                    // ONLY condition — detectGrantConditions has no rule matching these phrasings
+                    // (verified corpus-wide), so this cannot clobber a real gate set earlier.
+                    // If a future ship pairs a reaction sentence with another parsed condition,
+                    // merge the arrays instead of overwriting.
+                    ability.conditions = [
+                        {
+                            subject: 'hp-threshold',
+                            derivable: true,
+                            hpComparator: 'below',
+                            hpPercent: reaction.hpBelowPct,
+                            hpSubject: 'self',
+                        },
+                    ];
+                }
+            }
+        }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };
     // Player-side grants carry their parser ally-scope (self/ally/all-allies) so the engine
@@ -1180,6 +1242,60 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     for (const buff of enemyDebuffs) {
         if (isAccumulateDetonateEffect(buff.buffName)) continue;
         mergeBuff(buff, 'enemy');
+    }
+
+    // Phase 4c PR 1 (Task 8): damage-reaction DoT inflictions on the PASSIVE row (Warden
+    // "When directly damaged, this Unit inflicts Corrosion I … on that enemy", Shepherd) are
+    // NOT DoTs. Spec decision (§3.5): counter-DoT tick damage against an enemy ATTACKER is
+    // deliberately unsimulated — only the focus enemy's incoming DoTs tick, so emitting a dot
+    // here would phantom-credit tick damage the sim never resolves. The named status still
+    // matters (visible in the editor, condition-relevant for enemy-debuff gates), so emit a
+    // name-only DEBUFF (empty parsedEffects → no payload) riding the live on-attacked trigger;
+    // the executor lands it on the attacking enemy via eventCtx.counterTargetId. DoT-named
+    // effects are excluded from BOTH buff auto-fill (isDoTBuffName) and the active/charge DoT
+    // merge above (passive sources skipped), so without this pass they emit nothing.
+    const passiveRowText = getSkillRowForSlot(ship, 'passive')?.text ?? '';
+    if (passiveRowText) {
+        // Source tag is irrelevant here (it only drives stackTrigger classification, which a
+        // reaction-sentence DoT infliction never carries) — 'passive1' is a neutral stand-in.
+        for (const eff of parseSkillEffects(passiveRowText, 'passive1')) {
+            if (eff.target !== 'enemy' || !DOT_TIER_MAP[eff.buffName]) continue;
+            const pos = passiveRowText.indexOf(eff.buffName);
+            const reaction =
+                pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
+            if (!reaction) continue;
+            const dotReactionConditions: Condition[] =
+                reaction.hpBelowPct !== undefined
+                    ? [
+                          {
+                              subject: 'hp-threshold',
+                              derivable: true,
+                              hpComparator: 'below',
+                              hpPercent: reaction.hpBelowPct,
+                              hpSubject: 'self',
+                          },
+                      ]
+                    : [];
+            const ability: Ability = {
+                id: nextId(),
+                type: 'debuff',
+                target: 'enemy',
+                trigger: reaction.trigger,
+                ...(reaction.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
+                conditions: dotReactionConditions,
+                config: {
+                    type: 'debuff',
+                    buffName: eff.buffName,
+                    parsedEffects: {},
+                    stacks: eff.stacks ?? 1,
+                    isStackable: false,
+                    duration: typeof eff.duration === 'number' ? eff.duration : 2,
+                    application: eff.application ?? 'inflict',
+                },
+                autoFilled: true,
+            };
+            pushToSlot(bySlot, 'passive', [{ ability, pos }]);
+        }
     }
 
     // Sort each slot's abilities by their text position (stable sort preserves insertion

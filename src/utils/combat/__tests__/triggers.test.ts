@@ -1557,6 +1557,186 @@ describe('on-attacked live trigger (Task 4)', () => {
         });
         expect(intents).toHaveLength(1);
     });
+
+    // ------------------------------------------------------------------
+    // Task 4 (Phase 4c PR 1): crit filter + per-event eventCtx
+    // ------------------------------------------------------------------
+
+    // (a) triggerCritFilter 'crit' fires only on critting hits
+    it('triggerCritFilter "crit": enqueues only for didCrit:true events targeting the owner', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'crit-only',
+            triggerCritFilter: 'crit',
+        };
+        const ra: ReactiveAbility = { ability: critAbility, sourceSlot: 'passive' };
+
+        // critting hit → should enqueue
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+
+        // non-critting hit (didCrit absent) → should NOT enqueue
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(0);
+    });
+
+    // (b) triggerCritFilter 'non-crit' fires only on non-critting hits
+    it('triggerCritFilter "non-crit": enqueues only for events WITHOUT didCrit', () => {
+        const nonCritAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'non-crit-only',
+            triggerCritFilter: 'non-crit',
+        };
+        const ra: ReactiveAbility = { ability: nonCritAbility, sourceSlot: 'passive' };
+
+        // non-critting hit (didCrit absent) → should enqueue
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+
+        // non-critting hit (didCrit: false) → should ALSO enqueue.
+        // The engine never emits didCrit:false (present-only-when-true), but this locks
+        // listener robustness against any future emitter that includes the explicit falsy flag.
+        const nonCritFalseIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: false,
+        });
+        expect(nonCritFalseIntents).toHaveLength(1);
+
+        // critting hit (didCrit: true) → should NOT enqueue
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(0);
+    });
+
+    // (c) unfiltered ability (no triggerCritFilter) enqueues for both critting and non-critting hits
+    it('unfiltered ability (no triggerCritFilter): enqueues for both critting and non-critting hits', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+
+        // didCrit absent (normal engine path)
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+
+        // didCrit: false (explicit falsy — listener robustness, engine never emits this)
+        const nonCritFalseIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: false,
+        });
+        expect(nonCritFalseIntents).toHaveLength(1);
+    });
+
+    // (d) every enqueued intent carries eventCtx.counterTargetId === e.attackerId
+    it('every enqueued intent carries eventCtx.counterTargetId equal to the attackerId', () => {
+        const ra: ReactiveAbility = { ability: onAttackedBuff(), sourceSlot: 'passive' };
+
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy-attacker-42',
+            round: 1,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('enemy-attacker-42');
+    });
+
+    it('eventCtx.counterTargetId follows the attackerId for critting hits too', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'crit-ctx',
+            triggerCritFilter: 'crit',
+        };
+        const ra: ReactiveAbility = { ability: critAbility, sourceSlot: 'passive' };
+
+        const intents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'enemy-42',
+            round: 1,
+            didCrit: true,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('enemy-42');
+    });
+
+    // (e) mutually exclusive pair: one 'crit' + one 'non-crit' ability on the same owner
+    //     never double-fires — exactly one intent per event
+    it('mutually exclusive crit+non-crit pair: exactly one intent per event (never double-fires)', () => {
+        const critAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'pair-crit',
+            triggerCritFilter: 'crit',
+        };
+        const nonCritAbility: Ability = {
+            ...onAttackedBuff(),
+            id: 'pair-non-crit',
+            triggerCritFilter: 'non-crit',
+        };
+        const ras: ReactiveAbility[] = [
+            { ability: critAbility, sourceSlot: 'passive' },
+            { ability: nonCritAbility, sourceSlot: 'passive' },
+        ];
+
+        // critting hit: only crit fires
+        const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: ras }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: true,
+        });
+        expect(critIntents).toHaveLength(1);
+        expect(critIntents[0].ability.triggerCritFilter).toBe('crit');
+
+        // non-critting hit: only non-crit fires
+        const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: ras }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+        });
+        expect(nonCritIntents).toHaveLength(1);
+        expect(nonCritIntents[0].ability.triggerCritFilter).toBe('non-crit');
+    });
 });
 
 // ----------------------------------------------------------------------
@@ -2006,5 +2186,410 @@ describe('Phase 4b: death/revive triggers in LIVE_TRIGGERS', () => {
     it('AbilityTrigger includes on-cheat-death-activated (type-level compile check)', () => {
         const _trigger: AbilityTrigger = 'on-cheat-death-activated';
         expect(_trigger).toBe('on-cheat-death-activated');
+    });
+});
+
+// ----------------------------------------------------------------------
+// Task 1 (Phase 4c): type-layer additions
+//   - Ability.triggerCritFilter?: 'crit' | 'non-crit'
+//   - Intent.eventCtx?: { counterTargetId?: string }
+// These are structural tests: construct typed literals with the new fields
+// and assert the values round-trip correctly. The tests FAIL until the
+// fields are added to their respective interfaces.
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () => {
+    it('Ability accepts triggerCritFilter "crit" and the value round-trips', () => {
+        // If triggerCritFilter is not on the Ability interface this line causes a
+        // TypeScript compile error (ts(2353)), which Vitest surfaces as a type error.
+        const ability = ab({
+            type: 'buff',
+            trigger: 'on-attacked',
+            triggerCritFilter: 'crit',
+            config: {
+                type: 'buff',
+                buffName: 'Crit Only Buff',
+                stacks: 1,
+                parsedEffects: { attack: 10 },
+                isStackable: false,
+                duration: 1,
+            },
+        });
+        expect(ability.triggerCritFilter).toBe('crit');
+    });
+
+    it('Ability accepts triggerCritFilter "non-crit" and the value round-trips', () => {
+        const ability = ab({
+            type: 'buff',
+            trigger: 'on-attacked',
+            triggerCritFilter: 'non-crit',
+            config: {
+                type: 'buff',
+                buffName: 'NonCrit Only Buff',
+                stacks: 1,
+                parsedEffects: { attack: 5 },
+                isStackable: false,
+                duration: 1,
+            },
+        });
+        expect(ability.triggerCritFilter).toBe('non-crit');
+    });
+
+    it('Ability with no triggerCritFilter has the field undefined (absent → fires on any hit)', () => {
+        const ability = ab({
+            type: 'buff',
+            trigger: 'on-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Any Hit Buff',
+                stacks: 1,
+                parsedEffects: { attack: 5 },
+                isStackable: false,
+                duration: 1,
+            },
+        });
+        expect(ability.triggerCritFilter).toBeUndefined();
+    });
+
+    it('Intent accepts eventCtx with counterTargetId and the value round-trips', () => {
+        // If eventCtx is not on the Intent interface this line causes a TypeScript
+        // compile error (ts(2353)), which Vitest surfaces as a type error.
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'ctx-test',
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Counter Debuff',
+                    stacks: 1,
+                    parsedEffects: { defense: -10 },
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 2,
+                },
+            },
+            eventCtx: { counterTargetId: 'enemy-1' },
+        };
+        expect(intent.eventCtx?.counterTargetId).toBe('enemy-1');
+    });
+
+    it('Intent with eventCtx but no counterTargetId has counterTargetId undefined', () => {
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'ctx-empty',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            },
+            eventCtx: {},
+        };
+        // eventCtx must be present (object present, key absent) — not just "undefined chain"
+        expect(intent.eventCtx).toBeDefined();
+        expect('counterTargetId' in intent.eventCtx!).toBe(false);
+    });
+
+    it('Intent without eventCtx has the field undefined (normal non-event-context intent)', () => {
+        const intent: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'no-ctx',
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            },
+        };
+        expect(intent.eventCtx).toBeUndefined();
+    });
+});
+
+// ----------------------------------------------------------------------
+// Task 5 (Phase 4c PR 1): counter-debuff routing to the attacker's store
+//
+// A debuff intent carrying eventCtx.counterTargetId must:
+//   - apply the timed status to THAT enemy's per-target store
+//   - emit `debuff-applied` with targetId === counterTargetId
+// Without eventCtx the default store and ctx.enemy.id are used (lock
+// existing behaviour).
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId', () => {
+    // Minimal PlayerActorRuntime that always lands (debuffLandingChance=1).
+    const makeRuntime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'attacker' } as CombatActor,
+            landsTimedEnemyApplication: () => true,
+            debuffLandingGate: (_rate: number) => true,
+            debuffLandingChance: 1,
+        }) as unknown as PlayerActorRuntime;
+
+    const makeDebuffIntent = (counterTargetId?: string): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'counter-debuff',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Counter Corrosion',
+                stacks: 1,
+                parsedEffects: { defense: -5 },
+                isStackable: false,
+                application: 'inflict',
+                duration: 2,
+            },
+        },
+        ...(counterTargetId !== undefined ? { eventCtx: { counterTargetId } } : {}),
+    });
+
+    const buildCtx = (): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['attacker', makeRuntime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('routes debuff to the counterTargetId store when eventCtx carries one', () => {
+        const ctx = buildCtx();
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        ctx.bus.on('debuff-applied', (e) => emitted.push(e as { type: string; targetId?: string }));
+
+        executeIntent(makeDebuffIntent('enemy-1'), ctx);
+
+        // The timed ability status lands on the 'enemy-1' per-target store, not the default.
+        const timedEnemy1 = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, 'enemy-1');
+        expect(timedEnemy1.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(true);
+
+        // The default store must NOT have received the debuff.
+        const timedDefault = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, undefined);
+        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(false);
+
+        // debuff-applied event targets 'enemy-1'.
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-1');
+    });
+
+    it('uses the default store and ctx.enemy.id when no eventCtx is present', () => {
+        const ctx = buildCtx();
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        ctx.bus.on('debuff-applied', (e) => emitted.push(e as { type: string; targetId?: string }));
+
+        executeIntent(makeDebuffIntent(), ctx);
+
+        // The timed ability status lands on the default enemy store.
+        const timedDefault = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, undefined);
+        expect(timedDefault.some((s) => s.active.buffName === 'Counter Corrosion')).toBe(true);
+
+        // debuff-applied event targets the default enemy (ctx.enemy.id).
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-default');
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c Task 6: live drain-time selfHpPct
+//
+// buildDrainContext must forward the owner's REAL HP% to the condition gate
+// via ctx.selfHpPctFor?(ownerId). A heal intent gated on below-40% HP:
+//   - is SKIPPED when the delegate reports 80%
+//   - EXECUTES when the delegate reports 30%
+//   - when no delegate is provided (legacy ctx), defaults to 100 → gate
+//     never met for below-threshold conditions.
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
+    // A heal intent gated on "self HP below 40%".
+    const makeHealIntent = (): Intent => ({
+        ownerId: 'A',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'low-hp-heal',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 40,
+                    hpSubject: 'self',
+                },
+            ],
+            config: { type: 'heal', pct: 50, basis: 'hp' },
+        },
+    });
+
+    const runtime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'A' } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const buildCtx = (
+        selfHpPctFor?: (ownerId: string) => number
+    ): { ctx: IntentExecContext; applied: number[] } => {
+        const applied: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'A',
+            credit: () => {},
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: ['A'],
+        };
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy' } as CombatActor,
+            enemyId: 'enemy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['A', runtime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['A'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            healing,
+            ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
+        };
+        return { ctx, applied };
+    };
+
+    it('SKIPS the heal when the delegate reports HP 80% (above the 40% gate)', () => {
+        const { ctx, applied } = buildCtx(() => 80);
+        executeIntent(makeHealIntent(), ctx);
+        expect(applied).toHaveLength(0);
+    });
+
+    it('EXECUTES the heal when the delegate reports HP 30% (below the 40% gate)', () => {
+        const { ctx, applied } = buildCtx(() => 30);
+        executeIntent(makeHealIntent(), ctx);
+        // 50% of owner hp (1000) = 500
+        expect(applied).toEqual([500]);
+    });
+
+    it('defaults to selfHpPct 100 (gate never met) when no delegate is provided', () => {
+        // No selfHpPctFor → buildDrainContext falls back to 100, which is above 40 → skip.
+        const { ctx, applied } = buildCtx(undefined);
+        executeIntent(makeHealIntent(), ctx);
+        expect(applied).toHaveLength(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c Task 6 (incidental cleanup — Task 5 code review):
+//
+// A debuff intent WITH eventCtx.counterTargetId whose owner's
+// landsTimedEnemyApplication returns false must emit `debuff-resisted`
+// with targetId === ctx.enemy.id (locks the deliberate resisted-path
+// asymmetry: the resisted path always uses the default ctx.enemy.id,
+// not counterTargetId).
+// ----------------------------------------------------------------------
+describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 cleanup lock)', () => {
+    const makeResistableDebuffIntent = (counterTargetId: string): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'counter-debuff-resisted',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Counter Shred',
+                stacks: 1,
+                parsedEffects: { defense: -5 },
+                isStackable: false,
+                application: 'inflict',
+                duration: 2,
+            },
+        },
+        eventCtx: { counterTargetId },
+    });
+
+    it('debuff-resisted emits with targetId === ctx.enemy.id even when counterTargetId is set', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        const emitted: Array<{ type: string; targetId?: string }> = [];
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([
+                [
+                    'attacker',
+                    {
+                        actor: { id: 'attacker' } as CombatActor,
+                        // landsTimedEnemyApplication returns false → resist path
+                        landsTimedEnemyApplication: () => false,
+                        debuffLandingGate: (_rate: number) => false,
+                        debuffLandingChance: 1,
+                    } as unknown as PlayerActorRuntime,
+                ],
+            ]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+        ctx.bus.on('debuff-resisted', (e) =>
+            emitted.push(e as { type: string; targetId?: string })
+        );
+
+        executeIntent(makeResistableDebuffIntent('enemy-attacker-99'), ctx);
+
+        // debuff-resisted must point at ctx.enemy.id, not the counterTargetId.
+        expect(emitted).toHaveLength(1);
+        expect(emitted[0].targetId).toBe('enemy-default');
     });
 });

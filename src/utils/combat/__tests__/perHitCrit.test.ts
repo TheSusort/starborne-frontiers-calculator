@@ -22,7 +22,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
+import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
+import { createActor } from '../state';
+import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
+import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
 let idCounter = 0;
@@ -202,6 +206,7 @@ describe('perHitCrit', () => {
     });
 
     // ── Test 6: single-hit 50% crit — events with didCrit carry critHits: 1 ─
+    // (existing test — unchanged)
     // Gate (rate=0.5, 1 draw per round):
     //   R1: acc=0.5 (no) → didCrit=false
     //   R2: acc=1.0 → fire, acc=0 → didCrit=true, critHits=1
@@ -231,5 +236,215 @@ describe('perHitCrit', () => {
         expect(performed[2].critHits).toBeUndefined();
         expect(performed[3].didCrit).toBe(true);
         expect(performed[3].critHits).toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// hitCrits on PlayerTurnResult — runPlayerTurn direct tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal PlayerActorRuntime with a given crit gate (always-true or always-false)
+ * and a skill with the specified hit count.
+ */
+function makeHitCritRuntime(skills: ShipSkills, critAlwaysFires: boolean): PlayerActorRuntime {
+    const actor = createActor({
+        id: 'attacker',
+        side: 'player',
+        kind: 'attacker',
+        stats: {
+            attack: 10000,
+            crit: critAlwaysFires ? 100 : 0,
+            critDamage: 100,
+            defensePenetration: 0,
+            defence: 0,
+            hp: 20000,
+            speed: 100,
+        },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // Gate: always-true → every hit crits; always-false → no hit crits.
+    // Note: rateAccumulator-based gate at crit=100 fires on draw 1, so we use a simple closure.
+    const alwaysFire: PlayerActorRuntime['activeCritGate'] = () => true;
+    const neverFire: PlayerActorRuntime['activeCritGate'] = () => false;
+    const gate = critAlwaysFires ? alwaysFire : neverFire;
+
+    return {
+        actor,
+        focus: true,
+        castSkills: skills,
+        reactiveAbilities: [],
+        timedSelfBySlot: [],
+        timedEnemyBySlot: [],
+        hasChargedSkill: false,
+        attack: 10000,
+        crit: critAlwaysFires ? 100 : 0,
+        critDamage: 100,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 20000,
+        healModifier: 0,
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        affinityDisadvantage: false,
+        activeCritGate: gate,
+        chargedCritGate: gate,
+        activeHealCritGate: neverFire,
+        chargedHealCritGate: neverFire,
+        debuffLandingGate: makeRateGate(),
+        extendChanceGate: makeRateGate(),
+        landsTimedEnemyApplication: () => true,
+        selfBuffLookup: new Map(),
+        enemyDebuffLookup: new Map(),
+    };
+}
+
+/** Build minimal PlayerTurnArgs for a standalone runPlayerTurn call. */
+function makeHitCritArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
+    const enemy = createActor({
+        id: 'enemy',
+        side: 'enemy',
+        kind: 'enemy',
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            defence: 0,
+            hp: 10_000_000,
+            speed: 50,
+        },
+    });
+
+    const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    statusEngine.beginRound(1);
+
+    return {
+        runtime,
+        enemy,
+        statusEngine,
+        corrosionEntries: [],
+        infernoEntries: [],
+        pendingBombs: [],
+        pendingAccumulators: [],
+        enemyDefense: 0,
+        enemyHp: 10_000_000,
+        enemyType: undefined,
+        bus: createEventBus(),
+        round: 1,
+        enemyHpDecline: 0,
+    };
+}
+
+describe('hitCrits on PlayerTurnResult', () => {
+    // ── Test 7: 100% crit, 3-hit → hitCrits = [true, true, true] ─────────────
+    it('100% crit 3-hit: hitCrits has length 3 and all true', () => {
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'dmg-hc1',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100, hits: 3 },
+                        },
+                    ],
+                },
+            ],
+        };
+        const runtime = makeHitCritRuntime(skills, true);
+        const result = runPlayerTurn(makeHitCritArgs(runtime));
+        expect(result.hitCrits).toHaveLength(3);
+        expect(result.hitCrits.every(Boolean)).toBe(true);
+        // consistency: roundCrit === hitCrits.some(Boolean)
+        expect(result.roundCrit).toBe(result.hitCrits.some(Boolean));
+    });
+
+    // ── Test 8: 0% crit, 3-hit → hitCrits = [false, false, false] ────────────
+    it('0% crit 3-hit: hitCrits has length 3 and all false', () => {
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'dmg-hc2',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100, hits: 3 },
+                        },
+                    ],
+                },
+            ],
+        };
+        const runtime = makeHitCritRuntime(skills, false);
+        const result = runPlayerTurn(makeHitCritArgs(runtime));
+        expect(result.hitCrits).toHaveLength(3);
+        expect(result.hitCrits.every((v) => !v)).toBe(true);
+        expect(result.roundCrit).toBe(false);
+        expect(result.roundCrit).toBe(result.hitCrits.some(Boolean));
+    });
+
+    // ── Test 9: no damage ability → hitCrits = [] ────────────────────────────
+    it('skill with no damage ability: hitCrits is empty array', () => {
+        // A skill with only a charge ability (no damage) — no damage ability fired.
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'charge-hc1',
+                            type: 'charge',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'charge', amount: 1 },
+                        },
+                    ],
+                },
+            ],
+        };
+        const runtime = makeHitCritRuntime(skills, true);
+        const result = runPlayerTurn(makeHitCritArgs(runtime));
+        expect(result.hitCrits).toEqual([]);
+    });
+
+    // ── Test 10: consistency for single-hit 100% crit ────────────────────────
+    it('1-hit 100% crit: hitCrits = [true], roundCrit = true, consistency holds', () => {
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'dmg-hc3',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100 },
+                        },
+                    ],
+                },
+            ],
+        };
+        const runtime = makeHitCritRuntime(skills, true);
+        const result = runPlayerTurn(makeHitCritArgs(runtime));
+        expect(result.hitCrits).toEqual([true]);
+        expect(result.roundCrit).toBe(true);
+        expect(result.roundCrit).toBe(result.hitCrits.some(Boolean));
     });
 });

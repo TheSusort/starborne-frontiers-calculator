@@ -732,14 +732,42 @@ export const AbilityCard: React.FC<Props> = ({
                         label="Trigger"
                         value={ability.trigger}
                         options={TRIGGER_OPTIONS}
-                        onChange={(value) =>
-                            onChange({ ...ability, trigger: value as AbilityTrigger })
-                        }
+                        onChange={(value) => {
+                            if (value === 'on-attacked') {
+                                onChange({ ...ability, trigger: value as AbilityTrigger });
+                            } else {
+                                const { triggerCritFilter: _removed, ...rest } = ability;
+                                onChange({ ...rest, trigger: value as AbilityTrigger });
+                            }
+                        }}
                     />
                     {ability.trigger !== 'on-cast' && !LIVE_TRIGGERS.has(ability.trigger) && (
                         <p className="text-xs text-theme-text-secondary">
                             Not simulated — treated as assume-active
                         </p>
+                    )}
+                    {ability.trigger === 'on-attacked' && (
+                        <Select
+                            label="Hit filter"
+                            value={ability.triggerCritFilter ?? 'any'}
+                            options={[
+                                { value: 'any', label: 'Any hit' },
+                                { value: 'crit', label: 'Only critical hits' },
+                                { value: 'non-crit', label: 'Only non-critical hits' },
+                            ]}
+                            onChange={(value) => {
+                                if (value === 'any') {
+                                    const { triggerCritFilter: _removed, ...rest } = ability;
+                                    onChange(rest as Ability);
+                                } else {
+                                    onChange({
+                                        ...ability,
+                                        triggerCritFilter: value as 'crit' | 'non-crit',
+                                    });
+                                }
+                            }}
+                            helpLabel="Per-hit: a multi-hit attack checks each hit separately"
+                        />
                     )}
                 </>
             )}

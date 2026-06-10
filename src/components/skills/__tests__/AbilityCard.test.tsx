@@ -296,6 +296,29 @@ describe('AbilityCard', () => {
                 screen.queryByText(/not simulated — treated as assume-active/i)
             ).not.toBeInTheDocument();
         });
+
+        it('strips triggerCritFilter when trigger is changed away from on-attacked', () => {
+            const abilityWithCritFilter: Ability = {
+                ...buffAbility,
+                trigger: 'on-attacked',
+                triggerCritFilter: 'crit',
+            };
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={abilityWithCritFilter}
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            // Open the Trigger dropdown and switch to "on-crit"
+            fireEvent.click(screen.getByLabelText('Trigger'));
+            fireEvent.click(screen.getByText('On critical hit'));
+            expect(onChange).toHaveBeenCalledOnce();
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.trigger).toBe('on-crit');
+            expect(Object.prototype.hasOwnProperty.call(updated, 'triggerCritFilter')).toBe(false);
+        });
     });
 
     describe('extra-action ability', () => {
@@ -593,6 +616,111 @@ describe('AbilityCard', () => {
             expect(
                 screen.queryByLabelText('Only when damage punches through shield')
             ).not.toBeInTheDocument();
+        });
+    });
+
+    describe('Hit filter select (on-attacked trigger)', () => {
+        const shieldOnAttacked: Ability = {
+            id: 'a7',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: { type: 'shield', pct: 20, basis: 'hp' },
+        };
+
+        const buffOnAttacked: Ability = {
+            id: 'a8',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: '',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+            },
+        };
+
+        it('renders a Hit filter select when trigger is on-attacked', () => {
+            render(
+                <AbilityCard ability={shieldOnAttacked} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.getByLabelText('Hit filter')).toBeInTheDocument();
+        });
+
+        it('shows the three hit filter options', () => {
+            render(
+                <AbilityCard ability={shieldOnAttacked} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            fireEvent.click(screen.getByLabelText('Hit filter'));
+            expect(screen.getAllByText('Any hit').length).toBeGreaterThan(0);
+            expect(screen.getByText('Only critical hits')).toBeInTheDocument();
+            expect(screen.getByText('Only non-critical hits')).toBeInTheDocument();
+        });
+
+        it('defaults to "Any hit" when triggerCritFilter is absent', () => {
+            render(
+                <AbilityCard ability={shieldOnAttacked} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            // The trigger button text shows the selected option
+            expect(screen.getByText('Any hit')).toBeInTheDocument();
+        });
+
+        it('shows "Only critical hits" when triggerCritFilter is crit', () => {
+            const ability: Ability = { ...shieldOnAttacked, triggerCritFilter: 'crit' };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByText('Only critical hits')).toBeInTheDocument();
+        });
+
+        it('shows "Only non-critical hits" when triggerCritFilter is non-crit', () => {
+            const ability: Ability = { ...shieldOnAttacked, triggerCritFilter: 'non-crit' };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByText('Only non-critical hits')).toBeInTheDocument();
+        });
+
+        it('selecting "Only critical hits" calls onChange with triggerCritFilter: crit', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={buffOnAttacked} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Hit filter'));
+            fireEvent.click(screen.getByText('Only critical hits'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({ triggerCritFilter: 'crit' })
+            );
+        });
+
+        it('selecting "Only non-critical hits" calls onChange with triggerCritFilter: non-crit', () => {
+            const onChange = vi.fn();
+            render(<AbilityCard ability={buffOnAttacked} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Hit filter'));
+            fireEvent.click(screen.getByText('Only non-critical hits'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({ triggerCritFilter: 'non-crit' })
+            );
+        });
+
+        it('selecting "Any hit" calls onChange WITHOUT triggerCritFilter key (undefined/absent)', () => {
+            const onChange = vi.fn();
+            const ability: Ability = { ...shieldOnAttacked, triggerCritFilter: 'crit' };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Hit filter'));
+            fireEvent.click(screen.getByText('Any hit'));
+            const called = onChange.mock.calls[0][0] as Ability;
+            expect(called.triggerCritFilter).toBeUndefined();
+            expect(Object.prototype.hasOwnProperty.call(called, 'triggerCritFilter')).toBe(false);
+        });
+
+        it('does NOT render the Hit filter select when trigger is on-cast', () => {
+            render(<AbilityCard ability={buffAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByLabelText('Hit filter')).not.toBeInTheDocument();
+        });
+
+        it('does NOT render the Hit filter select when trigger is on-crit', () => {
+            const ability: Ability = { ...buffAbility, trigger: 'on-crit' };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByLabelText('Hit filter')).not.toBeInTheDocument();
         });
     });
 

@@ -33,8 +33,8 @@ const PANEL_VARIANTS: Record<
         imageMargin: 'mb-[10rem]',
     },
     compact: {
-        maxHeight: 'max-h-[120px]',
-        top: 'top-[calc(100%-119px)]',
+        maxHeight: 'max-h-[110px]',
+        top: 'top-[calc(100%-109px)]',
         imageMargin: 'mb-[4rem]',
     },
 };

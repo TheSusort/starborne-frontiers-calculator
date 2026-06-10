@@ -38,7 +38,7 @@ import { describe, expect, it } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
-import { createEventBus } from '../../combat/events';
+import { CombatEvent, createEventBus } from '../../combat/events';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1453,5 +1453,308 @@ describe('healingGoldenParity', () => {
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 0, 0, 0, 0, 0]);
         // The intercept fires exactly once, on the lethal round.
         expect(cheated.map((c) => c.round)).toEqual([1]);
+    });
+
+    // =========================================================================
+    // PHASE 4c PR 1 (per-hit on-attacked reactives) — NEW BEHAVIOUR GOLDENS
+    // (Task 11). The engine now emits ONE `attacked` event PER HIT of the
+    // enemy's fired damage ability (after the aggregate shield-first drain),
+    // each carrying ITS OWN hit's crit outcome. The on-attacked listener
+    // filters by the ability's `triggerCritFilter` ('crit' / 'non-crit' /
+    // absent → every hit) and enqueues a PER-EVENT intent whose
+    // eventCtx.counterTargetId names the attacker — the executor routes a
+    // counter-debuff to THAT enemy's per-target store. Drain-time
+    // hp-threshold gates read the heal target's LIVE post-attack HP
+    // (denominator baseHpFor). Executor reactive-heal fold: healModifier ×
+    // outgoing × incoming (all 0 here → bare basis × pct), NEVER crits.
+    // =========================================================================
+
+    // ── Scenario 21 (A): per-hit cadence + crit-filter pair (Isha shape) ──────
+    // HAND-VERIFIED. The tank (focus + heal target, hp 100000, defence 0, speed 100) carries an
+    // Isha-shaped PAIR of on-attacked self-heals: pct 3 with triggerCritFilter 'non-crit' + pct 6
+    // with 'crit' (basis 'hp' → the tank's own effectiveMaxHp 100000 → 3000 / 6000 per reaction;
+    // healModifier/outgoing/incoming all 0 → bare fold; reactive heals never crit). A ship-backed
+    // enemy (attack 4000, crit 50, critDamage 100, speed 50) fires a 3-HIT active damage ability
+    // (multiplier 100 → effectiveMultiplier 300) → 3 `attacked` events per round, each with its
+    // own hit's crit outcome.
+    //
+    // Per-hit crit pattern (rate-accumulator gate at 0.5, back-loaded — VERIFIED against
+    // engine.events.test.ts "Phase 4c Task 3" Test 1b):
+    //   R1: acc 0→0.5 F, →1.0 T (reset 0), →0.5 F  ⇒ [non-crit, CRIT, non-crit]
+    //   R2: acc 0.5→1.0 T, →0.5 F, →1.0 T          ⇒ [CRIT, non-crit, CRIT]
+    //   R3 = R1 pattern, R4 = R2 pattern (acc returns to 0 / 0.5 at each round boundary).
+    // Exactly ONE filtered reaction fires per hit (the 'non-crit' heal on non-critting hits, the
+    // 'crit' heal on critting hits):
+    //   R1: 2 × 3000 + 1 × 6000 = 12000.   R2: 1 × 3000 + 2 × 6000 = 15000.   R3/R4 alternate.
+    //
+    // Enemy damage (blended per-hit crit fold, defence 0 → reduction 0, neutral affinity):
+    //   preCrit = 4000 × 300% = 12000; R1 critFraction 1/3 → ×(1+1/3) = 16000;
+    //   R2 critFraction 2/3 → ×(1+2/3) = 20000. Alternating 16000 / 20000.
+    // The reactive heals DRAIN AFTER the enemy's turn body (after the hit landed), so each
+    // round's heal sees a full deficit → all effective, 0 overheal:
+    //   R1: 100000 − 16000 = 84000, +12000 → 96000 (enter R2 at 96%).
+    //   R2: 96000 − 20000 = 76000, +15000 → 91000 (enter R3 at 91%).
+    //   R3: 91000 − 16000 = 75000, +12000 → 87000 (enter R4 at 87%).
+    //   R4: 87000 − 20000 = 67000, +15000 → 82000.
+    //   ⇒ directHeal [12000, 15000, 12000, 15000]; effectiveHealing identical; overheal 0;
+    //     incomingDamage [16000, 20000, 16000, 20000]; targetHpPct entering [100, 96, 91, 87].
+    const scenario21Input = () =>
+        BASE({
+            rounds: 4,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-attacked',
+                                triggerCritFilter: 'non-crit',
+                                config: { type: 'heal', pct: 3, basis: 'hp' },
+                            }),
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-attacked',
+                                triggerCritFilter: 'crit',
+                                config: { type: 'heal', pct: 6, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 50, critDamage: 100, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 3 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+    snap(
+        'per-hit crit-filter pair (Isha shape: non-crit 3% + crit 6% on-attacked heals)',
+        scenario21Input
+    );
+
+    // Supplementary: exactly one filtered reaction per hit — the mixed crit pattern
+    // [F,T,F]/[T,F,T] yields alternating 12000 / 15000 reactive heal totals, all effective
+    // (the heals drain AFTER each round's hits, into a full deficit).
+    it('scenario 21: per-round reactive heals are 2×3% + 1×6% then 1×3% + 2×6% of max HP', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario21Input());
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([12000, 15000, 12000, 15000]);
+        expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([12000, 15000, 12000, 15000]);
+        expect(result.rounds.map((r) => r.overheal)).toEqual([0, 0, 0, 0]);
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([16000, 20000, 16000, 20000]);
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 96, 91, 87]);
+    });
+
+    // ── Scenario 22 (B): gated reactive heal crossing the threshold (Makoli) ──
+    // HAND-VERIFIED. The tank (hp 10000, defence 0) carries a Makoli-shaped on-attacked
+    // self-heal (pct 20 → 2000) GATED on `hp-threshold self below 40%` (derivable). A bare
+    // enemy hits 2000/round. The gate is evaluated at DRAIN time — AFTER the triggering hit
+    // landed — against the tank's LIVE post-attack HP (Task 6: selfHpPctFor, denominator
+    // baseHpFor). Numbers are chosen so the heal lifts the tank back to EXACTLY 40% (never
+    // above): each subsequent round re-enters at 40%, the hit drops it to 20% (< 40 at drain
+    // time) → the heal re-fires EVERY round once first triggered. The steady state is the
+    // documented RE-CROSSING behaviour: enter 40% → hit → 20% → heal → 40%.
+    //   R1: 10000 → hit → 8000 (80% at drain; 80 < 40 FALSE) → no heal.
+    //   R2: 8000 → 6000 (60%) → no heal.
+    //   R3: 6000 → 4000 (40% at drain; 40 < 40 FALSE — STRICT below) → no heal.
+    //   R4: 4000 → 2000 (20% TRUE) → heal 2000 (deficit 8000 → all effective) → 4000.
+    //   R5: enter 40% → 2000 (20% TRUE) → heal 2000 → 4000.
+    //   R6: identical to R5.
+    //   ⇒ directHeal [0, 0, 0, 2000, 2000, 2000]; zero reactive heals while the drain-time HP
+    //     is ≥ 40% (incl. the EXACTLY-40% round 3 — strict comparator); targetHpPct entering
+    //     [100, 80, 60, 40, 40, 40]; incomingDamage 2000 every round; overheal 0.
+    const scenario22Input = () =>
+        BASE({
+            rounds: 6,
+            healer: { ...HEALER, hp: 10000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-attacked',
+                                conditions: [
+                                    {
+                                        subject: 'hp-threshold',
+                                        derivable: true,
+                                        hpSubject: 'self',
+                                        hpComparator: 'below',
+                                        hpPercent: 40,
+                                    },
+                                ],
+                                config: { type: 'heal', pct: 20, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+
+    snap(
+        'gated on-attacked heal crosses the threshold (Makoli shape: drain-time below-40% gate)',
+        scenario22Input
+    );
+
+    // Supplementary: the gate is OFF for the first three rounds (drain-time HP 80/60/40% —
+    // 40 is NOT strictly below 40), then fires every round from R4 (drain-time HP 20%).
+    it('scenario 22: zero reactive heals at/above 40%, fires from round 4 (steady re-crossing)', () => {
+        idCounter = 0;
+        const result = simulateHealing(scenario22Input());
+        // Round 3 (index 2) is the exactly-40%-drain-time strict-below boundary case:
+        // the tank enters at 60%, takes 2000 damage → HP 4000 = exactly 40% at drain time.
+        // The strict-below comparator (40 < 40 = FALSE) means the heal does NOT fire on round 3.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 2000, 2000, 2000]);
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 80, 60, 40, 40, 40]);
+    });
+
+    // ── Scenario 23 (C): counter-debuff routed to the attacking enemy (Warden) ─
+    // HAND-VERIFIED. The tank (hp 100000, defence 0, hacking 200 → debuff landing chance
+    // clamp(200−100)/100 = 1, always lands) carries a Warden-shaped NAME-ONLY counter-debuff:
+    // { type:'debuff', buffName:'Corrosion I', parsedEffects:{}, duration 2, application
+    // 'inflict', trigger 'on-attacked', target 'enemy' }. A single ship-backed enemy attacker
+    // (attack 2000, crit 0, speed 50; 1-hit active 100% → 2000/round) bombards it → ONE
+    // `attacked` event per round → ONE intent with eventCtx.counterTargetId = 'e1' → the
+    // executor routes the debuff to THAT enemy's per-target store and emits `debuff-applied`
+    // with targetId 'e1' (sourceId = the tank focus, engine id 'attacker') — once per hit
+    // landed (1 hit/round → 1 per round).
+    //
+    // RESULT-SURFACE GAP (documented): no field of HealingSimulationResult exposes debuffs ON
+    // enemy attackers — EnemyRoundEffects.debuffs is the debuffs the ENEMY inflicted on the
+    // heal target, not what it suffers. The attribution is therefore asserted via the event
+    // bus (`debuff-applied`), the executor's only observable routing surface here; the
+    // snapshot locks the numeric output (no heals → directHeal 0; HP declines 2000/round:
+    // targetHpPct entering [100, 98, 96, 94]).
+    const scenario23Input = () =>
+        BASE({
+            rounds: 4,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            ab({
+                                type: 'debuff',
+                                target: 'enemy',
+                                trigger: 'on-attacked',
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Corrosion I',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    application: 'inflict',
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100, hits: 1 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+    snap(
+        'counter-debuff routed to the attacking enemy (Warden shape: on-attacked Corrosion I)',
+        scenario23Input
+    );
+
+    // Supplementary: the counter-debuff lands on the ATTACKING enemy's id ('e1'), sourced from
+    // the tank (the focus actor id 'attacker'), once per hit landed — one per round here.
+    it('scenario 23: debuff-applied targets the attacking enemy id once per hit landed', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const applied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
+        bus.on('debuff-applied', (e) => {
+            if (e.buffName === 'Corrosion I') applied.push(e);
+        });
+        simulateHealing({ ...scenario23Input(), bus });
+        expect(applied).toEqual([
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'e1',
+                round: 1,
+                buffName: 'Corrosion I',
+            },
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'e1',
+                round: 2,
+                buffName: 'Corrosion I',
+            },
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'e1',
+                round: 3,
+                buffName: 'Corrosion I',
+            },
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'e1',
+                round: 4,
+                buffName: 'Corrosion I',
+            },
+        ]);
     });
 });

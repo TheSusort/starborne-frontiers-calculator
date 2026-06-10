@@ -11,6 +11,7 @@
 > Updated **2026-06-07** after the damage-leech heals & shields ship (branch `feat/damage-leech`): the ~14 leech text cells (~11 ships) now parse + simulate (see §5 LEECH, §6).
 > Updated **2026-06-08** after the Phase 4a enemy-offense increment (branch `feat/combat-engine-phase4a-enemy-offense`): enemy is now a full `runPlayerTurn` actor vs the heal target; per-target status stores; affinity symmetry on enemy attacks; real `selfHpPct`; `attacked` event + live `on-attacked` trigger; enemy-applied DoTs tick on the tank (see §5 PHASE 4a, §6).
 > Updated **2026-06-09** after the Phase 4b death & revive increment (branch `feat/combat-engine-phase4b-death-revive`): three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) + `on-cheat-death-activated`; Cheat Death survives a lethal hit at 1 HP once per combat (clearing removable statuses); new `unremovable` concept; Salvation on-destroyed ally-heal re-enabled; on-kill/on-ally-destroyed extra-action bridge (Sokol/Liberator/Harvester) (see §5 PHASE 4b, §6 item 9).
+> Updated **2026-06-10** after the Phase 4c PR 1 per-hit attacked + self-damage reactives increment (branch `feat/combat-engine-phase4c-self-damage`): `attacked` emitted per hit with per-hit crit; `triggerCritFilter`; drain-time `selfHpPct`; counter-debuff routing via `eventCtx.counterTargetId`; `damageReaction` parser; Warden/Isha/Makoli/Guardian/Heliodor/Shepherd/Opal/Flamel/Iridium/Panguan/Stalwart live; phantom over-fires removed (see §5 PHASE 4c PR 1, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -746,6 +747,61 @@ buff/charge-aura), source it from firing + passive.
   **Goldens byte-identical.** This increment is engine + docs + labels; the 22 DPS golden parity
   scenarios remain byte-identical.
 
+- **Phase 4c PR 1: per-hit `attacked` + self-damage reactives (2026-06-10, branch `feat/combat-engine-phase4c-self-damage`).**
+  - `attacked` is now emitted PER HIT of the enemy's fired damage ability, each event carrying its
+    own hit's `didCrit` (per-hit crit draws threaded out of `runPlayerTurn` via
+    `PlayerTurnResult.hitCrits` — same draws, never re-drawn; `[]` for no-damage casts and
+    `noCrit` abilities → fallback single event with the round binary). Damage application stays
+    AGGREGATE (one shield-first drain per attack; events emit post-drain). DoT ticks/bombs/
+    detonations never emit `attacked`. When PR 3 adds tank-side `hp-changed`, it stays
+    once-per-attack (intended granularity asymmetry).
+  - `Ability.triggerCritFilter` (`'crit'`|`'non-crit'`|absent): the on-attacked listener filters
+    per hit. Isha parses as the mutually exclusive pair (3% non-crit / 6% crit, CSV typo
+    `"criticall"` tolerated). Editor: "Hit filter" select on on-attacked abilities; the field is
+    stripped when the trigger changes away.
+  - Per-event intents: `Intent.eventCtx.counterTargetId` carries the attacker; the executor's
+    debuff branch routes counter-inflictions to THAT enemy's per-target store.
+    **Counter-DoT decision (spec §3.5): Warden/Shepherd-style "inflicts Corrosion on that enemy"
+    lands as a NAME-ONLY debuff (`parsedEffects {}`, not a ticking DoT)** — no enemy HP race
+    exists in healing mode; the named status is visible + condition-relevant. NOTE:
+    `EnemyRoundEffects.debuffs` is heal-target-centric (debuffs the enemy inflicted ON the tank);
+    counter-debuffs on enemy attackers are observable via `debuff-applied` events only (golden
+    scenario 23 asserts via the bus) — a result-surface for them is a 4d/simulator-page concern.
+  - Live drain-time `selfHpPct`: `IntentExecContext.selfHpPctFor` (heal target only; denominator
+    `baseHpFor` — SAME as the cast path, deliberately not effective-max). "While below X% HP" gates
+    on self-subject damage reactions now parse DERIVABLE and evaluate at drain time vs live
+    post-attack HP — strict below (exactly 40% does NOT fire; golden scenario 22 locks the
+    boundary). The gate applies to non-heal follow-ups too (Makoli's Disable carries the same
+    below-40 condition).
+  - Parser: `ParsedHealAbility.damageReaction` (self-subject + self-recipient only; may be
+    present-but-empty = ungated); exported `detectDamageReactionTrigger` (sentence-scoped via
+    shared `rawSentenceAround`, ally-subject guard incl. `"another ally"`,
+    `"cannot/cannont critically hit"` rider scrub, `hpBelowPct` extraction). Audit parity:
+    `auditSkills` consumes `buildShipAbilities` so parity is automatic; a tripwire flags
+    self-subject reactions that regress to ungated on-cast.
+  - **Ships now live:** Warden (3% repair + name-only Corrosion counter), Isha (3/6 pair),
+    Makoli (gated 20% repair + gated Disable), Guardian (gated 20% repair + crit-only Binderburg
+    Resilience), Heliodor first passive (8% self-repair), plus corpus collateral reclassified from
+    phantom auras/on-cast to on-attacked: Shepherd (counter Corrosion + Attack Down), Opal
+    (Attack Down II + Defense Up II), Flamel (Speed Down I + Stasis card), Iridium
+    (Speed Down I/II), Panguan (Stealth), Stalwart (Legion Discipline II).
+  - **Phantom over-fires removed:** Guardian's Binderburg Resilience was an unconditional
+    per-round aura; the reclassified collateral ships' grants similarly stop misfiring on-cast.
+    (Warden's Corrosion previously emitted NOTHING at builder level — its counter is strictly
+    additive.)
+  - **Deferred/known:** Heliodor's "reduce debuff durations by 1" → 4e (cleanse family);
+    Heliodor 2nd passive/Cultivator/Refine/Graphite ally-subject reactions → 4c PR 2; Guardian's
+    ally-Provoke → PR 2 (its pre-existing inert manual-condition Provoke debuff left
+    byte-identical); Panon "If directly damaged" phrasing (not "when") keeps a residual aura —
+    follow-up; Purifier cleanse-on-damaged phantom — follow-up; Nayra CSV source typo
+    `"When directly damage"` (missing -d) keeps Terran Bolster III unmodeled — allowlisted with
+    accurate reason; consider typo tolerance later.
+
+  **In-game verification list additions:** per-hit reaction cadence vs multi-hit enemies (Isha
+  repairs once per hit?); counter-infliction landing (does Warden's Corrosion roll
+  hacking-vs-security?); strict-below threshold semantics at exactly X%; reactive heals never
+  crit (4b convention carried over).
+
 ---
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
@@ -951,10 +1007,50 @@ configure it and it looks like it works, but it does nothing".
 > `directHeal`; effective/overheal credit only the live target → 4d); on-kill extra action lands
 > the round after the kill (post-round enemy-death reconciliation — deliberate).
 >
-> **Phase 4c–4f and simulator page (pending):**
-> - **4c Enemy-action reactions + generic damage triggers** — `on-attacked` consumer ships
->   (Zosimos/Arum/Yarrow/Larkspur/Grif), generic `on-self-damaged`/`on-ally-damaged`,
->   Isha onCritHit (per-hit decision), Graphite/Refine.
+> **Shipped 2026-06-10 (Phase 4c PR 1 — per-hit attacked + self-damage reactives, branch `feat/combat-engine-phase4c-self-damage`):**
+> - `attacked` emitted per hit of the enemy's fired ability, each with its own `didCrit`; fallback
+>   single event for no-damage casts/noCrit abilities; DoT ticks/bombs/detonations excluded.
+> - `Ability.triggerCritFilter` (`'crit'`|`'non-crit'`|absent): per-hit listener filter. Isha pair
+>   parsed (3% non-crit / 6% crit; CSV typo `"criticall"` tolerated). Editor "Hit filter" select.
+> - `Intent.eventCtx.counterTargetId` threads the attacker id; executor debuff branch routes
+>   counter-inflictions to that enemy's per-target store. Counter-DoT modeled as NAME-ONLY debuff.
+> - Drain-time `selfHpPct` via `IntentExecContext.selfHpPctFor` (denominator `baseHpFor`); "below X%
+>   HP" gates on self-subject reactions now parse DERIVABLE and evaluate post-attack vs strict-below
+>   comparator (exactly 40% does NOT fire; golden scenario 22 locks the boundary).
+> - `ParsedHealAbility.damageReaction` parser (`detectDamageReactionTrigger`, sentence-scoped via
+>   `rawSentenceAround`); ally-subject guard; `"cannot/cannont critically hit"` rider scrub; audit
+>   tripwire for self-subject regressions. `auditSkills` parity automatic via `buildShipAbilities`.
+> - Ships live: Warden (3% repair + name-only Corrosion counter), Isha (3/6 pair), Makoli (gated
+>   20% repair + gated Disable), Guardian (gated 20% repair + crit-only Binderburg Resilience),
+>   Heliodor first passive (8% self-repair); corpus collateral reclassified from phantom auras/
+>   on-cast: Shepherd, Opal, Flamel, Iridium, Panguan, Stalwart.
+> - Phantom over-fires removed: Guardian Binderburg, and the reclassified ships no longer apply
+>   on-cast. (Warden's Corrosion was previously emitting nothing at builder level — strictly additive.)
+> - DPS goldens byte-identical (22 scenarios); 3 new healing golden scenarios (21–23).
+>
+> **Phase 4c–4f and simulator page (partially shipped / pending):**
+> - **4c PR 1 — SHIPPED 2026-06-10** (`feat/combat-engine-phase4c-self-damage`): per-hit
+>   `attacked` emission; `triggerCritFilter`; drain-time `selfHpPct`; counter-debuff routing;
+>   `damageReaction` parser; Warden/Isha/Makoli/Guardian/Heliodor self-damage reactives live;
+>   phantom over-fires removed for Shepherd/Opal/Flamel/Iridium/Panguan/Stalwart (see §5
+>   PHASE 4c PR 1).
+> - **4c PR 2 — pending** — `on-ally-attacked` reactives (Heliodor 2nd passive, Cultivator,
+>   Refine, Graphite role-filtered); Guardian ally-crit-hit Provoke.
+> - **4c PR 3 — pending** — `on-hp-threshold-crossed` reactives via tank-side `hp-changed`
+>   (Tycho Barrier below-40% once-per-battle; Hermes Cheat-Death grant below-40% gate fix).
+> - **4c PR 4 — pending** — enemy-action reactions (event-only enemy heal/cleanse emission,
+>   `cleanse-performed`, reactive `damage` executor branch): Zosimos/Arum/Yarrow/Larkspur/Grif.
+> - **4c PR 5 — pending** — enemy realism pair: §6 item 11 `derivable` flip for
+>   `enemy-buff`/Provoke `self-debuff` gates (controlled DPS-golden regeneration) + item 12
+>   enemy hacking landing roll.
+> - **4c PR 6 — pending** — §6 item 10 Chakara `lowest-speed-ally` condition subject.
+> - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
+>   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
+>   FrontLine R4 enemy-charged-skill leech shield; result-surface for counter-debuffs on
+>   enemy attackers (4d/simulator-page concern); noCrit MULTI-hit enemy attacks degrade to a
+>   single aggregate `attacked` event (hitCrits is [] for noCrit — unreachable today, no
+>   corpus skill combines "cannot critically hit" with a hit count; fix = fill(false), no
+>   gate draws).
 > - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
 >   AoE; death-fallback re-targeting.
 > - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
@@ -977,12 +1073,15 @@ configure it and it looks like it works, but it does nothing".
    self-HP curve (or configurable self-HP%) would make "if it is at full HP" and
    self-execute-style gates meaningful.
 5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06; `on-attacked`
-   shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09)* — the reactive machinery
-   now consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
-   `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a), and the four death/revive
-   triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` / `on-cheat-death-activated`
-   (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. Remaining annotation-only triggers are
-   the below-X%-HP / generic-damage reactives deferred to 4c.
+   shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09; `on-attacked` upgraded to
+   per-hit with `triggerCritFilter` Phase 4c PR 1 2026-06-10)* — the reactive machinery now
+   consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
+   `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a; upgraded to per-hit with
+   optional crit/non-crit filter in Phase 4c PR 1 — see §5 PHASE 4c PR 1), and the four
+   death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
+   `on-cheat-death-activated` (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. Remaining
+   annotation-only reactives are the ally-damaged, hp-crossing, and enemy-action families deferred
+   to 4c PRs 2–4.
 6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
    and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
    (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4

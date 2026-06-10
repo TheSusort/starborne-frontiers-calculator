@@ -946,32 +946,102 @@ function phrasePosTrigger(
     anchorPos: number,
     trigger: AbilityTrigger
 ): AbilityTrigger | undefined {
-    if (!text || anchorPos < 0) return undefined;
-    // Mask "Inc."/"Out." abbreviation periods (same sentinel as resolveBuffClause/parseExtraAction)
-    // before the boundary scan so a buff name like "Inc. Damage Up" does not split the sentence
-    // mid-name. The placeholder is the same byte length as the replaced space, so anchorPos (which
-    // points into the raw unmasked text) stays stable and needs no adjustment.
+    if (!text) return undefined;
+    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
+    // A negative anchorPos (ability has no position in text) is handled by rawSentenceAround,
+    // which returns undefined for any out-of-range position, cleanly suppressing the trigger.
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && phraseRe.test(sentence) ? trigger : undefined;
+}
+
+// The RAW-text sentence containing `anchorPos` (masked — see below), or undefined when the
+// position is invalid. Shared by phrasePosTrigger and detectDamageReactionTrigger so the
+// masking + boundary rules live in ONE place.
+//
+// Masking: "Inc."/"Out." abbreviation periods are masked (same sentinel as resolveBuffClause/
+// parseExtraAction) before the boundary scan so a buff name like "Inc. Damage Up" does not
+// split the sentence mid-name. The placeholder is the same byte length as the replaced space,
+// so anchorPos (which points into the raw unmasked text) stays stable and needs no adjustment.
+//
+// Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
+// <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
+// <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
+// raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
+// (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
+function rawSentenceAround(text: string, anchorPos: number): string | undefined {
+    if (anchorPos < 0) return undefined;
     const masked = maskAbbrev(text);
-    // Sentence boundaries: a terminal '.'/';' followed by whitespace/end, OR a <br>/<br /> tag.
-    // <br> tags separate paragraphs in skill texts, so a trigger phrase and an anchor in different
-    // <br>-separated paragraphs must NOT be co-scoped. Boundaries are MATCH POSITIONS in the same
-    // raw (masked) string — no replacement — so anchorPos stays valid. Variable-length matches
-    // (<br /> vs '.') use m[0].length for the boundary end. Lookbehind-free.
     const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
     let start = 0;
     let m: RegExpExecArray | null;
-    const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
     while ((m = boundary.exec(masked)) !== null) {
         const end = m.index + m[0].length;
         if (anchorPos < end) {
-            return phraseRe.test(masked.slice(start, end)) && anchorPos >= start
-                ? trigger
-                : undefined;
+            return anchorPos >= start ? masked.slice(start, end) : undefined;
         }
         start = end;
     }
     // Anchor is in the final (unterminated) sentence.
-    return phraseRe.test(masked.slice(start)) && anchorPos >= start ? trigger : undefined;
+    return anchorPos >= start ? masked.slice(start) : undefined;
+}
+
+// detectDamageReactionTrigger rules (Phase 4c PR 1, Task 8). Ally-subject guard covers BOTH
+// "when an ally …" and "when another ally …" (Provider) — those reactions are PR 2 scope.
+const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
+// Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
+// "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
+// carrying such a rider (Provider, Grif) never reads as crit-gated.
+const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
+// Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit"; the
+// missing "y" in the live CSV's "criticall hit" is tolerated). DISTINCT from the ACTIVE-voice
+// self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
+// which "hit\b" deliberately does not match (no trailing "s").
+const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
+// Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
+// trailing clause) / "when attacked". "If directly damaged" (Panon) is deliberately NOT
+// matched — only the "when" phrasing classifies this phase.
+const DR_DIRECT_DAMAGE_RE =
+    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b/i;
+// "while below N% HP" HP gate on a damage-reaction sentence (Makoli: "when directly damaged
+// while below 40% HP, …"). The same regex form as Task 7's parseHealAbilities annotation
+// (/while\s+below\s+(\d+)\s*%\s*hp/i) — kept here in the detector so ALL sentence-scoped
+// extraction lives in skillTextParser. Extracted AFTER the damage-reaction shape is confirmed
+// so an unrelated "while below X% HP" in a non-reaction sentence is never picked up.
+const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
+
+/**
+ * Self-subject damage-reaction trigger for non-heal clauses (Phase 4c PR 1). Matches the
+ * sentence around `pos` (RAW-text position, same masked bounds as phrasePosTrigger).
+ * Passive-voice "is critically hit" is the CRIT-FILTERED variant — distinct from the
+ * ACTIVE-voice self-crit condition, which detectGrantConditions still rejects in passive
+ * voice. Ally-subject sentences return undefined (PR 2). NO lookbehind (iOS Safari 15).
+ * `hpBelowPct` is set when the reaction sentence also carries a "while below N% HP" self
+ * HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold condition so the
+ * executor evaluates the gate at drain time rather than firing on every received attack.
+ * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
+ * Panguan, Stalwart, Makoli).
+ */
+export function detectDamageReactionTrigger(
+    text: string,
+    pos: number
+): { trigger: 'on-attacked'; critFilter?: 'crit'; hpBelowPct?: number } | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    if (DR_ALLY_SUBJECT_RE.test(sentence)) return undefined;
+    const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
+    if (DR_CRIT_HIT_RE.test(scrubbed)) {
+        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+        return {
+            trigger: 'on-attacked',
+            critFilter: 'crit',
+            ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+        };
+    }
+    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) {
+        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+        return { trigger: 'on-attacked', ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}) };
+    }
+    return undefined;
 }
 
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
@@ -1259,6 +1329,13 @@ export interface ParsedHealAbility {
     leechScope?: 'all' | 'detonation';
     /** Quixilver: damage-taken proc gated on shield punch-through. */
     requiresHpDamage?: boolean;
+    /** Present when the heal is a SELF-subject damage reaction ("when directly
+     *  damaged", "when attacked", "when (critically) hit"). buildShipAbilities maps
+     *  it to trigger 'on-attacked' (+ triggerCritFilter / derivable self
+     *  hp-threshold). Ally-subject reactions never carry this — they stay
+     *  disqualified until Phase 4c PR 2. May be present-but-empty: an empty object
+     *  signals an ungated reaction (Heliodor first-listed passive, Warden). */
+    damageReaction?: { critFilter?: 'crit' | 'non-crit'; hpBelowPct?: number };
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -1332,12 +1409,21 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 );
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
-// directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is
-// captured (not just tested) so the caller can reject an ENEMY-subject trigger — "when an enemy
-// takes damage from a DoT" (Anemone) is an on-DoT-tick trigger, NOT a self/ally damage reaction,
-// so it must not be disqualified by this rule. No lookbehind (iOS Safari 15).
+// directly damaged", "when attacked", "when … is hit", "when … takes … damage", and the
+// passive-voice pure crit-hit form "when (this unit) is critically hit" (tolerates the corpus
+// typo "criticall"). The match is captured (not just tested) so the caller can reject an
+// ENEMY-subject trigger — "when an enemy takes damage from a DoT" (Anemone) is an on-DoT-tick
+// trigger, NOT a self/ally damage reaction, so it must not be disqualified by this rule.
+// The crit-hit alternation uses `hit\b` (no trailing `s`) so it matches passive-voice "is
+// critically hit" but NOT the active-voice ally form "when an ally critically hits an enemy"
+// (which ends in "hits" + subject guard already applied to dmgReaction[0] in the annotation
+// gate). No lookbehind (iOS Safari 15).
 const HEAL_DAMAGE_REACTION_RE =
-    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
+    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+criticall?y?\s+hit\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
+// Detects the crit-hit alternation within a HEAL_DAMAGE_REACTION_RE match so the annotation
+// gate can set critFilter:'crit' when the trigger itself (not an instead-clause) is the pure
+// "when (this unit) is critically hit" phrasing.
+const HEAL_CRIT_HIT_TRIGGER_RE = /\bis\s+criticall?y?\s+hit\b/i;
 
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
@@ -1445,22 +1531,64 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
+            const resolved = resolveHealTarget(sentence);
             // Damage-reaction reactive triggers ("when … directly damaged", "when attacked",
-            // "when … is hit", "when … takes … damage") are unmodeled for PLAIN heals → drop
-            // them so they don't fire every round (phantom). Leech reactions (basis
-            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc and
-            // MUST still parse, so only disqualify when the heal is NOT a leech (guard #1).
-            // An ENEMY-subject trigger ("when an enemy takes damage from a DoT", Anemone) is an
-            // on-DoT-tick trigger, not a self/ally damage reaction, so it is NOT disqualified.
+            // "when … is hit", "when … takes … damage") on PLAIN heals — Phase 4c PR 1:
+            // SELF-subject reactions whose heal RECIPIENT is also self are now MODELED
+            // (on-attacked is a live trigger) and parse with a `damageReaction` annotation.
+            // Still disqualified (PR 2 routing scope, so they don't fire every round as
+            // phantom on-cast heals): ALLY-subject triggers ("when an ally … damaged",
+            // Cultivator/Refine/Graphite) and self triggers whose heal recipient is NOT
+            // self (Heliodor's second passive "repairs them"). Leech reactions (basis
+            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc
+            // and keep parsing WITHOUT the annotation (guard #1). An ENEMY-subject trigger
+            // ("when an enemy takes damage from a DoT", Anemone) is an on-DoT-tick trigger,
+            // not a self/ally damage reaction, so it is neither disqualified nor annotated.
+            let damageReaction: ParsedHealAbility['damageReaction'];
             if (!leechBasis) {
                 const dmgReaction = HEAL_DAMAGE_REACTION_RE.exec(sentence);
-                if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) continue;
+                if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) {
+                    if (/when\s+an\s+ally\b/i.test(dmgReaction[0])) continue;
+                    if (resolved.target !== 'self') continue;
+                    const hpGate = /while\s+below\s+(\d+)\s*%\s*hp/i.exec(sentence);
+                    // Instead-on-crit split (Isha): a sentence with "but when critical(ly)
+                    // hit, it instead" carries TWO repair matches — the one INSIDE the
+                    // instead-clause gets critFilter 'crit', the base match 'non-crit'
+                    // (mutually exclusive pair; the missing "y" in the live CSV text —
+                    // "criticall hit" — is tolerated). Isha's sentence always matches the
+                    // "directly damaged" alternation FIRST (it precedes the crit-hit
+                    // alternation in HEAL_DAMAGE_REACTION_RE), so the instead-clause
+                    // handling takes precedence and the crit-hit-trigger branch below is
+                    // never reached for Isha.
+                    const insteadClause =
+                        /but\s+when\s+criticall?y?\s+hit\b[^.;]*\binstead\b/i.exec(sentence);
+                    const inInstead =
+                        insteadClause !== null && m.index - sentenceStart > insteadClause.index;
+                    // Pure crit-hit trigger ("when this unit is critically hit, repairs N%"):
+                    // the matched trigger phrase is the crit-hit alternation and there is no
+                    // instead-clause — annotate critFilter:'crit' directly.
+                    const isCritHitTrigger =
+                        !insteadClause && HEAL_CRIT_HIT_TRIGGER_RE.test(dmgReaction[0]);
+                    const critFilter = insteadClause
+                        ? inInstead
+                            ? ('crit' as const)
+                            : ('non-crit' as const)
+                        : isCritHitTrigger
+                          ? ('crit' as const)
+                          : undefined;
+                    damageReaction = {
+                        ...(critFilter ? { critFilter } : {}),
+                        ...(hpGate ? { hpBelowPct: parseInt(hpGate[1], 10) } : {}),
+                    };
+                }
             }
             const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
-            // must not apply (Malvex).
-            const resolved = resolveHealTarget(sentence);
+            // must not apply (Malvex). (resolveHealTarget was hoisted above the
+            // damage-reaction block so the recipient gate can read it — the gate MUST read
+            // the SAME `resolved` object this target assignment uses, or the two could
+            // disagree on who receives the heal.)
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
             // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
             // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max
@@ -1488,6 +1616,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 explicitTarget,
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
+                ...(damageReaction ? { damageReaction } : {}),
             });
             // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
             // second SELF entry mirroring the first (5% each, same basis/scope).
@@ -1524,6 +1653,11 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                                       : 'hp',
                             target,
                             explicitTarget,
+                            // Same sentence → same trigger: a continuation component of a
+                            // damage-reaction repair is reactive too (no CSV case mixes the
+                            // continuation with the instead-on-crit split, so the inherited
+                            // critFilter is always absent today).
+                            ...(damageReaction ? { damageReaction } : {}),
                         });
                     }
                 }

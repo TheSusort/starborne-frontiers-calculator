@@ -8,6 +8,14 @@ import { fetchBuffsFromRocky } from './updateBuffsDataFetcher';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Manual description overrides applied after fetching upstream data.
+// Add entries here when the upstream source has incorrect descriptions.
+// Keep in sync with manual corrections already present in src/constants/buffs.ts.
+const MANUAL_DESCRIPTION_OVERRIDES: Record<string, string> = {
+    // upstream says "Damage" but the game scales bombs off Attack
+    'Bomb III': '300% Attack',
+};
+
 async function updateBuffsData() {
     const buffsMap = new Map<string, { name: string; description: string }>();
     const errors: string[] = [];
@@ -34,6 +42,14 @@ async function updateBuffsData() {
                 console.error(`Error updating buffs for ${ship.name}:`, error);
                 errors.push(`Error with ${ship.name}: Unknown error occurred`);
             }
+        }
+    }
+
+    // Apply manual overrides before writing — prevents regen from clobbering hand-corrections
+    for (const [name, description] of Object.entries(MANUAL_DESCRIPTION_OVERRIDES)) {
+        const existing = buffsMap.get(name);
+        if (existing) {
+            buffsMap.set(name, { ...existing, description });
         }
     }
 

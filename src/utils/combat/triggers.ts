@@ -71,6 +71,11 @@ export interface Intent {
     ability: Ability;
     sourceSlot: SkillSlot;
     ownerId: string;
+    /** Event context captured by the listener at enqueue time (per-event intents).
+     *  `counterTargetId`: the attacking enemy's actor id for "on that enemy"
+     *  counter-inflictions (Warden) — the executor's debuff branch routes the
+     *  application to THIS enemy's per-target store instead of the default. */
+    eventCtx?: { counterTargetId?: string };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
@@ -133,7 +138,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
  *  - on-attacked → attacked where targetId === ownerId (target-scoped; fires when THIS OWNER is
- *    attacked). One enqueue per enemy attack turn.
+ *    attacked). Per-HIT since Phase 4c PR 1 (the engine emits one event per hit). The ability's
+ *    triggerCritFilter discriminates on the hit's own crit outcome: 'crit' → critting hits only,
+ *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
+ *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
  *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
@@ -253,10 +261,17 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-attacked':
                     bus.on('attacked', (e) => {
-                        // Target-scoped: fires when THIS OWNER (the target) is attacked.
-                        // The engine emits `attacked` once per enemy attack turn from the
-                        // enemy intake in engine.ts (Task 8) — after the shield-first drain.
-                        if (e.targetId === ownerId) enqueue(intent);
+                        // Target-scoped: fires when THIS OWNER is attacked. Per-HIT since
+                        // Phase 4c PR 1 (the engine emits one event per hit). The ability's
+                        // triggerCritFilter discriminates on the hit's own crit outcome:
+                        // 'crit' → critting hits only, 'non-crit' → non-critting only,
+                        // absent → every hit. The intent is per-EVENT (not the shared const):
+                        // eventCtx captures the attacker for "on that enemy" counter routing.
+                        if (e.targetId !== ownerId) return;
+                        const filter = ra.ability.triggerCritFilter;
+                        if (filter === 'crit' && !e.didCrit) return;
+                        if (filter === 'non-crit' && e.didCrit) return;
+                        enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
                     });
                     break;
                 case 'on-destroyed':
@@ -354,6 +369,11 @@ export interface IntentExecContext {
      *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
      *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
     oncePerCombatFired?: Set<string>;
+    /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
+     *  PR 1). The engine closes over the heal target's current/max HP (healing mode);
+     *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
+     *  keeping all existing drain gating byte-identical. */
+    selfHpPctFor?: (ownerId: string) => number;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -449,6 +469,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         bombCount: ctx.pendingBombs.length,
         enemyType: ctx.enemyType,
         enemyHpPct,
+        // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
+        // closes over the heal target's current/max HP; every non-tank id and DPS mode report 100
+        // (the pre-4c default) → all existing drain gating stays byte-identical.
+        selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
         // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
@@ -665,15 +689,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
         };
+        // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
+        // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
+        // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
+        const counterTargetId = intent.eventCtx?.counterTargetId;
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
         if (owner.landsTimedEnemyApplication(cfg.application)) {
-            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status);
+            ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
             // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({
                 type: 'debuff-applied',
                 sourceId: intent.ownerId,
-                targetId: ctx.enemy.id,
+                targetId: counterTargetId ?? ctx.enemy.id,
                 round: ctx.round,
                 buffName: cfg.buffName,
             });
@@ -688,6 +716,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             ctx.recordResisted({ buffName: cfg.buffName, turnsRemaining });
             ctx.bus.emit({
                 type: 'debuff-resisted',
+                // debuff-resisted feeds the round display only — no per-target counter routing needed.
                 targetId: ctx.enemy.id,
                 round: ctx.round,
                 buffName: cfg.buffName,

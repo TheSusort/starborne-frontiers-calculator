@@ -126,9 +126,14 @@ export type CombatEvent =
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | { type: 'cheat-death-activated'; actorId: string; round: number }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
-     *  `attackerId` is the attacker. `didCrit` is present only when the attack
-     *  critted. Emitted once per enemy attack TURN (aggregate — not per-hit) from
-     *  the enemy intake in engine.ts, after the shield-first drain (Task 8). */
+     *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
+     *  (present only when that hit critted). Emitted once PER HIT of the enemy's
+     *  fired damage ability (Phase 4c PR 1), after the aggregate shield-first drain
+     *  so all events observe the same post-drain HP/shield state. A manual flat enemy
+     *  or a noCrit damage ability falls back to one event per attack turn (the pre-4c
+     *  contract). DoT ticks, bomb detonations, and accumulators never emit it — only
+     *  direct weapon hits. When PR 3 later adds tank-side `hp-changed`, that event
+     *  stays once-per-attack; the granularity asymmetry is intended. */
     | {
           type: 'attacked';
           targetId: string;
