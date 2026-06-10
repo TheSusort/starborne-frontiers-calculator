@@ -178,19 +178,22 @@ const TRIGGER_RE =
 //
 // Damage-reaction nuance (Phase 4c): SELF-subject "when directly damaged" / "when critically
 // hit" clauses (PR 1 — Warden, Isha, Makoli, Guardian, Heliodor, Shepherd, Opal, Flamel,
-// Iridium, Panguan, Stalwart) AND ALLY-subject "when an(other) ally … is directly damaged /
-// is critically hit" clauses (PR 2 — Cultivator, Refine, Graphite, Guardian's counter-Provoke,
-// Heliodor passive2) are parser-modeled (on-attacked / on-ally-attacked triggers), so their
+// Iridium, Panguan, Stalwart; plus Heliodor passive2 — self-subject "When directly damaged"
+// with all-allies RECIPIENTS, Task 8) AND ALLY-subject "when an(other) ally … is directly
+// damaged / is critically hit" clauses (PR 2 — Cultivator, Refine, Graphite, Guardian's
+// counter-Provoke) are parser-modeled (on-attacked / on-ally-attacked triggers), so their
 // effects never reach `ungatedEffects` (the trigger IS the gate), and any such clause that
 // DOES parse ungated is flagged by the detectDamageReactionTrigger parity guard in
 // `ungatedFinding` before this regex is consulted. The damage-reaction shapes below are ONLY
 // the ones the parser still leaves unmodeled, kept narrow so a future CSV variant the
 // detector misses surfaces as a finding instead of being swallowed:
-//   - "If … directly damaged" non-"when" variants (Panon's Barrier, stealth-loss riders)
+//   - "If … directly damaged" non-"when" variants (Panon's Barrier, Wusheng's stealth-loss
+//     rider)
 //   - Sansi's bare "When hit"
 //   - Lev's "If a critical hit occurs"
 //   - ally-OUTGOING "when an(other) ally inflicts …" where the ally DEALS the hit (Provider's
-//     inflicts-a-debuff counter; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
+//     inflicts-a-debuff counter, Oleander, Belladonna — Oleander's RoT grant would flag if
+//     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
 const INTENTIONAL_REACTIVE_RE =
     /\bif\b[^.;]*\bdirectly damaged\b|when hit\b|critical hit occurs|when an(?:other)? ally inflicts|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp (drops|falls|is) below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets debuffed|cleansing/i;
 

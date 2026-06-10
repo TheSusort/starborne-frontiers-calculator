@@ -722,6 +722,111 @@ describe('AbilityCard', () => {
             render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
             expect(screen.queryByLabelText('Hit filter')).not.toBeInTheDocument();
         });
+
+        it('renders the Hit filter select for on-ally-attacked too (engine honors triggerCritFilter per-hit there)', () => {
+            const ability: Ability = { ...buffOnAttacked, trigger: 'on-ally-attacked' };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Hit filter')).toBeInTheDocument();
+        });
+    });
+
+    describe('Ally role filter (on-ally-attacked trigger)', () => {
+        const buffOnAllyAttacked: Ability = {
+            id: 'a9',
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: '',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+            },
+        };
+
+        it('renders the role filter checkboxes when trigger is on-ally-attacked', () => {
+            render(
+                <AbilityCard ability={buffOnAllyAttacked} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.getByText('Ally role filter')).toBeInTheDocument();
+            expect(screen.getByLabelText('Attacker')).toBeInTheDocument();
+            expect(screen.getByLabelText('Defender')).toBeInTheDocument();
+            expect(screen.getByLabelText('Debuffer')).toBeInTheDocument();
+            expect(screen.getByLabelText('Supporter')).toBeInTheDocument();
+        });
+
+        it('does NOT render the role filter when trigger is on-attacked', () => {
+            const ability: Ability = { ...buffOnAllyAttacked, trigger: 'on-attacked' };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByText('Ally role filter')).not.toBeInTheDocument();
+        });
+
+        it('does NOT render the role filter when trigger is on-cast', () => {
+            render(<AbilityCard ability={buffAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.queryByText('Ally role filter')).not.toBeInTheDocument();
+        });
+
+        it('reflects the stored roleFilter as checked boxes', () => {
+            const ability: Ability = {
+                ...buffOnAllyAttacked,
+                roleFilter: ['ATTACKER', 'DEBUFFER'],
+            };
+            render(<AbilityCard ability={ability} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Attacker')).toBeChecked();
+            expect(screen.getByLabelText('Debuffer')).toBeChecked();
+            expect(screen.getByLabelText('Defender')).not.toBeChecked();
+            expect(screen.getByLabelText('Supporter')).not.toBeChecked();
+        });
+
+        it('checking a role calls onChange with that role added to roleFilter', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard ability={buffOnAllyAttacked} onChange={onChange} onRemove={vi.fn()} />
+            );
+            fireEvent.click(screen.getByLabelText('Attacker'));
+            expect(onChange).toHaveBeenCalledWith(
+                expect.objectContaining({ roleFilter: ['ATTACKER'] })
+            );
+        });
+
+        it('unchecking the only selected role calls onChange WITHOUT a roleFilter key (absent, not [])', () => {
+            const onChange = vi.fn();
+            const ability: Ability = { ...buffOnAllyAttacked, roleFilter: ['DEFENDER'] };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Defender'));
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.roleFilter).toBeUndefined();
+            expect(Object.prototype.hasOwnProperty.call(updated, 'roleFilter')).toBe(false);
+        });
+
+        it('strips roleFilter when trigger is changed away from on-ally-attacked', () => {
+            const onChange = vi.fn();
+            const ability: Ability = { ...buffOnAllyAttacked, roleFilter: ['SUPPORTER'] };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Trigger'));
+            fireEvent.click(screen.getByText('On critical hit'));
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.trigger).toBe('on-crit');
+            expect(Object.prototype.hasOwnProperty.call(updated, 'roleFilter')).toBe(false);
+        });
+
+        it('keeps triggerCritFilter but strips roleFilter when switching to on-attacked', () => {
+            const onChange = vi.fn();
+            const ability: Ability = {
+                ...buffOnAllyAttacked,
+                triggerCritFilter: 'crit',
+                roleFilter: ['ATTACKER'],
+            };
+            render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
+            fireEvent.click(screen.getByLabelText('Trigger'));
+            fireEvent.click(screen.getByText('When attacked'));
+            const updated = onChange.mock.calls[0][0] as Ability;
+            expect(updated.trigger).toBe('on-attacked');
+            expect(updated.triggerCritFilter).toBe('crit');
+            expect(Object.prototype.hasOwnProperty.call(updated, 'roleFilter')).toBe(false);
+        });
     });
 
     it('reconstructs picker value from config.buffName and shows selected buff', () => {
