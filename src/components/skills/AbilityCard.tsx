@@ -741,6 +741,30 @@ export const AbilityCard: React.FC<Props> = ({
                             Not simulated — treated as assume-active
                         </p>
                     )}
+                    {ability.trigger === 'on-attacked' && (
+                        <Select
+                            label="Hit filter"
+                            value={ability.triggerCritFilter ?? 'any'}
+                            options={[
+                                { value: 'any', label: 'Any hit' },
+                                { value: 'crit', label: 'Only critical hits' },
+                                { value: 'non-crit', label: 'Only non-critical hits' },
+                            ]}
+                            onChange={(value) => {
+                                if (value === 'any') {
+                                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                                    const { triggerCritFilter: _removed, ...rest } = ability;
+                                    onChange(rest as Ability);
+                                } else {
+                                    onChange({
+                                        ...ability,
+                                        triggerCritFilter: value as 'crit' | 'non-crit',
+                                    });
+                                }
+                            }}
+                            helpLabel="Per-hit: a multi-hit attack checks each hit separately"
+                        />
+                    )}
                 </>
             )}
 
