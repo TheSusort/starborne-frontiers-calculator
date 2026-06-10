@@ -277,7 +277,7 @@ Required-confirmation ships present: Yazid & Tycho (Everliving Regeneration), Cr
 
 Full affected-ship set (any golden delta MUST be a ship on this list — anything off-list is a bug):
 
-```
+```text
 Kafa, Nuqtu, AEGIS, Gallant, Anjian, Bizon, Bayah, Iridium, Ravager, Mangler,
 Panon, Morao, Nayra, Flamel, Ripper, Makoli, Butcher, Berserker, Sansi, Crucialis,
 Shelter, Rys, IonScorp, Torcher, Quixilver, APEX, Warden, Guardian, Shepherd, Medved,

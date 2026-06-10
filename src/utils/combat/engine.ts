@@ -1527,14 +1527,12 @@ export function runCombat(input: CombatEngineInput): {
         statusEngine.beginRound(r);
 
         // Combat-start seeding (round 1) for PASSIVE-sourced finite (timed) self-statuses.
+        // Player runtimes face the dummy enemy, so an `enemy-type` gate resolves against
+        // `enemyType`. Enemy-attacker runtimes face the player heal target (which has no
+        // EnemyBaseClass), so their `enemy-type` gate must resolve against undefined.
         if (r === 1) {
-            seedPassiveTimedStatuses(
-                [...runtimesById.values(), ...enemyPlayerRuntimes],
-                statusEngine,
-                bus,
-                enemyType,
-                r
-            );
+            seedPassiveTimedStatuses([...runtimesById.values()], statusEngine, bus, enemyType, r);
+            seedPassiveTimedStatuses(enemyPlayerRuntimes, statusEngine, bus, undefined, r);
         }
 
         // Team actors listed BEFORE the attacker so the input-order tiebreak yields
