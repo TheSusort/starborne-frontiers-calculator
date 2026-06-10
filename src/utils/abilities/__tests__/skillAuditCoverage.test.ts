@@ -22,11 +22,13 @@ describe('skill parser coverage audit', () => {
 });
 
 /**
- * Damage-reaction parity (Phase 4c PR 1): self-subject "when directly damaged" /
- * "when critically hit" clauses are parser-modeled (on-attacked trigger), so an effect
- * from such a clause that parses UNGATED on-cast is a parser regression the audit must
- * FLAG — not skip via the blanket reactive-trigger exclusion. Ally-subject reactions
- * stay skipped (4c PR 2 deferral), as do reactive triggers we don't model at all.
+ * Damage-reaction parity (Phase 4c): self-subject "when directly damaged" / "when
+ * critically hit" clauses (PR 1, on-attacked) and ally-subject "when an ally is directly
+ * damaged / is critically hit" clauses (PR 2, on-ally-attacked) are parser-modeled, so an
+ * effect from such a clause that parses UNGATED on-cast is a parser regression the audit
+ * must FLAG — not skip via the reactive-trigger exclusion. Reactive triggers the parser
+ * does not model at all (on-kill, Panon's "If directly damaged", Provider's ally-outgoing
+ * inflicts-a-debuff) stay skipped.
  */
 describe('ungatedFinding damage-reaction parity', () => {
     const ungatedBuff = (buffName: string): Ability => ({
@@ -49,10 +51,10 @@ describe('ungatedFinding damage-reaction parity', () => {
     });
 
     it('flags an ally-subject damage-reaction clause whose effect parsed ungated on-cast', () => {
-        // Flipped in 4c PR 2 Task 7: the detector now classifies ally-subject reactions
+        // Flipped in 4c PR 2 Task 7: the detector classifies ally-subject reactions
         // (on-ally-attacked), so the parity guard covers them too — buildShipAbilities
         // assigns the trigger, meaning a real-corpus build never parses these ungated.
-        // auditSkills' own ally-reaction comments/skip-list get reconciled in Task 10.
+        // auditSkills' INTENTIONAL_REACTIVE_RE no longer skips ally-damage shapes (Task 10).
         const plain = 'When an ally is directly damaged, this Unit gains Fortify II for 1 turn.';
         expect(ungatedFinding([ungatedBuff('Fortify II')], plain)).toContain('Fortify II');
     });
