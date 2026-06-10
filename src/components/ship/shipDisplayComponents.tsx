@@ -124,7 +124,7 @@ export const ShipHeader = memo(
                     {ship.name}
                 </span>
             </div>
-            {ship.refits && ship.refits.length > 0 && ship.rank && ship.rank > 0 && (
+            {((ship.refits?.length ?? 0) > 0 || (ship.rank ?? 0) > 0) && (
                 <div className="flex items-center gap-1">
                     {Array.from({ length: 6 }, (_, index) => (
                         <span
