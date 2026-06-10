@@ -1209,6 +1209,20 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             if (reaction) {
                 ability.trigger = reaction.trigger;
                 if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+                // "while below N% HP" gate on the reaction sentence (Makoli Disable): attach a
+                // derivable self hp-threshold condition so the executor evaluates the gate at
+                // drain time (live selfHpPct from Task 6) rather than firing on every hit.
+                if (reaction.hpBelowPct !== undefined) {
+                    ability.conditions = [
+                        {
+                            subject: 'hp-threshold',
+                            derivable: true,
+                            hpComparator: 'below',
+                            hpPercent: reaction.hpBelowPct,
+                            hpSubject: 'self',
+                        },
+                    ];
+                }
             }
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
@@ -1245,13 +1259,25 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             const reaction =
                 pos >= 0 ? detectDamageReactionTrigger(passiveRowText, pos) : undefined;
             if (!reaction) continue;
+            const dotReactionConditions: Condition[] =
+                reaction.hpBelowPct !== undefined
+                    ? [
+                          {
+                              subject: 'hp-threshold',
+                              derivable: true,
+                              hpComparator: 'below',
+                              hpPercent: reaction.hpBelowPct,
+                              hpSubject: 'self',
+                          },
+                      ]
+                    : [];
             const ability: Ability = {
                 id: nextId(),
                 type: 'debuff',
                 target: 'enemy',
                 trigger: reaction.trigger,
                 ...(reaction.critFilter ? { triggerCritFilter: reaction.critFilter } : {}),
-                conditions: [],
+                conditions: dotReactionConditions,
                 config: {
                     type: 'debuff',
                     buffName: eff.buffName,

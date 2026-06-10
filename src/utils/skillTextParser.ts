@@ -1000,6 +1000,12 @@ const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
 // matched — only the "when" phrasing classifies this phase.
 const DR_DIRECT_DAMAGE_RE =
     /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b/i;
+// "while below N% HP" HP gate on a damage-reaction sentence (Makoli: "when directly damaged
+// while below 40% HP, …"). The same regex form as Task 7's parseHealAbilities annotation
+// (/while\s+below\s+(\d+)\s*%\s*hp/i) — kept here in the detector so ALL sentence-scoped
+// extraction lives in skillTextParser. Extracted AFTER the damage-reaction shape is confirmed
+// so an unrelated "while below X% HP" in a non-reaction sentence is never picked up.
+const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
 
 /**
  * Self-subject damage-reaction trigger for non-heal clauses (Phase 4c PR 1). Matches the
@@ -1007,19 +1013,32 @@ const DR_DIRECT_DAMAGE_RE =
  * Passive-voice "is critically hit" is the CRIT-FILTERED variant — distinct from the
  * ACTIVE-voice self-crit condition, which detectGrantConditions still rejects in passive
  * voice. Ally-subject sentences return undefined (PR 2). NO lookbehind (iOS Safari 15).
+ * `hpBelowPct` is set when the reaction sentence also carries a "while below N% HP" self
+ * HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold condition so the
+ * executor evaluates the gate at drain time rather than firing on every received attack.
  * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
  * Panguan, Stalwart, Makoli).
  */
 export function detectDamageReactionTrigger(
     text: string,
     pos: number
-): { trigger: 'on-attacked'; critFilter?: 'crit' } | undefined {
+): { trigger: 'on-attacked'; critFilter?: 'crit'; hpBelowPct?: number } | undefined {
     const sentence = rawSentenceAround(text, pos);
     if (sentence === undefined) return undefined;
     if (DR_ALLY_SUBJECT_RE.test(sentence)) return undefined;
     const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
-    if (DR_CRIT_HIT_RE.test(scrubbed)) return { trigger: 'on-attacked', critFilter: 'crit' };
-    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) return { trigger: 'on-attacked' };
+    if (DR_CRIT_HIT_RE.test(scrubbed)) {
+        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+        return {
+            trigger: 'on-attacked',
+            critFilter: 'crit',
+            ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+        };
+    }
+    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) {
+        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+        return { trigger: 'on-attacked', ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}) };
+    }
     return undefined;
 }
 

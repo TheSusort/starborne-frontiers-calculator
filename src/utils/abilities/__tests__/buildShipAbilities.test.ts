@@ -1633,20 +1633,55 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Makoli second passive: the Disable counter-infliction flips to on-attacked', () => {
-            // NOTE: the "while below 40% HP" gate stays on the HEAL only (Task 7's
-            // damageReaction.hpBelowPct); the detector deliberately carries no hp gate, so
-            // Disable fires on every received attack. Still strictly better than the
-            // previous unconditional per-round aura.
+        it('Makoli second passive: the Disable counter-infliction flips to on-attacked WITH the derivable below-40% self hp-threshold condition', () => {
+            // The "while below 40% HP" gate appears in the reaction sentence, so the detector
+            // now surfaces hpBelowPct: 40.  The builder attaches the same derivable hp-threshold
+            // shape used for the heal (Task 7) so the executor gates the Disable infliction at
+            // drain time against the live tank HP — Disable no longer fires on every hit.
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
                     'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
             });
-            expect(passiveOf(s)?.abilities.find((a) => a.type === 'debuff')).toMatchObject({
+            const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
+            expect(debuff).toMatchObject({
                 trigger: 'on-attacked',
                 config: { buffName: 'Disable' },
             });
+            expect(debuff!.conditions).toEqual([
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 40,
+                    hpSubject: 'self',
+                },
+            ]);
+        });
+
+        it('Guardian Binderburg (negative): ungated crit reaction keeps empty conditions', () => {
+            // No "while below N% HP" in the Guardian sentence → conditions stay [].
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+            });
+            const buff = passiveOf(s)?.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Binderburg Resilience I'
+            );
+            expect(buff?.trigger).toBe('on-attacked');
+            expect(buff?.conditions).toEqual([]);
+        });
+
+        it('Warden Corrosion (negative): ungated reaction DoT keeps empty conditions', () => {
+            // No HP gate in Warden's sentence → conditions stay [].
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+            });
+            const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
+            expect(debuff?.trigger).toBe('on-attacked');
+            expect(debuff?.conditions).toEqual([]);
         });
 
         it('Provider (negative): ally-inflicts sentence with "cannont critically hit" is unchanged', () => {

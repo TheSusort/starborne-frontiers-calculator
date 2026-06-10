@@ -2541,6 +2541,28 @@ describe('detectDamageReactionTrigger', () => {
     it('negative pos → undefined', () => {
         expect(detectDamageReactionTrigger('When directly damaged, …', -1)).toBeUndefined();
     });
+
+    // hpBelowPct: widened return (spec-review fix — gated reaction debuffs carry hp gate)
+    it('Makoli: "when directly damaged while below 40% HP" → on-attacked with hpBelowPct 40', () => {
+        const text =
+            'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+        expect(at(text, 'Disable')).toEqual({ trigger: 'on-attacked', hpBelowPct: 40 });
+    });
+
+    it('ungated Warden sentence → on-attacked with no hpBelowPct', () => {
+        const text =
+            'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.';
+        expect(at(text, 'Corrosion I')).toEqual({ trigger: 'on-attacked' });
+    });
+
+    it('Guardian crit-filtered sentence (ungated) → on-attacked + critFilter, no hpBelowPct', () => {
+        const text =
+            'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.';
+        expect(at(text, 'Binderburg Resilience I')).toEqual({
+            trigger: 'on-attacked',
+            critFilter: 'crit',
+        });
+    });
 });
 
 describe('parseHealAbilities explicitTarget', () => {
