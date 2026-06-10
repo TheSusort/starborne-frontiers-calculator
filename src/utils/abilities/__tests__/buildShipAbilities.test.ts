@@ -361,10 +361,19 @@ describe('buildShipAbilities', () => {
             secondPassiveSkillText:
                 'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
         });
-        const dot = abilityOfType(slot(buildShipAbilities(s).slots, 'passive')!.abilities, 'dot')!;
+        const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+        const dot = abilityOfType(abilities, 'dot')!;
         expect(dot.config).toMatchObject({ type: 'dot', dotType: 'corrosion' });
         expect(dot.trigger).toBe('on-ally-crit-dot');
         expect(dot.conditions).toEqual([]);
+        // FULL list pin: heal + dot and NOTHING else. "with a critical hit" here is the
+        // ally's OUTGOING crit — if detectDamageReactionTrigger ever reads it as the ally
+        // BEING crit-hit, the Task 8 name-only-debuff pass adds a phantom on-ally-attacked
+        // Corrosion II debuff card on top of these two.
+        expect(abilities.map((a) => [a.type, a.trigger])).toEqual([
+            ['heal', 'on-cast'],
+            ['dot', 'on-ally-crit-dot'],
+        ]);
     });
 
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {

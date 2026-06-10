@@ -2682,6 +2682,19 @@ describe('detectDamageReactionTrigger — ally-subject (on-ally-attacked)', () =
         ).toEqual({ trigger: 'on-ally-attacked', roleFilter: ['ATTACKER', 'DEBUFFER'] });
     });
 
+    it('Crocus: ACTIVE-voice ally crit ("inflicts … with a critical hit") → undefined', () => {
+        // The ally lands the crit (outgoing, on-ally-crit-dot territory) — the ally is NOT
+        // being damaged. Bare DR_CRIT_HIT_RE matches "…with a critical hit", so without the
+        // passive-voice requirement this misclassified as on-ally-attacked + crit filter and
+        // buildShipAbilities emitted a phantom name-only Corrosion II debuff into simulations.
+        expect(
+            at(
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
+                'Corrosion II'
+            )
+        ).toBeUndefined();
+    });
+
     it('self-subject regression (Warden, byte-identical to the PR 1 pin): bare on-attacked', () => {
         expect(
             at(

@@ -989,8 +989,11 @@ function rawSentenceAround(text: string, anchorPos: number): string | undefined 
 // detectDamageReactionTrigger rules (Phase 4c PR 1 Task 8 + PR 2 Task 7). Ally-subject
 // detector covers BOTH "when an ally …" and "when another ally …" (Provider) — a matching
 // sentence classifies as on-ally-attacked when it also carries a damage-reaction shape
-// (Guardian's Provoke counter, Refine, Graphite); other ally-subject "when" sentences
-// (Provider's inflicts-a-debuff reaction) still return undefined.
+// with the ally as the PASSIVE-voice subject — "is critically hit" / "is directly damaged"
+// (Guardian's Provoke counter, Refine, Graphite). ACTIVE-voice ally sentences where the
+// ally DEALS the hit (Crocus "When another ally inflicts a DoT effect with a critical
+// hit", Provider's inflicts-a-debuff reaction) return undefined — those are outgoing
+// reactions, not the ally being damaged.
 const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
 // Role words inside an ally-subject phrase ("when an ally attacker or debuffer is
 // directly damaged" — Graphite) → ShipRoleCategory filter, CATEGORY semantics
@@ -1012,6 +1015,13 @@ const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
 // self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
 // which "hit\b" deliberately does not match (no trailing "s").
 const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
+// ALLY-subject crit reactions require the damaged ally as subject — "is critically hit"
+// (Guardian "When an ally is critically hit by an enemy"; same "criticall hit" typo
+// tolerance as DR_CRIT_HIT_RE). The bare DR_CRIT_HIT_RE also matches the ACTIVE-voice
+// "…inflicts a DoT effect WITH a critical hit" (Crocus), where the ally LANDS the crit
+// (outgoing — on-ally-crit-dot territory) rather than receiving it, so the ally branch
+// must not reuse it.
+const DR_ALLY_CRIT_HIT_RE = /\bis\s+criticall?y?\s+hit\b/i;
 // Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
 // trailing clause) / "when attacked". "If directly damaged" (Panon) is deliberately NOT
 // matched — only the "when" phrasing classifies this phase.
@@ -1033,7 +1043,11 @@ const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
  *
  * Subject decides the trigger: a self-subject reaction sentence → on-attacked; an
  * ALLY-subject one ("when an(other) ally … is critically hit / directly damaged") →
- * on-ally-attacked (Guardian's Provoke counter, Refine's Inc. Damage Down grant). Role
+ * on-ally-attacked (Guardian's Provoke counter, Refine's Inc. Damage Down grant). The
+ * ally branch's crit test demands PASSIVE voice (DR_ALLY_CRIT_HIT_RE, "IS critically
+ * hit") because the bare DR_CRIT_HIT_RE also matches active-voice "…inflicts a DoT
+ * effect WITH a critical hit" (Crocus) — an ally-OUTGOING crit handled by
+ * on-ally-crit-dot, which must stay undefined here. Role
  * nouns right after "ally" (Graphite "when an ally attacker or debuffer is directly
  * damaged") become `roleFilter`, CATEGORY-semantic ShipRoleCategory values the engine's
  * listener matches against the damaged ally's role. The ally branch needs its own
@@ -1071,7 +1085,7 @@ export function detectDamageReactionTrigger(
               .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
         : undefined;
     const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
-    if (DR_CRIT_HIT_RE.test(scrubbed)) {
+    if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
         const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
             trigger,
