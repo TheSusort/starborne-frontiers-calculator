@@ -11,6 +11,7 @@ import {
     LIVE_TRIGGERS,
 } from '../triggers';
 import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
@@ -1736,6 +1737,183 @@ describe('on-attacked live trigger (Task 4)', () => {
         });
         expect(nonCritIntents).toHaveLength(1);
         expect(nonCritIntents[0].ability.triggerCritFilter).toBe('non-crit');
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-ally-attacked listener (Phase 4c PR 2 Task 3): fires when ANOTHER player
+// actor takes a direct hit. Unit-level harness mirroring the on-attacked
+// crit-filter tests: bare bus + registerReactiveListeners + manual emits.
+// Owner is 'graphite' (the reacting ship); 'tank' is another player actor;
+// 'enemy' and 'ea1' are enemy-side per the isEnemySide predicate.
+// ----------------------------------------------------------------------
+describe('on-ally-attacked listener', () => {
+    // Build a minimal on-ally-attacked reactive ability (Graphite/Cultivator shape).
+    const onAllyAttackedBuff = (overrides: Partial<Ability> = {}): Ability =>
+        ab({
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Fortify',
+                stacks: 1,
+                parsedEffects: { defense: 15 },
+                isStackable: false,
+                duration: 1,
+            },
+            ...overrides,
+        });
+
+    // Helper: wire up the bus, register the owner's listeners (optionally with a
+    // roleOf lookup), emit the given attacked events, return collected intents.
+    function emitAllyAttacked(
+        reactiveAbilities: ReactiveAbility[],
+        events: Extract<CombatEvent, { type: 'attacked' }>[],
+        roleOf?: (actorId: string) => ShipTypeName | undefined
+    ): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'graphite', reactiveAbilities }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy' || id === 'ea1',
+            roleOf,
+        });
+        for (const e of events) bus.emit(e);
+        return intents;
+    }
+
+    // (1) ally scoping: another player actor's hit fires; own hits and
+    //     enemy-side targets do not
+    it('fires when ANOTHER player actor is hit, not for own hits or enemy-side targets', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+
+        // another player actor ('tank') is hit → enqueue
+        const allyIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 }]
+        );
+        expect(allyIntents).toHaveLength(1);
+        expect(allyIntents[0].ownerId).toBe('graphite');
+        expect(allyIntents[0].ability.trigger).toBe('on-ally-attacked');
+
+        // the owner itself is hit → NOT an ally hit (on-attacked's job)
+        const ownIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'graphite', attackerId: 'ea1', round: 1 }]
+        );
+        expect(ownIntents).toHaveLength(0);
+
+        // an enemy-side actor is hit (player attacking the enemy) → not an ally
+        const enemyIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'enemy', attackerId: 'tank', round: 1 }]
+        );
+        expect(enemyIntents).toHaveLength(0);
+    });
+
+    // (2) per-HIT semantics: the engine emits one attacked event per hit
+    it('fires once PER HIT: three attacked events yield three enqueues', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+        const hit = { type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 } as const;
+        const intents = emitAllyAttacked([ra], [hit, hit, hit]);
+        expect(intents).toHaveLength(3);
+    });
+
+    // (3) triggerCritFilter discriminates on the hit's own crit outcome
+    it('honors triggerCritFilter against the hit didCrit (crit and non-crit)', () => {
+        const critRa: ReactiveAbility = {
+            ability: onAllyAttackedBuff({ id: 'aa-crit', triggerCritFilter: 'crit' }),
+            sourceSlot: 'passive',
+        };
+        const nonCritRa: ReactiveAbility = {
+            ability: onAllyAttackedBuff({ id: 'aa-non-crit', triggerCritFilter: 'non-crit' }),
+            sourceSlot: 'passive',
+        };
+        const critHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+            didCrit: true,
+        } as const;
+        const plainHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+        } as const;
+
+        // 'crit'-filtered: only the didCrit hit fires
+        const critIntents = emitAllyAttacked([critRa], [critHit, plainHit]);
+        expect(critIntents).toHaveLength(1);
+        expect(critIntents[0].ability.triggerCritFilter).toBe('crit');
+
+        // 'non-crit'-filtered: only the hit WITHOUT didCrit fires
+        const nonCritIntents = emitAllyAttacked([nonCritRa], [critHit, plainHit]);
+        expect(nonCritIntents).toHaveLength(1);
+        expect(nonCritIntents[0].ability.triggerCritFilter).toBe('non-crit');
+    });
+
+    // (4) roleFilter matches the DAMAGED ally's role category via roleOf
+    describe('roleFilter against the damaged ally role', () => {
+        const filtered = (): ReactiveAbility => ({
+            ability: onAllyAttackedBuff({
+                id: 'aa-role',
+                roleFilter: ['ATTACKER', 'DEBUFFER'],
+            }),
+            sourceSlot: 'passive',
+        });
+        const hit = { type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 } as const;
+
+        it('enqueues when the ally role is an underscore variant of a listed category', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => 'DEBUFFER_BOMBER');
+            expect(intents).toHaveLength(1);
+        });
+
+        it('does NOT enqueue when the ally role is outside the filter', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => 'DEFENDER');
+            expect(intents).toHaveLength(0);
+        });
+
+        it('does NOT enqueue when roleOf returns undefined (unknown role = no match)', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => undefined);
+            expect(intents).toHaveLength(0);
+        });
+
+        it('does NOT enqueue when no roleOf is passed at all but a filter is present', () => {
+            const intents = emitAllyAttacked([filtered()], [hit]);
+            expect(intents).toHaveLength(0);
+        });
+
+        it('ability WITHOUT roleFilter still enqueues when roleOf is undefined (absent filter = any ally)', () => {
+            const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+            const intents = emitAllyAttacked([ra], [hit]);
+            expect(intents).toHaveLength(1);
+        });
+
+        it('EMPTY roleFilter array behaves like absent: fires for any ally', () => {
+            const ra: ReactiveAbility = {
+                ability: onAllyAttackedBuff({ id: 'aa-empty', roleFilter: [] }),
+                sourceSlot: 'passive',
+            };
+            const intents = emitAllyAttacked([ra], [hit]);
+            expect(intents).toHaveLength(1);
+        });
+    });
+
+    // (5) per-event eventCtx: counter routing (attacker) + ally routing (target)
+    it('enqueued intent carries eventCtx with BOTH counterTargetId and damagedAllyId', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 }]
+        );
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('ea1');
+        expect(intents[0].eventCtx?.damagedAllyId).toBe('tank');
     });
 });
 

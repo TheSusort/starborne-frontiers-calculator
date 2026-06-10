@@ -1,4 +1,6 @@
 import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
+import { matchesRoleCategory } from '../../constants/shipTypes';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { EnemyBaseClass, ParsedBuffEffects } from '../../types/calculator';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
@@ -145,6 +147,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    triggerCritFilter discriminates on the hit's own crit outcome: 'crit' → critting hits only,
  *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
  *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
+ *  - on-ally-attacked → attacked where targetId !== ownerId && !isEnemySide(targetId) (per hit;
+ *    critFilter + roleFilter applied). Fires when ANY OTHER player actor is hit — own hits are
+ *    on-attacked's job; an enemy-side target is never an ally. triggerCritFilter discriminates on
+ *    the hit's own crit outcome (same contract as on-attacked); roleFilter (Graphite) matches the
+ *    DAMAGED ally's role category via the optional roleOf lookup.
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
  *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
@@ -175,8 +182,12 @@ export function registerReactiveListeners(args: {
      *  player's on-ally-* reaction. The engine passes a predicate closing over the dummy id
      *  + all enemy-attacker ids; for an attacker-only/DPS run only the dummy is enemy-side. */
     isEnemySide: (actorId: string) => boolean;
+    /** Damaged-ally role lookup for role-filtered ally-damage reactions (Graphite).
+     *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
+     *  Optional: DPS-mode runs and unit fixtures omit it. */
+    roleOf?: (actorId: string) => ShipTypeName | undefined;
 }): void {
-    const { bus, perOwner, enqueue, isEnemySide } = args;
+    const { bus, perOwner, enqueue, isEnemySide, roleOf } = args;
     for (const { ownerId, reactiveAbilities } of perOwner) {
         for (const ra of reactiveAbilities) {
             const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
@@ -275,6 +286,38 @@ export function registerReactiveListeners(args: {
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
                         enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
+                    });
+                    break;
+                case 'on-ally-attacked':
+                    bus.on('attacked', (e) => {
+                        // Ally-scoped: fires when ANY OTHER player actor is hit — per HIT (the
+                        // engine emits one event per hit, PR 1). Excludes this owner (own hits
+                        // are on-attacked's job) and every enemy-side actor, mirroring
+                        // on-ally-destroyed's scoping. triggerCritFilter discriminates on the
+                        // hit's own crit outcome, same contract as on-attacked. roleFilter
+                        // (Graphite) matches the DAMAGED ally's role category; an unknown role
+                        // never matches (conservative — a manual actor with no ship picked keeps
+                        // role-filtered reactions dormant rather than inflating numbers); an
+                        // EMPTY filter array is treated as absent (any ally), not never-match.
+                        if (e.targetId === ownerId || isEnemySide(e.targetId)) return;
+                        const filter = ra.ability.triggerCritFilter;
+                        if (filter === 'crit' && !e.didCrit) return;
+                        if (filter === 'non-crit' && e.didCrit) return;
+                        const roles = ra.ability.roleFilter;
+                        if (
+                            roles &&
+                            roles.length > 0 &&
+                            !matchesRoleCategory(roleOf?.(e.targetId), roles)
+                        ) {
+                            return;
+                        }
+                        // Per-event intent: counterTargetId routes counter-inflictions to the
+                        // attacker (Guardian's Provoke); damagedAllyId routes 'ally'-target
+                        // payloads to exactly the hit ally (Cultivator/Refine/Graphite).
+                        enqueue({
+                            ...intent,
+                            eventCtx: { counterTargetId: e.attackerId, damagedAllyId: e.targetId },
+                        });
                     });
                     break;
                 case 'on-destroyed':
