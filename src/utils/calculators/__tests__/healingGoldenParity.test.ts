@@ -38,7 +38,7 @@ import { describe, expect, it } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
-import { createEventBus } from '../../combat/events';
+import { CombatEvent, createEventBus } from '../../combat/events';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1635,6 +1635,9 @@ describe('healingGoldenParity', () => {
     it('scenario 22: zero reactive heals at/above 40%, fires from round 4 (steady re-crossing)', () => {
         idCounter = 0;
         const result = simulateHealing(scenario22Input());
+        // Round 3 (index 2) is the exactly-40%-drain-time strict-below boundary case:
+        // the tank enters at 60%, takes 2000 damage → HP 4000 = exactly 40% at drain time.
+        // The strict-below comparator (40 < 40 = FALSE) means the heal does NOT fire on round 3.
         expect(result.rounds.map((r) => r.directHeal)).toEqual([0, 0, 0, 2000, 2000, 2000]);
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 80, 60, 40, 40, 40]);
     });
@@ -1718,11 +1721,9 @@ describe('healingGoldenParity', () => {
     it('scenario 23: debuff-applied targets the attacking enemy id once per hit landed', () => {
         idCounter = 0;
         const bus = createEventBus();
-        const applied: { round: number; targetId: string; sourceId: string; buffName: string }[] =
-            [];
+        const applied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
         bus.on('debuff-applied', (e) => {
-            const ev = e as { round: number; targetId: string; sourceId: string; buffName: string };
-            if (ev.buffName === 'Corrosion I') applied.push(ev);
+            if (e.buffName === 'Corrosion I') applied.push(e);
         });
         simulateHealing({ ...scenario23Input(), bus });
         expect(applied).toEqual([
