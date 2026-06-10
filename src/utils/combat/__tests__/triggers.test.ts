@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import {
@@ -1845,16 +1845,29 @@ describe('on-ally-attacked listener', () => {
             attackerId: 'ea1',
             round: 1,
         } as const;
+        // Explicit didCrit:false — the engine never emits it (present-only-when-true),
+        // but the listener must treat it as non-crit; mirrors the on-attacked PR 1
+        // robustness convention pinned above.
+        const explicitNonCritHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+            didCrit: false,
+        } as const;
 
-        // 'crit'-filtered: only the didCrit hit fires
-        const critIntents = emitAllyAttacked([critRa], [critHit, plainHit]);
+        // 'crit'-filtered: only the didCrit:true hit fires
+        const critIntents = emitAllyAttacked([critRa], [critHit, plainHit, explicitNonCritHit]);
         expect(critIntents).toHaveLength(1);
         expect(critIntents[0].ability.triggerCritFilter).toBe('crit');
 
-        // 'non-crit'-filtered: only the hit WITHOUT didCrit fires
-        const nonCritIntents = emitAllyAttacked([nonCritRa], [critHit, plainHit]);
-        expect(nonCritIntents).toHaveLength(1);
-        expect(nonCritIntents[0].ability.triggerCritFilter).toBe('non-crit');
+        // 'non-crit'-filtered: the absent-didCrit hit AND the explicit didCrit:false hit fire
+        const nonCritIntents = emitAllyAttacked(
+            [nonCritRa],
+            [critHit, plainHit, explicitNonCritHit]
+        );
+        expect(nonCritIntents).toHaveLength(2);
+        expect(nonCritIntents.every((i) => i.ability.triggerCritFilter === 'non-crit')).toBe(true);
     });
 
     // (4) roleFilter matches the DAMAGED ally's role category via roleOf
@@ -2769,5 +2782,173 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
         // debuff-resisted must point at ctx.enemy.id, not the counterTargetId.
         expect(emitted).toHaveLength(1);
         expect(emitted[0].targetId).toBe('enemy-default');
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c PR 2 Task 4: ally-target payload routing via eventCtx.damagedAllyId
+//
+// An on-ally-attacked reaction grant ('ally' target + eventCtx naming the
+// damaged ally — Graphite's "grants the ally Repair Over Time III") must land
+// on EXACTLY that ally. Without the routing the buff branch's Task-5 rule
+// ('ally' → every playerId) would put the HoT on the whole team and inflate
+// healing numbers. Without eventCtx the all-players grant is preserved
+// (PR 1 contract lock). The heal branch prefers damagedAllyId over
+// ctx.healing.targetId — identical today (the engine only attacks the heal
+// target) but locks "repairs THAT ally" semantics for 4d multi-target.
+// ----------------------------------------------------------------------
+describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
+    const PLAYER_IDS = ['healer', 'team1', 'tank'];
+
+    const makeRuntime = (id: string): PlayerActorRuntime =>
+        ({
+            actor: { id } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const makeBuffIntent = (damagedAllyId?: string): Intent => ({
+        ownerId: 'healer',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'graphite-ally-hot',
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Repair Over Time III',
+                stacks: 1,
+                parsedEffects: { defense: 5 },
+                isStackable: false,
+                duration: 2,
+            },
+        },
+        ...(damagedAllyId !== undefined
+            ? { eventCtx: { counterTargetId: 'ea1', damagedAllyId } }
+            : {}),
+    });
+
+    const buildBuffCtx = (): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['healer', makeRuntime('healer')]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: PLAYER_IDS,
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('buff intent with eventCtx.damagedAllyId and target "ally" grants ONLY the damaged ally', () => {
+        const ctx = buildBuffCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        const buffEvents: Array<{ actorId?: string }> = [];
+        ctx.bus.on('buff-applied', (e) => buffEvents.push(e as { actorId?: string }));
+
+        executeIntent(makeBuffIntent('tank'), ctx);
+
+        // EXACTLY one application, recipient = the damaged ally (third positional arg).
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        expect(applySpy.mock.calls[0][2]).toBe('tank');
+
+        // Exactly one buff-applied event, on the damaged ally — not the whole team.
+        expect(buffEvents).toHaveLength(1);
+        expect(buffEvents[0].actorId).toBe('tank');
+    });
+
+    it('buff intent with target "ally" and NO eventCtx keeps the all-players grant (PR 1 contract)', () => {
+        const ctx = buildBuffCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        const buffEvents: Array<{ actorId?: string }> = [];
+        ctx.bus.on('buff-applied', (e) => buffEvents.push(e as { actorId?: string }));
+
+        executeIntent(makeBuffIntent(), ctx);
+
+        // Every player id receives the grant, in the fixed playerIds order.
+        expect(applySpy).toHaveBeenCalledTimes(PLAYER_IDS.length);
+        expect(applySpy.mock.calls.map((c) => c[2])).toEqual(PLAYER_IDS);
+        expect(buffEvents.map((e) => e.actorId)).toEqual(PLAYER_IDS);
+    });
+
+    // ---- heal branch: damagedAllyId preferred over ctx.healing.targetId ----
+
+    const makeHealIntent = (damagedAllyId: string): Intent => ({
+        ownerId: 'healer',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'ally-reactive-repair',
+            type: 'heal',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            conditions: [],
+            config: { type: 'heal', pct: 10, basis: 'hp' },
+        },
+        eventCtx: { counterTargetId: 'ea1', damagedAllyId },
+    });
+
+    const buildHealCtx = (): {
+        ctx: IntentExecContext;
+        applied: number[];
+        credits: Array<{ bucket: string; amount: number }>;
+    } => {
+        const applied: number[] = [];
+        const credits: Array<{ bucket: string; amount: number }> = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'tank',
+            credit: (_actorId, bucket, amount) => credits.push({ bucket, amount }),
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: PLAYER_IDS,
+        };
+        const ctx: IntentExecContext = {
+            ...buildBuffCtx(),
+            healing,
+        };
+        return { ctx, applied, credits };
+    };
+
+    it('heal intent with damagedAllyId === healing.targetId routes to the target (effectiveHeal credited)', () => {
+        const { ctx, applied, credits } = buildHealCtx();
+
+        executeIntent(makeHealIntent('tank'), ctx);
+
+        // 10% of owner hp (1000) = 100, consumed by the heal target.
+        expect(applied).toEqual([100]);
+        expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
+        expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
+    });
+
+    it('heal intent with damagedAllyId ≠ healing.targetId credits directHeal but does NOT touch the target pool', () => {
+        const { ctx, applied, credits } = buildHealCtx();
+
+        // The damaged ally is 'team1', NOT the heal target 'tank' — locks the
+        // recipient-vs-target consumption split for the 4d multi-target future.
+        executeIntent(makeHealIntent('team1'), ctx);
+
+        expect(applied).toHaveLength(0);
+        expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
+        expect(credits.some((c) => c.bucket === 'effectiveHeal')).toBe(false);
     });
 });

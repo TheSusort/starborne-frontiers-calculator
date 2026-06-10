@@ -694,13 +694,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
-        // Recipients per the Task-5 target rule: self → [ownerId]; ally/all-allies → every
-        // player id (the FIXED playerIds order). The status carries casterId = ownerId so its
-        // gate evaluates against the caster's ctx even when it lives on another recipient.
+        // Recipients: an ally-damage reaction grant ('ally' target + eventCtx naming the
+        // damaged ally — Graphite's "grants the ally Repair Over Time III") lands on EXACTLY
+        // that ally; granting all playerIds would put the HoT on the whole team and inflate
+        // healing numbers. Otherwise the Task-5 target rule holds: self → [ownerId];
+        // ally/all-allies → every player id (the FIXED playerIds order). The status carries
+        // casterId = ownerId so its gate evaluates against the caster's ctx even when it
+        // lives on another recipient.
         const recipients: string[] =
-            intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
-                ? ctx.playerIds
-                : [intent.ownerId];
+            intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                ? [intent.eventCtx.damagedAllyId]
+                : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
+                  ? ctx.playerIds
+                  : [intent.ownerId];
         // The status object is identical for every recipient — hoist it above the loop.
         // Only the applyTimedAbilityStatus recipientId argument varies per iteration.
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
@@ -861,9 +867,13 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
                   : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+        // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
+        // reaction repairs THAT ally) over the healing target. Identical today — the engine
+        // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
+        // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
         const recipients =
             intent.ability.target === 'ally'
-                ? [ctx.healing.targetId]
+                ? [intent.eventCtx?.damagedAllyId ?? healing.targetId]
                 : intent.ability.target === 'all-allies'
                   ? ctx.playerIds
                   : [intent.ownerId];
