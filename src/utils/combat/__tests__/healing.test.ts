@@ -2725,6 +2725,82 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(rounds[1].activeSelfBuffs.map((b) => b.buffName)).not.toContain('Fortify');
     });
 
+    // ── Wipe (Task 3): a finite PASSIVE-slot self-buff is wiped AND not re-seeded ──
+    // A finite-duration passive-slot buff ("gains X for N turns") is seeded ONCE at combat
+    // start as a TIMED status (Task 2 reclassification — no longer a permanent aura) and
+    // decremented normally. When Cheat Death fires on the R1 lethal hit, clearRemovable wipes
+    // it; because seeding is round-1 ONLY, nothing re-applies it afterward. Contrast with the
+    // 'Fortify' test above (a CAST timed buff): here the buff comes from the PASSIVE slot and
+    // is never re-cast, so its absence post-wipe is the clean death-wipe proof.
+    //
+    // Built from Yazid's REFIT-ACTIVE passive ("At the start of combat … gains Everliving
+    // Regeneration II for 9 turns and Cheat Death"), so the seeded buff is a duration-9 timed
+    // passive status. NOT-VACUOUS GUARD: we assert the buff WAS applied/active before the wipe
+    // (a R1 buff-applied + present in R1's healTargetBuffs at turnsRemaining 9) AND is gone +
+    // not re-applied after (no second buff-applied; absent from R2+ healTargetBuffs). The
+    // recurring Cheat Death buff survives the wipe (it is always-active, never timed); an
+    // UNREMOVABLE_STATUSES member would also survive (Task 4) — only the timed buff is wiped.
+    it('wipes a finite PASSIVE-slot self-buff on Cheat Death and does NOT re-seed it', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        bus.on('buff-applied', (e) => buffApplied.push(e));
+        // Yazid's R4 passive: start-of-combat Everliving Regeneration II (9 turns) + Cheat Death.
+        // The finite buff is seeded off the PASSIVE slot at round 1 (seedPassiveTimedStatuses).
+        const yazid: Ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns and <unit-skill>Cheat Death</unit-skill><br /><br />Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+        } as Ship;
+        const yazidSkills = buildShipAbilities(yazid);
+        const result = runCombat(
+            BASE({
+                numRounds: 3, // R1 lethal hit → Cheat Death → wipe; R2/R3 prove no re-seed
+                hp: 2000, // enemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [], // granted by the parsed kit, NOT seeded as a top-level input buff
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: yazidSkills,
+            })
+        );
+        // Cheat Death intercepted the R1 lethal hit (the wipe happened this round).
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+
+        const everliving = (e: { actorId: string; buffName: string }) =>
+            e.actorId === 'attacker' && e.buffName === 'Everliving Regeneration II';
+        const rounds = result.healing!.rounds;
+        const hasEverliving = (rd: (typeof rounds)[number]) =>
+            rd.healTargetBuffs.some((b) => b.buffName === 'Everliving Regeneration II');
+
+        // (a) NOT VACUOUS — the finite passive buff WAS seeded/active before the wipe:
+        //   - exactly one buff-applied, on round 1 (the round-1-only seed), and
+        //   - present in R1's healTargetBuffs at its full duration-9 window.
+        const everlivingApplied = buffApplied.filter(everliving);
+        expect(everlivingApplied).toHaveLength(1);
+        expect(everlivingApplied[0].round).toBe(1);
+        expect(
+            rounds[0].healTargetBuffs.find((b) => b.buffName === 'Everliving Regeneration II')
+                ?.turnsRemaining
+        ).toBe(9);
+
+        // (b) Gone after the wipe AND never re-seeded:
+        //   - absent from EVERY post-wipe round's healTargetBuffs (R2, R3), and
+        //   - no further buff-applied beyond the single round-1 seed.
+        expect(hasEverliving(rounds[1])).toBe(false);
+        expect(hasEverliving(rounds[2])).toBe(false);
+        expect(everlivingApplied).toHaveLength(1); // no re-seed event past round 1
+
+        // Contrast: the recurring (always-active) Cheat Death buff SURVIVES the wipe.
+        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Cheat Death');
+    });
+
     // ── Regression: a carrier WITHOUT Cheat Death dies normally ───────────────
     it('regression: a tank without Cheat Death dies normally (ship-destroyed + destroyedRound)', () => {
         idCounter = 0;

@@ -447,6 +447,61 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
     it('fast enemy (enemySpeed 150): the same debuff expires one round later (round 3, the +1 KNOWN-DIFF)', () => {
         expect(oneShotEnemyDebuff(150)).toBe(3);
     });
+
+    it('applies a finite-duration passive self-buff once at combat start and expires it on its window', () => {
+        const skills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Everliving Regeneration II',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const { events } = collect(
+            baseInput({
+                shipSkills: skills,
+                numRounds: 6,
+                hasChargedSkill: false,
+                startCharged: false,
+                chargeCount: 0,
+            })
+        );
+        const applied = events.filter(
+            (e) =>
+                e.type === 'buff-applied' &&
+                (e as { buffName?: string }).buffName === 'Everliving Regeneration II'
+        );
+        const expired = events.filter(
+            (e) =>
+                e.type === 'buff-expired' &&
+                (e as { buffName?: string }).buffName === 'Everliving Regeneration II'
+        );
+        // Applied exactly once, at combat start.
+        expect(applied.map((e) => (e as { round: number }).round)).toEqual([1]);
+        // Expires after its 3-turn window (applied round 1 → decremented at the owner's
+        // post-turn each round → 0 at the end of round 3).
+        expect(expired.map((e) => (e as { round: number }).round)).toEqual([3]);
+    });
 });
 
 // ---------------------------------------------------------------------------
