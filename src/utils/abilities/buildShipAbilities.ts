@@ -1213,6 +1213,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 // derivable self hp-threshold condition so the executor evaluates the gate at
                 // drain time (live selfHpPct from Task 6) rather than firing on every hit.
                 if (reaction.hpBelowPct !== undefined) {
+                    // Safe overwrite: on a damage-reaction sentence the below-X% gate is the
+                    // ONLY condition — detectGrantConditions has no rule matching these phrasings
+                    // (verified corpus-wide), so this cannot clobber a real gate set earlier.
+                    // If a future ship pairs a reaction sentence with another parsed condition,
+                    // merge the arrays instead of overwriting.
                     ability.conditions = [
                         {
                             subject: 'hp-threshold',

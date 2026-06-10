@@ -948,6 +948,8 @@ function phrasePosTrigger(
 ): AbilityTrigger | undefined {
     if (!text) return undefined;
     const phraseRe = new RegExp(phrase.source, phrase.flags.replace('g', ''));
+    // A negative anchorPos (ability has no position in text) is handled by rawSentenceAround,
+    // which returns undefined for any out-of-range position, cleanly suppressing the trigger.
     const sentence = rawSentenceAround(text, anchorPos);
     return sentence !== undefined && phraseRe.test(sentence) ? trigger : undefined;
 }
@@ -989,7 +991,7 @@ const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
 // Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
 // "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
 // carrying such a rider (Provider, Grif) never reads as crit-gated.
-const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/gi;
+const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
 // Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit"; the
 // missing "y" in the live CSV's "criticall hit" is tolerated). DISTINCT from the ACTIVE-voice
 // self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
