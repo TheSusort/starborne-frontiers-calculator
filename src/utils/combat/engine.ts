@@ -1895,7 +1895,8 @@ export function runCombat(input: CombatEngineInput): {
                             ? {
                                   selfHpPctFor: (ownerId: string): number => {
                                       if (ownerId !== healTarget.id) return 100;
-                                      const maxHp = recipientMaxHp(healTarget.id);
+                                      // Same denominator as the cast-path selfHpPct (baseHpFor) — a buffed max HP must not make the gate flip at different thresholds at cast vs drain time.
+                                      const maxHp = baseHpFor(healTarget.id);
                                       if (maxHp <= 0) return 100;
                                       return Math.max(
                                           0,
