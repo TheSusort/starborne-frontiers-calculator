@@ -1,3 +1,4 @@
+import type { ShipRoleCategory } from '../constants/shipTypes';
 import { EnemyBaseClass, DoTType, StackTrigger, ParsedBuffEffects } from './calculator';
 
 export type SkillSlot = 'active' | 'charged' | 'passive';
@@ -40,6 +41,7 @@ export type AbilityTrigger =
     | 'on-stasis-applied'
     | 'on-bomb-detonated'
     | 'on-attacked'
+    | 'on-ally-attacked'
     | 'on-ally-destroyed'
     | 'on-destroyed'
     | 'on-enemy-destroyed'
@@ -64,6 +66,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-stasis-applied',
     'on-bomb-detonated',
     'on-attacked',
+    'on-ally-attacked',
     'on-destroyed',
     'on-ally-destroyed',
     'on-enemy-destroyed',
@@ -231,6 +234,12 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
+    /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
+     *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
+     *  ally's ship role matches one of these categories (prefix match over
+     *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
+     *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
+    roleFilter?: ShipRoleCategory[];
     scaling?: ScalingRule;
     config: AbilityConfig;
     autoFilled?: boolean;

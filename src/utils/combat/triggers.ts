@@ -73,9 +73,12 @@ export interface Intent {
     ownerId: string;
     /** Event context captured by the listener at enqueue time (per-event intents).
      *  `counterTargetId`: the attacking enemy's actor id for "on that enemy"
-     *  counter-inflictions (Warden) — the executor's debuff branch routes the
-     *  application to THIS enemy's per-target store instead of the default. */
-    eventCtx?: { counterTargetId?: string };
+     *  counter-inflictions (Warden, Guardian's ally-Provoke) — the executor's debuff
+     *  branch routes the application to THIS enemy's per-target store.
+     *  `damagedAllyId`: the DAMAGED ally's actor id (on-ally-attacked) — the heal and
+     *  buff branches route an 'ally'-target payload to exactly this recipient
+     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default. */
+    eventCtx?: { counterTargetId?: string; damagedAllyId?: string };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
