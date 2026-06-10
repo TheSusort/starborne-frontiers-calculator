@@ -124,17 +124,18 @@ export const ShipHeader = memo(
                     {ship.name}
                 </span>
             </div>
-
-            <div className="flex items-center gap-1">
-                {Array.from({ length: 6 }, (_, index) => (
-                    <span
-                        key={index}
-                        className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
-                    >
-                        ★
-                    </span>
-                ))}
-            </div>
+            {ship.refits && ship.refits.length > 0 && ship.rank && ship.rank > 0 && (
+                <div className="flex items-center gap-1">
+                    {Array.from({ length: 6 }, (_, index) => (
+                        <span
+                            key={index}
+                            className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
+                        >
+                            ★
+                        </span>
+                    ))}
+                </div>
+            )}
         </div>
     )
 );
