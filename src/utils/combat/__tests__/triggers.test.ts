@@ -1609,6 +1609,18 @@ describe('on-attacked live trigger (Task 4)', () => {
         });
         expect(nonCritIntents).toHaveLength(1);
 
+        // non-critting hit (didCrit: false) → should ALSO enqueue.
+        // The engine never emits didCrit:false (present-only-when-true), but this locks
+        // listener robustness against any future emitter that includes the explicit falsy flag.
+        const nonCritFalseIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: false,
+        });
+        expect(nonCritFalseIntents).toHaveLength(1);
+
         // critting hit (didCrit: true) → should NOT enqueue
         const critIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
             type: 'attacked',
@@ -1633,6 +1645,7 @@ describe('on-attacked live trigger (Task 4)', () => {
         });
         expect(critIntents).toHaveLength(1);
 
+        // didCrit absent (normal engine path)
         const nonCritIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
             type: 'attacked',
             targetId: 't',
@@ -1640,6 +1653,16 @@ describe('on-attacked live trigger (Task 4)', () => {
             round: 1,
         });
         expect(nonCritIntents).toHaveLength(1);
+
+        // didCrit: false (explicit falsy — listener robustness, engine never emits this)
+        const nonCritFalseIntents = emitAttacked([{ ownerId: 't', reactiveAbilities: [ra] }], {
+            type: 'attacked',
+            targetId: 't',
+            attackerId: 'attacker-1',
+            round: 1,
+            didCrit: false,
+        });
+        expect(nonCritFalseIntents).toHaveLength(1);
     });
 
     // (d) every enqueued intent carries eventCtx.counterTargetId === e.attackerId

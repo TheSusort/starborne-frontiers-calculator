@@ -2433,6 +2433,83 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
         expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
         expect(r[0].damageReaction).toBeUndefined();
     });
+
+    // LOCK: pure crit-only heal phrasing → ONE heal with damageReaction.critFilter 'crit'
+    it('crit-only heal: "when this unit is critically hit, repairs 5%" → ONE heal with critFilter crit', () => {
+        expect(
+            parseHealAbilities(
+                'When this unit is critically hit, this Unit repairs 5% of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 5,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'crit' },
+            },
+        ]);
+    });
+
+    // LOCK: corpus typo "criticall hit" (no trailing 'y') is also matched
+    it('crit-only heal: tolerated typo "criticall hit" → ONE heal with critFilter crit', () => {
+        expect(
+            parseHealAbilities(
+                'When this unit is criticall hit, this Unit repairs 7% of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 7,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'crit' },
+            },
+        ]);
+    });
+
+    // GUARD: Hermes-family active-voice "when an ally critically hits an enemy, repairs the ally"
+    // must NOT carry damageReaction. The active-voice "hits" (trailing 's') does not match the
+    // passive-voice "is critically hit" alternation. The ally-subject guard on dmgReaction[0]
+    // would block annotation even if another alternation happened to match. The heal emits
+    // normally (on-cast) without any damageReaction annotation.
+    it('GUARD: Hermes-family "when an ally critically hits an enemy, repairs the ally" → heal WITHOUT damageReaction', () => {
+        const r = parseHealAbilities(
+            'When an ally critically hits an enemy, this Unit repairs the ally for 5% of its Max HP.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0].damageReaction).toBeUndefined();
+    });
+
+    // GUARD: Isha pair unchanged — instead-clause logic still runs first and the
+    // "directly damaged" alternation precedes the crit-hit alternation in the regex,
+    // so Isha's pair still produces 3% non-crit + 6% crit.
+    it('GUARD: Isha pair unchanged after crit-hit alternation addition', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 3,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'non-crit' },
+            },
+            {
+                kind: 'heal',
+                pct: 6,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'crit' },
+            },
+        ]);
+    });
 });
 
 // Phase 4c PR 1 (Task 8): self-subject damage-reaction trigger for NON-HEAL clauses

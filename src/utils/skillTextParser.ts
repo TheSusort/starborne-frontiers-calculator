@@ -1409,12 +1409,21 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 );
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
 // (the caller gates this against the resolved leech basis). Covers "when (an ally/this unit is)
-// directly damaged", "when attacked", "when … is hit", "when … takes … damage". The match is
-// captured (not just tested) so the caller can reject an ENEMY-subject trigger — "when an enemy
-// takes damage from a DoT" (Anemone) is an on-DoT-tick trigger, NOT a self/ally damage reaction,
-// so it must not be disqualified by this rule. No lookbehind (iOS Safari 15).
+// directly damaged", "when attacked", "when … is hit", "when … takes … damage", and the
+// passive-voice pure crit-hit form "when (this unit) is critically hit" (tolerates the corpus
+// typo "criticall"). The match is captured (not just tested) so the caller can reject an
+// ENEMY-subject trigger — "when an enemy takes damage from a DoT" (Anemone) is an on-DoT-tick
+// trigger, NOT a self/ally damage reaction, so it must not be disqualified by this rule.
+// The crit-hit alternation uses `hit\b` (no trailing `s`) so it matches passive-voice "is
+// critically hit" but NOT the active-voice ally form "when an ally critically hits an enemy"
+// (which ends in "hits" + subject guard already applied to dmgReaction[0] in the annotation
+// gate). No lookbehind (iOS Safari 15).
 const HEAL_DAMAGE_REACTION_RE =
-    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
+    /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+criticall?y?\s+hit\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
+// Detects the crit-hit alternation within a HEAL_DAMAGE_REACTION_RE match so the annotation
+// gate can set critFilter:'crit' when the trigger itself (not an instead-clause) is the pure
+// "when (this unit) is critically hit" phrasing.
+const HEAL_CRIT_HIT_TRIGGER_RE = /\bis\s+criticall?y?\s+hit\b/i;
 
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
@@ -1546,16 +1555,27 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                     // hit, it instead" carries TWO repair matches — the one INSIDE the
                     // instead-clause gets critFilter 'crit', the base match 'non-crit'
                     // (mutually exclusive pair; the missing "y" in the live CSV text —
-                    // "criticall hit" — is tolerated).
+                    // "criticall hit" — is tolerated). Isha's sentence always matches the
+                    // "directly damaged" alternation FIRST (it precedes the crit-hit
+                    // alternation in HEAL_DAMAGE_REACTION_RE), so the instead-clause
+                    // handling takes precedence and the crit-hit-trigger branch below is
+                    // never reached for Isha.
                     const insteadClause =
                         /but\s+when\s+criticall?y?\s+hit\b[^.;]*\binstead\b/i.exec(sentence);
                     const inInstead =
                         insteadClause !== null && m.index - sentenceStart > insteadClause.index;
+                    // Pure crit-hit trigger ("when this unit is critically hit, repairs N%"):
+                    // the matched trigger phrase is the crit-hit alternation and there is no
+                    // instead-clause — annotate critFilter:'crit' directly.
+                    const isCritHitTrigger =
+                        !insteadClause && HEAL_CRIT_HIT_TRIGGER_RE.test(dmgReaction[0]);
                     const critFilter = insteadClause
                         ? inInstead
                             ? ('crit' as const)
                             : ('non-crit' as const)
-                        : undefined;
+                        : isCritHitTrigger
+                          ? ('crit' as const)
+                          : undefined;
                     damageReaction = {
                         ...(critFilter ? { critFilter } : {}),
                         ...(hpGate ? { hpBelowPct: parseInt(hpGate[1], 10) } : {}),
