@@ -1783,8 +1783,9 @@ describe('healingGoldenParity', () => {
     // reaction fires TWICE per round, each routed to eventCtx.damagedAllyId = 'tank'.
     //
     // Reactive heal per event (executor fold): owner effectiveMaxHp 10000 × 8% = 800;
-    // healModifier 0 × outgoingHeal 0 × tank incomingHeal 0 → bare 800 (reactive heals never
-    // crit). 2 events/round → directHeal 1600/round, credited to the FOCUS owner; consumption
+    // healModifier, outgoingHeal, and tank incomingHeal all 0 → fold factors 1 → bare 800
+    // (reactive heals never crit). 2 events/round → directHeal 1600/round, credited to the
+    // FOCUS owner; consumption
     // routes to the tank (damagedAllyId === healTargetId).
     // Enemy damage: 2000 × 200% = 4000/round (defence 0, crit 0, neutral affinity). The
     // reactive heals drain AFTER the enemy's turn body → full deficit at drain time →
@@ -1995,12 +1996,12 @@ describe('healingGoldenParity', () => {
     it('scenario 25: DEFENDER tank → no RoT grant, zero team healing (dormant)', () => {
         idCounter = 0;
         const bus = createEventBus();
-        let grants = 0;
+        const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
         bus.on('buff-applied', (e) => {
-            if ((e as { buffName?: string }).buffName === 'Repair Over Time III') grants++;
+            if (e.buffName === 'Repair Over Time III') grants.push(e);
         });
         const result = simulateHealing({ ...scenario25Input('DEFENDER'), bus });
-        expect(grants).toBe(0);
+        expect(grants).toEqual([]);
         expect(result.summary.teamTotalHealing).toBe(0);
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 98, 97]);
     });
@@ -2011,10 +2012,9 @@ describe('healingGoldenParity', () => {
     it('scenario 25: ATTACKER tank → RoT granted each round, 2500 team HoT/round from round 2', () => {
         idCounter = 0;
         const bus = createEventBus();
-        const grants: Array<{ actorId: string }> = [];
+        const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
         bus.on('buff-applied', (e) => {
-            if ((e as { buffName?: string }).buffName === 'Repair Over Time III')
-                grants.push(e as unknown as { actorId: string });
+            if (e.buffName === 'Repair Over Time III') grants.push(e);
         });
         const result = simulateHealing({ ...scenario25Input('ATTACKER'), bus });
         expect(grants.length).toBe(4); // one grant per enemy attack turn

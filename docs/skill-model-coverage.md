@@ -11,7 +11,7 @@
 > Updated **2026-06-07** after the damage-leech heals & shields ship (branch `feat/damage-leech`): the ~14 leech text cells (~11 ships) now parse + simulate (see §5 LEECH, §6).
 > Updated **2026-06-08** after the Phase 4a enemy-offense increment (branch `feat/combat-engine-phase4a-enemy-offense`): enemy is now a full `runPlayerTurn` actor vs the heal target; per-target status stores; affinity symmetry on enemy attacks; real `selfHpPct`; `attacked` event + live `on-attacked` trigger; enemy-applied DoTs tick on the tank (see §5 PHASE 4a, §6).
 > Updated **2026-06-09** after the Phase 4b death & revive increment (branch `feat/combat-engine-phase4b-death-revive`): three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) + `on-cheat-death-activated`; Cheat Death survives a lethal hit at 1 HP once per combat (clearing removable statuses); new `unremovable` concept; Salvation on-destroyed ally-heal re-enabled; on-kill/on-ally-destroyed extra-action bridge (Sokol/Liberator/Harvester) (see §5 PHASE 4b, §6 item 9).
-> Updated **2026-06-10** after the Phase 4c PR 1 per-hit attacked + self-damage reactives increment (branch `feat/combat-engine-phase4c-self-damage`): `attacked` emitted per hit with per-hit crit; `triggerCritFilter`; drain-time `selfHpPct`; counter-debuff routing via `eventCtx.counterTargetId`; `damageReaction` parser; Warden/Isha/Makoli/Guardian/Heliodor/Shepherd/Opal/Flamel/Iridium/Panguan/Stalwart live; phantom over-fires removed (see §5 PHASE 4c PR 1, §6).
+> Updated **2026-06-10** after the Phase 4c PR 2 on-ally-attacked reactives increment (branch `feat/combat-engine-phase4c-ally-damage`): new ally-scoped per-hit `on-ally-attacked` trigger with `triggerCritFilter` + `roleFilter` (category prefix match; unknown role = dormant); `eventCtx.damagedAllyId` routes 'ally'-target payloads to exactly the damaged ally; roles thread from ship data (`Ship.type` → page auto-fill → `roleByActorId`); Cultivator/Refine/Graphite/Guardian-ally-Provoke/Heliodor-p2 live; editor trigger + ally-role-filter controls (see §5 PHASE 4c PR 2, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -790,9 +790,10 @@ buff/charge-aura), source it from firing + passive.
     (Warden's Corrosion previously emitted NOTHING at builder level — its counter is strictly
     additive.)
   - **Deferred/known:** Heliodor's "reduce debuff durations by 1" → 4e (cleanse family);
-    Heliodor 2nd passive/Cultivator/Refine/Graphite ally-subject reactions → 4c PR 2; Guardian's
-    ally-Provoke → PR 2 (its pre-existing inert manual-condition Provoke debuff left
-    byte-identical); Panon "If directly damaged" phrasing (not "when") keeps a residual aura —
+    Heliodor 2nd passive/Cultivator/Refine/Graphite ally-subject reactions → 4c PR 2
+    *(SHIPPED 2026-06-10 — see the PR 2 block below)*; Guardian's
+    ally-Provoke → PR 2 *(SHIPPED — same block; the inert manual-condition Provoke artifact is
+    now dropped by the rule-5 scrub)*; Panon "If directly damaged" phrasing (not "when") keeps a residual aura —
     follow-up; Purifier cleanse-on-damaged phantom — follow-up; Nayra CSV source typo
     `"When directly damage"` (missing -d) keeps Terran Bolster III unmodeled — allowlisted with
     accurate reason; consider typo tolerance later.
@@ -801,6 +802,92 @@ buff/charge-aura), source it from firing + passive.
   repairs once per hit?); counter-infliction landing (does Warden's Corrosion roll
   hacking-vs-security?); strict-below threshold semantics at exactly X%; reactive heals never
   crit (4b convention carried over).
+
+- **Phase 4c PR 2: `on-ally-attacked` reactives (2026-06-10, branch `feat/combat-engine-phase4c-ally-damage`).**
+  - **Trigger semantics.** `on-ally-attacked` listens on the same per-hit `attacked` events as
+    `on-attacked`, but ALLY-SCOPED: it fires when ANOTHER player actor is hit by an enemy attack —
+    `targetId !== ownerId && !isEnemySide(targetId)` (own hits excluded; enemy-side targets
+    excluded). It fires once PER HIT (a 2-hit enemy active → 2 reactions/round), honors
+    `triggerCritFilter` (`'crit'`/`'non-crit'` evaluated against each hit's own `didCrit`), and a
+    new `Ability.roleFilter?: ShipRoleCategory[]` over the DAMAGED ally's role: category
+    prefix-matching over `ShipTypeName` via `matchesRoleCategory` in `constants/shipTypes.ts`
+    (`type === c || type.startsWith(`${c}_`)` — so `ATTACKER_DPS` etc. match `ATTACKER`).
+    **Unknown/absent role on the damaged ally = NO match** (a role-filtered reaction stays
+    dormant rather than inflating numbers — conservative). Absent/empty `roleFilter` = any ally.
+  - **`eventCtx.damagedAllyId` routing rule.** Each fired intent carries
+    `eventCtx: { counterTargetId: e.attackerId, damagedAllyId: e.targetId }`. The executor routes
+    an `'ally'`-target heal or buff payload to EXACTLY `damagedAllyId` (this is what prevents the
+    naive "grant to all players" over-grant); counter-debuffs (`target: 'enemy'` + `inflict`)
+    still ride `counterTargetId` to the ATTACKER's per-target store (PR 1 machinery, unchanged).
+    Heal recipients fall back to `healing.targetId` when no `damagedAllyId` is present (cast-path
+    reactions); explicit `all-allies` targets are NOT narrowed (Heliodor p2 heals everyone).
+  - **Role threading source (ship data).** `Ship.type` → healing-page auto-fill (team-ship slots,
+    the heal-target pick, and healer-as-target) → `TeamActorInput.role` / `healerRole` (adapter
+    input) → engine `roleByActorId` map → the listener's `roleOf(actorId)` lookup. Manual-stat
+    actors have no role → role-filtered reactions stay dormant for them unless a role is set.
+  - **Parser.** `detectDamageReactionTrigger` gains the ally-subject branch: ally-subject
+    sentences classify as `on-ally-attacked`. The CRIT shape REQUIRES passive voice
+    (`DR_ALLY_CRIT_HIT_RE`, "is critically hit") — Crocus's ACTIVE-voice "inflicts a DoT with a
+    critical hit" stays `on-ally-crit-dot` (guarded by a lock test). Role words after "an ally"
+    ("an Attacker or Debuffer ally" etc.) extract into `roleFilter`. `parseHealAbilities` now
+    emits ally-subject heals (flagged `damageReaction.allySubject`) and non-self-recipient
+    self-subject heals (PR 1 only emitted self-recipient ones); `resolveHealTarget` resolves
+    "them" with an "all allies" antecedent → `all-allies` (Heliodor p2's "repairs them").
+  - **buildShipAbilities.** The heal-trigger wiring honors `allySubject` (ally-subject reaction →
+    `on-ally-attacked`); the buff path threads `roleFilter` through and FORCES `target: 'ally'`
+    for on-ally-attacked buff grants (so the damagedAllyId routing applies); rule-5
+    self-referential status-condition artifacts are dropped (Guardian's Provoke debuff no longer
+    emits a phantom self-conditioned copy).
+  - **Ships now live:**
+    - *Cultivator* — 8% of CULTIVATOR's max HP repaired to the damaged ally, per hit. The text's
+      "within the active pattern" is approximated as ANY ally (pattern adjacency is a 4d
+      targeting concern — real fix there).
+    - *Refine* — Inc. Damage Down I to the damaged ally: 1 turn (first passive) / 2 turns
+      (second passive). The text is recipient-less; the spec-locked reading = the damaged ally.
+    - *Graphite* — Repair Over Time III (2 turns) to the damaged ally, ONLY when that ally's
+      role is Attacker or Debuffer (`roleFilter: ['ATTACKER','DEBUFFER']`). The granted HoT
+      ticks are REAL healing on the holder's turn, credited to Graphite
+      (applier-maxHp × hotPct basis — the foreign-applier HoT rule from the healing engine).
+    - *Guardian* (third clause) — Provoke (1 turn) applied to the enemy that CRITICALLY hit an
+      ally: `triggerCritFilter: 'crit'` + counter-routed via `counterTargetId` to that enemy's
+      per-target store. (Its pre-existing inert manual-condition Provoke artifact is dropped —
+      the rule-5 scrub above.)
+    - *Heliodor* (second passive) — 8% repair to ALL allies when Heliodor ITSELF is directly
+      damaged (`on-attacked`, self-subject, `all-allies` recipient via the "them" antecedent
+      resolution). The sentence's other half — "reduces Debuff durations by 1 turn" — is
+      DEFERRED to 4e (cleanse family).
+  - **Editor.** 'When an ally is attacked' trigger option on `AbilityCard`; an "Ally role filter"
+    `CheckboxGroup` shown for that trigger (empty = any ally); the "Hit filter" select is now
+    editable for BOTH attacked-family triggers (`on-attacked` + `on-ally-attacked`).
+    `CheckboxGroup` gained `helpLabel` support + unique per-instance checkbox ids (duplicate-id
+    collision across ability cards fixed).
+  - **auditSkills.** Ally-damage phrasings are no longer intentionally-skipped;
+    `INTENTIONAL_REACTIVE_RE` narrowed to the genuinely-unmodeled shapes: Panon "If directly
+    damaged", Sansi "when hit", Lev "critical hit occurs", ally-OUTGOING "inflicts" reactions
+    (Provider/Oleander/Belladonna — an ALLY attacking, not being attacked), Wusheng stealth
+    rider. Audit clean: 143 ships / 0 findings.
+  - **Goldens.** New healing golden scenarios 24 (per-hit ally-damage repair routing: 2-hit
+    enemy → 2 × 8% reactions/round routed to the damaged tank, credited to the reacting owner)
+    and 25 (role-filtered RoT grant: DEFENDER tank dormant / ATTACKER tank live with Graphite-
+    credited 2500 HoT ticks from round 2). DPS goldens byte-identical.
+  - **Approximations / known limitations:**
+    - `attacked` events carry no damage amounts, so reactions are flat %-of-max-HP per hit —
+      per-hit cadence is real, per-hit magnitude is not damage-proportional (no corpus ship
+      needs it today).
+    - Cultivator "within the active pattern" ≈ ANY ally (4d).
+    - Heliodor p2's debuff-duration-reduction half deferred to 4e.
+    - Reactive heals NEVER crit (4b convention carried over).
+    - Role filter is conservative on unknown roles: a damaged ally with no role NEVER satisfies
+      a `roleFilter` — dormant, not inflated.
+    - In healing mode only the heal target is ever attacked (single-target focus-fire), so
+      "the damaged ally" === the tank today; `damagedAllyId` routing future-proofs 4d
+      multi-target targeting (the contract is already per-event, not per-mode).
+
+  **In-game verification list additions:** Cultivator pattern adjacency (is "within the active
+  pattern" really any-ally for typical formations?); Refine recipient (does Inc. Damage Down land
+  on the damaged ally, the whole team, or Refine itself?); Graphite role gate against in-game
+  role taxonomy (do hybrid roles count?); Guardian ally-Provoke cadence on multi-hit crits
+  (once per critting hit?).
 
 ---
 
@@ -1028,14 +1115,39 @@ configure it and it looks like it works, but it does nothing".
 >   on-cast. (Warden's Corrosion was previously emitting nothing at builder level — strictly additive.)
 > - DPS goldens byte-identical (22 scenarios); 3 new healing golden scenarios (21–23).
 >
+> **Shipped 2026-06-10 (Phase 4c PR 2 — on-ally-attacked reactives, branch `feat/combat-engine-phase4c-ally-damage`):**
+> - New `on-ally-attacked` trigger (in `LIVE_TRIGGERS`): per HIT when ANOTHER player actor is hit
+>   by an enemy attack (own hits + enemy-side targets excluded); honors `triggerCritFilter` per
+>   hit and a new `Ability.roleFilter` (ShipRoleCategory[] — category prefix-match over the
+>   damaged ally's `ShipTypeName`; unknown/absent role NEVER matches; absent/empty = any ally).
+> - `eventCtx.damagedAllyId`: 'ally'-target reactive heal/buff payloads route to EXACTLY the
+>   damaged ally; counter-debuffs still ride `counterTargetId` to the attacker.
+> - Roles thread from ship data: `Ship.type` → healing-page auto-fill → `TeamActorInput.role` /
+>   `healerRole` → engine `roleByActorId` → listener `roleOf`.
+> - Parser ally-subject branch in `detectDamageReactionTrigger` (passive voice required for the
+>   crit shape; Crocus active-voice guard; role words → roleFilter); `parseHealAbilities` emits
+>   ally-subject + non-self-recipient heals; "them" with "all allies" antecedent → all-allies.
+> - Ships live: Cultivator (8% caster-max-HP to the damaged ally; pattern ≈ any ally → 4d),
+>   Refine (Inc. Damage Down I to the damaged ally, 1t p1 / 2t p2), Graphite (Repair Over Time
+>   III 2t, Attacker/Debuffer allies only — HoT ticks credited to Graphite), Guardian ally-crit
+>   Provoke (counter-routed, crit-only), Heliodor p2 (8% to ALL allies when itself damaged;
+>   duration-reduction half → 4e).
+> - Editor: 'When an ally is attacked' trigger + Ally role filter CheckboxGroup; Hit filter
+>   editable for both attacked-family triggers. auditSkills: ally-damage phrasings no longer
+>   skipped; 143 ships / 0 findings.
+> - DPS goldens byte-identical (22 scenarios); 2 new healing golden scenarios (24–25).
+>   See §5 PHASE 4c PR 2 for full semantics + approximations.
+>
 > **Phase 4c–4f and simulator page (partially shipped / pending):**
 > - **4c PR 1 — SHIPPED 2026-06-10** (`feat/combat-engine-phase4c-self-damage`): per-hit
 >   `attacked` emission; `triggerCritFilter`; drain-time `selfHpPct`; counter-debuff routing;
 >   `damageReaction` parser; Warden/Isha/Makoli/Guardian/Heliodor self-damage reactives live;
 >   phantom over-fires removed for Shepherd/Opal/Flamel/Iridium/Panguan/Stalwart (see §5
 >   PHASE 4c PR 1).
-> - **4c PR 2 — pending** — `on-ally-attacked` reactives (Heliodor 2nd passive, Cultivator,
->   Refine, Graphite role-filtered); Guardian ally-crit-hit Provoke.
+> - **4c PR 2 — SHIPPED 2026-06-10** (`feat/combat-engine-phase4c-ally-damage`):
+>   `on-ally-attacked` reactives (Heliodor 2nd passive, Cultivator, Refine, Graphite
+>   role-filtered); Guardian ally-crit-hit Provoke; `damagedAllyId` routing; role threading
+>   from ship data; editor trigger + role-filter controls (see §5 PHASE 4c PR 2).
 > - **4c PR 3 — pending** — `on-hp-threshold-crossed` reactives via tank-side `hp-changed`
 >   (Tycho Barrier below-40% once-per-battle; Hermes Cheat-Death grant below-40% gate fix).
 > - **4c PR 4 — pending** — enemy-action reactions (event-only enemy heal/cleanse emission,
@@ -1074,14 +1186,16 @@ configure it and it looks like it works, but it does nothing".
    self-execute-style gates meaningful.
 5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06; `on-attacked`
    shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09; `on-attacked` upgraded to
-   per-hit with `triggerCritFilter` Phase 4c PR 1 2026-06-10)* — the reactive machinery now
+   per-hit with `triggerCritFilter` Phase 4c PR 1 2026-06-10; `on-ally-attacked` shipped Phase 4c
+   PR 2 2026-06-10)* — the reactive machinery now
    consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
    `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a; upgraded to per-hit with
-   optional crit/non-crit filter in Phase 4c PR 1 — see §5 PHASE 4c PR 1), and the four
-   death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
+   optional crit/non-crit filter in Phase 4c PR 1 — see §5 PHASE 4c PR 1), `on-ally-attacked`
+   (Phase 4c PR 2 — per-hit, ally-scoped, crit + role filtered; see §5 PHASE 4c PR 2), and the
+   four death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
    `on-cheat-death-activated` (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. Remaining
-   annotation-only reactives are the ally-damaged, hp-crossing, and enemy-action families deferred
-   to 4c PRs 2–4.
+   annotation-only reactives are the hp-crossing and enemy-action families deferred
+   to 4c PRs 3–4.
 6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
    and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
    (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4
