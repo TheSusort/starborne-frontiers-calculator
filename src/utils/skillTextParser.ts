@@ -1259,6 +1259,12 @@ export interface ParsedHealAbility {
     leechScope?: 'all' | 'detonation';
     /** Quixilver: damage-taken proc gated on shield punch-through. */
     requiresHpDamage?: boolean;
+    /** Present when the heal is a SELF-subject damage reaction ("when directly
+     *  damaged", "when attacked", "when (critically) hit"). buildShipAbilities maps
+     *  it to trigger 'on-attacked' (+ triggerCritFilter / derivable self
+     *  hp-threshold). Ally-subject reactions never carry this — they stay
+     *  disqualified until Phase 4c PR 2. */
+    damageReaction?: { critFilter?: 'crit' | 'non-crit'; hpBelowPct?: number };
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -1445,22 +1451,51 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
             const leechBasis = resolveLeechBasis(basisScope);
+            const resolved = resolveHealTarget(sentence);
             // Damage-reaction reactive triggers ("when … directly damaged", "when attacked",
-            // "when … is hit", "when … takes … damage") are unmodeled for PLAIN heals → drop
-            // them so they don't fire every round (phantom). Leech reactions (basis
-            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc and
-            // MUST still parse, so only disqualify when the heal is NOT a leech (guard #1).
-            // An ENEMY-subject trigger ("when an enemy takes damage from a DoT", Anemone) is an
-            // on-DoT-tick trigger, not a self/ally damage reaction, so it is NOT disqualified.
+            // "when … is hit", "when … takes … damage") on PLAIN heals — Phase 4c PR 1:
+            // SELF-subject reactions whose heal RECIPIENT is also self are now MODELED
+            // (on-attacked is a live trigger) and parse with a `damageReaction` annotation.
+            // Still disqualified (PR 2 routing scope, so they don't fire every round as
+            // phantom on-cast heals): ALLY-subject triggers ("when an ally … damaged",
+            // Cultivator/Refine/Graphite) and self triggers whose heal recipient is NOT
+            // self (Heliodor's second passive "repairs them"). Leech reactions (basis
+            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc
+            // and keep parsing WITHOUT the annotation (guard #1). An ENEMY-subject trigger
+            // ("when an enemy takes damage from a DoT", Anemone) is an on-DoT-tick trigger,
+            // not a self/ally damage reaction, so it is neither disqualified nor annotated.
+            let damageReaction: ParsedHealAbility['damageReaction'];
             if (!leechBasis) {
                 const dmgReaction = HEAL_DAMAGE_REACTION_RE.exec(sentence);
-                if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) continue;
+                if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) {
+                    if (/when\s+an\s+ally\b/i.test(dmgReaction[0])) continue;
+                    if (resolved.target !== 'self') continue;
+                    const hpGate = /while\s+below\s+(\d+)\s*%\s*hp/i.exec(sentence);
+                    // Instead-on-crit split (Isha): a sentence with "but when critical(ly)
+                    // hit, it instead" carries TWO repair matches — the one INSIDE the
+                    // instead-clause gets critFilter 'crit', the base match 'non-crit'
+                    // (mutually exclusive pair; the missing "y" in the live CSV text —
+                    // "criticall hit" — is tolerated).
+                    const insteadClause =
+                        /but\s+when\s+criticall?y?\s+hit\b[^.;]*\binstead\b/i.exec(sentence);
+                    const inInstead =
+                        insteadClause !== null && m.index - sentenceStart > insteadClause.index;
+                    const critFilter = insteadClause
+                        ? inInstead
+                            ? ('crit' as const)
+                            : ('non-crit' as const)
+                        : undefined;
+                    damageReaction = {
+                        ...(critFilter ? { critFilter } : {}),
+                        ...(hpGate ? { hpBelowPct: parseInt(hpGate[1], 10) } : {}),
+                    };
+                }
             }
             const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
-            // must not apply (Malvex).
-            const resolved = resolveHealTarget(sentence);
+            // must not apply (Malvex). (resolveHealTarget was hoisted above the
+            // damage-reaction block so the recipient gate can read it.)
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
             // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
             // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max
@@ -1488,6 +1523,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 explicitTarget,
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
+                ...(damageReaction ? { damageReaction } : {}),
             });
             // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
             // second SELF entry mirroring the first (5% each, same basis/scope).
@@ -1524,6 +1560,11 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                                       : 'hp',
                             target,
                             explicitTarget,
+                            // Same sentence → same trigger: a continuation component of a
+                            // damage-reaction repair is reactive too (no CSV case mixes the
+                            // continuation with the instead-on-crit split, so the inherited
+                            // critFilter is always absent today).
+                            ...(damageReaction ? { damageReaction } : {}),
                         });
                     }
                 }

@@ -2225,12 +2225,23 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         ).toEqual([{ kind: 'heal', pct: 30, basis: 'hp', target: 'self', explicitTarget: false }]);
     });
 
-    it('Makoli passive: "when directly damaged while below 40% HP, repairs 20%" is NOT extracted', () => {
+    // Phase 4c PR 1: SELF-subject damage reactions are now MODELED (on-attacked is a live
+    // trigger) — Makoli's R2 passive parses with a damageReaction annotation instead of dropping.
+    it('Makoli R2 passive: "when directly damaged while below 40% HP, repairs 20%" IS extracted with a damageReaction', () => {
         expect(
             parseHealAbilities(
                 'When directly damaged while below 40% HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn.'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 20,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { hpBelowPct: 40 },
+            },
+        ]);
     });
 
     it('Makoli ACTIVE cleanse+repair (cleanses 1 debuff, repairs 5% + 100% Defense) still parses', () => {
@@ -2286,6 +2297,155 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         expect(
             parseHealAbilities('When this Unit is cleansed, it repairs 10% of its Max HP.')
         ).toEqual([]);
+    });
+});
+
+// Phase 4c PR 1 (Task 7): SELF-subject damage-reaction heals ("when directly damaged …
+// this Unit repairs …") parse with a `damageReaction` annotation; buildShipAbilities maps
+// it to trigger 'on-attacked' (+ triggerCritFilter / derivable self hp-threshold).
+// ALLY-subject reactions (and self triggers whose heal RECIPIENT is not self) stay
+// disqualified — they are PR 2 routing scope. All texts below are real CSV rows.
+describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)', () => {
+    it('Makoli first passive: below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 20,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { hpBelowPct: 40 },
+            },
+        ]);
+    });
+
+    it('Guardian first passive: same below-40% shape as Makoli', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 20,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { hpBelowPct: 40 },
+            },
+        ]);
+    });
+
+    it('Isha third passive: instead-on-crit pair → 3% non-crit + 6% crit (tolerates the "criticall" typo)', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 3,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'non-crit' },
+            },
+            {
+                kind: 'heal',
+                pct: 6,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: false,
+                damageReaction: { critFilter: 'crit' },
+            },
+        ]);
+    });
+
+    it('Heliodor FIRST passive: self repair parses with bare damageReaction; the debuff-duration clause emits nothing', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: true,
+                damageReaction: {},
+            },
+        ]);
+    });
+
+    it('Warden passive: self repair parses with bare damageReaction ("that enemy" in the Corrosion clause is not the trigger subject)', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.'
+            )
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 3,
+                basis: 'hp',
+                target: 'self',
+                explicitTarget: true,
+                damageReaction: {},
+            },
+        ]);
+    });
+
+    it('Heliodor SECOND passive: self trigger but NON-SELF heal recipient ("repairs them") stays disqualified (PR 2)', () => {
+        expect(
+            parseHealAbilities(
+                'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.'
+            )
+        ).toEqual([]);
+    });
+
+    it('Cultivator ally-damaged clause: ally-subject reaction stays disqualified (PR 2)', () => {
+        expect(
+            parseHealAbilities(
+                "when an ally is directly damaged within the active pattern, this Unit <unit-damage>repairs that ally for 8%</unit-damage> of this Unit's Max HP."
+            )
+        ).toEqual([]);
+    });
+
+    it('Refine: ally-damaged buff grant yields NO heal', () => {
+        expect(
+            parseHealAbilities(
+                'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.'
+            )
+        ).toEqual([]);
+    });
+
+    it('Graphite: ally-damaged Repair-Over-Time grant yields NO heal', () => {
+        expect(
+            parseHealAbilities(
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns.'
+            )
+        ).toEqual([]);
+    });
+
+    it('Anemone: enemy-subject DoT-tick trigger still parses WITHOUT a damageReaction', () => {
+        expect(
+            parseHealAbilities(
+                "When an enemy takes damage from a Damage over Time effect, repair 5% of this Unit's Max HP."
+            )
+        ).toEqual([{ kind: 'heal', pct: 5, basis: 'hp', target: 'self', explicitTarget: false }]);
+    });
+
+    it('GUARD: leech reactions stay leech (no damageReaction) — Malvex damage-taken shape', () => {
+        const r = parseHealAbilities(
+            'When directly damaged as a primary target, this Unit gains a Shield equal to 15% of the Damage dealt to them.'
+        );
+        expect(r).toHaveLength(1);
+        expect(r[0]).toMatchObject({ kind: 'shield', pct: 15, basis: 'damage-taken' });
+        expect(r[0].damageReaction).toBeUndefined();
     });
 });
 

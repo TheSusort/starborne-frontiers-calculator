@@ -1367,6 +1367,92 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // Phase 4c PR 1 (Task 7): SELF-subject damage-reaction heals ride the on-attacked
+    // reactive trigger. A "while below N% HP" gate becomes a DERIVABLE self hp-threshold
+    // condition (evaluated against live tank HP at drain time); Isha's instead-on-crit
+    // pair maps to triggerCritFilter 'non-crit' / 'crit'.
+    describe('self-subject damage-reaction heals → on-attacked (Phase 4c)', () => {
+        it('Makoli first passive: heal rides on-attacked with a derivable below-40% self hp-threshold', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                trigger: 'on-attacked',
+                config: { type: 'heal', pct: 20, basis: 'hp' },
+            });
+            expect(heal!.triggerCritFilter).toBeUndefined();
+            expect(heal!.conditions).toEqual([
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 40,
+                    hpSubject: 'self',
+                },
+            ]);
+        });
+
+        it('Isha third passive: instead-on-crit pair maps to triggerCritFilter non-crit (3%) / crit (6%)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heals = passive?.abilities.filter((a) => a.type === 'heal') ?? [];
+            expect(heals).toHaveLength(2);
+            const nonCrit = heals.find((h) => (h.config as { pct: number }).pct === 3);
+            const crit = heals.find((h) => (h.config as { pct: number }).pct === 6);
+            expect(nonCrit).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                trigger: 'on-attacked',
+                triggerCritFilter: 'non-crit',
+                conditions: [],
+                config: { type: 'heal', pct: 3, basis: 'hp' },
+            });
+            expect(crit).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                trigger: 'on-attacked',
+                triggerCritFilter: 'crit',
+                conditions: [],
+                config: { type: 'heal', pct: 6, basis: 'hp' },
+            });
+        });
+
+        it('Heliodor first passive: ungated self repair rides on-attacked with no conditions', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on itself by 1 turn and <unit-damage>repairs itself for 8%</unit-damage> of its Max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+            expect(heal!.triggerCritFilter).toBeUndefined();
+        });
+
+        it('Heliodor SECOND passive (ally recipient): still emits NO heal (PR 2 scope)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.',
+            });
+            const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+            const heal = passive?.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeUndefined();
+        });
+    });
+
     describe('Pallas-pattern ally-crit reactive triggers', () => {
         // Real Pallas passive shape: a defense buff, then "when an ally critically hits" (charge +
         // Everliving Regeneration buff), then "when this unit critically repairs an ally" (cleanse).
