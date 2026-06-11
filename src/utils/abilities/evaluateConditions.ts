@@ -17,6 +17,7 @@ export interface ConditionContext {
     enemyDestroyedCount: number;
     selfHpPct: number; // 0..100
     enemyHpPct: number; // 0..100
+    targetHpPct?: number; // 0..100 — heal target's live HP%, threaded in healing mode only
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -72,10 +73,17 @@ function countNames(names: string[], filter?: string): number {
     return names.filter((n) => n === filter).length;
 }
 
-// HP-threshold basis: enemy HP by default (offensive scaling), or the unit's own HP when
-// hpSubject is 'self' (e.g. "if at full HP"). Under DPS assumptions both are 100.
+// HP-threshold basis: enemy HP by default (offensive scaling), self HP when hpSubject is
+// 'self' (e.g. "if at full HP"), or the heal target's live HP when hpSubject is 'target'
+// (reactive crossing gates — healing mode only; absent targetHpPct defaults to 100 so the
+// condition is inert under DPS assumptions). Under DPS assumptions all three are 100.
 function evalHpThreshold(cond: Condition, ctx: ConditionContext): boolean {
-    const hp = cond.hpSubject === 'self' ? ctx.selfHpPct : ctx.enemyHpPct;
+    const hp =
+        cond.hpSubject === 'self'
+            ? ctx.selfHpPct
+            : cond.hpSubject === 'target'
+              ? (ctx.targetHpPct ?? 100)
+              : ctx.enemyHpPct;
     const t = cond.hpPercent ?? 0;
     return cond.hpComparator === 'above' ? hp > t : hp < t;
 }

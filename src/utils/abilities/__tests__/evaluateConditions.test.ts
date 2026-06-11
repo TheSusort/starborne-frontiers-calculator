@@ -323,3 +323,28 @@ describe('HP-percentage count subjects', () => {
         expect(evaluateCondition(c, ctx({ enemyHpPct: 0 }))).toBe(100);
     });
 });
+
+describe('hp-threshold hpSubject target', () => {
+    it('hp-threshold with hpSubject target reads targetHpPct', () => {
+        const c: Condition = {
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: 40,
+            hpSubject: 'target',
+        };
+        expect(evaluateCondition(c, ctx({ targetHpPct: 35 }))).toBe(1);
+        expect(evaluateCondition(c, ctx({ targetHpPct: 60 }))).toBe(0);
+    });
+
+    it('hp-threshold target defaults to 100 when targetHpPct absent (DPS-mode inert)', () => {
+        const c: Condition = {
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: 40,
+            hpSubject: 'target',
+        };
+        expect(evaluateCondition(c, ctx())).toBe(0);
+    });
+});
