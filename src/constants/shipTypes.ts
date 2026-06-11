@@ -64,3 +64,19 @@ export const SHIP_TYPES: Record<string, ShipType> = {
 } satisfies Record<string, ShipType>;
 
 export type ShipTypeName = keyof typeof SHIP_TYPES;
+
+/** Role CATEGORY for skill-text role filters ("an ally attacker or debuffer" — Graphite).
+ *  A category matches its exact ShipTypeName AND every underscore-suffixed variant
+ *  ('DEBUFFER' matches DEBUFFER, DEBUFFER_DEFENSIVE, DEBUFFER_BOMBER, …). */
+export type ShipRoleCategory = 'ATTACKER' | 'DEFENDER' | 'DEBUFFER' | 'SUPPORTER';
+
+/** True when `type` falls under ANY of the given categories (prefix match over
+ *  ShipTypeName). Unknown role (undefined) never matches — a role-filtered reaction
+ *  stays dormant rather than inflating numbers (spec §4 PR 2, conservative). */
+export function matchesRoleCategory(
+    type: ShipTypeName | undefined,
+    categories: ShipRoleCategory[]
+): boolean {
+    if (!type) return false;
+    return categories.some((c) => type === c || type.startsWith(`${c}_`));
+}

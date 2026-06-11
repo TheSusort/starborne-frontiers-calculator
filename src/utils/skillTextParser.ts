@@ -11,6 +11,7 @@ import {
     DoTType,
 } from '../types/calculator';
 import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
+import type { ShipRoleCategory } from '../constants/shipTypes';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
@@ -985,9 +986,29 @@ function rawSentenceAround(text: string, anchorPos: number): string | undefined 
     return anchorPos >= start ? masked.slice(start) : undefined;
 }
 
-// detectDamageReactionTrigger rules (Phase 4c PR 1, Task 8). Ally-subject guard covers BOTH
-// "when an ally …" and "when another ally …" (Provider) — those reactions are PR 2 scope.
+// detectDamageReactionTrigger rules (Phase 4c PR 1 Task 8 + PR 2 Task 7). Ally-subject
+// detector covers BOTH "when an ally …" and "when another ally …" (Provider) — a matching
+// sentence classifies as on-ally-attacked when it also carries a damage-reaction shape
+// with the ally as the PASSIVE-voice subject — "is critically hit" / "is directly damaged"
+// (Guardian's Provoke counter, Refine, Graphite). ACTIVE-voice ally sentences where the
+// ally DEALS the hit (Crocus "When another ally inflicts a DoT effect with a critical
+// hit", Provider's inflicts-a-debuff reaction) return undefined — those are outgoing
+// reactions, not the ally being damaged.
 const DR_ALLY_SUBJECT_RE = /when\s+an(?:other)?\s+ally\b/i;
+// Role words inside an ally-subject phrase ("when an ally attacker or debuffer is
+// directly damaged" — Graphite) → ShipRoleCategory filter, CATEGORY semantics
+// ('debuffer' covers every DEBUFFER_* variant; matching happens in the engine).
+// LIMITATION: only "or"-joined lists parse; a comma list ("an ally attacker,
+// defender or supporter") would capture only the first role and silently
+// UNDER-fire — widen the repetition group if such a CSV variant ever lands.
+const DR_ALLY_ROLES_RE =
+    /when\s+an(?:other)?\s+ally\s+((?:attacker|defender|debuffer|supporter)s?(?:\s+or\s+(?:attacker|defender|debuffer|supporter)s?)*)\b/i;
+const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
+    attacker: 'ATTACKER',
+    defender: 'DEFENDER',
+    debuffer: 'DEBUFFER',
+    supporter: 'SUPPORTER',
+};
 // Crit-suppression riders ("damage that cannot critically hit", incl. the live CSV typo
 // "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
 // carrying such a rider (Provider, Grif) never reads as crit-gated.
@@ -997,6 +1018,13 @@ const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
 // self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
 // which "hit\b" deliberately does not match (no trailing "s").
 const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
+// ALLY-subject crit reactions require the damaged ally as subject — "is critically hit"
+// (Guardian "When an ally is critically hit by an enemy"; same "criticall hit" typo
+// tolerance as DR_CRIT_HIT_RE). The bare DR_CRIT_HIT_RE also matches the ACTIVE-voice
+// "…inflicts a DoT effect WITH a critical hit" (Crocus), where the ally LANDS the crit
+// (outgoing — on-ally-crit-dot territory) rather than receiving it, so the ally branch
+// must not reuse it.
+const DR_ALLY_CRIT_HIT_RE = /\bis\s+criticall?y?\s+hit\b/i;
 // Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
 // trailing clause) / "when attacked". "If directly damaged" (Panon) is deliberately NOT
 // matched — only the "when" phrasing classifies this phase.
@@ -1010,36 +1038,75 @@ const DR_DIRECT_DAMAGE_RE =
 const DR_HP_BELOW_RE = /while\s+below\s+(\d+)\s*%\s*hp/i;
 
 /**
- * Self-subject damage-reaction trigger for non-heal clauses (Phase 4c PR 1). Matches the
+ * Damage-reaction trigger for non-heal clauses (Phase 4c PR 1 + PR 2 Task 7). Matches the
  * sentence around `pos` (RAW-text position, same masked bounds as phrasePosTrigger).
  * Passive-voice "is critically hit" is the CRIT-FILTERED variant — distinct from the
  * ACTIVE-voice self-crit condition, which detectGrantConditions still rejects in passive
- * voice. Ally-subject sentences return undefined (PR 2). NO lookbehind (iOS Safari 15).
- * `hpBelowPct` is set when the reaction sentence also carries a "while below N% HP" self
- * HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold condition so the
- * executor evaluates the gate at drain time rather than firing on every received attack.
+ * voice. NO lookbehind (iOS Safari 15).
+ *
+ * Subject decides the trigger: a self-subject reaction sentence → on-attacked; an
+ * ALLY-subject one ("when an(other) ally … is critically hit / directly damaged") →
+ * on-ally-attacked (Guardian's Provoke counter, Refine's Inc. Damage Down grant). The
+ * ally branch's crit test demands PASSIVE voice (DR_ALLY_CRIT_HIT_RE, "IS critically
+ * hit") because the bare DR_CRIT_HIT_RE also matches active-voice "…inflicts a DoT
+ * effect WITH a critical hit" (Crocus) — an ally-OUTGOING crit handled by
+ * on-ally-crit-dot, which must stay undefined here. Role
+ * nouns right after "ally" (Graphite "when an ally attacker or debuffer is directly
+ * damaged") become `roleFilter`, CATEGORY-semantic ShipRoleCategory values the engine's
+ * listener matches against the damaged ally's role. The ally branch needs its own
+ * direct-damage acceptance because DR_DIRECT_DAMAGE_RE only spans "when (this Unit is)
+ * directly damaged" — the ally/role words between "when" and "directly" fall outside it.
+ *
+ * `hpBelowPct` is set when a SELF-subject reaction sentence also carries a "while below
+ * N% HP" self HP gate (Makoli's Disable) — the caller attaches a derivable hp-threshold
+ * condition so the executor evaluates the gate at drain time rather than firing on every
+ * received attack. Ally-subject sentences never get it: DR_HP_BELOW_RE reads the OWNER's
+ * HP, and no corpus ally-reaction carries an HP gate.
  * Reference data: docs/ship-skills.csv (Warden, Guardian, Shepherd, Opal, Flamel, Iridium,
- * Panguan, Stalwart, Makoli).
+ * Panguan, Stalwart, Makoli; ally-subject: Guardian, Refine, Graphite).
  */
 export function detectDamageReactionTrigger(
     text: string,
     pos: number
-): { trigger: 'on-attacked'; critFilter?: 'crit'; hpBelowPct?: number } | undefined {
+):
+    | {
+          trigger: 'on-attacked' | 'on-ally-attacked';
+          critFilter?: 'crit';
+          hpBelowPct?: number;
+          roleFilter?: ShipRoleCategory[];
+      }
+    | undefined {
     const sentence = rawSentenceAround(text, pos);
     if (sentence === undefined) return undefined;
-    if (DR_ALLY_SUBJECT_RE.test(sentence)) return undefined;
+    const allySubject = DR_ALLY_SUBJECT_RE.test(sentence);
     const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
-    if (DR_CRIT_HIT_RE.test(scrubbed)) {
-        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
+    const roleM = allySubject ? DR_ALLY_ROLES_RE.exec(sentence) : null;
+    const roleFilter = roleM
+        ? roleM[1]
+              .toLowerCase()
+              .split(/\s+or\s+/)
+              .map((w) => ROLE_WORD_TO_CATEGORY[w.replace(/s$/, '')])
+        : undefined;
+    const trigger = allySubject ? ('on-ally-attacked' as const) : ('on-attacked' as const);
+    if (allySubject ? DR_ALLY_CRIT_HIT_RE.test(scrubbed) : DR_CRIT_HIT_RE.test(scrubbed)) {
+        const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
         return {
-            trigger: 'on-attacked',
+            trigger,
             critFilter: 'crit',
             ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+            ...(roleFilter ? { roleFilter } : {}),
         };
     }
-    if (DR_DIRECT_DAMAGE_RE.test(scrubbed)) {
-        const hpM = DR_HP_BELOW_RE.exec(scrubbed);
-        return { trigger: 'on-attacked', ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}) };
+    if (
+        DR_DIRECT_DAMAGE_RE.test(scrubbed) ||
+        (allySubject && /\bdirectly\s+damaged\b/i.test(scrubbed))
+    ) {
+        const hpM = allySubject ? null : DR_HP_BELOW_RE.exec(scrubbed);
+        return {
+            trigger,
+            ...(hpM ? { hpBelowPct: parseInt(hpM[1], 10) } : {}),
+            ...(roleFilter ? { roleFilter } : {}),
+        };
     }
     return undefined;
 }
@@ -1329,13 +1396,26 @@ export interface ParsedHealAbility {
     leechScope?: 'all' | 'detonation';
     /** Quixilver: damage-taken proc gated on shield punch-through. */
     requiresHpDamage?: boolean;
-    /** Present when the heal is a SELF-subject damage reaction ("when directly
-     *  damaged", "when attacked", "when (critically) hit"). buildShipAbilities maps
-     *  it to trigger 'on-attacked' (+ triggerCritFilter / derivable self
-     *  hp-threshold). Ally-subject reactions never carry this — they stay
-     *  disqualified until Phase 4c PR 2. May be present-but-empty: an empty object
-     *  signals an ungated reaction (Heliodor first-listed passive, Warden). */
-    damageReaction?: { critFilter?: 'crit' | 'non-crit'; hpBelowPct?: number };
+    /** Present when the heal is a damage reaction ("when directly damaged", "when
+     *  attacked", "when (critically) hit"). buildShipAbilities maps it to trigger
+     *  'on-attacked' — or 'on-ally-attacked' when `allySubject` is set — plus
+     *  triggerCritFilter / a derivable self hp-threshold. May be present-but-empty:
+     *  an empty object signals an ungated self reaction (Heliodor first-listed
+     *  passive, Warden). */
+    damageReaction?: {
+        critFilter?: 'crit' | 'non-crit';
+        hpBelowPct?: number;
+        /** True when the damaged unit is an ALLY ("when an(other) ally is directly
+         *  damaged", Cultivator's 8% repair) rather than this unit — routes to
+         *  on-ally-attacked. Only PASSIVE-voice ally shapes set this; ally-OUTGOING
+         *  sentences (Crocus "when another ally inflicts a DoT … with a critical
+         *  hit") never match HEAL_DAMAGE_REACTION_RE and stay unannotated.
+         *  NOTE: no roleFilter channel here (asymmetry vs the buff/debuff detector)
+         *  — a role-filtered reaction HEAL would parse unfiltered and over-fire;
+         *  no corpus ship needs it (Graphite's role-filtered payload is a buff).
+         *  Add the channel if such a ship ever appears. */
+        allySubject?: boolean;
+    };
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -1381,11 +1461,12 @@ function sentenceBoundsAround(
 //       - on-buff-purged: "when a buff is purged", "when … is purged".
 //       - reactive on-cleansed (PASSIVE form only): "when … is cleansed". The ACTIVE verb
 //         "cleanses"/"repairs" (Makoli/Morao/Cultivator active cleanse+repair) is NOT matched.
-//   (2) Damage-reaction (on-directly-damaged / attacked / takes-damage / is-hit) — disqualified
-//       ONLY when the heal's basis is a plain HP/attack/defense stat, NOT a damage-leech basis.
-//       Leech reactions (Cultivator/Malvex/Isha "repairs X% of the damage taken/dealt") ARE
-//       modeled via the engine's per-attack proc and MUST still parse, even though their sentence
-//       says "when … damaged". The caller gates this against `leechBasis` (see usage below).
+//   (2) Damage-reaction (on-directly-damaged / attacked / takes-damage / is-hit) — no longer
+//       disqualified at all (Phase 4c): plain-stat reaction heals parse with a `damageReaction`
+//       annotation (self- AND ally-subject — see the annotation gate in parseHealAbilities),
+//       while leech reactions (Cultivator/Malvex/Isha "repairs X% of the damage taken/dealt")
+//       parse WITHOUT it (modeled via the engine's per-attack proc). The annotation gate is
+//       gated against `leechBasis` (see usage below).
 // NO lookbehind (iOS Safari 15) — all alternations use plain `\b`/word-boundary anchors.
 // `\bcheat death\b(?!\s+activates)` (Task 8): a heal sentence merely MENTIONING Cheat Death
 // stays disqualified (unmodeled revive/grant content), but Yazid's MODELED follow-on — "when
@@ -1416,8 +1497,9 @@ const HEAL_DISQUALIFY_RE = new RegExp(
 // trigger, NOT a self/ally damage reaction, so it must not be disqualified by this rule.
 // The crit-hit alternation uses `hit\b` (no trailing `s`) so it matches passive-voice "is
 // critically hit" but NOT the active-voice ally form "when an ally critically hits an enemy"
-// (which ends in "hits" + subject guard already applied to dmgReaction[0] in the annotation
-// gate). No lookbehind (iOS Safari 15).
+// — every alternation here is a PASSIVE-voice damage shape, which is what makes the
+// annotation gate's ally-subject test on dmgReaction[0] safe (ally-OUTGOING sentences like
+// Crocus's "inflicts a DoT … with a critical hit" never match). No lookbehind (iOS Safari 15).
 const HEAL_DAMAGE_REACTION_RE =
     /when\b[^.;]*\b(?:directly\s+)?damaged\b|when\s+attacked\b|when\b[^.;]*\bis\s+attacked\b|when\b[^.;]*\bis\s+criticall?y?\s+hit\b|when\b[^.;]*\bis\s+hit\b|when\b[^.;]*\btakes\b[^.;]*\bdamage\b/i;
 // Detects the crit-hit alternation within a HEAL_DAMAGE_REACTION_RE match so the annotation
@@ -1484,6 +1566,11 @@ function resolveHealTarget(sentence: string): {
     explicit: boolean;
 } {
     const s = sentence.toLowerCase();
+    // "them" whose antecedent is an explicit "all allies" EARLIER in the sentence
+    // (Heliodor second-listed passive: "Debuffs on all allies by 1 turn and repairs
+    // them for 8%") → the pronoun is plural → all-allies. Checked first because the
+    // singular rule below would otherwise capture the bare \bthem\b.
+    if (/\ball\s+allies\b[^.;]*\bthem\b/.test(s)) return { target: 'all-allies', explicit: true };
     // Singular ally detection takes priority over the bare "their" heuristic so that
     // "Repairs the ally for 8% of their Max HP" correctly routes to ally, not all-allies.
     if (
@@ -1533,24 +1620,37 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             const leechBasis = resolveLeechBasis(basisScope);
             const resolved = resolveHealTarget(sentence);
             // Damage-reaction reactive triggers ("when … directly damaged", "when attacked",
-            // "when … is hit", "when … takes … damage") on PLAIN heals — Phase 4c PR 1:
-            // SELF-subject reactions whose heal RECIPIENT is also self are now MODELED
-            // (on-attacked is a live trigger) and parse with a `damageReaction` annotation.
-            // Still disqualified (PR 2 routing scope, so they don't fire every round as
-            // phantom on-cast heals): ALLY-subject triggers ("when an ally … damaged",
-            // Cultivator/Refine/Graphite) and self triggers whose heal recipient is NOT
-            // self (Heliodor's second passive "repairs them"). Leech reactions (basis
-            // 'damage-taken'/'damage-dealt') ARE modeled via the engine's per-attack proc
-            // and keep parsing WITHOUT the annotation (guard #1). An ENEMY-subject trigger
-            // ("when an enemy takes damage from a DoT", Anemone) is an on-DoT-tick trigger,
-            // not a self/ally damage reaction, so it is neither disqualified nor annotated.
+            // "when … is hit", "when … takes … damage") on PLAIN heals — Phase 4c: BOTH
+            // subjects are now MODELED (on-attacked and on-ally-attacked are live triggers)
+            // and parse with a `damageReaction` annotation. SELF-subject reactions (PR 1,
+            // Makoli/Guardian/Isha/Warden/Heliodor) annotate as before; ALLY-subject
+            // reactions ("when an(other) ally is directly damaged", Cultivator's 8% repair)
+            // additionally set `allySubject: true` so buildShipAbilities routes them to
+            // on-ally-attacked (Task 9). Non-self heal RECIPIENTS no longer disqualify
+            // either — Heliodor's second-listed passive ("when directly damaged … repairs
+            // them [all allies]") is a self trigger healing all-allies. The subject test
+            // runs on the MATCHED reaction phrase (dmgReaction[0]), which is by construction
+            // a PASSIVE-voice damage shape — HEAL_DAMAGE_REACTION_RE has no active-voice
+            // alternation, so ally-OUTGOING sentences (Crocus "when another ally inflicts
+            // a DoT … WITH a critical hit", Hermes-family "when an ally critically hits an
+            // enemy") never reach this gate and keep parsing as plain on-cast heals — the
+            // same passive-voice discipline as the detector's DR_ALLY_CRIT_HIT_RE. Leech
+            // reactions (basis 'damage-taken'/'damage-dealt') ARE modeled via the engine's
+            // per-attack proc and keep parsing WITHOUT the annotation (guard #1). An
+            // ENEMY-subject trigger ("when an enemy takes damage from a DoT", Anemone) is
+            // an on-DoT-tick trigger, not a self/ally damage reaction, so it is neither
+            // disqualified nor annotated.
             let damageReaction: ParsedHealAbility['damageReaction'];
             if (!leechBasis) {
                 const dmgReaction = HEAL_DAMAGE_REACTION_RE.exec(sentence);
                 if (dmgReaction && !/\benem(?:y|ies)\b/i.test(dmgReaction[0])) {
-                    if (/when\s+an\s+ally\b/i.test(dmgReaction[0])) continue;
-                    if (resolved.target !== 'self') continue;
-                    const hpGate = /while\s+below\s+(\d+)\s*%\s*hp/i.exec(sentence);
+                    const allySubject = DR_ALLY_SUBJECT_RE.test(dmgReaction[0]);
+                    // "while below N% HP" reads the OWNER's HP — never applied to
+                    // ally-subject reactions (same rule as the detector; no corpus
+                    // ally-reaction carries an HP gate).
+                    const hpGate = allySubject
+                        ? null
+                        : /while\s+below\s+(\d+)\s*%\s*hp/i.exec(sentence);
                     // Instead-on-crit split (Isha): a sentence with "but when critical(ly)
                     // hit, it instead" carries TWO repair matches — the one INSIDE the
                     // instead-clause gets critFilter 'crit', the base match 'non-crit'
@@ -1577,6 +1677,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                           ? ('crit' as const)
                           : undefined;
                     damageReaction = {
+                        ...(allySubject ? { allySubject: true } : {}),
                         ...(critFilter ? { critFilter } : {}),
                         ...(hpGate ? { hpBelowPct: parseInt(hpGate[1], 10) } : {}),
                     };
@@ -1585,10 +1686,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             const rawBasis = leechBasis ?? resolveHealBasis(basisScope);
             // Damage-taken procs always shield/heal the damaged unit ITSELF — "them" in
             // "Damage dealt to them" refers back to this Unit, so the \bthem\b ally rule
-            // must not apply (Malvex). (resolveHealTarget was hoisted above the
-            // damage-reaction block so the recipient gate can read it — the gate MUST read
-            // the SAME `resolved` object this target assignment uses, or the two could
-            // disagree on who receives the heal.)
+            // must not apply (Malvex).
             const target = leechBasis === 'damage-taken' ? 'self' : resolved.target;
             // "their Max HP" → target-hp, but on a SELF grant "their" is the singular-they
             // referring back to "This Unit" (APEX: "This Unit gains a Shield … of their Max

@@ -361,10 +361,19 @@ describe('buildShipAbilities', () => {
             secondPassiveSkillText:
                 'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
         });
-        const dot = abilityOfType(slot(buildShipAbilities(s).slots, 'passive')!.abilities, 'dot')!;
+        const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+        const dot = abilityOfType(abilities, 'dot')!;
         expect(dot.config).toMatchObject({ type: 'dot', dotType: 'corrosion' });
         expect(dot.trigger).toBe('on-ally-crit-dot');
         expect(dot.conditions).toEqual([]);
+        // FULL list pin: heal + dot and NOTHING else. "with a critical hit" here is the
+        // ally's OUTGOING crit — if detectDamageReactionTrigger ever reads it as the ally
+        // BEING crit-hit, the Task 8 name-only-debuff pass adds a phantom on-ally-attacked
+        // Corrosion II debuff card on top of these two.
+        expect(abilities.map((a) => [a.type, a.trigger])).toEqual([
+            ['heal', 'on-cast'],
+            ['dot', 'on-ally-crit-dot'],
+        ]);
     });
 
     it('Incinerator charged: damage + DoT(inferno) + detonate-dot(inferno, 180%)', () => {
@@ -1324,10 +1333,12 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('Cultivator clause 2: on-ally-directly-damaged passive repair is an unmodeled reactive trigger → NOT emitted', () => {
-            // The engine doesn't model an on-ally-damaged trigger, so emitting this heal would
-            // make it fire EVERY round (phantom). It's disqualified in parseHealAbilities until a
-            // live trigger exists (Phase 4b/4c). The HP basis (not leech) is what makes it a phantom.
+        it('Cultivator clause 2: on-ally-directly-damaged passive repair IS emitted, healing the damaged ally', () => {
+            // Phase 4c PR 2 (Tasks 8+9): parseHealAbilities parses ally-subject damage
+            // reactions with damageReaction.allySubject (Task 8), the ally-damage trigger
+            // shape flips the bare repair to the damaged ally, and buildShipAbilities
+            // consumes allySubject to route the heal to on-ally-attacked (Task 9) — the
+            // executor then resolves the recipient via eventCtx.damagedAllyId.
             const s = ship({
                 type: 'SUPPORTER',
                 thirdPassiveSkillText:
@@ -1335,7 +1346,16 @@ describe('buildShipAbilities', () => {
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
-            expect(heal).toBeUndefined();
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                trigger: 'on-ally-attacked',
+                conditions: [],
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+            // Symmetry with the self-subject pins: a plain directly-damaged ally reaction
+            // carries NO crit filter (only "is critically hit" phrasings set one).
+            expect(heal!.triggerCritFilter).toBeUndefined();
         });
 
         it('Morao: cleanse-trigger on a DEFENDER passive → both repairs stay self', () => {
@@ -1443,14 +1463,25 @@ describe('buildShipAbilities', () => {
             expect(heal!.triggerCritFilter).toBeUndefined();
         });
 
-        it('Heliodor SECOND passive (ally recipient): still emits NO heal (PR 2 scope)', () => {
+        it('Heliodor SECOND passive (all-allies recipient): emits an on-attacked heal to all allies (Task 8)', () => {
+            // Phase 4c PR 2 (Task 8): self-subject trigger with a NON-SELF recipient now
+            // parses — "them" resolves to "all allies" (antecedent earlier in the sentence),
+            // so the self-damage reaction heals the whole team. Correctly on-attacked (the
+            // OWNER is the damaged unit); no Task 9 change expected here.
             const s = ship({
                 firstPassiveSkillText:
                     'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.',
             });
             const passive = buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
             const heal = passive?.abilities.find((a) => a.type === 'heal');
-            expect(heal).toBeUndefined();
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'all-allies',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: { type: 'heal', pct: 8, basis: 'hp' },
+            });
+            expect(heal!.triggerCritFilter).toBeUndefined();
         });
     });
 
@@ -1525,7 +1556,7 @@ describe('buildShipAbilities', () => {
             expect(all.filter((a) => a.type === 'debuff')).toHaveLength(0);
         });
 
-        it('Guardian second passive: Binderburg grant rides on-attacked with crit filter; ally-Provoke sentence emits nothing new', () => {
+        it('Guardian second passive: Binderburg grant rides on-attacked with crit filter; ally-Provoke sentence rides on-ally-attacked', () => {
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
@@ -1541,19 +1572,26 @@ describe('buildShipAbilities', () => {
                 conditions: [],
                 config: { type: 'buff', buffName: 'Binderburg Resilience I', duration: 1 },
             });
-            // The ally-subject Provoke sentence is PR 2 scope: the debuff keeps its
-            // pre-existing on-cast emission with the manual (off-by-default) self-debuff
-            // Provoke condition — no on-attacked trigger, no crit filter, nothing new.
+            // The Provoke counter-debuff rides on-ally-attacked (Task 7 detector) and KEEPS
+            // its enemy-side target — counter-routing rides eventCtx.counterTargetId, only
+            // BUFF grants get target-forced to 'ally' (Task 9). The pre-trigger-era manual
+            // self-debuff Provoke condition was a detectGrantConditions rule-5 artifact (the
+            // GRANTED buff's own name matched the Provoke-standing targeting rule, not a real
+            // "while Provoked" gate) — Task 9 drops self-referential status conditions when a
+            // damage-reaction trigger attaches, so conditions are now empty.
             const provoke = passive?.abilities.find(
                 (a) =>
                     a.type === 'debuff' &&
                     (a.config as { buffName?: string }).buffName === 'Provoke'
             );
             expect(provoke).toMatchObject({
-                trigger: 'on-cast',
-                conditions: [{ subject: 'self-debuff', buffName: 'Provoke', derivable: false }],
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-ally-attacked',
+                triggerCritFilter: 'crit',
+                conditions: [],
+                config: { type: 'debuff', buffName: 'Provoke', duration: 1 },
             });
-            expect(provoke!.triggerCritFilter).toBeUndefined();
         });
 
         it('Shepherd passive: Corrosion I name-only debuff AND Attack Down I both ride on-attacked', () => {
@@ -1698,14 +1736,60 @@ describe('buildShipAbilities', () => {
             ]);
         });
 
-        it('Refine (negative): ally-subject reaction grant stays unchanged (PR 2)', () => {
+        it('Refine first passive: ally-subject reaction grant rides on-ally-attacked, recipient forced to the damaged ALLY', () => {
+            // Spec-locked (Task 9): Refine's recipient-less "grants Inc. Damage Down I"
+            // lands on the DAMAGED ally via eventCtx.damagedAllyId, which the executor only
+            // honors for 'ally'-target intents — so the builder forces target 'ally' on
+            // ally-damage-reaction BUFF grants.
             const s = ship({
                 firstPassiveSkillText:
                     'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.',
             });
             const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
-            expect(buff?.trigger).toBe('on-cast');
-            expect(buff?.triggerCritFilter).toBeUndefined();
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'ally',
+                trigger: 'on-ally-attacked',
+                config: { type: 'buff', buffName: 'Inc. Damage Down I', duration: 1 },
+            });
+            expect(buff!.triggerCritFilter).toBeUndefined();
+            expect(buff!.roleFilter).toBeUndefined();
+        });
+
+        it('Refine second passive: identical sentence at duration 2 parses the same way', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                secondPassiveSkillText:
+                    'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns.',
+            });
+            const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'ally',
+                trigger: 'on-ally-attacked',
+                config: { type: 'buff', buffName: 'Inc. Damage Down I', duration: 2 },
+            });
+        });
+
+        it('Graphite passive: ally-role words become roleFilter on the on-ally-attacked grant', () => {
+            // "when an ally attacker or debuffer is directly damaged" → the detector's
+            // DR_ALLY_ROLES_RE surfaces CATEGORY-semantic roleFilter values; the builder
+            // threads them onto the ability so the engine listener only fires when the
+            // damaged ally's role matches. Explicit "grants the ally" recipient + the
+            // Task 9 forcing both resolve to target 'ally'.
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns.',
+            });
+            const buff = passiveOf(s)?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'ally',
+                trigger: 'on-ally-attacked',
+                roleFilter: ['ATTACKER', 'DEBUFFER'],
+                config: { type: 'buff', buffName: 'Repair Over Time III', duration: 2 },
+            });
+            expect(buff!.triggerCritFilter).toBeUndefined();
         });
 
         it('Wusheng (negative): active-voice self-crit Stealth keeps on-crit, not on-attacked', () => {

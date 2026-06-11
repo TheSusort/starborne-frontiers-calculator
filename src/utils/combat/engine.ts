@@ -1,4 +1,5 @@
 import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
@@ -678,6 +679,12 @@ export interface CombatEngineInput {
     enemySpeed?: number;
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier?: number;
+    /** FOCUS actor's ship role (Ship.type) for role-filtered ally-damage reactions
+     *  (Graphite's "when a Defender or Debuffer ally takes damage"). Team actors carry
+     *  their own `role` on TeamActorInput. Absent (manual stats / no ship picked) →
+     *  the focus actor never matches a role filter — the reaction stays dormant for
+     *  hits on it (conservative; mirrors TeamActorInput.role's contract). */
+    role?: ShipTypeName;
     /** Healing mode switch (healing calc): the player actor id that heals/shields route to
      *  and consume against. Must be a player actor id (focus or a team actor). When set, the
      *  engine runs in healing mode — heals/shields/cleanses are consumed and a `healing`
@@ -1398,11 +1405,20 @@ export function runCombat(input: CombatEngineInput): {
     // DPS/attacker-only run → only the dummy is enemy-side).
     const isEnemySide = (actorId: string): boolean =>
         actorId === enemy.id || seenEnemyAttackerIds.has(actorId);
+    // Damaged-ally role lookup for role-filtered reactions (Graphite). Roles come from
+    // ship data on the healing page (TeamActorInput.role / the focus actor's input.role);
+    // built for ALL player actors for uniformity even though in healing mode only the heal
+    // target is ever attacked. An actor without a role stays OFF the map → roleOf returns
+    // undefined → role-filtered reactions stay dormant for hits on it (conservative).
+    const roleByActorId = new Map<string, ShipTypeName>();
+    if (input.role) roleByActorId.set(focusActorId, input.role);
+    for (const t of teamActors) if (t.role) roleByActorId.set(t.id, t.role);
     registerReactiveListeners({
         bus,
         perOwner: reactivePerOwner,
         enqueue: (intent) => intentQueue.push(intent),
         isEnemySide,
+        roleOf: (id) => roleByActorId.get(id),
     });
 
     // Owner-routed executor context (Task 6): the executor resolves an intent's owner runtime

@@ -1,6 +1,7 @@
 import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
 import { runCombat, EnemyRoundEffects } from '../combat/engine';
@@ -46,6 +47,12 @@ export interface HealingSimulationInput {
      *  computeAffinityModifiers(enemyAffinity, targetAffinity). Absent → neutral for all
      *  enemies (byte-identical to prior behaviour when enemy affinity was also absent). */
     healTargetAffinity?: AffinityName;
+    /** The HEALER ship's role (Ship.type) — maps to the engine's focus-actor `role` for
+     *  role-filtered on-ally-attacked reactions (Graphite) when the healer is the heal target.
+     *  Team actors carry their own `role` on TeamActorInput (passed through untouched by the
+     *  team walk). Absent (manual stats / no ship picked) → the focus actor never matches a
+     *  role filter — the reaction stays dormant for hits on it (conservative). */
+    healerRole?: ShipTypeName;
     teamActors?: TeamActorInput[];
     enemies: EnemyAttackerInput[];
     rounds: number;
@@ -213,6 +220,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         speed: healer.speed,
         enemySpeed: 0,
         healModifier: healer.healModifier,
+        role: input.healerRole,
         healTargetId,
         enemyAttackers: engineEnemyAttackers,
         teamActors: engineTeamActors,

@@ -1,3 +1,4 @@
+import type { ShipTypeName } from '../constants/shipTypes';
 import { AffinityName } from './ship';
 import type { ShipSkills } from './abilities';
 
@@ -254,6 +255,9 @@ export interface TeamShipConfig {
     stats?: CombatStatBlock;
     /** Affinity for the walked team actor — vs the enemy affinity yields its own modifiers. */
     affinity?: AffinityName;
+    /** Ship role (Ship.type) — auto-filled on ship pick, threaded to TeamActorInput.role for
+     *  role-filtered ally-damage reactions (Graphite). Absent for manual slots (conservative). */
+    role?: ShipTypeName;
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing
@@ -279,4 +283,8 @@ export interface TeamActorInput {
     /** Affinity for a walked team actor — vs the enemy affinity yields its own damage/crit
      *  modifiers (computeAffinityModifiers). Absent → neutral defaults. */
     affinity?: AffinityName;
+    /** Ship role (Ship.type) for role-filtered ally-damage reactions (Graphite).
+     *  Auto-filled from ship data on the healing page; absent for manual actors →
+     *  role-filtered reactions never fire for them (conservative). */
+    role?: ShipTypeName;
 }

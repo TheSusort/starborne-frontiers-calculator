@@ -10,9 +10,11 @@ import {
     LIVE_TRIGGERS,
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
+import { ShipRoleCategory } from '../../constants/shipTypes';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
+import { CheckboxGroup } from '../ui/CheckboxGroup';
 import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
@@ -109,11 +111,19 @@ const EXTEND_DOT_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }
     { value: 'inflicted', label: 'Only DoTs from this cast' },
 ];
 
+const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
+    { value: 'ATTACKER', label: 'Attacker' },
+    { value: 'DEFENDER', label: 'Defender' },
+    { value: 'DEBUFFER', label: 'Debuffer' },
+    { value: 'SUPPORTER', label: 'Supporter' },
+];
+
 const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-cast', label: 'On cast (default)' },
     { value: 'start-of-round', label: 'Start of round' },
     { value: 'on-crit', label: 'On critical hit' },
     { value: 'on-attacked', label: 'When attacked' },
+    { value: 'on-ally-attacked', label: 'When an ally is attacked' },
     { value: 'on-ally-destroyed', label: 'On ally destroyed' },
     { value: 'on-destroyed', label: 'On destroyed' },
     { value: 'on-enemy-destroyed', label: 'On enemy destroyed' },
@@ -733,12 +743,24 @@ export const AbilityCard: React.FC<Props> = ({
                         value={ability.trigger}
                         options={TRIGGER_OPTIONS}
                         onChange={(value) => {
-                            if (value === 'on-attacked') {
-                                onChange({ ...ability, trigger: value as AbilityTrigger });
-                            } else {
-                                const { triggerCritFilter: _removed, ...rest } = ability;
-                                onChange({ ...rest, trigger: value as AbilityTrigger });
-                            }
+                            // triggerCritFilter applies to the attacked family (on-attacked +
+                            // on-ally-attacked, same engine contract); roleFilter only to
+                            // on-ally-attacked. Strip whatever the new trigger doesn't support
+                            // so the stored ability stays canonical.
+                            const trigger = value as AbilityTrigger;
+                            const { triggerCritFilter, roleFilter, ...rest } = ability;
+                            const keepCritFilter =
+                                trigger === 'on-attacked' || trigger === 'on-ally-attacked';
+                            onChange({
+                                ...rest,
+                                ...(keepCritFilter && triggerCritFilter !== undefined
+                                    ? { triggerCritFilter }
+                                    : {}),
+                                ...(trigger === 'on-ally-attacked' && roleFilter !== undefined
+                                    ? { roleFilter }
+                                    : {}),
+                                trigger,
+                            });
                         }}
                     />
                     {ability.trigger !== 'on-cast' && !LIVE_TRIGGERS.has(ability.trigger) && (
@@ -746,7 +768,8 @@ export const AbilityCard: React.FC<Props> = ({
                             Not simulated — treated as assume-active
                         </p>
                     )}
-                    {ability.trigger === 'on-attacked' && (
+                    {(ability.trigger === 'on-attacked' ||
+                        ability.trigger === 'on-ally-attacked') && (
                         <Select
                             label="Hit filter"
                             value={ability.triggerCritFilter ?? 'any'}
@@ -767,6 +790,27 @@ export const AbilityCard: React.FC<Props> = ({
                                 }
                             }}
                             helpLabel="Per-hit: a multi-hit attack checks each hit separately"
+                        />
+                    )}
+                    {ability.trigger === 'on-ally-attacked' && (
+                        <CheckboxGroup
+                            label="Ally role filter"
+                            helpLabel="Empty = reacts to any ally. Categories match all variants (Debuffer covers every Debuffer subtype)."
+                            options={ROLE_FILTER_OPTIONS}
+                            values={ability.roleFilter ?? []}
+                            onChange={(values) => {
+                                // Empty selection normalizes to an ABSENT key (any ally),
+                                // never an empty array, so the stored ability stays canonical.
+                                if (values.length === 0) {
+                                    const { roleFilter: _removed, ...rest } = ability;
+                                    onChange(rest as Ability);
+                                } else {
+                                    onChange({
+                                        ...ability,
+                                        roleFilter: values as ShipRoleCategory[],
+                                    });
+                                }
+                            }}
                         />
                     )}
                 </>

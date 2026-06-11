@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import {
     MAX_INTENT_GENERATIONS,
@@ -11,6 +11,7 @@ import {
     LIVE_TRIGGERS,
 } from '../triggers';
 import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { createStatusEngine } from '../statusEngine';
 import type { PlayerActorRuntime, HealingRuntimeCtx } from '../playerTurn';
@@ -1740,6 +1741,196 @@ describe('on-attacked live trigger (Task 4)', () => {
 });
 
 // ----------------------------------------------------------------------
+// on-ally-attacked listener (Phase 4c PR 2 Task 3): fires when ANOTHER player
+// actor takes a direct hit. Unit-level harness mirroring the on-attacked
+// crit-filter tests: bare bus + registerReactiveListeners + manual emits.
+// Owner is 'graphite' (the reacting ship); 'tank' is another player actor;
+// 'enemy' and 'ea1' are enemy-side per the isEnemySide predicate.
+// ----------------------------------------------------------------------
+describe('on-ally-attacked listener', () => {
+    // Build a minimal on-ally-attacked reactive ability (Graphite/Cultivator shape).
+    const onAllyAttackedBuff = (overrides: Partial<Ability> = {}): Ability =>
+        ab({
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Fortify',
+                stacks: 1,
+                parsedEffects: { defense: 15 },
+                isStackable: false,
+                duration: 1,
+            },
+            ...overrides,
+        });
+
+    // Helper: wire up the bus, register the owner's listeners (optionally with a
+    // roleOf lookup), emit the given attacked events, return collected intents.
+    function emitAllyAttacked(
+        reactiveAbilities: ReactiveAbility[],
+        events: Extract<CombatEvent, { type: 'attacked' }>[],
+        roleOf?: (actorId: string) => ShipTypeName | undefined
+    ): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'graphite', reactiveAbilities }],
+            enqueue: (i) => intents.push(i),
+            isEnemySide: (id) => id === 'enemy' || id === 'ea1',
+            roleOf,
+        });
+        for (const e of events) bus.emit(e);
+        return intents;
+    }
+
+    // (1) ally scoping: another player actor's hit fires; own hits and
+    //     enemy-side targets do not
+    it('fires when ANOTHER player actor is hit, not for own hits or enemy-side targets', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+
+        // another player actor ('tank') is hit → enqueue
+        const allyIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 }]
+        );
+        expect(allyIntents).toHaveLength(1);
+        expect(allyIntents[0].ownerId).toBe('graphite');
+        expect(allyIntents[0].ability.trigger).toBe('on-ally-attacked');
+
+        // the owner itself is hit → NOT an ally hit (on-attacked's job)
+        const ownIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'graphite', attackerId: 'ea1', round: 1 }]
+        );
+        expect(ownIntents).toHaveLength(0);
+
+        // an enemy-side actor is hit (player attacking the enemy) → not an ally
+        const enemyIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'enemy', attackerId: 'tank', round: 1 }]
+        );
+        expect(enemyIntents).toHaveLength(0);
+    });
+
+    // (2) per-HIT semantics: the engine emits one attacked event per hit
+    it('fires once PER HIT: three attacked events yield three enqueues', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+        const hit = { type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 } as const;
+        const intents = emitAllyAttacked([ra], [hit, hit, hit]);
+        expect(intents).toHaveLength(3);
+    });
+
+    // (3) triggerCritFilter discriminates on the hit's own crit outcome
+    it('honors triggerCritFilter against the hit didCrit (crit and non-crit)', () => {
+        const critRa: ReactiveAbility = {
+            ability: onAllyAttackedBuff({ id: 'aa-crit', triggerCritFilter: 'crit' }),
+            sourceSlot: 'passive',
+        };
+        const nonCritRa: ReactiveAbility = {
+            ability: onAllyAttackedBuff({ id: 'aa-non-crit', triggerCritFilter: 'non-crit' }),
+            sourceSlot: 'passive',
+        };
+        const critHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+            didCrit: true,
+        } as const;
+        const plainHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+        } as const;
+        // Explicit didCrit:false — the engine never emits it (present-only-when-true),
+        // but the listener must treat it as non-crit; mirrors the on-attacked PR 1
+        // robustness convention pinned above.
+        const explicitNonCritHit = {
+            type: 'attacked',
+            targetId: 'tank',
+            attackerId: 'ea1',
+            round: 1,
+            didCrit: false,
+        } as const;
+
+        // 'crit'-filtered: only the didCrit:true hit fires
+        const critIntents = emitAllyAttacked([critRa], [critHit, plainHit, explicitNonCritHit]);
+        expect(critIntents).toHaveLength(1);
+        expect(critIntents[0].ability.triggerCritFilter).toBe('crit');
+
+        // 'non-crit'-filtered: the absent-didCrit hit AND the explicit didCrit:false hit fire
+        const nonCritIntents = emitAllyAttacked(
+            [nonCritRa],
+            [critHit, plainHit, explicitNonCritHit]
+        );
+        expect(nonCritIntents).toHaveLength(2);
+        expect(nonCritIntents.every((i) => i.ability.triggerCritFilter === 'non-crit')).toBe(true);
+    });
+
+    // (4) roleFilter matches the DAMAGED ally's role category via roleOf
+    describe('roleFilter against the damaged ally role', () => {
+        const filtered = (): ReactiveAbility => ({
+            ability: onAllyAttackedBuff({
+                id: 'aa-role',
+                roleFilter: ['ATTACKER', 'DEBUFFER'],
+            }),
+            sourceSlot: 'passive',
+        });
+        const hit = { type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 } as const;
+
+        it('enqueues when the ally role is an underscore variant of a listed category', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => 'DEBUFFER_BOMBER');
+            expect(intents).toHaveLength(1);
+        });
+
+        it('does NOT enqueue when the ally role is outside the filter', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => 'DEFENDER');
+            expect(intents).toHaveLength(0);
+        });
+
+        it('does NOT enqueue when roleOf returns undefined (unknown role = no match)', () => {
+            const intents = emitAllyAttacked([filtered()], [hit], () => undefined);
+            expect(intents).toHaveLength(0);
+        });
+
+        it('does NOT enqueue when no roleOf is passed at all but a filter is present', () => {
+            const intents = emitAllyAttacked([filtered()], [hit]);
+            expect(intents).toHaveLength(0);
+        });
+
+        it('ability WITHOUT roleFilter still enqueues when roleOf is undefined (absent filter = any ally)', () => {
+            const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+            const intents = emitAllyAttacked([ra], [hit]);
+            expect(intents).toHaveLength(1);
+        });
+
+        it('EMPTY roleFilter array behaves like absent: fires for any ally', () => {
+            const ra: ReactiveAbility = {
+                ability: onAllyAttackedBuff({ id: 'aa-empty', roleFilter: [] }),
+                sourceSlot: 'passive',
+            };
+            const intents = emitAllyAttacked([ra], [hit]);
+            expect(intents).toHaveLength(1);
+        });
+    });
+
+    // (5) per-event eventCtx: counter routing (attacker) + ally routing (target)
+    it('enqueued intent carries eventCtx with BOTH counterTargetId and damagedAllyId', () => {
+        const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
+        const intents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 }]
+        );
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.counterTargetId).toBe('ea1');
+        expect(intents[0].eventCtx?.damagedAllyId).toBe('tank');
+    });
+});
+
+// ----------------------------------------------------------------------
 // Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
 // on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
 // createEventBus directly. Owner is always 'A' (a player actor); 'B' is
@@ -2591,5 +2782,413 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
         // debuff-resisted must point at ctx.enemy.id, not the counterTargetId.
         expect(emitted).toHaveLength(1);
         expect(emitted[0].targetId).toBe('enemy-default');
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c PR 2 Task 4: ally-target payload routing via eventCtx.damagedAllyId
+//
+// An on-ally-attacked reaction grant ('ally' target + eventCtx naming the
+// damaged ally — Graphite's "grants the ally Repair Over Time III") must land
+// on EXACTLY that ally. Without the routing the buff branch's Task-5 rule
+// ('ally' → every playerId) would put the HoT on the whole team and inflate
+// healing numbers. Without eventCtx the all-players grant is preserved
+// (PR 1 contract lock). The heal branch prefers damagedAllyId over
+// ctx.healing.targetId — identical today (the engine only attacks the heal
+// target) but locks "repairs THAT ally" semantics for 4d multi-target.
+// ----------------------------------------------------------------------
+describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
+    const PLAYER_IDS = ['healer', 'team1', 'tank'];
+
+    const makeRuntime = (id: string): PlayerActorRuntime =>
+        ({
+            actor: { id } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const makeBuffIntent = (damagedAllyId?: string): Intent => ({
+        ownerId: 'healer',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'graphite-ally-hot',
+            type: 'buff',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Repair Over Time III',
+                stacks: 1,
+                parsedEffects: { defense: 5 },
+                isStackable: false,
+                duration: 2,
+            },
+        },
+        ...(damagedAllyId !== undefined
+            ? { eventCtx: { counterTargetId: 'ea1', damagedAllyId } }
+            : {}),
+    });
+
+    const buildBuffCtx = (): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['healer', makeRuntime('healer')]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: PLAYER_IDS,
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('buff intent with eventCtx.damagedAllyId and target "ally" grants ONLY the damaged ally', () => {
+        const ctx = buildBuffCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        const buffEvents: Array<{ actorId?: string }> = [];
+        ctx.bus.on('buff-applied', (e) => buffEvents.push(e as { actorId?: string }));
+
+        executeIntent(makeBuffIntent('tank'), ctx);
+
+        // EXACTLY one application, recipient = the damaged ally (third positional arg).
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        expect(applySpy.mock.calls[0][2]).toBe('tank');
+
+        // Exactly one buff-applied event, on the damaged ally — not the whole team.
+        expect(buffEvents).toHaveLength(1);
+        expect(buffEvents[0].actorId).toBe('tank');
+    });
+
+    it('buff intent with target "ally" and NO eventCtx keeps the all-players grant (PR 1 contract)', () => {
+        const ctx = buildBuffCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        const buffEvents: Array<{ actorId?: string }> = [];
+        ctx.bus.on('buff-applied', (e) => buffEvents.push(e as { actorId?: string }));
+
+        executeIntent(makeBuffIntent(), ctx);
+
+        // Every player id receives the grant, in the fixed playerIds order.
+        expect(applySpy).toHaveBeenCalledTimes(PLAYER_IDS.length);
+        expect(applySpy.mock.calls.map((c) => c[2])).toEqual(PLAYER_IDS);
+        expect(buffEvents.map((e) => e.actorId)).toEqual(PLAYER_IDS);
+    });
+
+    // ---- heal branch: damagedAllyId preferred over ctx.healing.targetId ----
+
+    const makeHealIntent = (damagedAllyId: string): Intent => ({
+        ownerId: 'healer',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'ally-reactive-repair',
+            type: 'heal',
+            target: 'ally',
+            trigger: 'on-ally-attacked',
+            conditions: [],
+            config: { type: 'heal', pct: 10, basis: 'hp' },
+        },
+        eventCtx: { counterTargetId: 'ea1', damagedAllyId },
+    });
+
+    const buildHealCtx = (): {
+        ctx: IntentExecContext;
+        applied: number[];
+        credits: Array<{ bucket: string; amount: number }>;
+    } => {
+        const applied: number[] = [];
+        const credits: Array<{ bucket: string; amount: number }> = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'tank',
+            credit: (_actorId, bucket, amount) => credits.push({ bucket, amount }),
+            recipientMaxHp: () => 1000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 1000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: () => {},
+            playerIds: PLAYER_IDS,
+        };
+        const ctx: IntentExecContext = {
+            ...buildBuffCtx(),
+            healing,
+        };
+        return { ctx, applied, credits };
+    };
+
+    it('heal intent with damagedAllyId === healing.targetId routes to the target (effectiveHeal credited)', () => {
+        const { ctx, applied, credits } = buildHealCtx();
+
+        executeIntent(makeHealIntent('tank'), ctx);
+
+        // 10% of owner hp (1000) = 100, consumed by the heal target.
+        expect(applied).toEqual([100]);
+        expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
+        expect(credits).toContainEqual({ bucket: 'effectiveHeal', amount: 100 });
+    });
+
+    it('heal intent with damagedAllyId ≠ healing.targetId credits directHeal but does NOT touch the target pool', () => {
+        const { ctx, applied, credits } = buildHealCtx();
+
+        // The damaged ally is 'team1', NOT the heal target 'tank' — locks the
+        // recipient-vs-target consumption split for the 4d multi-target future.
+        executeIntent(makeHealIntent('team1'), ctx);
+
+        expect(applied).toHaveLength(0);
+        expect(credits).toContainEqual({ bucket: 'directHeal', amount: 100 });
+        expect(credits.some((c) => c.bucket === 'effectiveHeal')).toBe(false);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c PR 2 Task 5: on-ally-attacked ENGINE integration (scenario 16).
+// Full runCombat in healing mode: a walked TEAM owner carries the reactive
+// ability; the heal target is a walked team 'tank' the enemy attacker hits.
+// Locks the engine-level threading: per-hit attacked events feed the owner's
+// listener; 'ally'-target payloads route to the DAMAGED tank (damagedAllyId);
+// roleFilter resolves the tank's role via the engine-built roleByActorId map
+// (TeamActorInput.role / CombatEngineInput.role → roleOf); counter debuffs
+// route to the ATTACKING enemy's per-target store (counterTargetId).
+// ----------------------------------------------------------------------
+describe('on-ally-attacked engine integration (scenario 16)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    // Walked team actor: real runPlayerTurn pipeline (reactive abilities only
+    // register for WALKED owners), real hp (the heal target's currentHp seeds
+    // from walk stats). `extra` lets a test set `role` / overrides.
+    const teamWalk = (
+        id: string,
+        speed: number,
+        hp: number,
+        shipSkills: ShipSkills,
+        extra: Partial<TeamActorEngineInput> = {}
+    ): TeamActorEngineInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills,
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+        ...extra,
+    });
+
+    // Graphite shape: passive on-ally-attacked ally buff (duration 2). Ability-level
+    // overrides (roleFilter, triggerCritFilter) flow through to the reactive guard.
+    const reactivePlatingSkills = (overrides: Partial<Ability> = {}): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'ally',
+                        trigger: 'on-ally-attacked',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Reactive Plating',
+                            stacks: 1,
+                            parsedEffects: { defense: 15 },
+                            isStackable: false,
+                            duration: 2,
+                        },
+                        ...overrides,
+                    }),
+                ],
+            },
+        ],
+    });
+
+    // Minimal flat-card enemy attacker: one attack (one `attacked` event) per turn.
+    const flatEnemy = (stats: Partial<EnemyAttacker['stats']> = {}): EnemyAttacker => ({
+        id: 'ea1',
+        stats: { attack: 100, crit: 0, critDamage: 0, speed: 10, ...stats },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    // Shared arrangement: focus actor (no reactives, NOT the heal target) + team owner
+    // 'graphite' (reactive carrier) + team 'tank' (heal target, large HP, optional role)
+    // + one enemy attacker bombarding the tank. Returns the collected bus events.
+    const runScenario = (opts: {
+        ownerSkills: ShipSkills;
+        tankSkills?: ShipSkills;
+        tankRole?: ShipTypeName;
+        enemy?: EnemyAttacker;
+        numRounds?: number;
+    }): CombatEvent[] => {
+        idCounter = 0;
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('attacked', (e) => events.push(e as CombatEvent));
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+        runCombat(
+            baseInput({
+                shipSkills: { slots: [] }, // focus actor: no reactives
+                hasChargedSkill: false,
+                chargeCount: 0,
+                hp: 1_000_000,
+                defence: 0,
+                healTargetId: 'tank',
+                numRounds: opts.numRounds ?? 3,
+                bus,
+                teamActors: [
+                    teamWalk('graphite', 120, 50_000, opts.ownerSkills),
+                    teamWalk('tank', 80, 1_000_000, opts.tankSkills ?? { slots: [] }, {
+                        role: opts.tankRole,
+                    }),
+                ],
+                enemyAttackers: [opts.enemy ?? flatEnemy()],
+            })
+        );
+        return events;
+    };
+
+    const buffsNamed = (events: CombatEvent[], buffName: string) =>
+        events.filter(
+            (e) => e.type === 'buff-applied' && (e as { buffName?: string }).buffName === buffName
+        ) as Array<{ actorId: string }>;
+
+    it('scenario 16a: team owner grants the damaged tank the ally buff, once per attack turn, ONLY the tank', () => {
+        const events = runScenario({ ownerSkills: reactivePlatingSkills(), tankRole: 'ATTACKER' });
+
+        // One attacked event per round, all on the tank — locks the arrangement.
+        const attacked = events.filter((e) => e.type === 'attacked');
+        expect(attacked.length).toBe(3);
+        for (const e of attacked) {
+            expect((e as { targetId?: string }).targetId).toBe('tank');
+            expect((e as { attackerId?: string }).attackerId).toBe('ea1');
+        }
+
+        // The reactive fires once per attack turn; damagedAllyId routing means the
+        // 'ally' payload lands on EXACTLY the tank (never graphite or the focus actor).
+        const plating = buffsNamed(events, 'Reactive Plating');
+        expect(plating.length).toBe(3);
+        expect(plating.every((e) => e.actorId === 'tank')).toBe(true);
+    });
+
+    describe('scenario 16b: roleFilter dormancy/firing against the tank role from the engine input', () => {
+        const filteredSkills = () =>
+            reactivePlatingSkills({ roleFilter: ['ATTACKER', 'DEBUFFER'] });
+
+        it('tank role DEFENDER (outside the filter) → ZERO applications', () => {
+            const events = runScenario({ ownerSkills: filteredSkills(), tankRole: 'DEFENDER' });
+            expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
+        });
+
+        it('tank role DEBUFFER_BOMBER (underscore variant of a listed category) → fires every attack turn', () => {
+            const events = runScenario({
+                ownerSkills: filteredSkills(),
+                tankRole: 'DEBUFFER_BOMBER',
+            });
+            const plating = buffsNamed(events, 'Reactive Plating');
+            expect(plating.length).toBe(3);
+            expect(plating.every((e) => e.actorId === 'tank')).toBe(true);
+        });
+
+        it('NO role on the tank input + filter present → dormant (conservative)', () => {
+            const events = runScenario({ ownerSkills: filteredSkills() });
+            expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
+        });
+    });
+
+    describe('scenario 16c: crit-only counter debuff routes to the attacking enemy (Guardian Provoke shape)', () => {
+        const provokeSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-ally-attacked',
+                            triggerCritFilter: 'crit',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Provoke',
+                                stacks: 1,
+                                parsedEffects: { defense: -10 },
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        it('100%-crit enemy → Provoke lands on THAT enemy id each attack turn (per-target routing)', () => {
+            const events = runScenario({
+                ownerSkills: provokeSkills(),
+                tankRole: 'DEFENDER',
+                enemy: flatEnemy({ crit: 100, critDamage: 50 }),
+            });
+            const provokes = events.filter(
+                (e) =>
+                    e.type === 'debuff-applied' &&
+                    (e as { buffName?: string }).buffName === 'Provoke'
+            ) as Array<{ targetId: string }>;
+            expect(provokes.length).toBe(3);
+            expect(provokes.every((e) => e.targetId === 'ea1')).toBe(true);
+        });
+
+        it('0%-crit enemy → no Provoke (crit filter holds at the engine level)', () => {
+            const events = runScenario({
+                ownerSkills: provokeSkills(),
+                tankRole: 'DEFENDER',
+                enemy: flatEnemy({ crit: 0 }),
+            });
+            const provokes = events.filter(
+                (e) =>
+                    e.type === 'debuff-applied' &&
+                    (e as { buffName?: string }).buffName === 'Provoke'
+            );
+            expect(provokes.length).toBe(0);
+        });
+    });
+
+    it('scenario 16d: the heal target OWNING the on-ally-attacked ability does NOT fire on its own hits', () => {
+        // The tank itself carries the reactive; only the tank is ever attacked. Own hits
+        // are on-attacked scope — the ally listener must stay silent the whole run.
+        const events = runScenario({
+            ownerSkills: { slots: [] },
+            tankSkills: reactivePlatingSkills(),
+            tankRole: 'ATTACKER',
+        });
+        expect(events.filter((e) => e.type === 'attacked').length).toBe(3);
+        expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
     });
 });

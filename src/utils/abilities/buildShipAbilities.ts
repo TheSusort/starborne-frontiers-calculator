@@ -872,8 +872,11 @@ function abilitiesFromText(
         const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
-        // Phase 4c PR 1: a SELF-subject damage-reaction heal (parser annotation
-        // `damageReaction`) rides the on-attacked reactive trigger. It takes PRECEDENCE
+        // Phase 4c PR 1+2: a damage-reaction heal (parser annotation `damageReaction`)
+        // rides the live reactive trigger — SELF-subject sentences ("when directly
+        // damaged") → on-attacked, ALLY-subject ones (allySubject, Cultivator's "when
+        // an ally is directly damaged … repairs 8%") → on-ally-attacked, where the
+        // executor heals the damaged ally via eventCtx.damagedAllyId. It takes PRECEDENCE
         // over the position-scoped detector chain below — the annotation is
         // SENTENCE-scoped by the parser (set only when the heal's own sentence carries
         // the trigger), where the detectors infer from an anchor position that can land
@@ -885,7 +888,9 @@ function abilitiesFromText(
         // debuffed" sentence rides on-debuff-inflicted (own inflictions; position-scoped). Both
         // are position-scoped so an unrelated heal/shield in another sentence is never co-triggered.
         const reactiveTrigger = h.damageReaction
-            ? ('on-attacked' as const)
+            ? h.damageReaction.allySubject
+                ? ('on-ally-attacked' as const)
+                : ('on-attacked' as const)
             : (detectCritRepairTrigger(text, healPos) ??
               // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
               // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
@@ -1209,6 +1214,37 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             if (reaction) {
                 ability.trigger = reaction.trigger;
                 if (reaction.critFilter) ability.triggerCritFilter = reaction.critFilter;
+                // Ally-role words in the trigger phrase (Graphite "when an ally attacker
+                // or debuffer is directly damaged") → CATEGORY-semantic roleFilter; the
+                // engine's on-ally-attacked listener fires only when the damaged ally's
+                // role matches one of them.
+                if (reaction.roleFilter) ability.roleFilter = reaction.roleFilter;
+                // Ally-damage-reaction BUFF grants land on the DAMAGED ally (spec-locked):
+                // Refine's recipient-less "grants Inc. Damage Down I" and Graphite's
+                // "grants the ally Repair Over Time III" both resolve via
+                // eventCtx.damagedAllyId, which the executor only honors for 'ally'-target
+                // intents — so force the recipient here (the parser's recipient-less scope
+                // resolution otherwise lands on 'all-allies'/'self'). DEBUFFS keep their
+                // enemy-side target (Guardian's Provoke "to that enemy") — counter-routing
+                // rides eventCtx.counterTargetId instead.
+                if (reaction.trigger === 'on-ally-attacked' && ability.type === 'buff') {
+                    ability.target = 'ally';
+                }
+                // Drop SELF-REFERENTIAL status conditions: detectGrantConditions' rule 5
+                // (Taunt/Provoke targeting gates) matches the GRANTED buff's own name when
+                // the reaction sentence applies that very status (Guardian "apply Provoke
+                // … to that enemy" → a stale manual self-debuff-Provoke gate from the
+                // pre-trigger era). The sentence carries no real Provoke-standing gate —
+                // the reaction trigger IS the gate — so the artifact is removed. A genuine
+                // status gate naming a DIFFERENT buff than the granted one would survive
+                // (no corpus reaction sentence has one today).
+                ability.conditions = ability.conditions.filter(
+                    (c) =>
+                        !(
+                            (c.subject === 'self-debuff' || c.subject === 'enemy-buff') &&
+                            c.buffName === buff.buffName
+                        )
+                );
                 // "while below N% HP" gate on the reaction sentence (Makoli Disable): attach a
                 // derivable self hp-threshold condition so the executor evaluates the gate at
                 // drain time (live selfHpPct from Task 6) rather than firing on every hit.

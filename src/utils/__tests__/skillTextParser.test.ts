@@ -2256,12 +2256,26 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         ]);
     });
 
-    it('Cultivator: active-cleanse repair (4%) stays; on-ally-directly-damaged repair (8%) drops', () => {
+    it('Cultivator p2: ally-damage clause → ally-target heal with allySubject damageReaction; 4% cleanse clause unchanged', () => {
+        // Full CSV p2 text (tags stripped; <br /><br /> → '. ' via the plain pipeline).
+        // The 4% cleanse-reaction clause is pinned to its pre-Task-8 shape (on-cast ally
+        // heal, NO damageReaction — "cleanses" is not a damage-reaction shape); the 8%
+        // ally-damaged clause was PR 1-disqualified and now parses with allySubject.
         expect(
             parseHealAbilities(
                 "When this Unit cleanses a Debuff, it also repairs that ally for 4% of this Unit's Max HP. Additionally, when an ally is directly damaged within the active pattern, this Unit repairs that ally for 8% of this Unit's Max HP."
             )
-        ).toEqual([{ kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true }]);
+        ).toEqual([
+            { kind: 'heal', pct: 4, basis: 'hp', target: 'ally', explicitTarget: true },
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'hp',
+                target: 'ally',
+                explicitTarget: true,
+                damageReaction: { allySubject: true },
+            },
+        ]);
     });
 
     it('GUARD: leech heal "repairs X% of the damage it deals" still parses (basis damage-dealt)', () => {
@@ -2301,12 +2315,14 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
     });
 });
 
-// Phase 4c PR 1 (Task 7): SELF-subject damage-reaction heals ("when directly damaged …
-// this Unit repairs …") parse with a `damageReaction` annotation; buildShipAbilities maps
-// it to trigger 'on-attacked' (+ triggerCritFilter / derivable self hp-threshold).
-// ALLY-subject reactions (and self triggers whose heal RECIPIENT is not self) stay
-// disqualified — they are PR 2 routing scope. All texts below are real CSV rows.
-describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)', () => {
+// Phase 4c damage-reaction heals. PR 1 (Task 7): SELF-subject reactions ("when directly
+// damaged … this Unit repairs …") parse with a `damageReaction` annotation;
+// buildShipAbilities maps it to trigger 'on-attacked' (+ triggerCritFilter / derivable
+// self hp-threshold). PR 2 (Task 8): ALLY-subject reactions ("when an ally is directly
+// damaged", Cultivator) parse with `damageReaction.allySubject: true`, and self triggers
+// whose heal RECIPIENT is not self (Heliodor's second-listed passive "repairs them
+// [all allies]") parse too. All texts below are real CSV rows.
+describe('parseHealAbilities — damage-reaction heals (Phase 4c)', () => {
     // Makoli and Guardian share this CSV text BYTE-IDENTICALLY (both ships'
     // first_passive_skill_text column) — one test covers both.
     it('Makoli/Guardian first passive (identical CSV text): below-40% gate → ONE heal with damageReaction.hpBelowPct', () => {
@@ -2385,20 +2401,56 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
         ]);
     });
 
-    it('Heliodor SECOND passive: self trigger but NON-SELF heal recipient ("repairs them") stays disqualified (PR 2)', () => {
+    it('Heliodor p2: self-damage trigger with all-allies recipient parses (was PR 1-disqualified)', () => {
+        // Self-subject trigger ("When directly damaged"), but the heal recipient is the
+        // whole team: "them" refers back to "all allies" earlier in the sentence, so the
+        // target is all-allies (NOT the singular-ally \bthem\b rule). damageReaction is
+        // present-but-empty — ungated self reaction, no allySubject. The duration-
+        // reduction half emits nothing (4e deferral).
         expect(
             parseHealAbilities(
                 'When directly damaged, this Unit reduces the duration of all active <unit-aid>Debuffs</unit-aid> on all allies by 1 turn and repairs them for 8% of its Max HP.'
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'hp',
+                target: 'all-allies',
+                explicitTarget: true,
+                damageReaction: {},
+            },
+        ]);
     });
 
-    it('Cultivator ally-damaged clause: ally-subject reaction stays disqualified (PR 2)', () => {
+    it('Cultivator ally-damaged clause (isolated): ally-subject reaction parses with allySubject (was PR 1-disqualified)', () => {
         expect(
             parseHealAbilities(
                 "when an ally is directly damaged within the active pattern, this Unit <unit-damage>repairs that ally for 8%</unit-damage> of this Unit's Max HP."
             )
-        ).toEqual([]);
+        ).toEqual([
+            {
+                kind: 'heal',
+                pct: 8,
+                basis: 'hp',
+                target: 'ally',
+                explicitTarget: true,
+                damageReaction: { allySubject: true },
+            },
+        ]);
+    });
+
+    // PIN (Task 8): Crocus p2 is ally-OUTGOING ("when another ally INFLICTS a DoT with a
+    // critical hit" — active voice, on-ally-crit-dot territory), NOT an ally-damaged
+    // reaction. HEAL_DAMAGE_REACTION_RE has no active-voice alternation, so the sentence
+    // never reaches the annotation gate: the 3% repair keeps parsing as a plain on-cast
+    // self heal with NO damageReaction (byte-identical to its pre-Task-8 shape).
+    it('Crocus p2: 3% repair keeps its current shape (no allySubject annotation)', () => {
+        expect(
+            parseHealAbilities(
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit <unit-damage>repairs itself for 3%</unit-damage> of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 3, basis: 'hp', target: 'self', explicitTarget: true }]);
     });
 
     it('Refine: ally-damaged buff grant yields NO heal', () => {
@@ -2515,7 +2567,8 @@ describe('parseHealAbilities — self-subject damage-reaction heals (Phase 4c)',
 // Phase 4c PR 1 (Task 8): self-subject damage-reaction trigger for NON-HEAL clauses
 // (buff grants, debuff/DoT inflictions). Sentence-scoped around `pos` on the RAW text
 // (same masked bounds as phrasePosTrigger). Passive-voice "is critically hit" is the
-// crit-filtered variant; ally-subject sentences stay undefined (PR 2).
+// crit-filtered variant; ally-subject sentences classify as on-ally-attacked (PR 2 Task 7,
+// see the sibling describe below).
 describe('detectDamageReactionTrigger', () => {
     const at = (text: string, needle: string) =>
         detectDamageReactionTrigger(text, text.indexOf(needle));
@@ -2538,13 +2591,16 @@ describe('detectDamageReactionTrigger', () => {
         ).toEqual({ trigger: 'on-attacked', critFilter: 'crit' });
     });
 
-    it('Guardian second passive: ally-subject Provoke sentence → undefined (PR 2)', () => {
+    it('Guardian second passive: ally-subject Provoke sentence → on-ally-attacked (PR 2 Task 7)', () => {
+        // Was pinned undefined in PR 1; the full two-sentence row also locks sentence
+        // scoping (the Provoke anchor must not pick up the self-subject crit sentence's
+        // trigger — both classify, but each from its OWN sentence).
         expect(
             at(
                 'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
                 'Provoke'
             )
-        ).toBeUndefined();
+        ).toEqual({ trigger: 'on-ally-attacked', critFilter: 'crit' });
     });
 
     it('Yarrow active: plain on-cast Corrosion infliction → undefined', () => {
@@ -2639,6 +2695,65 @@ describe('detectDamageReactionTrigger', () => {
             trigger: 'on-attacked',
             critFilter: 'crit',
         });
+    });
+});
+
+// Phase 4c PR 2 (Task 7): ALLY-subject damage reactions classify as on-ally-attacked
+// (Guardian's Provoke counter, Refine, Graphite) instead of returning undefined. Role
+// nouns right after "ally" (Graphite "ally attacker or debuffer") become a CATEGORY
+// roleFilter; hpBelowPct stays self-subject-only (DR_HP_BELOW_RE reads the OWNER's HP —
+// no corpus ally-reaction carries an HP gate).
+describe('detectDamageReactionTrigger — ally-subject (on-ally-attacked)', () => {
+    const at = (text: string, needle: string) =>
+        detectDamageReactionTrigger(text, text.indexOf(needle));
+
+    it('Guardian: "When an ally is critically hit by an enemy" → on-ally-attacked + crit filter', () => {
+        expect(
+            at(
+                'When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+                'Provoke'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked', critFilter: 'crit' });
+    });
+
+    it('Refine: "When an ally is directly damaged" → bare on-ally-attacked', () => {
+        expect(
+            at(
+                'When an ally is directly damaged, this Unit grants <unit-skill>Inc. Damage Down I</unit-skill> for 1 turn.',
+                'Inc. Damage Down I'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked' });
+    });
+
+    it('Graphite: "ally attacker or debuffer is directly damaged" → on-ally-attacked + role filter', () => {
+        expect(
+            at(
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns.',
+                'Repair Over Time III'
+            )
+        ).toEqual({ trigger: 'on-ally-attacked', roleFilter: ['ATTACKER', 'DEBUFFER'] });
+    });
+
+    it('Crocus: ACTIVE-voice ally crit ("inflicts … with a critical hit") → undefined', () => {
+        // The ally lands the crit (outgoing, on-ally-crit-dot territory) — the ally is NOT
+        // being damaged. Bare DR_CRIT_HIT_RE matches "…with a critical hit", so without the
+        // passive-voice requirement this misclassified as on-ally-attacked + crit filter and
+        // buildShipAbilities emitted a phantom name-only Corrosion II debuff into simulations.
+        expect(
+            at(
+                'When another ally inflicts a Damage Over Time (DoT) effect with a critical hit, this Unit repairs itself for 3% of its Max HP and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns on that enemy.',
+                'Corrosion II'
+            )
+        ).toBeUndefined();
+    });
+
+    it('self-subject regression (Warden, byte-identical to the PR 1 pin): bare on-attacked', () => {
+        expect(
+            at(
+                'When directly damaged, this Unit inflicts <unit-skill>Corrosion I</unit-skill> for 2 turns on that enemy and repairs itself 3% of its Max HP.',
+                'Corrosion I'
+            )
+        ).toEqual({ trigger: 'on-attacked' });
     });
 });
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
@@ -148,6 +149,11 @@ const HealingCalculatorPage: React.FC = () => {
     // Selected heal-target ship's affinity (explicit-target case). Drives each enemy attacker's
     // matchup vs the target. Undefined → neutral. Self-heal resolves from the healer ship instead.
     const [targetAffinity, setTargetAffinity] = useState<AffinityName | undefined>(undefined);
+    // Selected heal-target ship's role (explicit-target case). Drives role-filtered
+    // on-ally-attacked reactions (Graphite) when the target is hit. Undefined → no ship picked →
+    // the reaction stays dormant for hits on it (conservative). Self-heal resolves from the
+    // healer ship instead (healerRole below).
+    const [targetRole, setTargetRole] = useState<ShipTypeName | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
         undefined
     );
@@ -243,6 +249,7 @@ const HealingCalculatorPage: React.FC = () => {
         setTargetChargeCount(ship.chargeSkillCharge ?? 0);
         setTargetStartCharged(detectShipCharged(ship));
         setTargetAffinity(ship.affinity);
+        setTargetRole(ship.type);
         setTargetCombatStats({
             attack: Math.round(final.attack ?? 0),
             crit: Math.round(final.crit ?? 0),
@@ -353,6 +360,7 @@ const HealingCalculatorPage: React.FC = () => {
                         healModifier: Math.round(final.healModifier ?? 0),
                     },
                     affinity: ship.affinity,
+                    role: ship.type,
                     buffs: t.buffs.filter((b) => !b.autoFilled),
                     enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
                 };
@@ -377,6 +385,7 @@ const HealingCalculatorPage: React.FC = () => {
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 affinity: t.affinity,
+                role: t.role,
             })),
         [teamShips]
     );
@@ -406,6 +415,8 @@ const HealingCalculatorPage: React.FC = () => {
             shipSkills: targetShipSkills ?? buildDefaultShipSkills(),
             // Editable HP/defence are authoritative over the ship's stat snapshot.
             stats: { ...baseStats, defence: target.defence, hp: target.hp },
+            // Role-filtered on-ally-attacked reactions resolve the damaged target's role here.
+            role: targetRole,
         };
     }, [
         target.useHealerAsTarget,
@@ -416,6 +427,7 @@ const HealingCalculatorPage: React.FC = () => {
         targetStartCharged,
         targetShipSkills,
         targetCombatStats,
+        targetRole,
     ]);
 
     const enemyInputs = useMemo<EnemyAttackerInput[]>(
@@ -448,6 +460,10 @@ const HealingCalculatorPage: React.FC = () => {
                     ? getShipById(config.shipId)?.affinity
                     : undefined
                 : targetAffinity;
+            // The healer's own role (Ship.type) — auto-filled from the picked ship; manual
+            // configs have none. Drives role-filtered ally-damage reactions when the healer
+            // is the heal target (engine focus-actor role).
+            const healerRole = config.shipId ? getShipById(config.shipId)?.type : undefined;
             map.set(
                 config.id,
                 simulateHealing({
@@ -468,6 +484,7 @@ const HealingCalculatorPage: React.FC = () => {
                     selfBuffs: healerBuffs,
                     healTargetId,
                     healTargetAffinity,
+                    healerRole,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
                     rounds,
