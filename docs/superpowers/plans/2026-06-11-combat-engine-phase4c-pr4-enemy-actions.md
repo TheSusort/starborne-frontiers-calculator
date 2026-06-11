@@ -34,15 +34,15 @@
 |---|---|---|
 | `src/utils/combat/events.ts` | Combat event union | Add `cleanse-performed` event |
 | `src/types/abilities.ts` | Ability trigger taxonomy | Add `on-enemy-repaired`, `on-enemy-cleansed` to `AbilityTrigger` + `LIVE_TRIGGERS` |
-| `src/utils/combat/triggers.ts` | Listener registration + executor | 2 new listener cases; `damage` executor branch; `creditReactiveDamage` field on `IntentExecContext` |
+| `src/utils/combat/triggers.ts` | Listener registration + executor + reactive-type partition | 2 new listener cases; add `'damage'` to `ReactiveAbilityType`/`REACTIVE_ABILITY_TYPES`; `damage` executor branch; `creditReactiveDamage` field on `IntentExecContext` |
 | `src/utils/combat/playerTurn.ts` | Per-turn pipeline incl. healing block | `healEventOnly` arg → enemy cast heal/cleanse emit events, skip numeric; emit `cleanse-performed` on the cleanse branch |
 | `src/utils/combat/engine.ts` | Round loop / dispatch | Thread `creditReactiveDamage` into `executeIntent` ctx; pass `healEventOnly: true` on the enemy-attacker `runPlayerTurn` call |
-| `src/utils/skillTextParser.ts` | Skill text → abilities | Detect `on-enemy-repaired`/`on-enemy-cleansed`; reactive `damage` (noCrit); lift dormant exclusion |
-| `src/utils/buildShipAbilities.ts` | Wire parsed → ship abilities | Ensure new triggers/derivable flow through |
-| `src/utils/__tests__/auditSkills*` (or audit util) | Parser parity | Parity entries for the 5 ships |
+| `src/utils/skillTextParser.ts` | Skill text → abilities | Detect `on-enemy-repaired`/`on-enemy-cleansed`; sentence-scoped trigger stamp onto the no-buffName `damage` proc (noCrit); lift dormant repair exclusion + cleanse derivability |
+| `src/utils/abilities/buildShipAbilities.ts` | Wire parsed → ship abilities | Ensure new triggers/derivable flow through |
+| `scripts/auditSkills.ts` + `src/utils/abilities/__tests__/skillAuditCoverage.test.ts` | Parser parity | Parity/allowlist entries for the 5 ships |
 | `src/components/skills/AbilityCard.tsx` | Skill editor | Add 2 trigger select options |
 | `src/utils/combat/__tests__/enemyActions.test.ts` | New unit tests | per-trigger coverage |
-| `src/utils/combat/__tests__/healingGolden*.test.ts` (+ snapshot) | New golden scenario | one enemy-cleanse reaction scenario |
+| `src/utils/calculators/__tests__/healingGoldenParity.test.ts` (+ `__snapshots__/healingGoldenParity.test.ts.snap`) | New golden scenario | one enemy-cleanse reaction scenario |
 | `docs/skill-model-coverage.md` | Sim semantics + backlog | §5 PR-4 block; close §6 enemy-action items |
 | `src/constants/changelog.ts` | UNRELEASED changelog | Fold into the ONE evolving DPS/combat entry |
 
@@ -280,52 +280,83 @@ git commit -m "feat(combat): on-enemy-repaired/on-enemy-cleansed listeners"
 
 ---
 
-## Task 4: `damage` reactive executor branch + `creditReactiveDamage`
+## Task 4: Route `damage` reactively + executor branch + `creditReactiveDamage`
 
 **Files:**
-- Modify: `src/utils/combat/triggers.ts` (`IntentExecContext` interface + `executeIntent`)
+- Modify: `src/utils/combat/triggers.ts` (`ReactiveAbilityType` union ~line 38 + `REACTIVE_ABILITY_TYPES` mirror ~line 49 + `isReactiveAbility`/partition doc comments; `IntentExecContext` interface; `executeIntent`)
 - Modify: `src/utils/combat/engine.ts` (wire `creditReactiveDamage` into the `executeIntent` ctx ~line 1986)
 - Test: `src/utils/combat/__tests__/enemyActions.test.ts`
 
 Grif's proc resolves with the owner's last-turn ctx (bomb-style fold: `effectiveAttack × pct × affinityMult`), no enemy-defense mitigation (documented approximation, mirrors the bomb path), `noCrit` always. Emits nothing → no chain.
 
-- [ ] **Step 1: Write the failing test**
+> **CRITICAL (partition routing):** `partitionReactiveAbilities` routes an ability into the reactive listener path ONLY if `REACTIVE_ABILITY_TYPES.includes(ability.config.type)` (triggers.ts:91). Today `'damage'` is NOT in that list, so a Grif `damage` ability with trigger `on-enemy-cleansed` would stay on the CAST path and never reach the executor — the proc would be dead. This task MUST add `'damage'` to both `ReactiveAbilityType` (the type) and `REACTIVE_ABILITY_TYPES` (the runtime mirror), and update the partition/`isReactiveAbility` doc comments (~lines 33-37, 88-105) to mention damage. SAFETY: only damage abilities whose trigger is in `LIVE_TRIGGERS` route reactively; `on-cast` is NOT a live trigger, so every normal damage ability stays on the cast path (DPS goldens unaffected). Only Grif's `on-enemy-cleansed` damage qualifies.
 
-Add a unit test that drives `executeIntent` with a `damage` config and asserts `creditReactiveDamage` is called with `ownerId` and the bomb-style amount; and that with no `lastTurnCtxByActor` entry it is NOT called (skip). Build a minimal `IntentExecContext` (follow the shape other executor tests use, e.g. in `triggers.test.ts`):
+- [ ] **Step 1: Write the failing partition test**
+
+Add to `enemyActions.test.ts`:
+
+```ts
+import { partitionReactiveAbilities } from '../triggers';
+
+it('routes a damage ability with a live trigger to the reactive path', () => {
+    const { reactiveAbilities, castSkills } = partitionReactiveAbilities({
+        slots: [{ slot: 'passive', abilities: [
+            { id: 'grif-dmg', type: 'damage', target: 'enemy', trigger: 'on-enemy-cleansed',
+              conditions: [], config: { type: 'damage', multiplier: 0.75, noCrit: true } },
+            // an on-cast damage ability stays on the cast path (not live trigger).
+            { id: 'normal-dmg', type: 'damage', target: 'enemy', trigger: 'on-cast',
+              conditions: [], config: { type: 'damage', multiplier: 1 } },
+        ] }],
+    });
+    expect(reactiveAbilities.map((r) => r.ability.id)).toEqual(['grif-dmg']);
+    expect(castSkills.slots[0].abilities.map((a) => a.id)).toEqual(['normal-dmg']);
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails** — `npx vitest run src/utils/combat/__tests__/enemyActions.test.ts -t "reactive path"` → FAIL (`grif-dmg` stays on the cast path).
+
+- [ ] **Step 3: Add `'damage'` to the reactive-type union + mirror**, update the partition/`isReactiveAbility` doc comments. Re-run Step 1 test → PASS.
+
+- [ ] **Step 4: Write the failing executor test**
+
+Drives `executeIntent` with a `damage` config and asserts `creditReactiveDamage` is called with `ownerId` + the bomb-style amount; with no `lastTurnCtxByActor` entry it is NOT called (skip).
 
 ```ts
 it('damage reactive branch credits owner pool with bomb-style fold, skips without ctx', () => {
     const credited: { ownerId: string; amount: number }[] = [];
-    const baseCtx = makeExecCtx({ // helper mirroring triggers.test.ts ctx builder
+    // makeExecCtx MUST mirror the FULL IntentExecContext other executor tests build
+    // (see triggers.test.ts): executeIntent FIRST resolves ctx.runtimes.get(ownerId) and
+    // THROWS if absent (triggers.ts:689-695), then runs conditionsMet(buildDrainContext(...)).
+    // So supply a runtimes entry for BOTH 'grif' and 'grif-noctx' (only the lastTurnCtxByActor
+    // entry is absent for grif-noctx), plus the drain-context fields (statusEngine, enemyHp,
+    // cumulativeDamage, corrosionEntries, infernoEntries, pendingBombs, etc.).
+    const baseCtx = makeExecCtx({
         creditReactiveDamage: (ownerId, amount) => credited.push({ ownerId, amount }),
+        runtimes: new Map([['grif', makeRuntime('grif')], ['grif-noctx', makeRuntime('grif-noctx')]]),
         lastTurnCtxByActor: new Map([
-            ['grif', { effectiveAttack: 1000, affinityMult: 1.5 /* ...other PlayerRoundCtx fields */ }],
+            ['grif', { effectiveAttack: 1000, affinityMult: 1.5 /* ...rest of PlayerRoundCtx */ }],
         ]),
     });
     const intent: Intent = {
-        ownerId: 'grif',
-        sourceSlot: 'passive',
-        ability: {
-            id: 'grif-dmg', type: 'damage', target: 'enemy', trigger: 'on-enemy-cleansed',
-            conditions: [], config: { type: 'damage', multiplier: 0.75, noCrit: true },
-        },
+        ownerId: 'grif', sourceSlot: 'passive',
+        ability: { id: 'grif-dmg', type: 'damage', target: 'enemy', trigger: 'on-enemy-cleansed',
+                   conditions: [], config: { type: 'damage', multiplier: 0.75, noCrit: true } },
     };
     executeIntent(intent, baseCtx);
     expect(credited).toEqual([{ ownerId: 'grif', amount: 1000 * 0.75 * 1.5 }]);
 
-    // No ctx for the owner → skip.
     credited.length = 0;
-    executeIntent({ ...intent, ownerId: 'grif-noctx' }, baseCtx);
+    executeIntent({ ...intent, ownerId: 'grif-noctx' }, baseCtx); // no last-turn ctx → skip
     expect(credited).toHaveLength(0);
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 5: Run test to verify it fails**
 
 Run: `npx vitest run src/utils/combat/__tests__/enemyActions.test.ts -t "damage reactive"`
 Expected: FAIL (`damage` falls into the "any other type → skip" path; `creditReactiveDamage` not on the ctx type).
 
-- [ ] **Step 3: Add the ctx field + executor branch**
+- [ ] **Step 6: Add the ctx field + executor branch**
 
 In `IntentExecContext` (triggers.ts ~line 446, after `selfHpPctFor`):
 
@@ -357,12 +388,12 @@ In `executeIntent`, add a branch BEFORE the `extra-action` branch (after the `do
     }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 7: Run test to verify it passes**
 
 Run: `npx vitest run src/utils/combat/__tests__/enemyActions.test.ts -t "damage reactive"`
 Expected: PASS
 
-- [ ] **Step 5: Wire the delegate in the engine**
+- [ ] **Step 8: Wire the delegate in the engine**
 
 In `engine.ts`, in the `executeIntent(intent, { ... })` ctx object (~line 1986, alongside `recordResisted`), add:
 
@@ -374,12 +405,12 @@ In `engine.ts`, in the `executeIntent(intent, { ... })` ctx object (~line 1986, 
                         },
 ```
 
-- [ ] **Step 6: Run the full combat suite — verify zero churn**
+- [ ] **Step 9: Run the full combat suite — verify zero churn**
 
 Run: `npx vitest run src/utils/combat/`
 Expected: PASS, no golden snapshot diffs (the delegate is only invoked by a `damage` reactive intent, which no existing fixture produces).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add src/utils/combat/triggers.ts src/utils/combat/engine.ts src/utils/combat/__tests__/enemyActions.test.ts
@@ -402,6 +433,8 @@ Design: thread a boolean `healEventOnly` arg into `runPlayerTurn` (default false
 - When `healEventOnly`: for heal/shield abilities skip `credit`/`applyHealToTarget`/`grantShieldToTarget` (still collect `healTargets` so `heal-performed` emits with `amount: 0`, no `critHits`); for cleanse skip `credit('cleanseCount')` but still emit `cleanse-performed`. Restrict the enemy event-only emission to the CAST skill (`gatedSkill`) heal/cleanse abilities (the passive is a standing effect, not a cast — spec §3.2 "cast skill carries").
 
 > IMPLEMENTATION NOTE: the cleanse branch currently lives inside the `healAbilities` loop (playerTurn.ts:1550). Track a `cleansePerformedCount` accumulator across that loop and emit ONE `cleanse-performed` after the loop if `> 0` (mirrors the single `heal-performed` per cast at line 1557), carrying the summed count. Keep the `heal-performed` emit gated on `healTargets.length > 0` as today.
+
+> **LOAD-BEARING GUARD (why zero-churn holds).** The enemy walk already threads `healing: healingCtx` into its `runPlayerTurn` call (engine.ts:2559), and `HealingRuntimeCtx.credit` keys buckets by `actorId`. Today the enemy is damage-only so the healing block never fires for it; the moment a ship-backed enemy casts heal/cleanse (the Task 9 scenario), if `healEventOnly` is NOT honored the enemy would call `healing.credit(enemyId, …)` / `applyHealToTarget` / `grantShieldToTarget` and POLLUTE the player healing map with an enemy-id row (and even heal the tank from the enemy). The `healEventOnly` branch MUST skip **every** `healing.*` mutation — `credit`, `applyHealToTarget`, AND `grantShieldToTarget` — not just `credit`. Step 1(b)'s assertion (no credit/HP change attributable to the enemy cast) is the load-bearing check distinguishing correct event-only behavior from bucket pollution; keep it explicit.
 
 - [ ] **Step 1: Write the failing test (enemy cleanse emits event, no numeric)**
 
@@ -459,7 +492,11 @@ git commit -m "feat(combat): event-only enemy heal/cleanse emission"
 - Modify: `src/utils/skillTextParser.ts`
 - Test: the `skillTextParser` test suite (find with `grep -rl skillTextParser src/utils/__tests__ src/**/__tests__`) — add lock tests per ship phrasing.
 
-Current state: the `ENEMY_*` exclusion regex (skillTextParser.ts:341) treats "when an enemy repairs / enemy performs a repair / when an enemy dies" as dormant/non-derivable. PR 4 lifts repair + cleanse out of that exclusion into live, derivable triggers.
+Current state (verified): the exclusion regex at skillTextParser.ts:341 contains ONLY the repair phrasings (`when an enemy dies|when an enemy repairs|enemy performs a repair|enemy repairs`) — **"cleanse" is NOT in that regex**. Cleanse derivability is gated separately: `detectReactiveTrigger` (skillTextParser.ts:711) lists "enemy-cleanse" as not-derivable in its comment (~line 708), and a passive "when … is cleansed" form exists (~lines 1523-1524). So PR 4 must:
+- lift **repair** out of the line-341 exclusion (keep "when an enemy dies" routing to the existing on-enemy-destroyed path; keep the ally-grant exclusions);
+- lift **cleanse** derivability in `detectReactiveTrigger` (and/or the cleanse path), NOT the line-341 regex.
+
+> **PARSER GAP — `damage` proc has no buffName to key on (blocker).** `detectReactiveTrigger` resolves a clause via `resolveBuffClause(skillText, buffName)` — it is **buff-name scoped** and works for buff/debuff/charge grants. Grif's "deals 75% Damage that cannot critically hit" is a `damage` ability with **no buffName**, so that path cannot attach `on-enemy-cleansed` to it. The fix: add a **sentence-scoped trigger detector** (e.g. `detectEnemyCleanseTrigger(rawSentenceAround(...))`, mirroring PR 3's `detectHpCrossingTrigger` sentence-scoping with the Inc./Out. period masking) that, when the SAME sentence as the parsed `damage` ability matches "when an enemy cleanses a debuff", stamps `trigger: 'on-enemy-cleansed'` + `derivable: true` onto that damage ability. The damage ability itself is parsed by the existing damage-clause parser (with `noCrit: true` from the no-crit detection at skillTextParser.ts:1012/1247); the new detector only supplies the trigger. Buff/debuff/charge effects in the same family keep using the buff-name-scoped `detectReactiveTrigger` path.
 
 Ship phrasings to handle (from `docs/ship-skills.csv`):
 - **Zosimos** passive: "When an enemy repairs, this Unit gains a charge to its Charged Skill." → `on-enemy-repaired`, `charge` config amount 1, target self, `derivable: true`. (Refit adds "decrease that enemy's charge…" → UNMODELED; ignore.)
@@ -489,25 +526,31 @@ Add analogous tests for Zosimos (charge on-enemy-repaired), Arum (debuff + all-a
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `npx vitest run <parser test file> -t "enemy"`
+Tests live at the parser level (`src/utils/__tests__/skillTextParser.test.ts`) and ship-integrated level (`src/utils/abilities/__tests__/buildShipAbilities.test.ts`).
+Run: `npx vitest run src/utils/__tests__/skillTextParser.test.ts src/utils/abilities/__tests__/buildShipAbilities.test.ts -t "enemy"`
 Expected: FAIL (triggers currently dormant / not detected).
 
 - [ ] **Step 3: Implement parser detection**
 
-- Add a `detectEnemyRepairTrigger` / `detectEnemyCleanseTrigger` helper (or extend the existing trigger dispatch) returning the trigger when the sentence matches "when an enemy repairs" / "when an enemy cleanses a debuff" (case-insensitive, sentence-scoped). Remove repair/cleanse from the dormant `ENEMY_*` exclusion regex (keep "when an enemy dies" handled by the existing on-enemy-destroyed path; keep ally-grant exclusions).
-- Route the trigger's effect clause through the existing config parsers: charge → `charge`; "inflicts … Out. Damage Down I" → `debuff`; "gains/grants … Gelecek Contagion" → `buff` (self vs all-allies by subject); "deals X% Damage that cannot critically hit" → `damage` with `noCrit: true` (reuse the existing no-crit detection at skillTextParser.ts:1012/1247).
+- Add a `detectEnemyRepairTrigger` / `detectEnemyCleanseTrigger` helper (sentence-scoped, case-insensitive) returning the trigger when the sentence matches "when an enemy repairs" / "when an enemy cleanses a debuff". Lift **repair** out of the line-341 exclusion regex (keep "when an enemy dies" → existing on-enemy-destroyed path; keep ally-grant exclusions). Lift **cleanse** derivability in `detectReactiveTrigger` (its comment/not-derivable list ~line 708).
+- Route each effect clause through the existing config parsers:
+  - charge → `charge` (Zosimos) — buff-name-less but the charge clause parser owns it; attach the trigger via the sentence detector.
+  - "inflicts … Out. Damage Down I" → `debuff` (Arum), target enemy — buff-name-scoped `detectReactiveTrigger` can attach the trigger.
+  - "gains/grants … Gelecek Contagion" → `buff` (self for Yarrow/Larkspur; all-allies for Arum refit) — buff-name-scoped path.
+  - "deals X% Damage that cannot critically hit" → `damage` with `noCrit: true` (Grif) — the **sentence-scoped detector** stamps the trigger (no buffName; see the PARSER GAP note above). Reuse no-crit detection at skillTextParser.ts:1012/1247.
 - Emit `derivable: true` (these are now live).
 - Grif standing "+20% Defense" sentence: parse via the existing modifier/defense path (separate sentence, no trigger).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `npx vitest run <parser test file> -t "enemy"`
+Tests live at the parser level (`src/utils/__tests__/skillTextParser.test.ts`) and ship-integrated level (`src/utils/abilities/__tests__/buildShipAbilities.test.ts`).
+Run: `npx vitest run src/utils/__tests__/skillTextParser.test.ts src/utils/abilities/__tests__/buildShipAbilities.test.ts -t "enemy"`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/skillTextParser.ts <parser test file>
+git add src/utils/skillTextParser.ts src/utils/__tests__/skillTextParser.test.ts src/utils/abilities/__tests__/buildShipAbilities.test.ts
 git commit -m "feat(parser): on-enemy-repaired/cleansed triggers + Grif standing defense"
 ```
 
@@ -516,11 +559,11 @@ git commit -m "feat(parser): on-enemy-repaired/cleansed triggers + Grif standing
 ## Task 7: `buildShipAbilities` wiring + auditSkills parity
 
 **Files:**
-- Modify: `src/utils/buildShipAbilities.ts` (if any trigger/derivable gating filters new triggers)
-- Modify: the `audit:skills` parity source (find via `grep -rln "auditSkills\|audit:skills" src`)
-- Test: run `npm run` audit script / parity test
+- Modify: `src/utils/abilities/buildShipAbilities.ts` (if any trigger/derivable gating filters new triggers)
+- Modify: `scripts/auditSkills.ts` + `src/utils/abilities/__tests__/skillAuditCoverage.test.ts` (parity / allowlist)
+- Test: `npm run audit:skills` + the `skillAuditCoverage` test
 
-- [ ] **Step 1: Inspect `buildShipAbilities.ts`** for any allow-list or derivable-gating that would drop the new triggers; extend if needed (mirror how `on-hp-threshold-crossed` flowed through in PR 3).
+- [ ] **Step 1: Inspect `src/utils/abilities/buildShipAbilities.ts`** for any allow-list or derivable-gating that would drop the new triggers; extend if needed (mirror how `on-hp-threshold-crossed` flowed through in PR 3).
 
 - [ ] **Step 2: Run the skill audit** to surface parser/audit parity drift:
 
@@ -532,7 +575,7 @@ Expected: the 5 PR-4 ships (Zosimos/Arum/Yarrow/Larkspur/Grif) now parse their r
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/utils/buildShipAbilities.ts <audit source/tests>
+git add src/utils/abilities/buildShipAbilities.ts scripts/auditSkills.ts src/utils/abilities/__tests__/skillAuditCoverage.test.ts
 git commit -m "chore(audit): parity for enemy-action triggers"
 ```
 
@@ -542,7 +585,7 @@ git commit -m "chore(audit): parity for enemy-action triggers"
 
 **Files:**
 - Modify: `src/components/skills/AbilityCard.tsx` (`TRIGGER_OPTIONS` ~line 121)
-- Test: `src/components/skills/__tests__/AbilityCard.test.ts` (if it asserts option presence)
+- Test: `src/components/skills/__tests__/AbilityCard.test.tsx` (if it asserts option presence)
 
 - [ ] **Step 1: Add the two options** to `TRIGGER_OPTIONS`:
 
@@ -568,8 +611,8 @@ git commit -m "feat(editor): enemy-action trigger options"
 ## Task 9: Golden scenario — enemy-cleanse reaction
 
 **Files:**
-- Modify: the healing golden scenario source + its `.snap` (find via `ls src/utils/calculators/__tests__/__snapshots__ src/utils/combat/__tests__/__snapshots__`)
-- Test: the golden parity test
+- Modify: `src/utils/calculators/__tests__/healingGoldenParity.test.ts` (scenario list) + `src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap`
+- Test: `npx vitest run src/utils/calculators/__tests__/healingGoldenParity.test.ts`
 
 A new SYNTHETIC scenario (hand-built `ab()`, no parser import): a ship-backed enemy attacker that casts a cleanse, plus a Grif-like player with the `on-enemy-cleansed` 75% damage proc and (optionally) Yarrow's self-buff grant. Lock the enemy-cleanse event contract + the reactive damage credit + the all-allies/self buff routing.
 
@@ -579,14 +622,14 @@ A new SYNTHETIC scenario (hand-built `ab()`, no parser import): a ship-backed en
 
 Run the golden test; for a NET-NEW scenario the snapshot is additive. Inspect the diff: it MUST be purely the new scenario's block. If ANY existing scenario's numbers changed, STOP — that is a bug, not a golden update.
 
-Run: `npx vitest run <golden test file>`
+Run: `npx vitest run src/utils/calculators/__tests__/healingGoldenParity.test.ts`
 
 - [ ] **Step 3: Audit the diff** — confirm additive-only, then accept the new snapshot block.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add <golden source> <snapshot file>
+git add src/utils/calculators/__tests__/healingGoldenParity.test.ts src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap
 git commit -m "test(combat): golden scenario for enemy-cleanse reaction"
 ```
 
