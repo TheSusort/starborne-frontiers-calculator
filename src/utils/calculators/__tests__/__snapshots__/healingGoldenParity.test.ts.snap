@@ -11,6 +11,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
           "turnsRemaining": Infinity,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -38,6 +39,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -60,6 +62,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -82,6 +85,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -104,6 +108,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -126,6 +131,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -148,6 +154,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
   ],
   "summary": {
     "avgHealingPerRound": 3000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 18000,
     "totalEffectiveHealing": 15000,
@@ -167,6 +174,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
@@ -189,6 +197,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
@@ -211,6 +220,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
@@ -233,6 +243,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
@@ -255,6 +266,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
@@ -277,6 +289,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
@@ -299,6 +312,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
@@ -321,6 +335,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
@@ -343,6 +358,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
@@ -365,6 +381,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
@@ -387,6 +404,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -406,6 +424,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 99,
       "charges": 0,
       "cleanseCount": 0,
@@ -434,6 +453,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 99,
       "charges": 1,
       "cleanseCount": 0,
@@ -462,6 +482,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 99,
       "charges": 2,
       "cleanseCount": 0,
@@ -486,6 +507,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
   "summary": {
     "avgHealingPerRound": 2000,
     "teamTotalHealing": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 6000,
     "totalEffectiveHealing": 6000,
@@ -510,6 +532,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -542,6 +565,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -574,6 +598,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -606,6 +631,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -638,6 +664,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -670,6 +697,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -702,6 +730,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -734,6 +763,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -766,6 +796,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -798,6 +829,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
           "turnsRemaining": 2,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -825,6 +857,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
   ],
   "summary": {
     "avgHealingPerRound": 2000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 5000,
     "totalEffectiveHealing": 0,
@@ -844,6 +877,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -866,6 +900,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -888,6 +923,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -910,6 +946,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -932,6 +969,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -954,6 +992,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -976,6 +1015,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -998,6 +1038,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1020,6 +1061,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1042,6 +1084,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1064,6 +1107,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
   ],
   "summary": {
     "avgHealingPerRound": 1258,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 12579,
     "totalEffectiveHealing": 0,
@@ -1083,6 +1127,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1105,6 +1150,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1127,6 +1173,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1149,6 +1196,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1171,6 +1219,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1193,6 +1242,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1215,6 +1265,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1237,6 +1288,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1259,6 +1311,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1281,6 +1334,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1304,6 +1358,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
   "summary": {
     "avgHealingPerRound": 0,
     "destroyedRound": 4,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -1323,6 +1378,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1346,6 +1402,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1369,6 +1426,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1392,6 +1450,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1415,6 +1474,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1438,6 +1498,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1461,6 +1522,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1484,6 +1546,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1507,6 +1570,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1530,6 +1594,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1554,6 +1619,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
   "summary": {
     "avgHealingPerRound": 181,
     "teamTotalHealing": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 1806,
     "totalEffectiveHealing": 0,
@@ -1573,6 +1639,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -1595,6 +1662,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
@@ -1617,6 +1685,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
@@ -1639,6 +1708,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -1661,6 +1731,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
   ],
   "summary": {
     "avgHealingPerRound": 32,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 129,
     "totalEffectiveHealing": 0,
@@ -1680,6 +1751,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1702,6 +1774,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1724,6 +1797,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1746,6 +1820,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1768,6 +1843,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1790,6 +1866,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1812,6 +1889,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -1831,6 +1909,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1853,6 +1932,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1875,6 +1955,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1897,6 +1978,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1919,6 +2001,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1941,6 +2024,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -1963,6 +2047,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -1982,6 +2067,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2005,6 +2091,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2028,6 +2115,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2051,6 +2139,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2074,6 +2163,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2097,6 +2187,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2121,6 +2212,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
   "summary": {
     "avgHealingPerRound": 1600,
     "teamTotalHealing": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 9600,
     "totalEffectiveHealing": 9600,
@@ -2140,6 +2232,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -2162,6 +2255,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
@@ -2184,6 +2278,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
@@ -2206,6 +2301,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -2228,6 +2324,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
@@ -2250,6 +2347,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
@@ -2272,6 +2370,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -2294,6 +2393,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
@@ -2316,6 +2416,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "charged",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
@@ -2338,6 +2439,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
@@ -2360,6 +2462,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
   ],
   "summary": {
     "avgHealingPerRound": 1600,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 16000,
     "totalEffectiveHealing": 0,
@@ -2379,6 +2482,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2401,6 +2505,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2423,6 +2528,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2445,6 +2551,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2467,6 +2574,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -2486,6 +2594,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2531,6 +2640,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2576,6 +2686,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2621,6 +2732,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2666,6 +2778,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2711,6 +2824,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2756,6 +2870,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
   ],
   "summary": {
     "avgHealingPerRound": 5000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 30000,
     "totalEffectiveHealing": 25000,
@@ -2775,6 +2890,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2809,6 +2925,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2843,6 +2960,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2877,6 +2995,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2911,6 +3030,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2945,6 +3065,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -2979,6 +3100,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
   ],
   "summary": {
     "avgHealingPerRound": 8333,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 50000,
     "totalEffectiveHealing": 30000,
@@ -2998,6 +3120,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3020,6 +3143,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3042,6 +3166,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3064,6 +3189,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3086,6 +3212,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3108,6 +3235,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3130,6 +3258,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
   ],
   "summary": {
     "avgHealingPerRound": 1000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 6000,
     "totalEffectiveHealing": 6000,
@@ -3149,6 +3278,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3171,6 +3301,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3193,6 +3324,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3215,6 +3347,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3237,6 +3370,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3259,6 +3393,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3282,6 +3417,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
   "summary": {
     "avgHealingPerRound": 167,
     "destroyedRound": 2,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 1000,
     "totalEffectiveHealing": 500,
@@ -3301,6 +3437,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3323,6 +3460,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3345,6 +3483,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3367,6 +3506,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3389,6 +3529,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3411,6 +3552,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3433,6 +3575,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -3446,12 +3589,13 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
 }
 `;
 
-exports[`healingGoldenParity > once-per-battle crossing (Barrier granted ONCE despite TWO downward crossings) 1`] = `
+exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE despite TWO downward crossings) 1`] = `
 {
   "rounds": [
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3475,10 +3619,11 @@ exports[`healingGoldenParity > once-per-battle crossing (Barrier granted ONCE de
       "action": "active",
       "activeSelfBuffs": [
         {
-          "buffName": "Barrier",
+          "buffName": "Reinforced",
           "turnsRemaining": 3,
         },
       ],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3489,7 +3634,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Barrier granted ONCE de
       "enemyEffects": [],
       "healTargetBuffs": [
         {
-          "buffName": "Barrier",
+          "buffName": "Reinforced",
           "turnsRemaining": 3,
         },
       ],
@@ -3506,6 +3651,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Barrier granted ONCE de
   ],
   "summary": {
     "avgHealingPerRound": 4550,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 9100,
     "totalEffectiveHealing": 9100,
@@ -3525,6 +3671,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3547,6 +3694,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3569,6 +3717,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3591,6 +3740,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3613,6 +3763,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
   ],
   "summary": {
     "avgHealingPerRound": 13500,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 54000,
     "totalEffectiveHealing": 54000,
@@ -3632,6 +3783,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3654,6 +3806,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3676,6 +3829,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3698,6 +3852,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3720,6 +3875,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3742,6 +3898,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3764,6 +3921,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3786,6 +3944,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3808,6 +3967,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3830,6 +3990,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3852,6 +4013,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
   ],
   "summary": {
     "avgHealingPerRound": 1000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 10000,
     "totalEffectiveHealing": 0,
@@ -3871,6 +4033,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3893,6 +4056,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3915,6 +4079,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3937,6 +4102,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3959,6 +4125,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -3981,6 +4148,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4003,6 +4171,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4025,6 +4194,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4047,6 +4217,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4069,6 +4240,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4091,6 +4263,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
   ],
   "summary": {
     "avgHealingPerRound": 5000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 50000,
     "totalEffectiveHealing": 36000,
@@ -4110,6 +4283,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4133,6 +4307,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 1,
@@ -4156,6 +4331,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4179,6 +4355,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 1,
@@ -4202,6 +4379,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4225,6 +4403,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 1,
@@ -4248,6 +4427,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4271,6 +4451,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 1,
@@ -4294,6 +4475,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4317,6 +4499,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 1,
@@ -4341,6 +4524,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
   "summary": {
     "avgHealingPerRound": 1500,
     "teamTotalHealing": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 5,
     "totalDirectHeal": 15000,
     "totalEffectiveHealing": 0,
@@ -4360,6 +4544,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4383,6 +4568,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4406,6 +4592,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4429,6 +4616,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4453,6 +4641,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
   "summary": {
     "avgHealingPerRound": 0,
     "teamTotalHealing": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -4472,6 +4661,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4495,6 +4685,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4523,6 +4714,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4551,6 +4743,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4580,6 +4773,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
   "summary": {
     "avgHealingPerRound": 0,
     "teamTotalHealing": 7500,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -4599,6 +4793,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4621,6 +4816,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4643,6 +4839,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4665,6 +4862,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4687,6 +4885,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4709,6 +4908,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4731,6 +4931,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4753,6 +4954,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4775,6 +4977,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
   ],
   "summary": {
     "avgHealingPerRound": 375,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 3000,
     "totalEffectiveHealing": 3000,
@@ -4794,6 +4997,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4816,6 +5020,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4838,6 +5043,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4860,6 +5066,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4882,6 +5089,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4904,6 +5112,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4926,6 +5135,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4948,6 +5158,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4970,6 +5181,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -4992,6 +5204,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
   ],
   "summary": {
     "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 0,
     "totalEffectiveHealing": 0,
@@ -5011,6 +5224,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5034,6 +5248,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5057,6 +5272,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5080,6 +5296,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5103,6 +5320,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5126,6 +5344,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5149,6 +5368,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5172,6 +5392,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5195,6 +5416,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5218,6 +5440,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
     {
       "action": "active",
       "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -5242,6 +5465,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
   "summary": {
     "avgHealingPerRound": 1000,
     "teamTotalHealing": 12000,
+    "totalBarrierAbsorbed": 0,
     "totalCleanses": 0,
     "totalDirectHeal": 10000,
     "totalEffectiveHealing": 0,

@@ -537,17 +537,22 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
 // re-arming the next round's crossing. Deterministic, turn-order-independent.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A passive `on-hp-threshold-crossed` Barrier-style buff (Tycho/Kafa shape). The self
- *  hp-threshold condition is the TRIGGER config (executeIntent scrubs it at drain time). */
-const crossingBarrier = (oncePerCombat: boolean): Ability => ({
-    id: `barrier-${++idCounter}`,
+/** A passive `on-hp-threshold-crossed` buff (Tycho/Kafa shape). Grants a generic
+ *  NON-BLOCKING buff ('Reinforced' — not in BARRIER_BUFFS/CHEAT_DEATH_BUFFS/
+ *  UNREMOVABLE_STATUSES/PERSISTENT_STACKING_BUFFS, so it's a plain no-op) to isolate the
+ *  crossing-grant CADENCE (oncePerCombat caps to one grant; non-oncePerCombat re-fires per
+ *  crossing; duration persists into the next round's overview) from Barrier's
+ *  damage-immunity (which is covered in `barrier.test.ts`). The self hp-threshold condition
+ *  is the TRIGGER config (executeIntent scrubs it at drain time). */
+const crossingBuff = (oncePerCombat: boolean): Ability => ({
+    id: `crossing-${++idCounter}`,
     type: 'buff',
     target: 'self',
     trigger: 'on-hp-threshold-crossed',
     conditions: [selfThresholdBelow(40)],
     config: {
         type: 'buff',
-        buffName: 'Barrier',
+        buffName: 'Reinforced',
         stacks: 1,
         parsedEffects: {},
         isStackable: false,
@@ -609,17 +614,17 @@ const runCrossing = (opts: {
 };
 
 describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat)', () => {
-    // ── Tycho-shape: oncePerCombat → exactly ONE Barrier despite TWO downward crossings ──
+    // ── Tycho-shape: oncePerCombat → exactly ONE Reinforced despite TWO downward crossings ──
     // maxHp 10000, threshold 40% (4000). Each round a manual flat enemy hits 6500:
-    //   R1: 10000 → 3500 (35%)  → CROSS#1 below 40 → Barrier (oncePerCombat) applies.
+    //   R1: 10000 → 3500 (35%)  → CROSS#1 below 40 → Reinforced (oncePerCombat) applies.
     //       leech 70% of 6500 = 4550 → 3500+4550 = 8050 (80.5%) → re-armed above 40.
-    //   R2: 8050 →  1550 (15.5%) → CROSS#2 below 40 → Barrier oncePerCombat SKIPS the re-fire.
-    // Assert exactly ONE Barrier buff-applied across the whole combat.
-    it('Tycho-shape (oncePerCombat): ONE Barrier buff-applied across TWO downward crossings', () => {
+    //   R2: 8050 →  1550 (15.5%) → CROSS#2 below 40 → Reinforced oncePerCombat SKIPS the re-fire.
+    // Assert exactly ONE Reinforced buff-applied across the whole combat.
+    it('Tycho-shape (oncePerCombat): ONE Reinforced buff-applied across TWO downward crossings', () => {
         const { buffApplied, hpChanged } = runCrossing({
             hp: 10_000,
             numRounds: 2,
-            passiveAbilities: [crossingBarrier(true), takenLeechHeal(70)],
+            passiveAbilities: [crossingBuff(true), takenLeechHeal(70)],
             enemyAttackers: [manualEnemy('atk1', 6500)],
         });
 
@@ -629,22 +634,22 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         );
         expect(downwardCrossings).toHaveLength(2);
 
-        // oncePerCombat caps the Barrier to a single application for the whole combat.
-        const barriers = buffApplied.filter(
-            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        // oncePerCombat caps the Reinforced buff to a single application for the whole combat.
+        const grants = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Reinforced'
         );
-        expect(barriers).toHaveLength(1);
-        expect(barriers[0].round).toBe(1);
+        expect(grants).toHaveLength(1);
+        expect(grants[0].round).toBe(1);
     });
 
-    // ── Kafa-shape: NO oncePerCombat → Barrier on EACH downward crossing (2 events) ──
+    // ── Kafa-shape: NO oncePerCombat → Reinforced on EACH downward crossing (2 events) ──
     // Same HP arithmetic as Tycho-shape; only the oncePerCombat flag differs. The
-    // duration-3 Barrier granted on R1 persists through R2 (assert via healTargetBuffs).
-    it('Kafa-shape (no oncePerCombat): Barrier buff-applied on EACH downward crossing, and the grant persists', () => {
+    // duration-3 Reinforced granted on R1 persists through R2 (assert via healTargetBuffs).
+    it('Kafa-shape (no oncePerCombat): Reinforced buff-applied on EACH downward crossing, and the grant persists', () => {
         const { buffApplied, hpChanged, result } = runCrossing({
             hp: 10_000,
             numRounds: 2,
-            passiveAbilities: [crossingBarrier(false), takenLeechHeal(70)],
+            passiveAbilities: [crossingBuff(false), takenLeechHeal(70)],
             enemyAttackers: [manualEnemy('atk1', 6500)],
         });
 
@@ -653,28 +658,28 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         );
         expect(downwardCrossings).toHaveLength(2);
 
-        // One Barrier buff-applied per downward crossing → two events (R1 and R2).
-        const barriers = buffApplied.filter(
-            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        // One Reinforced buff-applied per downward crossing → two events (R1 and R2).
+        const grants = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Reinforced'
         );
-        expect(barriers).toHaveLength(2);
-        expect(barriers.map((b) => b.round)).toEqual([1, 2]);
+        expect(grants).toHaveLength(2);
+        expect(grants.map((b) => b.round)).toEqual([1, 2]);
 
         // The R1 grant (duration 3) persists into R2's round overview — assert via the
         // heal target's round-2 buffs (the duration outlives the heal back above N).
         const rounds = result.healing!.rounds;
-        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Barrier');
+        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Reinforced');
     });
 
-    // ── Cheat-Death save crossing: a 100→1-HP save IS a downward crossing → Barrier fires ──
+    // ── Cheat-Death save crossing: a 100→1-HP save IS a downward crossing → Reinforced fires ──
     // A lethal hit on a full-HP Cheat-Death tank is intercepted at 1 HP (0.05% of 2000).
     // The hp-changed is emitted AFTER the intercept (100 → 0.05) → a downward crossing of
     // 40 → the crossing reaction fires in the SAME round as cheat-death-activated.
-    it('Cheat-Death save: Barrier buff-applied alongside cheat-death-activated in the same round', () => {
+    it('Cheat-Death save: Reinforced buff-applied alongside cheat-death-activated in the same round', () => {
         const { buffApplied, cheated, hpChanged } = runCrossing({
             hp: 2000, // enemy 3000 → lethal in one hit → intercepted at 1 HP
             numRounds: 1,
-            passiveAbilities: [crossingBarrier(false)],
+            passiveAbilities: [crossingBuff(false)],
             selfBuffs: [cheatDeathBuff()],
             enemyAttackers: [manualEnemy('atk1', 3000)],
         });
@@ -690,11 +695,11 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         expect(downwardCrossings).toHaveLength(1);
 
         // The crossing reaction fired in the same round as the save.
-        const barriers = buffApplied.filter(
-            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        const grants = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Reinforced'
         );
-        expect(barriers).toHaveLength(1);
-        expect(barriers[0].round).toBe(1);
+        expect(grants).toHaveLength(1);
+        expect(grants[0].round).toBe(1);
     });
 
     // ── DoT-tick crossing: a turn-start Corrosion tick (NOT direct damage) crosses below N ──
@@ -702,7 +707,7 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
     // is tuned so HP stays ABOVE the threshold from attacks alone, and ONLY the R2 turn-start
     // DoT batch takes it below 40 — per the locked decision, DoT intake emits hp-changed too,
     // so the crossing reaction must fire on the tick.
-    it('DoT-tick crossing: Barrier buff-applied when ONLY the turn-start DoT batch crosses below the threshold', () => {
+    it('DoT-tick crossing: Reinforced buff-applied when ONLY the turn-start DoT batch crosses below the threshold', () => {
         // A dot-only enemy: corrosion (no direct damage → synthesized basic suppressed) so HP
         // is reduced ONLY by the turn-start DoT tick. Tank maxHp 1000 with a tier-7 / 10-stack
         // corrosion makes the R2 tick bite from 100% straight to 30% — a single downward
@@ -722,7 +727,7 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         const { buffApplied, hpChanged } = runCrossing({
             hp: 1000,
             numRounds: 2,
-            passiveAbilities: [crossingBarrier(false)],
+            passiveAbilities: [crossingBuff(false)],
             enemyAttackers: [dotEnemy],
         });
 
@@ -735,20 +740,20 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         expect(downwardCrossings[0].round).toBe(2);
 
         // The crossing reaction fired on the tick.
-        const barriers = buffApplied.filter(
-            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        const grants = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Reinforced'
         );
-        expect(barriers).toHaveLength(1);
-        expect(barriers[0].round).toBe(2);
+        expect(grants).toHaveLength(1);
+        expect(grants[0].round).toBe(2);
     });
 
     // ── DPS-mode inertness: no healTargetId → the crossing trigger is fully dormant ──
     // An attacker-only run (DPS mode, no enemyAttackers, no healTargetId) carrying the same
-    // crossing-Barrier passive. The trigger partitions to REACTIVE (isReactiveAbility →
+    // crossing-buff passive. The trigger partitions to REACTIVE (isReactiveAbility →
     // buff + live trigger), so it is NOT seeded by seedPassiveTimedStatuses → no phantom
     // round-1 grant. And with no heal target there is no tank-side hp-changed to fire it →
-    // zero Barrier buff-applied across the whole DPS run.
-    it('DPS-mode inertness: attacker-only run grants NO Barrier (no round-1 phantom seed, no crossing fire)', () => {
+    // zero Reinforced buff-applied across the whole DPS run.
+    it('DPS-mode inertness: attacker-only run grants NO Reinforced (no round-1 phantom seed, no crossing fire)', () => {
         idCounter = 0;
         const bus = createEventBus();
         const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
@@ -761,7 +766,7 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
                 healTargetId: undefined,
                 enemyHp: 10_000_000,
                 shipSkills: {
-                    slots: [{ slot: 'passive', abilities: [crossingBarrier(false)] }],
+                    slots: [{ slot: 'passive', abilities: [crossingBuff(false)] }],
                 },
                 bus,
             })
@@ -769,10 +774,10 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
 
         // DPS mode → no healing block at all.
         expect(result.healing).toBeUndefined();
-        // The crossing-Barrier passive is reactive → not seeded → NO phantom round-1 grant,
-        // and no hp-changed in DPS mode → never fires. Zero Barrier across the whole run.
-        const barriers = buffApplied.filter((e) => e.buffName === 'Barrier');
-        expect(barriers).toHaveLength(0);
+        // The crossing-buff passive is reactive → not seeded → NO phantom round-1 grant,
+        // and no hp-changed in DPS mode → never fires. Zero Reinforced across the whole run.
+        const grants = buffApplied.filter((e) => e.buffName === 'Reinforced');
+        expect(grants).toHaveLength(0);
     });
 });
 
