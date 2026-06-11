@@ -45,7 +45,12 @@ export type AbilityTrigger =
     | 'on-ally-destroyed'
     | 'on-destroyed'
     | 'on-enemy-destroyed'
-    | 'on-cheat-death-activated';
+    | 'on-cheat-death-activated'
+    // Fired by the engine when the owner's HP crosses below a watched threshold
+    // (downward only — heals/upward changes emit nothing). The buff executor uses this
+    // to grant conditional buffs, once-per-combat where the game says so (Tycho/Shelter/
+    // Los "once per battle, when HP drops below X%"; Kafa/Redeemer re-fire each crossing).
+    | 'on-hp-threshold-crossed';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -71,6 +76,7 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-destroyed',
     'on-enemy-destroyed',
     'on-cheat-death-activated',
+    'on-hp-threshold-crossed',
 ]);
 
 export type ConditionSubject =
@@ -111,8 +117,10 @@ export interface Condition {
     buffName?: string;
     hpComparator?: 'below' | 'above';
     hpPercent?: number;
-    // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive scaling).
-    hpSubject?: 'self' | 'enemy';
+    // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive
+    // scaling). 'target' = the heal target's live HP%, threaded in healing mode only; defaults
+    // to 100 elsewhere (DPS-mode inert — the condition never fires without a live target HP).
+    hpSubject?: 'self' | 'enemy' | 'target';
     // Threshold gating for count subjects (buff/debuff/adjacency/destroyed counts).
     // When set, the condition is "met" only when the derived/manual count satisfies
     // the comparator against `countThreshold` (e.g. enemy has ≥3 debuffs, self has 0
@@ -156,6 +164,11 @@ export type AbilityConfig =
           maxStacks?: number;
           stackTrigger?: StackTrigger;
           duration?: number | 'recurring';
+          /** "Once per battle" reactive buff grant (Tycho/Shelter/Los on-hp-threshold-crossed
+           *  crossing grants): the executor fires AT MOST ONCE per combat, tracked by a
+           *  combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
+           *  Absent → unbounded (fires on every qualifying trigger). */
+          oncePerCombat?: boolean;
       }
     | {
           type: 'debuff';

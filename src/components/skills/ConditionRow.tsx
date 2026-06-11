@@ -70,6 +70,7 @@ const HP_COMPARATOR_OPTIONS = [
 const HP_SUBJECT_OPTIONS = [
     { value: 'enemy', label: 'Enemy' },
     { value: 'self', label: 'Self' },
+    { value: 'target', label: 'Heal target' },
 ];
 
 const BUFF_NAME_SUBJECTS: ConditionSubject[] = [
@@ -181,7 +182,10 @@ export const ConditionRow: React.FC<Props> = ({ condition, onChange, onRemove })
                         value={condition.hpSubject ?? 'enemy'}
                         options={HP_SUBJECT_OPTIONS}
                         onChange={(value) =>
-                            onChange({ ...condition, hpSubject: value as 'self' | 'enemy' })
+                            onChange({
+                                ...condition,
+                                hpSubject: value as 'self' | 'enemy' | 'target',
+                            })
                         }
                     />
                     <Select

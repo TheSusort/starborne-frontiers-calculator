@@ -1111,6 +1111,67 @@ export function detectDamageReactionTrigger(
     return undefined;
 }
 
+// Phase 4c PR 3 (Task 6): "when HP drops/falls below N%" buff-grant reactives
+// (Tycho/Shelter/Los/Kafa/Redeemer). The (drops|falls) VERB is what distinguishes a
+// threshold-CROSSING reactive from the static "while/if below N% HP" gates handled
+// elsewhere — see the negative guards in the docblock below.
+const HP_CROSSING_RE =
+    /\b(?:its\s+|this\s+unit'?s?\s+)?hp\s+(?:drops|falls)\s+below\s+(\d+(?:\.\d+)?)\s*%/i;
+const ONCE_PER_BATTLE_RE = /\bonce per battle\b/i;
+
+/**
+ * "when HP drops/falls below N%" buff-grant reactives (Tycho/Shelter/Los/Kafa/Redeemer).
+ * Sentence-scoped at the ability's anchor `pos` using the SAME masked rawSentenceAround the
+ * damage-reaction path uses, so the "Inc."/"Out." abbreviation periods in a buff name
+ * (Shelter's "Inc. Damage Down II") don't split the sentence mid-name, and a buff in a
+ * DIFFERENT sentence does not co-trigger (Tycho's start-of-combat Cheat Death / Everliving
+ * Regeneration II precede the crossing clause; Los's "30% more Direct damage … when its HP is
+ * below 50%" modifier sits in its own <br>-separated sentence). Feed the CANONICAL post-wiring
+ * text shape — <br /> normalized to '. ' — exactly as buildShipAbilities does before scoping.
+ *
+ * The (drops|falls) VERB is REQUIRED, which excludes the static-gate phrasings the corpus also
+ * carries: the damage-reaction "while below N% HP" (Makoli), the extra-action "If its HP is
+ * below N%" (Tormenter), the enemy-scaling "when the target is below N% HP" (Tithonus), and the
+ * ally-filter "allies below N% HP" (Chimei) — none use drops/falls, so all return undefined.
+ *
+ * `oncePerCombat` is true when the SAME scoped sentence says "once per battle" — captured
+ * whether it leads the sentence (Tycho "Once per battle, when HP drops below 40%…") or trails
+ * it (Los "Once per battle when HP falls below 50%", Shelter "…below 20%, once per battle").
+ * Reference data: docs/ship-skills.csv (Tycho, Shelter, Los, Kafa, Redeemer).
+ */
+export function detectHpCrossingTrigger(
+    text: string,
+    pos: number
+): { trigger: 'on-hp-threshold-crossed'; hpBelowPct: number; oncePerCombat: boolean } | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const m = HP_CROSSING_RE.exec(sentence);
+    if (!m) return undefined;
+    return {
+        trigger: 'on-hp-threshold-crossed',
+        hpBelowPct: parseFloat(m[1]),
+        oncePerCombat: ONCE_PER_BATTLE_RE.test(sentence),
+    };
+}
+
+// Hermes charged skill: "If the target has less than N% HP" gate on a grant clause. Distinct
+// from the self-subject HP_CROSSING_RE — this reads the TARGET's HP and is a one-shot cast-time
+// gate, not a reactive crossing.
+const TARGET_HP_GATE_RE = /\bif the target has less than\s+(\d+(?:\.\d+)?)\s*%\s*hp\b/i;
+
+/**
+ * Hermes: "If the target has less than N% HP" gate on a grant clause. Sentence-scoped at the
+ * grant's anchor `pos` (same masked rawSentenceAround as the crossing detector) so the
+ * preceding repair/charge sentence — which has no target gate — never co-matches. Returns
+ * undefined for any text without "the target". Reference data: docs/ship-skills.csv (Hermes).
+ */
+export function detectTargetHpGate(text: string, pos: number): { hpBelowPct: number } | undefined {
+    const sentence = rawSentenceAround(text, pos);
+    if (sentence === undefined) return undefined;
+    const m = TARGET_HP_GATE_RE.exec(sentence);
+    return m ? { hpBelowPct: parseFloat(m[1]) } : undefined;
+}
+
 // "detonates <Corrosion|Inferno|Bomb> effects with N% of their power" / "… at N% power" —
 // consume active DoTs of that type and deal their damage at once, scaled by N% (Incinerator,
 // Crocus, Demolisher). Lingshe's countdown-reduction / crit-scaling detonation is not this form.

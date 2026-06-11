@@ -214,6 +214,12 @@ export interface PlayerTurnArgs {
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
      *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
     selfHpPct?: number;
+    /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
+     *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
+     *  40% HP" evaluated at cast time. Defaults to 100 so DPS-mode / un-updated callers behave
+     *  as if the target is full HP → a "below N" gate fails → grant inert in DPS (correct).
+     *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
+    targetHpPct?: number;
     /** Enemy-side debuff target key (Task 6). Passed as the `enemyTargetId` arg to the three
      *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
      *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
@@ -627,6 +633,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpDecline,
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
+        targetHpPct: targetHpPctArg = 100,
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
         selfDebuffNames: selfDebuffNamesArg = [],
@@ -834,6 +841,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        targetHpPct: targetHpPctArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -968,6 +976,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        targetHpPct: targetHpPctArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1044,6 +1053,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        targetHpPct: targetHpPctArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1123,6 +1133,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         roundCrit,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
+        targetHpPct: targetHpPctArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });

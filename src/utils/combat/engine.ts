@@ -96,7 +96,11 @@ function registerActorAbilityStatuses(
     castSkills: ShipSkills,
     statusEngine: ReturnType<typeof createStatusEngine>,
     ownerId: string,
-    playerIds: string[]
+    playerIds: string[],
+    // Heal target id (healing mode) — the recipient a single-`ally` Cheat-Death-family
+    // firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal target) →
+    // the carve-out falls back to [ownerId]. Irrelevant for every non-carve-out status.
+    healTargetId?: string
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
     timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
@@ -122,18 +126,36 @@ function registerActorAbilityStatuses(
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
             const side: 'self' | 'enemy' =
                 ability.target === 'enemy' || ability.target === 'all-enemies' ? 'enemy' : 'self';
+            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
+            // Cheat-Death-family grants from a FIRING slot (Hermes/Hayyan charged skills) are
+            // cast-path persistent grants, NOT always-on auras: they apply when the slot fires
+            // (per-slot timed loop in playerTurn, gated by conditionsMet at cast time) and never
+            // expire (duration Infinity; the intercept consumes them via cheatDeathConsumed).
+            // Scoped to CHEAT_DEATH_BUFFS — other firing-slot recurring buffs (Panon, Sansi,
+            // Sentinel, Oleander…) keep the aura model for now (documented in coverage §5).
+            const castPathCheatDeath =
+                !accumulating &&
+                CHEAT_DEATH_BUFFS.has(cfg.buffName) &&
+                (slot.slot === 'active' || slot.slot === 'charged');
             // Player-side recipients (self vs ally/all-allies). Enemy-side statuses ignore this
             // (recipients are only consulted on the self side). Self → caster only; ally/all-allies
             // → every player actor (fixed source order). `playerIds` already includes the caster.
+            // CARVE-OUT (castPathCheatDeath only): a single-`ally` grant narrows to the heal target
+            // (Hermes "grants Cheat Death to the lowest-HP ally"), fallback [ownerId] when no heal
+            // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
+            // for every OTHER cast-path buff is UNCHANGED.
             const recipients: string[] =
                 side === 'enemy'
                     ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
-                    : ability.target === 'ally' || ability.target === 'all-allies'
-                      ? playerIds
-                      : [ownerId];
-            const accumulating = !!cfg.stackTrigger && cfg.isStackable;
+                    : castPathCheatDeath && ability.target === 'ally'
+                      ? [healTargetId ?? ownerId]
+                      : ability.target === 'ally' || ability.target === 'all-allies'
+                        ? playerIds
+                        : [ownerId];
             const isAura =
-                !accumulating && (cfg.duration === 'recurring' || cfg.duration === undefined);
+                !accumulating &&
+                !castPathCheatDeath &&
+                (cfg.duration === 'recurring' || cfg.duration === undefined);
             const payload: AbilityStatusPayload = {
                 buffName: cfg.buffName,
                 stacks: cfg.stacks,
@@ -173,7 +195,14 @@ function registerActorAbilityStatuses(
                 // not recurring/undefined duration). A finite-duration passive buff lands here
                 // too (seeded at combat start by the round-1 loop). The classification branches
                 // above exhaustively exclude non-numeric durations from reaching this arm.
-                status = { ...base, kind: 'timed', duration: cfg.duration as number };
+                // Cheat-Death-family firing-slot grants take Infinity (never decrements to 0:
+                // Infinity − 1 === Infinity; expiry compares <= 0) → persists like Cheat Death;
+                // clearRemovable on the intercept still wipes it (it's consumed anyway).
+                status = {
+                    ...base,
+                    kind: 'timed',
+                    duration: castPathCheatDeath ? Infinity : (cfg.duration as number),
+                };
                 (side === 'self' ? timedSelfBySlot : timedEnemyBySlot).push(status);
             }
             // Enemy-side statuses register once (singular enemy maps); self-side aura/accum fan
@@ -982,7 +1011,10 @@ export function runCombat(input: CombatEngineInput): {
         shipSkills,
         statusEngine,
         'attacker',
-        playerIds
+        playerIds,
+        // Heal target (healing mode) — narrows a single-`ally` Cheat-Death-family firing-slot
+        // grant to the tank (Hermes). Undefined in DPS mode → falls back to the caster.
+        input.healTargetId
     );
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
@@ -1063,7 +1095,10 @@ export function runCombat(input: CombatEngineInput): {
             teamCastSkills,
             statusEngine,
             t.id,
-            playerIds
+            playerIds,
+            // Same carve-out narrowing as the attacker — a walked healer's single-`ally`
+            // Cheat-Death-family grant lands on the heal target.
+            input.healTargetId
         );
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
@@ -1286,6 +1321,17 @@ export function runCombat(input: CombatEngineInput): {
     const recipientIncomingHealPct = (id: string): number =>
         lastTurnCtxByActor.get(id)?.incomingHealPct ?? 0;
 
+    // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
+    // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
+    // the turn-start DoT tick but not the cast's heal. DPS mode (no healTarget) → 100 → a "below
+    // N" target gate fails → the grant is inert in DPS (correct). Defined here so every player
+    // turn dispatch (attacker + walked team) reads the same denominator (recipientMaxHp).
+    const healTargetHpPctNow = (): number => {
+        if (!healTarget) return 100;
+        const maxHp = recipientMaxHp(healTarget.id);
+        return maxHp > 0 ? (100 * Math.max(0, healTarget.currentHp)) / maxHp : 100;
+    };
+
     // The healing rounds + first-destroyed-round seam (target HP can only reach 0 via enemy
     // attacks, which land in Task 8 — the detection just never fires this task).
     const healingRounds: HealingRoundEngine[] = [];
@@ -1297,6 +1343,31 @@ export function runCombat(input: CombatEngineInput): {
     // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
     // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
     const cheatDeathConsumed = new Set<string>();
+    // Display-only (Phase 4c): a spent Cheat Death keeps reappearing in the displayed buff list
+    // for two reasons, depending on how it was granted. (1) Passive/aura grants (Tycho) are
+    // re-derived from the persistent aura store every round and clearRemovable leaves auras
+    // intact by design. (2) Active/charged cast-path grants (timed, Infinity) ARE deleted by
+    // clearRemovable on consumption, but a slot that re-fires each round re-applies them. Either
+    // way the chip would keep showing even though no further save is possible (consumption is the
+    // flag above, not a permanent store removal). `cheatDeathConsumed` is combat-lifetime and
+    // never re-armed (only ever .add'd / .has'd — see the intercept), so an actor present here
+    // can never be saved again.
+    //
+    // We track the round the intercept fired (set alongside the flag) and hide the chip only in
+    // rounds STRICTLY AFTER consumption: the consuming round still shows it (that round's chip
+    // reflects the protection that was live and actually saved the unit), and every subsequent
+    // round drops it. Pure display filter — does NOT touch save logic.
+    const cheatDeathConsumedRound = new Map<string, number>();
+    const hideSpentCheatDeath = (
+        buffs: ActiveBuff[],
+        ownerId: string,
+        round: number
+    ): ActiveBuff[] => {
+        const consumedRound = cheatDeathConsumedRound.get(ownerId);
+        return consumedRound !== undefined && round > consumedRound
+            ? buffs.filter((b) => !CHEAT_DEATH_BUFFS.has(b.buffName))
+            : buffs;
+    };
     // Once-per-combat reactive repairs (Phase 4b, Task 8). Keyed `${ownerId}:${abilityId}`.
     // Declared OUTSIDE the round loop (combat lifetime, like cheatDeathConsumed) so a flagged
     // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
@@ -1632,6 +1703,12 @@ export function runCombat(input: CombatEngineInput): {
             damage: number
         ): { shieldBefore: number; absorbed: number; hpDamage: number } => {
             roundIncomingDamage += damage;
+            // Capture the pre-drain HP + the target's current effective max HP for the
+            // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
+            // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
+            // the pre-hit value (not 1).
+            const hpBefore = healTarget!.currentHp;
+            const maxHp = recipientMaxHp(healTarget!.id);
             const shieldBefore = healTarget!.shieldPool;
             const absorbed = Math.min(healTarget!.shieldPool, damage);
             healTarget!.shieldPool -= absorbed;
@@ -1663,6 +1740,12 @@ export function runCombat(input: CombatEngineInput): {
                 if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
                     healTarget!.currentHp = 1;
                     cheatDeathConsumed.add(targetId);
+                    // Display-only: remember the round it was spent so the chip is dropped
+                    // from rounds AFTER this one (see hideSpentCheatDeath). First write wins —
+                    // the flag above already blocks any second intercept, so this set-once.
+                    if (!cheatDeathConsumedRound.has(targetId)) {
+                        cheatDeathConsumedRound.set(targetId, r);
+                    }
                     statusEngine.clearRemovable(targetId);
                     // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
                     // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
@@ -1681,6 +1764,22 @@ export function runCombat(input: CombatEngineInput): {
                     recordDestroyed(healTarget!, r, bus);
                     healTargetDestroyedRound = healTarget!.destroyedRound;
                 }
+            }
+            // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
+            // is called per enemy attack (aggregate drain) AND per turn-start DoT batch, and
+            // the emission covers both deliberately ("when HP drops below N%" includes DoT
+            // damage in-game). Emitted after the Cheat-Death intercept (a 100→1-HP save
+            // counts as a downward crossing — spec §5). Exact percentages (the enemy dummy's
+            // post-round emission stays integer-granularity — asymmetry intended, events.ts).
+            // A killed tank emits ship-destroyed above, never a posthumous crossing.
+            if (healTarget!.currentHp > 0 && maxHp > 0) {
+                bus.emit({
+                    type: 'hp-changed',
+                    targetId: healTarget!.id,
+                    round: r,
+                    oldPct: (100 * hpBefore) / maxHp,
+                    newPct: (100 * healTarget!.currentHp) / maxHp,
+                });
             }
             return { shieldBefore, absorbed, hpDamage };
         };
@@ -2073,6 +2172,11 @@ export function runCombat(input: CombatEngineInput): {
                             attackerMaxHp > 0
                                 ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
                                 : 100,
+                        // Heal target's live HP% at THIS turn start (pre-this-cast-heal) for
+                        // `hpSubject:'target'` gates (Hermes' "ally below 40% HP" Cheat-Death grant).
+                        // healTarget.currentHp here reflects the turn-start DoT tick but not this
+                        // cast's heal → exactly the cast-time basis. DPS mode (no healTarget) → 100.
+                        targetHpPct: healTargetHpPctNow(),
                         // Task 7: enemy-buff gates read the UNION of enemy attackers' self-buffs;
                         // self-debuff gates read this actor's own enemy-applied debuffs (names only).
                         // Both empty in DPS mode (no enemy attackers, no debuffs on the focus) →
@@ -2150,6 +2254,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Live HP% for self-HP-threshold gates (same logic as attacker above).
                         selfHpPct:
                             teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
+                        // Heal target's live HP% at this turn start (pre-this-cast-heal) for
+                        // `hpSubject:'target'` gates — same basis as the attacker branch.
+                        targetHpPct: healTargetHpPctNow(),
                         // Task 7: same as the attacker branch — enemy-buff = union of enemy attackers'
                         // self-buffs; self-debuff = this team actor's own enemy-applied debuffs (names
                         // only). Empty in DPS mode → byte-identical goldens.
@@ -2413,6 +2520,10 @@ export function runCombat(input: CombatEngineInput): {
                             grantAllyCharges: undefined,
                             healing: healingCtx,
                             selfHpPct: enemySelfHpPct,
+                            // Heal target's live HP% (the enemy is bound to it). Inert for current
+                            // fixtures (a bare enemy has no `hpSubject:'target'` gate) but threaded
+                            // for consistency with the player-turn dispatches.
+                            targetHpPct: healTargetHpPctNow(),
                         });
                         // Total damage the enemy dealt to the bound target this turn. secondary/
                         // conditional are display sub-buckets ALREADY inside directDamage (do NOT
@@ -2591,7 +2702,12 @@ export function runCombat(input: CombatEngineInput): {
         const enemyHpPct = lastAttackerTurn.enemyHpPct;
         const dotsConfig = lastAttackerTurn.dotsConfig;
         const dotsLanded = lastAttackerTurn.dotsLanded;
-        const activeSelfBuffsForRound = lastAttackerTurn.activeSelfBuffs;
+        // Display-only: hide a spent Cheat Death (the focus actor owns activeSelfBuffs).
+        const activeSelfBuffsForRound = hideSpentCheatDeath(
+            lastAttackerTurn.activeSelfBuffs,
+            focusActorId,
+            r
+        );
         const landedEnemyDebuffs = lastAttackerTurn.landedEnemyDebuffs;
         const resistedEnemyDebuffs = lastAttackerTurn.resistedEnemyDebuffs;
 
@@ -2749,7 +2865,9 @@ export function runCombat(input: CombatEngineInput): {
                     mergeDoTsForDisplay(tankDotSnapshot.corrosion, healTarget.corrosionEntries),
                     mergeDoTsForDisplay(tankDotSnapshot.inferno, healTarget.infernoEntries)
                 ),
-                healTargetBuffs,
+                // Display-only: hide a spent Cheat Death (the heal target owns these buffs).
+                // The destroyed-tank branch already set this to [] (filtering [] is a no-op).
+                healTargetBuffs: hideSpentCheatDeath(healTargetBuffs, healTarget.id, r),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

@@ -12,6 +12,7 @@
 > Updated **2026-06-08** after the Phase 4a enemy-offense increment (branch `feat/combat-engine-phase4a-enemy-offense`): enemy is now a full `runPlayerTurn` actor vs the heal target; per-target status stores; affinity symmetry on enemy attacks; real `selfHpPct`; `attacked` event + live `on-attacked` trigger; enemy-applied DoTs tick on the tank (see §5 PHASE 4a, §6).
 > Updated **2026-06-09** after the Phase 4b death & revive increment (branch `feat/combat-engine-phase4b-death-revive`): three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) + `on-cheat-death-activated`; Cheat Death survives a lethal hit at 1 HP once per combat (clearing removable statuses); new `unremovable` concept; Salvation on-destroyed ally-heal re-enabled; on-kill/on-ally-destroyed extra-action bridge (Sokol/Liberator/Harvester) (see §5 PHASE 4b, §6 item 9).
 > Updated **2026-06-10** after the Phase 4c PR 2 on-ally-attacked reactives increment (branch `feat/combat-engine-phase4c-ally-damage`): new ally-scoped per-hit `on-ally-attacked` trigger with `triggerCritFilter` + `roleFilter` (category prefix match; unknown role = dormant); `eventCtx.damagedAllyId` routes 'ally'-target payloads to exactly the damaged ally; roles thread from ship data (`Ship.type` → page auto-fill → `roleByActorId`); Cultivator/Refine/Graphite/Guardian-ally-Provoke/Heliodor-p2 live; editor trigger + ally-role-filter controls (see §5 PHASE 4c PR 2, §6).
+> Updated **2026-06-11** after the Phase 4c PR 3 on-hp-threshold-crossed increment (branch `feat/combat-engine-phase4c-hp-crossing`): new `on-hp-threshold-crossed` trigger fed by a tank-side `hp-changed` event (once per HP-intake event — enemy attack or DoT batch; downward crossing only); drain-time scrub of the trigger-defining self hp-threshold; `oncePerCombat` extended to buff grants; cast-path Cheat-Death carve-out (Hermes charged grant narrowed to heal-target-under-40% via `hpSubject:'target'`; Hayyan on charged-skill fire); Tycho/Shelter/Los/Kafa/Redeemer live (see §5 PHASE 4c PR 3, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -93,7 +94,7 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 
 | Field | Status |
 |---|---|
-| `Ability.trigger` | Union now has 16 values; 15 are LIVE (everything except the `on-cast` default — see `LIVE_TRIGGERS` in `src/types/abilities.ts` and §6 item 5 for the per-phase history, latest: `on-ally-attacked`, Phase 4c PR 2). Parser emits all live triggers (see §5); **editor exposes a Trigger select**; the sim routes every live trigger through the reactive machinery; remaining annotation-only reactive *families* are hp-crossing + enemy-action (4c PRs 3–4). |
+| `Ability.trigger` | Union now has 17 values; 16 are LIVE (everything except the `on-cast` default — see `LIVE_TRIGGERS` in `src/types/abilities.ts` and §6 item 5 for the per-phase history, latest: `on-hp-threshold-crossed`, Phase 4c PR 3). Parser emits all live triggers (see §5); **editor exposes a Trigger select**; the sim routes every live trigger through the reactive machinery; the remaining annotation-only reactive *family* is enemy-action (4c PR 4). |
 | `Ability.target` | Editor exposes 5 values; sim only distinguishes self-vs-enemy when routing buff/debuff conversion. `ally`/`all-allies`/`all-enemies` have no distinct sim meaning (all-allies modifiers fold into self — correct for single-ship DPS). |
 | `modifier.isMultiplicative` | Deliberate no-op, documented in `applyAbilities.ts:38-40`; hidden in editor. |
 | `modifier.channel` `outgoingHeal` / `incomingDamage` | No DPS bucket — silently dropped (`applyAbilities.ts:68`). |
@@ -710,9 +711,15 @@ buff/charge-aura), source it from firing + passive.
      Deferred to **4c** with the other below-X%-HP reactives. (Hermes is intentionally omitted
      from the user-facing changelog Cheat-Death ship list because its grant currently over-fires
      — the below-40%-HP gate is deferred to 4c; do not advertise it as working.)
+     **RESOLVED in 4c PR 3 (2026-06-11):** Hermes's charged Cheat Death is now a cast-path grant
+     gated on heal-target-under-40% (`hpSubject: 'target'`) and protects the heal target only;
+     Hermes is now advertised in the changelog Cheat-Death ship list.
   2. *Tycho's Barrier is an HP-threshold reactive, not on Cheat-Death-activation.* Tycho grants
      Barrier "when its HP drops below 40%" — an `hp-threshold` reactive, not an
      `on-cheat-death-activated` follow-on. Not modeled in 4b; deferred to **4c**.
+     **RESOLVED in 4c PR 3 (2026-06-11):** Tycho/Shelter/Los now fire Barrier (once per battle)
+     on the below-40% downward `on-hp-threshold-crossed` event (Barrier still name-only — the
+     shield amount is unsimulated, limitation 4).
   3. *Harvester on-ally-destroyed extra action is wired-but-DORMANT until 4d.* In single-target
      focus-fire healing mode no ally is attacked, so the ally-destroyed event never fires; the
      listener is in place and will activate once 4d introduces multi-target targeting.
@@ -890,6 +897,56 @@ buff/charge-aura), source it from firing + passive.
   on the damaged ally, the whole team, or Refine itself?); Graphite role gate against in-game
   role taxonomy (do hybrid roles count?); Guardian ally-Provoke cadence on multi-hit crits
   (once per critting hit?).
+
+- **Phase 4c PR 3: `on-hp-threshold-crossed` reactives + cast-path Cheat Death (2026-06-11, branch `feat/combat-engine-phase4c-hp-crossing`).**
+  - **Trigger semantics.** New `on-hp-threshold-crossed` trigger, fed by a new TANK-SIDE
+    `hp-changed` event. `hp-changed` is emitted ONCE PER HP-INTAKE EVENT (the aggregate drain of
+    a single enemy attack, OR a turn-start DoT batch) — NEVER per hit, and upward/heal changes
+    emit NOTHING. This is the intended granularity asymmetry foreshadowed in PR 1: damage
+    application is already aggregate-per-attack, so a 2-hit enemy active emits two `attacked`
+    events (per-hit) but exactly one `hp-changed` (per-attack). The listener fires only on a
+    DOWNWARD crossing of the ability's threshold N: `oldPct >= N > newPct` (strict-below on the
+    new side, matching the PR 1 drain-time `selfHpPct` boundary). N is read from the ability's own
+    SELF hp-threshold condition (`hpSubject: 'self'`).
+  - **Drain-time scrub of the self hp-threshold.** For an on-hp-threshold-crossed intent the SELF
+    hp-threshold condition is TRIGGER-DEFINING, not a re-evaluated gate — the crossing already
+    proved it. `triggers.ts` scrubs that condition off the intent before the executor re-checks
+    `conditionsMet`, so a same-round heal-up between the crossing and the cast cannot retroactively
+    block the grant. (Other conditions on the ability still evaluate normally.)
+  - **`oncePerCombat` extended to BUFF configs.** Previously a heal-only field; now honored on
+    buff grants too, so the Barrier ships fire their grant once per battle (the in-game wording).
+    Kafa/Redeemer re-fire on EVERY downward crossing (no once-per-combat marker).
+  - **Cast-path Cheat-Death carve-out.** Cheat-Death-family buffs (`CHEAT_DEATH_BUFFS`, currently
+    `{'Cheat Death'}`) carried on a FIRING slot (active/charged) are reclassified from always-on
+    auras to CAST-PATH persistent grants (duration `Infinity`), applied when the slot fires and
+    gated by `conditionsMet` AT CAST TIME (`engine.ts` ~134). This is SCOPED to CHEAT_DEATH_BUFFS
+    on firing slots only — other firing-slot recurring buffs (Panon, Sansi, Quixilver, Malvex,
+    Sentinel, Oleander) are NOT Cheat-Death-family and stay auras (explicitly out of scope here).
+    - *Hermes* (charged) — Cheat Death now grants only when the heal target is under 40% HP
+      (`hpSubject: 'target'`, evaluated at cast time) and protects the HEAL TARGET only (narrowed
+      from the 4b all-allies over-grant). Resolves the 4b KNOWN LIMITATION 1.
+    - *Hayyan* (charged) — Cheat Death now applies when its charged skill fires (a cadence side
+      effect of the cast-path move); the all-allies unconditional grant is otherwise unchanged.
+  - **`'target'` HP-subject evaluation.** New `hpSubject: 'target'` reads the heal target's HP%.
+    For Hermes the value is read at the CASTER's turn start (pre-this-cast-heal) — an
+    approximation, since the same cast's heal has not yet landed.
+  - **Ships now live:** Tycho / Shelter / Los — Barrier on the below-40% downward crossing,
+    once per battle; Kafa — Terran Tenacity; Redeemer — Defense Up, both re-firing on each
+    downward crossing. (Hermes/Hayyan move via the cast-path carve-out above, not this trigger.)
+  - **Approximations / known limitations:**
+    - Heals / upward HP changes emit NOTHING — only downward intake fires `hp-changed`, so a
+      threshold re-crossed after a heal-up only re-triggers on the NEXT downward crossing.
+    - `targetHpPct` for the `'target'` subject is read at the caster's turn start
+      (pre-this-cast-heal) — not after the cast's own heal.
+    - Barrier remains NAME-ONLY (the 4b convention — the shield amount is not simulated).
+    - Exact-vs-integer pct asymmetry: the tank-side `hp-changed` crossing check uses the EXACT
+      HP fraction, whereas the enemy dummy's post-round HP emission stays integer-pct (the PR 1
+      asymmetry, unchanged). Crossings are evaluated on the exact-pct tank side.
+  - **In-game verification list additions:** Hermes grant narrowed-to-target (does Hermes' Cheat
+    Death really protect only the heal target, not the whole team?); crossing-on-save behavior
+    (if a hit would cross below 40% but Cheat Death / a shield saves the unit above the line, does
+    the reactive still fire?); DoT-tick crossings (does a turn-start DoT batch that drops a unit
+    below the threshold fire the same reactive as an enemy attack would?).
 
 ---
 
@@ -1140,6 +1197,22 @@ configure it and it looks like it works, but it does nothing".
 > - DPS goldens byte-identical (22 scenarios); 2 new healing golden scenarios (24–25).
 >   See §5 PHASE 4c PR 2 for full semantics + approximations.
 >
+> **Shipped 2026-06-11 (Phase 4c PR 3 — on-hp-threshold-crossed reactives + cast-path Cheat Death, branch `feat/combat-engine-phase4c-hp-crossing`):**
+> - New `on-hp-threshold-crossed` trigger (in `LIVE_TRIGGERS`), fed by a tank-side `hp-changed`
+>   event emitted ONCE per HP-intake event (one enemy attack's aggregate drain OR a turn-start DoT
+>   batch — never per hit; heals/upward changes emit nothing). Fires on a downward crossing
+>   `oldPct >= N > newPct` (N from the ability's self hp-threshold condition).
+> - Drain-time scrub of the trigger-defining self hp-threshold so a same-round heal-up can't block
+>   the grant; `oncePerCombat` extended from heals to BUFF configs.
+> - Cast-path Cheat-Death carve-out (scoped to `CHEAT_DEATH_BUFFS` on FIRING slots): Hermes
+>   charged Cheat Death now gates on heal-target-under-40% (`hpSubject: 'target'`) and protects the
+>   target only; Hayyan charged Cheat Death applies when its charged skill fires. Panon/Sansi/
+>   Quixilver/Malvex/Sentinel/Oleander explicitly NOT reclassified (stay auras).
+> - Ships live: Tycho/Shelter/Los (Barrier below-40% once-per-battle), Kafa (Terran Tenacity),
+>   Redeemer (Defense Up) — Kafa/Redeemer re-fire each downward crossing.
+> - DPS goldens byte-identical; resolves 4b KNOWN LIMITATIONS 1 & 2. See §5 PHASE 4c PR 3 for full
+>   semantics + approximations.
+>
 > **Phase 4c–4f and simulator page (partially shipped / pending):**
 > - **4c PR 1 — SHIPPED 2026-06-10** (`feat/combat-engine-phase4c-self-damage`): per-hit
 >   `attacked` emission; `triggerCritFilter`; drain-time `selfHpPct`; counter-debuff routing;
@@ -1150,8 +1223,11 @@ configure it and it looks like it works, but it does nothing".
 >   `on-ally-attacked` reactives (Heliodor 2nd passive, Cultivator, Refine, Graphite
 >   role-filtered); Guardian ally-crit-hit Provoke; `damagedAllyId` routing; role threading
 >   from ship data; editor trigger + role-filter controls (see §5 PHASE 4c PR 2).
-> - **4c PR 3 — pending** — `on-hp-threshold-crossed` reactives via tank-side `hp-changed`
->   (Tycho Barrier below-40% once-per-battle; Hermes Cheat-Death grant below-40% gate fix).
+> - **4c PR 3 — SHIPPED 2026-06-11** (`feat/combat-engine-phase4c-hp-crossing`):
+>   `on-hp-threshold-crossed` reactives via tank-side `hp-changed` (Tycho/Shelter/Los Barrier
+>   below-40% once-per-battle; Kafa Terran Tenacity / Redeemer Defense Up re-fire each crossing);
+>   cast-path Cheat-Death carve-out (Hermes charged grant narrowed to heal-target-under-40%;
+>   Hayyan charged grant on charged-skill fire) (see §5 PHASE 4c PR 3).
 > - **4c PR 4 — pending** — enemy-action reactions (event-only enemy heal/cleanse emission,
 >   `cleanse-performed`, reactive `damage` executor branch): Zosimos/Arum/Yarrow/Larkspur/Grif.
 > - **4c PR 5 — pending** — enemy realism pair: §6 item 11 `derivable` flip for
@@ -1189,15 +1265,17 @@ configure it and it looks like it works, but it does nothing".
 5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06; `on-attacked`
    shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09; `on-attacked` upgraded to
    per-hit with `triggerCritFilter` Phase 4c PR 1 2026-06-10; `on-ally-attacked` shipped Phase 4c
-   PR 2 2026-06-10)* — the reactive machinery now
+   PR 2 2026-06-10; `on-hp-threshold-crossed` shipped Phase 4c PR 3 2026-06-11)* — the reactive
+   machinery now
    consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
    `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a; upgraded to per-hit with
    optional crit/non-crit filter in Phase 4c PR 1 — see §5 PHASE 4c PR 1), `on-ally-attacked`
-   (Phase 4c PR 2 — per-hit, ally-scoped, crit + role filtered; see §5 PHASE 4c PR 2), and the
+   (Phase 4c PR 2 — per-hit, ally-scoped, crit + role filtered; see §5 PHASE 4c PR 2),
+   `on-hp-threshold-crossed` (Phase 4c PR 3 — downward crossing of a self hp-threshold via the
+   tank-side `hp-changed` event; see §5 PHASE 4c PR 3), and the
    four death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
-   `on-cheat-death-activated` (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. Remaining
-   annotation-only reactives are the hp-crossing and enemy-action families deferred
-   to 4c PRs 3–4.
+   `on-cheat-death-activated` (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. The
+   remaining annotation-only reactive family is enemy-action, deferred to 4c PR 4.
 6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
    and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
    (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4

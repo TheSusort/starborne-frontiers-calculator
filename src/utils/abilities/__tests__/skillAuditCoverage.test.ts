@@ -69,3 +69,47 @@ describe('ungatedFinding damage-reaction parity', () => {
         expect(ungatedFinding([ungatedBuff('Attack Up I')], plain)).toContain('Attack Up I');
     });
 });
+
+/**
+ * HP-threshold parity (Phase 4c PR 3): "when HP drops/falls below N%" CROSSING grants
+ * (Tycho/Shelter/Los/Kafa/Redeemer) ride the on-hp-threshold-crossed trigger and Hermes's
+ * "If the target has less than N% HP" Cheat-Death grant carries a derivable target-HP gate —
+ * both parser-modeled, so an effect from such a clause that parses UNGATED on-cast is a parser
+ * regression the audit must FLAG via the detectHpCrossingTrigger / detectTargetHpGate parity
+ * guards. STATIC "while its HP is below N%" gates (no drops/falls verb) stay skipped.
+ */
+describe('ungatedFinding hp-threshold parity', () => {
+    const ungatedBuff = (buffName: string): Ability => ({
+        id: 'test-buff',
+        type: 'buff',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'buff', buffName, parsedEffects: {}, stacks: 1, isStackable: false },
+    });
+
+    it('flags a "when HP drops below N%" crossing clause whose effect parsed ungated on-cast', () => {
+        const plain = 'Once per battle, when HP drops below 40%, this Unit gains Cheat Death.';
+        expect(ungatedFinding([ungatedBuff('Cheat Death')], plain)).toContain('Cheat Death');
+    });
+
+    it('flags a "when HP falls below N%" crossing clause whose effect parsed ungated on-cast', () => {
+        const plain =
+            'Once per battle when HP falls below 50%, this Unit gains Everliving Regeneration III.';
+        expect(ungatedFinding([ungatedBuff('Everliving Regeneration III')], plain)).toContain(
+            'Everliving Regeneration III'
+        );
+    });
+
+    it('flags Hermes\'s "If the target has less than N% HP" Cheat-Death gate parsed ungated', () => {
+        const plain = 'If the target has less than 40% HP, it grants Cheat Death.';
+        expect(ungatedFinding([ungatedBuff('Cheat Death')], plain)).toContain('Cheat Death');
+    });
+
+    it('still skips a static "while its HP is below N%" gate (no drops/falls verb)', () => {
+        // A standing gate carries no crossing verb — HP_CROSSING_RE skips it, so it falls
+        // through to the INTENTIONAL_REACTIVE_RE "hp is below" skip rather than flagging.
+        const plain = 'When its HP is below 50%, this Unit gains Attack Up III.';
+        expect(ungatedFinding([ungatedBuff('Attack Up III')], plain)).toBeNull();
+    });
+});

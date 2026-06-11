@@ -27,6 +27,8 @@ import {
     detectGrantConditions,
     detectReactiveTrigger,
     detectDamageReactionTrigger,
+    detectHpCrossingTrigger,
+    detectTargetHpGate,
     parseHpThresholdCondition,
     parseExtendDoT,
     parseCritPowerExtend,
@@ -55,6 +57,7 @@ import {
     buildSkillBuffAutoFill,
     DOT_TIER_MAP,
 } from '../calculators/skillBuffAutoFill';
+import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -1119,6 +1122,66 @@ function dotAbility(entry: DoTApplicationEntry): Ability {
 }
 
 /**
+ * Phase 4c PR 3 (Task 7): a "when HP drops/falls below N%" buff-grant reactive. On a match,
+ * mutates the ability onto the LIVE on-hp-threshold-crossed trigger with a derivable SELF
+ * hp-threshold condition (evaluated against live tank HP at the crossing edge — Task 3 listener)
+ * and, when the scoped sentence says "once per battle", sets config.oncePerCombat (reusing the
+ * detector's \b-anchored flag rather than re-testing inline). Sentence-scoped at the buff's
+ * anchor `pos`, so the start-of-combat Cheat Death / Everliving (Tycho) and the standing
+ * direct-damage modifier (Los, its own <br>-separated sentence) are never co-triggered.
+ * Returns true when it handled the buff. Reference data: docs/ship-skills.csv.
+ */
+function crossing(rowText: string, pos: number, ability: Ability): boolean {
+    const detected = detectHpCrossingTrigger(rowText, pos);
+    if (!detected) return false;
+    ability.trigger = detected.trigger;
+    // Safe overwrite: the crossing sentence carries no other parsed condition
+    // (detectGrantConditions has no rule for "when HP drops below N%" — verified corpus-wide),
+    // mirroring the damage-reaction below-X% gate attach below.
+    ability.conditions = [
+        {
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: detected.hpBelowPct,
+            hpSubject: 'self',
+        },
+    ];
+    if (detected.oncePerCombat && ability.config.type === 'buff') {
+        ability.config.oncePerCombat = true;
+    }
+    return true;
+}
+
+/**
+ * Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants Cheat
+ * Death". On a match, attaches a derivable TARGET hp-threshold condition (evaluated against the
+ * heal recipient's live HP) and narrows the parser's all-allies grant to the single heal target.
+ * Caller gates this to the Cheat-Death family; sentence-scoped at the grant's anchor `pos`, so
+ * the preceding repair/charge sentence (no target gate) never matches. Returns true when it
+ * handled the buff. Reference data: docs/ship-skills.csv.
+ */
+function targetGate(rowText: string, pos: number, ability: Ability): boolean {
+    const gate = detectTargetHpGate(rowText, pos);
+    if (!gate) return false;
+    // Safe overwrite: the Hermes Cheat-Death grant sentence ("If the target has less than N% HP,
+    // it grants Cheat Death") carries no other parsed condition — detectGrantConditions has no
+    // rule matching the "target has less than N% HP" phrasing, so ability.conditions is always
+    // empty before this point — verified corpus-wide.
+    ability.conditions = [
+        {
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: gate.hpBelowPct,
+            hpSubject: 'target',
+        },
+    ];
+    if (ability.target === 'all-allies') ability.target = 'ally';
+    return true;
+}
+
+/**
  * Maps a SelectedGameBuff's skillSource onto the editor slot that owns it.
  * Charge buffs land on 'charged'; any passive source collapses to the single
  * 'passive' slot. Undefined defaults to 'active' (the safest, most common slot).
@@ -1200,6 +1263,28 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;
             ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
+        } else if (
+            // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives
+            // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger.
+            // Checked BEFORE the damage-reaction detector and short-circuiting: a crossing grant is
+            // never also target-gated, and the (drops|falls) verb excludes the static "while below
+            // N% HP" damage-reaction phrasing, so the two paths are mutually exclusive by corpus.
+            rowText &&
+            pos >= 0 &&
+            crossing(rowText, pos, ability)
+        ) {
+            // crossing grant handled in the helper; nothing further to do for this buff.
+        } else if (
+            // Phase 4c PR 3 (Task 7): Hermes charged "If the target has less than N% HP, it grants
+            // Cheat Death" — the clause names "the target", so spec PR 3 narrows the grant to the
+            // heal target. Only the Cheat-Death family is target-gated; the preceding repair/charge
+            // sentence has no target gate, so detectTargetHpGate returns undefined there.
+            rowText &&
+            pos >= 0 &&
+            CHEAT_DEATH_BUFFS.has(buff.buffName) &&
+            targetGate(rowText, pos, ability)
+        ) {
+            // target-gated Cheat Death handled in the helper; nothing further to do for this buff.
         } else {
             // Phase 4c PR 1 (Task 8): a SELF-subject damage-reaction grant/infliction ("When
             // directly damaged, … inflicts Speed Down I"; Guardian's "When this Unit is

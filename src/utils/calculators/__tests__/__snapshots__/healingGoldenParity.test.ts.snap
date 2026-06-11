@@ -8,7 +8,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "activeSelfBuffs": [
         {
           "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
+          "turnsRemaining": Infinity,
         },
       ],
       "chargeCount": 0,
@@ -22,7 +22,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [
         {
           "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
+          "turnsRemaining": Infinity,
         },
       ],
       "hotHeal": 0,
@@ -37,12 +37,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -51,12 +46,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -69,12 +59,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -83,12 +68,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -101,12 +81,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -115,12 +90,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -133,12 +103,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -147,12 +112,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -165,12 +125,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -179,12 +134,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": "recurring",
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -445,6 +395,105 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
     "totalIncomingDamage": 0,
     "totalOverheal": 0,
     "totalShield": 15000,
+    "totalShieldAbsorbed": 0,
+  },
+}
+`;
+
+exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant round 1, saves a later lethal hit at 1 HP) 1`] = `
+{
+  "rounds": [
+    {
+      "action": "charged",
+      "activeSelfBuffs": [],
+      "chargeCount": 99,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 6000,
+      "didCrit": false,
+      "directHeal": 6000,
+      "effectiveHealing": 6000,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Cheat Death",
+          "turnsRemaining": Infinity,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 7000,
+      "overheal": 0,
+      "round": 1,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "teamHealing": 0,
+      "totalRoundHealing": 6000,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [],
+      "chargeCount": 99,
+      "charges": 1,
+      "cleanseCount": 0,
+      "cumulativeHealing": 6000,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Cheat Death",
+          "turnsRemaining": Infinity,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 7000,
+      "overheal": 0,
+      "round": 2,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 90,
+      "targetShieldPool": 0,
+      "teamHealing": 0,
+      "totalRoundHealing": 0,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [],
+      "chargeCount": 99,
+      "charges": 2,
+      "cleanseCount": 0,
+      "cumulativeHealing": 6000,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [],
+      "hotHeal": 0,
+      "incomingDamage": 7000,
+      "overheal": 0,
+      "round": 3,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 20,
+      "targetShieldPool": 0,
+      "teamHealing": 0,
+      "totalRoundHealing": 0,
+    },
+  ],
+  "summary": {
+    "avgHealingPerRound": 2000,
+    "teamTotalHealing": 0,
+    "totalCleanses": 0,
+    "totalDirectHeal": 6000,
+    "totalEffectiveHealing": 6000,
+    "totalHealing": 6000,
+    "totalHotHeal": 0,
+    "totalIncomingDamage": 21000,
+    "totalOverheal": 0,
+    "totalShield": 0,
     "totalShieldAbsorbed": 0,
   },
 }
@@ -3393,6 +3442,79 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
     "totalOverheal": 0,
     "totalShield": 180000,
     "totalShieldAbsorbed": 20000,
+  },
+}
+`;
+
+exports[`healingGoldenParity > once-per-battle crossing (Barrier granted ONCE despite TWO downward crossings) 1`] = `
+{
+  "rounds": [
+    {
+      "action": "active",
+      "activeSelfBuffs": [],
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 4550,
+      "didCrit": false,
+      "directHeal": 4550,
+      "effectiveHealing": 4550,
+      "enemyEffects": [],
+      "healTargetBuffs": [],
+      "hotHeal": 0,
+      "incomingDamage": 6500,
+      "overheal": 0,
+      "round": 1,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 4550,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [
+        {
+          "buffName": "Barrier",
+          "turnsRemaining": 3,
+        },
+      ],
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 9100,
+      "didCrit": false,
+      "directHeal": 4550,
+      "effectiveHealing": 4550,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Barrier",
+          "turnsRemaining": 3,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 6500,
+      "overheal": 0,
+      "round": 2,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 81,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 4550,
+    },
+  ],
+  "summary": {
+    "avgHealingPerRound": 4550,
+    "totalCleanses": 0,
+    "totalDirectHeal": 9100,
+    "totalEffectiveHealing": 9100,
+    "totalHealing": 9100,
+    "totalHotHeal": 0,
+    "totalIncomingDamage": 13000,
+    "totalOverheal": 0,
+    "totalShield": 0,
+    "totalShieldAbsorbed": 0,
   },
 }
 `;

@@ -2027,4 +2027,277 @@ describe('healingGoldenParity', () => {
         // The 2500 tick out-heals the 1000 hit from round 2 → entering HP holds at 99%.
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 99, 99, 99]);
     });
+
+    // =========================================================================
+    // PHASE 4c PR 3 (HP-threshold-crossed reactives + cast-path Cheat Death) —
+    // NEW BEHAVIOUR GOLDENS (Task 10). The engine now emits a tank-side
+    // `hp-changed` per HP-intake event and fires `on-hp-threshold-crossed`
+    // reactives on a fresh DOWNWARD crossing of the configured threshold
+    // (oldPct ≥ N AND newPct < N), with `config.oncePerCombat` capping the
+    // grant to a single application for the whole combat. The self hp-threshold
+    // condition is the TRIGGER config — the crossing itself proves it, so the
+    // executor SCRUBS it at drain time (a heal back above N between crossings
+    // does NOT block the reaction). Recovery between crossings is a passive
+    // `basis:'damage-taken'` heal-leech that heals AFTER each attack's drain
+    // (engine §takenLeeches), re-arming the next round's crossing — the same
+    // deterministic recovery mechanism used by the engine end-to-end tests.
+    //
+    // Separately, a firing-slot `buff Cheat Death` is now a CAST-PATH grant
+    // (kind 'timed', duration Infinity) — it applies only when the slot FIRES,
+    // gated by `conditionsMet` at cast time, and when it targets a single 'ally'
+    // it lands ONLY on the heal target (Hermes shape). The grant persists and the
+    // tank's Cheat-Death intercept consumes it on a later lethal hit.
+    // (Engine reference: src/utils/combat/__tests__/hpCrossing.test.ts Tasks 4-5.)
+    // =========================================================================
+
+    // ── Scenario 26 (A): once-per-battle crossing — Barrier granted ONCE over TWO crossings ──
+    // HAND-VERIFIED (mirrors the Tycho-shape engine test, hpCrossing.test.ts Task 4). The tank
+    // IS the focus + heal target (hp 10000, defence 0, speed 100 → acts before the enemy). Its
+    // PASSIVE slot carries a Barrier-style `on-hp-threshold-crossed` buff with config
+    // `oncePerCombat: true` and condition `hp-threshold self below 40%` (derivable — the TRIGGER
+    // config, scrubbed at drain time), plus a `basis:'damage-taken'` heal-leech (pct 70, noCrit)
+    // that recovers HP ABOVE 40% between crossings (heals AFTER each attack's drain → re-arms the
+    // next crossing). A bare enemy hits 6500/round (speed 50 → acts after the tank).
+    //
+    // threshold 40% = 4000 HP. Each round the tank acts first (no heal to do — the leech is a
+    // takenLeech that only fires after damage), then the enemy hits, the tank-side hp-changed is
+    // emitted (the crossing test), then the takenLeech recovers:
+    //   R1 enter 100% (10000): enemy 6500 → HP 3500 (35%). hp-changed 100 → 35 CROSSES below 40
+    //       → CROSS#1 → Barrier (oncePerCombat) APPLIES (round 1, duration 3). takenLeech 70% ×
+    //       6500 = 4550 (deficit 6500 → all effective, overheal 0) → HP 3500 + 4550 = 8050 (80.5%).
+    //   R2 enter 80.5% (→ 81): enemy 6500 → HP 1550 (15.5%). hp-changed 80.5 → 15.5 CROSSES below
+    //       40 → CROSS#2 → Barrier oncePerCombat SKIPS the re-fire (no second grant). takenLeech
+    //       4550 (deficit 8450 → all effective) → HP 1550 + 4550 = 6100 (61%).
+    //   ⇒ TWO downward crossings of 40 occur, but the Barrier is granted EXACTLY ONCE (round 1).
+    //     The round-1 grant (duration 3) persists into round 2's healTargetBuffs. directHeal is
+    //     the leech 4550 every round (all effective, overheal 0); incomingDamage 6500 every round;
+    //     targetHpPct entering [100, 81]. The tank SURVIVES both rounds (net −1950/round; 2 rounds
+    //     deliberately, so the run ends before the third hit would drop HP below zero).
+    const scenario26Input = () =>
+        BASE({
+            rounds: 2,
+            healer: { ...HEALER, hp: 10000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            // Barrier-style crossing reactive: oncePerCombat caps it to ONE grant.
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                trigger: 'on-hp-threshold-crossed',
+                                conditions: [
+                                    {
+                                        subject: 'hp-threshold',
+                                        derivable: true,
+                                        hpSubject: 'self',
+                                        hpComparator: 'below',
+                                        hpPercent: 40,
+                                    },
+                                ],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Barrier',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 3,
+                                    oncePerCombat: true,
+                                },
+                            }),
+                            // Recovery: a damage-taken heal-leech (heals AFTER each attack drains →
+                            // lifts HP back above 40% so the next round re-crosses). noCrit → the
+                            // heal amount is deterministic (no crit-gate draw).
+                            ab({
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                config: {
+                                    type: 'heal',
+                                    pct: 70,
+                                    basis: 'damage-taken',
+                                    noCrit: true,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 6500, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+
+    snap(
+        'once-per-battle crossing (Barrier granted ONCE despite TWO downward crossings)',
+        scenario26Input
+    );
+
+    // Supplementary: the Barrier is granted EXACTLY ONCE (round 1) despite two downward crossings
+    // of 40, and the duration-3 grant persists into round 2's healTargetBuffs.
+    it('scenario 26: Barrier granted once on round 1 (oncePerCombat), persists into round 2', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const barriers: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Barrier' && e.actorId === 'attacker') barriers.push(e);
+        });
+        const result = simulateHealing({ ...scenario26Input(), bus });
+        // Exactly one Barrier application across the whole combat, on the first crossing.
+        expect(barriers.map((b) => b.round)).toEqual([1]);
+        // The recovery leech heals 4550 (70% of 6500) every round, all effective.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([4550, 4550]);
+        expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([4550, 4550]);
+        expect(result.rounds.map((r) => r.overheal)).toEqual([0, 0]);
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([6500, 6500]);
+        // Entering HP%: 100, then 80.5% (rounds to 81) after the R1 leech recovery.
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 81]);
+        // The round-1 grant (duration 3) is still held when entering round 2.
+        expect(result.rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Barrier');
+    });
+
+    // ── Scenario 27 (B): Hermes-shape cast-path Cheat Death (grant round + later save) ──
+    // HAND-VERIFIED (mirrors the persistence engine test, hpCrossing.test.ts Task 5). The FOCUS
+    // healer (hp 10000, speed 30 → acts AFTER the enemy) carries a CHARGED slot with a charged
+    // heal (target 'ally', target-hp 60% → 6000 of the tank's 10000) + a `buff Cheat Death`
+    // cast-path grant (target 'ally', condition `hp-threshold target below 40%`, duration
+    // 'recurring'). The heal target is a separate walked team actor ('tank', hp 10000, defence 0,
+    // speed 10 → acts last). A bare enemy hits 7000/round (speed 80 → acts FIRST). chargeCount 99
+    // + startCharged → the charged slot fires ONLY on round 1; rounds 2-3 the (empty) active slot
+    // does nothing. Turn order every round: enemy (80) → healer (30) → tank (10).
+    //
+    // The Cheat-Death grant's gate reads the tank's LIVE HP% at the CASTER's (healer's) turn start
+    // — the enemy has already hit by then (healer is slower) → the gate sees the post-hit HP:
+    //   R1 enter 100%: enemy 7000 → tank HP 3000 (30%). Healer charged turn: gate (tank 30% < 40)
+    //       PASSES → Cheat Death GRANTED to the tank (round 1, duration Infinity). Charged heal
+    //       6000 (deficit 7000 → effective 6000, overheal 0) → tank HP 3000 + 6000 = 9000 (90%).
+    //   R2 enter 90%: active slot empty → no heal. enemy 7000 → tank HP 2000 (20%). No recovery.
+    //   R3 enter 20%: active slot empty → no heal. enemy 7000 would drop HP 2000 → −5000 (LETHAL)
+    //       → the persistent Cheat Death (granted R1, never expired) INTERCEPTS → HP floored at 1
+    //       (NOT destroyed). cheat-death-activated R3. incomingDamage 7000.
+    //   ⇒ Cheat Death granted on ROUND 1 (the gate-passing charged fire), SAVES on ROUND 3 (the
+    //     later lethal hit, HP floored at 1). The run completes all 3 rounds — NO destroyedRound.
+    //     directHeal [6000, 0, 0] (the one-time charged heal); incomingDamage 7000 every round;
+    //     targetHpPct entering [100, 90, 20].
+    const scenario27Input = () => {
+        const tank: TeamActorInput = {
+            id: 'tank',
+            speed: 10, // acts last → takes the enemy hit before the healer's (speed 30) turn
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 10000,
+            },
+        };
+        return BASE({
+            rounds: 3,
+            chargeCount: 99, // never re-charges after the startCharged round
+            startCharged: true, // charged fires round 1 only
+            healer: { ...HEALER, hp: 10000, speed: 30 }, // acts AFTER the enemy → gate reads post-hit HP
+            healTargetId: 'tank',
+            teamActors: [tank],
+            shipSkills: {
+                slots: [
+                    // Active slot is inert (the healer's only job is the round-1 charged fire).
+                    { slot: 'active', abilities: [] },
+                    {
+                        slot: 'charged',
+                        abilities: [
+                            ab({
+                                type: 'heal',
+                                target: 'ally',
+                                config: { type: 'heal', pct: 60, basis: 'target-hp' },
+                            }),
+                            // Hermes-shape cast-path Cheat Death: target-HP gated, narrowed to the
+                            // heal target only ('ally'), persistent (duration 'recurring' → Infinity).
+                            ab({
+                                type: 'buff',
+                                target: 'ally',
+                                trigger: 'on-cast',
+                                conditions: [
+                                    {
+                                        subject: 'hp-threshold',
+                                        derivable: true,
+                                        hpSubject: 'target',
+                                        hpComparator: 'below',
+                                        hpPercent: 40,
+                                    },
+                                ],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Cheat Death',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 'recurring',
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 7000, crit: 0, critDamage: 0, speed: 80 },
+                    chargeCount: 0,
+                    startCharged: false,
+                },
+            ],
+        });
+    };
+
+    snap(
+        'Hermes-shape cast-path Cheat Death (gated grant round 1, saves a later lethal hit at 1 HP)',
+        scenario27Input
+    );
+
+    // Supplementary: the cast-path grant lands on the tank ONLY (narrowed 'ally') on the
+    // gate-passing charged round 1 (duration Infinity), then the persistent grant intercepts the
+    // later lethal hit on round 3 — the run completes with NO destroyedRound.
+    it('scenario 27: Cheat Death granted round 1 (tank only), saves the round-3 lethal hit', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cdGrants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const cheated: { round: number; actorId: string }[] = [];
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Cheat Death') cdGrants.push(e);
+        });
+        bus.on('cheat-death-activated', (e) =>
+            cheated.push(e as { round: number; actorId: string })
+        );
+        const result = simulateHealing({ ...scenario27Input(), bus });
+        // Granted ONCE, on round 1, to the tank only (narrowed 'ally'), Infinity duration.
+        expect(cdGrants).toHaveLength(1);
+        expect(cdGrants[0].actorId).toBe('tank');
+        expect(cdGrants[0].round).toBe(1);
+        expect(cdGrants[0].duration).toBe(Infinity);
+        // The persistent grant intercepts the round-3 lethal hit (tank floored at 1 HP).
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ round: 3, actorId: 'tank' });
+        // The run completes all 3 rounds with no death recorded.
+        expect(result.summary.destroyedRound).toBeUndefined();
+        expect(result.rounds).toHaveLength(3);
+        // One-time charged heal on round 1, then nothing; enemy 7000 every round.
+        expect(result.rounds.map((r) => r.directHeal)).toEqual([6000, 0, 0]);
+        expect(result.rounds.map((r) => r.incomingDamage)).toEqual([7000, 7000, 7000]);
+        // Entering HP%: 100 → 90 (after the R1 heal) → 20 (after the R2 unhealed hit).
+        expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 90, 20]);
+    });
 });

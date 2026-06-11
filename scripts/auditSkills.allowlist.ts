@@ -72,11 +72,8 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Reactive: when this Unit removes a debuff.',
     },
     // Self-HP / stat-comparison gates — not modelled (sim assumes full HP, no stat comparisons).
-    {
-        ship: 'Hermes',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Enemy HP-threshold gate (Cheat Death — not DPS).',
-    },
+    // (Hermes's "If the target has less than N% HP" Cheat-Death gate is now parser-modeled —
+    // Phase 4c PR 3, detectTargetHpGate — so it no longer needs an allowlist entry.)
     {
         ship: 'Bayah',
         rules: ['ungated-effect-with-trigger'],

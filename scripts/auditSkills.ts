@@ -13,7 +13,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
-import { detectDamageReactionTrigger } from '../src/utils/skillTextParser';
+import {
+    detectDamageReactionTrigger,
+    detectHpCrossingTrigger,
+    detectTargetHpGate,
+} from '../src/utils/skillTextParser';
 import { Ship } from '../src/types/ship';
 import { Ability } from '../src/types/abilities';
 import { ALLOWLIST } from './auditSkills.allowlist';
@@ -194,8 +198,19 @@ const TRIGGER_RE =
 //   - ally-OUTGOING "when an(other) ally inflicts …" where the ally DEALS the hit (Provider's
 //     inflicts-a-debuff counter, Oleander, Belladonna — Oleander's RoT grant would flag if
 //     this alternation were removed; Crocus's crit-DoT reaction is modeled as on-ally-crit-dot)
+//
+// HP-threshold nuance (Phase 4c PR 3): the reactive "when HP drops/falls below N%" CROSSING
+// grants (Tycho/Shelter/Los/Kafa/Redeemer) AND Hermes's "If the target has less than N% HP"
+// Cheat-Death gate are parser-modeled (on-hp-threshold-crossed trigger / derivable target-HP
+// condition), so their effects never reach `ungatedEffects` and any that DOES parse ungated is
+// flagged by the detectHpCrossingTrigger / detectTargetHpGate parity guards in `ungatedFinding`
+// before this regex is consulted. The STATIC "while its HP is below N%" gates below stay
+// unmodeled — they carry no (drops|falls) verb, so HP_CROSSING_RE skips them (Los's standing
+// direct-damage modifier, Tormenter's extra-action gate) — and remain in the skip set, kept
+// narrow (no drops/falls alternation) so a crossing variant the detector misses surfaces as a
+// finding instead of being swallowed.
 const INTENTIONAL_REACTIVE_RE =
-    /\bif\b[^.;]*\bdirectly damaged\b|when hit\b|critical hit occurs|when an(?:other)? ally inflicts|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp (drops|falls|is) below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets debuffed|cleansing/i;
+    /\bif\b[^.;]*\bdirectly damaged\b|when hit\b|critical hit occurs|when an(?:other)? ally inflicts|upon killing|on kill|killing an (enemy|opponent)|dies\b|destroyed|below \d+% ?hp|hp is below|lowest (speed|hp|health)|repaired this round|is (directly )?repaired|shield|receiv\w+|on the same team|every turn|at the start of the round|once per round|gets debuffed|cleansing/i;
 
 /** The sentence/clause of `plain` mentioning `name` (split on . ; and br-derived spaces). */
 function clauseFor(plain: string, name: string): string {
@@ -234,6 +249,17 @@ export function ungatedFinding(abilities: Ability[], plain: string): string | nu
         // Acceptable — duplicate buff names within one skill text are rare in the corpus.
         const namePos = plain.toLowerCase().indexOf(name.toLowerCase());
         if (detectDamageReactionTrigger(plain, namePos)) return clause.trim().slice(0, 160);
+        // Parity guard (Phase 4c PR 3): "when HP drops/falls below N%" crossing reactives
+        // (Tycho/Shelter/Los/Kafa/Redeemer) ride the LIVE on-hp-threshold-crossed trigger, and
+        // Hermes's "If the target has less than N% HP" Cheat-Death grant carries a derivable
+        // target-HP gate — both are parser-modeled (the trigger/gate IS the gate), so an effect
+        // that parsed UNGATED on-cast from a clause either detector classifies is a regression —
+        // flag it BEFORE the reactive skip below can hide it. Both detectors do their own
+        // sentence-scoping with Inc./Out. abbreviation masking (same discipline as clauseFor),
+        // anchored at the buff name's position in the full text (same first-occurrence indexOf
+        // caveat noted above).
+        if (detectHpCrossingTrigger(plain, namePos)) return clause.trim().slice(0, 160);
+        if (detectTargetHpGate(plain, namePos)) return clause.trim().slice(0, 160);
         if (INTENTIONAL_REACTIVE_RE.test(clause)) continue;
         if (TRIGGER_RE.test(clause)) return clause.trim().slice(0, 160);
     }
