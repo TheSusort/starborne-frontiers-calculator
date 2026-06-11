@@ -158,6 +158,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
  *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
  *    (any enemy-side actor — dummy wall + walked enemy attackers).
+ *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
+ *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
+ *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
+ *    gate). No threshold configured → dormant. Self-scoped, per-event (no listener state);
+ *    a heal-up re-arms naturally and oncePerCombat (buff/heal) caps re-fires.
  *
  * REGISTRATION ORDER (determinism): the FOCUS/attacker owner is registered FIRST, then team
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
@@ -350,6 +355,25 @@ export function registerReactiveListeners(args: {
                         // only; the executor's once-per-combat cap (oncePerCombat config flag +
                         // oncePerCombatFired Set) keeps the repair to once per battle.
                         if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-hp-threshold-crossed':
+                    bus.on('hp-changed', (e) => {
+                        // Self-scoped downward crossing: fires when THIS OWNER's HP crosses below
+                        // N (N from the ability's self hp-threshold condition — trigger CONFIG,
+                        // not a drain-time gate; executeIntent scrubs it). Per-event check
+                        // oldPct >= N > newPct: no listener state — a heal-up re-arms naturally,
+                        // oncePerCombat caps re-fires. Other actors' crossings are ignored.
+                        if (e.targetId !== ownerId) return;
+                        const n = ra.ability.conditions.find(
+                            (c) =>
+                                c.subject === 'hp-threshold' &&
+                                c.hpSubject === 'self' &&
+                                c.hpComparator === 'below'
+                        )?.hpPercent;
+                        if (n === undefined) return; // no threshold configured → dormant
+                        if (!(e.oldPct >= n && e.newPct < n)) return;
+                        enqueue({ ...intent });
                     });
                     break;
                 default:
@@ -670,11 +694,25 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         );
     }
 
+    // The self hp-threshold condition on an on-hp-threshold-crossed ability is TRIGGER
+    // CONFIG (the listener read N from it), NOT a drain-time gate — scrub it before gating.
+    // The crossing already proved the threshold; re-gating at drain time would WRONGLY BLOCK
+    // the reaction when an earlier reactive heal in the intent queue lifted the owner back
+    // above N before this intent drains. One filtered const feeds BOTH the gate AND the
+    // status's conditions (the status-object exclusion is hygiene only — timed statuses never
+    // re-evaluate conditions post-application).
+    const scrubbedConditions =
+        intent.ability.trigger === 'on-hp-threshold-crossed'
+            ? intent.ability.conditions.filter(
+                  (c) => !(c.subject === 'hp-threshold' && c.hpSubject === 'self')
+              )
+            : intent.ability.conditions;
+
     // Drain-time condition gate against CURRENT engine state — one gate for every branch,
     // built against the OWNER's snapshot (Task 6). liveGateConditions neutralizes
     // non-derivable-on-non-live subjects to 'always'; manual conditions keep literal gating
     // (manualCount). A failed gate is a silent skip (no resisted record).
-    const gateConditions = liveGateConditions(intent.ability.conditions);
+    const gateConditions = liveGateConditions(scrubbedConditions);
     if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
@@ -691,6 +729,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'buff') {
+        // "Once per battle" buff grant (Tycho/Shelter/Los Barrier): same combat-lifetime
+        // Set as the heal executor's cap (heal branch below), keyed owner+ability. A key
+        // present here means this owner+ability already granted this battle → silent skip.
+        if (cfg.oncePerCombat) {
+            const key = `${intent.ownerId}:${intent.ability.id}`;
+            if (ctx.oncePerCombatFired?.has(key)) return;
+            ctx.oncePerCombatFired?.add(key);
+        }
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;

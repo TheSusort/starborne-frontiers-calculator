@@ -14,10 +14,20 @@
  * focus attacker that IS the heal target, ship-/manual-backed enemy attackers, and
  * event collection off the bus.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability } from '../../../types/abilities';
+import {
+    registerReactiveListeners,
+    executeIntent,
+    Intent,
+    IntentExecContext,
+    ReactiveAbility,
+} from '../triggers';
+import { createStatusEngine } from '../statusEngine';
+import type { PlayerActorRuntime } from '../playerTurn';
+import type { CombatActor } from '../state';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -313,5 +323,200 @@ describe('Phase 4c PR 3 Task 2 — tank-side hp-changed emission', () => {
         expect(e.oldPct).toBeCloseTo(100, 6);
         expect(e.newPct).toBeCloseTo(e.oldPct, 6);
         expect(e.newPct).toBeCloseTo(100, 6);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4c PR 3 Task 3 — on-hp-threshold-crossed listener + condition scrub +
+// buff oncePerCombat. Drives registerReactiveListeners + createEventBus directly
+// (unit-level), mirroring the on-attacked unit tests in triggers.test.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Self hp-threshold condition (trigger CONFIG, not a drain-time gate). */
+const selfThresholdBelow = (n: number) =>
+    ({
+        subject: 'hp-threshold',
+        derivable: true,
+        hpComparator: 'below',
+        hpPercent: n,
+        hpSubject: 'self',
+    }) as const;
+
+/** A crossing-triggered ability (target-agnostic — listener only reads conditions). */
+const crossingAbility = (
+    n: number | undefined,
+    partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>
+): Ability => ({
+    id: `hx${++idCounter}`,
+    target: 'self',
+    trigger: 'on-hp-threshold-crossed',
+    conditions: n === undefined ? [] : [selfThresholdBelow(n)],
+    ...partial,
+});
+
+describe('Phase 4c PR 3 Task 3 — on-hp-threshold-crossed listener', () => {
+    // Harness: register one owner's crossing ability, capture enqueued intents.
+    const setup = (ability: Ability, ownerId = 'tank') => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const enqueued: Intent[] = [];
+        const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId, reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            isEnemySide: (id) => id === 'enemy-dummy',
+        });
+        const fire = (oldPct: number, newPct: number, targetId = ownerId, round = 1) =>
+            bus.emit({ type: 'hp-changed', targetId, round, oldPct, newPct });
+        return { bus, enqueued, fire };
+    };
+
+    const buff = crossingAbility(40, {
+        type: 'buff',
+        config: {
+            type: 'buff',
+            buffName: 'Last Stand',
+            stacks: 1,
+            parsedEffects: { defense: 50 },
+            isStackable: false,
+            duration: 2,
+        },
+    });
+
+    it('fires when the owner crosses below the threshold (45 → 35)', () => {
+        const { enqueued, fire } = setup(buff);
+        fire(45, 35);
+        expect(enqueued).toHaveLength(1);
+        expect(enqueued[0].ownerId).toBe('tank');
+        expect(enqueued[0].ability.id).toBe(buff.id);
+    });
+
+    it('boundary: 40 → 35 fires (oldPct >= N), 40 → 40 and 35 → 30 do NOT, 35 → 60 (upward) does NOT', () => {
+        const { enqueued, fire } = setup(buff);
+        fire(40, 35); // >= 40 then below 40 → fires
+        fire(40, 40); // newPct not < 40 → no
+        fire(35, 30); // oldPct already below 40 → no fresh crossing
+        fire(35, 60); // upward → no
+        expect(enqueued).toHaveLength(1);
+    });
+
+    it('ignores hp-changed events for other actors (targetId !== ownerId)', () => {
+        const { enqueued, fire } = setup(buff);
+        fire(45, 35, 'other-ally'); // a different player actor crosses
+        fire(45, 35, 'enemy-dummy'); // an enemy crosses
+        expect(enqueued).toHaveLength(0);
+    });
+
+    it('an ability with NO self hp-threshold condition is dormant (never enqueues)', () => {
+        const dormant = crossingAbility(undefined, {
+            type: 'buff',
+            config: {
+                type: 'buff',
+                buffName: 'No Threshold',
+                stacks: 1,
+                parsedEffects: { defense: 50 },
+                isStackable: false,
+                duration: 2,
+            },
+        });
+        const { enqueued, fire } = setup(dormant);
+        fire(45, 35); // would be a crossing IF a threshold were configured
+        expect(enqueued).toHaveLength(0);
+    });
+});
+
+describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scrub', () => {
+    // Minimal runtime (the buff branch reads sourceId/landing only via the gate path;
+    // a bare actor suffices, mirroring the damagedAllyId buff harness in triggers.test.ts).
+    const runtime = (id: string): PlayerActorRuntime =>
+        ({
+            actor: { id } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const buildCtx = (selfHpPctFor?: (ownerId: string) => number): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy' } as CombatActor,
+            enemyId: 'enemy',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['tank', runtime('tank')]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['tank'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            oncePerCombatFired: new Set<string>(),
+            ...(selfHpPctFor !== undefined ? { selfHpPctFor } : {}),
+        };
+    };
+
+    const crossingBuffIntent = (oncePerCombat: boolean): Intent => ({
+        ownerId: 'tank',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'last-stand',
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-hp-threshold-crossed',
+            conditions: [selfThresholdBelow(40)],
+            config: {
+                type: 'buff',
+                buffName: 'Last Stand',
+                stacks: 1,
+                parsedEffects: { defense: 50 },
+                isStackable: false,
+                duration: 2,
+                oncePerCombat,
+            },
+        },
+    });
+
+    it('oncePerCombat buff executes once; the second intent is silently skipped', () => {
+        const ctx = buildCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        executeIntent(crossingBuffIntent(true), ctx);
+        executeIntent(crossingBuffIntent(true), ctx);
+        expect(applySpy).toHaveBeenCalledTimes(1);
+        expect(ctx.oncePerCombatFired?.has('tank:last-stand')).toBe(true);
+    });
+
+    it('a NON-flagged crossing buff applies on every intent (no cap)', () => {
+        const ctx = buildCtx();
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        executeIntent(crossingBuffIntent(false), ctx);
+        executeIntent(crossingBuffIntent(false), ctx);
+        expect(applySpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('scrub: executes even when the owner is healed back ABOVE the threshold at drain time, and the applied status carries NO self hp-threshold condition', () => {
+        // selfHpPctFor reports 80% — above the 40% threshold. Without the scrub the
+        // drain-time gate would re-evaluate the self hp-threshold condition and BLOCK
+        // the reaction (the heal-before-drain edge). The crossing already proved the
+        // threshold, so the reaction must still fire.
+        const ctx = buildCtx(() => 80);
+        const applySpy = vi.spyOn(ctx.statusEngine, 'applyTimedAbilityStatus');
+        executeIntent(crossingBuffIntent(false), ctx);
+        expect(applySpy).toHaveBeenCalledTimes(1);
+
+        // The applied status's conditions exclude the self hp-threshold entry (hygiene).
+        const status = applySpy.mock.calls[0][1] as { conditions: Array<{ subject: string }> };
+        expect(
+            status.conditions.some(
+                (c) => (c as { subject?: string; hpSubject?: string }).subject === 'hp-threshold'
+            )
+        ).toBe(false);
     });
 });
