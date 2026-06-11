@@ -134,6 +134,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-ally-critically-repaired', label: 'After this unit critically repairs an ally' },
     { value: 'on-ally-crit', label: 'After an ally critically hits' },
     { value: 'on-bomb-detonated', label: 'When a Bomb detonates' },
+    { value: 'on-hp-threshold-crossed', label: 'When HP drops below a threshold' },
 ];
 
 const ALL_BUFF_STATS = [
@@ -559,6 +560,18 @@ export const AbilityCard: React.FC<Props> = ({
                                 }
                             />
                         </div>
+                        {config.type === 'buff' && (
+                            <Checkbox
+                                label="Once per battle"
+                                checked={config.oncePerCombat ?? false}
+                                onChange={(checked) =>
+                                    updateConfig({
+                                        ...config,
+                                        oncePerCombat: checked ? true : undefined,
+                                    })
+                                }
+                            />
+                        )}
                     </div>
                 );
             }
@@ -627,6 +640,18 @@ export const AbilityCard: React.FC<Props> = ({
                                 checked={config.noCrit ?? false}
                                 onChange={(checked) =>
                                     updateConfig({ ...config, noCrit: checked ? true : undefined })
+                                }
+                            />
+                        )}
+                        {config.type === 'heal' && (
+                            <Checkbox
+                                label="Once per battle"
+                                checked={config.oncePerCombat ?? false}
+                                onChange={(checked) =>
+                                    updateConfig({
+                                        ...config,
+                                        oncePerCombat: checked ? true : undefined,
+                                    })
                                 }
                             />
                         )}
@@ -766,6 +791,12 @@ export const AbilityCard: React.FC<Props> = ({
                     {ability.trigger !== 'on-cast' && !LIVE_TRIGGERS.has(ability.trigger) && (
                         <p className="text-xs text-theme-text-secondary">
                             Not simulated — treated as assume-active
+                        </p>
+                    )}
+                    {ability.trigger === 'on-hp-threshold-crossed' && (
+                        <p className="text-xs text-theme-text-secondary">
+                            The threshold comes from a self HP-threshold condition below — without
+                            one the reaction stays dormant.
                         </p>
                     )}
                     {(ability.trigger === 'on-attacked' ||
