@@ -520,3 +520,258 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
         ).toBe(false);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4c PR 3 Task 4 — END-TO-END engine integration (runCombat, healing mode).
+//
+// Drives the FULL engine and asserts the crossing reactives behave correctly through
+// the whole loop — emission (Task 2) → listener (Task 3) → executor → applied status →
+// `buff-applied` + healTargetBuffs round overview. No production code is exercised that
+// Tasks 2–3 didn't already carry; these are pure integration scenarios.
+//
+// Recovery mechanism for "heal back above N between crossings": a passive
+// `basis:'damage-taken'` heal-leech on the heal target. It heals AFTER each enemy
+// attack's drain (engine.ts §takenLeeches, applied after applyIncomingToTarget), so the
+// crossing `hp-changed` (emitted INSIDE applyIncomingToTarget, pre-leech) sees the
+// post-drain low HP and FIRES, then the leech restores HP above the threshold —
+// re-arming the next round's crossing. Deterministic, turn-order-independent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A passive `on-hp-threshold-crossed` Barrier-style buff (Tycho/Kafa shape). The self
+ *  hp-threshold condition is the TRIGGER config (executeIntent scrubs it at drain time). */
+const crossingBarrier = (oncePerCombat: boolean): Ability => ({
+    id: `barrier-${++idCounter}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-hp-threshold-crossed',
+    conditions: [selfThresholdBelow(40)],
+    config: {
+        type: 'buff',
+        buffName: 'Barrier',
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: false,
+        duration: 3,
+        oncePerCombat,
+    },
+});
+
+/** A passive damage-taken heal-leech (heals `pct`% of each attack's damage to the heal
+ *  target, AFTER the attack drains). Recovery for the re-cross scenarios. noCrit so the
+ *  heal amount is deterministic (no crit-gate draw). */
+const takenLeechHeal = (pct: number): Ability => ({
+    id: `leech-${++idCounter}`,
+    type: 'heal',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'damage-taken', noCrit: true },
+});
+
+/** Run a healing-mode combat with the heal target carrying the given passive abilities,
+ *  bombarded by manual flat enemies, and collect buff-applied + cheat-death events. */
+const runCrossing = (opts: {
+    hp: number;
+    numRounds: number;
+    passiveAbilities: Ability[];
+    enemyAttackers: EnemyAttacker[];
+    selfBuffs?: {
+        id: string;
+        buffName: string;
+        stacks: number;
+        isStackable: boolean;
+        parsedEffects: object;
+    }[];
+    healTargetId?: string;
+}) => {
+    idCounter = 0;
+    const bus = createEventBus();
+    const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+    const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+    const hpChanged: Extract<CombatEvent, { type: 'hp-changed' }>[] = [];
+    bus.on('buff-applied', (e) => buffApplied.push(e));
+    bus.on('cheat-death-activated', (e) => cheated.push(e));
+    bus.on('hp-changed', (e) => hpChanged.push(e));
+    const result = runCombat(
+        healBase({
+            numRounds: opts.numRounds,
+            hp: opts.hp,
+            healTargetId: opts.healTargetId ?? 'attacker',
+            selfBuffs: opts.selfBuffs ?? [],
+            enemyAttackers: opts.enemyAttackers,
+            shipSkills: {
+                slots: [{ slot: 'passive', abilities: opts.passiveAbilities }],
+            },
+            bus,
+        })
+    );
+    return { buffApplied, cheated, hpChanged, result };
+};
+
+describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat)', () => {
+    // ── Tycho-shape: oncePerCombat → exactly ONE Barrier despite TWO downward crossings ──
+    // maxHp 10000, threshold 40% (4000). Each round a manual flat enemy hits 6500:
+    //   R1: 10000 → 3500 (35%)  → CROSS#1 below 40 → Barrier (oncePerCombat) applies.
+    //       leech 70% of 6500 = 4550 → 3500+4550 = 8050 (80.5%) → re-armed above 40.
+    //   R2: 8050 →  1550 (15.5%) → CROSS#2 below 40 → Barrier oncePerCombat SKIPS the re-fire.
+    // Assert exactly ONE Barrier buff-applied across the whole combat.
+    it('Tycho-shape (oncePerCombat): ONE Barrier buff-applied across TWO downward crossings', () => {
+        const { buffApplied, hpChanged } = runCrossing({
+            hp: 10_000,
+            numRounds: 2,
+            passiveAbilities: [crossingBarrier(true), takenLeechHeal(70)],
+            enemyAttackers: [manualEnemy('atk1', 6500)],
+        });
+
+        // NOT VACUOUS: two downward crossings of 40 actually occurred.
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(2);
+
+        // oncePerCombat caps the Barrier to a single application for the whole combat.
+        const barriers = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        );
+        expect(barriers).toHaveLength(1);
+        expect(barriers[0].round).toBe(1);
+    });
+
+    // ── Kafa-shape: NO oncePerCombat → Barrier on EACH downward crossing (2 events) ──
+    // Same HP arithmetic as Tycho-shape; only the oncePerCombat flag differs. The
+    // duration-3 Barrier granted on R1 persists through R2 (assert via healTargetBuffs).
+    it('Kafa-shape (no oncePerCombat): Barrier buff-applied on EACH downward crossing, and the grant persists', () => {
+        const { buffApplied, hpChanged, result } = runCrossing({
+            hp: 10_000,
+            numRounds: 2,
+            passiveAbilities: [crossingBarrier(false), takenLeechHeal(70)],
+            enemyAttackers: [manualEnemy('atk1', 6500)],
+        });
+
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(2);
+
+        // One Barrier buff-applied per downward crossing → two events (R1 and R2).
+        const barriers = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        );
+        expect(barriers).toHaveLength(2);
+        expect(barriers.map((b) => b.round)).toEqual([1, 2]);
+
+        // The R1 grant (duration 3) persists into R2's round overview — assert via the
+        // heal target's round-2 buffs (the duration outlives the heal back above N).
+        const rounds = result.healing!.rounds;
+        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Barrier');
+    });
+
+    // ── Cheat-Death save crossing: a 100→1-HP save IS a downward crossing → Barrier fires ──
+    // A lethal hit on a full-HP Cheat-Death tank is intercepted at 1 HP (0.05% of 2000).
+    // The hp-changed is emitted AFTER the intercept (100 → 0.05) → a downward crossing of
+    // 40 → the crossing reaction fires in the SAME round as cheat-death-activated.
+    it('Cheat-Death save: Barrier buff-applied alongside cheat-death-activated in the same round', () => {
+        const { buffApplied, cheated, hpChanged } = runCrossing({
+            hp: 2000, // enemy 3000 → lethal in one hit → intercepted at 1 HP
+            numRounds: 1,
+            passiveAbilities: [crossingBarrier(false)],
+            selfBuffs: [cheatDeathBuff()],
+            enemyAttackers: [manualEnemy('atk1', 3000)],
+        });
+
+        // Cheat Death fired on round 1.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0].round).toBe(1);
+
+        // The save is a downward crossing of 40 (100 → ~0.05%).
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(1);
+
+        // The crossing reaction fired in the same round as the save.
+        const barriers = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        );
+        expect(barriers).toHaveLength(1);
+        expect(barriers[0].round).toBe(1);
+    });
+
+    // ── DoT-tick crossing: a turn-start Corrosion tick (NOT direct damage) crosses below N ──
+    // The tank carries a Corrosion DoT seeded by a dot-only enemy in R1. The direct damage
+    // is tuned so HP stays ABOVE the threshold from attacks alone, and ONLY the R2 turn-start
+    // DoT batch takes it below 40 — per the locked decision, DoT intake emits hp-changed too,
+    // so the crossing reaction must fire on the tick.
+    it('DoT-tick crossing: Barrier buff-applied when ONLY the turn-start DoT batch crosses below the threshold', () => {
+        // A dot-only enemy: corrosion (no direct damage → synthesized basic suppressed) so HP
+        // is reduced ONLY by the turn-start DoT tick. Tank maxHp 1000 with a tier-7 / 10-stack
+        // corrosion makes the R2 tick bite from 100% straight to 30% — a single downward
+        // crossing of 40% sourced ENTIRELY from the DoT batch (no direct attack involved).
+        const corrosionDot: Ability = {
+            id: `dot-${++idCounter}`,
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 7, stacks: 10, duration: 5 },
+        };
+        const dotEnemy = manualEnemy('dotEnemy', 1000, 50, {
+            shipSkills: { slots: [{ slot: 'active', abilities: [corrosionDot] }] },
+        });
+
+        const { buffApplied, hpChanged } = runCrossing({
+            hp: 1000,
+            numRounds: 2,
+            passiveAbilities: [crossingBarrier(false)],
+            enemyAttackers: [dotEnemy],
+        });
+
+        // The crossing came from a DoT tick (round 2), NOT a direct attack: there is exactly
+        // one downward crossing and it lands on round 2 (round 1 the DoT is not yet ticking).
+        const downwardCrossings = hpChanged.filter(
+            (e) => e.targetId === 'attacker' && e.oldPct >= 40 && e.newPct < 40
+        );
+        expect(downwardCrossings).toHaveLength(1);
+        expect(downwardCrossings[0].round).toBe(2);
+
+        // The crossing reaction fired on the tick.
+        const barriers = buffApplied.filter(
+            (e) => e.actorId === 'attacker' && e.buffName === 'Barrier'
+        );
+        expect(barriers).toHaveLength(1);
+        expect(barriers[0].round).toBe(2);
+    });
+
+    // ── DPS-mode inertness: no healTargetId → the crossing trigger is fully dormant ──
+    // An attacker-only run (DPS mode, no enemyAttackers, no healTargetId) carrying the same
+    // crossing-Barrier passive. The trigger partitions to REACTIVE (isReactiveAbility →
+    // buff + live trigger), so it is NOT seeded by seedPassiveTimedStatuses → no phantom
+    // round-1 grant. And with no heal target there is no tank-side hp-changed to fire it →
+    // zero Barrier buff-applied across the whole DPS run.
+    it('DPS-mode inertness: attacker-only run grants NO Barrier (no round-1 phantom seed, no crossing fire)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e));
+        const result = runCombat(
+            healBase({
+                numRounds: 3,
+                hp: 10_000,
+                // DPS mode: NO healTargetId, NO enemyAttackers.
+                healTargetId: undefined,
+                enemyHp: 10_000_000,
+                shipSkills: {
+                    slots: [{ slot: 'passive', abilities: [crossingBarrier(false)] }],
+                },
+                bus,
+            })
+        );
+
+        // DPS mode → no healing block at all.
+        expect(result.healing).toBeUndefined();
+        // The crossing-Barrier passive is reactive → not seeded → NO phantom round-1 grant,
+        // and no hp-changed in DPS mode → never fires. Zero Barrier across the whole run.
+        const barriers = buffApplied.filter((e) => e.buffName === 'Barrier');
+        expect(barriers).toHaveLength(0);
+    });
+});
