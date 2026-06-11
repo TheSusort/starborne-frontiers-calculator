@@ -50,7 +50,8 @@
         "e2e:headed": "cd e2e && npm run test:headed",
         "e2e:ui": "cd e2e && npm run test:ui",
         "e2e:install": "cd e2e && npm ci && npx playwright install --with-deps chromium",
-        "audit:skills": "tsx scripts/auditSkills.ts"
+        "audit:skills": "tsx scripts/auditSkills.ts",
+        "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts"
     },
     "browserslist": {
         "production": [
