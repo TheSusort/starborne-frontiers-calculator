@@ -18,6 +18,8 @@ import {
     isAccumulateDetonateEffect,
     detectReactiveTrigger,
     detectDamageReactionTrigger,
+    detectHpCrossingTrigger,
+    detectTargetHpGate,
     detectCritRepairTrigger,
     detectAllyCritTrigger,
     detectDestroyedTrigger,
@@ -2754,6 +2756,159 @@ describe('detectDamageReactionTrigger — ally-subject (on-ally-attacked)', () =
                 'Corrosion I'
             )
         ).toEqual({ trigger: 'on-attacked' });
+    });
+});
+
+// Phase 4c PR 3 (Task 6): "when HP drops/falls below N%" buff-grant reactives. The detector
+// is sentence-scoped at the buff's anchor (same masked rawSentenceAround the damage-reaction
+// path uses), so a buff in a DIFFERENT sentence (Tycho's Cheat Death, Los's damage modifier)
+// does not pick up the crossing trigger. Texts are fed in the CANONICAL post-wiring shape:
+// <br /> normalized to '. ' (buildShipAbilities does this before scoping), so <br>-separated
+// clauses become distinct sentences. The (drops|falls) verb is REQUIRED — excludes the
+// damage-reaction "while below N% HP", extra-action "If its HP is below", enemy-scaling "when
+// the target is below N%", and ally-filter "allies below N% HP".
+describe('detectHpCrossingTrigger', () => {
+    const at = (text: string, needle: string) =>
+        detectHpCrossingTrigger(text, text.indexOf(needle));
+
+    it('Tycho p2: Barrier "when HP drops below 40%" once per battle → oncePerCombat true', () => {
+        const text =
+            'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns. Once per battle, when HP drops below 40% it gains <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, 'Barrier')).toEqual({
+            trigger: 'on-hp-threshold-crossed',
+            hpBelowPct: 40,
+            oncePerCombat: true,
+        });
+    });
+
+    it('Tycho p2: Cheat Death (different sentence, no crossing verb) → undefined', () => {
+        const text =
+            'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns. Once per battle, when HP drops below 40% it gains <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, 'Cheat Death')).toBeUndefined();
+    });
+
+    it('Tycho p2: Everliving Regeneration II (same start-of-combat sentence) → undefined', () => {
+        const text =
+            'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns. Once per battle, when HP drops below 40% it gains <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, 'Everliving Regeneration II')).toBeUndefined();
+    });
+
+    it('Shelter p2: BOTH Barrier + Inc. Damage Down II match (abbreviation masking)', () => {
+        // The "Inc." period must NOT split the sentence mid buff-name, or the Inc. Damage Down
+        // II anchor would fall in a phantom sentence missing the crossing clause.
+        const text =
+            'This Unit gains <unit-skill>Barrier</unit-skill> for 1 turn and <unit-skill>Inc. Damage Down II</unit-skill> for 3 turns when HP drops below 20%, once per battle.';
+        const expected = {
+            trigger: 'on-hp-threshold-crossed' as const,
+            hpBelowPct: 20,
+            oncePerCombat: true,
+        };
+        expect(at(text, 'Barrier')).toEqual(expected);
+        expect(at(text, 'Inc. Damage Down II')).toEqual(expected);
+    });
+
+    it('Los p1: Barrier "when HP falls below 50%" (own br-sentence) → oncePerCombat true', () => {
+        const text =
+            'This Unit deals 30% more Direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, 'Barrier')).toEqual({
+            trigger: 'on-hp-threshold-crossed',
+            hpBelowPct: 50,
+            oncePerCombat: true,
+        });
+    });
+
+    it('Los p1: the "30% more Direct damage … when its HP is below 50%" clause → undefined', () => {
+        // No drops/falls verb in that sentence; anchoring there must not match.
+        const text =
+            'This Unit deals 30% more Direct damage when its HP is below 50%. Once per battle when HP falls below 50%, it grants <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, '30% more Direct damage')).toBeUndefined();
+    });
+
+    it('Kafa p1: Terran Tenacity I "when HP drops below 50%" → oncePerCombat false', () => {
+        const text =
+            'This Unit gains <unit-skill>Terran Tenacity I</unit-skill> for 3 turns when HP drops below 50%.';
+        expect(at(text, 'Terran Tenacity I')).toEqual({
+            trigger: 'on-hp-threshold-crossed',
+            hpBelowPct: 50,
+            oncePerCombat: false,
+        });
+    });
+
+    it('Redeemer p1: Defense Up II "When HP drops below 60%" (br-separated) → oncePerCombat false', () => {
+        const text =
+            'This Unit gains <unit-damage>Shield equal to 2.5%</unit-damage> of its Max HP every turn. When HP drops below 60% it gains <unit-skill>Defense Up II</unit-skill> for 4 turns.';
+        expect(at(text, 'Defense Up II')).toEqual({
+            trigger: 'on-hp-threshold-crossed',
+            hpBelowPct: 60,
+            oncePerCombat: false,
+        });
+    });
+
+    it('Redeemer p1: per-turn Shield sentence (no crossing verb) → undefined', () => {
+        const text =
+            'This Unit gains <unit-damage>Shield equal to 2.5%</unit-damage> of its Max HP every turn. When HP drops below 60% it gains <unit-skill>Defense Up II</unit-skill> for 4 turns.';
+        expect(at(text, 'Shield equal to 2.5%')).toBeUndefined();
+    });
+
+    // Negative guards — non-crossing HP phrasings must all return undefined.
+    it('Makoli "while below 40% HP" (damage-reaction) → undefined', () => {
+        const text =
+            'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP and inflicts <unit-skill>Disable</unit-skill> for 1 turn.';
+        expect(at(text, 'Disable')).toBeUndefined();
+    });
+
+    it('Tormenter "If its HP is below 50%" (extra-action) → undefined', () => {
+        const text =
+            'This Unit deals <unit-damage>180% damage</unit-damage> with a guaranteed critical hit. If its HP is below 50%, it <unit-aid>gains 1 Extra Action</unit-aid>.';
+        expect(at(text, 'Extra Action')).toBeUndefined();
+    });
+
+    it('Tithonus "when the target is below 10% HP" (enemy-scaling) → undefined', () => {
+        const text =
+            'This Unit deals <unit-damage>200% damage</unit-damage>, increased to <unit-damage>300% damage</unit-damage> when the target is below 10% HP.';
+        expect(at(text, '300% damage')).toBeUndefined();
+    });
+
+    it('Chimei "allies below 40% HP" (ally-filter) → undefined', () => {
+        const text =
+            'At the end of the round, this Unit <unit-damage>repairs 10%</unit-damage> of its Max HP to allies below 40% HP and grants them <unit-skill>Barrier</unit-skill> for 1 turn.';
+        expect(at(text, 'Barrier')).toBeUndefined();
+    });
+
+    it('negative pos → undefined', () => {
+        expect(
+            detectHpCrossingTrigger('when HP drops below 40% it gains Barrier.', -1)
+        ).toBeUndefined();
+    });
+});
+
+// Phase 4c PR 3 (Task 6): Hermes charged-skill "If the target has less than N% HP" gate on a
+// grant clause. Sentence-scoped at the grant's anchor; requires "the target".
+describe('detectTargetHpGate', () => {
+    const at = (text: string, needle: string) => detectTargetHpGate(text, text.indexOf(needle));
+
+    it('Hermes charged: "If the target has less than 40% HP, it grants Cheat Death" → hpBelowPct 40', () => {
+        const text =
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+        expect(at(text, 'Cheat Death')).toEqual({ hpBelowPct: 40 });
+    });
+
+    it('Hermes charged: the repair sentence (no target gate) → undefined', () => {
+        const text =
+            'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill. If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.';
+        expect(at(text, 'repairs 37%')).toBeUndefined();
+    });
+
+    it('no "the target" in the gated text → undefined', () => {
+        const text =
+            'This Unit gains <unit-skill>Terran Tenacity I</unit-skill> for 3 turns when HP drops below 50%.';
+        expect(at(text, 'Terran Tenacity I')).toBeUndefined();
+    });
+
+    it('negative pos → undefined', () => {
+        expect(
+            detectTargetHpGate('If the target has less than 40% HP, it grants Cheat Death.', -1)
+        ).toBeUndefined();
     });
 });
 
