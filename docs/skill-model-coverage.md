@@ -93,7 +93,7 @@ consecutive `anyOf` conditions OR together; groups AND (`evaluateConditions.ts:9
 
 | Field | Status |
 |---|---|
-| `Ability.trigger` | Model now has 10 values (union extended in Phase 3 + ally-crit-dot: `on-cast`, `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`, `on-ally-crit-dot`, `on-bomb-detonated`, `on-attacked`, `on-ally-destroyed`, `on-destroyed`); parser emits all live triggers (see §5); **editor exposes a Trigger select**; sim routes the six live triggers through the reactive machinery; non-live triggers remain annotation-only (assume-active). |
+| `Ability.trigger` | Union now has 16 values; 15 are LIVE (everything except the `on-cast` default — see `LIVE_TRIGGERS` in `src/types/abilities.ts` and §6 item 5 for the per-phase history, latest: `on-ally-attacked`, Phase 4c PR 2). Parser emits all live triggers (see §5); **editor exposes a Trigger select**; the sim routes every live trigger through the reactive machinery; remaining annotation-only reactive *families* are hp-crossing + enemy-action (4c PRs 3–4). |
 | `Ability.target` | Editor exposes 5 values; sim only distinguishes self-vs-enemy when routing buff/debuff conversion. `ally`/`all-allies`/`all-enemies` have no distinct sim meaning (all-allies modifiers fold into self — correct for single-ship DPS). |
 | `modifier.isMultiplicative` | Deliberate no-op, documented in `applyAbilities.ts:38-40`; hidden in editor. |
 | `modifier.channel` `outgoingHeal` / `incomingDamage` | No DPS bucket — silently dropped (`applyAbilities.ts:68`). |
@@ -247,9 +247,10 @@ buff/charge-aura), source it from firing + passive.
     repairs. The machinery supports any buff/debuff/dot/charge follow-up from this trigger;
     it is DPS-neutral today only because the currently-classified ships' payloads all happen
     to be not-simulated types (stealth / charge removal / repair).
-  - Non-live triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) are **annotation-only**:
-    abilities with these triggers behave as today (normal on-cast pipeline, manual assume-active
-    conditions). The engine cannot derive them until Phase 4.
+  - Non-live triggers (`on-attacked`, `on-ally-destroyed`, `on-destroyed`) were **annotation-only**
+    at Phase 3 (normal on-cast pipeline, manual assume-active conditions). All three have since
+    gone LIVE — `on-attacked` in Phase 4a (per-hit + crit filter in 4c PR 1), the destroyed pair
+    in Phase 4b, and `on-ally-attacked` joined in 4c PR 2; see those §5 blocks.
 - **Intent/drain semantics (Phase 3).** Reactive listeners push intents onto the engine's queue;
   the engine drains after `round-started` (start-of-round intents execute before any turn) and
   after each actor's turn body before Post Turn. A triggered effect never boosts the action that
@@ -262,7 +263,7 @@ buff/charge-aura), source it from firing + passive.
   not the previous `enemy-debuff` count condition that scaled per standing debuff (too fast).
   Per-standing scaling is preserved for "per buff/debuff ON the target" texts.
 - **Editor Trigger select (Phase 3; extended 2026-06-06).** `AbilityCard` gains a Trigger
-  `Select` listing all ten union values with plain-language labels. Non-live triggers render a note "Not simulated —
+  `Select` listing every union value with plain-language labels. Non-live triggers render a note "Not simulated —
   treated as assume-active". Changing the trigger on a buff/debuff/dot/charge ability is
   sufficient to route it through the reactive machinery.
 - **Persistent stacking statuses (game-verified 2026-06-05).** Four named statuses are NOT timed,
