@@ -15,7 +15,7 @@
  * event collection off the bus.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability } from '../../../types/abilities';
 import {
@@ -773,5 +773,313 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
         // and no hp-changed in DPS mode → never fires. Zero Barrier across the whole run.
         const barriers = buffApplied.filter((e) => e.buffName === 'Barrier');
         expect(barriers).toHaveLength(0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 4c PR 3 Task 5 — Hermes/Hayyan firing-slot Cheat-Death grants become
+// CAST-PATH, target-HP gated, heal-target narrowed.
+//
+// A `buff Cheat Death` on a FIRING slot (active/charged) used to classify as an
+// always-on AURA → active from round 1 (a 4b KNOWN LIMITATION). It now classifies
+// as a persistent cast-path grant (kind: 'timed', duration Infinity) that applies
+// only when the slot FIRES, gated by `conditionsMet` at cast time, and — when the
+// ability targets a single `ally` — lands ONLY on the heal target (Hermes shape).
+// `all-allies` keeps every player recipient (Hayyan shape). Scoped to CHEAT_DEATH_BUFFS;
+// every other firing-slot recurring buff keeps the aura model.
+//
+// Harness: the HEALER is the focus attacker; the heal target is a separate WALKED
+// team actor (`tank`) bombarded by a manual flat enemy. The carve-out emits a
+// `buff-applied` (duration Infinity) per recipient when the slot fires, and the
+// tank's Cheat-Death intercept consumes the granted status on a later lethal hit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A `buff Cheat Death` ability on a firing slot, optionally target-HP gated. `target`
+ *  selects the recipient routing ('ally' → narrowed to the heal target; 'all-allies' →
+ *  every player). `belowPct` (when set) adds the target-HP-subject gate evaluated at the
+ *  caster's turn start against the heal target's live HP%. */
+const cheatDeathGrant = (opts: { target: 'ally' | 'all-allies'; belowPct?: number }): Ability => ({
+    id: `cd-${++idCounter}`,
+    type: 'buff',
+    target: opts.target,
+    trigger: 'on-cast',
+    conditions:
+        opts.belowPct === undefined
+            ? []
+            : [
+                  {
+                      subject: 'hp-threshold',
+                      derivable: true,
+                      hpComparator: 'below',
+                      hpPercent: opts.belowPct,
+                      hpSubject: 'target',
+                  },
+              ],
+    config: {
+        type: 'buff',
+        buffName: 'Cheat Death',
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: false,
+        duration: 'recurring',
+    },
+});
+
+/** A walked team actor (the heal target / tank) with no skills of its own. */
+const tankActor = (id: string, hp: number, speed = 30): TeamActorEngineInput => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: { slots: [] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+/** Run a healing-mode combat where the HEALER (focus attacker) carries the given
+ *  firing-slot Cheat-Death grant, healing a separate walked tank under enemy fire.
+ *  Collects buff-applied + skill-fired + cheat-death-activated. */
+const runCastPathCheatDeath = (opts: {
+    grant: Ability;
+    grantSlot: 'active' | 'charged';
+    chargeCount: number;
+    startCharged: boolean;
+    numRounds: number;
+    healerSpeed: number;
+    tankHp: number;
+    tankSpeed?: number;
+    enemy: EnemyAttacker;
+}) => {
+    idCounter = 0;
+    const bus = createEventBus();
+    const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+    const skillFired: Extract<CombatEvent, { type: 'skill-fired' }>[] = [];
+    const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+    bus.on('buff-applied', (e) => buffApplied.push(e));
+    bus.on('skill-fired', (e) => skillFired.push(e));
+    bus.on('cheat-death-activated', (e) => cheated.push(e));
+    const result = runCombat(
+        healBase({
+            numRounds: opts.numRounds,
+            // The healer does NO damage of its own — its only job is the firing-slot grant.
+            hp: 10_000,
+            speed: opts.healerSpeed,
+            chargeCount: opts.chargeCount,
+            startCharged: opts.startCharged,
+            hasChargedSkill: opts.grantSlot === 'charged',
+            healTargetId: 'tank',
+            teamActors: [tankActor('tank', opts.tankHp, opts.tankSpeed)],
+            enemyAttackers: [opts.enemy],
+            shipSkills: {
+                slots: [{ slot: opts.grantSlot, abilities: [opts.grant] }],
+            },
+            bus,
+        })
+    );
+    return { buffApplied, skillFired, cheated, result };
+};
+
+describe('Phase 4c PR 3 Task 5 — cast-path Cheat-Death grants (Hermes/Hayyan)', () => {
+    // ── Classification + cadence: a CHARGED-slot Cheat Death is NOT an aura ──────
+    // chargeCount 3, not startCharged → rounds 1-3 active, round 4 charged. The grant
+    // applies ONLY on the charged-fire round — never in rounds 1-3 (an aura would be
+    // active from round 1). The healer acts before the enemy so the tank stays at full
+    // HP (no enemy gate here: grant is unconditional).
+    it('charged-slot grant: NO Cheat Death before the charged fires; applies on the charged-fire round', () => {
+        const { buffApplied, skillFired } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'ally' }),
+            grantSlot: 'charged',
+            chargeCount: 3,
+            startCharged: false,
+            numRounds: 5,
+            healerSpeed: 100, // healer acts before the enemy (50)
+            tankHp: 1_000_000, // huge → never dies; tank HP is irrelevant (no gate)
+            enemy: manualEnemy('atk1', 1000),
+        });
+
+        // The charged skill fires exactly once (round 4 for chargeCount-3, not-startCharged).
+        const chargedFires = skillFired.filter(
+            (e) => e.actorId === 'attacker' && e.slot === 'charged'
+        );
+        expect(chargedFires).toHaveLength(1);
+        const chargedRound = chargedFires[0].round;
+
+        // The grant lands ONLY on/after the charged-fire round — NEVER before (no aura).
+        const cdGrants = buffApplied.filter((e) => e.buffName === 'Cheat Death');
+        expect(cdGrants.length).toBeGreaterThan(0);
+        expect(cdGrants.every((e) => e.round >= chargedRound)).toBe(true);
+        // Specifically: the first grant is exactly the charged-fire round (NOT round 1).
+        expect(Math.min(...cdGrants.map((e) => e.round))).toBe(chargedRound);
+        expect(chargedRound).toBeGreaterThan(1);
+    });
+
+    // ── Narrowing: target 'ally' lands ONLY on the heal target, not the healer ──
+    // startCharged → charged fires round 1. The grant is `ally` → narrowed to [healTargetId].
+    // Only the tank receives a Cheat Death buff-applied; the healer (focus 'attacker') does not.
+    it("target 'ally' narrows the grant to the heal target only (not the caster)", () => {
+        const { buffApplied } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'ally' }),
+            grantSlot: 'charged',
+            chargeCount: 99, // never re-charges after the startCharged round
+            startCharged: true,
+            numRounds: 1,
+            healerSpeed: 100,
+            tankHp: 1_000_000,
+            enemy: manualEnemy('atk1', 1000),
+        });
+
+        const cdGrants = buffApplied.filter((e) => e.buffName === 'Cheat Death');
+        // Lands on the tank (heal target) — and NOT on the healer.
+        expect(cdGrants.map((e) => e.actorId)).toContain('tank');
+        expect(cdGrants.map((e) => e.actorId)).not.toContain('attacker');
+    });
+
+    // ── Narrowing: target 'all-allies' (Hayyan) keeps EVERY player recipient ────
+    // Same firing cadence; `all-allies` → both players (healer + tank) receive the grant,
+    // but only AFTER the charged fires (not round 1 — still cast-path, not an aura).
+    it("target 'all-allies' (Hayyan shape) grants to every player after the charged fires", () => {
+        const { buffApplied } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'all-allies' }),
+            grantSlot: 'charged',
+            chargeCount: 99,
+            startCharged: true,
+            numRounds: 1,
+            healerSpeed: 100,
+            tankHp: 1_000_000,
+            enemy: manualEnemy('atk1', 1000),
+        });
+
+        const cdGrants = buffApplied.filter((e) => e.buffName === 'Cheat Death');
+        const recipients = new Set(cdGrants.map((e) => e.actorId));
+        expect(recipients.has('attacker')).toBe(true);
+        expect(recipients.has('tank')).toBe(true);
+        expect(cdGrants.every((e) => e.round === 1)).toBe(true);
+    });
+
+    // ── Passive-slot Cheat Death stays an AURA (Tycho start-of-combat unchanged) ──
+    // A passive `buff Cheat Death` is NOT a firing slot → it keeps the aura model. The
+    // tank carries it from round 1: a lethal hit on the FIRST enemy attack is intercepted.
+    it('passive-slot Cheat Death stays an aura (Tycho): active from round 1, intercepts a round-1 lethal hit', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            healBase({
+                numRounds: 1,
+                hp: 10_000,
+                speed: 100,
+                healTargetId: 'tank',
+                // PASSIVE slot → aura; tank carries Cheat Death from round 1.
+                shipSkills: {
+                    slots: [{ slot: 'passive', abilities: [cheatDeathGrant({ target: 'ally' })] }],
+                },
+                teamActors: [tankActor('tank', 2000, 30)],
+                // 3000 dmg vs tank hp 2000 → lethal on the first round-1 attack.
+                enemyAttackers: [manualEnemy('atk1', 3000, 80)],
+                bus,
+            })
+        );
+
+        // The aura is active from round 1 → the lethal round-1 hit is intercepted.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'tank', round: 1 });
+        // Tank survived (Cheat Death floored it at 1 HP), so it was not destroyed.
+        expect(result.healing!.destroyedRound).toBeUndefined();
+    });
+
+    // ── Gate: target-HP-subject `below 40` blocks the grant when the tank is healthy ──
+    // startCharged → charged fires round 1. The healer acts AFTER the enemy (speed 30 vs 80)
+    // so the tank takes the round-1 hit BEFORE the healer's turn → the gate reads the
+    // post-hit HP%. Tank maxHp 10000, hit 1000 → 90% at the healer's turn → above 40 → BLOCKED.
+    it('gate: tank above 40% at the caster turn start → grant BLOCKED', () => {
+        const { buffApplied } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'ally', belowPct: 40 }),
+            grantSlot: 'charged',
+            chargeCount: 99,
+            startCharged: true,
+            numRounds: 1,
+            healerSpeed: 30, // healer acts AFTER the enemy (80) → reads post-hit tank HP
+            tankHp: 10_000,
+            tankSpeed: 10,
+            enemy: manualEnemy('atk1', 1000, 80), // 1000 vs 10000 → tank at 90% → above 40
+        });
+
+        const cdGrants = buffApplied.filter((e) => e.buffName === 'Cheat Death');
+        expect(cdGrants).toHaveLength(0);
+    });
+
+    // ── Gate: target-HP-subject `below 40` PASSES when the tank is hurt ─────────
+    // Same shape; the enemy hits hard enough to drop the tank below 40% before the healer
+    // acts. Tank maxHp 10000, hit 7000 → 30% at the healer's turn → below 40 → grant APPLIES.
+    it('gate: tank below 40% at the caster turn start → grant APPLIES (to the tank only)', () => {
+        const { buffApplied } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'ally', belowPct: 40 }),
+            grantSlot: 'charged',
+            chargeCount: 99,
+            startCharged: true,
+            numRounds: 1,
+            healerSpeed: 30,
+            tankHp: 10_000,
+            tankSpeed: 10,
+            enemy: manualEnemy('atk1', 7000, 80), // 7000 vs 10000 → tank at 30% → below 40
+        });
+
+        const cdGrants = buffApplied.filter((e) => e.buffName === 'Cheat Death');
+        expect(cdGrants.map((e) => e.actorId)).toEqual(['tank']);
+        expect(cdGrants[0].round).toBe(1);
+    });
+
+    // ── Persistence + intercept: the Infinity-duration grant survives later rounds and
+    // the tank's Cheat-Death intercept consumes it on a later lethal hit. ──────────
+    // startCharged → grant lands round 1 (gate below 40 passes — the tank is hurt to ~30%
+    // first). A later round delivers a lethal hit; the grant (never expired) is consumed.
+    it('persistence: the grant survives subsequent rounds and is consumed by a later lethal hit', () => {
+        const { buffApplied, cheated, result } = runCastPathCheatDeath({
+            grant: cheatDeathGrant({ target: 'ally', belowPct: 40 }),
+            grantSlot: 'charged',
+            chargeCount: 99,
+            startCharged: true,
+            numRounds: 2,
+            healerSpeed: 30,
+            tankHp: 10_000,
+            tankSpeed: 10,
+            // 7000/round vs 10000 hp, no heal recovery (healer does nothing but grant):
+            //   R1: 10000 → 3000 (30% → gate passes → grant lands round 1).
+            //   R2: 3000  → 0    → LETHAL → the round-1 grant (never expired) intercepts at 1 HP.
+            enemy: manualEnemy('atk1', 7000, 80),
+        });
+
+        // The grant landed on round 1 (gate passed) and is the ONLY application (Infinity
+        // never expires → no re-application churn from family rules).
+        const cdGrants = buffApplied.filter(
+            (e) => e.buffName === 'Cheat Death' && e.actorId === 'tank'
+        );
+        expect(cdGrants).toHaveLength(1);
+        expect(cdGrants[0].round).toBe(1);
+        expect(cdGrants[0].duration).toBe(Infinity);
+
+        // The persistent grant intercepts the later lethal hit (round 2) — the tank survives.
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'tank', round: 2 });
+        expect(result.healing!.destroyedRound).toBeUndefined();
     });
 });

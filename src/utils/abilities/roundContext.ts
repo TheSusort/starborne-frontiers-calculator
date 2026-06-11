@@ -23,6 +23,9 @@ export function buildRoundContext(state: {
     enemyHpPct?: number;
     /** Self HP% (0..100). Default 100 (DPS-assumption: self never takes damage). */
     selfHpPct?: number;
+    /** Heal target's live HP% (0..100) for `hpSubject:'target'` gates. Default 100
+     *  (DPS-assumption / no heal target → a "below N" target gate fails → inert). */
+    targetHpPct?: number;
     /** Active buff names on the enemy. Default [] (DPS-assumption: no enemy buffs). */
     enemyBuffNames?: string[];
     /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
@@ -44,6 +47,7 @@ export function buildRoundContext(state: {
         enemyAdjacentCount: 0,
         enemyDestroyedCount: 0,
         selfHpPct: state.selfHpPct ?? 100,
+        targetHpPct: state.targetHpPct ?? 100,
         enemyHpPct: state.enemyHpPct ?? 100,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };

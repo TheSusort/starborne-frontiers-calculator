@@ -2,9 +2,12 @@ import React from 'react';
 import { ActiveBuff } from '../../utils/combat/statusEngine';
 
 /** Render a buff's remaining-turns label. 'recurring' = always-on aura; 'permanent' =
- *  persistent stacking status (Defense Shred et al.) — both render as unbounded. */
+ *  persistent stacking status (Defense Shred et al.); a non-finite numeric duration =
+ *  a cast-path persistent grant (Infinity — e.g. Hermes/Hayyan Cheat Death) — all
+ *  render as unbounded ('∞'), never the raw "Infinityt". */
 function formatTurns(t: ActiveBuff['turnsRemaining']): string {
-    return t === 'recurring' || t === 'permanent' ? '∞' : `${t}t`;
+    if (t === 'recurring' || t === 'permanent') return '∞';
+    return Number.isFinite(t) ? `${t}t` : '∞';
 }
 
 interface BuffRowProps {
