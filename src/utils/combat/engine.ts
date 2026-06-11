@@ -2602,8 +2602,10 @@ export function runCombat(input: CombatEngineInput): {
                     }
                     if (damage > 0) {
                         // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
-                        // shieldBefore/absorbed are captured for the punch-through gate (Quixilver) below.
-                        const { shieldBefore, absorbed } = applyIncomingToTarget(damage);
+                        // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
+                        // hpDamage comes straight from the closure (0 under Barrier — damage fully
+                        // blocked, not shield-absorbed — otherwise damage - absorbed).
+                        const { shieldBefore, hpDamage } = applyIncomingToTarget(damage);
 
                         // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                         // AFTER this attack's drain so the proc never absorbs its own trigger.
@@ -2617,7 +2619,6 @@ export function runCombat(input: CombatEngineInput): {
                         // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
                         // to the heal target (enemy attacks only ever hit it).
                         if (takenLeeches.length > 0 && healingCtx) {
-                            const hpDamage = damage - absorbed;
                             const rt = runtimesById.get(healTarget!.id);
                             for (const e of takenLeeches) {
                                 if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
