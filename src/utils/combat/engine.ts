@@ -1632,6 +1632,12 @@ export function runCombat(input: CombatEngineInput): {
             damage: number
         ): { shieldBefore: number; absorbed: number; hpDamage: number } => {
             roundIncomingDamage += damage;
+            // Capture the pre-drain HP + the target's current effective max HP for the
+            // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
+            // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
+            // the pre-hit value (not 1).
+            const hpBefore = healTarget!.currentHp;
+            const maxHp = recipientMaxHp(healTarget!.id);
             const shieldBefore = healTarget!.shieldPool;
             const absorbed = Math.min(healTarget!.shieldPool, damage);
             healTarget!.shieldPool -= absorbed;
@@ -1681,6 +1687,22 @@ export function runCombat(input: CombatEngineInput): {
                     recordDestroyed(healTarget!, r, bus);
                     healTargetDestroyedRound = healTarget!.destroyedRound;
                 }
+            }
+            // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
+            // is called per enemy attack (aggregate drain) AND per turn-start DoT batch, and
+            // the emission covers both deliberately ("when HP drops below N%" includes DoT
+            // damage in-game). Emitted after the Cheat-Death intercept (a 100→1-HP save
+            // counts as a downward crossing — spec §5). Exact percentages (the enemy dummy's
+            // post-round emission stays integer-granularity — asymmetry intended, events.ts).
+            // A killed tank emits ship-destroyed above, never a posthumous crossing.
+            if (healTarget!.currentHp > 0 && maxHp > 0) {
+                bus.emit({
+                    type: 'hp-changed',
+                    targetId: healTarget!.id,
+                    round: r,
+                    oldPct: (100 * hpBefore) / maxHp,
+                    newPct: (100 * healTarget!.currentHp) / maxHp,
+                });
             }
             return { shieldBefore, absorbed, hpDamage };
         };

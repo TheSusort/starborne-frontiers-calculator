@@ -118,6 +118,17 @@ export type CombatEvent =
      *  `effect` is the control effect (e.g. 'stasis'). Present-only-when-fired; emitting it
      *  does NOT simulate the control's combat effect. */
     | { type: 'control-applied'; casterId: string; effect: ControlEffect; round: number }
+    /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
+     *  granularity asymmetry:
+     *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside
+     *     `applyIncomingToTarget` — i.e. per enemy attack (aggregate shield-first drain)
+     *     AND per tank turn-start DoT batch (the emission covers both deliberately,
+     *     since in-game "when HP drops below N%" includes DoT damage). `oldPct`/`newPct`
+     *     are EXACT (non-rounded) percentages. Emitted after the Cheat-Death intercept,
+     *     so a 100→1-HP save reads as a downward crossing; a killed tank emits
+     *     ship-destroyed instead, never a posthumous hp-changed.
+     *   - Enemy dummy (post-round): integer-granularity, emitted only when the rounded
+     *     enemy HP% changes between rounds. The integer-vs-exact asymmetry is intended. */
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     /** Emitted once per actor when its HP first reaches 0. `actorId` may be any
      *  participating actor: 'attacker', a team actor id, or 'enemy'. */
@@ -132,8 +143,9 @@ export type CombatEvent =
      *  so all events observe the same post-drain HP/shield state. A manual flat enemy
      *  or a noCrit damage ability falls back to one event per attack turn (the pre-4c
      *  contract). DoT ticks, bomb detonations, and accumulators never emit it — only
-     *  direct weapon hits. When PR 3 later adds tank-side `hp-changed`, that event
-     *  stays once-per-attack; the granularity asymmetry is intended. */
+     *  direct weapon hits. The tank-side `hp-changed` event (PR 3) is per-HP-intake-event
+     *  (attacks AND DoT batches), so a 3-hit attack emits 3 `attacked` but a single
+     *  `hp-changed`; the granularity asymmetry is intended. */
     | {
           type: 'attacked';
           targetId: string;
