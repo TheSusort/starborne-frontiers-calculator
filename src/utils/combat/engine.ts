@@ -1343,6 +1343,28 @@ export function runCombat(input: CombatEngineInput): {
     // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
     // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
     const cheatDeathConsumed = new Set<string>();
+    // Display-only (Phase 4c): the aura/recurring Cheat Death buff is re-derived into the
+    // displayed buff list every round and is NEVER removed from the StatusEngine store on
+    // consumption (consumption is the flag above, not a store mutation). So once an actor's
+    // Cheat Death is SPENT the chip would otherwise keep showing even though no further save is
+    // possible. `cheatDeathConsumed` is combat-lifetime and never re-armed (only ever .add'd /
+    // .has'd — see the intercept), so an actor present here can never be saved again.
+    //
+    // We track the round the intercept fired (set alongside the flag) and hide the chip only in
+    // rounds STRICTLY AFTER consumption: the consuming round still shows it (that round's chip
+    // reflects the protection that was live and actually saved the unit), and every subsequent
+    // round drops it. Pure display filter — does NOT touch save logic.
+    const cheatDeathConsumedRound = new Map<string, number>();
+    const hideSpentCheatDeath = (
+        buffs: ActiveBuff[],
+        ownerId: string,
+        round: number
+    ): ActiveBuff[] => {
+        const consumedRound = cheatDeathConsumedRound.get(ownerId);
+        return consumedRound !== undefined && round > consumedRound
+            ? buffs.filter((b) => !CHEAT_DEATH_BUFFS.has(b.buffName))
+            : buffs;
+    };
     // Once-per-combat reactive repairs (Phase 4b, Task 8). Keyed `${ownerId}:${abilityId}`.
     // Declared OUTSIDE the round loop (combat lifetime, like cheatDeathConsumed) so a flagged
     // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
@@ -1715,6 +1737,12 @@ export function runCombat(input: CombatEngineInput): {
                 if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
                     healTarget!.currentHp = 1;
                     cheatDeathConsumed.add(targetId);
+                    // Display-only: remember the round it was spent so the chip is dropped
+                    // from rounds AFTER this one (see hideSpentCheatDeath). First write wins —
+                    // the flag above already blocks any second intercept, so this set-once.
+                    if (!cheatDeathConsumedRound.has(targetId)) {
+                        cheatDeathConsumedRound.set(targetId, r);
+                    }
                     statusEngine.clearRemovable(targetId);
                     // The tank's enemy-applied Corrosion/Inferno DoTs are actor-state stacks
                     // (NOT StatusEngine entries), so clearRemovable doesn't touch them — empty
@@ -2671,7 +2699,12 @@ export function runCombat(input: CombatEngineInput): {
         const enemyHpPct = lastAttackerTurn.enemyHpPct;
         const dotsConfig = lastAttackerTurn.dotsConfig;
         const dotsLanded = lastAttackerTurn.dotsLanded;
-        const activeSelfBuffsForRound = lastAttackerTurn.activeSelfBuffs;
+        // Display-only: hide a spent Cheat Death (the focus actor owns activeSelfBuffs).
+        const activeSelfBuffsForRound = hideSpentCheatDeath(
+            lastAttackerTurn.activeSelfBuffs,
+            focusActorId,
+            r
+        );
         const landedEnemyDebuffs = lastAttackerTurn.landedEnemyDebuffs;
         const resistedEnemyDebuffs = lastAttackerTurn.resistedEnemyDebuffs;
 
@@ -2829,7 +2862,9 @@ export function runCombat(input: CombatEngineInput): {
                     mergeDoTsForDisplay(tankDotSnapshot.corrosion, healTarget.corrosionEntries),
                     mergeDoTsForDisplay(tankDotSnapshot.inferno, healTarget.infernoEntries)
                 ),
-                healTargetBuffs,
+                // Display-only: hide a spent Cheat Death (the heal target owns these buffs).
+                // The destroyed-tank branch already set this to [] (filtering [] is a no-op).
+                healTargetBuffs: hideSpentCheatDeath(healTargetBuffs, healTarget.id, r),
             });
             if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
                 healTargetDestroyedRound = r;

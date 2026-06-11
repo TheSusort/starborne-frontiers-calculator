@@ -37,12 +37,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -51,12 +46,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -69,12 +59,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -83,12 +68,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -101,12 +81,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -115,12 +90,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -133,12 +103,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -147,12 +112,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,
@@ -165,12 +125,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "activeSelfBuffs": [],
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
@@ -179,12 +134,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "directHeal": 3000,
       "effectiveHealing": 3000,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Cheat Death",
-          "turnsRemaining": Infinity,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
       "overheal": 0,

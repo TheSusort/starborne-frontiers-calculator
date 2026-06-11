@@ -2797,8 +2797,49 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(hasEverliving(rounds[2])).toBe(false);
         expect(everlivingApplied).toHaveLength(1); // no re-seed event past round 1
 
-        // Contrast: the recurring (always-active) Cheat Death buff SURVIVES the wipe.
-        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Cheat Death');
+        // Contrast: the recurring (always-active) Cheat Death buff SURVIVES the wipe in the
+        // StatusEngine store (it is always-active, never timed) — consumption is the per-actor
+        // flag, not a store deletion — but it is FILTERED OUT of the DISPLAY list once spent,
+        // so the displayed buffs no longer show a "Cheat Death" chip after consumption.
+        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).not.toContain('Cheat Death');
+    });
+
+    // ── Display-only: a SPENT Cheat Death no longer shows as an active buff ────
+    // The aura Cheat Death is re-derived every round into the displayed buff list, so before
+    // it is consumed it appears in healTargetBuffs (round 1). After the intercept consumes it
+    // (HP saved at 1, cheatDeathConsumed flag set — combat-lifetime, never re-armed), the
+    // engine correctly blocks any second save. The DISPLAY must reflect that actual
+    // save-eligibility: the "Cheat Death" chip is hidden in every round AFTER consumption,
+    // even though the recurring buff is still live in the StatusEngine store.
+    it('hides a spent Cheat Death from the displayed heal-target buffs after consumption', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
+        bus.on('cheat-death-activated', (e) => cheated.push(e));
+        const result = runCombat(
+            BASE({
+                numRounds: 3, // R1 consumes Cheat Death; R2/R3 must NOT show the chip
+                hp: 2000, // enemy 3000 → lethal in one hit
+                defence: 0,
+                healTargetId: 'attacker',
+                bus,
+                selfBuffs: [cheatDeathBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+                shipSkills: { slots: [] },
+            })
+        );
+        // Sanity: the intercept fired exactly once, on round 1 (consumed there).
+        expect(cheated).toHaveLength(1);
+        expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
+
+        const rounds = result.healing!.rounds;
+        const showsCheatDeath = (rd: (typeof rounds)[number]) =>
+            rd.healTargetBuffs.map((b) => b.buffName).includes('Cheat Death');
+        // BEFORE consumption (round 1): the chip is shown — the tank could still be saved.
+        expect(showsCheatDeath(rounds[0])).toBe(true);
+        // AFTER consumption (rounds 2 and 3): the chip is hidden — no save is possible.
+        expect(showsCheatDeath(rounds[1])).toBe(false);
+        expect(showsCheatDeath(rounds[2])).toBe(false);
     });
 
     // ── Regression: a carrier WITHOUT Cheat Death dies normally ───────────────
