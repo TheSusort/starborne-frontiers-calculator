@@ -443,17 +443,20 @@ describe('Barrier duration semantics (lock)', () => {
      *                                     turn → duration:1 Barrier now active on the tank
      *   [attacked atk2]            — 3000 attack arrives SAME round. Barrier is STILL ACTIVE (the
      *                                tank has NOT taken its post-turn decrement yet — it acts last)
-     *                                → atk2's 3000 is FULLY BLOCKED (barrierAbsorbed += 3000)
+     *                                → atk2's 3000 is FULLY BLOCKED (barrierAbsorbed += 3000) and,
+     *                                per decision #7, deals NO damage taken → its damage-taken leech
+     *                                does NOT fire (a fully-blocked attack has nothing to leech from)
      *   [buff-expired attacker Barrier] — the tank's own post-turn decrement (1 → 0) expires it
      *
      * Per-round result: incomingDamage 9500 (6500 + 3000), barrierAbsorbed 3000 (exactly atk2's
-     * hit), targetHpPctStart stays 100% (the leech off the 6500 that DID land recovers the tank
-     * fully before the next round top). The blocked 3000/round keeps the tank ALIVE across all
-     * rounds — contrast the single-enemy control (same Barrier, only the 6500 enemy) which blocks
-     * ZERO and is DESTROYED in round 3.
+     * hit). The damage-taken leech heals 4550 (70% of atk1's UNBLOCKED 6500 only — NOT 70% of the
+     * full 9500); the blocked atk2 3000 contributes ZERO leech (decision #7). The tank survives the
+     * two rounds (10000 → 8050 → 6100) — contrast the single-enemy control (same Barrier, only the
+     * 6500 enemy) which blocks ZERO.
      *
-     * This is the load-bearing demonstration of the real mechanic: with multiple enemies the
-     * reactive 1-turn Barrier blocks every same-round attack that lands AFTER the grant.
+     * This is the load-bearing demonstration of the real mechanic AND decision #7: with multiple
+     * enemies the reactive 1-turn Barrier blocks every same-round attack that lands AFTER the grant,
+     * and a fully-blocked attack feeds neither HP loss nor a damage-taken leech.
      *
      * NOTE on the turn model: this benefit depends on TURN ORDER — both attacking enemies must
      * act before the tank's own post-turn decrement (here forced via enemy speed > tank speed). A
@@ -461,10 +464,10 @@ describe('Barrier duration semantics (lock)', () => {
      * future phase; this test locks the benefit under the current single-target turn model where
      * the ordering can be arranged.
      */
-    it('reactive duration:1 Barrier blocks a SECOND enemy same-round attack (multi-enemy value)', () => {
+    it('reactive duration:1 Barrier blocks a SECOND enemy same-round attack, and the blocked hit feeds no leech', () => {
         const { result } = run(
             healBase({
-                numRounds: 3,
+                numRounds: 2,
                 hp: 10_000,
                 speed: 50, // tank slowest (margin); the enemy speeds 120/110 are what force both
                 // enemies to act before the tank's post-turn decrement, so the grant survives the round
@@ -491,10 +494,15 @@ describe('Barrier duration semantics (lock)', () => {
         // LOCK: each round, atk1's 6500 lands UNBLOCKED (it triggers the grant), then atk2's 3000
         // same-round attack is FULLY BLOCKED by the freshly-granted Barrier → barrierAbsorbed 3000
         // every round (exactly atk2's hit, never atk1's). This is the real multi-enemy value.
-        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([3000, 3000, 3000]);
+        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([3000, 3000]);
 
-        // The blocked 3000/round (plus the leech) keeps the tank alive across all rounds —
-        // contrast the single-enemy duration:1 test above, which blocks 0 and dies in round 3.
+        // LOCK (decision #7): the 70% damage-taken leech heals 4550 = 70% of atk1's UNBLOCKED 6500
+        // ONLY. The fully-blocked atk2 3000 deals no damage taken → it feeds NO leech (the heal is
+        // NOT 70% of 9500 = 6650). A Barrier-blocked attack has nothing to leech from. The leech
+        // credits the heal target's own directHeal (read off the engine round's perActor map).
+        expect(rounds.map((rd) => rd.perActor.get('attacker')?.directHeal)).toEqual([4550, 4550]);
+
+        // The tank survives the two rounds — the blocked 3000/round is damage it never takes.
         expect(result.healing!.destroyedRound).toBeUndefined();
     });
 });
