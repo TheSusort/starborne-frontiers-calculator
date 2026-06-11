@@ -466,7 +466,8 @@ describe('Barrier duration semantics (lock)', () => {
             healBase({
                 numRounds: 3,
                 hp: 10_000,
-                speed: 50, // tank acts LAST so both enemies' grants survive within the round
+                speed: 50, // tank slowest (margin); the enemy speeds 120/110 are what force both
+                // enemies to act before the tank's post-turn decrement, so the grant survives the round
                 shipSkills: {
                     slots: [
                         {
