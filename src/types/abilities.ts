@@ -46,9 +46,10 @@ export type AbilityTrigger =
     | 'on-destroyed'
     | 'on-enemy-destroyed'
     | 'on-cheat-death-activated'
-    // Fired by the engine when a unit's HP crosses a watched threshold (up or down).
-    // The heal executor uses this to grant once-per-combat conditional buffs (Tycho/
-    // Shelter/Los "once per battle, when ally drops below X%").
+    // Fired by the engine when the owner's HP crosses below a watched threshold
+    // (downward only — heals/upward changes emit nothing). The buff executor uses this
+    // to grant conditional buffs, once-per-combat where the game says so (Tycho/Shelter/
+    // Los "once per battle, when HP drops below X%"; Kafa/Redeemer re-fire each crossing).
     | 'on-hp-threshold-crossed';
 
 /**
