@@ -1343,12 +1343,15 @@ export function runCombat(input: CombatEngineInput): {
     // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
     // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
     const cheatDeathConsumed = new Set<string>();
-    // Display-only (Phase 4c): the aura/recurring Cheat Death buff is re-derived into the
-    // displayed buff list every round and is NEVER removed from the StatusEngine store on
-    // consumption (consumption is the flag above, not a store mutation). So once an actor's
-    // Cheat Death is SPENT the chip would otherwise keep showing even though no further save is
-    // possible. `cheatDeathConsumed` is combat-lifetime and never re-armed (only ever .add'd /
-    // .has'd — see the intercept), so an actor present here can never be saved again.
+    // Display-only (Phase 4c): a spent Cheat Death keeps reappearing in the displayed buff list
+    // for two reasons, depending on how it was granted. (1) Passive/aura grants (Tycho) are
+    // re-derived from the persistent aura store every round and clearRemovable leaves auras
+    // intact by design. (2) Active/charged cast-path grants (timed, Infinity) ARE deleted by
+    // clearRemovable on consumption, but a slot that re-fires each round re-applies them. Either
+    // way the chip would keep showing even though no further save is possible (consumption is the
+    // flag above, not a permanent store removal). `cheatDeathConsumed` is combat-lifetime and
+    // never re-armed (only ever .add'd / .has'd — see the intercept), so an actor present here
+    // can never be saved again.
     //
     // We track the round the intercept fired (set alongside the flag) and hide the chip only in
     // rounds STRICTLY AFTER consumption: the consuming round still shows it (that round's chip
