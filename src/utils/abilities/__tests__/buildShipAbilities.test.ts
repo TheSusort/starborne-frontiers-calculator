@@ -2247,4 +2247,209 @@ describe('buildShipAbilities', () => {
             expect(extra.trigger).toBe('on-enemy-destroyed');
         });
     });
+
+    // Phase 4c PR 3 (Task 7): "when HP drops/falls below N%" buff-grant reactives ride the
+    // on-hp-threshold-crossed trigger with a derivable self hp-threshold condition; "once per
+    // battle" maps to config.oncePerCombat. Sentence-scoped at the buff's anchor, so the
+    // start-of-combat Cheat Death / Everliving (Tycho) and the standing direct-damage modifier
+    // (Los) — which sit in different sentences/paragraphs — are untouched. Hermes's charged
+    // Cheat Death "if the target has less than N% HP" grant narrows to the heal target.
+    describe('hp-crossing reactive buff grants → on-hp-threshold-crossed (Phase 4c PR 3)', () => {
+        const selfHpBelow = (pct: number) => ({
+            subject: 'hp-threshold',
+            derivable: true,
+            hpComparator: 'below',
+            hpPercent: pct,
+            hpSubject: 'self',
+        });
+
+        it('Tycho R4 passive: Barrier rides on-hp-threshold-crossed (below 40%, once per battle); Cheat Death / Everliving II untouched', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration II</unit-skill> for 9 turns. Once per battle, when HP drops below 40% it gains <unit-skill>Barrier</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const barrier = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
+            )!;
+            expect(barrier).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(40)],
+            });
+            expect(barrier.config).toMatchObject({ duration: 1, oncePerCombat: true });
+            // The start-of-combat grants stay on-cast (no crossing trigger / condition).
+            const cheatDeath = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
+            )!;
+            expect(cheatDeath).toMatchObject({ trigger: 'on-cast', conditions: [] });
+            expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
+            const everliving = passive.abilities.find(
+                (a) =>
+                    a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration II'
+            )!;
+            expect(everliving).toMatchObject({ trigger: 'on-cast', conditions: [] });
+            expect(everliving.config).toMatchObject({ duration: 9 });
+        });
+
+        it('Shelter R4 passive: BOTH grants ride on-hp-threshold-crossed (below 20%, once per battle) at durations 1 and 3', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'This Unit gains <unit-skill>Barrier</unit-skill> for 1 turn and <unit-skill>Inc. Damage Down II</unit-skill> for 3 turns when HP drops below 20%, once per battle.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const barrier = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
+            )!;
+            expect(barrier).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(20)],
+            });
+            expect(barrier.config).toMatchObject({ duration: 1, oncePerCombat: true });
+            const incDown = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Inc. Damage Down II'
+            )!;
+            expect(incDown).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(20)],
+            });
+            expect(incDown.config).toMatchObject({ duration: 3, oncePerCombat: true });
+        });
+
+        it('Los R0 passive: Barrier wired (below 50%, once per battle); standing direct-damage modifier untouched', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit deals 30% more Direct damage when its HP is below 50%.<br />Once per battle when HP falls below 50%, it grants <unit-skill>Barrier</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const barrier = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Barrier'
+            )!;
+            expect(barrier).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(50)],
+            });
+            expect(barrier.config).toMatchObject({ duration: 1, oncePerCombat: true });
+            // The outgoing-damage modifier KEEPS its on-cast trigger + existing hp-threshold gate
+            // (its own sentence carries no drops/falls verb → no crossing reclassification).
+            const mod = passive.abilities.find(
+                (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+            )!;
+            expect(mod.trigger).toBe('on-cast');
+            expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+            expect(mod.conditions).toEqual([
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 50,
+                    hpSubject: 'self',
+                },
+            ]);
+        });
+
+        it('Kafa R0 passive: Terran Tenacity I rides on-hp-threshold-crossed (below 50%, NO once per battle), duration 3', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-skill>Terran Tenacity I</unit-skill> for 3 turns when HP drops below 50%.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const buff = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Tenacity I'
+            )!;
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(50)],
+            });
+            expect(buff.config).toMatchObject({ duration: 3 });
+            // No "once per battle" in the sentence → flag absent (unbounded).
+            expect(
+                buff.config.type === 'buff' ? buff.config.oncePerCombat : undefined
+            ).toBeUndefined();
+        });
+
+        it('Redeemer R0 passive: Defense Up II rides on-hp-threshold-crossed (below 60%); standing shield untouched', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains <unit-damage>Shield equal to 2.5%</unit-damage> of its Max HP every turn.<br />When HP drops below 60% it gains <unit-skill>Defense Up II</unit-skill> for 4 turns.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const buff = passive.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Defense Up II'
+            )!;
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-hp-threshold-crossed',
+                conditions: [selfHpBelow(60)],
+            });
+            expect(buff.config).toMatchObject({ duration: 4 });
+            // The every-turn shield sits in its own <br>-separated sentence → untouched.
+            const shield = passive.abilities.find((a) => a.type === 'shield')!;
+            expect(shield.trigger).not.toBe('on-hp-threshold-crossed');
+        });
+
+        it('Hermes charged: Cheat Death narrows to the heal target with a derivable below-40% target hp-threshold; heal + charge unchanged', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit <unit-damage>repairs 37%</unit-damage> of its Max HP and <unit-aid>adds 1 charge</unit-aid> to the Charged Skill.<br /><br />If the target has less than 40% HP, it grants <unit-skill>Cheat Death</unit-skill>.',
+                chargeSkillCharge: 4,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            const cheatDeath = charged.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
+            )!;
+            expect(cheatDeath).toMatchObject({
+                type: 'buff',
+                target: 'ally',
+                trigger: 'on-cast',
+                conditions: [
+                    {
+                        subject: 'hp-threshold',
+                        derivable: true,
+                        hpComparator: 'below',
+                        hpPercent: 40,
+                        hpSubject: 'target',
+                    },
+                ],
+            });
+            expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
+            // The 37% repair + 1 charge are unchanged by the target-gate wiring.
+            const heal = charged.abilities.find((a) => a.type === 'heal')!;
+            expect(heal).toMatchObject({
+                type: 'heal',
+                target: 'ally',
+                config: { type: 'heal', pct: 37, basis: 'hp' },
+            });
+            const charge = charged.abilities.find((a) => a.type === 'charge')!;
+            expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
+        });
+
+        it('Hayyan charged: Cheat Death stays an unconditional all-allies on-cast grant (byte-identical; only engine cadence changed in Task 5)', () => {
+            const s = ship({
+                chargeSkillText:
+                    'This Unit <unit-damage>repairs 17%</unit-damage> of its Max HP, grants <unit-skill>Cheat Death</unit-skill> to all allies, and <unit-aid>adds 1 charge</unit-aid> to their Charged Skill.',
+                chargeSkillCharge: 4,
+            });
+            const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+            const cheatDeath = charged.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
+            )!;
+            expect(cheatDeath).toMatchObject({
+                type: 'buff',
+                target: 'all-allies',
+                trigger: 'on-cast',
+                conditions: [],
+            });
+        });
+    });
 });
