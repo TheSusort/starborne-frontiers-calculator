@@ -230,3 +230,181 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         expect(rounds[0].shieldAbsorbed).toBe(0);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// Barrier duration semantics (lock) — resolves locked decision #9.
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+/** Self hp-threshold-below condition (TRIGGER config; executeIntent scrubs it at drain). */
+const selfThresholdBelow = (n: number) =>
+    ({
+        subject: 'hp-threshold',
+        derivable: true,
+        hpComparator: 'below',
+        hpPercent: n,
+        hpSubject: 'self',
+    }) as const;
+
+/** A real on-hp-threshold-crossed Barrier grant (Tycho/Kafa shape): when the tank's own
+ *  HP drops below `threshold`%, grant a `duration` Barrier self-buff. */
+const crossingBarrier = (threshold: number, duration: number, oncePerCombat = false): Ability => ({
+    id: `xbarrier-${++idCounter}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-hp-threshold-crossed',
+    conditions: [selfThresholdBelow(threshold)],
+    config: {
+        type: 'buff',
+        buffName: 'Barrier',
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: false,
+        duration,
+        oncePerCombat,
+    },
+});
+
+/** A damage-taken heal-leech (heals `pct`% of each attack's damage AFTER the drain).
+ *  Recovery so the tank re-arms above the threshold between crossings. noCrit → deterministic. */
+const takenLeechHeal = (pct: number): Ability => ({
+    id: `leech-${++idCounter}`,
+    type: 'heal',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'damage-taken', noCrit: true },
+});
+
+describe('Barrier duration semantics (lock)', () => {
+    /**
+     * LOCKED ANSWER (decision #9) — how many intake events a "for 1 turn" (duration:1)
+     * Barrier blocks, and in which rounds.
+     *
+     * Fixture: maxHp 10000, crossing threshold 40% (4000 HP), a duration:1 Barrier granted
+     * reactively when the tank's own HP first drops below 40% (Kafa/Tycho shape — but NOT
+     * oncePerCombat, so it can re-fire). A manual flat enemy hits 6500/round, and a 70%
+     * damage-taken leech recovers the tank ~back up each round. 4 rounds.
+     *
+     * OBSERVED round-by-round trace (per-round barrierAbsorbed / targetHpPctStart / round buffs):
+     *
+     *   R1 (start 100% = 10000):
+     *     - Enemy attacks 6500. NO Barrier active yet → HP drains 10000 → 3500 (35%).
+     *       This intake is NOT blocked (barrierAbsorbed R1 = 0).
+     *     - HP is now below 40% → the on-hp-threshold-crossed listener fires DURING R1's enemy
+     *       turn and grants Barrier duration:1.
+     *     - Leech 70% of 6500 = 4550 → 3500 + 4550 = 8050 (80.5%).
+     *     - Owner post-turn decrement INCLUDES same-turn applications: the duration:1 Barrier
+     *       granted THIS round is decremented 1 → 0 at the tank's own post-turn decrement and
+     *       EXPIRES before any further intake. It blocks NOTHING (the only R1 intake already
+     *       landed before the grant).
+     *
+     *   R2 (start 80.5% = 8050):
+     *     - The R1 Barrier still LINGERS in the round-overview snapshot (healTargetBuffs shows
+     *       'Barrier') — but it is already spent/expired and does NOT block: the 6500 attack
+     *       drains 8050 → 1550 (15.5%) UNBLOCKED (barrierAbsorbed R2 = 0). A fresh duration:1
+     *       Barrier is granted during R2's enemy turn and again expires same-turn.
+     *
+     *   R3 (start 61.0%): same — attack lands UNBLOCKED. Because no intake is ever blocked, the
+     *     leech can't keep pace with 6500/round and the tank is DESTROYED in round 3.
+     *
+     * CONCLUSION (the lock): a reactively-granted "for 1 turn" (duration:1) Barrier whose grant
+     * trigger fires DURING the enemy's turn (AFTER the attack that caused the crossing) blocks
+     * ZERO intake events. The same-turn application is immediately consumed by the tank's own
+     * post-turn decrement (owner post-turn decrement INCLUDES same-turn applications, per the
+     * turn model), so the Barrier never survives into a round where an intake event occurs.
+     * NOTE: the spent Barrier still LINGERS for one round in healTargetBuffs (the round-overview
+     * snapshot re-derives it) even though it blocks nothing — names-only display, never folded
+     * into any value. Every round's incoming attack therefore drains HP normally; barrierAbsorbed
+     * is 0 in EVERY round, and the tank dies once the leech can't keep up.
+     *
+     * This is the riskiest part of the plan and the result is SURPRISING but CORRECT for THIS
+     * grant shape: the grant timing (reactive, post-attack, during the enemy turn) collides with
+     * the same-turn decrement so a 1-turn duration has no surviving window. See the duration:2
+     * test below for the contrast (a longer duration DOES survive one round to block).
+     */
+    it('reactive duration:1 Barrier (grant fires post-attack) blocks ZERO intake — expires same turn', () => {
+        const { result } = run(
+            healBase({
+                numRounds: 4,
+                hp: 10_000,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [crossingBarrier(40, 1), takenLeechHeal(70)],
+                        },
+                    ],
+                },
+                enemyAttackers: [manualEnemy('atk1', 6500)],
+            })
+        );
+
+        const rounds = result.healing!.rounds;
+
+        // NON-VACUOUS: the attacks actually land as incoming damage in R1-R3 (R4 the tank is
+        // already dead → no further intake).
+        expect(rounds.slice(0, 3).every((rd) => rd.incomingDamage === 6500)).toBe(true);
+
+        // LOCK: a duration:1 Barrier granted reactively (post-attack, during the enemy turn) is
+        // decremented to expiry by the tank's own same-turn post-turn decrement → it never
+        // survives into an intake. barrierAbsorbed is 0 in EVERY round.
+        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([0, 0, 0, 0]);
+
+        // The spent Barrier LINGERS one round in the round-overview (R2 shows it) even though it
+        // blocked nothing — names-only display, distinct from the blocked total above.
+        expect(rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Barrier');
+
+        // Because nothing is ever blocked, the leech can't keep up with 6500/round → the tank
+        // is destroyed in round 3 (confirms the zero-block result is load-bearing, not vacuous).
+        expect(result.healing!.destroyedRound).toBe(3);
+    });
+
+    /**
+     * Contrast / sanity lock: a LONGER (duration:2) reactively-granted Barrier DOES survive past
+     * its grant turn and blocks the NEXT round's intake.
+     *
+     * Same fixture as above but duration:2. OBSERVED targetHpPctStart / barrierAbsorbed per round:
+     *   R1 start 100.0%, barrierAbsorbed 0
+     *   R2 start  80.5%, barrierAbsorbed 6500  (BLOCKED)
+     *   R3 start 100.0%, barrierAbsorbed 0
+     *   R4 start  80.5%, barrierAbsorbed 6500  (BLOCKED)
+     *
+     *   R1: attack 6500 lands UNBLOCKED (10000 → 3500, 35%) → crossing fires → Barrier duration:2
+     *       granted during R1's enemy turn → same-turn post-turn decrement takes 2 → 1 (STILL
+     *       ACTIVE). Leech recovers toward 80.5%.
+     *   R2: Barrier (1 turn left) is ACTIVE at the start of the enemy turn → the 6500 attack is
+     *       FULLY BLOCKED (barrierAbsorbed R2 = 6500, HP does NOT drain). No crossing → no fresh
+     *       grant. Post-turn decrement takes 1 → 0 → EXPIRES.
+     *   R3: Barrier expired → 6500 attack lands UNBLOCKED again → crossing fires → fresh
+     *       duration:2 Barrier granted → survives into R4.
+     *   R4: Barrier active → 6500 FULLY BLOCKED (barrierAbsorbed R4 = 6500).
+     *
+     * So a duration:2 Barrier blocks exactly the intake of the round AFTER each grant: rounds 2
+     * and 4 here. This confirms the duration:1 zero-block result above is a same-turn-decrement
+     * artifact of the 1-turn duration, not a bug in the block guard itself.
+     */
+    it('reactive duration:2 Barrier survives one round and blocks the NEXT round intake', () => {
+        const { result } = run(
+            healBase({
+                numRounds: 4,
+                hp: 10_000,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'passive',
+                            abilities: [crossingBarrier(40, 2), takenLeechHeal(70)],
+                        },
+                    ],
+                },
+                enemyAttackers: [manualEnemy('atk1', 6500)],
+            })
+        );
+
+        const rounds = result.healing!.rounds;
+
+        // R1 + R3 grants: attack lands unblocked (barrierAbsorbed 0). R2 + R4: fully blocked 6500.
+        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([0, 6500, 0, 6500]);
+        // The two blocks keep the tank alive across all 4 rounds.
+        expect(result.healing!.destroyedRound).toBeUndefined();
+    });
+});

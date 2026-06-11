@@ -237,6 +237,17 @@ export const HealerConfigCard: React.FC<HealerConfigCardProps> = ({
                                 value={summary.totalShieldAbsorbed.toLocaleString()}
                                 color="purple"
                             />
+                            {/* Barrier (full damage immunity) blocked total — only shown when a
+                                Barrier actually fired, keeping the common 2-card layout uncluttered
+                                for the vast majority of fleets that never use Barrier. The 3rd card
+                                wraps to a new row in the 2-col grid (acceptable). */}
+                            {summary.totalBarrierAbsorbed > 0 && (
+                                <StatCard
+                                    title="Barrier Absorbed"
+                                    value={summary.totalBarrierAbsorbed.toLocaleString()}
+                                    color="orange"
+                                />
+                            )}
                         </div>
 
                         <SummaryRow
