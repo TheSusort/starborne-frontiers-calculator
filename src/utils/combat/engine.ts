@@ -32,6 +32,7 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
+import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import {
@@ -785,6 +786,10 @@ export interface HealingRoundEngine {
     targetShieldStart: number;
     incomingDamage: number;
     shieldAbsorbed: number;
+    /** Per-round total fully blocked by an active Barrier (full damage immunity). Tracked
+     *  separately from shieldAbsorbed (Barrier does not drain the shield pool). Task 2 adds the
+     *  UI display surface; this field exists now so the blocked total is observable. */
+    barrierAbsorbed: number;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
@@ -1664,6 +1669,10 @@ export function runCombat(input: CombatEngineInput): {
         // to these via the shield-first drain below.
         let roundIncomingDamage = 0;
         let roundShieldAbsorbed = 0;
+        // Per-round total fully blocked by an active Barrier (full damage immunity). Tracked
+        // SEPARATELY from shieldAbsorbed (Barrier does NOT drain the shield pool) so the UI
+        // can attribute the blocked total to the Barrier, not the shield.
+        let roundBarrierAbsorbed = 0;
         // Enemy-effects accounting (healing mode, Task 10a): per-enemy self-buffs + the debuffs
         // each enemy lands on the heal target this round, surfaced for the UI's enemy-effects
         // round overview ATTRIBUTED to the source enemy ship. Keyed by the enemy actor id; an
@@ -1696,12 +1705,13 @@ export function runCombat(input: CombatEngineInput): {
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
-        // shield-before / absorbed / hpDamage the caller needs for any per-attack rider (the
-        // taken-leech punch-through gate). Both the per-attack enemy intake (below) and the tank
-        // DoT-tick intake (turn-start) route through here so the bleed accounting is identical.
+        // shield-before + the post-shield hpDamage the caller needs for any per-attack rider (the
+        // taken-leech punch-through gate; hpDamage is 0 under Barrier so the leech reads 0). Both
+        // the per-attack enemy intake (below) and the tank DoT-tick intake (turn-start) route
+        // through here so the bleed accounting is identical.
         const applyIncomingToTarget = (
             damage: number
-        ): { shieldBefore: number; absorbed: number; hpDamage: number } => {
+        ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
             roundIncomingDamage += damage;
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
@@ -1709,6 +1719,34 @@ export function runCombat(input: CombatEngineInput): {
             // the pre-hit value (not 1).
             const hpBefore = healTarget!.currentHp;
             const maxHp = recipientMaxHp(healTarget!.id);
+            // Barrier — FULL DAMAGE IMMUNITY (locked game rule). While the heal target carries
+            // an active BARRIER_BUFFS status, ALL incoming damage is fully blocked: direct
+            // attacks, DoT ticks, AND bomb detonations (all three funnel through this closure).
+            // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death
+            // — so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers
+            // the Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on
+            // first hit. The damage still "arrives" (roundIncomingDamage already incremented
+            // above) but its effect is nullified; the blocked amount is tracked SEPARATELY as
+            // roundBarrierAbsorbed (NOT roundShieldAbsorbed — Barrier never touches the shield).
+            // HP does not move → the emit below is a no-op crossing (oldPct === newPct), which we
+            // still fire once for emission consistency. Detection mirrors the Cheat-Death check
+            // (selfBuffNamesForOwners aggregates snapshot + timed + active ability self statuses).
+            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [healTarget!.id]).some(
+                (n) => BARRIER_BUFFS.has(n)
+            );
+            if (carriesBarrier) {
+                roundBarrierAbsorbed += damage;
+                if (healTarget!.currentHp > 0 && maxHp > 0) {
+                    bus.emit({
+                        type: 'hp-changed',
+                        targetId: healTarget!.id,
+                        round: r,
+                        oldPct: (100 * hpBefore) / maxHp,
+                        newPct: (100 * healTarget!.currentHp) / maxHp,
+                    });
+                }
+                return { shieldBefore: healTarget!.shieldPool, hpDamage: 0, barriered: true };
+            }
             const shieldBefore = healTarget!.shieldPool;
             const absorbed = Math.min(healTarget!.shieldPool, damage);
             healTarget!.shieldPool -= absorbed;
@@ -1781,7 +1819,7 @@ export function runCombat(input: CombatEngineInput): {
                     newPct: (100 * healTarget!.currentHp) / maxHp,
                 });
             }
-            return { shieldBefore, absorbed, hpDamage };
+            return { shieldBefore, hpDamage, barriered: false };
         };
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
@@ -2565,8 +2603,11 @@ export function runCombat(input: CombatEngineInput): {
                     }
                     if (damage > 0) {
                         // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
-                        // shieldBefore/absorbed are captured for the punch-through gate (Quixilver) below.
-                        const { shieldBefore, absorbed } = applyIncomingToTarget(damage);
+                        // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
+                        // hpDamage comes straight from the closure (0 under Barrier — damage fully
+                        // blocked, not shield-absorbed — otherwise damage - absorbed). barriered = the
+                        // attack was fully blocked by an active Barrier (decision #7, below).
+                        const { shieldBefore, hpDamage, barriered } = applyIncomingToTarget(damage);
 
                         // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                         // AFTER this attack's drain so the proc never absorbs its own trigger.
@@ -2579,8 +2620,11 @@ export function runCombat(input: CombatEngineInput): {
                         // verify list (spec §5).
                         // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
                         // to the heal target (enemy attacks only ever hit it).
-                        if (takenLeeches.length > 0 && healingCtx) {
-                            const hpDamage = damage - absorbed;
+                        // Barrier carve-out (decision #7): an attack FULLY BLOCKED by Barrier deals no
+                        // damage taken at all, so its damage-taken procs are skipped entirely — there is
+                        // nothing to leech from. (Distinct from a shield absorb, where the convention
+                        // still leeches off the full attack: a shield takes the hit, Barrier nullifies it.)
+                        if (takenLeeches.length > 0 && healingCtx && !barriered) {
                             const rt = runtimesById.get(healTarget!.id);
                             for (const e of takenLeeches) {
                                 if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
@@ -2849,6 +2893,7 @@ export function runCombat(input: CombatEngineInput): {
                 targetShieldStart,
                 incomingDamage: roundIncomingDamage,
                 shieldAbsorbed: roundShieldAbsorbed,
+                barrierAbsorbed: roundBarrierAbsorbed,
                 // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
                 // (keep the first occurrence so the UI shows each effect once per enemy per round),
                 // preserving the order enemies first acted this round. Active enemy-applied DoTs on

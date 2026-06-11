@@ -17,6 +17,7 @@ const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
     overheal: 0,
     incomingDamage: 0,
     shieldAbsorbed: 0,
+    barrierAbsorbed: 0,
     targetHpPct: 100,
     targetShieldPool: 0,
     totalRoundHealing: 0,

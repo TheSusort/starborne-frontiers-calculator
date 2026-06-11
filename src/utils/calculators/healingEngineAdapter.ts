@@ -74,6 +74,9 @@ export interface HealingRoundData {
     overheal: number;
     incomingDamage: number;
     shieldAbsorbed: number;
+    /** Full-immunity blocked total this round; distinct from shieldAbsorbed — Barrier never
+     *  touches the shield pool. */
+    barrierAbsorbed: number;
     targetHpPct: number; // ENTERING the round
     targetShieldPool: number; // ENTERING the round
     totalRoundHealing: number; // directHeal + hotHeal (raw; shield separate)
@@ -105,6 +108,7 @@ export interface HealingSimulationResult {
         totalEffectiveHealing: number;
         totalOverheal: number;
         totalShieldAbsorbed: number;
+        totalBarrierAbsorbed: number;
         totalIncomingDamage: number;
         /** RAW healing / rounds — NOT effective. */
         avgHealingPerRound: number;
@@ -239,6 +243,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     let totalEffectiveRaw = 0;
     let totalOverhealRaw = 0;
     let totalShieldAbsorbedRaw = 0;
+    let totalBarrierAbsorbedRaw = 0;
     let totalIncomingRaw = 0;
     let totalTeamRaw = 0;
 
@@ -253,6 +258,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         const overhealRaw = focus?.overheal ?? 0;
         const incomingRaw = hr?.incomingDamage ?? 0;
         const shieldAbsorbedRaw = hr?.shieldAbsorbed ?? 0;
+        const barrierAbsorbedRaw = hr?.barrierAbsorbed ?? 0;
 
         // teamHealing = Σ non-focus entries' raw (direct + HoT). Team shield contributes to the
         // pool mechanically (the engine consumes it) but is NOT separately reported here.
@@ -276,6 +282,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         totalEffectiveRaw += effectiveRaw;
         totalOverhealRaw += overhealRaw;
         totalShieldAbsorbedRaw += shieldAbsorbedRaw;
+        totalBarrierAbsorbedRaw += barrierAbsorbedRaw;
         totalIncomingRaw += incomingRaw;
         totalTeamRaw += teamRoundRaw;
 
@@ -293,6 +300,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             overheal: Math.round(overhealRaw),
             incomingDamage: Math.round(incomingRaw),
             shieldAbsorbed: Math.round(shieldAbsorbedRaw),
+            barrierAbsorbed: Math.round(barrierAbsorbedRaw),
             targetHpPct: Math.round(hr?.targetHpPctStart ?? 100),
             targetShieldPool: Math.round(hr?.targetShieldStart ?? 0),
             totalRoundHealing: Math.round(totalRoundRaw),
@@ -321,6 +329,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             totalEffectiveHealing: Math.round(totalEffectiveRaw),
             totalOverheal: Math.round(totalOverhealRaw),
             totalShieldAbsorbed: Math.round(totalShieldAbsorbedRaw),
+            totalBarrierAbsorbed: Math.round(totalBarrierAbsorbedRaw),
             totalIncomingDamage: Math.round(totalIncomingRaw),
             avgHealingPerRound:
                 numRounds > 0 ? Math.round((totalDirectRaw + totalHotRaw) / numRounds) : 0,

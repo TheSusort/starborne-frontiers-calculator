@@ -691,7 +691,8 @@ buff/charge-aura), source it from firing + passive.
   primitives 4e (cleanse/purge consumption) will build on.
 
   **Yazid `on-cheat-death-activated` follow-on.** Yazid repairs 60% of Max HP (once per combat)
-  and gains Barrier (name-only; the shield effect is UNMODELED) in the round Cheat Death fires.
+  and gains Barrier (now FULL DAMAGE IMMUNITY for its duration — no longer name-only; see
+  limitation 4) in the round Cheat Death fires.
 
   **Salvation `on-destroyed` ally-heal re-enabled.** Salvation's "when destroyed, repair all
   allies" heal now fires on the live `on-destroyed` trigger (it was disqualified as an unmodeled
@@ -718,14 +719,23 @@ buff/charge-aura), source it from firing + passive.
      Barrier "when its HP drops below 40%" — an `hp-threshold` reactive, not an
      `on-cheat-death-activated` follow-on. Not modeled in 4b; deferred to **4c**.
      **RESOLVED in 4c PR 3 (2026-06-11):** Tycho/Shelter/Los now fire Barrier (once per battle)
-     on the below-40% downward `on-hp-threshold-crossed` event (Barrier still name-only — the
-     shield amount is unsimulated, limitation 4).
+     on the below-40% downward `on-hp-threshold-crossed` event (Barrier is now modeled as full
+     damage immunity for its duration — see limitation 4, RESOLVED).
   3. *Harvester on-ally-destroyed extra action is wired-but-DORMANT until 4d.* In single-target
      focus-fire healing mode no ally is attacked, so the ally-destroyed event never fires; the
      listener is in place and will activate once 4d introduces multi-target targeting.
-  4. *Barrier shield effect UNMODELED.* Only the named buff-grant fires (Yazid/Tycho Barrier) —
-     the shield amount is not simulated, the same emitted-not-simulated convention as control
-     buffs.
+  4. *Barrier shield effect UNMODELED.*
+     **RESOLVED (2026-06-11, branch `feat/combat-engine-barrier-immunity`):** Barrier is now
+     modeled as FULL DAMAGE IMMUNITY for its duration. A single block point at the top of
+     `applyIncomingToTarget` (engine.ts) nullifies ALL incoming damage — direct attacks,
+     damage-over-time ticks, and bomb detonations — whenever the heal target carries an active
+     `'Barrier'` status, strictly in front of both the shield pool AND Cheat Death. It is
+     duration-based, not consumed on the first hit, and a `basis:'damage-taken'` leech reads 0 in
+     a fully-blocked round. REMAINING approximation: the "for 1 turn" duration under the turn
+     model — Barrier blocks the REMAINING same-round attacks, so its value scales with the number
+     of enemy attackers; a reactively-granted 1-turn Barrier is effectively inert against a SINGLE
+     attacker (it is granted after that enemy's only attack). The behavior is locked in
+     `src/utils/combat/__tests__/barrier.test.ts`.
   5. *Salvation on-destroyed dead-caster-recipient edge.* The heal's `all-allies` scope resolves
      to all player ids with NO dead-actor filtering, so a dead caster counts as a recipient in
      `directHeal` (gross) — this only surfaces in the synthetic Salvation-as-tank case;
@@ -939,6 +949,8 @@ buff/charge-aura), source it from firing + passive.
     - `targetHpPct` for the `'target'` subject is read at the caster's turn start
       (pre-this-cast-heal) — not after the cast's own heal.
     - Barrier remains NAME-ONLY (the 4b convention — the shield amount is not simulated).
+      *(Superseded 2026-06-11: Barrier is now modeled as full damage immunity for its duration —
+      see §5 Phase 4b KNOWN LIMITATION 4, RESOLVED.)*
     - Exact-vs-integer pct asymmetry: the tank-side `hp-changed` crossing check uses the EXACT
       HP fraction, whereas the enemy dummy's post-round HP emission stays integer-pct (the PR 1
       asymmetry, unchanged). Crossings are evaluated on the exact-pct tank side.
@@ -1141,14 +1153,16 @@ configure it and it looks like it works, but it does nothing".
 > - New `unremovable` concept: effects removable by default; `UNREMOVABLE_STATUSES` name-set
 >   (seeded Acidic Decay) + persistent-stacking debuffs unremovable; Bombs/Blast left untouched.
 > - Yazid `on-cheat-death-activated` follow-on: 60% self-repair (once per combat) + Barrier
->   (name-only; shield UNMODELED). Salvation `on-destroyed` ally-heal re-enabled.
+>   (name-only; shield UNMODELED — superseded 2026-06-11, now full damage immunity). Salvation
+>   `on-destroyed` ally-heal re-enabled.
 > - Reactive extra-action bridge: Sokol (on-kill, lands the round after), Liberator (on-kill +
 >   all-allies charge), Harvester (on-ally-destroyed — wired but dormant until 4d). §6 item 9a/9b.
 > - DPS goldens byte-identical (22 scenarios).
 >
 > **Phase 4b KNOWN LIMITATIONS (deferrals):** Hermes Cheat-Death grant drops its below-40%-HP
 > gate (parses unconditional → 4c); Tycho's Barrier is an HP-threshold reactive, not on
-> Cheat-Death (→ 4c); Harvester ally-destroyed dormant until 4d; Barrier shield UNMODELED;
+> Cheat-Death (→ 4c); Harvester ally-destroyed dormant until 4d; Barrier shield UNMODELED
+> (RESOLVED 2026-06-11 — now full damage immunity, see KNOWN LIMITATION 4);
 > Salvation on-destroyed `all-allies` has no dead-recipient filter (dead caster counts in gross
 > `directHeal`; effective/overheal credit only the live target → 4d); on-kill extra action lands
 > the round after the kill (post-round enemy-death reconciliation — deliberate).

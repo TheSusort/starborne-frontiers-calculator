@@ -2050,25 +2050,29 @@ describe('healingGoldenParity', () => {
     // (Engine reference: src/utils/combat/__tests__/hpCrossing.test.ts Tasks 4-5.)
     // =========================================================================
 
-    // ── Scenario 26 (A): once-per-battle crossing — Barrier granted ONCE over TWO crossings ──
-    // HAND-VERIFIED (mirrors the Tycho-shape engine test, hpCrossing.test.ts Task 4). The tank
-    // IS the focus + heal target (hp 10000, defence 0, speed 100 → acts before the enemy). Its
-    // PASSIVE slot carries a Barrier-style `on-hp-threshold-crossed` buff with config
-    // `oncePerCombat: true` and condition `hp-threshold self below 40%` (derivable — the TRIGGER
-    // config, scrubbed at drain time), plus a `basis:'damage-taken'` heal-leech (pct 70, noCrit)
-    // that recovers HP ABOVE 40% between crossings (heals AFTER each attack's drain → re-arms the
-    // next crossing). A bare enemy hits 6500/round (speed 50 → acts after the tank).
+    // ── Scenario 26 (A): once-per-battle crossing — Reinforced granted ONCE over TWO crossings ──
+    // HAND-VERIFIED (mirrors the Tycho-shape engine test, hpCrossing.test.ts Task 4). This scenario
+    // tests the on-hp-threshold-crossed GRANT CADENCE (oncePerCombat caps to one grant); it uses a
+    // NEUTRAL non-blocking buff ('Reinforced', not in BARRIER_BUFFS/CHEAT_DEATH_BUFFS/
+    // UNREMOVABLE_STATUSES/PERSISTENT_STACKING_BUFFS) so the cadence is decoupled from Barrier's
+    // damage-immunity — Barrier's blocking is covered in src/utils/combat/__tests__/barrier.test.ts.
+    // The tank IS the focus + heal target (hp 10000, defence 0, speed 100 → acts before the enemy).
+    // Its PASSIVE slot carries a `on-hp-threshold-crossed` buff with config `oncePerCombat: true`
+    // and condition `hp-threshold self below 40%` (derivable — the TRIGGER config, scrubbed at drain
+    // time), plus a `basis:'damage-taken'` heal-leech (pct 70, noCrit) that recovers HP ABOVE 40%
+    // between crossings (heals AFTER each attack's drain → re-arms the next crossing). A bare enemy
+    // hits 6500/round (speed 50 → acts after the tank).
     //
     // threshold 40% = 4000 HP. Each round the tank acts first (no heal to do — the leech is a
     // takenLeech that only fires after damage), then the enemy hits, the tank-side hp-changed is
     // emitted (the crossing test), then the takenLeech recovers:
     //   R1 enter 100% (10000): enemy 6500 → HP 3500 (35%). hp-changed 100 → 35 CROSSES below 40
-    //       → CROSS#1 → Barrier (oncePerCombat) APPLIES (round 1, duration 3). takenLeech 70% ×
+    //       → CROSS#1 → Reinforced (oncePerCombat) APPLIES (round 1, duration 3). takenLeech 70% ×
     //       6500 = 4550 (deficit 6500 → all effective, overheal 0) → HP 3500 + 4550 = 8050 (80.5%).
     //   R2 enter 80.5% (→ 81): enemy 6500 → HP 1550 (15.5%). hp-changed 80.5 → 15.5 CROSSES below
-    //       40 → CROSS#2 → Barrier oncePerCombat SKIPS the re-fire (no second grant). takenLeech
+    //       40 → CROSS#2 → Reinforced oncePerCombat SKIPS the re-fire (no second grant). takenLeech
     //       4550 (deficit 8450 → all effective) → HP 1550 + 4550 = 6100 (61%).
-    //   ⇒ TWO downward crossings of 40 occur, but the Barrier is granted EXACTLY ONCE (round 1).
+    //   ⇒ TWO downward crossings of 40 occur, but the Reinforced buff is granted EXACTLY ONCE (round 1).
     //     The round-1 grant (duration 3) persists into round 2's healTargetBuffs. directHeal is
     //     the leech 4550 every round (all effective, overheal 0); incomingDamage 6500 every round;
     //     targetHpPct entering [100, 81]. The tank SURVIVES both rounds (net −1950/round; 2 rounds
@@ -2083,7 +2087,7 @@ describe('healingGoldenParity', () => {
                     {
                         slot: 'passive',
                         abilities: [
-                            // Barrier-style crossing reactive: oncePerCombat caps it to ONE grant.
+                            // Neutral crossing reactive: oncePerCombat caps it to ONE grant.
                             ab({
                                 type: 'buff',
                                 target: 'self',
@@ -2099,7 +2103,7 @@ describe('healingGoldenParity', () => {
                                 ],
                                 config: {
                                     type: 'buff',
-                                    buffName: 'Barrier',
+                                    buffName: 'Reinforced',
                                     parsedEffects: {},
                                     stacks: 1,
                                     isStackable: false,
@@ -2136,22 +2140,24 @@ describe('healingGoldenParity', () => {
         });
 
     snap(
-        'once-per-battle crossing (Barrier granted ONCE despite TWO downward crossings)',
+        'once-per-battle crossing (Reinforced granted ONCE despite TWO downward crossings)',
         scenario26Input
     );
 
-    // Supplementary: the Barrier is granted EXACTLY ONCE (round 1) despite two downward crossings
-    // of 40, and the duration-3 grant persists into round 2's healTargetBuffs.
-    it('scenario 26: Barrier granted once on round 1 (oncePerCombat), persists into round 2', () => {
+    // Supplementary: the Reinforced buff is granted EXACTLY ONCE (round 1) despite two downward
+    // crossings of 40, and the duration-3 grant persists into round 2's healTargetBuffs. (A neutral
+    // non-blocking buff isolates the oncePerCombat cadence; Barrier's blocking is covered in
+    // src/utils/combat/__tests__/barrier.test.ts.)
+    it('scenario 26: Reinforced granted once on round 1 (oncePerCombat), persists into round 2', () => {
         idCounter = 0;
         const bus = createEventBus();
-        const barriers: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        const grants: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
         bus.on('buff-applied', (e) => {
-            if (e.buffName === 'Barrier' && e.actorId === 'attacker') barriers.push(e);
+            if (e.buffName === 'Reinforced' && e.actorId === 'attacker') grants.push(e);
         });
         const result = simulateHealing({ ...scenario26Input(), bus });
-        // Exactly one Barrier application across the whole combat, on the first crossing.
-        expect(barriers.map((b) => b.round)).toEqual([1]);
+        // Exactly one Reinforced application across the whole combat, on the first crossing.
+        expect(grants.map((b) => b.round)).toEqual([1]);
         // The recovery leech heals 4550 (70% of 6500) every round, all effective.
         expect(result.rounds.map((r) => r.directHeal)).toEqual([4550, 4550]);
         expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([4550, 4550]);
@@ -2160,7 +2166,7 @@ describe('healingGoldenParity', () => {
         // Entering HP%: 100, then 80.5% (rounds to 81) after the R1 leech recovery.
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 81]);
         // The round-1 grant (duration 3) is still held when entering round 2.
-        expect(result.rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Barrier');
+        expect(result.rounds[1].healTargetBuffs.map((b) => b.buffName)).toContain('Reinforced');
     });
 
     // ── Scenario 27 (B): Hermes-shape cast-path Cheat Death (grant round + later save) ──

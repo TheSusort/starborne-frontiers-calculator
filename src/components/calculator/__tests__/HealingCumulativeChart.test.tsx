@@ -44,6 +44,7 @@ const row = (over: Partial<HealingRoundData>): HealingRoundData => ({
     overheal: 0,
     incomingDamage: 0,
     shieldAbsorbed: 0,
+    barrierAbsorbed: 0,
     targetHpPct: 100,
     targetShieldPool: 0,
     totalRoundHealing: 0,
@@ -63,6 +64,7 @@ const summary = (): HealingSimulationResult['summary'] => ({
     totalEffectiveHealing: 0,
     totalOverheal: 0,
     totalShieldAbsorbed: 0,
+    totalBarrierAbsorbed: 0,
     totalIncomingDamage: 0,
     avgHealingPerRound: 0,
 });
