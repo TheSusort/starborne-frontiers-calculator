@@ -1705,12 +1705,13 @@ export function runCombat(input: CombatEngineInput): {
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
         // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
-        // shield-before / absorbed / hpDamage the caller needs for any per-attack rider (the
-        // taken-leech punch-through gate). Both the per-attack enemy intake (below) and the tank
-        // DoT-tick intake (turn-start) route through here so the bleed accounting is identical.
+        // shield-before + the post-shield hpDamage the caller needs for any per-attack rider (the
+        // taken-leech punch-through gate; hpDamage is 0 under Barrier so the leech reads 0). Both
+        // the per-attack enemy intake (below) and the tank DoT-tick intake (turn-start) route
+        // through here so the bleed accounting is identical.
         const applyIncomingToTarget = (
             damage: number
-        ): { shieldBefore: number; absorbed: number; hpDamage: number } => {
+        ): { shieldBefore: number; hpDamage: number } => {
             roundIncomingDamage += damage;
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
@@ -1744,7 +1745,7 @@ export function runCombat(input: CombatEngineInput): {
                         newPct: (100 * healTarget!.currentHp) / maxHp,
                     });
                 }
-                return { shieldBefore: healTarget!.shieldPool, absorbed: 0, hpDamage: 0 };
+                return { shieldBefore: healTarget!.shieldPool, hpDamage: 0 };
             }
             const shieldBefore = healTarget!.shieldPool;
             const absorbed = Math.min(healTarget!.shieldPool, damage);
@@ -1818,7 +1819,7 @@ export function runCombat(input: CombatEngineInput): {
                     newPct: (100 * healTarget!.currentHp) / maxHp,
                 });
             }
-            return { shieldBefore, absorbed, hpDamage };
+            return { shieldBefore, hpDamage };
         };
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();

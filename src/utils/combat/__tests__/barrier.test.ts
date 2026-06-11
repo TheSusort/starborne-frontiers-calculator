@@ -118,6 +118,9 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         expect(rounds[0].barrierAbsorbed).toBe(3000);
         // Shield pool untouched (no shield ability → 0, and barrier did NOT drain it).
         expect(rounds[0].shieldAbsorbed).toBe(0);
+        // Blocked damage still "arrives": it counts toward incomingDamage even though its
+        // effect is nullified (mirrors the control test's incomingDamage assertion).
+        expect(rounds[0].incomingDamage).toBe(3000);
     });
 
     // ── DoT batch (Corrosion) while barriered → HP unchanged (DoT fully blocked) ──
