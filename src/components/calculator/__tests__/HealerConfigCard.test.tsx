@@ -28,7 +28,10 @@ const config: HealerShipConfig = {
     shipSkills: buildDefaultShipSkills(),
 };
 
-const makeResult = (destroyedRound?: number): HealingSimulationResult => ({
+const makeResult = (
+    destroyedRound?: number,
+    totalBarrierAbsorbed = 0
+): HealingSimulationResult => ({
     rounds: [
         {
             round: 1,
@@ -63,7 +66,7 @@ const makeResult = (destroyedRound?: number): HealingSimulationResult => ({
         totalEffectiveHealing: 5000,
         totalOverheal: 1000,
         totalShieldAbsorbed: 1500,
-        totalBarrierAbsorbed: 0,
+        totalBarrierAbsorbed,
         totalIncomingDamage: 0,
         avgHealingPerRound: 6000,
         ...(destroyedRound !== undefined ? { destroyedRound } : {}),
@@ -95,6 +98,27 @@ describe('HealerConfigCard', () => {
         expect(screen.getByText('Shield Absorbed')).toBeInTheDocument();
         // Overheal with % of raw: 1000 / 6000 = 17%
         expect(screen.getByText(/1,000 \(17% of raw\)/)).toBeInTheDocument();
+        // The conditional "Barrier Absorbed" card is ABSENT when totalBarrierAbsorbed === 0.
+        expect(screen.queryByText('Barrier Absorbed')).not.toBeInTheDocument();
+    });
+
+    it('renders the Barrier Absorbed card when totalBarrierAbsorbed > 0', () => {
+        render(
+            <HealerConfigCard
+                config={config}
+                isBest
+                isComparing={false}
+                simResult={makeResult(undefined, 12345)}
+                bestEffectiveHealing={5000}
+                onRemove={noop}
+                onUpdate={noop}
+                onSelectShip={noop}
+                onStartChargedChange={noop}
+                onShipSkillsChange={noop}
+            />
+        );
+        expect(screen.getByText('Barrier Absorbed')).toBeInTheDocument();
+        expect(screen.getByText((12345).toLocaleString())).toBeInTheDocument();
     });
 
     it('shows positive survival text when the target survives', () => {

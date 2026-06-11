@@ -103,7 +103,7 @@ describe('Barrier — full damage immunity (Task 1)', () => {
     it('blocks a direct attack: HP unchanged, barrierAbsorbed == attack damage, shieldPool untouched', () => {
         const { result } = run(
             healBase({
-                numRounds: 1,
+                numRounds: 2,
                 hp: 10_000,
                 selfBuffs: [barrierBuff()],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -111,11 +111,15 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         );
 
         const rounds = result.healing!.rounds;
-        // HP fully intact — the attack was fully blocked.
-        expect(rounds[0].targetHpPctStart).toBeCloseTo(100, 6);
+        // targetHpPctStart is a PRE-hit snapshot, so round 0's 100% proves nothing on its own.
+        // The POST-hit signal is round 2's start HP: Barrier is active both rounds, so if the
+        // round-1 hit had drained HP, round 2 would start below 100%. It starts at 100% →
+        // the round-1 hit was fully blocked.
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
         expect(result.healing!.destroyedRound).toBeUndefined();
         // The blocked total is tracked separately as barrierAbsorbed (NOT shieldAbsorbed).
         expect(rounds[0].barrierAbsorbed).toBe(3000);
+        expect(rounds[1].barrierAbsorbed).toBe(3000);
         // Shield pool untouched (no shield ability → 0, and barrier did NOT drain it).
         expect(rounds[0].shieldAbsorbed).toBe(0);
         // Blocked damage still "arrives": it counts toward incomingDamage even though its
@@ -134,7 +138,9 @@ describe('Barrier — full damage immunity (Task 1)', () => {
                 target: 'enemy',
                 config: { type: 'dot', dotType: 'corrosion', tier: 7, stacks: 10, duration: 5 },
             });
-        const dotEnemy = manualEnemy('dotEnemy', 1000, 50, {
+        // attack 0 → the ONLY incoming damage is the corrosion tick (isolates the DoT from the
+        // enemy's basic attack, so incomingDamage > 0 below is sourced solely from the tick).
+        const dotEnemy = manualEnemy('dotEnemy', 0, 50, {
             shipSkills: { slots: [{ slot: 'active', abilities: [corrosionDot()] }] },
         });
 
@@ -172,7 +178,17 @@ describe('Barrier — full damage immunity (Task 1)', () => {
                 target: 'enemy',
                 config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
             });
-        const bombEnemy = manualEnemy('bombEnemy', 1000, 50, {
+        // NOTE: a ship-backed enemy whose active skill is the bomb-apply + detonate kit deals NO
+        // basic-attack direct damage into the heal target — the only incoming stream is the bomb
+        // detonation (verified: incomingDamage is [0, 700, 700, 700] = the bomb burst alone, the
+        // basic attack contributes nothing). Bomb burst scales with the APPLIER's effective attack
+        // (playerTurn.ts: damagePerStack = effectiveAttack * tier/100), so 10 stacks × (1000 × 7/100)
+        // × 100% = 700 per detonation. The basic `attack` value is therefore irrelevant to intake
+        // except as the bomb's damagePerStack scalar — it must stay non-zero or the bomb deals 0.
+        // The test pins the EXACT bomb total below, so it cannot pass on basic-attack blocking.
+        const attack = 1000;
+        const bombDamagePerRound = 10 /* stacks */ * (attack * (7 / 100)); /* tier 7 */ // = 700
+        const bombEnemy = manualEnemy('bombEnemy', attack, 50, {
             shipSkills: { slots: [{ slot: 'active', abilities: [bombDot(), detonate()] }] },
         });
 
@@ -186,9 +202,17 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         );
 
         const rounds = result.healing!.rounds;
-        // Bomb detonation damage arrived (non-vacuous)…
-        expect(rounds.some((rd) => rd.incomingDamage > 0)).toBe(true);
-        // …but Barrier fully blocked it → HP at the start of the last round is still 100%.
+        // NON-VACUOUS + ISOLATED: the bomb detonation actually arrives as incoming damage, and the
+        // incoming total equals the EXACT bomb burst (700/round, rounds 2-4) — not a basic attack.
+        // This proves the assertion is exercising the bomb path, not basic-attack blocking.
+        const detonationRounds = rounds.filter((rd) => rd.incomingDamage > 0);
+        expect(detonationRounds.length).toBeGreaterThan(0);
+        expect(detonationRounds.every((rd) => rd.incomingDamage === bombDamagePerRound)).toBe(true);
+        // …but Barrier fully blocked each detonation (barrierAbsorbed === the exact bomb total)…
+        expect(detonationRounds.every((rd) => rd.barrierAbsorbed === bombDamagePerRound)).toBe(
+            true
+        );
+        // …so HP at the start of the last round is still 100%.
         expect(rounds[rounds.length - 1].targetHpPctStart).toBeCloseTo(100, 6);
         expect(result.healing!.destroyedRound).toBeUndefined();
     });
@@ -197,7 +221,7 @@ describe('Barrier — full damage immunity (Task 1)', () => {
     it('a lethal hit blocked by Barrier does NOT trigger Cheat Death (Barrier is in front of it)', () => {
         const { result, cheated } = run(
             healBase({
-                numRounds: 1,
+                numRounds: 2,
                 hp: 2000, // enemy hits for 3000 → lethal sized
                 selfBuffs: [barrierBuff(), cheatDeathBuff()],
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -205,8 +229,9 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         );
 
         const rounds = result.healing!.rounds;
-        // HP unchanged — Barrier blocked the whole (lethal-sized) hit.
-        expect(rounds[0].targetHpPctStart).toBeCloseTo(100, 6);
+        // POST-hit signal: round 2's start HP is 100% → the would-be-lethal round-1 hit drained
+        // NO HP (Barrier is active both rounds and blocked it fully).
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
         expect(result.healing!.destroyedRound).toBeUndefined();
         // Cheat Death was NOT consumed: Barrier is strictly in front of it.
         expect(cheated).toHaveLength(0);
@@ -216,7 +241,7 @@ describe('Barrier — full damage immunity (Task 1)', () => {
     it('control (no Barrier): the same direct attack drains HP normally', () => {
         const { result } = run(
             healBase({
-                numRounds: 1,
+                numRounds: 2,
                 hp: 10_000,
                 selfBuffs: [], // NO Barrier
                 enemyAttackers: [manualEnemy('atk1', 3000)],
@@ -228,6 +253,44 @@ describe('Barrier — full damage immunity (Task 1)', () => {
         expect(rounds[0].barrierAbsorbed).toBe(0);
         expect(rounds[0].incomingDamage).toBe(3000);
         expect(rounds[0].shieldAbsorbed).toBe(0);
+        // POST-hit signal: with NO Barrier the round-1 hit actually drains HP, so round 2 starts
+        // at (10000 - 3000) / 10000 = 70%. This is what genuinely proves HP dropped (contrast the
+        // barriered test where round-2 start stays 100%).
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(70, 6);
+    });
+
+    // ── Shield precedence: Barrier sits IN FRONT of the shield pool (never drains it) ──
+    // The heal target carries BOTH a 25%-of-hp self shield (2500 pool) AND Barrier. A barriered
+    // attack must be blocked by Barrier first, so the shield pool is NEVER touched.
+    it('shield precedence: Barrier blocks in front of the shield pool — shield never drains', () => {
+        const shieldSelf = () =>
+            ab({
+                type: 'shield',
+                target: 'self',
+                config: { type: 'shield', pct: 25, basis: 'hp' }, // 25% of 10000 hp = 2500 pool
+            });
+
+        const { result } = run(
+            healBase({
+                numRounds: 2,
+                hp: 10_000,
+                shipSkills: { slots: [{ slot: 'active', abilities: [shieldSelf()] }] },
+                selfBuffs: [barrierBuff()],
+                enemyAttackers: [manualEnemy('atk1', 3000)],
+            })
+        );
+
+        const rounds = result.healing!.rounds;
+        // The fixture really does seed a non-zero shield pool (otherwise this test is vacuous):
+        // by round 2 the round-1 cast's 2500 shield is present at round start.
+        expect(rounds[1].targetShieldStart).toBeGreaterThan(0);
+        // Barrier blocks each round's 3000 attack…
+        expect(rounds.map((rd) => rd.barrierAbsorbed)).toEqual([3000, 3000]);
+        // …and because Barrier is in FRONT of the shield, the shield pool is NEVER drained.
+        expect(rounds.map((rd) => rd.shieldAbsorbed)).toEqual([0, 0]);
+        // HP intact (round-2 start, the post-hit signal) — nothing got through Barrier.
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
+        expect(result.healing!.destroyedRound).toBeUndefined();
     });
 });
 
