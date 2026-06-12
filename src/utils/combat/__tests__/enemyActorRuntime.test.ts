@@ -47,7 +47,7 @@ describe('buildEnemyPlayerActorRuntime', () => {
                 chargeCount: 0,
                 startCharged: false,
             },
-            { statusEngine, playerIds: ['attacker'], enemyDebuffLookup: emptyDebuffLookup() }
+            { statusEngine, enemyIds: ['attacker'], enemyDebuffLookup: emptyDebuffLookup() }
         );
 
         // actor side/kind
@@ -104,7 +104,7 @@ describe('buildEnemyPlayerActorRuntime', () => {
         const statusEngine = makeStatusEngine();
         const ctx = {
             statusEngine,
-            playerIds: ['attacker'],
+            enemyIds: ['attacker'],
             enemyDebuffLookup: emptyDebuffLookup(),
         };
 
@@ -174,7 +174,7 @@ describe('buildEnemyPlayerActorRuntime', () => {
                 startCharged: false,
                 shipSkills,
             },
-            { statusEngine, playerIds: ['attacker'], enemyDebuffLookup: emptyDebuffLookup() }
+            { statusEngine, enemyIds: ['attacker'], enemyDebuffLookup: emptyDebuffLookup() }
         );
 
         // The reactive buff was partitioned OUT of castSkills
@@ -212,7 +212,7 @@ describe('buildEnemyPlayerActorRuntime', () => {
                 chargeCount: 0,
                 startCharged: false,
             },
-            { statusEngine, playerIds: ['attacker'], enemyDebuffLookup: lookup }
+            { statusEngine, enemyIds: ['attacker'], enemyDebuffLookup: lookup }
         );
         expect(runtime.enemyDebuffLookup).toBe(lookup);
     });

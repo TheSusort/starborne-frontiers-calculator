@@ -398,7 +398,7 @@ describe('Task 9: enemy affinity threading', () => {
         });
         return {
             statusEngine,
-            playerIds: ['attacker'],
+            enemyIds: ['attacker'],
             enemyDebuffLookup: new Map(),
         };
     };
