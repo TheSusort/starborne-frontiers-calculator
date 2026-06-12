@@ -1107,9 +1107,7 @@ function abilitiesFromText(
                 type: 'charge',
                 target: 'all-allies',
                 trigger: allyChargeGrant.trigger,
-                conditions: allyChargeGrant.condition
-                    ? [{ subject: 'enemy-buff', buffName: 'Stealth', derivable: true }]
-                    : [],
+                conditions: allyChargeGrant.conditions ?? [],
                 config: { type: 'charge', amount: allyChargeGrant.amount },
                 autoFilled: true,
             },

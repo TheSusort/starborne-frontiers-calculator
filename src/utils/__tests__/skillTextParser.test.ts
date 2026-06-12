@@ -1332,7 +1332,7 @@ describe('parseAllyChargeGrant', () => {
         expect(parseAllyChargeGrant(text)).toEqual({
             amount: 2,
             trigger: 'start-of-round',
-            condition: true,
+            conditions: [{ subject: 'enemy-buff', buffName: 'Stealth', derivable: true }],
         });
     });
 
@@ -1342,7 +1342,7 @@ describe('parseAllyChargeGrant', () => {
         expect(parseAllyChargeGrant(text)).toEqual({
             amount: 1,
             trigger: 'start-of-round',
-            condition: true,
+            conditions: [{ subject: 'enemy-buff', buffName: 'Stealth', derivable: true }],
         });
     });
 

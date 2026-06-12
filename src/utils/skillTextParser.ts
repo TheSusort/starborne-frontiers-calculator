@@ -1420,29 +1420,33 @@ const ALLY_CHARGE_GRANT_RE =
     /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+all\s+allies)/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
+// Shared on-enemy-death phrasing. Used both to EXCLUDE Liberator's death-triggered grant
+// from parseAllyChargeGrant (below) and to detect the on-enemy-destroyed extra-action trigger
+// (EXTRA_ACTION_ENEMY_DESTROYED_RE, further down). Alternation order is irrelevant for .test().
+const ENEMY_DEATH_PHRASING_RE = /when an enemy dies|upon a kill|killing an enemy/i;
+
 // Death-triggered ally-charge grants are Liberator's domain (parseAllyChargeOnEnemyDeath +
 // on-enemy-destroyed trigger). Liberator's text ("When an enemy dies, all allies add 1 charge
 // to their Charged Skills") ALSO matches ALLY_CHARGE_GRANT_RE, so parseAllyChargeGrant must
 // bail on the on-enemy-death phrasing to avoid a spurious second (on-cast) charge ability.
-// Same detection vocabulary as EXTRA_ACTION_ENEMY_DESTROYED_RE.
-const ALLY_CHARGE_ON_DEATH_EXCLUDE_RE = /when an enemy dies|upon a kill|killing an enemy/i;
 
 /**
  * Parses Hayyan's / Graphite's all-allies charge-bar grant. Returns the per-ally charge
  * amount, the trigger ('on-cast' for Hayyan, 'start-of-round' for Graphite — detected
  * directly via START_OF_ROUND_RE, NOT detectReactiveTrigger which is buff-name-scoped),
- * and a `condition` flag set when the grant is gated on an enemy having Stealth (Graphite).
+ * and a `conditions` array set when the grant is gated on an enemy having Stealth (Graphite) —
+ * a derivable enemy-buff condition the emission site spreads directly (no re-hardcoded buffName).
  * Returns null when no ally-charge phrase matches — self-charge ships fall through to
  * parseChargeGain (whose CHARGE_DISQUALIFY_RE already rejects these ally phrasings).
  */
 export function parseAllyChargeGrant(
     text: string | null | undefined
-): { amount: number; trigger: 'on-cast' | 'start-of-round'; condition?: boolean } | null {
+): { amount: number; trigger: 'on-cast' | 'start-of-round'; conditions?: Condition[] } | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
     // Death-triggered grants (Liberator) belong to parseAllyChargeOnEnemyDeath /
     // on-enemy-destroyed — never claim them here, or we'd double-emit an on-cast grant.
-    if (ALLY_CHARGE_ON_DEATH_EXCLUDE_RE.test(plain)) return null;
+    if (ENEMY_DEATH_PHRASING_RE.test(plain)) return null;
     const m = ALLY_CHARGE_GRANT_RE.exec(plain);
     if (!m) return null;
     const raw = m[1].toLowerCase();
@@ -1450,8 +1454,10 @@ export function parseAllyChargeGrant(
     if (!amount || isNaN(amount)) return null;
 
     const trigger = START_OF_ROUND_RE.test(plain) ? 'start-of-round' : 'on-cast';
-    const condition = ALLY_CHARGE_ENEMY_STEALTH_RE.test(plain);
-    return { amount, trigger, ...(condition ? { condition: true } : {}) };
+    const conditions: Condition[] = ALLY_CHARGE_ENEMY_STEALTH_RE.test(plain)
+        ? [{ subject: 'enemy-buff', buffName: 'Stealth', derivable: true }]
+        : [];
+    return { amount, trigger, ...(conditions.length ? { conditions } : {}) };
 }
 
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
@@ -1466,7 +1472,7 @@ const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
 // Death-trigger detection (Phase 4b Task 10) on the matched clause: an on-kill phrasing
 // (Sokol "upon a kill", Liberator "when an enemy dies") → on-enemy-destroyed; an
 // ally-destroyed phrasing (Harvester) → on-ally-destroyed. Default (no match) → on-cast.
-const EXTRA_ACTION_ENEMY_DESTROYED_RE = /upon a kill|when an enemy dies|killing an enemy/i;
+const EXTRA_ACTION_ENEMY_DESTROYED_RE = ENEMY_DEATH_PHRASING_RE;
 const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;
 
 // "gains/grants (itself) one|1|a|an extra (End Of Round) action" — incl. Tygr's
