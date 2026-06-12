@@ -492,7 +492,10 @@ function mergeDoTsForDisplay(
  *  self-buffs/debuffs, so absent from `roundEnemyEffects`) gets a fresh entry appended so its DoTs
  *  still surface. NAMES/COUNTS ONLY for display — never folded into a sim value. */
 function buildEnemyRoundEffects(
-    roundEnemyEffects: Map<string, { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }>,
+    roundEnemyEffects: Map<
+        string,
+        { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[]; resistedDebuffs: ActiveBuff[] }
+    >,
     corrosionEntries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[],
     infernoEntries: Pick<ActiveDoTStack, 'sourceId' | 'tier' | 'stacks'>[]
 ): EnemyRoundEffects[] {
@@ -527,6 +530,7 @@ function buildEnemyRoundEffects(
             selfBuffs: dedupeByBuffName(e.selfBuffs),
             debuffs: dedupeByBuffName(e.debuffs),
             dots: Array.from(dotsBySource.get(enemyId)?.values() ?? []),
+            resistedDebuffs: dedupeByBuffName(e.resistedDebuffs),
         });
     }
     // DoT-only enemies (active DoTs but no self-buffs/debuffs) appended in container order.
@@ -538,6 +542,7 @@ function buildEnemyRoundEffects(
             selfBuffs: [],
             debuffs: [],
             dots: Array.from(byKey.values()),
+            resistedDebuffs: [],
         });
     }
     return out;
@@ -780,6 +785,11 @@ export interface EnemyRoundEffects {
      *  DoT-based enemy (Torcher/Belladonna) surfaces in the panel even with no self-buffs/debuffs.
      *  NAMES ONLY for display — never folded into any sim value. Empty when no DoTs are active. */
     dots: EnemyDoTState[];
+    /** TIMED debuffs this enemy attacker ATTEMPTED to inflict on the heal target this round but
+     *  that were RESISTED by the hacking-vs-security landing roll (per-enemy `debuffLandingChance`).
+     *  De-duped by buffName WITHIN this enemy. NAMES ONLY for display — never folded into any sim
+     *  value. Empty when every attempted debuff landed (or the enemy attempted none). */
+    resistedDebuffs: ActiveBuff[];
 }
 
 /** One enemy-applied DoT active on the heal target, attributed to its source enemy and summed per
@@ -1690,7 +1700,7 @@ export function runCombat(input: CombatEngineInput): {
         // buffName WITHIN each enemy at the post-round push. Empty for a bare/manual enemy → no UI rows.
         const roundEnemyEffects = new Map<
             string,
-            { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[] }
+            { selfBuffs: ActiveBuff[]; debuffs: ActiveBuff[]; resistedDebuffs: ActiveBuff[] }
         >();
         // Display snapshot of the heal target's DoT containers, captured BEFORE the
         // tank's turn-start tickDoTs/expireStacks run.  Merged with the live containers
@@ -2603,17 +2613,23 @@ export function runCombat(input: CombatEngineInput): {
                         // Debuffs use inflictedEnemyDebuffs (source-accurate: only what THIS enemy
                         // applied this turn) rather than landedEnemyDebuffs (the shared per-target
                         // window, which would leak other attackers' debuffs into this enemy's group).
+                        // resistedEnemyDebuffs = the TIMED debuffs THIS enemy attempted but were
+                        // resisted by its hacking-vs-security landing roll (display-only — Task R1).
+                        // The guard also fires on resists alone so a fully-resisted enemy (nothing
+                        // landed) still gets an entry and surfaces its resisted debuffs.
                         if (
                             enemyTurn.activeSelfBuffs.length > 0 ||
-                            enemyTurn.inflictedEnemyDebuffs.length > 0
+                            enemyTurn.inflictedEnemyDebuffs.length > 0 ||
+                            enemyTurn.resistedEnemyDebuffs.length > 0
                         ) {
                             let entry = roundEnemyEffects.get(actor.id);
                             if (!entry) {
-                                entry = { selfBuffs: [], debuffs: [] };
+                                entry = { selfBuffs: [], debuffs: [], resistedDebuffs: [] };
                                 roundEnemyEffects.set(actor.id, entry);
                             }
                             entry.selfBuffs.push(...enemyTurn.activeSelfBuffs);
                             entry.debuffs.push(...enemyTurn.inflictedEnemyDebuffs);
+                            entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
                         }
                         // Extra-action grants: re-insert this enemy into the remaining queue for an extra
                         // turn (full-actor completeness — mirrors the attacker and walked-team branches).
