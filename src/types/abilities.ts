@@ -50,7 +50,12 @@ export type AbilityTrigger =
     // (downward only — heals/upward changes emit nothing). The buff executor uses this
     // to grant conditional buffs, once-per-combat where the game says so (Tycho/Shelter/
     // Los "once per battle, when HP drops below X%"; Kafa/Redeemer re-fire each crossing).
-    | 'on-hp-threshold-crossed';
+    | 'on-hp-threshold-crossed'
+    // Fired when an ENEMY-SIDE actor repairs (reuses heal-performed) or cleanses a
+    // debuff (cleanse-performed). Player reactions: Zosimos charge gain on enemy
+    // repair; Arum/Yarrow/Larkspur/Grif reactions on enemy cleanse. Phase 4c PR 4.
+    | 'on-enemy-repaired'
+    | 'on-enemy-cleansed';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -77,6 +82,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-enemy-destroyed',
     'on-cheat-death-activated',
     'on-hp-threshold-crossed',
+    'on-enemy-repaired',
+    'on-enemy-cleansed',
 ]);
 
 export type ConditionSubject =
