@@ -244,4 +244,35 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
         // lone-attacker baseline.
         expect(supTotal).toBeGreaterThan(baseTotal);
     });
+
+    // ── Task 3: isolation guard — enemy buff does NOT leak onto the player team ─
+    it('an enemy all-allies buff does NOT leak onto the player team', () => {
+        idc = 0;
+        const withBuff = runCombat(
+            BASE_MULTI([supporterEnemy('support', 80, 'all-allies'), plainEnemy('attacker2', 40)])
+        );
+        // CONTROL: the supporter's buff is SELF-target → the other enemy stays unbuffed (so the
+        // enemy incoming DIFFERS), but the player team is identical in both runs either way.
+        idc = 0;
+        const selfControl = runCombat(
+            BASE_MULTI([supporterEnemy('support', 80, 'self'), plainEnemy('attacker2', 40)])
+        );
+
+        // Same player-side observable the PR1 leak test (T4.4) used: the player attacker's OWN
+        // outgoing damage (result.rounds — the damage it deals into the enemy HP pool).
+        const playerDamage = (r: ReturnType<typeof runCombat>) =>
+            r.rounds.map((round) => ({
+                totalRoundDamage: round.totalRoundDamage,
+                cumulativeDamage: round.cumulativeDamage,
+                directDamage: round.directDamage,
+            }));
+
+        // NON-VACUITY: the enemy incoming DID change between the two runs (all-allies routing
+        // reached the second enemy) — otherwise the leak guard would compare two identical runs.
+        expect(total(withBuff)).toBeGreaterThan(total(selfControl));
+
+        // Player-side outgoing damage is byte-identical — the enemy all-allies buff never leaked
+        // across onto a player store.
+        expect(playerDamage(withBuff)).toEqual(playerDamage(selfControl));
+    });
 });
