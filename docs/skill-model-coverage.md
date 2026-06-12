@@ -1417,7 +1417,7 @@ configure it and it looks like it works, but it does nothing".
 >   charges too. KNOWN enemy-side limitation (pre-existing PR1/PR2 drain wiring, documented in the test):
 >   the reactive drain's `enemyAttackerIds` is the same for both sides, so an enemy Graphite's `enemy-buff`
 >   Stealth gate reads the enemy attackers' OWN buffs (not the player team) — enemy Graphite stays niche/
->   dormant; player-side gate works correctly. PR3 = optional enemy `grantAllyCharges`.
+>   dormant; player-side gate works correctly.
 >   **v1 targeting (deferred, now UNBLOCKED — no board data needed, user direction 2026-06-12):**
 >   shared-target, list-order focus-fire — both teams hammer one target until it dies, then advance
 >   to the next ship added; this re-enables dead-recipient filtering (Salvation gross `directHeal`
