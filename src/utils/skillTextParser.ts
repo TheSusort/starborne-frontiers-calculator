@@ -348,8 +348,7 @@ const CHARGE_DISQUALIFY_RE =
 // (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
 // Routes the charge gain onto the LIVE on-enemy-repaired trigger (per-event, +amount each
 // fire). Reference data: docs/ship-skills.csv.
-const ENEMY_REPAIRS_RE =
-    /\bwhen\s+an?\s+enem(?:y|ies)\b[^.]*?\b(?:repairs?|performs?\s+a\s+repairs?)\b/i;
+const ENEMY_REPAIRS_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\b(?:repairs?|performs?\s+a\s+repairs?)\b/i;
 
 // "adds/gains N charge(s)" (self-add). "removes" is excluded by the verb set, so
 // Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
@@ -703,7 +702,7 @@ const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
 // "when an enemy cleanses a debuff" — a player reaction to an ENEMY cleanse (Phase 4c PR 4):
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
-const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enem(?:y|ies)\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
+const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
