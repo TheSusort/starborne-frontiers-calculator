@@ -28,6 +28,7 @@ import {
     parseHealAbilities,
     parseCleanse,
     parseHealNoCrit,
+    statusEffectCondition,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1618,9 +1619,56 @@ describe('detectGrantConditions', () => {
         const text =
             'If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill>.';
         expect(detectGrantConditions(text, 'Terran Guard III')).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
+    });
+
+    describe('statusEffectCondition (item 11: Taunt/Provoke derivable)', () => {
+        it('classifies Taunt as a derivable enemy-buff gate', () => {
+            expect(statusEffectCondition('Taunt')).toEqual({
+                subject: 'enemy-buff',
+                buffName: 'Taunt',
+                derivable: true,
+            });
+        });
+
+        it('classifies Provoke as a derivable self-debuff gate', () => {
+            expect(statusEffectCondition('Provoke')).toEqual({
+                subject: 'self-debuff',
+                buffName: 'Provoke',
+                derivable: true,
+            });
+        });
+
+        it('leaves an arbitrary named status as a non-derivable self-buff fallback', () => {
+            expect(statusEffectCondition('Stealth')).toEqual({
+                subject: 'self-buff',
+                buffName: 'Stealth',
+                derivable: false,
+            });
+        });
+
+        it('preserves anyOf for Taunt/Provoke and the fallback', () => {
+            expect(statusEffectCondition('Taunt', true)).toEqual({
+                subject: 'enemy-buff',
+                buffName: 'Taunt',
+                derivable: true,
+                anyOf: true,
+            });
+            expect(statusEffectCondition('Provoke', true)).toEqual({
+                subject: 'self-debuff',
+                buffName: 'Provoke',
+                derivable: true,
+                anyOf: true,
+            });
+            expect(statusEffectCondition('Stealth', true)).toEqual({
+                subject: 'self-buff',
+                buffName: 'Stealth',
+                derivable: false,
+                anyOf: true,
+            });
+        });
     });
 
     it('classifies "more than 3 Debuffs" as enemy-debuff gte 4 (Crocus)', () => {

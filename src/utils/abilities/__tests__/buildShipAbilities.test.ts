@@ -667,8 +667,8 @@ describe('buildShipAbilities', () => {
         expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
         // Taunt = enemy buff, Provoke = self debuff (both targeting effects), anyOf.
         expect(outgoing.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
 
         const defPen = mods.find(
@@ -766,8 +766,8 @@ describe('buildShipAbilities', () => {
                 a.config.buffName === 'Terran Guard III'
         );
         expect(buff?.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
 
