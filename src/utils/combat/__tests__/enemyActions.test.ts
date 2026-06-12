@@ -21,6 +21,7 @@ import { createActor } from '../state';
 import type { CombatActor } from '../state';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
+import type { SelectedGameBuff } from '../../../types/calculator';
 
 describe('Phase 4c PR 4 — enemy-action triggers', () => {
     it('registers on-enemy-repaired and on-enemy-cleansed as live triggers', () => {
@@ -430,6 +431,179 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
 });
 
 // ----------------------------------------------------------------------
+// Phase 4c PR 4 Task 5 (code-review fix): HoT-ticking guard.
+//
+// The healing block ticks HoT (Repair Over Time) sources ABOVE the cast
+// heal/shield/cleanse loop, crediting `hotHeal` (and, when the holder is the
+// heal target, applying to the target). That ticking is NOT a cast — it has
+// its own pre-loop. In event-only (enemy) mode it MUST be suppressed too,
+// otherwise a HoT-carrying enemy would credit the PLAYER healing map under
+// its own id (and could mutate the tank's HP). This proves the
+// `if (!healEventOnly)` guard around BOTH HoT loops.
+// ----------------------------------------------------------------------
+describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', () => {
+    interface HealingSpy {
+        healing: HealingRuntimeCtx;
+        credits: { actorId: string; bucket: string; amount: number }[];
+        applied: number[];
+        shields: number[];
+    }
+    const makeHealingSpy = (): HealingSpy => {
+        const credits: { actorId: string; bucket: string; amount: number }[] = [];
+        const applied: number[] = [];
+        const shields: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'tank',
+            credit: (actorId, bucket, amount) => credits.push({ actorId, bucket, amount }),
+            recipientMaxHp: () => 10000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 10000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: (raw) => shields.push(raw),
+            playerIds: ['attacker', 'tank'],
+        };
+        return { healing, credits, applied, shields };
+    };
+
+    // An always-active self-buff carrying hotPct 10. Always-active because it has no
+    // skillSource / skillDuration (isAlwaysActive), so the status engine surfaces it in
+    // entry.activeSelfBuffs every round → loop (b) of the HoT ticker reads it.
+    const hotBuff = (): SelectedGameBuff => ({
+        id: 'hot-1',
+        buffName: 'Repair Over Time',
+        stacks: 1,
+        parsedEffects: { hotPct: 10 },
+        isStackable: false,
+    });
+
+    // Runtime mirrors the 5a enemy-side runtime, but its selfBuffLookup maps the HoT
+    // buff name to the buff so loop (b)'s expandBuffs surfaces the hotPct.
+    // actor.id is 'attacker' so the status engine surfaces the always-active HoT buff in
+    // snapshot(actor.id).activeSelfBuffs (selfAlwaysSnap only populates for the 'attacker'
+    // owner). holder ('attacker') !== heal target ('tank') → loop (b) credits hotHeal only.
+    const makeRuntime = (): PlayerActorRuntime => {
+        const actor = createActor({
+            id: 'attacker',
+            side: 'player',
+            kind: 'attacker',
+            stats: {
+                attack: 5000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 10000,
+                speed: 100,
+            },
+            chargeCount: 0,
+            startCharged: false,
+        });
+        const noGate: PlayerActorRuntime['activeCritGate'] = () => false;
+        return {
+            actor,
+            focus: true,
+            // No cast abilities: the ONLY healing.* a misbehaving enemy could trigger here is
+            // the HoT tick, isolating the guard under test.
+            castSkills: { slots: [] },
+            reactiveAbilities: [],
+            timedSelfBySlot: [],
+            timedEnemyBySlot: [],
+            hasChargedSkill: false,
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            defence: 0,
+            hp: 10000,
+            healModifier: 0,
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            affinityDisadvantage: false,
+            activeCritGate: noGate,
+            chargedCritGate: noGate,
+            activeHealCritGate: noGate,
+            chargedHealCritGate: noGate,
+            debuffLandingGate: makeRateGate(),
+            extendChanceGate: makeRateGate(),
+            landsTimedEnemyApplication: () => true,
+            selfBuffLookup: new Map([['Repair Over Time', [hotBuff()]]]),
+            enemyDebuffLookup: new Map(),
+        };
+    };
+
+    // Seed the status engine with the HoT buff so its name lands in entry.activeSelfBuffs.
+    const makeArgs = (
+        runtime: PlayerActorRuntime,
+        healing: HealingRuntimeCtx,
+        healEventOnly: boolean
+    ): PlayerTurnArgs => {
+        const enemy = createActor({
+            id: 'tank',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 10_000_000,
+                speed: 50,
+            },
+        });
+        const statusEngine = createStatusEngine({
+            selfBuffs: [hotBuff()],
+            enemyDebuffs: [],
+        });
+        statusEngine.beginRound(1);
+        return {
+            runtime,
+            enemy,
+            statusEngine,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            pendingAccumulators: [],
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            enemyType: undefined,
+            bus: createEventBus(),
+            round: 1,
+            enemyHpDecline: 0,
+            healing,
+            healEventOnly,
+        };
+    };
+
+    it('event-only mode: HoT ticking credits/applies NOTHING on the player map', () => {
+        const spy = makeHealingSpy();
+        runPlayerTurn(makeArgs(makeRuntime(), spy.healing, true));
+
+        // The guard suppressed BOTH HoT loops: no hotHeal credit, no applyHealToTarget,
+        // no shield grant under the enemy id.
+        expect(spy.credits).toHaveLength(0);
+        expect(spy.applied).toHaveLength(0);
+        expect(spy.shields).toHaveLength(0);
+    });
+
+    it('normal mode: the same HoT source DOES credit hotHeal (proves the source is real)', () => {
+        const spy = makeHealingSpy();
+        runPlayerTurn(makeArgs(makeRuntime(), spy.healing, false));
+
+        // Contrast: with the guard inactive (player path), loop (b) ticks the HoT and
+        // credits the holder's hotHeal bucket. (Holder !== target → no applyHealToTarget.)
+        expect(spy.credits.some((c) => c.bucket === 'hotHeal' && c.amount > 0)).toBe(true);
+    });
+});
+
+// ----------------------------------------------------------------------
 // Phase 4c PR 4 Task 5b: integration — a ship-backed enemy attacker whose
 // cast cleanses emits cleanse-performed (casterId = enemy id), credits NO
 // player healing buckets under the enemy id, and a Grif-like player's
@@ -542,9 +716,14 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
 
         // Grif's on-enemy-cleansed damage proc credited the focus player's damage pool
         // (creditReactiveDamage → direct). The focus has NO cast damage of its own, so any
-        // directDamage in the result comes solely from the on-enemy-cleansed proc. It needs a
-        // prior-turn ctx to fold, so it lands from round 2+.
+        // directDamage in the result comes solely from the on-enemy-cleansed proc. The proc
+        // folds the owner's last-turn ctx bomb-style: focusAttack × multiplier × affinityMult,
+        // with NO defense and NO crit (noCrit). The focus acts before the enemy each round, so
+        // its ctx is already populated when the enemy cleanses — the proc lands every round.
+        // Deterministic value: 5000 attack × 2 multiplier × 1.0 affinityMult (no affinity set)
+        // × 3 rounds = 30000.
         const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
-        expect(grifDamage).toBeGreaterThan(0);
+        const perRoundProc = 5000 * 2 * 1.0;
+        expect(grifDamage).toBe(perRoundProc * 3);
     });
 });

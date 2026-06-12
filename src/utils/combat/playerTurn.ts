@@ -1480,21 +1480,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 healing.credit(creditId, 'overheal', overheal);
             }
         };
-        // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
-        // payload.stacks already folds accumulating per-round counts / timed configured stacks.
-        for (const s of selfAbilityStatuses) {
-            const hotPct = s.payload.parsedEffects.hotPct;
-            if (!hotPct) continue;
-            tickHot(s.casterId, hotPct, s.payload.stacks);
-        }
-        // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
-        // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
-        // SelectedGameBuff carries the effective stacks already.
-        for (const ab of entry.activeSelfBuffs) {
-            for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
-                const hotPct = b.parsedEffects?.hotPct;
+        // Event-only (enemy) mode: HoT ticking must not credit or apply to the player healing map.
+        if (!healEventOnly) {
+            // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
+            // payload.stacks already folds accumulating per-round counts / timed configured stacks.
+            for (const s of selfAbilityStatuses) {
+                const hotPct = s.payload.parsedEffects.hotPct;
                 if (!hotPct) continue;
-                tickHot(undefined, hotPct, b.stacks ?? 1);
+                tickHot(s.casterId, hotPct, s.payload.stacks);
+            }
+            // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
+            // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
+            // SelectedGameBuff carries the effective stacks already.
+            for (const ab of entry.activeSelfBuffs) {
+                for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                    const hotPct = b.parsedEffects?.hotPct;
+                    if (!hotPct) continue;
+                    tickHot(undefined, hotPct, b.stacks ?? 1);
+                }
             }
         }
 
