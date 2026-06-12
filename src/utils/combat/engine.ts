@@ -826,6 +826,16 @@ export interface EnemyDoTState {
     stacks: number;
 }
 
+/** The four side-specific fields the reactive intent drain needs (enemy-team PR1). Everything
+ *  else in the executor ctx is shared across sides; only these differ between the player drain
+ *  and the enemy drain. `recipientIds` becomes the executor's `playerIds` (same-side recipients). */
+interface ReactiveSideCtx {
+    runtimes: Map<string, PlayerActorRuntime>;
+    recipientIds: string[];
+    isLowestSpeedAllyFor: (ownerId: string) => boolean;
+    grantAllyCharges: (amount: number) => void;
+}
+
 export interface HealingRoundEngine {
     perActor: Map<string, ActorHealing>;
     targetHpPctStart: number;
@@ -1325,6 +1335,16 @@ export function runCombat(input: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
+    // Enemy-side lowest-speed set (ties → all; a lone enemy is trivially slowest → true).
+    // Empty in DPS mode (no enemy attackers).
+    const lowestSpeedEnemyIds = new Set<string>();
+    if (enemyAttackerActors.length > 0) {
+        const minEnemySpeed = Math.min(...enemyAttackerActors.map((a) => a.stats.speed));
+        for (const a of enemyAttackerActors) {
+            if (a.stats.speed === minEnemySpeed) lowestSpeedEnemyIds.add(a.id);
+        }
+    }
+
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
     // are folded exactly once via snapshot()/activeAbilityStatuses/timedAbilityStatuses), so
@@ -1550,6 +1570,28 @@ export function runCombat(input: CombatEngineInput): {
         isEnemySide,
         roleOf: (id) => roleByActorId.get(id),
     });
+
+    // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
+    // registerReactiveListeners call so an enemy attacker's own reactive abilities (e.g.
+    // Chakara's start-of-round self Attack Up) fire — before this they were partitioned onto
+    // the enemy runtime but never listened for. registerReactiveListeners holds NO module-level
+    // state: it only attaches per-call `bus.on(...)` subscriptions closing over its args, so a
+    // second call adds an independent listener set without disturbing the player registration.
+    // Gated on length>0 so DPS / bare-stat-enemy runs register nothing (goldens byte-identical).
+    const enemyIntentQueue: Intent[] = [];
+    const enemyReactivePerOwner = enemyPlayerRuntimes.map((rt) => ({
+        ownerId: rt.actor.id,
+        reactiveAbilities: rt.reactiveAbilities,
+    }));
+    if (enemyReactivePerOwner.length > 0) {
+        registerReactiveListeners({
+            bus,
+            perOwner: enemyReactivePerOwner,
+            enqueue: (intent) => enemyIntentQueue.push(intent),
+            isEnemySide,
+            roleOf: (id) => roleByActorId.get(id),
+        });
+    }
 
     // Owner-routed executor context (Task 6): the executor resolves an intent's owner runtime
     // from this map for per-owner landing gates, charge caps, sourceId, bomb effective-attack.
@@ -2030,9 +2072,14 @@ export function runCombat(input: CombatEngineInput): {
         // present when a drain pass starts; the loop processes one generation per pass
         // and stops when the queue is empty. MAX_INTENT_GENERATIONS converts a
         // pathological self-feeding loop into a thrown error rather than a hang.
-        const drainIntents = (): void => {
+        // Side-parameterized drain (enemy-team PR1). The four side-specific fields are
+        // `runtimes`, `recipientIds` (→ executeIntent ctx.playerIds), `isLowestSpeedAllyFor`,
+        // and `grantAllyCharges`; everything else is shared and moved verbatim. The player
+        // drain (drainIntents) and the enemy drain (drainEnemyIntents) below each bind their
+        // own queue + sideCtx, so the player path is behaviourally unchanged.
+        const drainQueue = (queue: Intent[], sideCtx: ReactiveSideCtx): void => {
             let generation = 0;
-            while (intentQueue.length > 0) {
+            while (queue.length > 0) {
                 if (++generation > MAX_INTENT_GENERATIONS) {
                     throw new Error(
                         `combat round ${r}: intent queue exceeded MAX_INTENT_GENERATIONS ` +
@@ -2040,7 +2087,7 @@ export function runCombat(input: CombatEngineInput): {
                     );
                 }
                 // Snapshot this generation's batch; new enqueues during execution run next pass.
-                const batch = intentQueue.splice(0, intentQueue.length);
+                const batch = queue.splice(0, queue.length);
                 for (const intent of batch) {
                     executeIntent(intent, {
                         round: r,
@@ -2051,10 +2098,10 @@ export function runCombat(input: CombatEngineInput): {
                         corrosionEntries,
                         infernoEntries,
                         pendingBombs,
-                        runtimes: runtimesById,
-                        grantAllyCharges,
+                        runtimes: sideCtx.runtimes,
+                        grantAllyCharges: sideCtx.grantAllyCharges,
                         grantExtraAction,
-                        playerIds,
+                        playerIds: sideCtx.recipientIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
@@ -2106,8 +2153,7 @@ export function runCombat(input: CombatEngineInput): {
                         // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
-                        isLowestSpeedAllyFor: (ownerId: string): boolean =>
-                            lowestSpeedAllyIds.has(ownerId),
+                        isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
                         // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
                         // Healing mode: the heal target's current/max HP is read from the SAME
                         // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure
@@ -2132,6 +2178,34 @@ export function runCombat(input: CombatEngineInput): {
                     });
                 }
             }
+        };
+
+        // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
+        // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
+        const drainIntents = (): void =>
+            drainQueue(intentQueue, {
+                runtimes: runtimesById,
+                recipientIds: playerIds,
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds.has(ownerId),
+                grantAllyCharges,
+            });
+
+        // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
+        // recipientIds is the enemy-attacker ids (PR1 exercises self-target only; this
+        // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is a documented no-op
+        // (Gap F — enemy ally-charge grants deferred to PR3). Skips entirely when the enemy
+        // queue is empty (DPS / no enemy reactives) so the player path is untouched.
+        const drainEnemyIntents = (): void => {
+            if (enemyIntentQueue.length === 0) return;
+            // Use the enemy executor's own runtime map (NOT runtimesById, which drives
+            // leech scan / seeding / credit and must stay player-only). This reuses the
+            // existing enemyPlayerRuntimeByActorId — same source, key, and values.
+            drainQueue(enemyIntentQueue, {
+                runtimes: enemyPlayerRuntimeByActorId,
+                recipientIds: enemyAttackerActorIds,
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds.has(ownerId),
+                grantAllyCharges: () => {},
+            });
         };
 
         // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
@@ -2162,6 +2236,7 @@ export function runCombat(input: CombatEngineInput): {
         bus.emit({ type: 'round-started', round: r });
         // Drain point (a): start-of-round intents execute before the first turn.
         drainIntents();
+        drainEnemyIntents();
 
         inTurnLoop = true;
         try {
@@ -2780,6 +2855,7 @@ export function runCombat(input: CombatEngineInput): {
                 // below decrements it). A triggered effect therefore never boosts the hit that
                 // triggered it (the hit's damage was already computed in the turn body).
                 drainIntents();
+                drainEnemyIntents();
 
                 // Post Turn (combat-system.md section 4): the status CARRIER decrements.
                 // Player-side actors call decrementPlayer(actor.id) — team actors have empty
@@ -2931,6 +3007,7 @@ export function runCombat(input: CombatEngineInput): {
             // most once per combat. With NO on-enemy-destroyed listener registered the intent
             // queue is empty → this is a NO-OP (goldens byte-identical).
             drainIntents();
+            drainEnemyIntents();
         }
 
         // Report stacks after expiry (state going into next round)

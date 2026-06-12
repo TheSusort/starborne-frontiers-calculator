@@ -1389,9 +1389,19 @@ configure it and it looks like it works, but it does nothing".
 >   single aggregate `attacked` event (hitCrits is [] for noCrit — unreachable today, no
 >   corpus skill combines "cannot critically hit" with a hit count; fix = fill(false), no
 >   gate draws).
-> - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
->   AoE; death-fallback re-targeting.
-> - **Enemy-team support (follow-up after 4d)** — enemy supporters that buff enemy
+> - **4d RE-SCOPED → enemy-team support (board-data targeting deferred).** The original 4d
+>   (positional 3×4 hex / front-back-skip / AoE) needs in-game board data not yet gathered, so
+>   targeting is deferred. Near-term 4d = **enemy-team support** (below; the targeting-independent
+>   part). Spec: `docs/superpowers/specs/2026-06-12-combat-engine-enemy-team-support-design.md`.
+>   3-PR slice: PR1 enemy reactive self-buffs (SHIPPED, see sub-item) → PR2 cross-enemy buff
+>   routing + UI (Enemy Team rename, remove 4-slot cap) → PR3 optional enemy `grantAllyCharges`.
+>   **v1 targeting (deferred, now UNBLOCKED — no board data needed, user direction 2026-06-12):**
+>   shared-target, list-order focus-fire — both teams hammer one target until it dies, then advance
+>   to the next ship added; this re-enables dead-recipient filtering (Salvation gross `directHeal`
+>   counts a dead caster — unreachable in single-target healing mode today), Harvester dormant
+>   `on-ally-destroyed`, and death-fallback retargeting. Only AoE / front-back-skip / hex-adjacency
+>   stay blocked on board data.
+> - **Enemy-team support (4d, partially shipped — PR1 done)** — enemy supporters that buff enemy
 >   attackers in the healing calculator's enemy ship section. Today each enemy walks
 >   `runPlayerTurn` (Phase 4a) but is an island bound solely to the heal target as its
 >   victim: `grantAllyCharges` is omitted for the enemy walk (`engine.ts` ~2608, "its
@@ -1405,8 +1415,28 @@ configure it and it looks like it works, but it does nothing".
 >   on the 4a full-actor enemy walk and the 4c `isEnemySide` predicate; the ally-routing and
 >   enemy-team UI are net-new. Slot AFTER 4d (the enemy team must exist before enemies can
 >   buff within it).
->   - **Sub-item — enemy-attacker REACTIVE abilities never fire (found 2026-06-12 debugging
->     "Chakara R0 as enemy attacker shows no buffs").** An enemy attacker's reactive abilities
+>   - **Sub-item — enemy-attacker REACTIVE self-buffs (SHIPPED, enemy-team PR1, 2026-06-12).**
+>     Fixed the "Chakara as enemy shows no buffs" bug. Built a parallel enemy-side reactive mirror:
+>     a separate `enemyIntentQueue` + a second `registerReactiveListeners` gated on
+>     `enemyReactivePerOwner.length > 0`; the single `drainIntents` closure refactored into a
+>     side-parameterized `drainQueue(queue, sideCtx)` with four side-specific fields (`runtimes`,
+>     `recipientIds`→`playerIds`, `isLowestSpeedAllyFor`, `grantAllyCharges`), all other ctx fields
+>     shared verbatim; `drainIntents` binds the player side, `drainEnemyIntents` binds the enemy side
+>     (`enemyPlayerRuntimeByActorId` as runtimes — NOT merged into `runtimesById`, which feeds
+>     leech/seed/credit and stays player-only — enemy recipient ids, enemy-side
+>     `lowestSpeedEnemyIds`, no-op `grantAllyCharges`), called after all three `drainIntents()` sites.
+>     **Gap E fix:** `lowestSpeedEnemyIds` = per-side min speed (ties→all; a lone enemy is in the set
+>     → resolves `true`), so the enemy ctx no longer reuses the player `lowestSpeedAllyIds` (which
+>     would wrongly resolve `false` and suppress Chakara's lowest-speed gate). In single-target
+>     healing mode only `round-started` fires enemy-side (the tank deals no return damage), so PR1's
+>     surface is start-of-round self-buffs; DPS / bare-stat-enemy runs register/drain nothing →
+>     goldens byte-identical. STILL PENDING (PR2/PR3): cross-enemy `ally`/`all-allies` cast-path
+>     routing (`registerActorAbilityStatuses` at `engine.ts` ~369 still routes enemy cast buffs to
+>     `playerIds`), per-recipient aura registration onto enemy ids, the UI rename + cap removal, and
+>     enemy `grantAllyCharges`. ALSO LATENT (PR2/targeting): `selfHpPctFor` (`engine.ts` ~2164) returns
+>     100 for any id `!== healTarget.id`, so a future enemy reactive gated on its OWN self-HP% always
+>     sees 100% — inert in PR1 (only `round-started` fires enemy-side; enemies aren't damaged in
+>     single-target healing mode) but must be addressed once enemies can take damage. **ORIGINAL sub-item text (for reference):** An enemy attacker's reactive abilities
 >     (e.g. `start-of-round` self-buffs — Chakara's lowest-speed Attack Up / Defense Up) are
 >     partitioned + stored on its runtime but are NEVER registered as listeners:
 >     `registerReactiveListeners` only gets `reactivePerOwner` = `'attacker'` + walked team
