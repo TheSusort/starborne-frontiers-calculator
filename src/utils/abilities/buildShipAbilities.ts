@@ -349,7 +349,7 @@ function parseModifiers(text: string): ParsedModifier[] {
                 // "while Stealthed" (self) — the acting unit's own Stealth.
                 const subject =
                     target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
-                conditions.push({ subject, buffName: 'Stealth', derivable: false });
+                conditions.push({ subject, buffName: 'Stealth', derivable: true });
             }
             conditions.push(...affectedByConditions(sentence));
             const hpCond = hpThresholdFromSentence(sentence);
