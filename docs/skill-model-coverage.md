@@ -1538,9 +1538,11 @@ configure it and it looks like it works, but it does nothing".
     healing adapter; the UI gained a heal-target `security` input and a per-enemy `hacking` input.
     **Affinity-omission approximation:** the adapter's landing formula OMITS affinity (matching
     its existing healer-side landing convention), whereas the DPS sim applies affinity to hacking.
-    **Default note:** heal-target `security` defaults to 0 (debuffs land up to 100%), but a fresh
-    MANUAL enemy defaults to `hacking: 0` — so its debuffs NEVER land until enemy hacking is set
-    or an enemy ship is picked (which auto-fills `ship.stats.hacking`). See §5 PHASE 4c PR 5.
+    **Default note:** heal-target `security` defaults to 0 (debuffs land up to 100%), and a fresh
+    MANUAL enemy defaults to `hacking: 200` (matching the DPS-side player-hacking convention);
+    picking an enemy ship auto-fills `ship.stats.hacking`. So enemy debuffs land by default against
+    typical security; raise the heal-target `security` to reduce the landing chance. See §5
+    PHASE 4c PR 5.
 
 13. **Pestilence enemy-cleanse Corrosion II reaction — known orphan (Phase 4c PR 4 follow-up)** —
     Pestilence's refit passive text reads: "When an enemy cleanses a Debuff this unit inflicts
