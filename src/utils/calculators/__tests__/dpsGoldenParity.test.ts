@@ -1201,4 +1201,84 @@ describe('dpsGoldenParity', () => {
             ],
         };
     });
+
+    // Scenario 23: item-11 live gates (enemy-buff modifier + self-debuff gated buff).
+    // PR5 item 11 flipped `enemy-buff` / `self-debuff` GATE conditions to live-reading
+    // (derivable:true + LIVE_SUBJECTS). In runCombat these gates fire when the named
+    // status is actually present (MET case — locked by enemyBuffSelfDebuffGate.test.ts).
+    //
+    // In DPS mode there is NO live enemy-buff or self-debuff data: `playerEnemyBuffNames()`
+    // is inert and DPSSimulationInput exposes no enemy-buff / self-debuff picker (confirmed
+    // Task 4). So both gates read EMPTY live arrays (count 0) → evaluate NOT-MET → the gated
+    // +100% attack modifier and the gated buff-grant do NOT apply. The damage therefore
+    // reflects ONLY the base ability (gates inert). This LOCKS the assume-active→live-0
+    // behavioral shift: were a future change to mis-flip these gates back to assume-active,
+    // the modifier/buff would apply and this golden would churn.
+    //
+    // The "gate MET" case is intentionally NOT exercised here — DPSSimulationInput provides
+    // no way to supply enemy-buff / self-debuff status (Task 4). MET is covered by the
+    // runCombat unit tests in enemyBuffSelfDebuffGate.test.ts (Tasks 5/6).
+    snap(
+        'item-11 live gates (enemy-buff modifier + self-debuff gated buff evaluate not-met in DPS mode)',
+        () => {
+            const shipSkills: ShipSkills = {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                            // self-buff gated on a self-debuff being present — NOT-MET in DPS.
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                conditions: [
+                                    {
+                                        subject: 'self-debuff',
+                                        derivable: true,
+                                        buffName: 'Provoke',
+                                    },
+                                ],
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Retaliation',
+                                    parsedEffects: { attack: 50 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            // +100% attack modifier gated on the enemy having a 'Stealth'
+                            // buff — NOT-MET in DPS (no live enemy-buff data).
+                            ab({
+                                type: 'modifier',
+                                conditions: [
+                                    {
+                                        subject: 'enemy-buff',
+                                        derivable: true,
+                                        buffName: 'Stealth',
+                                    },
+                                ],
+                                config: {
+                                    type: 'modifier',
+                                    channel: 'attack',
+                                    value: 100,
+                                    isMultiplicative: false,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            };
+            return {
+                ...BASE,
+                chargeCount: 0,
+                shipSkills,
+            };
+        }
+    );
 });
