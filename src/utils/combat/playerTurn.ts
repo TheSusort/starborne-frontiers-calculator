@@ -1229,13 +1229,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         );
     }
     // ALLY charge gains (Task 5): ally/all-allies-targeted charge abilities bump EVERY player
-    // actor (incl. this caster), each capped at its OWN chargeCount. Gated by the CASTER's
-    // active-round state (mirrors own gains — charge abilities fire on active turns); recipients
-    // receive regardless of their own action state. Applied at the SAME sequence point as own
-    // gains. Independent of hasChargedSkill: a caster with no charged skill of its own can still
-    // grant charges to allies (Hermes pattern). The engine supplies grantAllyCharges, which
-    // performs the per-actor cap-bump; absent (standalone callers) → no-op.
-    if (action === 'active' && grantAllyCharges) {
+    // actor (incl. this caster), each capped at its OWN chargeCount. Sourced from the FIRING
+    // skill (`gatedSkill`), active OR charged — a grant riding the charged skill (Hayyan) fires
+    // on a charged turn just as an active-skill grant fires on an active turn; recipients receive
+    // regardless of their own action state. Applied at the SAME sequence point as own gains.
+    // Independent of hasChargedSkill: a caster with no charged skill of its own can still grant
+    // charges to allies (Hermes pattern). The engine supplies grantAllyCharges, which performs
+    // the per-actor cap-bump; absent (standalone callers) → no-op.
+    if ((action === 'active' || action === 'charged') && grantAllyCharges) {
         const allyCharges =
             chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'ally' }) +
             chargeGainFromSkill({
