@@ -97,6 +97,13 @@ export type CombatEvent =
           amount: number;
           critHits?: number;
       }
+    /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
+     *  configured number of debuffs cleansed. Emitted on the cast path for ANY actor
+     *  (player or enemy); enemy-side emission carries NO numeric effect (Phase 4c PR 4 —
+     *  cast-fires-regardless: emitted on every qualifying cast, with no check that a
+     *  debuff actually existed to cleanse). The `on-enemy-cleansed` listener filters
+     *  `isEnemySide(casterId)`. */
+    | { type: 'cleanse-performed'; casterId: string; count: number; round: number }
     | {
           type: 'dot-ticked';
           targetId: string;
