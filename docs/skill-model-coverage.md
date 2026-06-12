@@ -1469,6 +1469,25 @@ configure it and it looks like it works, but it does nothing".
 >   purge, control effect simulation (stasis/taunt/provoke effects), damage reduction/reflect.
 > - **4f Defense-calc adoption** — defense calculator on the engine.
 > - **5 Simulator page** — per-round damage/healing/defense per actor; own UX spec.
+> - **TEAM-AGNOSTIC ARCHITECTURE PRINCIPLE (guiding the targeting + simulator phase; user-ratified 2026-06-12).**
+>   The engine is currently player-centric with a *parallel enemy-side mirror* (the PR1/PR2/PR3
+>   structures: `runtimesById`↔enemy runtimes, `playerIds`↔enemy recipient ids, `grantAllyCharges`↔
+>   `grantEnemyAllyCharges`, `lowestSpeedAllyIds`↔`lowestSpeedEnemyIds`, two intent queues, side-ctx
+>   `drainQueue`). That mirror is acceptable scaffolding NOW but should NOT keep growing. The end-state
+>   goal is **team-agnostic**: every ship is an actor in one speed-ordered queue (already true), each
+>   side targeting the opposing team, with ONE `bySide(...)` machinery instead of duplicated player/enemy
+>   logic. An asymmetry audit (2026-06-12) found the mirror itself is the CHEAP layer (mechanical
+>   `bySide` merge); the real work is THREE structural items, all of which land naturally as part of
+>   building targeting + the simulator: (1) collapse the **dummy-enemy vs real-enemy-actor duality** —
+>   DPS mode uses the `enemy` as a stat-block damage SINK (cumulative-damage scalar drives HP%-gates),
+>   healing mode uses real enemy `runPlayerTurn` actors; a symmetric model needs real actors (or a
+>   no-kit actor for the DPS stat-block case); (2) build the **targeting model** (today degenerate:
+>   player→dummy, enemy→heal target, pre-bound at dispatch; no target CHOICE) — the deferred work, with
+>   v1 = shared-target list-order focus-fire (no board data); (3) unify the **asymmetric accounting**
+>   (player per-actor `roundDamage` maps + heal buckets vs enemy single-scalar `roundIncoming` +
+>   `healEventOnly`) into per-actor-per-side accounting with a symmetric result surface. **Directive:
+>   design the targeting/simulator phase side-symmetric from the start; do NOT do a standalone
+>   "unify the mirrors" refactor before then (it would be largely redone by this work).**
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
