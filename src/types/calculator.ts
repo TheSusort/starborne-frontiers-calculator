@@ -42,7 +42,7 @@ export interface ChargeGain {
     // Reactive event the charge gain fires on (set for inflict-driven charge gains).
     // When present, the gain is per-event (+amount each fire) rather than a per-standing
     // count condition, and `condition` is 'always'.
-    trigger?: 'on-debuff-inflicted' | 'on-ally-debuff-inflicted';
+    trigger?: 'on-debuff-inflicted' | 'on-ally-debuff-inflicted' | 'on-enemy-repaired';
 }
 
 export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {
