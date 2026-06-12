@@ -211,6 +211,7 @@ export interface HealerShipConfig {
     healModifier: number;
     speed: number; // turn-order speed; auto-filled from ship stats
     hacking: number; // debuff landing (cleanse / debuff abilities) vs enemy security
+    security: number; // inbound debuff resistance — used when the healer is the heal target
     chargeCount: number;
     startCharged: boolean;
     shipSkills: ShipSkills;

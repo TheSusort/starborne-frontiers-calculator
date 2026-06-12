@@ -23,6 +23,7 @@ const config: HealerShipConfig = {
     healModifier: 20,
     speed: 100,
     hacking: 200,
+    security: 0,
     chargeCount: 0,
     startCharged: false,
     shipSkills: buildDefaultShipSkills(),

@@ -15,6 +15,7 @@ export interface HealTargetState {
     hp: number;
     defence: number;
     speed: number;
+    security: number;
 }
 
 interface HealTargetPanelProps {
@@ -26,6 +27,7 @@ interface HealTargetPanelProps {
     onHpChange: (v: number) => void;
     onDefenceChange: (v: number) => void;
     onSpeedChange: (v: number) => void;
+    onSecurityChange: (v: number) => void;
 }
 
 export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
@@ -37,6 +39,7 @@ export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
     onHpChange,
     onDefenceChange,
     onSpeedChange,
+    onSecurityChange,
 }) => {
     const { getShipById } = useShips();
     const selectedShip = target.shipId ? getShipById(target.shipId) : undefined;
@@ -96,6 +99,16 @@ export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
                                     value={target.speed}
                                     onChange={(e) =>
                                         onSpeedChange(Math.max(0, parseInt(e.target.value) || 0))
+                                    }
+                                />
+                                <Input
+                                    label="Target Security"
+                                    helpLabel="Higher security reduces the chance enemy debuffs land on the heal target (enemy hacking − security)."
+                                    type="number"
+                                    min="0"
+                                    value={target.security}
+                                    onChange={(e) =>
+                                        onSecurityChange(Math.max(0, parseInt(e.target.value) || 0))
                                     }
                                 />
                             </div>

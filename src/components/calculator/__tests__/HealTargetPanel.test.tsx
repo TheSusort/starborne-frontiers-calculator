@@ -13,6 +13,7 @@ const baseTarget: HealTargetState = {
     hp: 40000,
     defence: 5000,
     speed: 100,
+    security: 0,
 };
 
 const noop = () => {};
@@ -29,6 +30,7 @@ describe('HealTargetPanel', () => {
                 onHpChange={noop}
                 onDefenceChange={noop}
                 onSpeedChange={noop}
+                onSecurityChange={noop}
             />
         );
         expect(screen.getByLabelText('Use healer as target (heal self)')).toBeChecked();
@@ -46,10 +48,31 @@ describe('HealTargetPanel', () => {
                 onHpChange={noop}
                 onDefenceChange={noop}
                 onSpeedChange={noop}
+                onSecurityChange={noop}
             />
         );
         expect(screen.getByLabelText('Target HP')).toHaveValue(40000);
         expect(screen.getByLabelText('Target Defense')).toHaveValue(5000);
+        expect(screen.getByLabelText('Target Security')).toHaveValue(0);
+    });
+
+    it('reports security edits via onSecurityChange', () => {
+        const onSecurity = vi.fn();
+        render(
+            <HealTargetPanel
+                isOpen
+                onToggle={noop}
+                target={{ ...baseTarget, useHealerAsTarget: false }}
+                onUseHealerAsTargetChange={noop}
+                onSelectShip={noop}
+                onHpChange={noop}
+                onDefenceChange={noop}
+                onSpeedChange={noop}
+                onSecurityChange={onSecurity}
+            />
+        );
+        fireEvent.change(screen.getByLabelText('Target Security'), { target: { value: '75' } });
+        expect(onSecurity).toHaveBeenCalledWith(75);
     });
 
     it('toggles target mode via the checkbox', () => {
@@ -64,6 +87,7 @@ describe('HealTargetPanel', () => {
                 onHpChange={noop}
                 onDefenceChange={noop}
                 onSpeedChange={noop}
+                onSecurityChange={noop}
             />
         );
         fireEvent.click(screen.getByLabelText('Use healer as target (heal self)'));
