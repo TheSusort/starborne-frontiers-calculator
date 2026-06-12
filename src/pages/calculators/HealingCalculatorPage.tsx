@@ -30,7 +30,6 @@ import { HealTargetPanel, HealTargetState } from '../../components/calculator/He
 import {
     EnemyAttackersPanel,
     EnemyAttackerConfig,
-    MAX_ENEMY_ATTACKERS,
 } from '../../components/calculator/EnemyAttackersPanel';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
@@ -268,7 +267,6 @@ const HealingCalculatorPage: React.FC = () => {
 
     // ---- Enemy attacker handlers ----
     const addEnemy = () => {
-        if (enemies.length >= MAX_ENEMY_ATTACKERS) return;
         const n = nextEnemyIdRef.current++;
         setEnemies((prev) => [
             ...prev,

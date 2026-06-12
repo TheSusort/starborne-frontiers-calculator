@@ -32,8 +32,6 @@ export interface EnemyAttackerConfig {
     shipSkills?: ShipSkills;
 }
 
-export const MAX_ENEMY_ATTACKERS = 4;
-
 interface EnemyAttackersPanelProps {
     isOpen: boolean;
     onToggle: () => void;
@@ -63,7 +61,7 @@ const EnemyCard: React.FC<{
                         variant="compact"
                     />
                 </div>
-                <Button variant="danger" onClick={onRemove} aria-label="Remove enemy attacker">
+                <Button variant="danger" onClick={onRemove} aria-label="Remove enemy">
                     <CloseIcon />
                 </Button>
             </div>
@@ -161,16 +159,15 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                 <ChevronDownIcon
                     className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
                 />
-                <span className="text-lg font-bold">
-                    Enemy Attackers ({enemies.length}/{MAX_ENEMY_ATTACKERS})
-                </span>
+                <span className="text-lg font-bold">Enemy Team ({enemies.length})</span>
             </span>
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
                 <p className="text-sm text-theme-text-secondary">
-                    The enemies dealing damage to the heal target. Pick a ship to autofill its
-                    offensive stats and walk its damage abilities, or enter stats manually.
+                    The enemy team attacking the heal target. A ship with a damage ability hits the
+                    target; a support ship buffs the team. Pick a ship to autofill its stats and
+                    walk its abilities, or enter stats manually.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {enemies.map((enemy) => (
@@ -183,11 +180,9 @@ export const EnemyAttackersPanel: React.FC<EnemyAttackersPanelProps> = ({
                         />
                     ))}
                 </div>
-                {enemies.length < MAX_ENEMY_ATTACKERS && (
-                    <Button variant="secondary" size="sm" onClick={onAdd}>
-                        + Add enemy attacker
-                    </Button>
-                )}
+                <Button variant="secondary" size="sm" onClick={onAdd}>
+                    + Add enemy
+                </Button>
             </div>
         </CollapsibleForm>
     </div>

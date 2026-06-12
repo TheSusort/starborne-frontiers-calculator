@@ -95,7 +95,7 @@ describe('EnemyAttackersPanel', () => {
         ).toBeInTheDocument();
     });
 
-    it('calls onAdd and hides the add button at the cap', () => {
+    it('calls onAdd and keeps the add button visible beyond four enemies (no cap)', () => {
         const onAdd = vi.fn();
         const { rerender } = render(
             <EnemyAttackersPanel
@@ -108,22 +108,22 @@ describe('EnemyAttackersPanel', () => {
                 onUpdate={noop}
             />
         );
-        fireEvent.click(screen.getByText('+ Add enemy attacker'));
+        fireEvent.click(screen.getByText('+ Add enemy'));
         expect(onAdd).toHaveBeenCalled();
 
-        const four = [1, 2, 3, 4].map((n) => ({ ...manual, id: `${n}`, name: `Enemy ${n}` }));
+        const five = [1, 2, 3, 4, 5].map((n) => ({ ...manual, id: `${n}`, name: `Enemy ${n}` }));
         rerender(
             <EnemyAttackersPanel
                 isOpen
                 onToggle={noop}
-                enemies={four}
+                enemies={five}
                 onAdd={onAdd}
                 onRemove={noop}
                 onSelectShip={noop}
                 onUpdate={noop}
             />
         );
-        expect(screen.queryByText('+ Add enemy attacker')).not.toBeInTheDocument();
+        expect(screen.getByText('+ Add enemy')).toBeInTheDocument();
     });
 
     it('renders an affinity selector defaulting to Antimatter', () => {
@@ -180,7 +180,7 @@ describe('EnemyAttackersPanel', () => {
         );
         fireEvent.change(screen.getByLabelText('Attack'), { target: { value: '8000' } });
         expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
-        fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
+        fireEvent.click(screen.getByLabelText('Remove enemy'));
         expect(onRemove).toHaveBeenCalledWith('1');
     });
 
@@ -215,8 +215,8 @@ describe('EnemyAttackersPanel', () => {
             />
         );
         // No enemy cards rendered.
-        expect(screen.queryByLabelText('Remove enemy attacker')).not.toBeInTheDocument();
-        // Add button still visible (0 < MAX_ENEMY_ATTACKERS).
-        expect(screen.getByText('+ Add enemy attacker')).toBeInTheDocument();
+        expect(screen.queryByLabelText('Remove enemy')).not.toBeInTheDocument();
+        // Add button still visible with zero enemies.
+        expect(screen.getByText('+ Add enemy')).toBeInTheDocument();
     });
 });
