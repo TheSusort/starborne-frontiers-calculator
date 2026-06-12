@@ -89,6 +89,125 @@ const controlEnemy = (): EnemyAttacker =>
         shipSkills: { slots: [basicAttack()] } as ShipSkills,
     }) as EnemyAttacker;
 
+// A `lowest-speed-ally`-gated (derivable) start-of-round self Attack Up — Chakara's REAL gate.
+// The buff only folds in when the owner is the slowest on its (enemy) side.
+const lowestSpeedGatedBuffSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'start-of-round',
+            conditions: [{ subject: 'lowest-speed-ally', derivable: true }],
+            config: {
+                type: 'buff',
+                buffName: 'Attack Up',
+                parsedEffects: { attack: 100 },
+                stacks: 1,
+                isStackable: false,
+                duration: 99,
+            },
+        }),
+    ],
+});
+
+// Enemy carrying the `lowest-speed-ally`-gated start-of-round self Attack Up, at a given speed.
+const gatedEnemy = (id: string, speed: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [basicAttack(), lowestSpeedGatedBuffSlot()],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+// Enemy carrying an UNGATED start-of-round self Attack Up (the existing buffedEnemy shape),
+// at a given speed/id — used as the "everyone gets the buff" baseline.
+const ungatedBuffedEnemy = (id: string, speed: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            trigger: 'start-of-round',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 100 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+// A plain enemy with NO start-of-round buff, at a given speed/id.
+const plainEnemy = (id: string, speed: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [basicAttack()] } as ShipSkills,
+    }) as EnemyAttacker;
+
+// An enemy whose ACTIVE slot grants an on-cast (no trigger) self Attack Up alongside its hit.
+// This is the NON-reactive cast path, which already worked before PR1 — guards against regression.
+const onCastSelfBuffEnemy = (): EnemyAttacker =>
+    ({
+        id: 'oncast',
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 100 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+// Variant of BASE that accepts an arbitrary list of enemy attackers (multi-enemy scenarios).
+const BASE_MULTI = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => ({
+    ...BASE(enemyAttackers[0]),
+    enemyAttackers,
+});
+
 const BASE = (enemyAttacker: EnemyAttacker): CombatEngineInput => ({
     attack: 1000,
     crit: 0,
@@ -135,5 +254,115 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
         // The reactive buff folds +100% attack into the enemy's round-2 hit, so the buffed
         // enemy deals strictly more incoming damage to the tank than the un-buffed control.
         expect(buffedR2).toBeGreaterThan(controlR2);
+    });
+
+    // ── Task 3: lowest-speed-ally gate for enemies ────────────────────────────
+
+    it('a lone enemy passes the lowest-speed-ally gate (it is trivially the slowest)', () => {
+        // A single gated enemy: lowestSpeedEnemyIds = {its id}, so isLowestSpeedAlly → true,
+        // the start-of-round Attack Up applies, and incoming damage exceeds a plain control
+        // (no buff at all). This pins the lone-actor "trivially slowest" semantics on the
+        // ENEMY side (mirroring the player-side default-true lone-actor assumption).
+        idc = 0;
+        const gated = runCombat(BASE(gatedEnemy('chakara', 50)));
+        idc = 0;
+        const control = runCombat(BASE(controlEnemy()));
+
+        const gatedTotal =
+            gated.healing!.rounds[0].incomingDamage + gated.healing!.rounds[1].incomingDamage;
+        const controlTotal =
+            control.healing!.rounds[0].incomingDamage + control.healing!.rounds[1].incomingDamage;
+
+        // Gate resolves true for the lone enemy → buff folds in → harder hits than the
+        // un-buffed control.
+        expect(gatedTotal).toBeGreaterThan(controlTotal);
+    });
+
+    it('with two enemies of different speeds, only the SLOWER one passes the gate', () => {
+        // Both enemies carry the SAME lowest-speed-ally-gated self Attack Up but at DIFFERENT
+        // speeds. lowestSpeedEnemyIds = {the slower id only}, so the gate resolves:
+        //   - slow enemy (speed 40): isLowestSpeedAlly → true  → buff folds in
+        //   - fast enemy (speed 80): isLowestSpeedAlly → false → buff does NOT fold in
+        //
+        // Per-enemy incoming damage is not separable through the healing harness (it sums all
+        // enemy hits into rounds[].incomingDamage). So we bracket the gated outcome between two
+        // baselines that ARE observable:
+        //   - BOTH ungated-but-buffed  → both enemies buffed (upper bound)
+        //   - NEITHER buffed (plain)   → neither enemy buffed (lower bound)
+        // If exactly ONE of the two gets the buff (the slowest), total incoming must sit
+        // strictly between: less than "both buffed", more than "neither buffed". That window
+        // is only reachable when exactly one enemy's buff folds in — proving "exactly the
+        // slowest gets it".
+        idc = 0;
+        const gated = runCombat(BASE_MULTI([gatedEnemy('slow', 40), gatedEnemy('fast', 80)]));
+        idc = 0;
+        const bothBuffed = runCombat(
+            BASE_MULTI([ungatedBuffedEnemy('slow', 40), ungatedBuffedEnemy('fast', 80)])
+        );
+        idc = 0;
+        const neitherBuffed = runCombat(
+            BASE_MULTI([plainEnemy('slow', 40), plainEnemy('fast', 80)])
+        );
+
+        const total = (r: ReturnType<typeof runCombat>) =>
+            r.healing!.rounds.reduce((sum, round) => sum + round.incomingDamage, 0);
+
+        const gatedTotal = total(gated);
+        const bothTotal = total(bothBuffed);
+        const neitherTotal = total(neitherBuffed);
+
+        // Sanity: the two baselines bracket as expected (both-buffed hits hardest).
+        expect(bothTotal).toBeGreaterThan(neitherTotal);
+
+        // Exactly one enemy buffed → strictly between the two baselines.
+        expect(gatedTotal).toBeGreaterThan(neitherTotal);
+        expect(gatedTotal).toBeLessThan(bothTotal);
+    });
+
+    // ── Task 4: regression + isolation guards ─────────────────────────────────
+
+    it('an enemy on-cast (non-reactive) self-buff still folds into its own hit', () => {
+        // The on-cast self-buff path already worked before PR1; only the reactive
+        // start-of-round path was dead. This guards the cast path against the
+        // partition/registration change. The active slot applies a self Attack Up then hits,
+        // so the buff couples into the SAME cast's outgoing damage → harder than a plain control.
+        idc = 0;
+        const onCast = runCombat(BASE(onCastSelfBuffEnemy()));
+        idc = 0;
+        const control = runCombat(BASE(controlEnemy()));
+
+        const onCastTotal =
+            onCast.healing!.rounds[0].incomingDamage + onCast.healing!.rounds[1].incomingDamage;
+        const controlTotal =
+            control.healing!.rounds[0].incomingDamage + control.healing!.rounds[1].incomingDamage;
+
+        expect(onCastTotal).toBeGreaterThan(controlTotal);
+    });
+
+    it('an enemy start-of-round self-buff does NOT leak onto the player team', () => {
+        // The enemy buff lands on the enemy id only; enemy recipient routing never touches
+        // player ids. So a PLAYER-side figure — the player attacker's OWN outgoing damage
+        // (result.rounds, the damage it deals into the enemy HP pool) — must be byte-identical
+        // WITH vs WITHOUT the enemy self-buff. (incomingDamage WOULD differ, since that is the
+        // enemy's own output folding the buff; the player's outgoing damage must be untouched.)
+        idc = 0;
+        const withBuff = runCombat(BASE(buffedEnemy()));
+        idc = 0;
+        const withoutBuff = runCombat(BASE(controlEnemy()));
+
+        const playerDamage = (r: ReturnType<typeof runCombat>) =>
+            r.rounds.map((round) => ({
+                totalRoundDamage: round.totalRoundDamage,
+                cumulativeDamage: round.cumulativeDamage,
+                directDamage: round.directDamage,
+            }));
+
+        // Sanity: the enemy buff DID change the enemy's output (otherwise this guard is vacuous).
+        expect(withBuff.healing!.rounds[1].incomingDamage).toBeGreaterThan(
+            withoutBuff.healing!.rounds[1].incomingDamage
+        );
+
+        // Player-side outgoing damage is byte-identical — the enemy buff never leaked across.
+        expect(playerDamage(withBuff)).toEqual(playerDamage(withoutBuff));
     });
 });
