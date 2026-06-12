@@ -48,7 +48,7 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `evaluateConditions.test.ts` (adapt the existing `ctx` helper in that file — it builds a full `ConditionContext`; if there is a `makeCtx`/base-context helper, extend it, otherwise construct inline matching the interface):
+Add to `evaluateConditions.test.ts`. **Add the import** `import { buildRoundContext } from '../roundContext';` (the test file currently imports only from `../evaluateConditions`):
 
 ```typescript
 describe('lowest-speed-ally', () => {
@@ -95,13 +95,19 @@ In `src/types/abilities.ts`, add to the `ConditionSubject` union (place after `'
     | 'lowest-speed-ally'
 ```
 
-In `src/utils/abilities/evaluateConditions.ts`, add to `ConditionContext` (after `targetHpPct`):
+In `src/utils/abilities/evaluateConditions.ts`, add to `ConditionContext` (after `targetHpPct`).
+**MUST be OPTIONAL** — `buildRoundContext` is NOT the only `ConditionContext` constructor (direct
+literals exist in `buffAbilityConverters.ts` `buildStaticBuffContext` and several test helpers); a
+required field would break `tsc`. The default-true contract still holds via `buildRoundContext`'s
+`?? true`; the inline/static constructors never use the `lowest-speed-ally` subject, so an
+`undefined → 0` there is inert.
 
 ```typescript
     /** True when the condition owner has the lowest Speed among its (player) team
-     *  (ties → all tied qualify). Default true — a lone actor (single-ship DPS, drain
-     *  default) is trivially slowest. Populated live by the engine via buildDrainContext. */
-    isLowestSpeedAlly: boolean;
+     *  (ties → all tied qualify). Optional; defaults to true via buildRoundContext (a lone
+     *  actor — single-ship DPS, drain default — is trivially slowest). Populated live by the
+     *  engine via buildDrainContext. */
+    isLowestSpeedAlly?: boolean;
 ```
 
 Add the switch case (after `'enemy-hp-missing-pct'`):
@@ -498,26 +504,34 @@ And forward it in the `buildRoundContext({...})` call inside `buildActorConditio
 
 - [ ] **Step 4: Implement — engine.ts**
 
-(a) After `const runtimesById = …` (~line 1551), compute the set:
+(a) **Source the speeds from `allPlayerActors`, NOT `runtimesById`.** `runtimesById`
+(`engine.ts:1548`) only contains WALKED team actors — the team-runtime builder skips non-walked
+actors (`engine.ts:1135` `if (!t.walk) return;`), so a legacy/non-walked teammate's Speed would be
+invisible and the gate would wrongly treat the focus as slowest. `allPlayerActors`
+(`engine.ts:1219` = `[attacker, ...teamCombatActors]`) includes EVERY player actor with a real
+`stats.speed` and `side: 'player'`. Add immediately after the `allPlayerActors` definition (~line 1219,
+outside the round loop — still in closure scope at the `IntentExecContext` assembly ~2046):
 
 ```typescript
     // Phase 4c PR 6: player-team actors sharing the minimum Speed (ties → all). Speed is static
     // turn-ORDER in this sim, so compute once. Feeds the lowest-speed-ally gate (Chakara).
-    const playerActorsForSpeed = [...runtimesById.values()]
-        .map((rt) => rt.actor)
-        .filter((a) => a.side === 'player');
-    const minPlayerSpeed = Math.min(...playerActorsForSpeed.map((a) => a.stats.speed));
+    // Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
+    const minPlayerSpeed = Math.min(...allPlayerActors.map((a) => a.stats.speed));
     const lowestSpeedAllyIds = new Set(
-        playerActorsForSpeed.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
+        allPlayerActors.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
     );
 ```
 
-(b) At the `IntentExecContext` object literal inside `drainIntents` (~line 2046, beside `selfHpPctFor`), add:
+(b) At the `IntentExecContext` object literal inside `drainIntents` (~line 2046), add as an
+**UNCONDITIONAL top-level property** (e.g. next to `oncePerCombatFired` at ~line 2097). **Do NOT
+place it inside the `...(healTarget ? { selfHpPctFor: … } : {})` conditional spread** (lines
+~2103-2118) — that spread is healing-mode-only, and Chakara's DPS gate needs the delegate in DPS
+mode too:
 
 ```typescript
-                        // Phase 4c PR 6: live lowest-speed-ally gate. Unconditional (unlike the
-                        // healing-only selfHpPctFor) — in DPS mode the set is {attacker}, so the
-                        // lone attacker resolves true and DPS gating stays byte-identical.
+                        // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
+                        // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
+                        // the lone attacker resolves true and DPS gating stays byte-identical.
                         isLowestSpeedAllyFor: (ownerId: string): boolean =>
                             lowestSpeedAllyIds.has(ownerId),
 ```

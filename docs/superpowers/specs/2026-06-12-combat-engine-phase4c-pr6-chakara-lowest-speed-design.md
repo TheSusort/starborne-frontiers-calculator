@@ -44,7 +44,11 @@ condition owner has the minimum Speed among its side's actors (ties → all tied
 
 ### 2. Live evaluation — `src/utils/abilities/evaluateConditions.ts` + `roundContext.ts`
 
-- Add `isLowestSpeedAlly?: boolean` to `ConditionContext` (`evaluateConditions.ts`).
+- Add `isLowestSpeedAlly?: boolean` to `ConditionContext` (`evaluateConditions.ts`). **Optional** —
+  `buildRoundContext` is not the only constructor (direct literals in `buffAbilityConverters.ts`
+  `buildStaticBuffContext` + test helpers); a required field would break `tsc`. The default-true
+  contract is still enforced by `buildRoundContext`'s `?? true`; the static constructors never use
+  this subject so `undefined → 0` is inert there.
 - New `evaluateCondition` case: `case 'lowest-speed-ally': return ctx.isLowestSpeedAlly ? 1 : 0;`.
 - **The default-`true` lives in `buildRoundContext` (`src/utils/abilities/roundContext.ts`)**, which is
   the actual constructor of every `ConditionContext` (`buildActorConditionContext` delegates to it).
@@ -88,14 +92,17 @@ The gate site is `buildDrainContext` (see §3a). Plumb the live value as a **del
 `IntentExecContext`**, mirroring the existing `selfHpPctFor` delegate.
 
 - **Compute the lowest-speed set once** (speeds are static — the sim treats speed as turn ORDER, not a
-  mutable per-round stat): among the player-side actors (`runtimesById` values whose
-  `actor.side === 'player'`, i.e. attacker + team ships), find `minSpeed = min(actor.stats.speed)` and
-  build `lowestSpeedAllyIds: Set<string>` = ids whose `actor.stats.speed === minSpeed` (ties → all
-  qualify). Compute this **outside the round loop** (after `runtimesById` is built, ~`engine.ts:1548`).
+  mutable per-round stat) from **`allPlayerActors`** (`engine.ts:1219` = `[attacker,
+  ...teamCombatActors]`), NOT `runtimesById` — the latter omits non-walked team actors
+  (`engine.ts:1135` `if (!t.walk) return;`), which would make their Speed invisible to the gate. Find
+  `minSpeed = min(actor.stats.speed)` and build `lowestSpeedAllyIds: Set<string>` = ids whose
+  `actor.stats.speed === minSpeed` (ties → all qualify). Compute **outside the round loop** (right
+  after the `allPlayerActors` definition, ~`engine.ts:1219`).
 - **Add a delegate to `IntentExecContext`** (`triggers.ts:419`): `isLowestSpeedAllyFor?: (ownerId:
   string) => boolean`. Provide it at the `IntentExecContext` assembly site inside `drainIntents`
-  (`engine.ts:~2046`, alongside `selfHpPctFor`): `isLowestSpeedAllyFor: (ownerId) =>
-  lowestSpeedAllyIds.has(ownerId)`. Provide it unconditionally (unlike `selfHpPctFor`, which is
+  (`engine.ts:~2046`) as an **unconditional top-level property** — NOT inside the
+  `...(healTarget ? { selfHpPctFor } : {})` healing-mode spread: `isLowestSpeedAllyFor: (ownerId) =>
+  lowestSpeedAllyIds.has(ownerId)`. Unconditional (unlike `selfHpPctFor`, which is
   healing-mode gated) — in DPS mode the lone attacker is the only player id, so the set = `{attacker}`
   and the delegate returns `true` for the attacker → DPS-assumption preserved with no special-casing.
 - **`buildDrainContext`** (`triggers.ts:559`): pass `isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true`
