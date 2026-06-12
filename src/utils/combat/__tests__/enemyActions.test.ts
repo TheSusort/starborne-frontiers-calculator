@@ -135,9 +135,12 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
 // lastTurnCtx entry) it skips, exactly like a bomb follow-up.
 // ----------------------------------------------------------------------
 describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
+    // attack is the base runtime stat the damage branch falls back to before the owner's
+    // first turn (no lastTurnCtx entry) — known value 800 so the no-ctx fold is deterministic.
     const makeRuntime = (id: string): PlayerActorRuntime =>
         ({
             actor: { id } as CombatActor,
+            attack: 800,
             landsTimedEnemyApplication: () => true,
             debuffLandingGate: (_rate: number) => true,
             debuffLandingChance: 1,
@@ -196,7 +199,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
         },
     });
 
-    it('credits owner pool with bomb-style fold, skips without ctx', () => {
+    it('credits owner pool with bomb-style fold; falls back to runtime stats without ctx', () => {
         const credited: { ownerId: string; amount: number }[] = [];
         const ctx = makeExecCtx({
             creditReactiveDamage: (ownerId, amount) => credited.push({ ownerId, amount }),
@@ -208,9 +211,12 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
         // effectiveAttack 1000 × (75/100) × affinityMult 1.5 = 1125.
         expect(credited).toEqual([{ ownerId: 'grif', amount: 1000 * (75 / 100) * 1.5 }]);
 
+        // CodeRabbit #99 FIX #4: before the owner's first turn (no lastTurnCtx entry) the proc
+        // no longer drops — it falls back to the owner's base runtime stats (attack 800) with
+        // affinity defaulting to 1 (no turn snapshot → no matchup known), mirroring the heal path.
         credited.length = 0;
         executeIntent(makeDamageIntent('grif-noctx'), ctx);
-        expect(credited).toHaveLength(0);
+        expect(credited).toEqual([{ ownerId: 'grif-noctx', amount: 800 * (75 / 100) * 1 }]);
     });
 
     it('skips creditReactiveDamage when effectiveAttack is 0 (zero-damage guard)', () => {
