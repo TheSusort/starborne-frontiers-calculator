@@ -409,6 +409,105 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
     });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 9b (item 12 completion) — TIMED enemy-debuff inflictions honor the
+// per-enemy `debuffLandingChance`.
+//
+// The TIMED status-debuff infliction path (Provoke, Defense Down, …) is gated by
+// `landsTimedEnemyApplicationFn`'s 'inflict' branch. Task 9 wired the field into
+// the DoT path only; this locks that a fresh TIMED infliction now draws against
+// the enemy's `debuffLandingChance` instead of a hard-coded 100%.
+//
+// We reuse the Task 6 coupling: the tank's self-buff GRANT is gated on it being
+// Provoked, and that buff doubles outgoing damage. So the Provoke landing is
+// observable through round-2 directDamage:
+//   - chance 0 → Provoke never lands → grant never fires → directDamage stays 10000.
+//   - chance 1 / omitted → Provoke lands (Task 6 behaviour) → round 2 doubles to 20000.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Task 9b, item 12)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `t9b${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    /** Enemy attacker that lands a 99-turn Provoke (TIMED inflict) on its target, with a
+     *  configurable per-enemy debuffLandingChance. attack 1, speed 1 → acts after the focus. */
+    const provokeEnemy = (debuffLandingChance?: number): EnemyAttacker =>
+        ({
+            id: 'e1',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            ...(debuffLandingChance !== undefined ? { debuffLandingChance } : {}),
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            enemyAb({
+                                type: 'damage',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                            enemyAb({
+                                type: 'debuff',
+                                target: 'enemy',
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Provoke',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    application: 'inflict',
+                                    duration: 99,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        }) as EnemyAttacker;
+
+    const cond: Ability['conditions'] = [
+        { subject: 'self-debuff', derivable: true, buffName: 'Provoke' },
+    ];
+
+    const runWith = (enemy: EnemyAttacker) =>
+        runCombat(
+            GRANT_BASE({
+                shipSkills: grantGatedSelfBuffSkill(cond),
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                enemyAttackers: [enemy],
+            })
+        );
+
+    it('debuffLandingChance 0 → TIMED Provoke NEVER lands → gated grant never fires', () => {
+        idCounter = 0;
+        const result = runWith(provokeEnemy(0));
+        // Provoke resisted every round → tank never Provoked → +100% attack grant never fires.
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(10000);
+    });
+
+    it('debuffLandingChance 1 → TIMED Provoke ALWAYS lands → gated grant fires round 2', () => {
+        idCounter = 0;
+        const result = runWith(provokeEnemy(1));
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+
+    it('omitted debuffLandingChance → defaults to 100% (byte-identical to Task 6)', () => {
+        idCounter = 0;
+        const result = runWith(provokeEnemy(undefined));
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+});
+
 describe('status-grant gate path — count-scaled self-debuff (item 11, Step 4)', () => {
     it('a self-debuff-COUNT-scaled buff GRANT is not granted at round 1 with no debuffs (net-zero)', () => {
         idCounter = 0;

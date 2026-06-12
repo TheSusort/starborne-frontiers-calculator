@@ -414,7 +414,9 @@ export function buildEnemyPlayerActorRuntime(
     const enemyDebuffLandingGate = makeRateGate();
     const enemyExtendChanceGate = makeRateGate();
     const landsTimedEnemyApplicationFn = (application?: 'inflict' | 'apply'): boolean =>
-        application === 'apply' ? !affinityDisadvantage : enemyDebuffLandingGate(1); // 100% landing rate (no hacking check for enemy actors)
+        application === 'apply'
+            ? !affinityDisadvantage
+            : enemyDebuffLandingGate(e.debuffLandingChance ?? 1); // fresh timed inflictions draw against this enemy's hacking-vs-security landing chance (default 1 — 100% — when absent)
 
     return {
         actor,
