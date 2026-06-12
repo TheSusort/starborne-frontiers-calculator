@@ -2421,7 +2421,7 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Enemy Hacking &amp; Heal-Target Security:
                                         </span>{' '}
-                                        Each enemy attacker has a Hacking stat, and the heal target
+                                        Each enemy has a Hacking stat, and the heal target
                                         has a Security stat. An enemy&apos;s debuffs — both timed
                                         effects and damage-over-time — land based on its Hacking
                                         versus the target&apos;s Security: the higher the
