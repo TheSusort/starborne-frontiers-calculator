@@ -1,5 +1,5 @@
 /**
- * enemy-buff / self-debuff condition gate tests (Task 7).
+ * enemy-buff / self-debuff condition gate tests (Tasks 7 + PR5-item11).
  *
  * Verifies that a player ability gated on `enemy-buff` fires when the
  * `enemyBuffNames` arg carries the named buff (and not when empty), and that a
@@ -10,9 +10,13 @@
  *
  * NOTE on `derivable: true`: only a DERIVABLE enemy-buff/self-debuff condition reads
  * the context name arrays — a non-derivable one returns manualCount (the editor path).
- * Ship-data `enemy-buff` gates are currently emitted non-derivable (buildShipAbilities);
- * making them live-reading is a separate data-modeling change. Task 7 delivers the
- * PLUMBING (the arrays are now populated), which these derivable conditions exercise.
+ *
+ * As of PR 5 item 11 (Tasks 1 + 1b), real ship-data enemy-buff gates are now emitted
+ * `derivable: true` by buildShipAbilities.ts:
+ *   - `parseModifiers` Stealth branch: "while Stealthed" self-buff/enemy-buff gates.
+ *   - `enemyEffectConditions`: "deal more to enemies with <Buff>" gates (e.g. Lodolite).
+ * These runtime tests therefore lock the behavior that live ship abilities depend on,
+ * not just hand-built conditions.
  */
 import { describe, it, expect } from 'vitest';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
