@@ -158,6 +158,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
  *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
  *    (any enemy-side actor — dummy wall + walked enemy attackers).
+ *  - on-enemy-repaired → heal-performed where isEnemySide(casterId)
+ *    (any enemy-side actor's repair cast — dummy wall + enemy attackers). One enqueue per cast.
+ *  - on-enemy-cleansed → cleanse-performed where isEnemySide(casterId)
+ *    (any enemy-side actor's cleanse cast — dummy wall + enemy attackers). One enqueue per cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -346,6 +350,19 @@ export function registerReactiveListeners(args: {
                         // Enemy-scoped: fires when any enemy-side actor (dummy wall + enemy
                         // attackers) is destroyed. One enqueue per destruction event.
                         if (isEnemySide(e.actorId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-repaired':
+                    bus.on('heal-performed', (e) => {
+                        // Enemy-scoped: any enemy-side actor's repair (dummy wall + enemy
+                        // attackers). One enqueue per qualifying cast — Zosimos banks a charge.
+                        if (isEnemySide(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-cleansed':
+                    bus.on('cleanse-performed', (e) => {
+                        // Enemy-scoped: any enemy-side actor's cleanse. One enqueue per cast.
+                        if (isEnemySide(e.casterId)) enqueue(intent);
                     });
                     break;
                 case 'on-cheat-death-activated':
