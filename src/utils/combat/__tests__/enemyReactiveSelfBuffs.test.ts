@@ -122,8 +122,15 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
         idc = 0;
         const control = runCombat(BASE(controlEnemy()));
 
+        const buffedR1 = buffed.healing!.rounds[0].incomingDamage;
+        const controlR1 = control.healing!.rounds[0].incomingDamage;
         const buffedR2 = buffed.healing!.rounds[1].incomingDamage;
         const controlR2 = control.healing!.rounds[1].incomingDamage;
+
+        // The `start-of-round` buff lands at the round-1 head, BEFORE the enemy folds its
+        // turn, so it already couples into the round-1 hit — pinning "fires at the round
+        // head before the enemy acts".
+        expect(buffedR1).toBeGreaterThan(controlR1);
 
         // The reactive buff folds +100% attack into the enemy's round-2 hit, so the buffed
         // enemy deals strictly more incoming damage to the tank than the un-buffed control.

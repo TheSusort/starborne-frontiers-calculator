@@ -1335,11 +1335,6 @@ export function runCombat(input: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
-    // Enemy-side executor runtimes — a SEPARATE map (not merged into runtimesById, which
-    // drives leech scan / seeding / credit). Used only as the enemy IntentExecContext.runtimes.
-    const enemyRuntimesById = new Map<string, PlayerActorRuntime>(
-        enemyPlayerRuntimes.map((rt) => [rt.actor.id, rt])
-    );
     // Enemy-side lowest-speed set (ties → all; a lone enemy is trivially slowest → true).
     // Empty in DPS mode (no enemy attackers).
     const lowestSpeedEnemyIds = new Set<string>();
@@ -2202,8 +2197,11 @@ export function runCombat(input: CombatEngineInput): {
         // queue is empty (DPS / no enemy reactives) so the player path is untouched.
         const drainEnemyIntents = (): void => {
             if (enemyIntentQueue.length === 0) return;
+            // Use the enemy executor's own runtime map (NOT runtimesById, which drives
+            // leech scan / seeding / credit and must stay player-only). This reuses the
+            // existing enemyPlayerRuntimeByActorId — same source, key, and values.
             drainQueue(enemyIntentQueue, {
-                runtimes: enemyRuntimesById,
+                runtimes: enemyPlayerRuntimeByActorId,
                 recipientIds: enemyAttackerActorIds,
                 isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds.has(ownerId),
                 grantAllyCharges: () => {},
