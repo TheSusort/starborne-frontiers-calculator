@@ -1353,6 +1353,17 @@ export function runCombat(input: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
+    // Enemy-team charge grant (enemy-team PR3): the mirror of grantAllyCharges — bump every
+    // ENEMY attacker's charges by `amount`, each capped at its own chargeCount, skipping 0. Lets
+    // an enemy supporter (Hayyan charged grant / Graphite start-of-round / Liberator on-kill)
+    // accelerate the enemy attackers' charged bursts. Empty enemy list (DPS mode) → never called.
+    const grantEnemyAllyCharges = (amount: number): void => {
+        for (const a of enemyAttackerActors) {
+            if (a.chargeCount <= 0) continue;
+            a.charges = Math.min(a.charges + amount, a.chargeCount);
+        }
+    };
+
     // Enemy-side lowest-speed set (ties → all; a lone enemy is trivially slowest → true).
     // Empty in DPS mode (no enemy attackers).
     const lowestSpeedEnemyIds = new Set<string>();
@@ -2210,9 +2221,11 @@ export function runCombat(input: CombatEngineInput): {
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
         // recipientIds is the enemy-attacker ids (PR1 exercises self-target only; this
-        // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is a documented no-op
-        // (Gap F — enemy ally-charge grants deferred to PR3). Skips entirely when the enemy
-        // queue is empty (DPS / no enemy reactives) so the player path is untouched.
+        // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is the enemy mirror
+        // (Gap F — enemy ally-charge grants, done in enemy-team PR3): a reactive enemy
+        // ally-charge grant now bumps the enemy attackers' charges, not the player team.
+        // Skips entirely when the enemy queue is empty (DPS / no enemy reactives) so the
+        // player path is untouched.
         const drainEnemyIntents = (): void => {
             if (enemyIntentQueue.length === 0) return;
             // Use the enemy executor's own runtime map (NOT runtimesById, which drives
@@ -2222,7 +2235,7 @@ export function runCombat(input: CombatEngineInput): {
                 runtimes: enemyPlayerRuntimeByActorId,
                 recipientIds: enemyAttackerActorIds,
                 isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds.has(ownerId),
-                grantAllyCharges: () => {},
+                grantAllyCharges: grantEnemyAllyCharges,
             });
         };
 
@@ -2711,13 +2724,14 @@ export function runCombat(input: CombatEngineInput): {
                             // by THIS actor's id (its per-target store). Empty for the current fixtures —
                             // no player ability targets enemy attackers — but threaded for the full kit.
                             selfDebuffNames: ownerDebuffNames(actor.id),
-                            // grantAllyCharges is OMITTED for the enemy walk (Task 6b emission scoping):
-                            // the engine's closure bumps only PLAYER actors (allPlayerActors), so an enemy
-                            // running runPlayerTurn must never reach it — its "allies" are enemy-side, not
-                            // the player team. Inert today (the synthesized manual enemy is damage-only with
-                            // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
-                            // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
-                            grantAllyCharges: undefined,
+                            // grantAllyCharges for the enemy walk uses the ENEMY mirror (enemy-team PR3):
+                            // an enemy supporter running runPlayerTurn grants charges to its OWN (enemy)
+                            // attackers via grantEnemyAllyCharges (which bumps enemyAttackerActors), NEVER
+                            // the player team — the player closure bumps only allPlayerActors. Inert for the
+                            // current synthesized manual enemy (damage-only, no ally-charge ability, so
+                            // runPlayerTurn never calls it → goldens byte-identical), but a future full-kit
+                            // enemy supporter (Hayyan/Graphite/Liberator) now accelerates enemy charged bursts.
+                            grantAllyCharges: grantEnemyAllyCharges,
                             healing: healingCtx,
                             // Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): the enemy
                             // shares the player healingCtx, so its cast heal/cleanse must EMIT

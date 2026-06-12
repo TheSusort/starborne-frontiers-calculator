@@ -23,6 +23,7 @@ import {
     parseConditionalDamage,
     parseChargeGain,
     parseAllyChargeOnEnemyDeath,
+    parseAllyChargeGrant,
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
@@ -1090,6 +1091,27 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: allyChargePos >= 0 ? allyChargePos : MAX_POS,
+        });
+    }
+
+    // Hayyan / Graphite (enemy-team PR3): an all-allies charge-bar grant on cast (Hayyan)
+    // or start-of-round (Graphite). Distinct from the self-charge block above (parseChargeGain
+    // disqualifies these ally phrasings) and from Liberator's on-enemy-death block. Graphite's
+    // grant is gated on an enemy having Stealth (a derivable enemy-buff condition).
+    const allyChargeGrant = parseAllyChargeGrant(text);
+    if (allyChargeGrant) {
+        const grantPos = text.search(/charge/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'charge',
+                target: 'all-allies',
+                trigger: allyChargeGrant.trigger,
+                conditions: allyChargeGrant.conditions ?? [],
+                config: { type: 'charge', amount: allyChargeGrant.amount },
+                autoFilled: true,
+            },
+            pos: grantPos >= 0 ? grantPos : MAX_POS,
         });
     }
 

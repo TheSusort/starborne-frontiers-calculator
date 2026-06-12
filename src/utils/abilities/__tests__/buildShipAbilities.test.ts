@@ -2642,3 +2642,92 @@ describe('buildShipAbilities', () => {
         });
     });
 });
+
+describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite)', () => {
+    it('Hayyan charged slot: emits a charge / all-allies / on-cast ability with no conditions', () => {
+        const s = ship({
+            chargeSkillText:
+                'This Unit <unit-damage>repairs 17%</unit-damage> of its Max HP, grants <unit-skill>Cheat Death</unit-skill> to all allies, and <unit-aid>adds 1 charge</unit-aid> to their Charged Skill.',
+            chargeSkillCharge: 4,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const charged = slot(slots, 'charged');
+        expect(charged).toBeDefined();
+
+        const charge = abilityOfType(charged!.abilities, 'charge');
+        expect(charge).toMatchObject({
+            type: 'charge',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            config: { type: 'charge', amount: 1 },
+            autoFilled: true,
+        });
+        expect(charge!.conditions).toEqual([]);
+    });
+
+    it('Graphite passive (R4): emits charge / all-allies / start-of-round + enemy-Stealth condition', () => {
+        const s = ship({
+            thirdPassiveSkillText:
+                'When an ally attacker or debuffer is directly damaged, this Unit grants the ally <unit-skill>Repair Over Time III</unit-skill> for 2 turns.<br /><br />At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 2 charges</unit-aid> to the charged skill of all allies within the active pattern.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive).toBeDefined();
+
+        const charge = abilityOfType(passive!.abilities, 'charge');
+        expect(charge).toMatchObject({
+            type: 'charge',
+            target: 'all-allies',
+            trigger: 'start-of-round',
+            config: { type: 'charge', amount: 2 },
+            autoFilled: true,
+        });
+        expect(charge!.conditions[0]).toMatchObject({
+            subject: 'enemy-buff',
+            buffName: 'Stealth',
+            derivable: true,
+        });
+    });
+
+    it('self-charge ship still emits charge / self and NOT an all-allies grant — Selenite', () => {
+        const s = ship({
+            activeSkillText:
+                "If any target is <unit-aid>Stealthed</unit-aid>, it <unit-aid>adds 1 charge</unit-aid> to this Unit's Charged Skill.",
+            chargeSkillCharge: 4,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active');
+        const charges = active!.abilities.filter((a) => a.type === 'charge');
+        expect(charges).toHaveLength(1);
+        expect(charges[0].target).toBe('self');
+    });
+
+    // Regression: Liberator's real CSV text matches BOTH parseAllyChargeOnEnemyDeath (correct,
+    // on-enemy-destroyed) AND ALLY_CHARGE_GRANT_RE (the Hayyan/Graphite on-cast parser). The
+    // on-death exclusion guard in parseAllyChargeGrant must keep Liberator on the death path
+    // ONLY — exactly one charge ability, never a spurious second on-cast one.
+    it('Liberator real passive: emits EXACTLY ONE charge — on-enemy-destroyed / all-allies, no on-cast double', () => {
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive).toBeDefined();
+
+        const charges = passive!.abilities.filter((a) => a.type === 'charge');
+        expect(charges).toHaveLength(1);
+        expect(charges[0]).toMatchObject({
+            type: 'charge',
+            target: 'all-allies',
+            trigger: 'on-enemy-destroyed',
+            config: { type: 'charge', amount: 1 },
+        });
+        // No spurious on-cast charge from parseAllyChargeGrant.
+        expect(charges.some((c) => c.trigger === 'on-cast')).toBe(false);
+    });
+});

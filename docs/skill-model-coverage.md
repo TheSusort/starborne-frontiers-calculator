@@ -1393,8 +1393,31 @@ configure it and it looks like it works, but it does nothing".
 >   (positional 3×4 hex / front-back-skip / AoE) needs in-game board data not yet gathered, so
 >   targeting is deferred. Near-term 4d = **enemy-team support** (below; the targeting-independent
 >   part). Spec: `docs/superpowers/specs/2026-06-12-combat-engine-enemy-team-support-design.md`.
->   3-PR slice: PR1 enemy reactive self-buffs (SHIPPED, see sub-item) → PR2 cross-enemy buff
->   routing + UI (Enemy Team rename, remove 4-slot cap) → PR3 optional enemy `grantAllyCharges`.
+>   3-PR slice: PR1 enemy reactive self-buffs (SHIPPED) → PR2 cross-enemy buff routing + UI
+>   (Enemy Team rename, remove 4-slot cap; SHIPPED) → PR3 ally-charge-grant abilities (SHIPPED, see
+>   below). **All three enemy-team PRs done; remaining enemy-team work = the deferred targeting/simulator
+>   phase under the TEAM-AGNOSTIC principle.**
+>   **PR3 SHIPPED (2026-06-12, branch `feat/combat-engine-enemy-team-pr3-ally-charge`; spec
+>   `docs/superpowers/specs/2026-06-12-ally-charge-grant-abilities-design.md`):** went FULL (parser +
+>   wiring), not just the optional enemy `grantAllyCharges`. (1) New dedicated parser
+>   `parseAllyChargeGrant` (skillTextParser.ts) emits `all-allies` charge abilities for Hayyan
+>   (charged-slot, `on-cast`, unconditional) and Graphite (passive, `start-of-round`, gated on
+>   `{subject:'enemy-buff', buffName:'Stealth', derivable:true}`; "within active pattern" ≈ all-allies;
+>   tolerates the live CSV "adds 1 charges" plural typo). It returns the condition object (no hard-coded
+>   buffName at the emission site) and EXCLUDES on-enemy-death phrasing via a shared
+>   `ENEMY_DEATH_PHRASING_RE` (also used by `EXTRA_ACTION_ENEMY_DESTROYED_RE`) so Liberator stays solely
+>   on `parseAllyChargeOnEnemyDeath` (no double-emit — regression-tested). Self-charge parser
+>   `parseChargeGain` untouched (its `CHARGE_DISQUALIFY_RE` already rejects these). (2) Cast-path
+>   ally-charge gate in playerTurn.ts (~1239) generalized `action === 'active'` → `('active' ||
+>   'charged')` so Hayyan's charged-skill grant fires (own-charge re-bank stays active-only; goldens
+>   byte-identical — no synthetic golden's charged skill carries an ally-charge config). (3) New
+>   `grantEnemyAllyCharges` (engine.ts ~1360, mirror of player `grantAllyCharges` over
+>   `enemyAttackerActors`) wired into the enemy walk (~2734, was `undefined`) + the enemy reactive drain
+>   side-ctx (~2238, was the PR1 no-op). Both sides: a player-team Hayyan/Graphite now grants the team
+>   charges too. KNOWN enemy-side limitation (pre-existing PR1/PR2 drain wiring, documented in the test):
+>   the reactive drain's `enemyAttackerIds` is the same for both sides, so an enemy Graphite's `enemy-buff`
+>   Stealth gate reads the enemy attackers' OWN buffs (not the player team) — enemy Graphite stays niche/
+>   dormant; player-side gate works correctly.
 >   **v1 targeting (deferred, now UNBLOCKED — no board data needed, user direction 2026-06-12):**
 >   shared-target, list-order focus-fire — both teams hammer one target until it dies, then advance
 >   to the next ship added; this re-enables dead-recipient filtering (Salvation gross `directHeal`
@@ -1469,6 +1492,51 @@ configure it and it looks like it works, but it does nothing".
 >   purge, control effect simulation (stasis/taunt/provoke effects), damage reduction/reflect.
 > - **4f Defense-calc adoption** — defense calculator on the engine.
 > - **5 Simulator page** — per-round damage/healing/defense per actor; own UX spec.
+> - **TEAM-AGNOSTIC ARCHITECTURE PRINCIPLE (guiding the targeting + simulator phase; user-ratified 2026-06-12).**
+>   The engine is currently player-centric with a *parallel enemy-side mirror* (the PR1/PR2/PR3
+>   structures: `runtimesById`↔enemy runtimes, `playerIds`↔enemy recipient ids, `grantAllyCharges`↔
+>   `grantEnemyAllyCharges`, `lowestSpeedAllyIds`↔`lowestSpeedEnemyIds`, two intent queues, side-ctx
+>   `drainQueue`). That mirror is acceptable scaffolding NOW but should NOT keep growing. The end-state
+>   goal is **team-agnostic**: every ship is an actor in one speed-ordered queue (already true), each
+>   side targeting the opposing team, with ONE `bySide(...)` machinery instead of duplicated player/enemy
+>   logic. An asymmetry audit (2026-06-12) found the mirror itself is the CHEAP layer (mechanical
+>   `bySide` merge); the real work is THREE structural items, all of which land naturally as part of
+>   building targeting + the simulator: (1) collapse the **dummy-enemy vs real-enemy-actor duality** —
+>   DPS mode uses the `enemy` as a stat-block damage SINK (cumulative-damage scalar drives HP%-gates),
+>   healing mode uses real enemy `runPlayerTurn` actors; a symmetric model needs real actors (or a
+>   no-kit actor for the DPS stat-block case); (2) build the **targeting model** (today degenerate:
+>   player→dummy, enemy→heal target, pre-bound at dispatch; no target CHOICE) — the deferred work, with
+>   v1 = shared-target list-order focus-fire (no board data); (3) unify the **asymmetric accounting**
+>   (player per-actor `roundDamage` maps + heal buckets vs enemy single-scalar `roundIncoming` +
+>   `healEventOnly`) into per-actor-per-side accounting with a symmetric result surface. **Directive:
+>   design the targeting/simulator phase side-symmetric from the start; do NOT do a standalone
+>   "unify the mirrors" refactor before then (it would be largely redone by this work).**
+> - **PLAYER (ALLY) TEAM vs ENEMY TEAM coverage (standing reference; post enemy-team PR1–3, 2026-06-12).**
+>   Legend: ✅ supported & exercised · ⚠️ wired but DORMANT (machinery exists; the triggering event
+>   can't occur in single-target healing mode) · ◐ partial · — moot/not modeled.
+>
+>   | Mechanic | Player/ally | Enemy | Notes |
+>   |---|---|---|---|
+>   | Active/charged damage (multi-hit, secondary, conditional) | ✅ | ✅ | Enemy walks the same `runPlayerTurn` (4a); its damage credits as INCOMING to the tank (single scalar, not a per-actor map) |
+>   | DoTs (Corrosion/Inferno) + bombs | ✅ | ✅ | Enemy DoTs land on the tank, tick at the tank's turn |
+>   | Debuffs on the opposing side | ✅ | ✅ | Enemy debuffs land on the tank, gated by hacking vs tank security (4c PR5) |
+>   | Self-buffs — cast | ✅ | ✅ | 4a |
+>   | Self-buffs — reactive (start-of-round) | ✅ | ✅ | enemy-team PR1 (Chakara-as-enemy) |
+>   | Ally / all-allies buffs | ✅ | ✅ | enemy-team PR2 — routes to the enemy team via `enemyIds` |
+>   | Charge cadence + ally-charge grants | ✅ | ✅ | enemy-team PR3 (`grantEnemyAllyCharges`) |
+>   | Auras (recurring passives) | ✅ | ✅ | per-recipient registration both sides |
+>   | Reactive: on-attacked / on-ally-attacked / on-crit / hp-threshold-crossed / on-destroyed family / on-enemy-repaired·cleansed | ✅ full suite | ⚠️ dormant | Listeners register enemy-side, but the events never fire: the tank deals no return damage, so enemies are never attacked/crit-hit/killed and have no attacked allies. Only `round-started` (+ on-cast) fire enemy-side today |
+>   | Heals / shields / cleanse | ✅ full | ⚠️ event-only | Enemy heals emit events (`healEventOnly`) but credit nothing / heal no one — moot since enemies take no damage |
+>   | Death / revive / Cheat Death | ✅ | — moot | Enemies don't die in single-target healing mode |
+>   | Condition gating (live) | ✅ | ◐ | Gap: an enemy's `enemy-buff` gate on the reactive DRAIN reads the enemy attackers' OWN buffs (drain `enemyAttackerIds` is the same for both sides), not the player team — e.g. enemy Graphite's "if an enemy has Stealth" stays dormant. Pre-existing PR1/PR2 drain-ctx asymmetry |
+>
+>   **Bottom line:** for what the healing calc measures — incoming damage to the tank — the enemy side is at
+>   EFFECTIVE PARITY (damage, DoTs, debuffs, self/team buffs, charge acceleration all real). The residual
+>   asymmetry is STRUCTURAL, not missing features: reactive triggers are dormant only because no one attacks
+>   the enemies; heal/cleanse/death are event-only/moot because enemies are invulnerable here; the enemy-buff
+>   drain-gate reads the wrong side. All three dissolve in the deferred targeting/simulator phase (real
+>   two-way damage lights up enemy reactives; `bySide` unification fixes the gate source) — see the
+>   TEAM-AGNOSTIC principle above.
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
