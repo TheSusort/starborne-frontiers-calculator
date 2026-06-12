@@ -64,7 +64,7 @@ Where the routing logic is identical, factor it into a small `side`-parameterize
 | **B — reactive listeners** | `reactivePerOwner` (`engine.ts:1522`) is `'attacker'` + walked team only; `runtimes` map (`engine.ts:1556`) is player-only; `executeIntent` (`triggers.ts:727`) throws on a non-player owner | Enemy runtimes in a reactive-capable map; a second `registerReactiveListeners` scoped to enemy ids; an enemy `IntentExecContext` |
 | **C — per-enemy buff stores + re-derivation** | Enemies already run `runPlayerTurn`, which folds `timedAbilityStatuses('self', id)` at each enemy's turn (`playerTurn.ts:1013`) | Mostly *free* once routing (A) lands; aura / `all-allies` buffs need per-recipient registration onto enemy ids |
 | **D — supporter UI** | `EnemyAttackersPanel` caps at `MAX_ENEMY_ATTACKERS` (4); labelled "Attackers"; all cards are attackers | Rename → "Enemy Team"; remove cap; supporters reuse the same card (a card with a damage ability hits the tank, one without only buffs) |
-| **E — `isLowestSpeedAllyFor` per-side** | Computed from `allPlayerActors` (`engine.ts:1221`); returns `false` for enemy ids | Per-side minimum speed; a lone enemy island resolves `true` on its own side |
+| **E — `isLowestSpeedAllyFor` per-side** | The enemy-walk dispatch omits the closure entirely (only the player dispatch at `engine.ts:~2109` passes it), so the gate currently defaults to `true` (`triggers.ts:~595`, `?? true`). The player set is computed from `allPlayerActors` (`engine.ts:~1225`) and omits enemy ids | PR 1's enemy `IntentExecContext` must supply an **enemy-side** lowest-speed set so a lone enemy stays `true` rather than regressing to `false` by reusing the player set. Risk is a PR1-introduced regression, not a pre-existing live bug |
 | **F — `grantAllyCharges` enemy-side (optional)** | `undefined` for the enemy walk (`engine.ts:2627`) | An enemy-scoped charge-grant delegate, only if a supporter must accelerate an attacker's charged skill |
 
 ### 3.3 Component decomposition
@@ -91,7 +91,7 @@ Where the routing logic is identical, factor it into a small `side`-parameterize
 - **Manual flat card (no `shipSkills`):** keeps synthesizing a basic attack (`engine.ts:343`); carries no support skills → unaffected.
 - **Pure supporter (ship-backed, no damage ability):** `runPlayerTurn` resolves `damage = 0`; the enemy takes its turn, applies buffs, deals no damage. Confirm the walk tolerates a zero-damage enemy turn without emitting a spurious `attacked` event.
 - **Dead heal target:** existing cadence-only guard (`engine.ts:2545`) is unchanged; enemy reactive self-buffs should still advance/fire per existing cadence semantics (buffs with no live victim are inert but cadence advances).
-- **`isLowestSpeedAllyFor` for a lone enemy:** must return `true` (slowest on its own one-ship side), fixing the PR6 companion latent bug.
+- **`isLowestSpeedAllyFor` for a lone enemy:** must resolve `true` (slowest on its own one-ship side). Today the enemy walk omits the closure so the gate defaults to `true`; the hazard is PR1's new enemy context reusing the player-only set and *regressing* a lone enemy to `false`. PR1 must build a per-side set (the PR6 companion latent bug, addressed at wiring time).
 
 ---
 
