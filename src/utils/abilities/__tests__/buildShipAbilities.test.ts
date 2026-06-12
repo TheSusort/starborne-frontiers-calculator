@@ -2572,5 +2572,37 @@ describe('buildShipAbilities', () => {
                 config: { type: 'damage', multiplier: 75, noCrit: true },
             });
         });
+
+        // CodeRabbit #99 FIX #2: the standing "+N% Defense" modifier must only emit when its
+        // containing sentence is a STANDALONE/standing clause — a finite-duration or
+        // trigger-gated clause with the same wording must NOT be promoted to a permanent buff.
+        it('does NOT emit a standing defense modifier for a finite-duration "for N turns" clause', () => {
+            const s = ship({
+                secondPassiveSkillText: 'This Unit increases its Defense by 20% for 2 turns.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find(
+                (a) =>
+                    a.type === 'modifier' &&
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defense'
+            );
+            expect(mod).toBeUndefined();
+        });
+
+        it('does NOT emit a standing defense modifier for a trigger-gated "When an enemy cleanses" clause', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit increases its Defense by 20%.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find(
+                (a) =>
+                    a.type === 'modifier' &&
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defense'
+            );
+            expect(mod).toBeUndefined();
+        });
     });
 });
