@@ -1868,6 +1868,14 @@ describe('detectGrantConditions', () => {
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
     });
+
+    it('classifies "lowest speed among all allies" as a derivable lowest-speed-ally gate', () => {
+        const text =
+            'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
+            { subject: 'lowest-speed-ally', derivable: true },
+        ]);
+    });
 });
 
 describe('parseChargeGain ally-crit trigger (Hermes)', () => {

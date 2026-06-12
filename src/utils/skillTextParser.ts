@@ -621,6 +621,12 @@ export function detectGrantConditions(
         ];
     }
 
+    // Chakara: "if it has the lowest Speed among all allies" — a derivable team-speed gate.
+    // Live-derived in the engine from the player team's static speeds (lone actor → true).
+    if (/\blowest\s+speed\s+among\s+(?:all\s+)?allies\b/i.test(low)) {
+        return [{ subject: 'lowest-speed-ally', derivable: true }];
+    }
+
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
     if (countGate) return [countGate];
