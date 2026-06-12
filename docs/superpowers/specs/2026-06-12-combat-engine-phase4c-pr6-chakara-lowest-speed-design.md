@@ -42,15 +42,18 @@ trivially the slowest, so the buffs apply; in the engine team-walk the gate comp
 Add `'lowest-speed-ally'` to the `ConditionSubject` union. Semantics: the gate is satisfied when the
 condition owner has the minimum Speed among its side's actors (ties → all tied actors qualify).
 
-### 2. Live evaluation — `src/utils/abilities/evaluateConditions.ts`
+### 2. Live evaluation — `src/utils/abilities/evaluateConditions.ts` + `roundContext.ts`
 
-- Add `isLowestSpeedAlly?: boolean` to `ConditionContext`.
-- **Default `true`** when unpopulated. Rationale: a lone actor (single-ship DPS, attacker-only drain
-  path) is trivially the slowest on its side; defaulting true preserves DPS-mode behaviour with no
-  special-casing and keeps the drain path byte-identical.
-- New `evaluateCondition` case: `case 'lowest-speed-ally': return ctx.isLowestSpeedAlly ? 1 : 0;`
-  (default-true is applied at context construction / via `?? true` so the field reads as a real
-  boolean here).
+- Add `isLowestSpeedAlly?: boolean` to `ConditionContext` (`evaluateConditions.ts`).
+- New `evaluateCondition` case: `case 'lowest-speed-ally': return ctx.isLowestSpeedAlly ? 1 : 0;`.
+- **The default-`true` lives in `buildRoundContext` (`src/utils/abilities/roundContext.ts`)**, which is
+  the actual constructor of every `ConditionContext` (`buildActorConditionContext` delegates to it).
+  Add the field to `buildRoundContext`'s `state` param and its returned object with a `?? true`
+  default. Rationale for default-true: a lone actor (single-ship DPS, attacker-only drain path) is
+  trivially the slowest on its side; defaulting true preserves DPS-mode behaviour with no
+  special-casing and keeps the drain path byte-identical. All other `buildRoundContext` call sites
+  (`playerTurn.ts:841/976/1053/1132`, `NEUTRAL_NAMES_CTX` in `triggers.ts`) correctly inherit
+  default-true.
 
 ### 3. Live-subject registration — `src/utils/combat/abilityStatusGating.ts`
 
@@ -66,17 +69,25 @@ gate each round against the owner's live context.
   `stats.speed === min` (ties included): `lowestSpeedAllyIds: Set<string>`. Source = the player-side
   runtimes/turn-queue actors (attacker + team ships), each carrying `stats.speed`.
 - Add `isLowestSpeedAlly?: boolean` to the `shared` bag of `buildActorConditionContext`
-  (`triggers.ts`), threaded into the returned context (via `buildRoundContext`).
-- Populate `isLowestSpeedAlly: lowestSpeedAllyIds.has(ownerId)` at the player-actor context build
-  sites: the round-1 seed (`engine.ts` ~251) and the player-turn foreign-caster ctx resolver
-  (`playerTurn.ts`).
-- **Drain path** (`buildDrainContext`): leave unset → default `true`. The drain gate is attacker-only
-  and golden-locked; no lowest-speed ability rides a drain-time reactive (Chakara's grant is a
-  start-of-round passive), so this is safe and churns no golden.
+  (`triggers.ts:517`), passed through into the `buildRoundContext` call.
+- There are exactly **three** `buildActorConditionContext` call sites:
+  1. **The passive-status seed inside `seedPassiveTimedStatuses`** (`engine.ts:251`, where the
+     `seedCtx` is built and gated via `conditionsMet` at `engine.ts:261`). NOTE: this is **not** a
+     round-1-only seed — `seedPassiveTimedStatuses` runs **every round** and is called **twice**: for
+     player runtimes (`engine.ts:1672`) and for **enemy** runtimes (`engine.ts:1673`). Populate
+     `isLowestSpeedAlly: lowestSpeedAllyIds.has(ownerId)` **only for the player call**; the enemy call
+     must leave the field unset (pass `undefined`) so enemy actors fall to default-`true` rather than
+     `false`. This requires an explicit side guard / passing the set only into the player invocation —
+     do NOT unconditionally call `lowestSpeedAllyIds.has(ownerId)` in the shared seed code, or
+     enemy-side ids would resolve `false`.
+  2. **The player-turn foreign-caster ctx resolver** `foreignCasterCtx` (`playerTurn.ts:909`):
+     populate `isLowestSpeedAlly: lowestSpeedAllyIds.has(casterId)` for the (player-side) caster.
+  3. **`buildDrainContext`** (`triggers.ts:568`): leave unset → default `true`. The drain gate is
+     attacker-only and golden-locked; no lowest-speed ability rides a drain-time reactive (Chakara's
+     grant is a start-of-round passive), so this is safe and churns no golden.
 - **Enemy-walk actors:** Chakara is player-side and no enemy carries a lowest-speed gate; enemy-team
-  support is deferred to post-4d. Enemy-actor contexts may leave the field unset (default true) — the
-  subject is unused on the enemy side today. (If desired, compute a per-side min symmetrically; not
-  required to close item 10.)
+  support is deferred to post-4d. Enemy-actor contexts leave the field unset (default true) per the
+  side guard above — the subject is unused on the enemy side today.
 
 ### 5. Parser — Gap B gate — `src/utils/skillTextParser.ts` `detectGrantConditions`
 
@@ -95,11 +106,13 @@ extracted. Implementation detail (segment-loop verb recognition vs. a supplement
 pass) is left to the plan; the observable contract is: both buffs emit, `start-of-round` trigger,
 `lowest-speed-ally` condition.
 
-### 7. Editor — `src/components/.../AbilityCard.tsx`
+### 7. Editor — `src/components/skills/ConditionRow.tsx`
 
-Add `'lowest-speed-ally'` to the condition-subject options and a human-readable label (e.g.
-"Has lowest Speed among allies") so the auto-parsed gate is visible and manually editable, matching
-the editor treatment of the other condition subjects.
+The condition-subject `<Select>` lives in `ConditionRow.tsx` (NOT `AbilityCard.tsx`, which only
+renders `<ConditionRow>`). Add `'lowest-speed-ally'` to `SUBJECT_VALUES` and a human-readable label
+(e.g. "Has lowest Speed among allies") via `EXTRA_SUBJECT_LABELS` (or `CONDITIONAL_CONDITION_LABELS`
+in `src/types/calculator.ts`, which `subjectLabel` also consults) so the auto-parsed gate is visible
+and manually editable. `AbilityCard.tsx` needs no change.
 
 ## Data flow
 
