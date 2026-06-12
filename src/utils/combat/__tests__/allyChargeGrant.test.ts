@@ -510,17 +510,19 @@ describe('enemy-side Hayyan ally-charge acceleration', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Test 3 — ENEMY-side Graphite (dormant case).
 //
-// An enemy Graphite's gate is "an enemy has Stealth". From the ENEMY actor's perspective the
-// `enemy-buff` source is the PLAYER team (enemyEnemyBuffNames() → player self-buff names). In
-// the healing harness the player team is a single bare focus actor with no Stealth, so the
-// gate is DORMANT — the enemy attacker gets no acceleration from the enemy Graphite grant.
+// The enemy Graphite's grant uses a `start-of-round` trigger, so it is a LIVE trigger that
+// routes through the reactive DRAIN (engine.ts ~2136 → triggers.ts ~591), never the enemy CAST
+// walk. In that drain `enemyAttackerIds` is hardcoded to `enemyAttackerActorIds` for BOTH sides
+// (a pre-existing PR1/PR2 drain-wiring detail), so an enemy actor's `enemy-buff` gate reads the
+// ENEMY ATTACKERS' OWN buffs — not the player team's. (The player-self-buff source,
+// enemyEnemyBuffNames(), is only wired into the enemy cast walk at engine.ts ~2722, which a
+// start-of-round ability never reaches.) In this healing harness no enemy attacker holds
+// Stealth, so the gate is DORMANT — the enemy attacker gets no acceleration from the grant.
 //
 // We assert the DORMANT case only: an enemy Graphite with the Stealth-gated grant produces the
-// SAME total incoming as a control whose grant is absent (self-targeted). The gate-ON path
-// (a PLAYER ship holding Stealth) is NOT cleanly configurable through this healing harness, so
-// per the task we do NOT force it — that direction is covered by the PLAYER-side gate test
-// (Test 1, which exercises the SAME `{enemy-buff, Stealth, derivable}` condition through the
-// shared executeIntent charge branch).
+// SAME total incoming as a control whose grant is absent (self-targeted). The gate-ON direction
+// is covered by the PLAYER-side gate test (Test 1, which exercises the SAME
+// `{enemy-buff, Stealth, derivable}` condition through the shared executeIntent charge branch).
 //
 // Observable: total incoming damage to the heal target. Single isolated variable: whether the
 // (dormant) grant is present. Equal totals → the gate never fired.
