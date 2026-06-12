@@ -59,35 +59,58 @@ condition owner has the minimum Speed among its side's actors (ties → all tied
 
 Add `'lowest-speed-ally'` to `LIVE_SUBJECTS`. Without this, `liveGateConditions` would neutralize the
 derivable condition to `always` (the "ally counts unavailable" legacy path) and the buffs would apply
-unconditionally — defeating Gap B. With it, the status-grant path (`engine.ts:173`
-`registerActorAbilityStatuses` → `liveGateConditions` → per-round `conditionsMet`) re-evaluates the
-gate each round against the owner's live context.
+unconditionally — defeating Gap B. With it, the condition survives `liveGateConditions` untouched on
+**both** the cast/registration path (`engine.ts:173` `registerActorAbilityStatuses`) and the reactive
+executor path (`triggers.ts:747` `executeIntent`), so it is evaluated live each round.
+
+### 3a. CRITICAL — which path actually evaluates Chakara's gate
+
+`start-of-round` is a **LIVE trigger** (`LIVE_TRIGGERS`). After Gap A stamps the buffs with
+`trigger: 'start-of-round'`, `partitionReactiveAbilities` (`triggers.ts:111`) routes them into
+`reactiveAbilities`, **NOT** `castSkills` — so `registerActorAbilityStatuses` (and therefore the
+round-1-only `seedPassiveTimedStatuses` at `engine.ts:1671`, gated by `if (r === 1)`) **never sees
+them**. Instead they are enqueued on the `round-started` event (`triggers.ts:282`) and fire **every
+round** via `executeIntent`, which evaluates the gate at `triggers.ts:748`:
+
+```
+conditionsMet(liveGateConditions(scrubbedConditions), buildDrainContext(ctx, intent.ownerId))
+```
+
+**Therefore the live `lowest-speed-ally` value must be supplied to `buildDrainContext`** (the reactive
+drain context), NOT to the seed. This is the single gate site that matters for Chakara. (A passive
+"gains X for N turns" buff WITHOUT a start-of-round trigger would instead ride the seed path — but no
+such lowest-speed ship exists in the corpus, so the seed and the aura foreign-caster context stay at
+default-`true`.)
 
 ### 4. Engine plumbing — `src/utils/combat/engine.ts` + `triggers.ts`
 
-- Compute **once per combat** the player-side minimum speed and the set of player owner ids whose
-  `stats.speed === min` (ties included): `lowestSpeedAllyIds: Set<string>`. Source = the player-side
-  runtimes/turn-queue actors (attacker + team ships), each carrying `stats.speed`.
-- Add `isLowestSpeedAlly?: boolean` to the `shared` bag of `buildActorConditionContext`
-  (`triggers.ts:517`), passed through into the `buildRoundContext` call.
-- There are exactly **three** `buildActorConditionContext` call sites:
-  1. **The passive-status seed inside `seedPassiveTimedStatuses`** (`engine.ts:251`, where the
-     `seedCtx` is built and gated via `conditionsMet` at `engine.ts:261`). NOTE: this is **not** a
-     round-1-only seed — `seedPassiveTimedStatuses` runs **every round** and is called **twice**: for
-     player runtimes (`engine.ts:1672`) and for **enemy** runtimes (`engine.ts:1673`). Populate
-     `isLowestSpeedAlly: lowestSpeedAllyIds.has(ownerId)` **only for the player call**; the enemy call
-     must leave the field unset (pass `undefined`) so enemy actors fall to default-`true` rather than
-     `false`. This requires an explicit side guard / passing the set only into the player invocation —
-     do NOT unconditionally call `lowestSpeedAllyIds.has(ownerId)` in the shared seed code, or
-     enemy-side ids would resolve `false`.
-  2. **The player-turn foreign-caster ctx resolver** `foreignCasterCtx` (`playerTurn.ts:909`):
-     populate `isLowestSpeedAlly: lowestSpeedAllyIds.has(casterId)` for the (player-side) caster.
-  3. **`buildDrainContext`** (`triggers.ts:568`): leave unset → default `true`. The drain gate is
-     attacker-only and golden-locked; no lowest-speed ability rides a drain-time reactive (Chakara's
-     grant is a start-of-round passive), so this is safe and churns no golden.
+The gate site is `buildDrainContext` (see §3a). Plumb the live value as a **delegate on
+`IntentExecContext`**, mirroring the existing `selfHpPctFor` delegate.
+
+- **Compute the lowest-speed set once** (speeds are static — the sim treats speed as turn ORDER, not a
+  mutable per-round stat): among the player-side actors (`runtimesById` values whose
+  `actor.side === 'player'`, i.e. attacker + team ships), find `minSpeed = min(actor.stats.speed)` and
+  build `lowestSpeedAllyIds: Set<string>` = ids whose `actor.stats.speed === minSpeed` (ties → all
+  qualify). Compute this **outside the round loop** (after `runtimesById` is built, ~`engine.ts:1548`).
+- **Add a delegate to `IntentExecContext`** (`triggers.ts:419`): `isLowestSpeedAllyFor?: (ownerId:
+  string) => boolean`. Provide it at the `IntentExecContext` assembly site inside `drainIntents`
+  (`engine.ts:~2046`, alongside `selfHpPctFor`): `isLowestSpeedAllyFor: (ownerId) =>
+  lowestSpeedAllyIds.has(ownerId)`. Provide it unconditionally (unlike `selfHpPctFor`, which is
+  healing-mode gated) — in DPS mode the lone attacker is the only player id, so the set = `{attacker}`
+  and the delegate returns `true` for the attacker → DPS-assumption preserved with no special-casing.
+- **`buildDrainContext`** (`triggers.ts:559`): pass `isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true`
+  into the `buildActorConditionContext` `shared` bag.
+- **Add `isLowestSpeedAlly?: boolean` to the `shared` bag** of `buildActorConditionContext`
+  (`triggers.ts:517`), forwarded into the `buildRoundContext` call. The `?? true` default lives in
+  `buildRoundContext` (§2), so the seed (`engine.ts:251`) and the foreign-caster aura resolver
+  (`playerTurn.ts:909`) — which do NOT pass the field — correctly inherit default-`true`.
+- **Why the seed / foreign-caster sites are left alone:** Chakara's buff is a reactive start-of-round
+  intent (§3a), so it is gated only at `buildDrainContext`. The seed handles passive timed buffs that
+  carry NO reactive trigger; the foreign-caster resolver gates auras/accumulators. No corpus
+  lowest-speed buff rides either path, so their default-`true` fallback is safe and churns no golden.
 - **Enemy-walk actors:** Chakara is player-side and no enemy carries a lowest-speed gate; enemy-team
-  support is deferred to post-4d. Enemy-actor contexts leave the field unset (default true) per the
-  side guard above — the subject is unused on the enemy side today.
+  support is deferred to post-4d. An enemy owner id is absent from `lowestSpeedAllyIds`, so the
+  delegate returns `false` for it — but no enemy ability uses this subject today, so it is inert.
 
 ### 5. Parser — Gap B gate — `src/utils/skillTextParser.ts` `detectGrantConditions`
 
@@ -122,10 +145,11 @@ ship-skills.csv / imported ship text
   → buildSkillBuffAutoFill → buildShipAbilities
        · detectReactiveTrigger → start-of-round
        · detectGrantConditions (Gap B) → [{subject:'lowest-speed-ally', derivable:true}]
-  → engine registerActorAbilityStatuses
+  → engine partitionReactiveAbilities: start-of-round buff → reactiveAbilities (NOT castSkills)
+  → enqueued on round-started event → executeIntent EACH round
        · liveGateConditions keeps 'lowest-speed-ally' (LIVE_SUBJECTS)
-       · per round: conditionsMet(conds, ctx) where ctx.isLowestSpeedAlly =
-         lowestSpeedAllyIds.has(ownerId)
+       · conditionsMet(conds, buildDrainContext(ctx, ownerId)) where
+         ctx.isLowestSpeedAllyFor(ownerId) feeds ctx.isLowestSpeedAlly = lowestSpeedAllyIds.has(ownerId)
   → buffs applied (Attack Up II / Defense Up II, 1 turn) only on rounds Chakara is slowest
 ```
 
