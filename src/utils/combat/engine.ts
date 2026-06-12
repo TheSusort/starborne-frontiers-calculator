@@ -317,6 +317,10 @@ export interface EnemyActorInput {
     affinityCritCap?: number;
     /** Pre-resolved crit penalty (from computeAffinityModifiers). Default 0 (neutral). */
     affinityCritPenalty?: number;
+    /** Pre-computed debuff landing chance (0..1) for THIS enemy's inflictions on the tank.
+     *  Computed by the healing adapter from enemy hacking vs heal-target security. Omitted →
+     *  100% (1) for backward compatibility (every existing test/the dummy path omits it). */
+    debuffLandingChance?: number;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -427,7 +431,7 @@ export function buildEnemyPlayerActorRuntime(
         defence: e.stats.defence ?? 0,
         hp: e.stats.hp ?? 0,
         healModifier: 0,
-        debuffLandingChance: 1,
+        debuffLandingChance: e.debuffLandingChance ?? 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: resolvedDamageMod,
@@ -745,6 +749,10 @@ export interface CombatEngineInput {
         affinityCritCap?: number;
         /** Pre-resolved crit penalty vs the heal target. Default 0 (neutral). */
         affinityCritPenalty?: number;
+        /** Pre-computed debuff landing chance (0..1) for THIS enemy's inflictions on the tank
+         *  (computed by the healing adapter from enemy hacking vs heal-target security).
+         *  Omitted → 100% (1) for backward compatibility. */
+        debuffLandingChance?: number;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
