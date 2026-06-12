@@ -1524,6 +1524,52 @@ describe('simulateDPS', () => {
                 .forEach((r) => expect(r.charges).toBe(0));
         });
 
+        // CHARACTERIZATION / LOCK (PR 5 item 11): the charge-gain enemy-buff gates in
+        // skillTextParser (charge-on-Stealth / "N or more buffs" → Selenite, Nuqtu, Rhodium)
+        // MUST stay `derivable: false`. This pair documents WHY they cannot be flipped to
+        // `derivable: true` like the modifier/damage enemy-buff gates were in Tasks 1/1b/3.
+        //
+        // The DPS charge cast-path (playerTurn → gateFiringAbilities → evaluateCondition) gates
+        // the charge ability LITERALLY against ctx.enemyBuffNames — it does NOT run through
+        // liveGateConditions (that neutralizer only covers the buff/debuff status-registration
+        // path in the engine). In DPS mode the enemy has no attacker actors, so enemyBuffNames is
+        // structurally always [] (engine.ts playerEnemyBuffNames: "Inert in DPS mode (no enemy
+        // attackers → empty list)"), and DPSSimulationInput exposes no enemy-buff picker to feed
+        // it. Therefore:
+        //   - derivable:false  → assume-active (count = manualCount ?? 1) → charge awarded.
+        //   - derivable:true   → live read returns 0 → gate FAILS → charge dropped EVERY round.
+        // Flipping would silently zero charge gain for these ships in ALL cases — a regression,
+        // not an accuracy gain. If a live enemy-buff source is ever added to the DPS charge ctx,
+        // revisit this lock.
+        it('LOCK: charge-on-enemy-buff stays assume-active (derivable:false); a derivable:true gate would zero charge', () => {
+            // derivable:false (the SHIPPED parser output) → assume-active → +1/round on actives,
+            // accelerating the cadence exactly like the Selenite case above.
+            const assumeActive = simulateDPS({
+                ...base,
+                selfChargeGain: {
+                    amount: 1,
+                    condition: 'enemy-buff',
+                    derivable: false,
+                    manualCount: 1,
+                },
+            });
+            expect(chargedRounds(assumeActive)).toEqual([3, 6, 9, 12]);
+
+            // Counterfactual: the SAME gate flipped to derivable:true reads the (empty) live
+            // enemy-buff list → gate fails every round → the bonus charge NEVER lands, leaving
+            // only the baseline 1-charge-per-active cadence. This is the regression that flipping
+            // these parser sites would cause, so they remain derivable:false.
+            const liveRead = simulateDPS({
+                ...base,
+                selfChargeGain: {
+                    amount: 1,
+                    condition: 'enemy-buff',
+                    derivable: true,
+                },
+            });
+            expect(chargedRounds(liveRead)).toEqual([4, 8, 12]);
+        });
+
         it('does nothing when there is no charged skill', () => {
             const result = simulateDPS({
                 ...base,

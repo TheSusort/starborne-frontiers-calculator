@@ -1432,6 +1432,27 @@ configure it and it looks like it works, but it does nothing".
     the 22 DPS goldens under a controlled KNOWN-DIFF review (medium cost; meaningful accuracy
     gain for any ship with an enemy-buff or self-debuff gate).
 
+    **Charge-gain enemy-buff gates stay manual (`derivable: false`) — by design, NOT deferred.**
+    The PR 5 flip covered the *modifier* and *damage* enemy-buff gates (Tasks 1/1b/3), but the
+    *charge-gain* enemy-buff gates in `skillTextParser.ts` (`classifyChargeCondition` — charge-on-
+    Stealth at ~line 384, and the "N or more buffs"/"buffs on the target" count phrasings at
+    ~lines 385–392; also the Rhodium per-buff form in `parseChargeGain`) must REMAIN
+    `derivable: false`. These gate the charge-on-Stealth / buff-count ships (Selenite, Nuqtu,
+    Rhodium). The reason is the DPS charge cast-path evaluates these gates in a context with NO
+    live enemy-buff data: `runPlayerTurn` → `gateFiringAbilities` (`src/utils/abilities/applyAbilities.ts`)
+    → `conditionsMet`/`evaluateCondition` reads `ctx.enemyBuffNames` LITERALLY. Crucially this path
+    does **not** run through `liveGateConditions` (the `enemy-buff`-not-in-`LIVE_SUBJECTS` neutralizer
+    in `abilityStatusGating.ts` only covers the engine's buff/debuff status-registration path, not the
+    charge cast-path). In DPS mode the enemy has no attacker actors, so `enemyBuffNames` is
+    structurally always `[]` (engine.ts `playerEnemyBuffNames`: "Inert in DPS mode (no enemy
+    attackers → empty list)"), and `DPSSimulationInput` exposes no enemy-buff picker to populate it.
+    Consequence: `derivable: false` → assume-active (count = `manualCount ?? 1`) → charge awarded;
+    `derivable: true` → live read returns 0 → gate fails EVERY round → charge gain zeroed
+    unconditionally. Flipping these sites would silently kill charge gain for these ships in ALL
+    cases — a regression, not an accuracy gain — so they stay assume-active. Locked by
+    `dpsSimulator.test.ts` ("LOCK: charge-on-enemy-buff stays assume-active…"), which proves both
+    branches. Revisit only if a live enemy-buff source is ever wired into the DPS charge context.
+
 12. **Enemy debuffs land at 100% on the tank (Phase 4a simplification)** — Enemy attacker
     actors carry no hacking stat, so there is no hacking-vs-security landing roll when they
     inflict debuffs on the heal target; `debuffLandingChance` is hard-coded to `1` (always
