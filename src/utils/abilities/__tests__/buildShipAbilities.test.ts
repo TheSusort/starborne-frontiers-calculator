@@ -2704,4 +2704,30 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
         expect(charges).toHaveLength(1);
         expect(charges[0].target).toBe('self');
     });
+
+    // Regression: Liberator's real CSV text matches BOTH parseAllyChargeOnEnemyDeath (correct,
+    // on-enemy-destroyed) AND ALLY_CHARGE_GRANT_RE (the Hayyan/Graphite on-cast parser). The
+    // on-death exclusion guard in parseAllyChargeGrant must keep Liberator on the death path
+    // ONLY — exactly one charge ability, never a spurious second on-cast one.
+    it('Liberator real passive: emits EXACTLY ONE charge — on-enemy-destroyed / all-allies, no on-cast double', () => {
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit has 40% Shield Penetration. When an enemy dies, all allies <unit-aid>add 1 charge</unit-aid> to their Charged Skills.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive).toBeDefined();
+
+        const charges = passive!.abilities.filter((a) => a.type === 'charge');
+        expect(charges).toHaveLength(1);
+        expect(charges[0]).toMatchObject({
+            type: 'charge',
+            target: 'all-allies',
+            trigger: 'on-enemy-destroyed',
+            config: { type: 'charge', amount: 1 },
+        });
+        // No spurious on-cast charge from parseAllyChargeGrant.
+        expect(charges.some((c) => c.trigger === 'on-cast')).toBe(false);
+    });
 });

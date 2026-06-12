@@ -1420,6 +1420,12 @@ const ALLY_CHARGE_GRANT_RE =
     /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+all\s+allies)/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
+// Death-triggered ally-charge grants are Liberator's domain (parseAllyChargeOnEnemyDeath +
+// on-enemy-destroyed trigger). Liberator's text ("When an enemy dies, all allies add 1 charge
+// to their Charged Skills") ALSO matches ALLY_CHARGE_GRANT_RE, so parseAllyChargeGrant must
+// bail on the on-enemy-death phrasing to avoid a spurious second (on-cast) charge ability.
+// Same detection vocabulary as EXTRA_ACTION_ENEMY_DESTROYED_RE.
+const ALLY_CHARGE_ON_DEATH_EXCLUDE_RE = /when an enemy dies|upon a kill|killing an enemy/i;
 
 /**
  * Parses Hayyan's / Graphite's all-allies charge-bar grant. Returns the per-ally charge
@@ -1434,6 +1440,9 @@ export function parseAllyChargeGrant(
 ): { amount: number; trigger: 'on-cast' | 'start-of-round'; condition?: boolean } | null {
     if (!text) return null;
     const plain = stripUnitTags(text);
+    // Death-triggered grants (Liberator) belong to parseAllyChargeOnEnemyDeath /
+    // on-enemy-destroyed — never claim them here, or we'd double-emit an on-cast grant.
+    if (ALLY_CHARGE_ON_DEATH_EXCLUDE_RE.test(plain)) return null;
     const m = ALLY_CHARGE_GRANT_RE.exec(plain);
     if (!m) return null;
     const raw = m[1].toLowerCase();
