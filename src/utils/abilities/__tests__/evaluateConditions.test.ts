@@ -6,6 +6,7 @@ import {
     conditionsMet,
     scaledBonus,
 } from '../evaluateConditions';
+import { buildRoundContext } from '../roundContext';
 import { Ability, Condition } from '../../../types/abilities';
 
 const ctx = (over: Partial<ConditionContext> = {}): ConditionContext => ({
@@ -346,5 +347,45 @@ describe('hp-threshold hpSubject target', () => {
             hpSubject: 'target',
         };
         expect(evaluateCondition(c, ctx())).toBe(0);
+    });
+});
+
+describe('lowest-speed-ally', () => {
+    it('returns 1 when isLowestSpeedAlly is true', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            isLowestSpeedAlly: true,
+        });
+        expect(evaluateCondition({ subject: 'lowest-speed-ally', derivable: true }, ctx)).toBe(1);
+    });
+
+    it('returns 0 when isLowestSpeedAlly is false', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            isLowestSpeedAlly: false,
+        });
+        expect(evaluateCondition({ subject: 'lowest-speed-ally', derivable: true }, ctx)).toBe(0);
+    });
+
+    it('defaults to 1 (lone-actor DPS assumption) when the field is omitted', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+        });
+        expect(evaluateCondition({ subject: 'lowest-speed-ally', derivable: true }, ctx)).toBe(1);
     });
 });

@@ -110,7 +110,12 @@ export type ConditionSubject =
     | 'ally-crit-dot'
     // A specific named ally is on the team (roster/team-composition gate; manual,
     // team-dependent). The ally's name is carried in `buffName` (e.g. "Isha").
-    | 'ally-on-team';
+    | 'ally-on-team'
+    // Binary gate: the condition owner has the lowest Speed among its (player) team
+    // (ties → all tied qualify). Used by Chakara's start-of-round self-buffs.
+    // Evaluated from ConditionContext.isLowestSpeedAlly; defaults true (lone-actor
+    // DPS assumption: a single attacker is trivially the slowest).
+    | 'lowest-speed-ally';
 
 export interface Condition {
     subject: ConditionSubject;
