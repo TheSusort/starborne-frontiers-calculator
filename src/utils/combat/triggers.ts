@@ -471,6 +471,11 @@ export interface IntentExecContext {
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
      *  keeping all existing drain gating byte-identical. */
     selfHpPctFor?: (ownerId: string) => number;
+    /** Whether `ownerId` has the lowest Speed among the player team (ties → all qualify),
+     *  feeding the `lowest-speed-ally` gate at drain time. Computed once by the engine (Speed
+     *  is static turn-order in this sim). Absent → buildDrainContext defaults the gate to true
+     *  (lone-actor DPS assumption). */
+    isLowestSpeedAllyFor?: (ownerId: string) => boolean;
     /** Credit reactive direct damage to the owner's round damage map against the shared
      *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
@@ -528,6 +533,9 @@ export function buildActorConditionContext(
         enemyBuffNames?: string[];
         /** Active debuff names on self. Default [] (DPS-assumption). Populated in Task 7+. */
         selfDebuffNames?: string[];
+        /** Owner has the lowest Speed among its player team. Default true (lone-actor /
+         *  DPS assumption). Populated by buildDrainContext (Phase 4c PR 6). */
+        isLowestSpeedAlly?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -553,6 +561,7 @@ export function buildActorConditionContext(
         selfHpPct: shared.selfHpPct,
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
+        isLowestSpeedAlly: shared.isLowestSpeedAlly,
     });
 }
 
@@ -581,6 +590,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // (no enemy attackers, no debuffs on player actors) → drain gating byte-identical.
         enemyBuffNames: selfBuffNamesForOwners(ctx.statusEngine, ctx.enemyAttackerIds ?? []),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
+        // Phase 4c PR 6: live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
+        // paths keep the lone-actor assumption and stay byte-identical.
+        isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,
     });
 }
 
