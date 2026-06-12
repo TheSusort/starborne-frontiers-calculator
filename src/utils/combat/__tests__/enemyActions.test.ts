@@ -8,10 +8,19 @@ import {
     Intent,
     IntentExecContext,
 } from '../triggers';
-import { createEventBus } from '../events';
+import { createEventBus, CombatEvent } from '../events';
 import { createStatusEngine } from '../statusEngine';
-import type { PlayerActorRuntime, PlayerRoundCtx } from '../playerTurn';
+import {
+    runPlayerTurn,
+    PlayerActorRuntime,
+    PlayerTurnArgs,
+    HealingRuntimeCtx,
+} from '../playerTurn';
+import type { PlayerRoundCtx } from '../playerTurn';
+import { createActor } from '../state';
 import type { CombatActor } from '../state';
+import { makeRateGate } from '../../calculators/rateAccumulator';
+import { runCombat, CombatEngineInput } from '../engine';
 
 describe('Phase 4c PR 4 — enemy-action triggers', () => {
     it('registers on-enemy-repaired and on-enemy-cleansed as live triggers', () => {
@@ -211,5 +220,331 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
         });
         executeIntent(makeDamageIntent('grif'), ctx);
         expect(credited).toHaveLength(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse EMISSION.
+//
+// When runPlayerTurn is called with `healEventOnly: true` (the enemy walk),
+// a CAST skill carrying heal/cleanse abilities must EMIT `heal-performed` /
+// `cleanse-performed` with the actor's id, but mutate NOTHING on the shared
+// player healing ctx — no credit / applyHealToTarget / grantShieldToTarget.
+// This is the load-bearing guard: a single leaked healing.* call would credit
+// the player healing map under an enemy id (or heal the tank).
+// ----------------------------------------------------------------------
+describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => {
+    // A spy healing ctx that records EVERY mutation. If event-only mode is honoured,
+    // none of these arrays receive an entry.
+    interface HealingSpy {
+        healing: HealingRuntimeCtx;
+        credits: { actorId: string; bucket: string; amount: number }[];
+        applied: number[];
+        shields: number[];
+    }
+    const makeHealingSpy = (): HealingSpy => {
+        const credits: { actorId: string; bucket: string; amount: number }[] = [];
+        const applied: number[] = [];
+        const shields: number[] = [];
+        const healing: HealingRuntimeCtx = {
+            targetId: 'tank',
+            credit: (actorId, bucket, amount) => credits.push({ actorId, bucket, amount }),
+            recipientMaxHp: () => 10000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => 10000,
+            applyHealToTarget: (raw) => {
+                applied.push(raw);
+                return { consumed: raw, overheal: 0 };
+            },
+            grantShieldToTarget: (raw) => shields.push(raw),
+            playerIds: ['enemy1', 'tank'],
+        };
+        return { healing, credits, applied, shields };
+    };
+
+    // An enemy-side runtime whose ACTIVE cast skill heals an ally and cleanses.
+    const makeRuntime = (skills: ShipSkills): PlayerActorRuntime => {
+        const actor = createActor({
+            id: 'enemy1',
+            side: 'player', // runPlayerTurn is side-agnostic; the engine flags enemy via healEventOnly
+            kind: 'attacker',
+            stats: {
+                attack: 5000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 10000,
+                speed: 100,
+            },
+            chargeCount: 0,
+            startCharged: false,
+        });
+        const noGate: PlayerActorRuntime['activeCritGate'] = () => false;
+        return {
+            actor,
+            focus: true,
+            castSkills: skills,
+            reactiveAbilities: [],
+            timedSelfBySlot: [],
+            timedEnemyBySlot: [],
+            hasChargedSkill: false,
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            defence: 0,
+            hp: 10000,
+            healModifier: 0,
+            debuffLandingChance: 1,
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            affinityDisadvantage: false,
+            activeCritGate: noGate,
+            chargedCritGate: noGate,
+            activeHealCritGate: noGate,
+            chargedHealCritGate: noGate,
+            debuffLandingGate: makeRateGate(),
+            extendChanceGate: makeRateGate(),
+            landsTimedEnemyApplication: () => true,
+            selfBuffLookup: new Map(),
+            enemyDebuffLookup: new Map(),
+        };
+    };
+
+    const makeArgs = (
+        runtime: PlayerActorRuntime,
+        healing: HealingRuntimeCtx,
+        healEventOnly: boolean
+    ): PlayerTurnArgs => {
+        const enemy = createActor({
+            id: 'tank',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 10_000_000,
+                speed: 50,
+            },
+        });
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        return {
+            runtime,
+            enemy,
+            statusEngine,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            pendingAccumulators: [],
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            enemyType: undefined,
+            bus: createEventBus(),
+            round: 1,
+            enemyHpDecline: 0,
+            healing,
+            healEventOnly,
+        };
+    };
+
+    // Cast skill: a heal (ally target) + a cleanse, both on-cast.
+    const healCleanseSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'ea-heal',
+                        type: 'heal',
+                        target: 'ally',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'heal', pct: 20, basis: 'hp' },
+                    },
+                    {
+                        id: 'ea-cleanse',
+                        type: 'cleanse',
+                        target: 'ally',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'cleanse', count: 2 },
+                    },
+                ],
+            },
+        ],
+    });
+
+    it('emits heal-performed + cleanse-performed with the actor id and mutates NOTHING', () => {
+        const events: CombatEvent[] = [];
+        const spy = makeHealingSpy();
+        const args = makeArgs(makeRuntime(healCleanseSkills()), spy.healing, true);
+        args.bus.on('heal-performed', (e) => events.push(e));
+        args.bus.on('cleanse-performed', (e) => events.push(e));
+
+        runPlayerTurn(args);
+
+        const heal = events.find((e) => e.type === 'heal-performed');
+        const cleanse = events.find((e) => e.type === 'cleanse-performed');
+
+        // Both events fired with the enemy actor's id.
+        expect(cleanse).toBeDefined();
+        expect(cleanse!.casterId).toBe('enemy1');
+        expect(cleanse!.count).toBe(2);
+        expect(heal).toBeDefined();
+        expect(heal!.casterId).toBe('enemy1');
+        // Event-only heal carries NO numeric (amount 0, no crit info).
+        expect(heal!.amount).toBe(0);
+        expect(heal!.critHits).toBeUndefined();
+
+        // CRITICAL: not a single healing.* mutation ran in event-only mode.
+        expect(spy.credits).toHaveLength(0);
+        expect(spy.applied).toHaveLength(0);
+        expect(spy.shields).toHaveLength(0);
+    });
+
+    it('normal mode (healEventOnly false) DOES credit and emit cleanse-performed', () => {
+        // Sanity / symmetry: the player path credits buckets AND now emits cleanse-performed.
+        const events: CombatEvent[] = [];
+        const spy = makeHealingSpy();
+        const args = makeArgs(makeRuntime(healCleanseSkills()), spy.healing, false);
+        args.bus.on('cleanse-performed', (e) => events.push(e));
+
+        runPlayerTurn(args);
+
+        const cleanse = events.find((e) => e.type === 'cleanse-performed');
+        expect(cleanse).toBeDefined();
+        expect(cleanse!.casterId).toBe('enemy1');
+        expect(cleanse!.count).toBe(2);
+        // Player path credited cleanseCount + directHeal (mutations DID run).
+        expect(spy.credits.some((c) => c.bucket === 'cleanseCount')).toBe(true);
+        expect(spy.credits.some((c) => c.bucket === 'directHeal')).toBe(true);
+    });
+});
+
+// ----------------------------------------------------------------------
+// Phase 4c PR 4 Task 5b: integration — a ship-backed enemy attacker whose
+// cast cleanses emits cleanse-performed (casterId = enemy id), credits NO
+// player healing buckets under the enemy id, and a Grif-like player's
+// on-enemy-cleansed damage proc credits the enemy pool.
+// ----------------------------------------------------------------------
+describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif proc', () => {
+    const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `i${Math.random().toString(36).slice(2)}`,
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    // A focus player (the heal target) carrying a Grif-style on-enemy-cleansed damage proc.
+    const grifSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-enemy-cleansed',
+                        config: { type: 'damage', multiplier: 2, noCrit: true },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 10_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 10000,
+        ...overrides,
+    });
+
+    it('enemy cleanse cast emits cleanse-performed (enemy id), no player credit, Grif procs', () => {
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('cleanse-performed', (e) => events.push(e));
+        bus.on('heal-performed', (e) => events.push(e));
+
+        const result = runCombat(
+            BASE({
+                numRounds: 3,
+                healTargetId: 'attacker',
+                shipSkills: grifSkills(),
+                bus,
+                enemyAttackers: [
+                    {
+                        id: 'enemy1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'cleanse',
+                                            target: 'self',
+                                            config: { type: 'cleanse', count: 1 },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
+            })
+        );
+
+        // cleanse-performed fired with the ENEMY's id (every round it cast).
+        const cleanseEvents = events.filter((e) => e.type === 'cleanse-performed');
+        expect(cleanseEvents.length).toBeGreaterThan(0);
+        for (const e of cleanseEvents) {
+            expect(e.casterId).toBe('enemy1');
+            expect(e.count).toBe(1);
+        }
+
+        // The enemy credited NO player healing buckets under its own id.
+        const enemyRows = (result.healing?.rounds ?? []).map((rd) => rd.perActor.get('enemy1'));
+        for (const row of enemyRows) {
+            if (!row) continue;
+            expect(row.cleanseCount ?? 0).toBe(0);
+            expect(row.directHeal ?? 0).toBe(0);
+            expect(row.effectiveHeal ?? 0).toBe(0);
+        }
+
+        // Grif's on-enemy-cleansed damage proc credited the focus player's damage pool
+        // (creditReactiveDamage → direct). The focus has NO cast damage of its own, so any
+        // directDamage in the result comes solely from the on-enemy-cleansed proc. It needs a
+        // prior-turn ctx to fold, so it lands from round 2+.
+        const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
+        expect(grifDamage).toBeGreaterThan(0);
     });
 });

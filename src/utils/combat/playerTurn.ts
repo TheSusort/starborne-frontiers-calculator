@@ -210,6 +210,12 @@ export interface PlayerTurnArgs {
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
     healing?: HealingRuntimeCtx;
+    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): when true (the enemy walk),
+     *  the heal block EMITS `heal-performed`/`cleanse-performed` carrying THIS actor's id but
+     *  credits NO player healing bucket and mutates NO target — the shared player `healing` ctx
+     *  must never see an enemy-id mutation. Scopes emission to the CAST skill (gatedSkill) only,
+     *  never the passive. Defaults falsy (player/team turns credit + mutate as before). */
+    healEventOnly?: boolean;
     /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
      *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
@@ -637,6 +643,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
         selfDebuffNames: selfDebuffNamesArg = [],
+        healEventOnly = false,
     } = args;
 
     const {
@@ -1503,18 +1510,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        const healAbilities = [
-            ...(gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false)),
-            ...(gatedPassive?.abilities ?? []).filter((a) => !isHookOwned(a, true)),
-        ];
+        // Event-only mode (enemy walk, Task 5): EMIT heal/cleanse events but credit/mutate
+        // NOTHING — and scope to the CAST skill only (the spec: "the cast skill carries"),
+        // never the passive. Normal (player/team) mode keeps both slots and credits/mutates.
+        const healAbilities = healEventOnly
+            ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false))
+            : [
+                  ...(gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false)),
+                  ...(gatedPassive?.abilities ?? []).filter((a) => !isHookOwned(a, true)),
+              ];
         const healTargets: string[] = [];
         let healCritCount = 0;
         let healRawSum = 0;
+        let cleansePerformedCount = 0;
 
         for (const ability of healAbilities) {
             const cfg = ability.config;
             if (cfg.type === 'heal') {
                 const recipients = recipientsFor(ability.target);
+                if (healEventOnly) {
+                    // Event-only: NO numeric at all — do NOT draw the heal crit gate, do NOT
+                    // credit or apply. Just register recipients so heal-performed fires (amount 0).
+                    for (const rid of recipients) healTargets.push(rid);
+                    continue;
+                }
                 // ONE crit draw per heal ability (not per recipient).
                 const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
                 if (didCrit) healCritCount += 1;
@@ -1537,6 +1556,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     healRawSum += raw;
                 }
             } else if (cfg.type === 'shield') {
+                // Event-only: shields are not repairs → no heal-performed recipient, no numeric.
+                // Skip entirely (no credit/grant).
+                if (healEventOnly) continue;
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
                 const recipients = recipientsFor(ability.target);
@@ -1548,12 +1570,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                 }
             } else if (cfg.type === 'cleanse') {
-                healing.credit(actor.id, 'cleanseCount', cfg.count);
+                // Accumulate for the cleanse-performed emit in BOTH modes; only credit the
+                // player bucket OUTSIDE event-only mode (the enemy must not pollute the map).
+                cleansePerformedCount += cfg.count;
+                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', cfg.count);
             }
         }
 
         // ONE heal-performed per cast that healed at least one recipient. critHits is the
-        // number of heal abilities that crit (present-only-when-positive).
+        // number of heal abilities that crit (present-only-when-positive). In event-only mode
+        // amount is 0 and critHits is absent (no numeric was computed).
         if (healTargets.length > 0) {
             bus.emit({
                 type: 'heal-performed',
@@ -1562,6 +1588,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 round: r,
                 amount: healRawSum,
                 ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+            });
+        }
+
+        // ONE cleanse-performed per cast that cleansed (BOTH modes — the on-enemy-cleansed
+        // listener filters by side, so the player-side emit is inert without an enemy reactor).
+        if (cleansePerformedCount > 0) {
+            bus.emit({
+                type: 'cleanse-performed',
+                casterId: actor.id,
+                count: cleansePerformedCount,
+                round: r,
             });
         }
     }

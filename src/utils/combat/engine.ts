@@ -2562,6 +2562,12 @@ export function runCombat(input: CombatEngineInput): {
                             // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
                             grantAllyCharges: undefined,
                             healing: healingCtx,
+                            // Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): the enemy
+                            // shares the player healingCtx, so its cast heal/cleanse must EMIT
+                            // heal-performed/cleanse-performed (so player on-enemy-repaired/
+                            // -cleansed reactives fire) WITHOUT crediting any player bucket or
+                            // mutating the heal target. Player/team calls leave this falsy.
+                            healEventOnly: true,
                             selfHpPct: enemySelfHpPct,
                             // Heal target's live HP% (the enemy is bound to it). Inert for current
                             // fixtures (a bare enemy has no `hpSubject:'target'` gate) but threaded
