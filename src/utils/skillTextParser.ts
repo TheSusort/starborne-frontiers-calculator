@@ -758,13 +758,27 @@ export function detectReactiveTrigger(
  */
 export function statusEffectCondition(name: string, anyOf = false): Condition {
     const lower = name.toLowerCase();
-    const base =
-        lower === 'taunt'
-            ? { subject: 'enemy-buff' as const, buffName: 'Taunt' }
-            : lower === 'provoke'
-              ? { subject: 'self-debuff' as const, buffName: 'Provoke' }
-              : { subject: 'self-buff' as const, buffName: name };
-    return { ...base, derivable: false, ...(anyOf ? { anyOf: true } : {}) };
+    if (lower === 'taunt')
+        return {
+            subject: 'enemy-buff',
+            buffName: 'Taunt',
+            derivable: true,
+            ...(anyOf ? { anyOf: true } : {}),
+        };
+    if (lower === 'provoke')
+        return {
+            subject: 'self-debuff',
+            buffName: 'Provoke',
+            derivable: true,
+            ...(anyOf ? { anyOf: true } : {}),
+        };
+    // Any other named status → manual self-buff (unchanged; out of item-11 scope).
+    return {
+        subject: 'self-buff',
+        buffName: name,
+        derivable: false,
+        ...(anyOf ? { anyOf: true } : {}),
+    };
 }
 
 // "extends [active/all] Damage Over Time [(DoT)] effects by N turn(s)" — prolongs existing

@@ -21,6 +21,8 @@ export interface EnemyAttackerConfig {
     crit: number;
     critDamage: number;
     speed: number;
+    /** Enemy hacking — drives inbound debuff landing chance vs the heal target's security. */
+    hacking: number;
     chargeCount: number;
     startCharged: boolean;
     /** Affinity for the matchup vs the heal target. Default 'antimatter' (neutral when the
@@ -96,6 +98,16 @@ const EnemyCard: React.FC<{
                     min="0"
                     value={enemy.critDamage}
                     onChange={(e) => onUpdate({ critDamage: parseInt(e.target.value) || 0 })}
+                />
+                <Input
+                    label="Hacking"
+                    type="number"
+                    min="0"
+                    value={enemy.hacking}
+                    onChange={(e) =>
+                        onUpdate({ hacking: Math.max(0, parseInt(e.target.value) || 0) })
+                    }
+                    helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%."
                 />
                 <Input
                     label="Charge Count"

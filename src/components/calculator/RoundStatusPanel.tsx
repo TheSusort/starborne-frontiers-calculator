@@ -6,13 +6,18 @@ import { ActiveBuff } from '../../utils/combat/statusEngine';
 import { dotStateLabel } from './dotLabels';
 
 /** One DoT status row: an orange marker dot + the shared DPS DoT label (`Inferno I ×3`). Keyed by
- *  the caller. Shared by the per-enemy DoT list and the aggregated Heal Target DoT list. */
-const DotRow: React.FC<{ dot: EnemyDoTState }> = ({ dot }) => (
-    <div className="flex items-center gap-1.5 mb-1">
-        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-orange-500" />
+ *  the caller. Shared by the per-enemy DoT list and the aggregated Heal Target DoT list. The
+ *  `resisted` variant dims the row and greys the marker + appends an italic "resisted" label,
+ *  mirroring BuffRow's resisted treatment for a DoT that failed to land. */
+const DotRow: React.FC<{ dot: EnemyDoTState; resisted?: boolean }> = ({ dot, resisted }) => (
+    <div className={`flex items-center gap-1.5 mb-1 ${resisted ? 'opacity-40' : ''}`}>
+        <div
+            className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${resisted ? 'bg-dark-border' : 'bg-orange-500'}`}
+        />
         <span className="flex-1 text-xs text-theme-text-primary truncate">
             {dotStateLabel(dot)}
         </span>
+        {resisted && <span className="text-xs text-theme-text-secondary italic">resisted</span>}
     </div>
 );
 
@@ -83,7 +88,12 @@ const ConfigSection: React.FC<{
         (b) => b.stacks === undefined || b.stacks > 0
     );
     const enemyEffects = (roundData?.enemyEffects ?? []).filter(
-        (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0 || e.dots.length > 0
+        (e) =>
+            e.selfBuffs.length > 0 ||
+            e.debuffs.length > 0 ||
+            e.dots.length > 0 ||
+            e.resistedDebuffs.length > 0 ||
+            e.resistedDots.length > 0
     );
     // Heal Target section: the target's OWN active buffs (Cheat Death, Barrier, etc.) plus the
     // debuffs/DoTs on it AGGREGATED across every enemy for a target-centric view, then DEDUPED/
@@ -197,6 +207,29 @@ const ConfigSection: React.FC<{
                                             key={`tdeb-${b.buffName}-${j}`}
                                             buff={b}
                                             variant="enemy"
+                                        />
+                                    ))}
+                                </>
+                            )}
+                            {(enemy.resistedDebuffs.length > 0 ||
+                                enemy.resistedDots.length > 0) && (
+                                <>
+                                    <div className="text-xs text-theme-text-secondary mt-1 mb-1">
+                                        Resisted
+                                    </div>
+                                    {enemy.resistedDebuffs.map((b, j) => (
+                                        <BuffRow
+                                            key={`tres-${b.buffName}-${j}`}
+                                            buff={b}
+                                            variant="enemy"
+                                            resisted
+                                        />
+                                    ))}
+                                    {enemy.resistedDots.map((dot, j) => (
+                                        <DotRow
+                                            key={`tresdot-${dot.type}-${dot.tier}-${j}`}
+                                            dot={dot}
+                                            resisted
                                         />
                                     ))}
                                 </>

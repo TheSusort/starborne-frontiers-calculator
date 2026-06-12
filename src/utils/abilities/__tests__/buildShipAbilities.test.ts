@@ -506,6 +506,31 @@ describe('buildShipAbilities', () => {
         expect(mod!.conditions[0]).toMatchObject({ subject: 'self-buff', buffName: 'Stealth' });
     });
 
+    it('Stealth-gated outgoing-damage modifier is derivable (item 11)', () => {
+        // "X% more direct damage while Stealthed" on a self-scoped skill hits the stealth
+        // branch in parseModifiers. derivable: true makes the condition read live selfBuffNames
+        // (0 at combat start) instead of assuming the buff is active (count 1).
+        const s = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit deals <unit-damage>25% more direct damage</unit-damage> while <unit-skill>Stealthed</unit-skill>.',
+        });
+
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const mod = passive.abilities.find(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'outgoingDamage'
+        )!;
+        expect(mod).toBeDefined();
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
+        expect(mod.target).toBe('self');
+        expect(mod.conditions[0]).toEqual({
+            subject: 'self-buff',
+            buffName: 'Stealth',
+            derivable: true,
+        });
+    });
+
     it('Lodolite passive: crit-damage vs Defenders + all-ally damage vs enemies with Concentrate Fire/Stealth', () => {
         const s = ship({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -534,10 +559,10 @@ describe('buildShipAbilities', () => {
         )!;
         expect(out.config).toMatchObject({ channel: 'outgoingDamage', value: 15 });
         expect(out.target).toBe('all-allies');
-        // Concentrate Fire is a debuff → derivable enemy-debuff; Stealth is a buff → manual enemy-buff.
+        // Concentrate Fire is a debuff → derivable enemy-debuff; Stealth is a buff → derivable enemy-buff.
         expect(out.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Concentrate Fire', derivable: true, anyOf: true },
-            { subject: 'enemy-buff', buffName: 'Stealth', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Stealth', derivable: true, anyOf: true },
         ]);
     });
 
@@ -642,8 +667,8 @@ describe('buildShipAbilities', () => {
         expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
         // Taunt = enemy buff, Provoke = self debuff (both targeting effects), anyOf.
         expect(outgoing.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
 
         const defPen = mods.find(
@@ -741,8 +766,8 @@ describe('buildShipAbilities', () => {
                 a.config.buffName === 'Terran Guard III'
         );
         expect(buff?.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: false, anyOf: true },
-            { subject: 'self-debuff', buffName: 'Provoke', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
 

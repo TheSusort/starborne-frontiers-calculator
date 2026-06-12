@@ -187,14 +187,15 @@ function damageEnemyEffectNamesFromClause(rawText: string): string[] {
 
 /**
  * Builds enemy-effect gating conditions from effect names: debuffs/DoTs → derivable `enemy-debuff`
- * (the sim tracks enemy debuff/DoT counts), buffs → manual `enemy-buff`. Multiple → anyOf.
+ * (the sim tracks enemy debuff/DoT counts), buffs → derivable `enemy-buff` (reads live
+ * `enemyBuffNames` at eval time; 0 at combat start). Multiple → anyOf.
  */
 function enemyEffectConditions(names: string[]): Condition[] {
     return names.map((buffName) => {
         const isDebuff = classifyEnemyEffect(buffName) === 'debuff';
         return {
             subject: isDebuff ? 'enemy-debuff' : 'enemy-buff',
-            derivable: isDebuff,
+            derivable: true,
             buffName,
             ...(names.length > 1 ? { anyOf: true } : {}),
         };
@@ -349,7 +350,7 @@ function parseModifiers(text: string): ParsedModifier[] {
                 // "while Stealthed" (self) — the acting unit's own Stealth.
                 const subject =
                     target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
-                conditions.push({ subject, buffName: 'Stealth', derivable: false });
+                conditions.push({ subject, buffName: 'Stealth', derivable: true });
             }
             conditions.push(...affectedByConditions(sentence));
             const hpCond = hpThresholdFromSentence(sentence);

@@ -18,6 +18,32 @@ describe('liveGateConditions', () => {
         expect(liveGateConditions(conds)).toEqual(conds);
     });
 
+    it('passes a derivable enemy-buff condition through unchanged (live subject, item 11)', () => {
+        const conds: Condition[] = [
+            { subject: 'enemy-buff', derivable: true, buffName: 'Attack Up' },
+        ];
+        expect(liveGateConditions(conds)).toEqual(conds);
+    });
+
+    it('passes a derivable self-debuff condition through unchanged (live subject, item 11)', () => {
+        const conds: Condition[] = [
+            { subject: 'self-debuff', derivable: true, buffName: 'Defense Down' },
+        ];
+        expect(liveGateConditions(conds)).toEqual(conds);
+    });
+
+    it('passes a derivable self-debuff count-scaling condition through unchanged', () => {
+        const conds: Condition[] = [
+            {
+                subject: 'self-debuff',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 1,
+            },
+        ];
+        expect(liveGateConditions(conds)).toEqual(conds);
+    });
+
     it('neutralizes a derivable non-live subject (adjacent-ally) to always', () => {
         const conds: Condition[] = [
             {
@@ -31,7 +57,7 @@ describe('liveGateConditions', () => {
     });
 
     it('preserves the anyOf flag when neutralizing', () => {
-        const conds: Condition[] = [{ subject: 'enemy-buff', derivable: true, anyOf: true }];
+        const conds: Condition[] = [{ subject: 'adjacent-ally', derivable: true, anyOf: true }];
         expect(liveGateConditions(conds)).toEqual([
             { subject: 'always', derivable: true, anyOf: true },
         ]);

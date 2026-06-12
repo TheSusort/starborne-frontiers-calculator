@@ -45,6 +45,7 @@ const manual: EnemyAttackerConfig = {
     crit: 0,
     critDamage: 0,
     speed: 50,
+    hacking: 0,
     chargeCount: 0,
     startCharged: false,
 };
@@ -181,6 +182,24 @@ describe('EnemyAttackersPanel', () => {
         expect(onUpdate).toHaveBeenCalledWith('1', { attack: 8000 });
         fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
         expect(onRemove).toHaveBeenCalledWith('1');
+    });
+
+    it('renders the hacking field and propagates edits', () => {
+        const onUpdate = vi.fn();
+        render(
+            <EnemyAttackersPanel
+                isOpen
+                onToggle={noop}
+                enemies={[{ ...manual, hacking: 250 }]}
+                onAdd={noop}
+                onRemove={noop}
+                onSelectShip={noop}
+                onUpdate={onUpdate}
+            />
+        );
+        expect(screen.getByLabelText('Hacking')).toHaveValue(250);
+        fireEvent.change(screen.getByLabelText('Hacking'), { target: { value: '300' } });
+        expect(onUpdate).toHaveBeenCalledWith('1', { hacking: 300 });
     });
 
     it('renders correctly with zero enemies and still shows the Add button', () => {

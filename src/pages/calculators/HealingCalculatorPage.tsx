@@ -85,6 +85,7 @@ const HealingCalculatorPage: React.FC = () => {
         healModifier: Math.round(final.healModifier ?? 0),
         speed: Math.round(final.speed ?? 100),
         hacking: Math.round(final.hacking ?? 200),
+        security: Math.round(final.security ?? 0),
     });
 
     const defaultConfig = (id: string, name: string): HealerShipConfig => ({
@@ -98,6 +99,7 @@ const HealingCalculatorPage: React.FC = () => {
         healModifier: 20,
         speed: 100,
         hacking: 200,
+        security: 0,
         chargeCount: 0,
         startCharged: false,
         shipSkills: buildDefaultShipSkills(),
@@ -142,6 +144,7 @@ const HealingCalculatorPage: React.FC = () => {
         hp: 40000,
         defence: 5000,
         speed: 100,
+        security: 0,
     });
     const [targetShipSkills, setTargetShipSkills] = useState<ShipSkills | undefined>(undefined);
     const [targetChargeCount, setTargetChargeCount] = useState(0);
@@ -166,6 +169,7 @@ const HealingCalculatorPage: React.FC = () => {
             crit: 0,
             critDamage: 0,
             speed: 50,
+            hacking: 200,
             chargeCount: 0,
             startCharged: false,
         },
@@ -244,6 +248,7 @@ const HealingCalculatorPage: React.FC = () => {
             hp: Math.round(final.hp ?? 0),
             defence: Math.round(final.defence ?? 0),
             speed: Math.round(final.speed ?? 100),
+            security: Math.round(final.security ?? 0),
         }));
         setTargetShipSkills(buildShipAbilities(ship));
         setTargetChargeCount(ship.chargeSkillCharge ?? 0);
@@ -274,6 +279,7 @@ const HealingCalculatorPage: React.FC = () => {
                 crit: 0,
                 critDamage: 0,
                 speed: 50,
+                hacking: 200,
                 chargeCount: 0,
                 startCharged: false,
             },
@@ -297,6 +303,7 @@ const HealingCalculatorPage: React.FC = () => {
                     crit: Math.round(final.crit ?? 0),
                     critDamage: Math.round(final.critDamage ?? 0),
                     speed: Math.round(final.speed ?? 50),
+                    hacking: Math.round(final.hacking ?? 200),
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
                     shipSkills: buildShipAbilities(ship),
@@ -440,6 +447,7 @@ const HealingCalculatorPage: React.FC = () => {
                     critDamage: e.critDamage,
                     speed: e.speed,
                 },
+                hacking: e.hacking,
                 chargeCount: e.chargeCount,
                 startCharged: e.startCharged,
                 shipSkills: e.shipSkills,
@@ -464,6 +472,10 @@ const HealingCalculatorPage: React.FC = () => {
             // configs have none. Drives role-filtered ally-damage reactions when the healer
             // is the heal target (engine focus-actor role).
             const healerRole = config.shipId ? getShipById(config.shipId)?.type : undefined;
+            // The heal target's security drives each enemy's inbound debuff landing chance
+            // (enemy hacking − security). Self-heal uses the healer config's own security
+            // (auto-filled from the ship, 0 for manual configs); otherwise the manual target.
+            const healTargetSecurity = target.useHealerAsTarget ? config.security : target.security;
             map.set(
                 config.id,
                 simulateHealing({
@@ -484,6 +496,7 @@ const HealingCalculatorPage: React.FC = () => {
                     selfBuffs: healerBuffs,
                     healTargetId,
                     healTargetAffinity,
+                    healTargetSecurity,
                     healerRole,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
@@ -498,6 +511,7 @@ const HealingCalculatorPage: React.FC = () => {
         teamActors,
         targetActor,
         target.useHealerAsTarget,
+        target.security,
         targetAffinity,
         getShipById,
         enemyInputs,
@@ -535,6 +549,7 @@ const HealingCalculatorPage: React.FC = () => {
                         onHpChange={(v) => setTarget((prev) => ({ ...prev, hp: v }))}
                         onDefenceChange={(v) => setTarget((prev) => ({ ...prev, defence: v }))}
                         onSpeedChange={(v) => setTarget((prev) => ({ ...prev, speed: v }))}
+                        onSecurityChange={(v) => setTarget((prev) => ({ ...prev, security: v }))}
                     />
 
                     <EnemyAttackersPanel
