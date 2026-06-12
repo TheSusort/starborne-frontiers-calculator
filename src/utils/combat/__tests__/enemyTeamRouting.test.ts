@@ -75,6 +75,72 @@ const supporterEnemy = (id: string, speed: number, buffTarget: Ability['target']
         } as ShipSkills,
     }) as EnemyAttacker;
 
+// A PURE supporter: only an all-allies Attack Up on its active slot, NO damage ability.
+const pureSupporterEnemy = (id: string, speed: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 100 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+// An aura supporter: all-allies Attack Up with NO duration (aura → folds each round via
+// activeAbilityStatuses), plus a basic hit.
+const auraSupporterEnemy = (id: string, speed: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 100 },
+                                stacks: 1,
+                                isStackable: false,
+                                // No duration → aura (recurring fold).
+                            },
+                        }),
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
 // A plain enemy with NO buff at all, at a given speed/id.
 const plainEnemy = (id: string, speed: number): EnemyAttacker =>
     ({
@@ -140,5 +206,42 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
         // identically in both runs). Observed RED: 20000 vs 20000 → toBeGreaterThan FAILS.
         // After the fix the second enemy folds the all-allies buff → strictly more incoming.
         expect(total(allAllies)).toBeGreaterThan(total(selfControl));
+    });
+
+    // ── Task 2: aura routing + pure-supporter coverage ─────────────────────────
+    it('an enemy all-allies AURA buff reaches the OTHER enemy and folds each round', () => {
+        idc = 0;
+        const aura = runCombat(
+            BASE_MULTI([auraSupporterEnemy('support', 80), plainEnemy('attacker2', 40)])
+        );
+        // CONTROL: replace the aura supporter with a plain attacker (no buff at all), keeping the
+        // second attacker identical. The delta is the second enemy folding the routed aura.
+        idc = 0;
+        const noBuff = runCombat(
+            BASE_MULTI([plainEnemy('support', 80), plainEnemy('attacker2', 40)])
+        );
+
+        expect(total(aura)).toBeGreaterThan(total(noBuff));
+    });
+
+    it('a PURE supporter (no damage slot) buffs a plain attacker and produces no NaN', () => {
+        idc = 0;
+        const withSupporter = runCombat(
+            BASE_MULTI([pureSupporterEnemy('support', 80), plainEnemy('attacker2', 40)])
+        );
+        // BASELINE: drop the supporter entirely — just the lone plain attacker.
+        idc = 0;
+        const baseline = runCombat(BASE_MULTI([plainEnemy('attacker2', 40)]));
+
+        const supTotal = total(withSupporter);
+        const baseTotal = total(baseline);
+
+        // (b) no NaN anywhere in the incoming-damage series.
+        for (const round of withSupporter.healing!.rounds) {
+            expect(Number.isNaN(round.incomingDamage)).toBe(false);
+        }
+        // (a) the supporter's all-allies buff reached the plain attacker → more incoming than the
+        // lone-attacker baseline.
+        expect(supTotal).toBeGreaterThan(baseTotal);
     });
 });
