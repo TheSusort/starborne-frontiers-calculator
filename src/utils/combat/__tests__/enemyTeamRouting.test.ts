@@ -247,16 +247,26 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
 
     // ── Task 3: isolation guard — enemy buff does NOT leak onto the player team ─
     it('an enemy all-allies buff does NOT leak onto the player team', () => {
+        // The player focus actor carries a buff-SENSITIVE damage action (a basic attack scales with
+        // effective attack), so its OUTGOING damage would change if an enemy all-allies Attack Up
+        // ever leaked onto a player store. With the default empty player slots the leak comparison
+        // would be vacuous (0 === 0 in both runs regardless of leakage) — CodeRabbit #103.
+        const playerDamageSkill = { slots: [basicAttack()] } as ShipSkills;
         idc = 0;
-        const withBuff = runCombat(
-            BASE_MULTI([supporterEnemy('support', 80, 'all-allies'), plainEnemy('attacker2', 40)])
-        );
+        const withBuff = runCombat({
+            ...BASE_MULTI([
+                supporterEnemy('support', 80, 'all-allies'),
+                plainEnemy('attacker2', 40),
+            ]),
+            shipSkills: playerDamageSkill,
+        });
         // CONTROL: the supporter's buff is SELF-target → the other enemy stays unbuffed (so the
         // enemy incoming DIFFERS), but the player team is identical in both runs either way.
         idc = 0;
-        const selfControl = runCombat(
-            BASE_MULTI([supporterEnemy('support', 80, 'self'), plainEnemy('attacker2', 40)])
-        );
+        const selfControl = runCombat({
+            ...BASE_MULTI([supporterEnemy('support', 80, 'self'), plainEnemy('attacker2', 40)]),
+            shipSkills: playerDamageSkill,
+        });
 
         // Same player-side observable the PR1 leak test (T4.4) used: the player attacker's OWN
         // outgoing damage (result.rounds — the damage it deals into the enemy HP pool).
@@ -267,9 +277,13 @@ describe('enemy-team cross-enemy cast buff routing (PR2)', () => {
                 directDamage: round.directDamage,
             }));
 
-        // NON-VACUITY: the enemy incoming DID change between the two runs (all-allies routing
-        // reached the second enemy) — otherwise the leak guard would compare two identical runs.
+        // NON-VACUITY (enemy side): the enemy incoming DID change between the two runs (all-allies
+        // routing reached the second enemy) — otherwise the leak guard would compare identical runs.
         expect(total(withBuff)).toBeGreaterThan(total(selfControl));
+        // NON-VACUITY (player side): the player actually DEALS damage, so the equality below is a
+        // real leak detector — a leaked enemy Attack Up would raise this and break the toEqual.
+        expect(withBuff.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
+        expect(selfControl.rounds.some((round) => round.totalRoundDamage > 0)).toBe(true);
 
         // Player-side outgoing damage is byte-identical — the enemy all-allies buff never leaked
         // across onto a player store.
