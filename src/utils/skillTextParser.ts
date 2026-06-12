@@ -336,9 +336,19 @@ function stripUnitTags(text: string): string {
 }
 
 // Phrases that disqualify a charge phrase from being a self-gain we model:
-// ally-grant to others, on-kill (enemy never dies), enemy-repair (never repairs).
+// ally-grant to others, on-kill (enemy never dies). The enemy-REPAIR phrasings were
+// lifted OUT (Phase 4c PR 4): a self charge gain "when an enemy repairs" now rides the
+// LIVE on-enemy-repaired trigger (Zosimos) — handled in parseChargeGain below — instead
+// of being dropped. "when an enemy dies" still routes here (an on-kill charge never fires
+// in the single-ship sim; Liberator's all-allies death charge is handled separately).
 const CHARGE_DISQUALIFY_RE =
-    /all allies|their charged skill|charged skill of all allies|upon killing|killing an enemy|when an enemy dies|when an enemy repairs|enemy performs a repair|enemy repairs/i;
+    /all allies|their charged skill|charged skill of all allies|upon killing|killing an enemy|when an enemy dies/i;
+
+// "when an enemy repairs / performs a repair[s]" — a player reaction to an ENEMY repair
+// (Zosimos's "gains a charge"). Tolerates the live CSV refit typo "performs a repairs".
+// Routes the charge gain onto the LIVE on-enemy-repaired trigger (per-event, +amount each
+// fire). Reference data: docs/ship-skills.csv.
+const ENEMY_REPAIRS_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\b(?:repairs?|performs?\s+a\s+repairs?)\b/i;
 
 // "adds/gains N charge(s)" (self-add). "removes" is excluded by the verb set, so
 // Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
@@ -689,6 +699,10 @@ function matchesActiveSelfCrit(text: string): boolean {
 }
 const START_OF_ROUND_RE = /at the start of (?:the|each|every) round/i;
 const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
+// "when an enemy cleanses a debuff" — a player reaction to an ENEMY cleanse (Phase 4c PR 4):
+// Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
+// buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
+const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -704,9 +718,13 @@ const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
  *    new trigger path is correct.
  *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
  *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
+ *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed' (Phase 4c PR 4: Arum Out. Damage
+ *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
+ *    enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is handled by
+ *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
  *
- * Other reactive phrasings (when-attacked, ally-crit, on-kill, enemy-cleanse, …) are NOT
- * derivable this phase and stay undefined (manual modelling). Reference data: docs/ship-skills.csv.
+ * Other reactive phrasings (when-attacked, ally-crit, on-kill, …) are NOT derivable this phase
+ * and stay undefined (manual modelling). Reference data: docs/ship-skills.csv.
  */
 export function detectReactiveTrigger(
     skillText: string | null | undefined,
@@ -725,6 +743,11 @@ export function detectReactiveTrigger(
     // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
     // only matches the literal activation phrasing.
     if (CHEAT_DEATH_ACTIVATES_RE.test(clause)) return 'on-cheat-death-activated';
+    // "when an enemy cleanses a debuff" → on-enemy-cleansed (Phase 4c PR 4). Previously this
+    // phrasing fell through to undefined (manual modelling); it is now a LIVE derivable trigger
+    // for the named buff/debuff grant in its clause (Arum Out. Damage Down I, Yarrow/Larkspur
+    // Gelecek Contagion, Arum-refit all-allies Gelecek Contagion II).
+    if (ENEMY_CLEANSE_RE.test(clause)) return 'on-enemy-cleansed';
     return undefined;
 }
 
@@ -934,6 +957,25 @@ export function detectDestroyedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
+}
+
+/**
+ * Returns 'on-enemy-cleansed' when `anchorPos` (the ability's raw-text anchor position) falls
+ * inside the sentence carrying the "when an enemy cleanses a Debuff" phrase; otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectDestroyedTrigger), reusing the SAME masked
+ * rawSentenceAround so a leading non-reaction sentence (Grif's standing "increases its Defense by
+ * 20%.") does NOT co-trigger the cleanse proc that follows it.
+ *
+ * This is the SENTENCE-SCOPED counterpart to detectReactiveTrigger's buff-name-scoped cleanse
+ * branch: it serves the NAMELESS damage proc (Grif's "deals 75% Damage that cannot critically
+ * hit") which has no buffName to resolve a clause on. ENEMY_CLEANSE_RE is shared with that branch
+ * so the two paths recognize the same phrasing. Reference data: docs/ship-skills.csv (Grif).
+ */
+export function detectEnemyCleanseTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_CLEANSE_RE, anchorPos, 'on-enemy-cleansed');
 }
 
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
@@ -1286,6 +1328,13 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     // FIRST since its text also matches the self-inflict phrasing; then the self-inflict form
     // ("after it inflicts a debuff", Hemlock). Both emit 'always' + a reactive trigger so the
     // engine listens for the event rather than scaling by an enemy-debuff count.
+    // Enemy-repair reactive (Zosimos): a self charge gain that fires per ENEMY repair. Checked
+    // FIRST among the reactive branches — the on-enemy-repaired trigger IS the gate (per-event
+    // +amount), so it pre-empts the always-true default and any debuff-inflict classification.
+    if (ENEMY_REPAIRS_RE.test(plain)) {
+        return { amount, condition: 'always', derivable: true, trigger: 'on-enemy-repaired' };
+    }
+
     const low = plain.toLowerCase();
     if (ALLY_INFLICTS_DEBUFF_RE.test(plain)) {
         return {

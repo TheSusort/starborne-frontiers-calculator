@@ -2031,6 +2031,11 @@ export function runCombat(input: CombatEngineInput): {
                             if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
                             else pendingResisted.push(resisted);
                         },
+                        // Phase 4c PR 4: reactive direct damage (Grif) credits the owner's
+                        // round map via the single credit point so leeches still see it.
+                        creditReactiveDamage: (ownerId: string, amount: number): void => {
+                            creditDamage(ownerId, 'direct', amount);
+                        },
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's
@@ -2557,6 +2562,12 @@ export function runCombat(input: CombatEngineInput): {
                             // but guarded now so a future full-kit enemy (Task 9) can never grant player charges.
                             grantAllyCharges: undefined,
                             healing: healingCtx,
+                            // Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): the enemy
+                            // shares the player healingCtx, so its cast heal/cleanse must EMIT
+                            // heal-performed/cleanse-performed (so player on-enemy-repaired/
+                            // -cleansed reactives fire) WITHOUT crediting any player bucket or
+                            // mutating the heal target. Player/team calls leave this falsy.
+                            healEventOnly: true,
                             selfHpPct: enemySelfHpPct,
                             // Heal target's live HP% (the enemy is bound to it). Inert for current
                             // fixtures (a bare enemy has no `hpSubject:'target'` gate) but threaded

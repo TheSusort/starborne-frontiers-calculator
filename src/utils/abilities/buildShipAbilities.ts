@@ -38,6 +38,7 @@ import {
     detectStasisAppliedTrigger,
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
+    detectEnemyCleanseTrigger,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
@@ -433,6 +434,34 @@ function parseModifiers(text: string): ParsedModifier[] {
         }
     }
 
+    // "increases its Defense by N%" → a STANDING self defense modifier (Grif refit's "This Unit
+    // increases its Defense by 20%"). Multiplicative (a % of base defense), self-scoped. Scoped
+    // to "Defense" specifically so it never collides with the "defense penetration" branches
+    // below (penetration carries the extra "penetration" word). Phase 4c PR 4 (Task 6).
+    const defM = plain.match(/increases?\s+its\s+defense\s+by\s+(\d+(?:\.\d+)?)%/i);
+    if (defM) {
+        // Sentence-scope the standing modifier (CodeRabbit #99 FIX #2): a triggered ("when X,
+        // increases its Defense by 20%") or finite-duration ("increases its Defense by 20% for 2
+        // turns") clause with the same wording must NOT be promoted to a PERMANENT buff — that is
+        // wrong combat math. Only emit when the containing sentence is a standalone/standing clause
+        // (no trigger words, no finite duration). The gated/finite shapes are left for other
+        // parsing (reactive buff-grant / timed buff) to handle, or left unparsed.
+        const defSentence = sentenceContaining(plain, defM.index!);
+        const hasTrigger = /\b(when|if|while|upon|after|each|every)\b|at the start of/i.test(
+            defSentence
+        );
+        const hasFiniteDuration = /\bfor\s+\d+\s+turns?\b/i.test(defSentence);
+        if (!hasTrigger && !hasFiniteDuration) {
+            out.push({
+                channel: 'defense',
+                value: parseFloat(defM[1]),
+                isMultiplicative: true,
+                target: 'self',
+                conditions: [],
+            });
+        }
+    }
+
     const penM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration\s+for each\s+buff/i);
     if (penM) {
         const sentence = sentenceContaining(plain, penM.index!);
@@ -720,6 +749,17 @@ function abilitiesFromText(
             ...out[0].ability.conditions,
             ...enemyEffectConditions(damageEffects),
         ];
+    }
+
+    // Phase 4c PR 4 (Task 6): Grif's NAMELESS damage proc — "When an enemy cleanses a Debuff,
+    // this Unit deals 75% Damage that cannot critically hit" — rides the LIVE on-enemy-cleansed
+    // trigger. Sentence-scoped at the damage anchor (`damagePos`), so Grif's standing "increases
+    // its Defense by 20%." in a DIFFERENT leading sentence never co-triggers the proc. noCrit is
+    // already attached above (parseNoCrit). The buff/debuff-grant cleanse cases (Arum/Yarrow/
+    // Larkspur) are handled by detectReactiveTrigger in the buff-merge path (they have a buffName).
+    if (out[0]?.ability.type === 'damage') {
+        const cleanseTrigger = detectEnemyCleanseTrigger(text, damagePos);
+        if (cleanseTrigger) out[0].ability.trigger = cleanseTrigger;
     }
 
     const extendTurns = parseExtendDoT(text);

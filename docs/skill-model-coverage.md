@@ -13,6 +13,7 @@
 > Updated **2026-06-09** after the Phase 4b death & revive increment (branch `feat/combat-engine-phase4b-death-revive`): three live death triggers (`on-destroyed`/`on-ally-destroyed`/`on-enemy-destroyed`) + `on-cheat-death-activated`; Cheat Death survives a lethal hit at 1 HP once per combat (clearing removable statuses); new `unremovable` concept; Salvation on-destroyed ally-heal re-enabled; on-kill/on-ally-destroyed extra-action bridge (Sokol/Liberator/Harvester) (see §5 PHASE 4b, §6 item 9).
 > Updated **2026-06-10** after the Phase 4c PR 2 on-ally-attacked reactives increment (branch `feat/combat-engine-phase4c-ally-damage`): new ally-scoped per-hit `on-ally-attacked` trigger with `triggerCritFilter` + `roleFilter` (category prefix match; unknown role = dormant); `eventCtx.damagedAllyId` routes 'ally'-target payloads to exactly the damaged ally; roles thread from ship data (`Ship.type` → page auto-fill → `roleByActorId`); Cultivator/Refine/Graphite/Guardian-ally-Provoke/Heliodor-p2 live; editor trigger + ally-role-filter controls (see §5 PHASE 4c PR 2, §6).
 > Updated **2026-06-11** after the Phase 4c PR 3 on-hp-threshold-crossed increment (branch `feat/combat-engine-phase4c-hp-crossing`): new `on-hp-threshold-crossed` trigger fed by a tank-side `hp-changed` event (once per HP-intake event — enemy attack or DoT batch; downward crossing only); drain-time scrub of the trigger-defining self hp-threshold; `oncePerCombat` extended to buff grants; cast-path Cheat-Death carve-out (Hermes charged grant narrowed to heal-target-under-40% via `hpSubject:'target'`; Hayyan on charged-skill fire); Tycho/Shelter/Los/Kafa/Redeemer live (see §5 PHASE 4c PR 3, §6).
+> Updated **2026-06-12** after the Phase 4c PR 4 enemy-action reactions increment (branch `feat/combat-engine-phase4c-enemy-actions`): event-only enemy heal/cleanse emission (`heal-performed`/`cleanse-performed`); new `on-enemy-repaired`/`on-enemy-cleansed` triggers (both `isEnemySide(casterId)` filtered); reactive `damage` executor branch (bomb-style fold, no enemy-defense mitigation); Zosimos/Arum/Yarrow/Larkspur/Grif live; Zosimos charge-sabotage UNMODELED; Arum all-cleansed-enemies → singular focus approximation; Pestilence enemy-cleanse Corrosion II orphan documented in §6 (see §5 PHASE 4c PR 4, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -960,6 +961,70 @@ buff/charge-aura), source it from firing + passive.
     the reactive still fire?); DoT-tick crossings (does a turn-start DoT batch that drops a unit
     below the threshold fire the same reactive as an enemy attack would?).
 
+- **Phase 4c PR 4: enemy-action reactions (2026-06-12, branch `feat/combat-engine-phase4c-enemy-actions`).**
+  Player ships now react to ENEMY repair and cleanse casts in the Healing Calculator.
+
+  **Event-only enemy heal/cleanse emission.** When the enemy's turn walks a heal or cleanse
+  ability the engine emits a `heal-performed` or `cleanse-performed` event carrying the
+  enemy's `casterId`, but applies **no numeric healing and credits no player bucket**. The
+  enemy simulates no actual repair — these are TRIGGER SOURCES only, not simulated heals.
+  **Cast-fires-regardless approximation:** the cleanse event fires unconditionally; no check
+  is made that a debuff actually existed on the enemy to cleanse. (This matches the
+  "cast-fires" model used throughout the engine for gated abilities whose gate is
+  non-derivable.)
+
+  **Two new reactive triggers.**
+  - `on-enemy-repaired` — listens on `heal-performed` events where `isEnemySide(casterId)`.
+  - `on-enemy-cleansed` — listens on `cleanse-performed` events where `isEnemySide(casterId)`.
+
+  Both filter exclusively to enemy-side casts; player casts that emit `heal-performed` (e.g.
+  Pallas) do NOT trigger these listeners.
+
+  **Reactive `damage` executor branch (new).** The intent executor gained a `damage` payload
+  branch for use by enemy-action reactives. The formula is a bomb-style fold:
+  `effectiveAttack × (multiplier / 100) × hits × affinityMult`.
+  **Documented approximation: NO enemy-defense mitigation is applied.** Enemy defense
+  mitigation is deliberately excluded — in the single-target healing context the enemy's
+  defensive stats are not configured and applying them would require a separate attacker-side
+  defense estimate. The reactive damage credits the owner's `damage` pool and emits no event
+  (no chaining). This is the same "no-crit-no-chain" simplification used by reactive heals.
+
+  **Ships now live:**
+  - *Zosimos* — gains 1 charge when an enemy repairs (`on-enemy-repaired`). The REFIT clause
+    ("decrease that enemy's charge for every second repair performed in a battle") is
+    **UNMODELED** — no enemy charge race exists in healing mode. Documented as an unmodeled
+    approximation.
+  - *Arum* — on enemy cleanse (`on-enemy-cleansed`): inflicts Out. Damage Down I on the
+    cleansed enemy (1 turn, first passive); refit Gelecek Contagion II to all allies (2 turns,
+    refit passive). **"All cleansed enemies" approximation:** the sim has a single focus
+    enemy; the multi-enemy clause is approximated as the singular focus enemy. Both effects
+    route to that enemy's per-target store.
+  - *Yarrow / Larkspur* — self Gelecek Contagion grant on enemy cleanse (`on-enemy-cleansed`);
+    Larkspur is the refit variant of Yarrow.
+  - *Grif* — on enemy cleanse (`on-enemy-cleansed`): gains a standing +20% Defense modifier
+    (aura, re-fires each qualifying event) AND a 75% no-crit damage proc via the reactive
+    `damage` branch (bomb-style, no enemy-defense mitigation, credits Grif's `damage` pool).
+
+  **Golden scenario.** A new healing golden scenario locks the enemy-cleanse → reaction
+  contract (additive snapshot of charges, buff grants, damage proc, and debuff inflictions)
+  for the PR 4 ship set.
+
+  **Approximations / known limitations:**
+  - Enemy heal/cleanse emission is event-only (no numeric healing simulated for the enemy).
+  - Cast-fires-regardless: `cleanse-performed` fires even if no debuff was present.
+  - No-enemy-defense mitigation on the reactive `damage` fold.
+  - Zosimos charge-sabotage (refit "decrease that enemy's charge per second repair") is
+    UNMODELED — no enemy charge race in healing mode.
+  - Arum "all cleansed enemies" → singular focus enemy (multi-enemy targeting is 4d scope).
+  - Pestilence's refit passive "When an enemy cleanses a Debuff this unit inflicts Corrosion II
+    for 2 turns on all cleansed enemies" is UNMODELED — see §6 Pestilence orphan entry.
+
+  **In-game verification list additions:** cast-fires-regardless cleanse event (does Grif's
+  proc actually fire when the enemy has no debuff to cleanse?); Arum enemy count (does Out.
+  Damage Down land on every enemy that cleansed, or just the one?); Grif 75% proc rate (is
+  it per-cast or per-event?); Zosimos charge sabotage refit timing (per second repair in the
+  whole battle, or per repair cast in a given round?).
+
 ---
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
@@ -1242,8 +1307,14 @@ configure it and it looks like it works, but it does nothing".
 >   below-40% once-per-battle; Kafa Terran Tenacity / Redeemer Defense Up re-fire each crossing);
 >   cast-path Cheat-Death carve-out (Hermes charged grant narrowed to heal-target-under-40%;
 >   Hayyan charged grant on charged-skill fire) (see §5 PHASE 4c PR 3).
-> - **4c PR 4 — pending** — enemy-action reactions (event-only enemy heal/cleanse emission,
->   `cleanse-performed`, reactive `damage` executor branch): Zosimos/Arum/Yarrow/Larkspur/Grif.
+> - **4c PR 4 — SHIPPED 2026-06-12** (`feat/combat-engine-phase4c-enemy-actions`):
+>   event-only enemy heal/cleanse emission (`heal-performed`/`cleanse-performed`); new
+>   `on-enemy-repaired`/`on-enemy-cleansed` triggers (`isEnemySide(casterId)` filter);
+>   reactive `damage` executor branch (bomb-style fold, no enemy-defense mitigation,
+>   no-crit-no-chain); Zosimos (charge on enemy repair; refit charge-sabotage UNMODELED),
+>   Arum (Out. Damage Down I + refit Gelecek Contagion II; all-cleansed-enemies → singular
+>   focus), Yarrow/Larkspur (self Gelecek Contagion on enemy cleanse), Grif (+20% Defense
+>   modifier + 75% damage proc on enemy cleanse) (see §5 PHASE 4c PR 4).
 > - **4c PR 5 — pending** — enemy realism pair: §6 item 11 `derivable` flip for
 >   `enemy-buff`/Provoke `self-debuff` gates (controlled DPS-golden regeneration) + item 12
 >   enemy hacking landing roll.
@@ -1279,17 +1350,22 @@ configure it and it looks like it works, but it does nothing".
 5. **`trigger` field** *(partially shipped 2026-06-05, Phase 3; extended 2026-06-06; `on-attacked`
    shipped Phase 4a; death/revive triggers shipped Phase 4b 2026-06-09; `on-attacked` upgraded to
    per-hit with `triggerCritFilter` Phase 4c PR 1 2026-06-10; `on-ally-attacked` shipped Phase 4c
-   PR 2 2026-06-10; `on-hp-threshold-crossed` shipped Phase 4c PR 3 2026-06-11)* — the reactive
+   PR 2 2026-06-10; `on-hp-threshold-crossed` shipped Phase 4c PR 3 2026-06-11;
+   `on-enemy-repaired`/`on-enemy-cleansed` shipped Phase 4c PR 4 2026-06-12)* — the reactive
    machinery now
    consumes `start-of-round`, `on-crit`, `on-debuff-inflicted`, `on-ally-debuff-inflicted`,
    `on-bomb-detonated`, `on-ally-crit-dot`, `on-attacked` (Phase 4a; upgraded to per-hit with
    optional crit/non-crit filter in Phase 4c PR 1 — see §5 PHASE 4c PR 1), `on-ally-attacked`
    (Phase 4c PR 2 — per-hit, ally-scoped, crit + role filtered; see §5 PHASE 4c PR 2),
    `on-hp-threshold-crossed` (Phase 4c PR 3 — downward crossing of a self hp-threshold via the
-   tank-side `hp-changed` event; see §5 PHASE 4c PR 3), and the
-   four death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
+   tank-side `hp-changed` event; see §5 PHASE 4c PR 3), `on-enemy-repaired` and
+   `on-enemy-cleansed` (Phase 4c PR 4 — enemy heal/cleanse event-only emission with
+   `isEnemySide(casterId)` filter; reactive `damage` executor branch; see §5 PHASE 4c PR 4),
+   and the four death/revive triggers `on-destroyed` / `on-ally-destroyed` / `on-enemy-destroyed` /
    `on-cheat-death-activated` (Phase 4b — see §5 PHASE 4b). All are in `LIVE_TRIGGERS`. The
-   remaining annotation-only reactive family is enemy-action, deferred to 4c PR 4.
+   remaining annotation-only reactive families are enemy-action edge cases (Pestilence
+   enemy-cleanse Corrosion — see §6 Pestilence orphan), deferred 4d/4e items (multi-target,
+   cleanse consumption, purge, control effects), and Chakara (§6 item 10).
 6. **Heal/shield consumption** *(shipped 2026-06-07, feat/healing-calc-engine — see §5 HEALING
    and the shipped block above)*. heal/shield parsed + consumed by the Healing Calculator
    (DPS unaffected). Remaining heal-side seams now tracked as items 11–12 below and the Phase-4
@@ -1362,6 +1438,31 @@ configure it and it looks like it works, but it does nothing".
     land). Resolution: add an optional `enemyHacking` stat to the enemy attacker config and
     apply the normal landing formula. Medium cost; relevant for security-stacked tanks facing
     debuff-heavy enemies.
+
+13. **Pestilence enemy-cleanse Corrosion II reaction — known orphan (Phase 4c PR 4 follow-up)** —
+    Pestilence's refit passive text reads: "When an enemy cleanses a Debuff this unit inflicts
+    Corrosion II for 2 turns on all cleansed enemies." This is an `on-enemy-cleansed` reactive
+    DoT infliction, but it is **currently UNPARSED and does not fire** for two compounding
+    reasons:
+
+    1. *Passive DoT pass exclusion.* `buildDoTAutoFill` (the passive-slot DoT scanner in
+       `buildShipAbilities.ts`) only recognizes `on-attacked` and `on-ally-attacked`
+       damage-reaction triggers when emitting DoT entries from passive text. It does not
+       recognize `on-enemy-cleansed` as a valid reactive DoT trigger, so Pestilence's
+       passive Corrosion II entry is never emitted.
+
+    2. *`isDoTBuffName` exclusion at the parser level.* `buildDoTAutoFill` / `buildShipAbilities`
+       use `isDoTBuffName` to identify DoT abilities; the passive-slot DoT-auto-fill path
+       is also excluded by the editor's passive-slot DoT guardrail (a passive-slot `dot` is
+       a known silent no-op in the DPS engine). Even if the trigger classification were
+       extended, the current architecture would drop the ability.
+
+    **Resolution path:** extend `buildDoTAutoFill` (or add a dedicated enemy-cleanse DoT
+    detector) to recognize the `on-enemy-cleansed` trigger, and wire the resulting `dot`
+    ability through the reactive intent executor's DoT branch (which can apply DoTs to the
+    enemy's per-target store). The "all cleansed enemies" multi-target scoping would use the
+    same singular-focus-enemy approximation as Arum (4d for real multi-target). Medium cost;
+    low user-visible impact until Pestilence is a common sim subject.
 
 ---
 

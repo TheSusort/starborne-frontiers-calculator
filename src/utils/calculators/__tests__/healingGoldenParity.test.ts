@@ -2306,4 +2306,147 @@ describe('healingGoldenParity', () => {
         // Entering HP%: 100 → 90 (after the R1 heal) → 20 (after the R2 unhealed hit).
         expect(result.rounds.map((r) => r.targetHpPct)).toEqual([100, 90, 20]);
     });
+
+    // =========================================================================
+    // PHASE 4c PR 4 (enemy-action reactions) — NEW BEHAVIOUR GOLDEN.
+    // The enemy walk now EMITS `heal-performed` / `cleanse-performed` (event-only:
+    // the enemy's cast cleanse mutates NOTHING on the player healing map). Player
+    // ships carrying `on-enemy-repaired` / `on-enemy-cleansed` reactives react to
+    // those events: a Grif-style `damage` proc folds the owner's last-turn ctx
+    // bomb-style (effectiveAttack × multiplier/100 × affinityMult — NO defense, NO
+    // crit) and credits the owner's damage pool (NOT a healing bucket, so it does
+    // NOT surface in the healing round buckets), and a Yarrow-style `buff` self-grant
+    // surfaces in the round buff display. (Engine reference:
+    // src/utils/combat/__tests__/enemyActions.test.ts Task 5b.)
+    // =========================================================================
+
+    // ── Scenario 28: enemy-cleanse reaction (Grif damage proc + Yarrow self-buff) ──
+    // The FOCUS healer IS the heal target (hp 100000, defence 0, speed 100 → acts BEFORE
+    // the enemy every round, so its last-turn ctx is populated when the enemy cleanses).
+    // Its PASSIVE slot carries TWO `on-enemy-cleansed` reactives:
+    //   • a Grif-style `damage` proc (multiplier 75 = raw percentage, noCrit) → folds the
+    //     owner's last-turn ctx bomb-style and credits the owner's DAMAGE pool. This is NOT
+    //     a healing bucket, so it does NOT appear in the healing round buckets (no directHeal
+    //     etc.) — it is asserted off the bus / result instead (the snapshot freezes only the
+    //     healing-visible reaction surface).
+    //   • a Yarrow-style `buff Vigor Up` (self, +attack 30%, 2 turns) → surfaces in the round
+    //     buff display (activeSelfBuffs / healTargetBuffs) from the round AFTER the first fire.
+    // A ship-backed ENEMY whose ACTIVE (cast) slot is a `cleanse` (count 1, no damage ability)
+    // — it emits `cleanse-performed` (casterId = enemy id) each cast, event-only (no enemy
+    // numeric, no player-map credit), speed 50 → acts AFTER the focus.
+    //
+    // Per round (focus speed 100 acts first; nothing to do — its only abilities are reactive;
+    // then the enemy cleanses → both reactives fire):
+    //   R1 focus turn: ctx populated. enemy cleanse → Grif proc credits damage; Vigor Up
+    //       GRANTED to self (lands AFTER the focus's R1 turn → shows from R2).
+    //   R2 enter: activeSelfBuffs/healTargetBuffs = ['Vigor Up'] (the R1 grant). enemy cleanse
+    //       again → proc + re-grant.
+    //   R3, R4: steady — Vigor Up held, reaction fires every round.
+    //   ⇒ No healing of any kind (directHeal/hotHeal/shield/cleanseCount/effective/overheal 0
+    //     every round — the player NEVER heals; the enemy's heal/cleanse are event-only).
+    //     incomingDamage 0 (the enemy has no damage ability). The Vigor Up self-buff appears in
+    //     the round buff display from round 2 (turnsRemaining 2). The Grif damage proc is
+    //     credited to the player damage pool (asserted via the bus, not the healing snapshot).
+    const scenario28Input = () =>
+        BASE({
+            rounds: 4,
+            healer: { ...HEALER, hp: 100000, defence: 0 },
+            healTargetId: 'healer',
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [
+                            // Grif-style reactive direct-damage proc (raw % multiplier, noCrit).
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                trigger: 'on-enemy-cleansed',
+                                config: { type: 'damage', multiplier: 75, noCrit: true },
+                            }),
+                            // Yarrow-style reactive self-buff grant → surfaces in the buff display.
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                trigger: 'on-enemy-cleansed',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Vigor Up',
+                                    parsedEffects: { attack: 30 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 2,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemies: [
+                {
+                    id: 'e1',
+                    stats: { attack: 4000, crit: 0, critDamage: 0, speed: 50 },
+                    chargeCount: 0,
+                    startCharged: false,
+                    // Cast slot is a CLEANSE only (no damage ability) → emits cleanse-performed
+                    // each cast, event-only (no player-map credit), incoming damage 0.
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'cleanse',
+                                        target: 'self',
+                                        config: { type: 'cleanse', count: 1 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+    snap(
+        'enemy cleanse reaction (player damage proc + self-buff on enemy cleanse)',
+        scenario28Input
+    );
+
+    // Supplementary: the enemy cleanse fires the player's on-enemy-cleansed reactives every round.
+    // The Grif damage proc credits the player damage pool (not a healing bucket → invisible to the
+    // healing snapshot, asserted off the result), and the Yarrow self-buff surfaces in the round
+    // buff display from round 2 (granted on the round-1 enemy cleanse, which lands after the focus's
+    // round-1 turn). No healing of any kind, and incomingDamage stays 0 (cleanse-only enemy).
+    it('scenario 28: enemy cleanse → Grif damage proc credited + Vigor Up self-buff from round 2', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const cleanses: Extract<CombatEvent, { type: 'cleanse-performed' }>[] = [];
+        bus.on('cleanse-performed', (e) => cleanses.push(e));
+        const result = simulateHealing({ ...scenario28Input(), bus });
+
+        // The enemy cleanse-performed fired with the ENEMY's id each round it cast.
+        expect(cleanses.length).toBeGreaterThan(0);
+        expect(cleanses.every((e) => e.casterId === 'e1' && e.count === 1)).toBe(true);
+
+        // No healing of any kind, and the cleanse-only enemy deals no damage.
+        expect(result.rounds.every((r) => r.directHeal === 0)).toBe(true);
+        expect(result.rounds.every((r) => r.hotHeal === 0 && r.shield === 0)).toBe(true);
+        expect(result.rounds.every((r) => r.cleanseCount === 0)).toBe(true);
+        expect(result.rounds.every((r) => r.incomingDamage === 0)).toBe(true);
+
+        // The Vigor Up self-buff surfaces from round 2 (the round-1 grant lands after the focus's
+        // round-1 turn) and persists thereafter.
+        const buffNamesByRound = result.rounds.map((r) => r.activeSelfBuffs.map((b) => b.buffName));
+        expect(buffNamesByRound[0]).not.toContain('Vigor Up');
+        expect(buffNamesByRound[1]).toContain('Vigor Up');
+        expect(buffNamesByRound[3]).toContain('Vigor Up');
+
+        // The Vigor Up grant fires off the SAME on-enemy-cleansed trigger + firing slot as the
+        // Grif damage proc, so its appearance proves that reactive path resolves. The damage proc
+        // itself credits the player DAMAGE pool (NOT a healing bucket), which the healing result
+        // does not expose — the sister buff is the observable proof the reaction fired, and no
+        // healing leaked from the enemy's event-only cleanse (totalHealing 0).
+        expect(result.summary.totalHealing).toBe(0);
+    });
 });

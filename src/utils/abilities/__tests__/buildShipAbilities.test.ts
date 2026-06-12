@@ -2452,4 +2452,157 @@ describe('buildShipAbilities', () => {
             });
         });
     });
+
+    // Phase 4c PR 4 (Task 6): player ships react to an ENEMY's repair/cleanse. These triggers
+    // are LIVE in healing mode (the DPS sim ignores enemy-action triggers, so the 22 DPS goldens
+    // stay byte-identical). Per-ship lock tests mirror the PR3 hp-crossing reactive block.
+    describe('enemy-action reactives → on-enemy-repaired / on-enemy-cleansed (Phase 4c PR 4)', () => {
+        const passiveOf = (s: Ship): Skill | undefined =>
+            buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+
+        it('Zosimos passive: enemy-repair charge gain rides on-enemy-repaired (self, derivable)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an enemy repairs, this Unit <unit-aid>gains a charge</unit-aid> to its Charged Skill.',
+            });
+            const charge = passiveOf(s)?.abilities.find((a) => a.type === 'charge');
+            expect(charge).toMatchObject({
+                type: 'charge',
+                target: 'self',
+                trigger: 'on-enemy-repaired',
+                conditions: [],
+                config: { type: 'charge', amount: 1 },
+            });
+        });
+
+        it('Arum first passive: Out. Damage Down I debuff rides on-enemy-cleansed (enemy, 1 turn)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a debuff</unit-aid>, this Unit inflicts all cleansed enemies with <unit-skill>Out. Damage Down I</unit-skill> for 1 turn.',
+            });
+            const debuff = passiveOf(s)?.abilities.find(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Out. Damage Down I'
+            );
+            expect(debuff).toMatchObject({
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'debuff', buffName: 'Out. Damage Down I', duration: 1 },
+            });
+        });
+
+        it('Arum SECOND (refit) passive: debuff (enemy) AND all-allies Gelecek Contagion II buff, both on-enemy-cleansed', () => {
+            const s = ship({
+                // factory default refits + only secondPassiveSkillText → getShipSkillRows picks Passive R2
+                secondPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a debuff</unit-aid>, this Unit inflicts all cleansed enemies with <unit-skill>Out. Damage Down I</unit-skill> for 1 turn and this Unit grants all allies <unit-skill>Gelecek Contagion II</unit-skill> for 3 turns.',
+            });
+            const passive = passiveOf(s);
+            const debuff = passive?.abilities.find(
+                (a) => a.config.type === 'debuff' && a.config.buffName === 'Out. Damage Down I'
+            );
+            expect(debuff).toMatchObject({
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'debuff', buffName: 'Out. Damage Down I', duration: 1 },
+            });
+            const buff = passive?.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Gelecek Contagion II'
+            );
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'all-allies',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'buff', buffName: 'Gelecek Contagion II', duration: 3 },
+            });
+        });
+
+        it('Yarrow/Larkspur passive: self Gelecek Contagion I buff rides on-enemy-cleansed (self, 2 turns)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit gains <unit-skill>Gelecek Contagion I</unit-skill> for 2 turns.',
+            });
+            const buff = passiveOf(s)?.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Gelecek Contagion I'
+            );
+            expect(buff).toMatchObject({
+                type: 'buff',
+                target: 'self',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'buff', buffName: 'Gelecek Contagion I', duration: 2 },
+            });
+        });
+
+        it('Grif first (non-refit) passive: 75% noCrit damage proc ALONE rides on-enemy-cleansed (no defense modifier)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.',
+            });
+            const passive = passiveOf(s);
+            const dmg = passive?.abilities.find((a) => a.type === 'damage');
+            expect(dmg).toMatchObject({
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'damage', multiplier: 75, noCrit: true },
+            });
+            // No standing defense modifier on the non-refit passive.
+            expect(passive?.abilities.find((a) => a.type === 'modifier')).toBeUndefined();
+        });
+
+        it('Grif SECOND (refit) passive: standing +20% self defense modifier AND on-enemy-cleansed 75% noCrit damage proc', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'This Unit increases its Defense by 20%. When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find((a) => a.type === 'modifier');
+            expect(mod).toMatchObject({
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                config: { type: 'modifier', channel: 'defense', value: 20, isMultiplicative: true },
+            });
+            const dmg = passive?.abilities.find((a) => a.type === 'damage');
+            expect(dmg).toMatchObject({
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-enemy-cleansed',
+                config: { type: 'damage', multiplier: 75, noCrit: true },
+            });
+        });
+
+        // CodeRabbit #99 FIX #2: the standing "+N% Defense" modifier must only emit when its
+        // containing sentence is a STANDALONE/standing clause — a finite-duration or
+        // trigger-gated clause with the same wording must NOT be promoted to a permanent buff.
+        it('does NOT emit a standing defense modifier for a finite-duration "for N turns" clause', () => {
+            const s = ship({
+                secondPassiveSkillText: 'This Unit increases its Defense by 20% for 2 turns.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find(
+                (a) =>
+                    a.type === 'modifier' &&
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defense'
+            );
+            expect(mod).toBeUndefined();
+        });
+
+        it('does NOT emit a standing defense modifier for a trigger-gated "When an enemy cleanses" clause', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit increases its Defense by 20%.',
+            });
+            const passive = passiveOf(s);
+            const mod = passive?.abilities.find(
+                (a) =>
+                    a.type === 'modifier' &&
+                    a.config.type === 'modifier' &&
+                    a.config.channel === 'defense'
+            );
+            expect(mod).toBeUndefined();
+        });
+    });
 });

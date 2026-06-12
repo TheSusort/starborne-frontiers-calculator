@@ -34,7 +34,11 @@ export const MAX_INTENT_GENERATIONS = 10;
  *  types are routed through the trigger machinery; any other type carrying a live trigger
  *  stays on the on-cast path (not-simulated follow-up payloads — e.g. control from a
  *  bomb-detonate reactive). heal/shield/cleanse are routed too (Task 9) but only DO anything
- *  in healing mode — in DPS mode the executor's healing-ctx-off guard makes them inert. */
+ *  in healing mode — in DPS mode the executor's healing-ctx-off guard makes them inert.
+ *  `damage` (Phase 4c PR 4 — Grif's on-enemy-cleansed "75% Damage that cannot critically hit")
+ *  is reactive ONLY when its trigger is in LIVE_TRIGGERS. SAFETY: `on-cast` is NOT a live
+ *  trigger, so every normal on-cast damage ability stays on the cast path — only damage
+ *  abilities carrying a live trigger route reactively. */
 export type ReactiveAbilityType =
     | 'buff'
     | 'debuff'
@@ -43,7 +47,8 @@ export type ReactiveAbilityType =
     | 'heal'
     | 'shield'
     | 'cleanse'
-    | 'extra-action';
+    | 'extra-action'
+    | 'damage';
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -55,6 +60,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'shield',
     'cleanse',
     'extra-action',
+    'damage',
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -84,8 +90,10 @@ export interface Intent {
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
- *  buff/debuff/dot/charge/heal/shield/cleanse ability whose trigger is in the live
- *  set. Anything else stays on the on-cast path. */
+ *  buff/debuff/dot/charge/heal/shield/cleanse/extra-action/damage ability whose trigger is
+ *  in the live set. Anything else stays on the on-cast path. SAFETY: `on-cast` is not a live
+ *  trigger, so a normal on-cast damage ability is NOT reactive and stays on the cast path —
+ *  only a damage ability carrying a live trigger (e.g. Grif's on-enemy-cleansed) routes here. */
 function isReactiveAbility(ability: Ability): boolean {
     if (!LIVE_TRIGGERS.has(ability.trigger)) return false;
     return (REACTIVE_ABILITY_TYPES as readonly string[]).includes(ability.config.type);
@@ -93,8 +101,10 @@ function isReactiveAbility(ability: Ability): boolean {
 
 /**
  * Partition the input ShipSkills ONCE at setup into:
- *  - `castSkills`: everything except live-trigger buff/debuff/dot/charge/heal/shield/cleanse abilities.
- *    Feeds every on-cast pipeline (status registration loop + runPlayerTurn).
+ *  - `castSkills`: everything except live-trigger buff/debuff/dot/charge/heal/shield/cleanse/
+ *    extra-action/damage abilities. Feeds every on-cast pipeline (status registration loop +
+ *    runPlayerTurn). SAFETY: a normal on-cast `damage` ability is NOT live-triggered, so it
+ *    stays here — only a damage ability carrying a live trigger routes to reactiveAbilities.
  *  - `reactiveAbilities`: the excluded abilities, in slot/text order — fixed
  *    registration order = fixed execution order (determinism).
  */
@@ -158,6 +168,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
  *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
  *    (any enemy-side actor — dummy wall + walked enemy attackers).
+ *  - on-enemy-repaired → heal-performed where isEnemySide(casterId)
+ *    (any enemy-side actor's repair cast — dummy wall + enemy attackers). One enqueue per cast.
+ *  - on-enemy-cleansed → cleanse-performed where isEnemySide(casterId)
+ *    (any enemy-side actor's cleanse cast — dummy wall + enemy attackers). One enqueue per cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -348,6 +362,19 @@ export function registerReactiveListeners(args: {
                         if (isEnemySide(e.actorId)) enqueue(intent);
                     });
                     break;
+                case 'on-enemy-repaired':
+                    bus.on('heal-performed', (e) => {
+                        // Enemy-scoped: any enemy-side actor's repair (dummy wall + enemy
+                        // attackers). One enqueue per qualifying cast — Zosimos banks a charge.
+                        if (isEnemySide(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-cleansed':
+                    bus.on('cleanse-performed', (e) => {
+                        // Enemy-scoped: any enemy-side actor's cleanse. One enqueue per cast.
+                        if (isEnemySide(e.casterId)) enqueue(intent);
+                    });
+                    break;
                 case 'on-cheat-death-activated':
                     bus.on('cheat-death-activated', (e) => {
                         // Self-scoped: fires when THIS OWNER's own Cheat Death intercept saves
@@ -444,6 +471,11 @@ export interface IntentExecContext {
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
      *  keeping all existing drain gating byte-identical. */
     selfHpPctFor?: (ownerId: string) => number;
+    /** Credit reactive direct damage to the owner's round damage map against the shared
+     *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
+     *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
+     *  sees it. Absent → the damage branch is inert (unit fixtures / DPS mode w/o delegate). */
+    creditReactiveDamage?: (ownerId: string, amount: number) => void;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -955,6 +987,26 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'cleanse') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         ctx.healing.credit(intent.ownerId, 'cleanseCount', cfg.count);
+        return;
+    }
+
+    if (cfg.type === 'damage') {
+        // Reactive direct-damage proc (Grif's on-enemy-cleansed "75% Damage that cannot
+        // critically hit"). Bomb-style fold from the owner's last-turn ctx: effectiveAttack
+        // × (multiplier/100) × hits × affinityMult, NO enemy-defense mitigation (documented
+        // approximation, mirrors the bomb path) and NO crit. `multiplier` is a raw percentage
+        // like the cast path (e.g. 75 for "75% damage"), so divide by 100. Folds `hits` like
+        // the cast path (single-hit for Grif today, but multi-hit-correct). Before the owner's
+        // first turn (faster enemy, round 1) there is no ctx → falls back to base runtime stats
+        // like the reactive heal path; affinity defaults to 1 without a turn snapshot (no matchup
+        // known — a small documented approximation, same spirit as the heal path which ignores
+        // affinity entirely). Emits NO event → no chain.
+        const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+        const effectiveAttack = ownerCtx?.effectiveAttack ?? owner.attack;
+        const affinityMult = ownerCtx?.affinityMult ?? 1;
+        const amount = effectiveAttack * (cfg.multiplier / 100) * (cfg.hits ?? 1) * affinityMult;
+        // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc credits nothing).
+        if (amount > 0) ctx.creditReactiveDamage?.(intent.ownerId, amount);
         return;
     }
 

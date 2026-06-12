@@ -23,6 +23,7 @@ import {
     detectCritRepairTrigger,
     detectAllyCritTrigger,
     detectDestroyedTrigger,
+    detectEnemyCleanseTrigger,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -1276,6 +1277,34 @@ describe('parseChargeGain', () => {
         expect(parseChargeGain(text)).toBeNull();
     });
 
+    it('parses enemy-repair self gain as on-enemy-repaired trigger — Zosimos', () => {
+        const text =
+            'When an enemy repairs, this Unit <unit-aid>gains a charge</unit-aid> to its Charged Skill.';
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-enemy-repaired',
+        });
+    });
+
+    it('parses "performs a repairs" enemy-repair phrasing (refit, source typo) as on-enemy-repaired — Zosimos refit', () => {
+        const text =
+            "When an enemy performs a repairs, this Unit <unit-aid>gains a charge</unit-aid> to its Charged Skill.<br /><br />Additionally, this Unit decrease that enemy's charge by one for every second repair they perform.";
+        expect(parseChargeGain(text)).toEqual({
+            amount: 1,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-enemy-repaired',
+        });
+    });
+
+    it('still returns null for "when an enemy dies" on-kill ally charge — Liberator (death routing unchanged)', () => {
+        const text =
+            'When an enemy dies, this unit <unit-aid>grants 1 charge</unit-aid> to all allies.';
+        expect(parseChargeGain(text)).toBeNull();
+    });
+
     it('returns null when there is no charge phrase', () => {
         expect(
             parseChargeGain('This Unit deals <unit-damage>140% damage</unit-damage>.')
@@ -1364,6 +1393,25 @@ describe('detectReactiveTrigger', () => {
         const text =
             'When an ally critically hits an enemy, this unit gains <unit-skill>Everliving Regeneration</unit-skill> for 2 turns.';
         expect(detectReactiveTrigger(text, 'Everliving Regeneration')).toBe('on-ally-crit');
+    });
+
+    it('classifies an enemy-cleanse debuff infliction as on-enemy-cleansed — Arum', () => {
+        const text =
+            'When an enemy <unit-aid>cleanses a debuff</unit-aid>, this Unit inflicts all cleansed enemies with <unit-skill>Out. Damage Down I</unit-skill> for 1 turn.';
+        expect(detectReactiveTrigger(text, 'Out. Damage Down I')).toBe('on-enemy-cleansed');
+    });
+
+    it('classifies an enemy-cleanse self-buff grant as on-enemy-cleansed — Yarrow/Larkspur', () => {
+        const text =
+            'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit gains <unit-skill>Gelecek Contagion I</unit-skill> for 2 turns.';
+        expect(detectReactiveTrigger(text, 'Gelecek Contagion I')).toBe('on-enemy-cleansed');
+    });
+
+    it('scopes enemy-cleanse to the buff clause (Arum refit: debuff on cleanse-clause, all-allies buff in same sentence)', () => {
+        const text =
+            'When an enemy <unit-aid>cleanses a debuff</unit-aid>, this Unit inflicts all cleansed enemies with <unit-skill>Out. Damage Down I</unit-skill> for 1 turn and this Unit grants all allies <unit-skill>Gelecek Contagion II</unit-skill> for 3 turns.';
+        expect(detectReactiveTrigger(text, 'Out. Damage Down I')).toBe('on-enemy-cleansed');
+        expect(detectReactiveTrigger(text, 'Gelecek Contagion II')).toBe('on-enemy-cleansed');
     });
 });
 
@@ -1473,6 +1521,37 @@ describe('detectDestroyedTrigger', () => {
         const text =
             "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP.";
         expect(detectDestroyedTrigger(text, text.indexOf('that ally for 5%'))).toBeUndefined();
+    });
+});
+
+describe('detectEnemyCleanseTrigger', () => {
+    it('returns on-enemy-cleansed when the anchor is in the "when an enemy cleanses a Debuff … deals N% Damage" sentence — Grif', () => {
+        const text =
+            'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.';
+        expect(detectEnemyCleanseTrigger(text, text.search(/<unit-damage>/i))).toBe(
+            'on-enemy-cleansed'
+        );
+    });
+
+    it('is position-scoped: an anchor in a DIFFERENT sentence is not stamped (Grif refit: standing +20% defense precedes the proc)', () => {
+        // The +20% defense modifier sits in its own leading sentence, OUTSIDE the cleanse proc.
+        const text =
+            'This Unit increases its Defense by 20%. When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.';
+        expect(detectEnemyCleanseTrigger(text, text.indexOf('Defense by 20%'))).toBeUndefined();
+        expect(detectEnemyCleanseTrigger(text, text.search(/<unit-damage>/i))).toBe(
+            'on-enemy-cleansed'
+        );
+    });
+
+    it('returns undefined when the enemy-cleanse phrase is absent', () => {
+        const text = 'This Unit deals <unit-damage>75% damage</unit-damage>.';
+        expect(detectEnemyCleanseTrigger(text, text.search(/<unit-damage>/i))).toBeUndefined();
+    });
+
+    it('returns undefined for a negative anchor (ability has no position in text)', () => {
+        const text =
+            'When an enemy <unit-aid>cleanses a Debuff</unit-aid>, this Unit deals <unit-damage>75% Damage</unit-damage> that cannot critically hit.';
+        expect(detectEnemyCleanseTrigger(text, -1)).toBeUndefined();
     });
 });
 

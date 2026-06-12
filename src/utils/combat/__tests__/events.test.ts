@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createEventBus } from '../events';
+import { CombatEvent, createEventBus } from '../events';
 
 describe('createEventBus', () => {
     it('dispatches to listeners of the matching type in registration order', () => {
@@ -54,5 +54,15 @@ describe('createEventBus', () => {
         );
         bus.emit({ type: 'cheat-death-activated', actorId: 'tank', round: 2 });
         expect(received).toEqual([{ actorId: 'tank', round: 2 }]);
+    });
+
+    it('delivers cleanse-performed to listeners', () => {
+        const bus = createEventBus();
+        const seen: CombatEvent[] = [];
+        bus.on('cleanse-performed', (e) => seen.push(e));
+        bus.emit({ type: 'cleanse-performed', casterId: 'enemy', count: 1, round: 2 });
+        expect(seen).toEqual([
+            { type: 'cleanse-performed', casterId: 'enemy', count: 1, round: 2 },
+        ]);
     });
 });
