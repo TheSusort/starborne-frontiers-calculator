@@ -1393,8 +1393,31 @@ configure it and it looks like it works, but it does nothing".
 >   (positional 3×4 hex / front-back-skip / AoE) needs in-game board data not yet gathered, so
 >   targeting is deferred. Near-term 4d = **enemy-team support** (below; the targeting-independent
 >   part). Spec: `docs/superpowers/specs/2026-06-12-combat-engine-enemy-team-support-design.md`.
->   3-PR slice: PR1 enemy reactive self-buffs (SHIPPED, see sub-item) → PR2 cross-enemy buff
->   routing + UI (Enemy Team rename, remove 4-slot cap) → PR3 optional enemy `grantAllyCharges`.
+>   3-PR slice: PR1 enemy reactive self-buffs (SHIPPED) → PR2 cross-enemy buff routing + UI
+>   (Enemy Team rename, remove 4-slot cap; SHIPPED) → PR3 ally-charge-grant abilities (SHIPPED, see
+>   below). **All three enemy-team PRs done; remaining enemy-team work = the deferred targeting/simulator
+>   phase under the TEAM-AGNOSTIC principle.**
+>   **PR3 SHIPPED (2026-06-12, branch `feat/combat-engine-enemy-team-pr3-ally-charge`; spec
+>   `docs/superpowers/specs/2026-06-12-ally-charge-grant-abilities-design.md`):** went FULL (parser +
+>   wiring), not just the optional enemy `grantAllyCharges`. (1) New dedicated parser
+>   `parseAllyChargeGrant` (skillTextParser.ts) emits `all-allies` charge abilities for Hayyan
+>   (charged-slot, `on-cast`, unconditional) and Graphite (passive, `start-of-round`, gated on
+>   `{subject:'enemy-buff', buffName:'Stealth', derivable:true}`; "within active pattern" ≈ all-allies;
+>   tolerates the live CSV "adds 1 charges" plural typo). It returns the condition object (no hard-coded
+>   buffName at the emission site) and EXCLUDES on-enemy-death phrasing via a shared
+>   `ENEMY_DEATH_PHRASING_RE` (also used by `EXTRA_ACTION_ENEMY_DESTROYED_RE`) so Liberator stays solely
+>   on `parseAllyChargeOnEnemyDeath` (no double-emit — regression-tested). Self-charge parser
+>   `parseChargeGain` untouched (its `CHARGE_DISQUALIFY_RE` already rejects these). (2) Cast-path
+>   ally-charge gate in playerTurn.ts (~1239) generalized `action === 'active'` → `('active' ||
+>   'charged')` so Hayyan's charged-skill grant fires (own-charge re-bank stays active-only; goldens
+>   byte-identical — no synthetic golden's charged skill carries an ally-charge config). (3) New
+>   `grantEnemyAllyCharges` (engine.ts ~1360, mirror of player `grantAllyCharges` over
+>   `enemyAttackerActors`) wired into the enemy walk (~2734, was `undefined`) + the enemy reactive drain
+>   side-ctx (~2238, was the PR1 no-op). Both sides: a player-team Hayyan/Graphite now grants the team
+>   charges too. KNOWN enemy-side limitation (pre-existing PR1/PR2 drain wiring, documented in the test):
+>   the reactive drain's `enemyAttackerIds` is the same for both sides, so an enemy Graphite's `enemy-buff`
+>   Stealth gate reads the enemy attackers' OWN buffs (not the player team) — enemy Graphite stays niche/
+>   dormant; player-side gate works correctly. PR3 = optional enemy `grantAllyCharges`.
 >   **v1 targeting (deferred, now UNBLOCKED — no board data needed, user direction 2026-06-12):**
 >   shared-target, list-order focus-fire — both teams hammer one target until it dies, then advance
 >   to the next ship added; this re-enables dead-recipient filtering (Salvation gross `directHeal`
