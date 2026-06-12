@@ -621,6 +621,12 @@ export function detectGrantConditions(
         ];
     }
 
+    // Chakara: "if it has the lowest Speed among all allies" — a derivable team-speed gate.
+    // Live-derived in the engine from the player team's static speeds (lone actor → true).
+    if (/\blowest\s+speed\s+among\s+(?:all\s+)?allies\b/i.test(low)) {
+        return [{ subject: 'lowest-speed-ally', derivable: true }];
+    }
+
     // 3. buff/debuff count threshold ("more than 3 Debuffs", "no debuffs")
     const countGate = countGateCondition(clause);
     if (countGate) return [countGate];
@@ -697,7 +703,12 @@ function matchesActiveSelfCrit(text: string): boolean {
     }
     return false;
 }
-const START_OF_ROUND_RE = /at the start of (?:the|each|every) round/i;
+const START_OF_ROUND_RE =
+    /at the start of (?:the|each|every) round|starts? (?:the|each|every) round/i;
+// "starts (each|every|the) round with <buff>" — a start-of-round self-grant whose governing
+// phrase uses no application verb (Chakara's R2 passive; unique in the corpus). findVerb treats
+// it as a self-receive ('gains') so the buff segments extract.
+const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
 const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
 // "when an enemy cleanses a debuff" — a player reaction to an ENEMY cleanse (Phase 4c PR 4):
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
@@ -2101,6 +2112,9 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
         }
         if (SKIP_VERBS.has(words[i])) return null;
     }
+    // "starts each round with <buff>" carries no application verb in the scanned text — treat
+    // the construct as a self-receive so the segment loop extracts the conjoined buffs.
+    if (STARTS_ROUND_WITH_RE.test(accumulatedText)) return 'gains';
     return undefined;
 }
 

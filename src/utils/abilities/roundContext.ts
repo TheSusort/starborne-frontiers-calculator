@@ -30,6 +30,10 @@ export function buildRoundContext(state: {
     enemyBuffNames?: string[];
     /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
     selfDebuffNames?: string[];
+    /** Owner has the lowest Speed among its (player) team. Default true (lone-actor /
+     *  DPS assumption: a single attacker is trivially the slowest). Populated live by the
+     *  engine drain context (Phase 4c PR 6). */
+    isLowestSpeedAlly?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -49,6 +53,7 @@ export function buildRoundContext(state: {
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
         enemyHpPct: state.enemyHpPct ?? 100,
+        isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

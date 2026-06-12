@@ -18,6 +18,11 @@ export interface ConditionContext {
     selfHpPct: number; // 0..100
     enemyHpPct: number; // 0..100
     targetHpPct?: number; // 0..100 — heal target's live HP%, threaded in healing mode only
+    /** True when the condition owner has the lowest Speed among its (player) team
+     *  (ties → all tied qualify). Optional; defaults to true via buildRoundContext (a lone
+     *  actor — single-ship DPS, drain default — is trivially slowest). Populated live by the
+     *  engine via buildDrainContext. */
+    isLowestSpeedAlly?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -63,6 +68,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyHpPct;
         case 'enemy-hp-missing-pct':
             return 100 - ctx.enemyHpPct;
+        case 'lowest-speed-ally':
+            return ctx.isLowestSpeedAlly ? 1 : 0;
         default:
             return 0;
     }

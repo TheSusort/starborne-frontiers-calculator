@@ -5,11 +5,12 @@ import { Condition, ConditionSubject } from '../../types/abilities';
  * these gate buff/debuff abilities dynamically. `enemy-buff` and `self-debuff` are
  * now live-derivable too (populated from the round context's `enemyBuffNames` /
  * `selfDebuffNames` arrays, item 11) — they are no longer hardcoded 0 and so are
- * read literally instead of neutralized. Derivable conditions on any OTHER subject
- * (ally counts — still unavailable to the Phase-1 sim) are neutralized to 'always',
- * preserving the old static gate's "satisfiable in principle" semantics: without
- * this they would flip from included to permanently excluded. Manual (non-derivable)
- * conditions keep literal gating via manualCount.
+ * read literally instead of neutralized. `lowest-speed-ally` is live-derived from
+ * the player team's speeds each round (Phase 4c PR 6). Derivable conditions on any
+ * OTHER subject (ally counts — still unavailable to the Phase-1 sim) are neutralized
+ * to 'always', preserving the old static gate's "satisfiable in principle" semantics:
+ * without this they would flip from included to permanently excluded. Manual
+ * (non-derivable) conditions keep literal gating via manualCount.
  */
 const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     'always',
@@ -22,6 +23,7 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     'hp-threshold',
     'enemy-hp-pct',
     'enemy-hp-missing-pct',
+    'lowest-speed-ally',
 ]);
 
 /**

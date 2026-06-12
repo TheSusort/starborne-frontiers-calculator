@@ -91,6 +91,11 @@ export function buildStaticBuffContext(opts: { enemyType?: EnemyBaseClass }): Co
         enemyDestroyedCount: 1,
         selfHpPct: 100,
         enemyHpPct: 100,
+        // The preview is always for a single attacker ship, so it is trivially the slowest
+        // "ally" — matching the live engine's lone-actor default (buildRoundContext `?? true`).
+        // Without this a `lowest-speed-ally`-gated buff (Chakara) would be excluded from the
+        // preview panel while the sim correctly includes it.
+        isLowestSpeedAlly: true,
     };
 }
 

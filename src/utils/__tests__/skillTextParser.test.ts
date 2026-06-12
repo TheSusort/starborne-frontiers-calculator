@@ -1868,6 +1868,14 @@ describe('detectGrantConditions', () => {
             { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
         ]);
     });
+
+    it('classifies "lowest speed among all allies" as a derivable lowest-speed-ally gate', () => {
+        const text =
+            'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+        expect(detectGrantConditions(text, 'Attack Up II')).toEqual([
+            { subject: 'lowest-speed-ally', derivable: true },
+        ]);
+    });
 });
 
 describe('parseChargeGain ally-crit trigger (Hermes)', () => {
@@ -3089,5 +3097,26 @@ describe('parseHealNoCrit', () => {
     it('Pallas repair-cannot-crit sets heal noCrit', () => {
         expect(parseHealNoCrit('This repair cannot critically hit.')).toBe(true);
         expect(parseHealNoCrit('This attack cannot critically hit.')).toBe(false);
+    });
+});
+
+describe('Chakara "starts each round with" extraction (Gap A)', () => {
+    const txt =
+        'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.';
+
+    it('extracts BOTH self-buffs with duration 1', () => {
+        const effects = parseSkillEffects(txt, 'passive2');
+        const buffs = effects
+            .filter((e) => e.target === 'self')
+            .map((e) => e.buffName)
+            .sort();
+        expect(buffs).toEqual(['Attack Up II', 'Defense Up II']);
+        for (const e of effects.filter((e) => e.target === 'self')) {
+            expect(e.duration).toBe(1);
+        }
+    });
+
+    it('maps the phrasing to the start-of-round trigger', () => {
+        expect(detectReactiveTrigger(txt, 'Attack Up II')).toBe('start-of-round');
     });
 });

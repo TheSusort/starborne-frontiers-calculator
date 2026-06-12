@@ -1218,6 +1218,14 @@ export function runCombat(input: CombatEngineInput): {
     // bump. Built once. Used by grantAllyCharges below (passed into every runPlayerTurn call).
     const allPlayerActors = [attacker, ...teamCombatActors];
 
+    // Phase 4c PR 6: player-team actors sharing the minimum Speed (ties → all). Speed is static
+    // turn-ORDER in this sim, so compute once. Feeds the lowest-speed-ally gate (Chakara).
+    // Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
+    const minPlayerSpeed = Math.min(...allPlayerActors.map((a) => a.stats.speed));
+    const lowestSpeedAllyIds = new Set(
+        allPlayerActors.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
+    );
+
     // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
     // its OWN chargeCount, skipping chargeCount 0 (no charge skill → nothing to bank). Called
     // from a caster's active-round charge step (runPlayerTurn). For an attacker-only run this
@@ -2095,6 +2103,11 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
+                        // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
+                        // the lone attacker resolves true and DPS gating stays byte-identical.
+                        isLowestSpeedAllyFor: (ownerId: string): boolean =>
+                            lowestSpeedAllyIds.has(ownerId),
                         // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
                         // Healing mode: the heal target's current/max HP is read from the SAME
                         // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure

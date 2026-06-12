@@ -68,3 +68,10 @@ describe('liveGateConditions', () => {
         expect(liveGateConditions(conds)).toEqual(conds);
     });
 });
+
+describe('liveGateConditions — lowest-speed-ally', () => {
+    it('keeps a derivable lowest-speed-ally condition (does NOT neutralize to always)', () => {
+        const out = liveGateConditions([{ subject: 'lowest-speed-ally', derivable: true }]);
+        expect(out).toEqual([{ subject: 'lowest-speed-ally', derivable: true }]);
+    });
+});

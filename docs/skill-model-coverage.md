@@ -1377,7 +1377,11 @@ configure it and it looks like it works, but it does nothing".
 >   manual by design) + §6 item 12 enemy hacking landing roll for timed-status AND DoT inflictions
 >   (`clamp(enemyHacking − healTargetSecurity, 0, 100)/100`; adapter omits affinity; heal-target
 >   security + per-enemy hacking inputs) (see §5 PHASE 4c PR 5).
-> - **4c PR 6 — pending** — §6 item 10 Chakara `lowest-speed-ally` condition subject.
+> - **4c PR 6 — SHIPPED 2026-06-12** (`feat/combat-engine-phase4c-pr6-chakara-lowest-speed`):
+>   §6 item 10 Chakara `lowest-speed-ally` condition subject — new condition subject + parser
+>   `"starts each round with X and Y"` extraction at a `start-of-round` trigger; live-gated via
+>   the engine `IntentExecContext.isLowestSpeedAllyFor` delegate (player-team static speeds)
+>   consumed in `buildDrainContext` (see §5 PHASE 4c PR 6).
 > - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
 >   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
 >   FrontLine R4 enemy-charged-skill leech shield; result-surface for counter-debuffs on
@@ -1401,6 +1405,24 @@ configure it and it looks like it works, but it does nothing".
 >   on the 4a full-actor enemy walk and the 4c `isEnemySide` predicate; the ally-routing and
 >   enemy-team UI are net-new. Slot AFTER 4d (the enemy team must exist before enemies can
 >   buff within it).
+>   - **Sub-item — enemy-attacker REACTIVE abilities never fire (found 2026-06-12 debugging
+>     "Chakara R0 as enemy attacker shows no buffs").** An enemy attacker's reactive abilities
+>     (e.g. `start-of-round` self-buffs — Chakara's lowest-speed Attack Up / Defense Up) are
+>     partitioned + stored on its runtime but are NEVER registered as listeners:
+>     `registerReactiveListeners` only gets `reactivePerOwner` = `'attacker'` + walked team
+>     (`engine.ts` ~1522), enemy ids excluded. So enemy-side `start-of-round` self-buffs silently
+>     do not apply (reproduced: a generic enemy on-cast self-buff fires, the same buff as
+>     `start-of-round` does not). PRE-EXISTING (predates 4c PR 6; Chakara's buffs were
+>     `start-of-round` before it). NON-TRIVIAL: `executeIntent` resolves the firing owner from
+>     `ctx.runtimes` (= player `runtimesById` only) and throws on a miss, and ally-scope delegates
+>     (`grantAllyCharges`) are player-scoped — so wiring enemy reactive intents needs enemy
+>     runtimes + per-side scoping, i.e. the enemy-team work above. **Companion latent bug:** the
+>     PR6 `isLowestSpeedAllyFor(ownerId)` delegate returns `false` for an enemy id (absent from the
+>     player-derived `lowestSpeedAllyIds`); a lone enemy island is trivially slowest on its own
+>     side, so it should resolve `true` — fix this (e.g. return true for non-player ids, or
+>     compute per-side min) WHEN enemy reactive support lands, or the gate would wrongly suppress
+>     even after registration. Player-side Chakara (DPS attacker / team member) is unaffected and
+>     works correctly.
 > - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
 >   purge, control effect simulation (stasis/taunt/provoke effects), damage reduction/reflect.
 > - **4f Defense-calc adoption** — defense calculator on the engine.
@@ -1477,7 +1499,11 @@ configure it and it looks like it works, but it does nothing".
    - *9c. Tithonus purge-count* — DEFERRED to **4e**. Extra action after purging 4+ buffs in a
      single skill — requires purge mechanics (cleanse/purge consumption modeling). Remains an
      assume-active annotation ability until then.
-10. **Chakara lowest-speed buff-condition gap** — Chakara's third passive applies Attack Up II
+10. **Chakara lowest-speed buff-condition gap — SHIPPED 2026-06-12 (Phase 4c PR 6).** New
+    `lowest-speed-ally` condition subject; `"starts each round with X and Y"` extraction at a
+    `start-of-round` trigger; live-derived from the player team's static speeds via the engine
+    `IntentExecContext.isLowestSpeedAllyFor` delegate consumed in `buildDrainContext`. Original
+    gap: Chakara's third passive applies Attack Up II
     and Defense Up II at round start when it has the lowest Speed among allies. The parser
     currently emits only the passive damage ability (60% to the highest Speed Enemy); the two
     buff abilities with the lowest-speed condition are not extracted (condition subject has no

@@ -1040,15 +1040,26 @@ describe('buildShipAbilities', () => {
         });
     });
 
-    it('Chakara third passive: round-start damage proc parses as a passive damage ability', () => {
+    it('Chakara passive: round-start damage proc + both self-buffs gated on lowest-speed', () => {
         const s = ship({
             thirdPassiveSkillText:
                 'This Unit starts each round with <unit-skill>Attack Up II</unit-skill> and <unit-skill>Defense Up II</unit-skill> for 1 turn if it has the lowest speed among all Allies. Then, deals <unit-damage>60% damage</unit-damage> to the highest Speed Enemy.',
         });
-        const skills = buildShipAbilities(s);
-        const passive = skills.slots.find((sl) => sl.slot === 'passive');
-        const dmg = passive?.abilities.find((a) => a.type === 'damage');
-        expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 60 } });
+        const passive = buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive');
+        // 60% damage proc still parses.
+        expect(passive?.abilities.find((a) => a.type === 'damage')).toMatchObject({
+            config: { type: 'damage', multiplier: 60 },
+        });
+        // Both self-buffs now emit, with start-of-round trigger + lowest-speed-ally gate.
+        const buffs = (passive?.abilities ?? []).filter((a) => a.type === 'buff');
+        expect(
+            buffs.map((b) => (b.config.type === 'buff' ? b.config.buffName : '')).sort()
+        ).toEqual(['Attack Up II', 'Defense Up II']);
+        for (const b of buffs) {
+            expect(b.trigger).toBe('start-of-round');
+            expect(b.target).toBe('self');
+            expect(b.conditions).toEqual([{ subject: 'lowest-speed-ally', derivable: true }]);
+        }
     });
 
     describe('extra-action abilities from text', () => {
