@@ -44,7 +44,7 @@ describe('HealingCalculatorPage', () => {
         );
         expect(screen.getByText('Healing Calculator')).toBeInTheDocument();
         expect(screen.getByText('Heal Target')).toBeInTheDocument();
-        expect(screen.getByText(/Enemy Attackers/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Team/)).toBeInTheDocument();
         expect(screen.getByText('Team')).toBeInTheDocument();
         expect(screen.getByDisplayValue('Healer 1')).toBeInTheDocument();
         // Results summary renders → simulateHealing ran without throwing (the StatCard title and
@@ -59,11 +59,11 @@ describe('HealingCalculatorPage', () => {
                 <HealingCalculatorPage />
             </MemoryRouter>
         );
-        // Initially one enemy → count shows (1/4).
-        expect(screen.getByText(/Enemy Attackers \(1\/4\)/)).toBeInTheDocument();
+        // Initially one enemy → count shows (1).
+        expect(screen.getByText(/Enemy Team \(1\)/)).toBeInTheDocument();
         // Click the remove button for the first (and only) enemy attacker.
-        fireEvent.click(screen.getByLabelText('Remove enemy attacker'));
-        // Guard removed → count now shows (0/4).
-        expect(screen.getByText(/Enemy Attackers \(0\/4\)/)).toBeInTheDocument();
+        fireEvent.click(screen.getByLabelText('Remove enemy'));
+        // Guard removed → count now shows (0).
+        expect(screen.getByText(/Enemy Team \(0\)/)).toBeInTheDocument();
     });
 });

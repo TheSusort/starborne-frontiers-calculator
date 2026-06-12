@@ -2398,17 +2398,18 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
-                                            Heal Target &amp; Enemy Attackers:
+                                            Heal Target &amp; Enemy Team:
                                         </span>{' '}
                                         Pick what the healer is keeping alive — the healer itself,
-                                        another of your ships, or a manual stat line — then add up
-                                        to four enemy attackers that bombard it each round. Enemies
-                                        can be real ships (their charged skills produce realistic
-                                        damage spikes, and they apply their real debuffs and
-                                        damage-over-time effects to the target — which tick for
-                                        damage each round — and buff themselves with their own
-                                        abilities) or quick manual attack/defense lines. Each enemy
-                                        attacker has an affinity selector matched against the
+                                        another of your ships, or a manual stat line — then build an
+                                        enemy team that bombards it each round. A ship with a damage
+                                        ability hits the target; a support ship buffs the team.
+                                        Enemies can be real ships (their charged skills produce
+                                        realistic damage spikes, and they apply their real debuffs
+                                        and damage-over-time effects to the target — which tick for
+                                        damage each round — and buff themselves and their team with
+                                        their own abilities) or quick manual attack/defense lines.
+                                        Each enemy has an affinity selector matched against the
                                         target&apos;s affinity to scale their incoming damage. A
                                         hover-gated round status panel beside the Healing Over Time
                                         chart shows, for the hovered round and grouped per healer
@@ -2420,7 +2421,7 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Enemy Hacking &amp; Heal-Target Security:
                                         </span>{' '}
-                                        Each enemy attacker has a Hacking stat, and the heal target
+                                        Each enemy has a Hacking stat, and the heal target
                                         has a Security stat. An enemy&apos;s debuffs — both timed
                                         effects and damage-over-time — land based on its Hacking
                                         versus the target&apos;s Security: the higher the

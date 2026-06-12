@@ -30,7 +30,6 @@ import { HealTargetPanel, HealTargetState } from '../../components/calculator/He
 import {
     EnemyAttackersPanel,
     EnemyAttackerConfig,
-    MAX_ENEMY_ATTACKERS,
 } from '../../components/calculator/EnemyAttackersPanel';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
@@ -268,7 +267,6 @@ const HealingCalculatorPage: React.FC = () => {
 
     // ---- Enemy attacker handlers ----
     const addEnemy = () => {
-        if (enemies.length >= MAX_ENEMY_ATTACKERS) return;
         const n = nextEnemyIdRef.current++;
         setEnemies((prev) => [
             ...prev,
@@ -742,14 +740,14 @@ const HealingCalculatorPage: React.FC = () => {
                             <strong>Heal target.</strong> By default the healer heals itself. Pick a
                             separate target to model healing an ally — the target enters the
                             simulation as a real actor and walks its own kit (its self-heals and
-                            buffs apply), while the enemy attackers bombard it.
+                            buffs apply), while the enemy team bombards it.
                         </p>
                         <p>
                             <strong>Fully deterministic.</strong> The simulation contains no
                             randomness — identical inputs always produce identical results. Crits
                             use a fractional-accumulator schedule at the healer&apos;s effective
-                            crit rate. Each enemy attacker&apos;s affinity is matched against the
-                            heal target&apos;s affinity to scale its incoming damage.
+                            crit rate. Each enemy&apos;s affinity is matched against the heal
+                            target&apos;s affinity to scale its incoming damage.
                         </p>
                     </div>
                 </div>

@@ -97,6 +97,9 @@ function registerActorAbilityStatuses(
     castSkills: ShipSkills,
     statusEngine: ReturnType<typeof createStatusEngine>,
     ownerId: string,
+    // Same-side ally-recipient order for `ally`/`all-allies` cast buffs: player ids for player
+    // actors, enemy attacker ids for enemy actors. Named `playerIds` historically; for enemy
+    // actors the engine passes the enemy team's ids so cross-enemy buffs land on the enemy side.
     playerIds: string[],
     // Heal target id (healing mode) — the recipient a single-`ally` Cheat-Death-family
     // firing-slot grant narrows to (Hermes shape). Absent (DPS mode / no heal target) →
@@ -330,11 +333,15 @@ export function buildEnemyPlayerActorRuntime(
     e: EnemyActorInput,
     ctx: {
         statusEngine: StatusEngine;
-        playerIds: string[];
+        // Enemy-team recipient order (mirror of playerIds for player actors): the enemy ATTACKER
+        // ids in input order. An enemy supporter's `ally`/`all-allies` cast buffs route to THIS
+        // list so they land on the enemy team (raising other enemies' damage to the tank) instead
+        // of leaking onto the player team.
+        enemyIds: string[];
         enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
     }
 ): PlayerActorRuntime {
-    const { statusEngine, playerIds, enemyDebuffLookup } = ctx;
+    const { statusEngine, enemyIds, enemyDebuffLookup } = ctx;
 
     // Manual flat-card enemy (no shipSkills): synthesize a single basic-attack active slot
     // (100% multiplier, 1 hit, crit-eligible) so the runPlayerTurn walk produces byte-identical
@@ -364,13 +371,16 @@ export function buildEnemyPlayerActorRuntime(
     const { castSkills, reactiveAbilities } = partitionReactiveAbilities(sourceSkills);
 
     // Register this enemy actor's cast buff/debuff abilities (no-op for damage-only
-    // shipSkills; safe to call defensively). Own ownerId = actor id. playerIds is
-    // passed for ally-routing — irrelevant for pure damage actors.
+    // shipSkills; safe to call defensively). Own ownerId = actor id. `enemyIds` is the
+    // same-side ally-recipient order: an enemy supporter's `ally`/`all-allies` buff routes
+    // onto the ENEMY team (aura/accum fan out per enemy store; timed carry `recipients` for
+    // the per-recipient apply loop), so it folds into each enemy's own turn rather than
+    // leaking onto the player team.
     const { timedSelfBySlot, timedEnemyBySlot } = registerActorAbilityStatuses(
         castSkills,
         statusEngine,
         e.id,
-        playerIds
+        enemyIds
     );
 
     // hasChargedSkill: true only when the enemy banks charges (chargeCount >= 1) AND its
@@ -1319,6 +1329,10 @@ export function runCombat(input: CombatEngineInput): {
         }
         seenEnemyAttackerIds.add(e.id);
     }
+    // Enemy-team recipient order (mirror of playerIds): enemy ATTACKER ids in input order —
+    // NOT the dummy enemy.id (the victim stand-in). Equals enemyAttackerActorIds but computable
+    // before the runtimes map.
+    const enemyRecipientIds = enemyAttackerInputs.map((e) => e.id);
     // Build a full PlayerActorRuntime for each enemy attacker (Task 5), in input order.
     // Each enemy gets its OWN gate instances (determinism isolation), reactive-partitioned
     // abilities, neutral affinity placeholder, and real defence/hp. The enemy walks
@@ -1327,7 +1341,11 @@ export function runCombat(input: CombatEngineInput): {
     // Manual flat-card enemies (no shipSkills) are handled inside the builder by synthesizing
     // a single 100%/1-hit basic-attack active slot (parity with the retired EnemyAttackerRuntime).
     const enemyPlayerRuntimes: PlayerActorRuntime[] = enemyAttackerInputs.map((e) =>
-        buildEnemyPlayerActorRuntime(e, { statusEngine, playerIds, enemyDebuffLookup })
+        buildEnemyPlayerActorRuntime(e, {
+            statusEngine,
+            enemyIds: enemyRecipientIds,
+            enemyDebuffLookup,
+        })
     );
     const enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor);
     const enemyAttackerActorIds = enemyAttackerActors.map((a) => a.id);
