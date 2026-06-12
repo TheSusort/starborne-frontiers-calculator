@@ -2426,11 +2426,13 @@ const DocumentationPage: React.FC = () => {
                                         versus the target&apos;s Security: the higher the
                                         enemy&apos;s Hacking over the target&apos;s Security, the
                                         more reliably its debuffs stick (and high enough Security
-                                        can shrug them off entirely). Defaults: a freshly added
-                                        manual enemy starts at 200 Hacking (picking an enemy ship
-                                        fills Hacking from the ship&apos;s stats), and the
-                                        target&apos;s Security defaults to 0 — so debuffs land at
-                                        full chance until you raise the target&apos;s Security.
+                                        can shrug them off entirely). The exact landing chance is
+                                        (enemy Hacking − target Security), clamped to a 0–100%
+                                        range. Defaults: a freshly added manual enemy starts at 200
+                                        Hacking (picking an enemy ship fills Hacking from the
+                                        ship&apos;s stats), and the target&apos;s Security defaults
+                                        to 0 — so debuffs land at full chance until you raise the
+                                        target&apos;s Security.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

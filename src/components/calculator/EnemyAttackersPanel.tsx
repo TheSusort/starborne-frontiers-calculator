@@ -107,7 +107,7 @@ const EnemyCard: React.FC<{
                     onChange={(e) =>
                         onUpdate({ hacking: Math.max(0, parseInt(e.target.value) || 0) })
                     }
-                    helpLabel="The enemy's hacking stat. Debuffs land when it exceeds the heal target's security (landing chance = enemy hacking − target security)."
+                    helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%."
                 />
                 <Input
                     label="Charge Count"

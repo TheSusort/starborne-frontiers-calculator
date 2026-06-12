@@ -410,6 +410,83 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PR5 item 11 (POSITIVE half, enemy-buff) — status-grant gate reads LIVE enemy-buff
+// through runCombat. Mirrors the Task 6 Provoke test but for the enemy-buff/Taunt
+// subject: an enemy attacker BUFFS ITSELF with Taunt (enemy-buff reads the enemy's
+// OWN self-buffs via playerEnemyBuffNames(), NOT a debuff applied to the player), and
+// the player's Taunt-gated self-buff GRANT fires once that enemy holds Taunt. Proves
+// the engine sources the live enemyBuffNames array from real enemy self-buffs.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('status-grant gate path — LIVE enemy-buff/Taunt positive (item 11)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `eb-taunt${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    // An enemy attacker that grants ITSELF a 99-turn 'Taunt' self-buff. attack 1, speed 1 →
+    // it acts AFTER the focus, so round 1 the grant gate still sees no enemy Taunt; round 2
+    // playerEnemyBuffNames() returns ['Taunt'] for the enemy and the gate is live.
+    const tauntEnemy = (): EnemyAttacker =>
+        ({
+            id: 'e1',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            enemyAb({
+                                type: 'damage',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                            enemyAb({
+                                type: 'buff',
+                                target: 'self',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Taunt',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 99,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        }) as EnemyAttacker;
+
+    it('an enemy-buff(Taunt)-gated self-buff GRANT FIRES once an enemy holds Taunt (live)', () => {
+        idCounter = 0;
+        const cond: Ability['conditions'] = [
+            { subject: 'enemy-buff', derivable: true, buffName: 'Taunt' },
+        ];
+        const result = runCombat(
+            GRANT_BASE({
+                shipSkills: grantGatedSelfBuffSkill(cond),
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                enemyAttackers: [tauntEnemy()],
+            })
+        );
+        // Round 1: focus (faster) acts before the enemy self-buffs Taunt → gate sees no enemy
+        //          buff → grant does NOT fire → base directDamage 10000.
+        // Round 2: the enemy holds Taunt → playerEnemyBuffNames() returns ['Taunt'] → engine
+        //          threads it as enemyBuffNames → gate passes → +100% attack self-buff is
+        //          GRANTED and couples into the same round's outgoing damage → 20000.
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Task 9b (item 12 completion) — TIMED enemy-debuff inflictions honor the
 // per-enemy `debuffLandingChance`.
 //

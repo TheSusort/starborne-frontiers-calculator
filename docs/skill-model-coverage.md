@@ -1074,11 +1074,11 @@ buff/charge-aura), source it from firing + passive.
     applies affinity to hacking. This is an accepted approximation in the healing-calculator
     landing path.
   - **Default behaviour:** the heal-target `security` input defaults to **0** (⇒ debuffs land at
-    up to 100%, preserving prior behaviour when security is unset). However a fresh MANUAL enemy
-    defaults to `hacking: 0` ⇒ its debuffs now NEVER land until the user sets enemy hacking or
-    picks an enemy ship (which auto-fills `ship.stats.hacking`). Previously enemy debuffs always
-    landed at 100% regardless. **Users must set enemy hacking (or pick an enemy ship) for enemy
-    debuffs to land.**
+    up to 100%, preserving prior behaviour when security is unset). A fresh MANUAL enemy defaults
+    to `hacking: 200` (matching the DPS-side player-hacking convention), and picking an enemy ship
+    auto-fills `ship.stats.hacking`. So enemy debuffs land by default against typical security —
+    landing chance is `clamp(hacking − security, 0, 100) / 100` — and the user raises the
+    heal-target `security` to reduce it.
 
 ---
 
@@ -1387,6 +1387,20 @@ configure it and it looks like it works, but it does nothing".
 >   gate draws).
 > - **4d Targeting + multi-enemy** — taunt/stealth/provoke targeting; multiple enemies;
 >   AoE; death-fallback re-targeting.
+> - **Enemy-team support (follow-up after 4d)** — enemy supporters that buff enemy
+>   attackers in the healing calculator's enemy ship section. Today each enemy walks
+>   `runPlayerTurn` (Phase 4a) but is an island bound solely to the heal target as its
+>   victim: `grantAllyCharges` is omitted for the enemy walk (`engine.ts` ~2608, "its
+>   allies are enemy-side, not the player team") and 4c PR 4's enemy heal/cleanse is
+>   `healEventOnly` (emits events, credits no bucket, routes to no enemy recipient). There
+>   is no enemy *team* an enemy buff can land on. Requires: (1) the multi-enemy team
+>   foundation from 4d; (2) enemy-side `ally`/`all-allies` buff routing to other enemies —
+>   the mirror of 4c PR 2's player-side ally routing — so a support ship's Attack Up raises
+>   the bound attacker's effective stats; (3) per-enemy buff stores + stat re-derivation at
+>   the attacker's turn; (4) an enemy "supporter" slot in the enemy ship section UI. Builds
+>   on the 4a full-actor enemy walk and the 4c `isEnemySide` predicate; the ally-routing and
+>   enemy-team UI are net-new. Slot AFTER 4d (the enemy team must exist before enemies can
+>   buff within it).
 > - **4e Consumption & mitigation** — cleanse debuff consumption (today output-count only),
 >   purge, control effect simulation (stasis/taunt/provoke effects), damage reduction/reflect.
 > - **4f Defense-calc adoption** — defense calculator on the engine.

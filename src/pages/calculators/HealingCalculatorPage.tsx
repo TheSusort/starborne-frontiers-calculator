@@ -303,7 +303,7 @@ const HealingCalculatorPage: React.FC = () => {
                     crit: Math.round(final.crit ?? 0),
                     critDamage: Math.round(final.critDamage ?? 0),
                     speed: Math.round(final.speed ?? 50),
-                    hacking: Math.round(final.hacking ?? 0),
+                    hacking: Math.round(final.hacking ?? 200),
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
                     shipSkills: buildShipAbilities(ship),
