@@ -133,6 +133,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             debuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
+    // defence/maxHp/heal fields are sentinels not read by the damage branch.
     const makePlayerRoundCtx = (effectiveAttack: number, affinityMult: number): PlayerRoundCtx => ({
         effectiveAttack,
         dotMult: 1,
@@ -197,6 +198,18 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
 
         credited.length = 0;
         executeIntent(makeDamageIntent('grif-noctx'), ctx);
+        expect(credited).toHaveLength(0);
+    });
+
+    it('skips creditReactiveDamage when effectiveAttack is 0 (zero-damage guard)', () => {
+        // Owner ctx present but effectiveAttack is 0 → amount is 0 → guard swallows it,
+        // creditReactiveDamage must NOT be called.
+        const credited: { ownerId: string; amount: number }[] = [];
+        const ctx = makeExecCtx({
+            creditReactiveDamage: (ownerId, amount) => credited.push({ ownerId, amount }),
+            lastTurnCtxByActor: new Map([['grif', makePlayerRoundCtx(0, 1.5)]]),
+        });
+        executeIntent(makeDamageIntent('grif'), ctx);
         expect(credited).toHaveLength(0);
     });
 });

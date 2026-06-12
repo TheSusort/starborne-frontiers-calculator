@@ -993,12 +993,16 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'damage') {
         // Reactive direct-damage proc (Grif's on-enemy-cleansed "75% Damage that cannot
         // critically hit"). Bomb-style fold from the owner's last-turn ctx: effectiveAttack
-        // × pct × affinityMult, NO enemy-defense mitigation (documented approximation,
-        // mirrors the bomb path) and NO crit. Before the owner's first turn (faster enemy,
-        // round 1) there is no ctx → skip, exactly like a bomb follow-up. Emits NO event → no chain.
+        // × multiplier × hits × affinityMult, NO enemy-defense mitigation (documented
+        // approximation, mirrors the bomb path) and NO crit. Folds `hits` like the cast path
+        // (single-hit for Grif today, but multi-hit-correct). Before the owner's first turn
+        // (faster enemy, round 1) there is no ctx → skip, exactly like a bomb follow-up.
+        // Emits NO event → no chain.
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
         if (ownerCtx === undefined) return;
-        const amount = ownerCtx.effectiveAttack * cfg.multiplier * ownerCtx.affinityMult;
+        const amount =
+            ownerCtx.effectiveAttack * cfg.multiplier * (cfg.hits ?? 1) * ownerCtx.affinityMult;
+        // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc credits nothing).
         if (amount > 0) ctx.creditReactiveDamage?.(intent.ownerId, amount);
         return;
     }
