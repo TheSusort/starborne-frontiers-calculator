@@ -50,13 +50,15 @@ A new dedicated parser in `skillTextParser.ts`, mirroring the `parseAllyChargeOn
 - **Match shape:** an "adds/grants N charge(s) to … Charged Skill" phrase whose recipient is **all allies** — either explicit ("of all allies", "all allies' Charged Skill") or via the antecedent "their Charged Skill" when the same sentence grants something "to all allies" (Hayyan: "grants Cheat Death to all allies, and adds 1 charge to their Charged Skill"). MUST NOT match self phrasings ("adds 1 charge to its Charged Skill" — Hermes/Asphodel/Chakara/Cobalt) or "gains N charge" (self).
 - **Trigger:** `start-of-round` when the clause is start-of-round-scoped ("At the start of the round …" — Graphite); else `on-cast` (Hayyan's charged rider). Reuse the existing start-of-round detection (`START_OF_ROUND_RE` / `detectReactiveTrigger`, shared masking for abbreviation periods).
 - **Condition:** Graphite's "if an enemy has Stealth" → an `enemy-buff` (Stealth) condition, `derivable:true` (live since PR5). Hayyan → no condition. The "within the active pattern" scope is dropped (≈ all-allies).
-- **Amount:** the numeral in the text (Graphite is "1/2 charges" across refit tiers; refit resolution is already upstream via `getShipSkillRows`, so the parser sees one number).
+- **Amount:** the numeral in the text (Graphite is "1/2 charges" across refit tiers; refit resolution is already upstream via `getShipSkillRows`, so the parser sees one number). NOTE the live CSV has the plural-with-singular typo "adds 1 charges" / "adds 2 charges" — the regex must tolerate `charges?` (as `SELF_CHARGE_ADD_RE` already does); add an explicit test for the plural-with-`1` form.
 
 ### 3.2 Engine — cast-path charged-action gap
 
 `playerTurn.ts:1238` grants ally charges only when `action === 'active'` (written for Hermes, whose grant is on the active skill). Hayyan's grant rides the **charged** skill, so it is currently never granted. Generalize the gate to fire on the firing action — `action === 'active' || action === 'charged'` — reading the firing skill's ally-charge via the existing `chargeGainFromSkill({ targetFilter: 'ally' })`. Verify `gatedSkill` resolves to the firing skill on a charged turn. Graphite's `start-of-round` grant does NOT use this block (it partitions into the reactive path and fires via `executeIntent`'s charge branch).
 
 This is a shared change: it fixes the player cast path AND the enemy walk (which runs the same `runPlayerTurn`).
+
+**Partition guard (avoid double-grant):** the cast-path block sums ally-charge from BOTH the firing skill (`gatedSkill`) AND the passive (`gatedPassive`). Graphite's grant lives in a passive slot but is a `start-of-round` ability, so it MUST be partitioned out of `castSkills` into the reactive set (`partitionReactiveAbilities`) and fire only via `executeIntent` — not also be summed into `gatedPassive` here (which would double-grant: once on-cast, once reactive). The existing partition keys on the reactive trigger, so a correctly-`start-of-round`-tagged Graphite charge ability is excluded from the cast aggregation automatically; the plan must verify this (a parser test asserting the Graphite ability carries `start-of-round`, and an engine test asserting a single grant per round).
 
 ### 3.3 Engine — enemy `grantAllyCharges` mirror
 
