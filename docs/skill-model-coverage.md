@@ -1433,7 +1433,10 @@ configure it and it looks like it works, but it does nothing".
 >     goldens byte-identical. STILL PENDING (PR2/PR3): cross-enemy `ally`/`all-allies` cast-path
 >     routing (`registerActorAbilityStatuses` at `engine.ts` ~369 still routes enemy cast buffs to
 >     `playerIds`), per-recipient aura registration onto enemy ids, the UI rename + cap removal, and
->     enemy `grantAllyCharges`. **ORIGINAL sub-item text (for reference):** An enemy attacker's reactive abilities
+>     enemy `grantAllyCharges`. ALSO LATENT (PR2/targeting): `selfHpPctFor` (`engine.ts` ~2164) returns
+>     100 for any id `!== healTarget.id`, so a future enemy reactive gated on its OWN self-HP% always
+>     sees 100% — inert in PR1 (only `round-started` fires enemy-side; enemies aren't damaged in
+>     single-target healing mode) but must be addressed once enemies can take damage. **ORIGINAL sub-item text (for reference):** An enemy attacker's reactive abilities
 >     (e.g. `start-of-round` self-buffs — Chakara's lowest-speed Attack Up / Defense Up) are
 >     partitioned + stored on its runtime but are NEVER registered as listeners:
 >     `registerReactiveListeners` only gets `reactivePerOwner` = `'attacker'` + walked team
