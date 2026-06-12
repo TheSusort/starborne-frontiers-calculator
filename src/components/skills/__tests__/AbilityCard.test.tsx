@@ -224,9 +224,23 @@ describe('AbilityCard', () => {
             expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
         });
 
-        it('does not render a Trigger select for damage abilities', () => {
+        it('renders a Trigger select for damage abilities (reactive damage procs need it)', () => {
+            // Phase 4c PR 4: Grif's on-enemy-cleansed "75% Damage" proc is a reactive damage
+            // ability — its trigger must be editable. A plain on-cast damage now shows the
+            // Trigger dropdown too (defaulting to on-cast), consistent with every other type.
+            const reactiveDamage: Ability = {
+                ...damageAbility,
+                trigger: 'on-enemy-cleansed',
+            };
+            render(<AbilityCard ability={reactiveDamage} onChange={vi.fn()} onRemove={vi.fn()} />);
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
+            // The selected reactive trigger label is shown.
+            expect(screen.getByText('When an enemy cleanses a debuff')).toBeInTheDocument();
+        });
+
+        it('renders a Trigger select for a plain on-cast damage ability too', () => {
             render(<AbilityCard ability={damageAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
-            expect(screen.queryByLabelText('Trigger')).not.toBeInTheDocument();
+            expect(screen.getByLabelText('Trigger')).toBeInTheDocument();
         });
 
         it('calls onChange with the new trigger when an option is selected', () => {

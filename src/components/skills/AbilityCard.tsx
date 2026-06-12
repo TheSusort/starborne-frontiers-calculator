@@ -763,7 +763,11 @@ export const AbilityCard: React.FC<Props> = ({
                 ability.type === 'charge' ||
                 ability.type === 'heal' ||
                 ability.type === 'shield' ||
-                ability.type === 'cleanse') && (
+                ability.type === 'cleanse' ||
+                // Reactive damage procs (Grif's on-enemy-cleansed "75% Damage") need the trigger
+                // editor too. A plain on-cast damage now shows the Trigger dropdown (defaulting to
+                // on-cast) — acceptable and consistent with every other type.
+                ability.type === 'damage') && (
                 <>
                     <Select
                         label="Trigger"
