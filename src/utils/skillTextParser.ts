@@ -1407,6 +1407,44 @@ export function parseAllyChargeOnEnemyDeath(
     return { amount };
 }
 
+// Hayyan / Graphite (enemy-team PR3): an all-allies charge-bar grant — distinct from
+// parseChargeGain's self-targeted contract (which disqualifies "all allies" / "their
+// charged skill" / "charged skill of all allies"). Two real phrasings:
+//   • Hayyan (charged slot): "…and adds 1 charge to their Charged Skill." → on-cast, no condition.
+//   • Graphite (third passive): "At the start of the round, if an enemy Unit has Stealth, this
+//     Unit adds 1/2 charges to the charged skill of all allies within the active pattern."
+//     → start-of-round, gated on enemy-has-Stealth.
+// Tolerates the live CSV plural-with-1 typo ("adds 1 charges"). Reference: docs/ship-skills.csv.
+// Lookbehind-free; matches both "to their Charged Skill" and "to the charged skill of all allies".
+const ALLY_CHARGE_GRANT_RE =
+    /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+all\s+allies)/i;
+// Graphite's gate: "if an enemy (Unit) has Stealth".
+const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
+
+/**
+ * Parses Hayyan's / Graphite's all-allies charge-bar grant. Returns the per-ally charge
+ * amount, the trigger ('on-cast' for Hayyan, 'start-of-round' for Graphite — detected
+ * directly via START_OF_ROUND_RE, NOT detectReactiveTrigger which is buff-name-scoped),
+ * and a `condition` flag set when the grant is gated on an enemy having Stealth (Graphite).
+ * Returns null when no ally-charge phrase matches — self-charge ships fall through to
+ * parseChargeGain (whose CHARGE_DISQUALIFY_RE already rejects these ally phrasings).
+ */
+export function parseAllyChargeGrant(
+    text: string | null | undefined
+): { amount: number; trigger: 'on-cast' | 'start-of-round'; condition?: boolean } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    const m = ALLY_CHARGE_GRANT_RE.exec(plain);
+    if (!m) return null;
+    const raw = m[1].toLowerCase();
+    const amount = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+    if (!amount || isNaN(amount)) return null;
+
+    const trigger = START_OF_ROUND_RE.test(plain) ? 'start-of-round' : 'on-cast';
+    const condition = ALLY_CHARGE_ENEMY_STEALTH_RE.test(plain);
+    return { amount, trigger, ...(condition ? { condition: true } : {}) };
+}
+
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
 // Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges

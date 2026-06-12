@@ -7,6 +7,7 @@ import {
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
+    parseAllyChargeGrant,
     detectGrantConditions,
     parseHpThresholdCondition,
     parseExtendDoT,
@@ -1312,6 +1313,49 @@ describe('parseChargeGain', () => {
         ).toBeNull();
         expect(parseChargeGain('')).toBeNull();
         expect(parseChargeGain(null)).toBeNull();
+    });
+});
+
+describe('parseAllyChargeGrant', () => {
+    it('parses Hayyan on-cast all-allies grant (no condition)', () => {
+        const text =
+            'This Unit <unit-damage>repairs 17%</unit-damage> of its Max HP, grants <unit-skill>Cheat Death</unit-skill> to all allies, and <unit-aid>adds 1 charge</unit-aid> to their Charged Skill.';
+        expect(parseAllyChargeGrant(text)).toEqual({
+            amount: 1,
+            trigger: 'on-cast',
+        });
+    });
+
+    it('parses Graphite start-of-round all-allies grant (amount 2) with enemy-Stealth condition', () => {
+        const text =
+            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 2 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+        expect(parseAllyChargeGrant(text)).toEqual({
+            amount: 2,
+            trigger: 'start-of-round',
+            condition: true,
+        });
+    });
+
+    it('tolerates the plural-with-1 CSV typo "adds 1 charges" — Graphite R-tier', () => {
+        const text =
+            'At the start of the round, if an enemy Unit has <unit-skill>Stealth</unit-skill>, this Unit <unit-aid>adds 1 charges</unit-aid> to the charged skill of all allies within the active pattern.';
+        expect(parseAllyChargeGrant(text)).toEqual({
+            amount: 1,
+            trigger: 'start-of-round',
+            condition: true,
+        });
+    });
+
+    it('returns null for a self-charge add (self-charge lock — Hermes/Asphodel/Chakara/Cobalt)', () => {
+        expect(parseAllyChargeGrant('adds 1 charge to its Charged Skill')).toBeNull();
+    });
+
+    it('returns null when there is no ally-charge phrase', () => {
+        expect(
+            parseAllyChargeGrant('This Unit deals <unit-damage>140% damage</unit-damage>.')
+        ).toBeNull();
+        expect(parseAllyChargeGrant('')).toBeNull();
+        expect(parseAllyChargeGrant(null)).toBeNull();
     });
 });
 
