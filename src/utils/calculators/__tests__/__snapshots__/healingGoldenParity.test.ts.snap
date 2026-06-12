@@ -2588,6 +2588,148 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
 }
 `;
 
+exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self-buff on enemy cleanse) 1`] = `
+{
+  "rounds": [
+    {
+      "action": "active",
+      "activeSelfBuffs": [],
+      "barrierAbsorbed": 0,
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 0,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [],
+      "hotHeal": 0,
+      "incomingDamage": 0,
+      "overheal": 0,
+      "round": 1,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 0,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "barrierAbsorbed": 0,
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 0,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 0,
+      "overheal": 0,
+      "round": 2,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 0,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "barrierAbsorbed": 0,
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 0,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 0,
+      "overheal": 0,
+      "round": 3,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 0,
+    },
+    {
+      "action": "active",
+      "activeSelfBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "barrierAbsorbed": 0,
+      "chargeCount": 0,
+      "charges": 0,
+      "cleanseCount": 0,
+      "cumulativeHealing": 0,
+      "didCrit": false,
+      "directHeal": 0,
+      "effectiveHealing": 0,
+      "enemyEffects": [],
+      "healTargetBuffs": [
+        {
+          "buffName": "Vigor Up",
+          "turnsRemaining": 2,
+        },
+      ],
+      "hotHeal": 0,
+      "incomingDamage": 0,
+      "overheal": 0,
+      "round": 4,
+      "shield": 0,
+      "shieldAbsorbed": 0,
+      "targetHpPct": 100,
+      "targetShieldPool": 0,
+      "totalRoundHealing": 0,
+    },
+  ],
+  "summary": {
+    "avgHealingPerRound": 0,
+    "totalBarrierAbsorbed": 0,
+    "totalCleanses": 0,
+    "totalDirectHeal": 0,
+    "totalEffectiveHealing": 0,
+    "totalHealing": 0,
+    "totalHotHeal": 0,
+    "totalIncomingDamage": 0,
+    "totalOverheal": 0,
+    "totalShield": 0,
+    "totalShieldAbsorbed": 0,
+  },
+}
+`;
+
 exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard the heal target) 1`] = `
 {
   "rounds": [
