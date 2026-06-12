@@ -1511,6 +1511,32 @@ configure it and it looks like it works, but it does nothing".
 >   `healEventOnly`) into per-actor-per-side accounting with a symmetric result surface. **Directive:
 >   design the targeting/simulator phase side-symmetric from the start; do NOT do a standalone
 >   "unify the mirrors" refactor before then (it would be largely redone by this work).**
+> - **PLAYER (ALLY) TEAM vs ENEMY TEAM coverage (standing reference; post enemy-team PR1–3, 2026-06-12).**
+>   Legend: ✅ supported & exercised · ⚠️ wired but DORMANT (machinery exists; the triggering event
+>   can't occur in single-target healing mode) · ◐ partial · — moot/not modeled.
+>
+>   | Mechanic | Player/ally | Enemy | Notes |
+>   |---|---|---|---|
+>   | Active/charged damage (multi-hit, secondary, conditional) | ✅ | ✅ | Enemy walks the same `runPlayerTurn` (4a); its damage credits as INCOMING to the tank (single scalar, not a per-actor map) |
+>   | DoTs (Corrosion/Inferno) + bombs | ✅ | ✅ | Enemy DoTs land on the tank, tick at the tank's turn |
+>   | Debuffs on the opposing side | ✅ | ✅ | Enemy debuffs land on the tank, gated by hacking vs tank security (4c PR5) |
+>   | Self-buffs — cast | ✅ | ✅ | 4a |
+>   | Self-buffs — reactive (start-of-round) | ✅ | ✅ | enemy-team PR1 (Chakara-as-enemy) |
+>   | Ally / all-allies buffs | ✅ | ✅ | enemy-team PR2 — routes to the enemy team via `enemyIds` |
+>   | Charge cadence + ally-charge grants | ✅ | ✅ | enemy-team PR3 (`grantEnemyAllyCharges`) |
+>   | Auras (recurring passives) | ✅ | ✅ | per-recipient registration both sides |
+>   | Reactive: on-attacked / on-ally-attacked / on-crit / hp-threshold-crossed / on-destroyed family / on-enemy-repaired·cleansed | ✅ full suite | ⚠️ dormant | Listeners register enemy-side, but the events never fire: the tank deals no return damage, so enemies are never attacked/crit-hit/killed and have no attacked allies. Only `round-started` (+ on-cast) fire enemy-side today |
+>   | Heals / shields / cleanse | ✅ full | ⚠️ event-only | Enemy heals emit events (`healEventOnly`) but credit nothing / heal no one — moot since enemies take no damage |
+>   | Death / revive / Cheat Death | ✅ | — moot | Enemies don't die in single-target healing mode |
+>   | Condition gating (live) | ✅ | ◐ | Gap: an enemy's `enemy-buff` gate on the reactive DRAIN reads the enemy attackers' OWN buffs (drain `enemyAttackerIds` is the same for both sides), not the player team — e.g. enemy Graphite's "if an enemy has Stealth" stays dormant. Pre-existing PR1/PR2 drain-ctx asymmetry |
+>
+>   **Bottom line:** for what the healing calc measures — incoming damage to the tank — the enemy side is at
+>   EFFECTIVE PARITY (damage, DoTs, debuffs, self/team buffs, charge acceleration all real). The residual
+>   asymmetry is STRUCTURAL, not missing features: reactive triggers are dormant only because no one attacks
+>   the enemies; heal/cleanse/death are event-only/moot because enemies are invulnerable here; the enemy-buff
+>   drain-gate reads the wrong side. All three dissolve in the deferred targeting/simulator phase (real
+>   two-way damage lights up enemy reactives; `bySide` unification fixes the gate source) — see the
+>   TEAM-AGNOSTIC principle above.
 
 1. **Editor fields + validation for the no-op types** *(shipped 2026-06-03, PR #76 — Phase 0,
    feat/editor-noop-guardrails)* — config fields rendered and "not simulated" labels added for
