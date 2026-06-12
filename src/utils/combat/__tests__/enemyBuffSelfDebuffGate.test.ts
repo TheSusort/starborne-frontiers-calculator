@@ -325,6 +325,90 @@ describe('status-grant gate path — flat self-debuff/Provoke (item 11, Step 5b)
     });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 6 (POSITIVE half) — status-grant gate reads LIVE self-debuff through runCombat.
+//
+// Task 5 proved the NEGATIVE half: with no live Provoke on the tank, a flat
+// self-debuff(Provoke)-gated self-buff GRANT does NOT fire. This locks the POSITIVE
+// half end-to-end: when the tank/heal-target ACTUALLY carries a Provoke debuff (landed
+// by an enemy attacker), the same gated GRANT IS granted — proving the engine threads
+// the live `ownerDebuffNamesFor(...)` array into the status-grant gating context
+// (engine.ts registerActorAbilityStatuses → playerTurn timedSelfBySlot conditionsMet,
+// fed selfDebuffNames at the engine.ts ~2228/2307 playerTurn sites). Provoke is sourced
+// the realistic way: an enemy attacker applies a 99-turn Provoke debuff to the tank.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+        id: `t6${++idCounter}`,
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        ...partial,
+    });
+
+    // An enemy attacker that lands a 99-turn 'Provoke' debuff on whatever it targets
+    // (the heal target / tank). attack 1, speed 1 → it acts AFTER the focus, so round 1
+    // the grant gate still sees no Provoke; round 2 it is live.
+    const provokeEnemy = (): EnemyAttacker =>
+        ({
+            id: 'e1',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            enemyAb({
+                                type: 'damage',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                            enemyAb({
+                                type: 'debuff',
+                                target: 'enemy',
+                                config: {
+                                    type: 'debuff',
+                                    buffName: 'Provoke',
+                                    parsedEffects: {},
+                                    stacks: 1,
+                                    isStackable: false,
+                                    application: 'inflict',
+                                    duration: 99,
+                                },
+                            }),
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        }) as EnemyAttacker;
+
+    it('a Provoke-gated self-buff GRANT FIRES once an enemy lands Provoke on the tank (live)', () => {
+        idCounter = 0;
+        // Same grant fixture as the NEGATIVE flat test above (self-buff +100% attack, 99 turns,
+        // gated on a derivable self-debuff 'Provoke'). Here an enemy actually Provokes the tank.
+        const cond: Ability['conditions'] = [
+            { subject: 'self-debuff', derivable: true, buffName: 'Provoke' },
+        ];
+        const result = runCombat(
+            GRANT_BASE({
+                shipSkills: grantGatedSelfBuffSkill(cond),
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                enemyAttackers: [provokeEnemy()],
+            })
+        );
+        // Round 1: focus (faster) acts before the enemy lands Provoke → gate sees no self-debuff
+        //          → grant does NOT fire → base directDamage 10000.
+        // Round 2: Provoke is live on the tank → ownerDebuffNamesFor returns ['Provoke'] →
+        //          engine threads it as selfDebuffNames → gate passes → +100% attack self-buff
+        //          is GRANTED and couples into the same round's outgoing damage → 20000.
+        expect(result.rounds[0].directDamage).toBe(10000);
+        expect(result.rounds[1].directDamage).toBe(20000);
+    });
+});
+
 describe('status-grant gate path — count-scaled self-debuff (item 11, Step 4)', () => {
     it('a self-debuff-COUNT-scaled buff GRANT is not granted at round 1 with no debuffs (net-zero)', () => {
         idCounter = 0;
