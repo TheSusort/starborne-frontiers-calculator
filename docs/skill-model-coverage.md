@@ -1377,7 +1377,11 @@ configure it and it looks like it works, but it does nothing".
 >   manual by design) + §6 item 12 enemy hacking landing roll for timed-status AND DoT inflictions
 >   (`clamp(enemyHacking − healTargetSecurity, 0, 100)/100`; adapter omits affinity; heal-target
 >   security + per-enemy hacking inputs) (see §5 PHASE 4c PR 5).
-> - **4c PR 6 — pending** — §6 item 10 Chakara `lowest-speed-ally` condition subject.
+> - **4c PR 6 — SHIPPED 2026-06-12** (`feat/combat-engine-phase4c-pr6-chakara-lowest-speed`):
+>   §6 item 10 Chakara `lowest-speed-ally` condition subject — new condition subject + parser
+>   `"starts each round with X and Y"` extraction at a `start-of-round` trigger; live-gated via
+>   the engine `IntentExecContext.isLowestSpeedAllyFor` delegate (player-team static speeds)
+>   consumed in `buildDrainContext` (see §5 PHASE 4c PR 6).
 > - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
 >   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
 >   FrontLine R4 enemy-charged-skill leech shield; result-surface for counter-debuffs on
@@ -1477,7 +1481,11 @@ configure it and it looks like it works, but it does nothing".
    - *9c. Tithonus purge-count* — DEFERRED to **4e**. Extra action after purging 4+ buffs in a
      single skill — requires purge mechanics (cleanse/purge consumption modeling). Remains an
      assume-active annotation ability until then.
-10. **Chakara lowest-speed buff-condition gap** — Chakara's third passive applies Attack Up II
+10. **Chakara lowest-speed buff-condition gap — SHIPPED 2026-06-12 (Phase 4c PR 6).** New
+    `lowest-speed-ally` condition subject; `"starts each round with X and Y"` extraction at a
+    `start-of-round` trigger; live-derived from the player team's static speeds via the engine
+    `IntentExecContext.isLowestSpeedAllyFor` delegate consumed in `buildDrainContext`. Original
+    gap: Chakara's third passive applies Attack Up II
     and Defense Up II at round start when it has the lowest Speed among allies. The parser
     currently emits only the passive damage ability (60% to the highest Speed Enemy); the two
     buff abilities with the lowest-speed condition are not extracted (condition subject has no
