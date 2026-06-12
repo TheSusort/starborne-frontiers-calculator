@@ -426,6 +426,72 @@ describe('RoundStatusPanel', () => {
         expect(screen.getByText('Inferno I ×5')).toBeInTheDocument();
     });
 
+    it("renders an enemy's resisted debuffs with the resisted treatment alongside landed ones", () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [{ buffName: 'Defense Down', turnsRemaining: 2 }],
+                                    dots: [],
+                                    resistedDebuffs: [
+                                        { buffName: 'Attack Down', turnsRemaining: 2 },
+                                    ],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        // The resisted debuff name renders with the "resisted" label.
+        expect(screen.getByText('Attack Down')).toBeInTheDocument();
+        expect(screen.getByText('resisted')).toBeInTheDocument();
+    });
+
+    it('still surfaces an enemy that ONLY resisted debuffs (landed nothing)', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [],
+                                    dots: [],
+                                    resistedDebuffs: [{ buffName: 'Stun', turnsRemaining: 1 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        // The enemy group renders even though it landed nothing.
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        expect(screen.getByText('Stun')).toBeInTheDocument();
+        expect(screen.getByText('resisted')).toBeInTheDocument();
+        // Not collapsed to the empty note.
+        expect(screen.queryByText(/no buffs or effects this round/i)).not.toBeInTheDocument();
+    });
+
     it('hides zero-stack heal-target buffs and omits the section when the target has nothing', () => {
         render(
             <RoundStatusPanel

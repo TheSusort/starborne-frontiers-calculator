@@ -83,7 +83,11 @@ const ConfigSection: React.FC<{
         (b) => b.stacks === undefined || b.stacks > 0
     );
     const enemyEffects = (roundData?.enemyEffects ?? []).filter(
-        (e) => e.selfBuffs.length > 0 || e.debuffs.length > 0 || e.dots.length > 0
+        (e) =>
+            e.selfBuffs.length > 0 ||
+            e.debuffs.length > 0 ||
+            e.dots.length > 0 ||
+            e.resistedDebuffs.length > 0
     );
     // Heal Target section: the target's OWN active buffs (Cheat Death, Barrier, etc.) plus the
     // debuffs/DoTs on it AGGREGATED across every enemy for a target-centric view, then DEDUPED/
@@ -197,6 +201,21 @@ const ConfigSection: React.FC<{
                                             key={`tdeb-${b.buffName}-${j}`}
                                             buff={b}
                                             variant="enemy"
+                                        />
+                                    ))}
+                                </>
+                            )}
+                            {enemy.resistedDebuffs.length > 0 && (
+                                <>
+                                    <div className="text-xs text-theme-text-secondary mt-1 mb-1">
+                                        Resisted
+                                    </div>
+                                    {enemy.resistedDebuffs.map((b, j) => (
+                                        <BuffRow
+                                            key={`tres-${b.buffName}-${j}`}
+                                            buff={b}
+                                            variant="enemy"
+                                            resisted
                                         />
                                     ))}
                                 </>
