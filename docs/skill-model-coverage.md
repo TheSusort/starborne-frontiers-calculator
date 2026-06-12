@@ -14,6 +14,7 @@
 > Updated **2026-06-10** after the Phase 4c PR 2 on-ally-attacked reactives increment (branch `feat/combat-engine-phase4c-ally-damage`): new ally-scoped per-hit `on-ally-attacked` trigger with `triggerCritFilter` + `roleFilter` (category prefix match; unknown role = dormant); `eventCtx.damagedAllyId` routes 'ally'-target payloads to exactly the damaged ally; roles thread from ship data (`Ship.type` → page auto-fill → `roleByActorId`); Cultivator/Refine/Graphite/Guardian-ally-Provoke/Heliodor-p2 live; editor trigger + ally-role-filter controls (see §5 PHASE 4c PR 2, §6).
 > Updated **2026-06-11** after the Phase 4c PR 3 on-hp-threshold-crossed increment (branch `feat/combat-engine-phase4c-hp-crossing`): new `on-hp-threshold-crossed` trigger fed by a tank-side `hp-changed` event (once per HP-intake event — enemy attack or DoT batch; downward crossing only); drain-time scrub of the trigger-defining self hp-threshold; `oncePerCombat` extended to buff grants; cast-path Cheat-Death carve-out (Hermes charged grant narrowed to heal-target-under-40% via `hpSubject:'target'`; Hayyan on charged-skill fire); Tycho/Shelter/Los/Kafa/Redeemer live (see §5 PHASE 4c PR 3, §6).
 > Updated **2026-06-12** after the Phase 4c PR 4 enemy-action reactions increment (branch `feat/combat-engine-phase4c-enemy-actions`): event-only enemy heal/cleanse emission (`heal-performed`/`cleanse-performed`); new `on-enemy-repaired`/`on-enemy-cleansed` triggers (both `isEnemySide(casterId)` filtered); reactive `damage` executor branch (bomb-style fold, no enemy-defense mitigation); Zosimos/Arum/Yarrow/Larkspur/Grif live; Zosimos charge-sabotage UNMODELED; Arum all-cleansed-enemies → singular focus approximation; Pestilence enemy-cleanse Corrosion II orphan documented in §6 (see §5 PHASE 4c PR 4, §6).
+> Updated **2026-06-12** after the Phase 4c PR 5 enemy-realism pair (branch `feat/combat-engine-phase4c-pr5-enemy-realism`): `enemy-buff` / Taunt (enemy-buff) / Provoke (self-debuff) GATE conditions flipped from assume-active to live-0 (read live `enemyBuffNames`/`selfDebuffNames`, 0 at combat start) on the modifier/damage AND status-grant paths (`enemy-buff`/`self-debuff` added to `LIVE_SUBJECTS`) — the *charge-gain* enemy-buff gates stay manual by design (DPS charge cast-path has no live enemy-buff data); enemy attackers gain an optional `hacking` stat so their debuff inflictions (timed status AND DoT) land via `clamp(enemyHacking − healTargetSecurity, 0, 100)/100` instead of hard-coded 100%, with a new heal-target `security` input (adapter landing omits affinity — documented approximation); §6 items 11 & 12 closed (see §5 PHASE 4c PR 5, §6).
 > Purpose: a single source of truth for what the ability model can *express*, what the
 > parser *auto-fills*, what the editor *exposes*, and what the DPS sim actually
 > *consumes* — so new sim features can be introduced in a structured, prioritized way.
@@ -1025,6 +1026,60 @@ buff/charge-aura), source it from firing + passive.
   it per-cast or per-event?); Zosimos charge sabotage refit timing (per second repair in the
   whole battle, or per repair cast in a given round?).
 
+- **Phase 4c PR 5: enemy-realism pair (2026-06-12, branch `feat/combat-engine-phase4c-pr5-enemy-realism`).**
+  Two independent accuracy upgrades: (a) the `enemy-buff` / Taunt / Provoke gate `derivable`
+  flip from assume-active to live-0, and (b) an enemy hacking landing roll for enemy-inflicted
+  debuffs. Closes §6 items 11 and 12.
+
+  **(a) `enemy-buff` / Taunt / Provoke gate flip — assume-active → live-0.** Previously the
+  ship-data conditions gating on the `enemy-buff` subject ("if the enemy has Stealth", "to
+  enemies with <buff>"), the Taunt-style enemy-buff gate, and the Provoke-style `self-debuff`
+  gate were emitted `derivable: false`, so they were treated as assume-active (count =
+  `manualCount ?? 1`) and fired every round even with no live state. They now read the live
+  `enemyBuffNames` (enemy's active self-buff names) / `selfDebuffNames` (tank's own debuff
+  names) arrays, which are **0 at combat start** in single-ship DPS mode (no enemy attackers,
+  no Taunt/Provoke live), so these gates correctly stay inert until a matching enemy buff or
+  self-debuff is actually present.
+  - *Sites flipped:* the Stealth gate in `parseModifiers` and the `enemyEffectConditions`
+    enemy-buff gate (both `buildShipAbilities.ts`); the Taunt (enemy-buff) and Provoke
+    (self-debuff) gates in `statusEffectCondition` (`skillTextParser.ts`).
+  - *Both evaluation paths now read live.* The modifier/damage path reads live without any
+    `LIVE_SUBJECTS` change. To make the buff/debuff STATUS-GRANT gating path read live too,
+    `enemy-buff` and `self-debuff` were added to `LIVE_SUBJECTS` (`abilityStatusGating.ts`) —
+    the neutralizer that lets the status-registration path consume the live arrays.
+  - *Affected ships* (now reflect real battle state instead of assume-active):
+    Lodolite, Panguan, Selenite (Stealth "more damage" modifier — now inert at start unless
+    an enemy buff is supplied); Lodolite ("to enemies with <buff>" gate); Amartya, Anemone,
+    Panon, Rikra (flat Taunt/Provoke-gated status GRANTS — not granted at round 1 in
+    single-ship DPS since no Taunt/Provoke is live there); Sustainer (self-debuff COUNT-scaled —
+    net-zero: 0 count → 0 bonus, already `derivable`).
+  - *DPS goldens:* byte-identical (22 unchanged); +1 NEW golden scenario (#23) locks the
+    live-0 behaviour. Unit tests in `enemyBuffSelfDebuffGate.test.ts` lock the MET case (not
+    constructible in DPS golden mode, where the live arrays are always empty).
+
+  **Charge-gain enemy-buff gates NOT flipped (carve-out — by design, not a deferral).** The
+  CHARGE-GAIN enemy-buff gates (charge-on-Stealth / "N or more buffs" — Selenite, Nuqtu,
+  Rhodium) stay `derivable: false`. The DPS charge cast-path evaluates these gates in a context
+  with NO live enemy-buff data (`playerEnemyBuffNames()` is inert in DPS mode; `DPSSimulationInput`
+  exposes no enemy-buff picker), so flipping would zero charge gain unconditionally every round —
+  a regression, not an accuracy gain. See §6 item 11 for the full mechanism and the locking test.
+
+  **(b) Enemy hacking landing roll (timed status + DoT inflictions).** Enemy attacker actors now
+  carry an optional `hacking` stat. Enemy debuff inflictions — BOTH timed status debuffs AND
+  DoTs — land via `clamp(enemyHacking − healTargetSecurity, 0, 100) / 100` instead of the old
+  hard-coded `debuffLandingChance: 1` (always-100%). The landing chance is computed in the
+  healing adapter; the UI gained a heal-target `security` input plus a per-enemy `hacking` input.
+  - **Affinity-omission approximation (documented).** The adapter's landing formula OMITS
+    affinity, matching its existing healer-side landing convention; the DPS sim, by contrast,
+    applies affinity to hacking. This is an accepted approximation in the healing-calculator
+    landing path.
+  - **Default behaviour:** the heal-target `security` input defaults to **0** (⇒ debuffs land at
+    up to 100%, preserving prior behaviour when security is unset). However a fresh MANUAL enemy
+    defaults to `hacking: 0` ⇒ its debuffs now NEVER land until the user sets enemy hacking or
+    picks an enemy ship (which auto-fills `ship.stats.hacking`). Previously enemy debuffs always
+    landed at 100% regardless. **Users must set enemy hacking (or pick an enemy ship) for enemy
+    debuffs to land.**
+
 ---
 
 ## 6. Prioritized backlog: introducing parsed features into the sim
@@ -1315,9 +1370,13 @@ configure it and it looks like it works, but it does nothing".
 >   Arum (Out. Damage Down I + refit Gelecek Contagion II; all-cleansed-enemies → singular
 >   focus), Yarrow/Larkspur (self Gelecek Contagion on enemy cleanse), Grif (+20% Defense
 >   modifier + 75% damage proc on enemy cleanse) (see §5 PHASE 4c PR 4).
-> - **4c PR 5 — pending** — enemy realism pair: §6 item 11 `derivable` flip for
->   `enemy-buff`/Provoke `self-debuff` gates (controlled DPS-golden regeneration) + item 12
->   enemy hacking landing roll.
+> - **4c PR 5 — SHIPPED 2026-06-12** (`feat/combat-engine-phase4c-pr5-enemy-realism`): enemy
+>   realism pair: §6 item 11 `derivable` flip for the `enemy-buff` / Taunt (enemy-buff) /
+>   Provoke (`self-debuff`) gates (assume-active → live-0 on the modifier/damage AND status-grant
+>   paths; `enemy-buff`/`self-debuff` added to `LIVE_SUBJECTS`; charge-gain enemy-buff gates stay
+>   manual by design) + §6 item 12 enemy hacking landing roll for timed-status AND DoT inflictions
+>   (`clamp(enemyHacking − healTargetSecurity, 0, 100)/100`; adapter omits affinity; heal-target
+>   security + per-enemy hacking inputs) (see §5 PHASE 4c PR 5).
 > - **4c PR 6 — pending** — §6 item 10 Chakara `lowest-speed-ally` condition subject.
 > - **4c follow-ups (unassigned):** Panon "If directly damaged" phrasing gap (residual aura);
 >   Purifier cleanse-on-damaged phantom; Nayra CSV typo ("When directly damage") tolerance;
@@ -1418,19 +1477,23 @@ configure it and it looks like it works, but it does nothing".
 > (team-actor healModifier) shipped 2026-06-08 in the healing backlog batch — see the shipped
 > block above.*
 
-11. **`enemy-buff` / Provoke `self-debuff` conditions still manual-count (Phase 4a follow-up)** —
-    The engine now feeds live `enemyBuffNames` (enemy's active self-buff names) and
-    `selfDebuffNames` (tank's own debuff names) into every player condition context. However,
-    the ship-data conditions that gate on the `enemy-buff` subject (e.g. "if the enemy has
-    Stealth") and the Provoke-style `self-debuff` gates are emitted `derivable: false` in
-    `buildShipAbilities.ts` and the parser; only `derivable: true` conditions (the
-    count-scaling path) consume the live arrays. Making the ship gates live requires flipping
-    them to `derivable: true`, which would churn all 22 DPS golden snapshots (those ships
-    would then see 0 enemy-buffs / 0 self-debuffs instead of the previous assume-active-1
-    treatment). Deliberately deferred: the live plumbing exists; the golden-churn cost is the
-    blocker. Resolution: flip `derivable` in the parser / `buildShipAbilities.ts`, regenerate
-    the 22 DPS goldens under a controlled KNOWN-DIFF review (medium cost; meaningful accuracy
-    gain for any ship with an enemy-buff or self-debuff gate).
+11. **`enemy-buff` / Taunt / Provoke `self-debuff` GATE conditions — SHIPPED 2026-06-12
+    (Phase 4c PR 5, branch `feat/combat-engine-phase4c-pr5-enemy-realism`).** The MODIFIER,
+    DAMAGE, and STATUS-GRANT gates that read the `enemy-buff` subject (e.g. "if the enemy has
+    Stealth", "to enemies with <buff>", the Taunt enemy-buff gate) and the Provoke-style
+    `self-debuff` subject were flipped from `derivable: false` (assume-active, count =
+    `manualCount ?? 1`) to live reads of `enemyBuffNames` / `selfDebuffNames`. Those arrays are
+    **0 at combat start** in single-ship DPS mode, so the gates now correctly stay inert until a
+    matching enemy buff / self-debuff is actually present, instead of always assuming it active.
+    Sites flipped: `parseModifiers` Stealth gate + `enemyEffectConditions` enemy-buff gate
+    (`buildShipAbilities.ts`); `statusEffectCondition` Taunt (enemy-buff) + Provoke
+    (self-debuff) gates (`skillTextParser.ts`). The status-grant path reads live via
+    `enemy-buff`/`self-debuff` added to `LIVE_SUBJECTS` (`abilityStatusGating.ts`); the
+    modifier/damage path reads live without that. Affected ships: Lodolite, Panguan, Selenite,
+    Amartya, Anemone, Panon, Rikra, Sustainer (see §5 PHASE 4c PR 5). DPS goldens byte-identical
+    (22 unchanged); +1 NEW golden scenario (#23) locks the live-0 behaviour; `enemyBuffSelfDebuffGate.test.ts`
+    locks the MET case (not constructible in DPS golden mode). The charge-gain carve-out below
+    is the ONE part that intentionally stays manual.
 
     **Charge-gain enemy-buff gates stay manual (`derivable: false`) — by design, NOT deferred.**
     The PR 5 flip covered the *modifier* and *damage* enemy-buff gates (Tasks 1/1b/3), but the
@@ -1453,12 +1516,17 @@ configure it and it looks like it works, but it does nothing".
     `dpsSimulator.test.ts` ("LOCK: charge-on-enemy-buff stays assume-active…"), which proves both
     branches. Revisit only if a live enemy-buff source is ever wired into the DPS charge context.
 
-12. **Enemy debuffs land at 100% on the tank (Phase 4a simplification)** — Enemy attacker
-    actors carry no hacking stat, so there is no hacking-vs-security landing roll when they
-    inflict debuffs on the heal target; `debuffLandingChance` is hard-coded to `1` (always
-    land). Resolution: add an optional `enemyHacking` stat to the enemy attacker config and
-    apply the normal landing formula. Medium cost; relevant for security-stacked tanks facing
-    debuff-heavy enemies.
+12. **Enemy hacking landing roll — SHIPPED 2026-06-12 (Phase 4c PR 5, branch
+    `feat/combat-engine-phase4c-pr5-enemy-realism`).** Enemy attacker actors now carry an
+    optional `hacking` stat, and enemy debuff inflictions — BOTH timed status debuffs AND DoTs —
+    land via `clamp(enemyHacking − healTargetSecurity, 0, 100) / 100` instead of the old
+    hard-coded `debuffLandingChance: 1` (always-100%). The landing chance is computed in the
+    healing adapter; the UI gained a heal-target `security` input and a per-enemy `hacking` input.
+    **Affinity-omission approximation:** the adapter's landing formula OMITS affinity (matching
+    its existing healer-side landing convention), whereas the DPS sim applies affinity to hacking.
+    **Default note:** heal-target `security` defaults to 0 (debuffs land up to 100%), but a fresh
+    MANUAL enemy defaults to `hacking: 0` — so its debuffs NEVER land until enemy hacking is set
+    or an enemy ship is picked (which auto-fills `ship.stats.hacking`). See §5 PHASE 4c PR 5.
 
 13. **Pestilence enemy-cleanse Corrosion II reaction — known orphan (Phase 4c PR 4 follow-up)** —
     Pestilence's refit passive text reads: "When an enemy cleanses a Debuff this unit inflicts

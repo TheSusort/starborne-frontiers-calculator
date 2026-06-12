@@ -2418,6 +2418,23 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
+                                            Enemy Hacking &amp; Heal-Target Security:
+                                        </span>{' '}
+                                        Each enemy attacker has a Hacking stat, and the heal target
+                                        has a Security stat. An enemy&apos;s debuffs — both timed
+                                        effects and damage-over-time — land based on its Hacking
+                                        versus the target&apos;s Security: the higher the
+                                        enemy&apos;s Hacking over the target&apos;s Security, the
+                                        more reliably its debuffs stick (and high enough Security
+                                        can shrug them off entirely). Note the default: a freshly
+                                        added manual enemy starts at 0 Hacking, so its debuffs will
+                                        not land until you set its Hacking — or pick an enemy ship,
+                                        which fills Hacking from the ship&apos;s stats. The
+                                        target&apos;s Security defaults to 0, so debuffs land at
+                                        full chance until you raise it.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
                                             Effective Healing vs Overheal:
                                         </span>{' '}
                                         Each round the simulation tracks the target&apos;s HP and
