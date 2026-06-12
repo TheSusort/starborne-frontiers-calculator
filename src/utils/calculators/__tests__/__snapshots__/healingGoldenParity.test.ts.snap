@@ -2761,6 +2761,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -2808,6 +2809,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -2855,6 +2857,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -2902,6 +2905,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -2949,6 +2953,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -2996,6 +3001,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
           ],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3052,6 +3058,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3088,6 +3095,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3124,6 +3132,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3160,6 +3169,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3196,6 +3206,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",
@@ -3232,6 +3243,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
           "dots": [],
           "enemyId": "e1",
           "resistedDebuffs": [],
+          "resistedDots": [],
           "selfBuffs": [
             {
               "buffName": "Attack Up",

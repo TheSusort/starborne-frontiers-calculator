@@ -40,6 +40,7 @@ const twoEnemyRound = (): HealingRoundData =>
                 debuffs: [{ buffName: 'Defense Down', turnsRemaining: 3, stacks: 2 }],
                 dots: [],
                 resistedDebuffs: [],
+                resistedDots: [],
             },
             {
                 enemyId: 'e2',
@@ -47,6 +48,7 @@ const twoEnemyRound = (): HealingRoundData =>
                 debuffs: [{ buffName: 'Defense Down', turnsRemaining: 1, stacks: 1 }],
                 dots: [],
                 resistedDebuffs: [],
+                resistedDots: [],
             },
         ],
     });
@@ -129,6 +131,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -184,6 +187,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -266,6 +270,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [{ type: 'inferno', tier: 15, stacks: 3 }],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -298,6 +303,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [{ buffName: 'Defense Down', turnsRemaining: 2 }],
                                     dots: [{ type: 'corrosion', tier: 3, stacks: 1 }],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -348,6 +354,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [{ buffName: 'Defense Down', turnsRemaining: 3 }],
                                     dots: [{ type: 'inferno', tier: 15, stacks: 2 }],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -401,6 +408,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [{ type: 'inferno', tier: 15, stacks: 2 }],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                                 {
                                     enemyId: 'e2',
@@ -408,6 +416,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [{ type: 'inferno', tier: 15, stacks: 3 }],
                                     resistedDebuffs: [],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -443,6 +452,7 @@ describe('RoundStatusPanel', () => {
                                     resistedDebuffs: [
                                         { buffName: 'Attack Down', turnsRemaining: 2 },
                                     ],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -474,6 +484,7 @@ describe('RoundStatusPanel', () => {
                                     debuffs: [],
                                     dots: [],
                                     resistedDebuffs: [{ buffName: 'Stun', turnsRemaining: 1 }],
+                                    resistedDots: [],
                                 },
                             ],
                         }),
@@ -487,6 +498,72 @@ describe('RoundStatusPanel', () => {
         // The enemy group renders even though it landed nothing.
         expect(screen.getByText('Makoli')).toBeInTheDocument();
         expect(screen.getByText('Stun')).toBeInTheDocument();
+        expect(screen.getByText('resisted')).toBeInTheDocument();
+        // Not collapsed to the empty note.
+        expect(screen.queryByText(/no buffs or effects this round/i)).not.toBeInTheDocument();
+    });
+
+    it("renders an enemy's resisted DoTs with the resisted treatment under the Resisted header", () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [{ buffName: 'Defense Down', turnsRemaining: 2 }],
+                                    dots: [],
+                                    resistedDebuffs: [],
+                                    resistedDots: [{ type: 'corrosion', tier: 6, stacks: 3 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        // The resisted DoT renders its DPS label with the "resisted" treatment.
+        expect(screen.getByText('Corrosion II ×3')).toBeInTheDocument();
+        expect(screen.getByText('resisted')).toBeInTheDocument();
+    });
+
+    it('still surfaces an enemy that ONLY resisted DoTs (landed nothing)', () => {
+        render(
+            <RoundStatusPanel
+                configs={[
+                    {
+                        name: 'Healer 1',
+                        roundData: row({
+                            round: 4,
+                            enemyEffects: [
+                                {
+                                    enemyId: 'e1',
+                                    selfBuffs: [],
+                                    debuffs: [],
+                                    dots: [],
+                                    resistedDebuffs: [],
+                                    resistedDots: [{ type: 'inferno', tier: 15, stacks: 2 }],
+                                },
+                            ],
+                        }),
+                    },
+                ]}
+                totalRounds={20}
+                hoveredRound={4}
+                enemyName={enemyName}
+            />
+        );
+        // The enemy group renders even though it landed nothing.
+        expect(screen.getByText('Makoli')).toBeInTheDocument();
+        expect(screen.getByText('Inferno I ×2')).toBeInTheDocument();
         expect(screen.getByText('resisted')).toBeInTheDocument();
         // Not collapsed to the empty note.
         expect(screen.queryByText(/no buffs or effects this round/i)).not.toBeInTheDocument();
