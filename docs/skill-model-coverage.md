@@ -1401,8 +1401,20 @@ configure it and it looks like it works, but it does nothing".
 >   counts a dead caster — unreachable in single-target healing mode today), Harvester dormant
 >   `on-ally-destroyed`, and death-fallback retargeting. Only AoE / front-back-skip / hex-adjacency
 >   stay blocked on board data.
-> - **Enemy-team support (4d, partially shipped — PR1 done)** — enemy supporters that buff enemy
->   attackers in the healing calculator's enemy ship section. Today each enemy walks
+> - **Enemy-team support (4d, partially shipped — PR1 + PR2 done)** — enemy supporters that buff enemy
+>   attackers in the healing calculator's enemy ship section.
+>   **PR2 SHIPPED (2026-06-12, branch `feat/combat-engine-enemy-team-pr2-routing`):** Gap A cross-enemy
+>   cast routing — `buildEnemyPlayerActorRuntime` now threads an `enemyIds` recipient order (the enemy
+>   attacker ids, computed as `enemyAttackerInputs.map(e=>e.id)` before the runtime map) into the one
+>   `registerActorAbilityStatuses` call that consumed `playerIds`, so an enemy `ally`/`all-allies` cast
+>   buff lands on the enemy team instead of the player team. Gap C (per-recipient aura) fell out FREE —
+>   the helper already fans aura/accumulating out once per recipient and timed statuses carry
+>   `recipients`, so each enemy's `runPlayerTurn` self-buff fold picks them up. Gap D UI — "Enemy
+>   Attackers"→"Enemy Team", `MAX_ENEMY_ATTACKERS` cap DELETED (panel + page + tests + DocumentationPage
+>   updated). Pure supporter (no damage slot) buffs without attacking (verified zero spurious incoming).
+>   Goldens byte-identical (no enemy ally-buff fixtures). STILL PENDING: PR3 optional enemy
+>   `grantAllyCharges`; deferred targeting/board-data items.
+>   Historical context (pre-PR2): each enemy walks
 >   `runPlayerTurn` (Phase 4a) but is an island bound solely to the heal target as its
 >   victim: `grantAllyCharges` is omitted for the enemy walk (`engine.ts` ~2608, "its
 >   allies are enemy-side, not the player team") and 4c PR 4's enemy heal/cleanse is
