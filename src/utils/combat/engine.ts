@@ -2031,6 +2031,11 @@ export function runCombat(input: CombatEngineInput): {
                             if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
                             else pendingResisted.push(resisted);
                         },
+                        // Phase 4c PR 4: reactive direct damage (Grif) credits the owner's
+                        // round map via the single credit point so leeches still see it.
+                        creditReactiveDamage: (ownerId: string, amount: number): void => {
+                            creditDamage(ownerId, 'direct', amount);
+                        },
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's
