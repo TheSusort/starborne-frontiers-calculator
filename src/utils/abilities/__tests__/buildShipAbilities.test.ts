@@ -559,10 +559,10 @@ describe('buildShipAbilities', () => {
         )!;
         expect(out.config).toMatchObject({ channel: 'outgoingDamage', value: 15 });
         expect(out.target).toBe('all-allies');
-        // Concentrate Fire is a debuff → derivable enemy-debuff; Stealth is a buff → manual enemy-buff.
+        // Concentrate Fire is a debuff → derivable enemy-debuff; Stealth is a buff → derivable enemy-buff.
         expect(out.conditions).toEqual([
             { subject: 'enemy-debuff', buffName: 'Concentrate Fire', derivable: true, anyOf: true },
-            { subject: 'enemy-buff', buffName: 'Stealth', derivable: false, anyOf: true },
+            { subject: 'enemy-buff', buffName: 'Stealth', derivable: true, anyOf: true },
         ]);
     });
 
