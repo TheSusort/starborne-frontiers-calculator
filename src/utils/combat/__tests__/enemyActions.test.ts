@@ -106,7 +106,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                             target: 'enemy',
                             trigger: 'on-enemy-cleansed',
                             conditions: [],
-                            config: { type: 'damage', multiplier: 0.75, noCrit: true },
+                            config: { type: 'damage', multiplier: 75, noCrit: true },
                         },
                         {
                             id: 'normal-dmg',
@@ -114,7 +114,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                             target: 'enemy',
                             trigger: 'on-cast',
                             conditions: [],
-                            config: { type: 'damage', multiplier: 1 },
+                            config: { type: 'damage', multiplier: 100 },
                         },
                     ],
                 },
@@ -192,7 +192,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             target: 'enemy',
             trigger: 'on-enemy-cleansed',
             conditions: [],
-            config: { type: 'damage', multiplier: 0.75, noCrit: true },
+            config: { type: 'damage', multiplier: 75, noCrit: true },
         },
     });
 
@@ -204,7 +204,9 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
         });
 
         executeIntent(makeDamageIntent('grif'), ctx);
-        expect(credited).toEqual([{ ownerId: 'grif', amount: 1000 * 0.75 * 1.5 }]);
+        // multiplier is a raw percentage (75 → 0.75), so the fold divides by 100:
+        // effectiveAttack 1000 × (75/100) × affinityMult 1.5 = 1125.
+        expect(credited).toEqual([{ ownerId: 'grif', amount: 1000 * (75 / 100) * 1.5 }]);
 
         credited.length = 0;
         executeIntent(makeDamageIntent('grif-noctx'), ctx);
@@ -628,7 +630,7 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
                         type: 'damage',
                         target: 'enemy',
                         trigger: 'on-enemy-cleansed',
-                        config: { type: 'damage', multiplier: 2, noCrit: true },
+                        config: { type: 'damage', multiplier: 200, noCrit: true },
                     }),
                 ],
             },
@@ -720,10 +722,10 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
         // folds the owner's last-turn ctx bomb-style: focusAttack × multiplier × affinityMult,
         // with NO defense and NO crit (noCrit). The focus acts before the enemy each round, so
         // its ctx is already populated when the enemy cleanses — the proc lands every round.
-        // Deterministic value: 5000 attack × 2 multiplier × 1.0 affinityMult (no affinity set)
-        // × 3 rounds = 30000.
+        // Deterministic value: multiplier is a raw percentage (200 → 2.0), so the fold divides
+        // by 100: 5000 attack × (200/100) × 1.0 affinityMult (no affinity set) × 3 rounds = 30000.
         const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
-        const perRoundProc = 5000 * 2 * 1.0;
+        const perRoundProc = 5000 * (200 / 100) * 1.0;
         expect(grifDamage).toBe(perRoundProc * 3);
     });
 });
