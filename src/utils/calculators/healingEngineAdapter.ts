@@ -33,6 +33,12 @@ export interface EnemyAttackerInput {
      *  computeAffinityModifiers(enemyAffinity, targetAffinity) to produce the matchup.
      *  Absent → neutral defaults (modifier 0, cap 100, penalty 0). */
     affinity?: AffinityName;
+    /** Enemy attacker's hacking stat — combined with the heal target's security
+     *  (HealingSimulationInput.healTargetSecurity) to compute this enemy's INBOUND debuff
+     *  landing chance: clamp(hacking − security, 0, 100) / 100 (no affinity, matching the
+     *  adapter's landing convention). Absent → the engine enemy omits debuffLandingChance →
+     *  engine `?? 1` → debuffs land at 100% (backward compatible). */
+    hacking?: number;
 }
 
 export interface HealingSimulationInput {
@@ -53,6 +59,9 @@ export interface HealingSimulationInput {
      *  team walk). Absent (manual stats / no ship picked) → the focus actor never matches a
      *  role filter — the reaction stays dormant for hits on it (conservative). */
     healerRole?: ShipTypeName;
+    /** The heal target's security stat — used with each enemy's hacking for the inbound debuff
+     *  landing roll. Absent → 0 (debuffs land at up to 100%, preserving prior behavior). */
+    healTargetSecurity?: number;
     teamActors?: TeamActorInput[];
     enemies: EnemyAttackerInput[];
     rounds: number;
@@ -152,6 +161,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         rounds: numRounds,
         teamActors,
         healTargetAffinity,
+        healTargetSecurity,
     } = input;
 
     // Dummy-enemy defaults: a high-defence, huge-HP punching bag that never dies and acts last.
@@ -191,11 +201,22 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // byte-identical to prior behaviour for all fixtures that omit affinity.
     const engineEnemyAttackers = enemies.map((e) => {
         const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
+        // INBOUND debuff landing for THIS enemy: clamp(hacking − tank security, 0, 100) / 100.
+        // No affinity (matches the adapter's healer-side landing convention above). Attached
+        // ONLY when the enemy carries a hacking value — omitted hacking → field omitted →
+        // engine `?? 1` → 100% (backward compatible with every fixture that omits hacking).
+        const enemyDebuffLandingChance =
+            e.hacking == null
+                ? undefined // omitted → engine defaults to 1 (100%), current behavior
+                : Math.min(100, Math.max(0, e.hacking - (healTargetSecurity ?? 0))) / 100;
         return {
             ...e,
             affinityDamageModifier: aff.damageModifier,
             affinityCritCap: aff.critCap,
             affinityCritPenalty: aff.critPenalty,
+            ...(enemyDebuffLandingChance != null
+                ? { debuffLandingChance: enemyDebuffLandingChance }
+                : {}),
         };
     });
 

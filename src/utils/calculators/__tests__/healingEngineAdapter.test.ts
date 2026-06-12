@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { createEventBus, CombatEvent } from '../../combat/events';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
+import * as engine from '../../combat/engine';
 import { buildEnemyPlayerActorRuntime, EnemyActorInput } from '../../combat/engine';
 import { createStatusEngine } from '../../combat/statusEngine';
 
@@ -897,5 +898,126 @@ describe('Task 6: role threading for role-filtered on-ally-attacked reactions', 
             })
         );
         expect(plating.length).toBe(0);
+    });
+});
+
+// ── Task 10: per-enemy inbound debuff landing chance from enemy hacking vs tank security ─
+// The adapter computes each enemy attacker's debuffLandingChance =
+//   clamp(enemyHacking − healTargetSecurity, 0, 100) / 100 (NO affinity — the adapter's
+// landing convention), and attaches it to the engine enemy ONLY when the enemy carries a
+// `hacking` value. Omitted hacking → field omitted → engine `?? 1` → 100% (backward compat).
+// These tests spy on runCombat and assert on the exact value handed to the engine.
+describe('Task 10: enemy debuff landing chance from hacking vs heal-target security', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    // Capture the enemyAttackers passed to runCombat, then delegate to the real impl so the
+    // simulation still runs (and existing assertions stay meaningful).
+    const captureEnemyAttackers = () => {
+        const captured: { enemyAttackers: engine.EnemyActorInput[] } = { enemyAttackers: [] };
+        const real = engine.runCombat;
+        vi.spyOn(engine, 'runCombat').mockImplementation((arg) => {
+            captured.enemyAttackers = (arg.enemyAttackers ??
+                []) as unknown as engine.EnemyActorInput[];
+            return real(arg);
+        });
+        return captured;
+    };
+
+    const enemyWith = (id: string, extra: Record<string, unknown>) => ({
+        id,
+        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+        ...extra,
+    });
+
+    it('hacking 150 vs security 100 → debuffLandingChance 0.5', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetSecurity: 100,
+                enemies: [enemyWith('e1', { hacking: 150 })],
+            })
+        );
+        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0.5);
+    });
+
+    it('hacking 250 vs security 100 → clamps to 1 (ceiling 100%)', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetSecurity: 100,
+                enemies: [enemyWith('e1', { hacking: 250 })],
+            })
+        );
+        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(1);
+    });
+
+    it('hacking 50 vs security 100 → floors at 0 (no minimum)', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetSecurity: 100,
+                enemies: [enemyWith('e1', { hacking: 50 })],
+            })
+        );
+        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0);
+    });
+
+    it('enemy with NO hacking → debuffLandingChance omitted (engine ?? 1 → 100%)', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetSecurity: 100,
+                enemies: [enemyWith('e1', {})],
+            })
+        );
+        expect('debuffLandingChance' in cap.enemyAttackers[0]).toBe(false);
+        expect(cap.enemyAttackers[0].debuffLandingChance).toBeUndefined();
+    });
+
+    it('healTargetSecurity omitted → defaults to 0: hacking 80 → 0.8', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                // healTargetSecurity omitted → 0
+                enemies: [enemyWith('e1', { hacking: 80 })],
+            })
+        );
+        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0.8);
+    });
+
+    it('per-enemy: one enemy with hacking, one without → independent landing fields', () => {
+        idCounter = 0;
+        const cap = captureEnemyAttackers();
+        simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
+                healTargetSecurity: 100,
+                enemies: [enemyWith('e1', { hacking: 150 }), enemyWith('e2', {})],
+            })
+        );
+        const e1 = cap.enemyAttackers.find((e) => e.id === 'e1');
+        const e2 = cap.enemyAttackers.find((e) => e.id === 'e2');
+        expect(e1?.debuffLandingChance).toBe(0.5);
+        expect('debuffLandingChance' in (e2 as object)).toBe(false);
     });
 });
