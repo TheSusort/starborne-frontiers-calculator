@@ -199,12 +199,95 @@ describe('resolveCells — Backline family (Task 5)', () => {
     });
 });
 
-describe('resolveCells — unknown signature', () => {
-    it('throws on a pattern with no offset table', () => {
-        // Cross has no table yet in Task 2 — this test is REMOVED in Task 6 when Cross gets a table.
-        expect(() => resolveCells(parsePattern('Pattern-Cross-Range-1'), 'M2')).toThrow(
-            /no offset table|unknown pattern/i
-        );
+describe('resolveCells — Cross family (Task 6)', () => {
+    // ---------------------------------------------------------------------------
+    // Cross-Range-1: origin in M row + 4 diagonal neighbors (all 4 off-row directions).
+    // Offsets: ORIGIN(0,0), cov(0,-1)[up-back], cov(+1,-1)[up-front],
+    //   cov(-1,+1)[down-back], cov(0,+1)[down-front]
+    // Anchor M3(q=1,r=1): up-back→T2(1,0), up-front→T3(2,0),
+    //   down-back→B2(0,2), down-front→B3(1,2).
+    // ---------------------------------------------------------------------------
+    it('Cross-Range-1 @ M3 → origin M3, covered {T2, T3, B2, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cross-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'T2', 'T3', 'B2', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'T2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M1(q=-1,r=1) — up-back(0,-1)→(-1,0) off-board, up-front(+1,-1)→(0,0)=T1,
+    //   down-back(-1,+1)→(-2,2) off-board, down-front(0,+1)→(-1,2)=B1.
+    it('Cross-Range-1 @ M1 clips 2 off-board diagonals', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cross-Range-1'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1', 'T1', 'B1']));
+        expect(origins(cells)).toEqual(['M1']);
+    });
+});
+
+describe('resolveCells — Curve family (Task 6)', () => {
+    // ---------------------------------------------------------------------------
+    // Curve-Range-1: origin in M row + up-back(0,-1) + down-back(-1,+1).
+    // Anchor M4(q=2,r=1): up-back→T3(2,0), down-back→B3(1,2).
+    // ---------------------------------------------------------------------------
+    it('Curve-Range-1 @ M4 → origin M4, covered {T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Curve-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M1(q=-1,r=1) — up-back(0,-1)→(-1,0) off-board,
+    //   down-back(-1,+1)→(-2,2) off-board. Only origin remains.
+    it('Curve-Range-1 @ M1 clips all covered (both off-board)', () => {
+        const cells = resolveCells(parsePattern('Pattern-Curve-Range-1'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1']));
+        expect(origins(cells)).toEqual(['M1']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Reverse-Curve-Range-1: origin in M row + up-front(+1,-1) + down-front(0,+1).
+    // Mirror of Curve. Anchor M3(q=1,r=1): up-front→T3(2,0), down-front→B3(1,2).
+    // ---------------------------------------------------------------------------
+    it('Reverse-Curve-Range-1 @ M3 → origin M3, covered {T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Reverse-Curve-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M4(q=2,r=1) — up-front(+1,-1)→T4(3,0) ✓, down-front(0,+1)→B4(2,2) ✓.
+    // (T4 and B4 are on-board, so no clipping for M4.)
+    it('Reverse-Curve-Range-1 @ M4 → origin M4, covered {T4, B4}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Reverse-Curve-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'T4', 'B4']));
+        expect(origins(cells)).toEqual(['M4']);
+    });
+});
+
+describe('resolveCells — Root family (Task 6)', () => {
+    // ---------------------------------------------------------------------------
+    // Root-Range-1: origin in M row + front(+1,0) + up-back(0,-1) + down-back(-1,+1).
+    // Anchor M3(q=1,r=1): front→M4(2,1), up-back→T2(1,0), down-back→B2(0,2).
+    // ---------------------------------------------------------------------------
+    it('Root-Range-1 @ M3 → origin M3, covered {M4, T2, B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Root-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4', 'T2', 'B2']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'M4')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B2')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M1(q=-1,r=1) — front(+1,0)→M2(0,1) ✓, up-back(0,-1)→(-1,0) off-board,
+    //   down-back(-1,+1)→(-2,2) off-board. Only M1 and M2 remain.
+    it('Root-Range-1 @ M1 clips 2 off-board cells', () => {
+        const cells = resolveCells(parsePattern('Pattern-Root-Range-1'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1', 'M2']));
+        expect(origins(cells)).toEqual(['M1']);
     });
 });
 

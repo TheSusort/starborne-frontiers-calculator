@@ -201,4 +201,64 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Covered: M-front(+1,0), M-2front(+2,0).
     // Verified @ M1(q=-1,r=1): origin M1, covered {M2, M3}.
     'backline|2|': [ORIGIN, cov(1, 0), cov(2, 0)],
+
+    // ---------------------------------------------------------------------------
+    // Cross family (Task 6)
+    //
+    // Convention: DARK center hex = ORIGIN; BRIGHT hexes = covered.
+    // A cross is the 4 diagonal (off-row) neighbors: up-back, up-front, down-back, down-front.
+    // It excludes the 2 in-row directions (back, front) — giving a rotated + shape.
+    // ---------------------------------------------------------------------------
+
+    // Pattern-Cross-Range-1
+    // PNG: 5 hexes — dark-red center origin (M row) + 2 bright T cells + 2 bright B cells.
+    // T bright at c=10 (up-front, delta=-9 from M origin at c=19) and c=30 (up-back, delta=+11).
+    // B bright at c=10 (down-front, delta=-9) and c=30 (down-back, delta=+11).
+    // Offsets: up-back(0,-1), up-front(+1,-1), down-back(-1,+1), down-front(0,+1).
+    // Verified @ M3(q=1,r=1): origin M3, covered {T2(0,-1), T3(+1,-1), B2(-1,+1), B3(0,+1)}.
+    'cross|1|': [ORIGIN, cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Curve family (Task 6)
+    //
+    // Convention: DARK center hex = ORIGIN (M row); BRIGHT hexes = covered.
+    // Curve = origin + T-back + B-back: origin flanked by both backward diagonals.
+    // Reverse-Curve mirrors this: origin + T-front + B-front.
+    // ---------------------------------------------------------------------------
+
+    // Pattern-Curve-Range-1
+    // PNG: 3 hexes — dark-red M origin (LEFT/FRONT, c=11) + 1 bright T hex (BACK, c=20) +
+    //   1 bright B hex (BACK, c=20).  T and B both appear to the BACK-RIGHT of origin.
+    // T covered at c=20: delta=+9 from origin c=11 → up-back(0,-1) ✓
+    // B covered at c=20: delta=+9 → down-back(-1,+1) ✓
+    // Verified @ M4(q=2,r=1): origin M4, covered {T3(0,-1)=T3, B3(-1,+1)=B3}.
+    'curve|1|': [ORIGIN, cov(0, -1), cov(-1, 1)],
+
+    // Pattern-Reverse-Curve-Range-1
+    // PNG: 3 hexes — dark-red M origin (RIGHT/BACK, c=20) + 1 bright T hex (FRONT, c=11) +
+    //   1 bright B hex (FRONT, c=11).  T and B appear to the FRONT-LEFT of origin.
+    // T covered at c=11: delta=-9 from origin c=20 → up-front(+1,-1) ✓
+    // B covered at c=11: delta=-9 → down-front(0,+1) ✓
+    // Verified @ M3(q=1,r=1): origin M3, covered {T4(+1,-1)=T4... wait}
+    // Actually at M3: up-front(+1,-1) → T(q+1=2,r=0)=T3. down-front(0,+1) → B(q=1,r=2)=B3.
+    // Verified @ M3(q=1,r=1): origin M3, covered {T3(+1,-1), B3(0,+1)}.
+    'curve|1|reverse': [ORIGIN, cov(1, -1), cov(0, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Root family (Task 6)
+    //
+    // Convention: BRIGHT center hex = ORIGIN (M row, BACK side of pattern); darker cells = covered.
+    // Root = origin at back M + M-front (covered, dark) + T-up-back + B-down-back.
+    // The T and B covered cells are directly adjacent to the origin (not to M-front).
+    // This follows the same image convention as Backline (bright = origin).
+    // ---------------------------------------------------------------------------
+
+    // Pattern-Root-Range-1
+    // PNG: 4 hexes — bright-red M origin (RIGHT, c=40) + dark M covered (LEFT/FRONT, c=20) +
+    //   bright T covered (far RIGHT, c=49) + bright B covered (far RIGHT, c=50).
+    // M-front covered at c=20: delta=-20 from origin c=40 → front(+1,0) ✓
+    // T covered at c=49: delta=+9 from origin c=40 → up-back(0,-1) ✓
+    // B covered at c=50: delta=+10 from origin c=40 → down-back(-1,+1) ✓
+    // Verified @ M3(q=1,r=1): origin M3, covered {M4(+1,0), T2(0,-1), B2(-1,+1)}.
+    'root|1|': [ORIGIN, cov(1, 0), cov(0, -1), cov(-1, 1)],
 };
