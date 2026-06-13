@@ -26,11 +26,9 @@ describe('OFFSET_TABLES structural invariants', () => {
             if (sig.includes('notSelf')) {
                 // notSelf (caster excluded): 0 origins
                 expect(count, sig).toBe(0);
-            } else if (sig.startsWith('all|')) {
-                // all-target: 12 origins (handled in resolvePattern, no table entry normally)
-                expect(count, sig).toBe(12);
             } else {
-                // standard attack patterns: exactly 1 origin
+                // standard attack/support patterns: exactly 1 origin
+                // (the 'all' case is handled in resolveCells, not as a table entry)
                 expect(count, sig).toBe(1);
             }
         }

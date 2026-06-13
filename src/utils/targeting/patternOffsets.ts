@@ -41,8 +41,7 @@ export function patternSignature(p: ParsedPattern): string {
 }
 
 /** Per-signature offset tables, hand-derived from the in-game pattern PNGs.
- *  Each table includes exactly one ORIGIN (except not-self patterns, which omit it).
- *  Tasks 3-7 fill this in shape-family by shape-family. */
+ *  Each table includes exactly one ORIGIN (except not-self patterns, which omit it). */
 export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Pattern-Base -> shape 'base', range 0, no mods
     'base|0|': [ORIGIN],
@@ -77,11 +76,6 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Pattern-Line-Support-Range-1: support extends FORWARD (+q) from caster; caster IS included (ORIGIN).
     // Caster + 1 covered cell one step forward.  1 origin.
     'line|1|support': [ORIGIN, cov(1, 0)],
-
-    // Pattern-Line-Support-Range-2: grey caster icon + 2 yellow hexes.
-    // Origin = nearest yellow; covered = 1 step further back (-1,0).
-    // PNG: caster icon left + 2 yellow hexes.
-    'line|2|support': [ORIGIN, cov(-1, 0)],
 
     // Pattern-Line-Support-Range-3: support extends FORWARD (+q) from caster; caster IS included (ORIGIN).
     // Caster + 3 covered cells extending forward.  1 origin.
@@ -286,18 +280,6 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // ---------------------------------------------------------------------------
     // Wings family (Task 7)
     //
-    // Wings-Range-1: all-T+B diagonal neighbors of origin M (same geometry as cross|1|).
-    // Origin at center-M (darkest cell), 2 T cells + 2 B cells flanking it diagonally.
-    //   Verified @ M3(1,1): origin M3, covered {T2(0,-1), T3(+1,-1), B2(-1,+1), B3(0,+1)}.
-    'wings|1|': [ORIGIN, cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
-
-    // Wings-Range-2: extends each wing arm by one more step back.
-    //   T-row: adds T1(-1,-1) to the back of the upper wing.
-    //   B-row: adds B1(-2,+1) to the back of the lower wing.
-    //   Total 7 cells: origin M + T3(+1,-1) + T2(0,-1) + T1(-1,-1) + B3(0,+1) + B2(-1,+1) + B1(-2,+1).
-    //   Verified @ M4(2,1): origin M4, covered {T4(+1,-1), T3(0,-1), T2(-1,-1), B4(0,+1), B3(-1,+1), B2(-2,+1)}.
-    'wings|2|': [ORIGIN, cov(1, -1), cov(0, -1), cov(-1, -1), cov(0, 1), cov(-1, 1), cov(-2, 1)],
-
     // Wings-Range-2-Support-Not-Self: support variant (buffs allies), caster excluded (notSelf).
     // 0 origins (notSelf).  7 offset cells; many clip off-board depending on anchor.
     // Human-verified @ M3: covered {T2,T3,B2,B3} (3 offsets clip off-board).

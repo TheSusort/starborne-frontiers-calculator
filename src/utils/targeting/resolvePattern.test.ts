@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTargetingCsv } from '../targetingParser';
 import { resolveCells, ResolvedCell } from './resolvePattern';
 import { ALL_POSITIONS } from './board';
+import { CORPUS_PATTERNS } from './__fixtures__/corpusPatterns';
 
 const positions = (cells: ResolvedCell[]) => new Set(cells.map((c) => c.position));
 const origins = (cells: ResolvedCell[]) =>
@@ -82,13 +83,6 @@ describe('resolveCells — Line family (Task 3)', () => {
     it('Line-Support-Range-1 @ M3 → origin M3, covered {M4}', () => {
         const cells = resolveCells(parsePattern('Pattern-Line-Support-Range-1'), 'M3');
         expect(positions(cells)).toEqual(new Set(['M3', 'M4']));
-        expect(origins(cells)).toEqual(['M3']);
-    });
-
-    // Line-Support-Range-2: origin + 1 covered step back.  Anchor M3.
-    it('Line-Support-Range-2 @ M3 → origin M3, covered M2', () => {
-        const cells = resolveCells(parsePattern('Pattern-Line-Support-Range-2'), 'M3');
-        expect(positions(cells)).toEqual(new Set(['M3', 'M2']));
         expect(origins(cells)).toEqual(['M3']);
     });
 
@@ -548,20 +542,13 @@ describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe
 
 const CSV_PATH = 'docs/ship-targeting.csv';
 
-describe.skipIf(!existsSync(CSV_PATH))('ship-targeting.csv pattern coverage', () => {
-    const rows = parseTargetingCsv(readFileSync(CSV_PATH, 'utf8'));
-    const patterns = new Set<string>();
-    for (const r of rows) {
-        if (r.activePattern) patterns.add(r.activePattern);
-        if (r.chargedPattern) patterns.add(r.chargedPattern);
-    }
-
+describe('corpus fixture coverage (CI-safe)', () => {
     it('has patterns to test', () => {
-        expect(patterns.size).toBeGreaterThan(20);
+        expect(CORPUS_PATTERNS.length).toBeGreaterThan(20);
     });
 
     it('every corpus pattern resolves: no throw, valid Positions, valid origin count', () => {
-        for (const raw of patterns) {
+        for (const raw of CORPUS_PATTERNS) {
             const parsed = parsePattern(raw);
             const cells = resolveCells(parsed, 'M2');
             for (const c of cells) {
@@ -577,6 +564,25 @@ describe.skipIf(!existsSync(CSV_PATH))('ship-targeting.csv pattern coverage', ()
                 // all other patterns (attack and support): exactly 1 origin
                 expect(originCount, raw).toBe(1);
             }
+        }
+    });
+});
+
+describe.skipIf(!existsSync(CSV_PATH))('ship-targeting.csv drift check (dev-only)', () => {
+    const rows = parseTargetingCsv(readFileSync(CSV_PATH, 'utf8'));
+    const livePatterns = new Set<string>();
+    for (const r of rows) {
+        if (r.activePattern) livePatterns.add(r.activePattern);
+        if (r.chargedPattern) livePatterns.add(r.chargedPattern);
+    }
+
+    it('all live CSV patterns are present in CORPUS_PATTERNS fixture (update fixture if new patterns added)', () => {
+        const fixtureSet = new Set(CORPUS_PATTERNS);
+        for (const raw of livePatterns) {
+            expect(
+                fixtureSet,
+                `"${raw}" is in the live CSV but missing from CORPUS_PATTERNS fixture`
+            ).toContain(raw);
         }
     });
 });
