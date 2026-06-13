@@ -123,3 +123,84 @@ describe('resolveCells — unknown signature', () => {
         );
     });
 });
+
+describe('resolveCells — Cone family (Task 4)', () => {
+    // ---------------------------------------------------------------------------
+    // Cone-Range-1: tip at FRONT, fans back.
+    // Offsets: ORIGIN(0,0), cov(-1,0), cov(0,-1), cov(-1,+1)
+    // Anchor M4(q=2,r=1): origin M4, back→M3, up-back T3, down-back B3.
+    // ---------------------------------------------------------------------------
+    it('Cone-Range-1 @ M4 → origin M4, covered {M3, T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cone-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'M3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M2(q=0,r=1) — cov(-1,0)→M1(-1,1), cov(0,-1)→T1(0,0),
+    // cov(-1,+1)→B at (-1,2) = B1... wait B1=(-1,2) ✓ → {M2,M1,T1,B1} all on-board.
+    // Anchor M1(q=-1,r=1): cov(-1,0)→(-2,1) off-board, cov(0,-1)→T(-1,0)=off-board,
+    // cov(-1,+1)→(-2,2) off-board.
+    it('Cone-Range-1 @ M1 clips all covered cells (all off-board)', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cone-Range-1'), 'M1');
+        // M1(q=-1,r=1): back→(-2,1) off, up-back→(-1,0) off, down-back→(-2,2) off
+        expect(positions(cells)).toEqual(new Set(['M1']));
+        expect(origins(cells)).toEqual(['M1']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Cone-Back-Range-1: origin at BACK, wide 2-layer forward fan (6 cells total).
+    // Offsets: ORIGIN(0,0), cov(+1,0), cov(+1,-1), cov(0,+1), cov(+2,-1), cov(+1,+1)
+    // Anchor M2(q=0,r=1): front→M3, T-upfront→T2, B-downfront→B2, T-further→T3, B-further→B3.
+    // ---------------------------------------------------------------------------
+    it('Cone-Back-Range-1 @ M2 → origin M2, covered {M3, T2, B2, T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cone-Back-Range-1'), 'M2');
+        expect(positions(cells)).toEqual(new Set(['M2', 'M3', 'T2', 'B2', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M2']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Cone-Support-Range-1: single origin hex, no covered area.
+    // ---------------------------------------------------------------------------
+    it('Cone-Support-Range-1 @ M3 → origin M3 only', () => {
+        const cells = resolveCells(parsePattern('Pattern-Cone-Support-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Prolonged_Cone-Support-Range-2: origin at front, 2-step back line + T+B fan.
+    // Offsets: ORIGIN(0,0), cov(-1,0), cov(-2,0), cov(0,-1), cov(-1,+1)
+    // Anchor M4(q=2,r=1): back1→M3, back2→M2, up-back→T3, down-back→B3.
+    // ---------------------------------------------------------------------------
+    it('Prolonged_Cone-Support-Range-2 @ M4 → origin M4, covered {M3, M2, T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Prolonged_Cone-Support-Range-2'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M4']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Reverse-Cone-Range-1: tip at BACK, fans forward (mirror of Cone-Range-1).
+    // Offsets: ORIGIN(0,0), cov(+1,0), cov(+1,-1), cov(0,+1)
+    // Anchor M3(q=1,r=1): front→M4, up-front→T3, down-front→B3.
+    // ---------------------------------------------------------------------------
+    it('Reverse-Cone-Range-1 @ M3 → origin M3, covered {M4, T3, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Reverse-Cone-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'M4')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M4(q=2,r=1) — front(+1,0)→(3,1)=off-board (no M5),
+    // up-front(+1,-1)→T4(3,0) ✓, down-front(0,+1)→B4(2,2) ✓.
+    it('Reverse-Cone-Range-1 @ M4 clips off-board front M cell', () => {
+        const cells = resolveCells(parsePattern('Pattern-Reverse-Cone-Range-1'), 'M4');
+        // M4(origin), front(+1,0)→(3,1) off-board, T4(3,0) ✓, B4(2,2) ✓
+        expect(positions(cells)).toEqual(new Set(['M4', 'T4', 'B4']));
+        expect(origins(cells)).toEqual(['M4']);
+    });
+});
