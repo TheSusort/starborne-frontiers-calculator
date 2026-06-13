@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
+import { parseTargetingCsv } from '../src/utils/targetingParser';
 
 const DRY_RUN = process.env.DRY_RUN === 'true' || process.argv.includes('--dry-run');
 const CSV_PATH = 'docs/ship-targeting.csv';
@@ -15,38 +16,9 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-interface Row {
-    name: string;
-    active_target: string | null;
-    active_pattern: string | null;
-    charged_target: string | null;
-    charged_pattern: string | null;
-}
-
-const parseCsv = (): Row[] => {
-    const lines = readFileSync(CSV_PATH, 'utf8')
-        .split(/\r?\n/)
-        .filter((l) => l.trim().length > 0);
-    const rows: Row[] = [];
-    for (let i = 1; i < lines.length; i++) {
-        const [name, at, ap, ct, cp] = lines[i].split(',');
-        const norm = (v?: string) => {
-            const t = (v ?? '').trim();
-            return t.length ? t : null;
-        };
-        rows.push({
-            name: (name ?? '').trim(),
-            active_target: norm(at),
-            active_pattern: norm(ap),
-            charged_target: norm(ct),
-            charged_pattern: norm(cp),
-        });
-    }
-    return rows;
-};
-
 const main = async () => {
-    const rows = parseCsv();
+    const rows = parseTargetingCsv(readFileSync(CSV_PATH, 'utf8'));
+    const orNull = (v: string) => (v.length ? v : null);
 
     const { data: templates, error } = await supabase
         .from('ship_templates')
@@ -72,10 +44,10 @@ const main = async () => {
         matched.add(tmpl.name.toLowerCase());
 
         const payload = {
-            active_target: row.active_target,
-            active_pattern: row.active_pattern,
-            charged_target: row.charged_target,
-            charged_pattern: row.charged_pattern,
+            active_target: orNull(row.activeTarget),
+            active_pattern: orNull(row.activePattern),
+            charged_target: orNull(row.chargedTarget),
+            charged_pattern: orNull(row.chargedPattern),
         };
 
         if (DRY_RUN) {
@@ -100,7 +72,8 @@ const main = async () => {
         .map((t) => t.name)
         .sort();
 
-    console.log(`\n${DRY_RUN ? '[DRY RUN] ' : ''}Processed ${updated}/${rows.length} CSV rows.`);
+    const verb = DRY_RUN ? 'Would update' : 'Updated';
+    console.log(`\n${verb} ${updated}/${rows.length} matched CSV rows.`);
     if (unmatchedCsv.length) {
         console.warn(
             `\nCSV names with NO matching template (${unmatchedCsv.length}):\n  ${unmatchedCsv.join('\n  ')}`

@@ -5,6 +5,7 @@ import {
     parsePattern,
     parseSkillTargeting,
     parseShipTargeting,
+    parseTargetingCsv,
 } from '../targetingParser';
 
 describe('parseTarget', () => {
@@ -234,22 +235,7 @@ const CSV_PATH = 'docs/ship-targeting.csv';
 const csvAvailable = existsSync(CSV_PATH);
 
 describe.skipIf(!csvAvailable)('ship-targeting.csv corpus coverage', () => {
-    const rows = readFileSync(CSV_PATH, 'utf8')
-        .split(/\r?\n/)
-        .filter((l) => l.trim().length > 0)
-        .slice(1) // drop header
-        // Naive split is safe: ship-targeting.csv has no quoted fields or embedded commas.
-        .map((line) => {
-            const [name, activeTarget, activePattern, chargedTarget, chargedPattern] =
-                line.split(',');
-            return {
-                name: name.trim(),
-                activeTarget: (activeTarget ?? '').trim(),
-                activePattern: (activePattern ?? '').trim(),
-                chargedTarget: (chargedTarget ?? '').trim(),
-                chargedPattern: (chargedPattern ?? '').trim(),
-            };
-        });
+    const rows = parseTargetingCsv(readFileSync(CSV_PATH, 'utf8'));
 
     it('has rows to test', () => {
         expect(rows.length).toBeGreaterThan(100);

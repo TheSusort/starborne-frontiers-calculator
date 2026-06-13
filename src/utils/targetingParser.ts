@@ -57,6 +57,37 @@ export interface ShipTargeting {
     charged?: SkillTargeting;
 }
 
+export interface TargetingCsvRow {
+    name: string;
+    activeTarget: string;
+    activePattern: string;
+    chargedTarget: string;
+    chargedPattern: string;
+}
+
+/**
+ * Parses the raw text of docs/ship-targeting.csv into rows.
+ * NOTE: ship-targeting.csv has no quoted fields or embedded commas, so a naive
+ * comma split is safe. Keep this the single source of truth for that assumption.
+ */
+export function parseTargetingCsv(csvText: string): TargetingCsvRow[] {
+    return csvText
+        .split(/\r?\n/)
+        .filter((l) => l.trim().length > 0)
+        .slice(1) // drop header
+        .map((line) => {
+            const [name, activeTarget, activePattern, chargedTarget, chargedPattern] =
+                line.split(',');
+            return {
+                name: (name ?? '').trim(),
+                activeTarget: (activeTarget ?? '').trim(),
+                activePattern: (activePattern ?? '').trim(),
+                chargedTarget: (chargedTarget ?? '').trim(),
+                chargedPattern: (chargedPattern ?? '').trim(),
+            };
+        });
+}
+
 // ---------------------------------------------------------------------------
 // Target axis
 // ---------------------------------------------------------------------------
