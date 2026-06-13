@@ -20,10 +20,22 @@ describe('OFFSET_TABLES structural invariants', () => {
         }
     });
 
-    it('every table has exactly one origin, except not-self signatures (zero)', () => {
+    it('every table has the correct origin count per pattern type', () => {
         for (const [sig, table] of entries) {
-            const expected = sig.includes('notSelf') ? 0 : 1;
-            expect(originCount(table), sig).toBe(expected);
+            const count = originCount(table);
+            if (sig.includes('notSelf')) {
+                // notSelf (caster excluded): 0 origins
+                expect(count, sig).toBe(0);
+            } else if (sig.startsWith('all|')) {
+                // all-target: 12 origins (handled in resolvePattern, no table entry normally)
+                expect(count, sig).toBe(12);
+            } else if (sig.includes('support')) {
+                // support patterns extend forward and may omit the caster cell: 0 or 1 origins
+                expect(count <= 1, sig).toBe(true);
+            } else {
+                // standard attack patterns: exactly 1 origin
+                expect(count, sig).toBe(1);
+            }
         }
     });
 

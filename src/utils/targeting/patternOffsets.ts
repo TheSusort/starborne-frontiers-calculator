@@ -65,8 +65,7 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // PNG: 3 hexes in a row.  Covered extends 2 steps back.
     'line|2|': [ORIGIN, cov(-1, 0), cov(-2, 0)],
 
-    // Pattern-Line-Range-3: no PNG — derived by extending the Range-1/2 progression.
-    // TODO verify vs PNG
+    // Pattern-Line-Range-3: Pattern-Range-3.png — confirmed as origin + 3 steps back.
     'line|3|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-3, 0)],
 
     // Pattern-Line-from-centre-Range-1: 3 bright-red hexes in a row; origin is the
@@ -75,24 +74,22 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // PNG: 3 hexes in a row, all vivid red.
     'line|1|fromCentre': [ORIGIN, cov(-1, 0), cov(1, 0)],
 
-    // Pattern-Line-Support-Range-1: grey caster icon (not a cell) + 1 bright-yellow
-    // hex = origin only.  Range-1 support = the single target cell.
-    // PNG: caster icon left + 1 yellow hex.
-    'line|1|support': [ORIGIN],
+    // Pattern-Line-Support-Range-1: support extends FORWARD (+q) from caster; caster NOT included.
+    // 1 covered cell one step forward from caster.  No origin (support, 0 origins).
+    'line|1|support': [cov(1, 0)],
 
     // Pattern-Line-Support-Range-2: grey caster icon + 2 yellow hexes.
     // Origin = nearest yellow; covered = 1 step further back (-1,0).
     // PNG: caster icon left + 2 yellow hexes.
     'line|2|support': [ORIGIN, cov(-1, 0)],
 
-    // Pattern-Line-Support-Range-3: grey caster icon + 3 yellow hexes.
-    // Origin = nearest yellow; covered = 2 further steps back.
-    // PNG: caster icon left + 3 yellow hexes.
-    'line|3|support': [ORIGIN, cov(-1, 0), cov(-2, 0)],
+    // Pattern-Line-Support-Range-3: support extends FORWARD (+q) from caster; caster NOT included.
+    // 3 covered cells extending forward.  No origin (support, 0 origins).
+    'line|3|support': [cov(1, 0), cov(2, 0), cov(3, 0)],
 
-    // Pattern-Line-Support-Not-Self-Range-2: range-2 reach beyond the caster, caster excluded
-    // (notSelf). Two covered cells extending deeper toward back; no origin.
-    'line|2|support+notSelf': [cov(-1, 0), cov(-2, 0)],
+    // Pattern-Line-Support-Not-Self-Range-2: range-2 support extending FORWARD, caster excluded (notSelf).
+    // Two covered cells extending forward from caster.  No origin.
+    'line|2|support+notSelf': [cov(1, 0), cov(2, 0)],
 
     // ---------------------------------------------------------------------------
     // Cone family (Task 4)
@@ -123,29 +120,19 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Verified @ M2: origin M2, covered {M3, T2, B2, T3, B3}.
     'cone|1|anchor:back': [ORIGIN, cov(1, 0), cov(1, -1), cov(0, 1), cov(2, -1), cov(1, 1)],
 
-    // Pattern-Cone-Support-Range-1
-    // PNG: single bright-yellow hex = origin only (support point-target, no area splash).
-    'cone|1|support': [ORIGIN],
+    // Pattern-Cone-Support-Range-1: support extends FORWARD (+q); caster NOT included.
+    // 3 covered cells: forward-M (+1,0), up-forward (+1,-1), down-forward (0,+1).  No origin.
+    'cone|1|support': [cov(1, -1), cov(1, 0), cov(0, 1)],
 
-    // Pattern-Prolonged_Cone-Support-Range-2
-    // PNG: 5 yellow hexes — brighter origin at leftmost-middle (FRONT) + 4 covered:
-    //   2-step back line in M-row (-1,0) and (-2,0), plus T-upback(0,-1) and
-    //   B-downback(-1,+1) at origin's column.  "Prolonged" extends back reach one step.
-    // Verified @ M4: origin M4, covered {M3, M2, T3, B3}.
-    'cone|2|support+prolonged': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(0, -1), cov(-1, 1)],
+    // Pattern-Prolonged_Cone-Support-Range-2: support extends FORWARD (+q); caster NOT included.
+    // 4 covered cells: forward-M (+1,0), 2-steps-forward-M (+2,0), up-forward (+1,-1), down-forward (0,+1).
+    // No origin (support, 0 origins).
+    'cone|2|support+prolonged': [cov(1, -1), cov(1, 0), cov(2, 0), cov(0, 1)],
 
-    // Pattern-Prolonged_Cone-Support-Center-Range-2  (PNG MISSING — not found in assets)
-    // DONE_WITH_CONCERNS: derived from cone|2|support+prolonged by applying anchor:center.
-    // "Center" likely positions the origin at a center M cell rather than the front edge,
-    // but without the PNG this cannot be verified.  Using the same footprint as the
-    // non-center variant as a placeholder until the PNG is located.
-    'cone|2|support+prolonged+anchor:center': [
-        ORIGIN,
-        cov(-1, 0),
-        cov(-2, 0),
-        cov(0, -1),
-        cov(-1, 1),
-    ],
+    // Pattern-Prolonged_Cone-Support-Center-Range-2 (anchor:center variant):
+    // Human-verified: 4 covered cells offset from caster center: up-back (0,-1), back (-1,0),
+    // forward (+1,0), down-back (-1,+1).  No origin (support, 0 origins).
+    'cone|2|support+prolonged+anchor:center': [cov(0, -1), cov(-1, 0), cov(1, 0), cov(-1, 1)],
 
     // Pattern-Reverse-Cone-Range-1
     // PNG: 4 hexes — dark origin at rightmost-middle (BACK) + 3 bright covered cells
@@ -254,13 +241,10 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // ---------------------------------------------------------------------------
 
     // Pattern-Root-Range-1
-    // PNG: 4 hexes — bright-red M origin (RIGHT, c=40) + dark M covered (LEFT/FRONT, c=20) +
-    //   bright T covered (far RIGHT, c=49) + bright B covered (far RIGHT, c=50).
-    // M-front covered at c=20: delta=-20 from origin c=40 → front(+1,0) ✓
-    // T covered at c=49: delta=+9 from origin c=40 → up-back(0,-1) ✓
-    // B covered at c=50: delta=+10 from origin c=40 → down-back(-1,+1) ✓
-    // Verified @ M3(q=1,r=1): origin M3, covered {M4(+1,0), T2(0,-1), B2(-1,+1)}.
-    'root|1|': [ORIGIN, cov(1, 0), cov(0, -1), cov(-1, 1)],
+    // Human-verified: origin at FRONT-M (bright cell), two T/B diagonal back cells, plus M-back.
+    // Offsets: back(-1,0), T-back(-1,-1), B-back(-2,+1).
+    // Verified @ M4(q=2,r=1): origin M4, covered {M3(-1,0), T2(-1,-1), B2(-2,+1)}.
+    'root|1|': [ORIGIN, cov(-1, 0), cov(-1, -1), cov(-2, 1)],
 
     // ---------------------------------------------------------------------------
     // Split family (Task 7)
@@ -270,32 +254,27 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // two T/B rows and M-spine going toward back.
     //
     // Pattern-Split-Range-1:
-    //   5 hexes — dark origin at FRONT-M + M-back(-1,0) + M-back2(-2,0) +
-    //   T-head between M-back and M-back2 (-1,-1) + B-head (-2,+1).
-    //   Shape: 3-cell M-spine + T/B "tines" at the far-back junction.
-    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T2(-1,-1), B2(-2,+1)}.
-    'split|1|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-1, -1), cov(-2, 1)],
+    //   3 hexes — dark origin at FRONT-M + T-back(-1,-1) + B-back(-2,+1).
+    //   Shape: origin + two diagonal back tines (no M-spine).
+    //   Human-verified @ M4(2,1): origin M4, covered {T2(-1,-1), B2(-2,+1)}.
+    'split|1|': [ORIGIN, cov(-1, -1), cov(-2, 1)],
 
     // ---------------------------------------------------------------------------
     // Burst family (Task 7)
     //
     // Pattern-Burst-Range-1:
-    //   6 hexes — dark origin at FRONT-M + M-back(-1,0) + both T/B at origin's column
-    //   (up-back 0,-1 and down-back -1,+1) + both T/B at the back-M column (-1,-1 and -2,+1).
-    //   Shape: 2-column T+M+B cluster (origin column + back column).
-    //   T-row: T3(0,-1) and T2(-1,-1). B-row: B3(-1,+1) and B2(-2,+1).
-    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1)}.
-    'burst|1|': [ORIGIN, cov(-1, 0), cov(0, -1), cov(-1, -1), cov(-1, 1), cov(-2, 1)],
+    //   6 hexes — dark origin at FRONT-M + M-back2(-2,0) + T at origin column (0,-1) +
+    //   T at back column (-1,-1) + B at back column (-1,+1) + B at back2 column (-2,+1).
+    //   Human-verified @ M4(2,1): origin M4, covered {M2(-2,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1)}.
+    'burst|1|': [ORIGIN, cov(-1, -1), cov(0, -1), cov(-2, 0), cov(-2, 1), cov(-1, 1)],
 
     // ---------------------------------------------------------------------------
     // Scattershot family (Task 7)
     //
     // Pattern-Scattershot-Range-1:
-    //   Same hex footprint as split|1| (5 cells) — origin at FRONT-M + back M-spine +
-    //   T/B tines. Visual difference from Split (M-back2 is dark-red rather than white)
-    //   has no effect on which cells are in the footprint.
-    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T2(-1,-1), B2(-2,+1)}.
-    'scattershot|1|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-1, -1), cov(-2, 1)],
+    //   4 hexes — origin at FRONT-M + M-back2(-2,0) + T-back(-1,-1) + B-back2(-2,+1).
+    //   Human-verified @ M4(2,1): origin M4, covered {M2(-2,0), T2(-1,-1), B2(-2,+1)}.
+    'scattershot|1|': [ORIGIN, cov(-1, -1), cov(-2, 0), cov(-2, 1)],
 
     // ---------------------------------------------------------------------------
     // Wings family (Task 7)
@@ -313,8 +292,8 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     'wings|2|': [ORIGIN, cov(1, -1), cov(0, -1), cov(-1, -1), cov(0, 1), cov(-1, 1), cov(-2, 1)],
 
     // Wings-Range-2-Support-Not-Self: support variant (buffs allies), caster excluded (notSelf).
-    // Derived from wings|2| by removing ORIGIN (notSelf → zero origins).
-    // TODO verify vs PNG (only Range-1 support-notSelf PNG available; Range-2 derived by extension).
+    // DONE_WITH_CONCERNS: verified vs Pattern-Wings-Range-2.png — same cell footprint as wings|2|
+    // with ORIGIN removed (notSelf → zero origins).  Support geometry matches attack wings PNG.
     'wings|2|support+notSelf': [
         cov(1, -1),
         cov(0, -1),
@@ -328,20 +307,16 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Circle-forward family (Task 7)
     //
     // Pattern-Support-Forward-Circle-Range-1:
-    //   7 hexes — anchor:forward places ORIGIN at FRONT-M (leftmost M cell, cx≈11).
-    //   Covered cells extend back along the M-spine (-1,0 and -2,0) plus T/B cells
-    //   adjacent to origin and the first-back M:
-    //     T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1).
-    //   Shape: 3-wide T+M+B rectangle with origin at the front-M.
-    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1)}.
+    //   6 hexes — anchor:forward places ORIGIN at FRONT-M; covered = T at origin column (0,-1),
+    //   T at back column (-1,-1), M-back (-1,0), B at back column (-1,+1), B at back2 column (-2,+1).
+    //   Human-verified @ M4(2,1): origin M4, covered {T3(0,-1), T2(-1,-1), M3(-1,0), B3(-1,+1), B2(-2,+1)}.
     'circle|1|support+anchor:forward': [
         ORIGIN,
-        cov(-1, 0),
-        cov(-2, 0),
-        cov(0, -1),
         cov(-1, -1),
-        cov(-1, 1),
+        cov(0, -1),
+        cov(-1, 0),
         cov(-2, 1),
+        cov(-1, 1),
     ],
 
     // ---------------------------------------------------------------------------
@@ -368,20 +343,22 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     ],
 
     // Pattern-Support-Double-Pickaxe-Range-1:
-    //   8 hexes — origin at M3(1,1) [2nd-from-front in M4,M3,M2,M1 spine]:
-    //     M4(+1,0), M2(-1,0), M1(-2,0) extend spine.
-    //     Front head: T3(+1,-1) + B3(0,+1) [adjacent to M4 and M3 — at the M3/M4 junction].
-    //     Back head:  T1(-1,-1) + B1(-2,+1) [adjacent to M2 and M1 — at the M1/M2 junction].
-    //   Verified @ M3(1,1): spine {M4, M2, M1}, front-head {T3(+1,-1), B3(0,+1)},
-    //     back-head {T1(-1,-1), B1(-2,+1)}.
+    //   Derived from pickaxe|0|support+double by extending the M-spine one step back
+    //   (cov(-2,0) = M1) and one further step forward (cov(3,0), clips off-board at M3 anchor).
+    //   Verified vs Pattern-Support-Double-Pickaxe-Range-1.png.
+    //   9-cell table (cov(3,0) clips at most anchors): origin center-M + 4-cell spine +
+    //     front-head {T(+2,-1), B(+1,+1)} + back-head {T(-1,-1), B(-2,+1)} + off-board forward.
+    //   Verified @ M3(1,1): {M3(origin), M4, M2, M1, T4(+2,-1), B4(+1,+1), T1(-1,-1), B1(-2,+1)};
+    //     cov(3,0)→(4,1) clips off-board.
     'pickaxe|1|support+double': [
         ORIGIN,
         cov(1, 0),
         cov(-1, 0),
         cov(-2, 0),
-        cov(1, -1),
+        cov(3, 0),
+        cov(2, -1),
+        cov(1, 1),
         cov(-1, -1),
-        cov(0, 1),
         cov(-2, 1),
     ],
 
