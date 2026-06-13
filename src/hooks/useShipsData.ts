@@ -16,6 +16,10 @@ interface ShipTemplate {
     first_passive_skill_text?: string;
     second_passive_skill_text?: string;
     third_passive_skill_text?: string;
+    active_target?: string | null;
+    active_pattern?: string | null;
+    charged_target?: string | null;
+    charged_pattern?: string | null;
     bio?: string;
     quote?: string;
     quote_author?: string;
@@ -66,6 +70,10 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
     firstPassiveSkillText: template.first_passive_skill_text,
     secondPassiveSkillText: template.second_passive_skill_text,
     thirdPassiveSkillText: template.third_passive_skill_text,
+    activeTarget: template.active_target ?? undefined,
+    activePattern: template.active_pattern ?? undefined,
+    chargedTarget: template.charged_target ?? undefined,
+    chargedPattern: template.charged_pattern ?? undefined,
     bio: template.bio,
     quote: template.quote,
     quoteAuthor: template.quote_author,
