@@ -1,6 +1,8 @@
+import { existsSync, readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
-import { parsePattern } from '../targetingParser';
+import { parsePattern, parseTargetingCsv } from '../targetingParser';
 import { resolveCells, ResolvedCell } from './resolvePattern';
+import { ALL_POSITIONS } from './board';
 
 const positions = (cells: ResolvedCell[]) => new Set(cells.map((c) => c.position));
 const origins = (cells: ResolvedCell[]) =>
@@ -517,5 +519,38 @@ describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe
     it('Base-Support @ M2 → origin M2 only', () => {
         const cells = resolveCells(parsePattern('Pattern-Base-Support'), 'M2');
         expect(cells).toEqual([{ position: 'M2', role: 'origin' }]);
+    });
+});
+
+const CSV_PATH = 'docs/ship-targeting.csv';
+
+describe.skipIf(!existsSync(CSV_PATH))('ship-targeting.csv pattern coverage', () => {
+    const rows = parseTargetingCsv(readFileSync(CSV_PATH, 'utf8'));
+    const patterns = new Set<string>();
+    for (const r of rows) {
+        if (r.activePattern) patterns.add(r.activePattern);
+        if (r.chargedPattern) patterns.add(r.chargedPattern);
+    }
+
+    it('has patterns to test', () => {
+        expect(patterns.size).toBeGreaterThan(20);
+    });
+
+    it('every corpus pattern resolves: no throw, valid Positions, valid origin count', () => {
+        for (const raw of patterns) {
+            const parsed = parsePattern(raw);
+            const cells = resolveCells(parsed, 'M2');
+            for (const c of cells) {
+                expect(ALL_POSITIONS, `${raw} -> ${c.position}`).toContain(c.position);
+            }
+            const originCount = cells.filter((c) => c.role === 'origin').length;
+            if (parsed.shape === 'all') {
+                expect(originCount, raw).toBe(12);
+            } else if (parsed.modifiers.notSelf) {
+                expect(originCount, raw).toBe(0);
+            } else {
+                expect(originCount, raw).toBe(1);
+            }
+        }
     });
 });
