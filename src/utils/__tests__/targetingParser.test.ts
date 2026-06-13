@@ -159,6 +159,14 @@ describe('parsePattern', () => {
     it('throws on an unrecognizable shape', () => {
         expect(() => parsePattern('Pattern-Nonsense-Range-1')).toThrow(/unknown pattern shape/i);
     });
+
+    it('captures the double modifier (Double-Pickaxe)', () => {
+        expect(parsePattern('Pattern-Support-Double-Pickaxe-Range-0')).toMatchObject({
+            shape: 'pickaxe',
+            range: 0,
+            modifiers: { support: true, double: true },
+        });
+    });
 });
 
 describe('parseSkillTargeting', () => {
@@ -230,6 +238,7 @@ describe.skipIf(!csvAvailable)('ship-targeting.csv corpus coverage', () => {
         .split(/\r?\n/)
         .filter((l) => l.trim().length > 0)
         .slice(1) // drop header
+        // Naive split is safe: ship-targeting.csv has no quoted fields or embedded commas.
         .map((line) => {
             const [name, activeTarget, activePattern, chargedTarget, chargedPattern] =
                 line.split(',');

@@ -35,6 +35,7 @@ export interface PatternModifiers {
     prolonged?: boolean;
     reverse?: boolean;
     notSelf?: boolean;
+    double?: boolean;
     fromCentre?: boolean;
     anchorMod?: 'back' | 'center' | 'forward';
 }
@@ -145,6 +146,8 @@ export function parsePattern(raw: string): ParsedPattern {
     if (/(^|-)prolonged(-|$)/.test(lower)) modifiers.prolonged = true;
     if (/(^|-)reverse(-|$)/.test(lower)) modifiers.reverse = true;
     if (/not-self/.test(lower)) modifiers.notSelf = true;
+    if (/(^|-)double(-|$)/.test(lower)) modifiers.double = true;
+    // British spelling only — the corpus uses "from-centre"; a future "from-center" would need adding here.
     if (/from-centre/.test(lower)) modifiers.fromCentre = true;
     // anchor modifier (mutually exclusive); 'back' must not fire on 'backline'
     if (/(^|-)back(-|$)/.test(lower)) modifiers.anchorMod = 'back';
