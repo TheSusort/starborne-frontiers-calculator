@@ -1,3 +1,5 @@
+import { Ship } from '../types/ship';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -163,4 +165,36 @@ export function parsePattern(raw: string): ParsedPattern {
     }
 
     return { raw, shape: detectShape(lower), range, modifiers };
+}
+
+// ---------------------------------------------------------------------------
+// Per-skill and per-ship
+// ---------------------------------------------------------------------------
+
+export function parseSkillTargeting(target: string, pattern: string): SkillTargeting {
+    return { target: parseTarget(target), pattern: parsePattern(pattern) };
+}
+
+export function parseShipTargeting(
+    ship: Pick<
+        Ship,
+        'activeTarget' | 'activePattern' | 'chargedTarget' | 'chargedPattern' | 'chargeSkillCharge'
+    >
+): ShipTargeting {
+    const result: ShipTargeting = {};
+
+    if (ship.activeTarget && ship.activePattern) {
+        result.active = parseSkillTargeting(ship.activeTarget, ship.activePattern);
+    }
+
+    if (ship.chargedTarget && ship.chargedPattern) {
+        // Explicit override (charged differs from active).
+        result.charged = parseSkillTargeting(ship.chargedTarget, ship.chargedPattern);
+    } else if (result.active && ship.chargeSkillCharge != null) {
+        // Empty charged columns mean "charged targets the same as active"; only
+        // inherit when the ship actually has a charged skill.
+        result.charged = result.active;
+    }
+
+    return result;
 }

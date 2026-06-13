@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseTarget, parsePattern } from '../targetingParser';
+import {
+    parseTarget,
+    parsePattern,
+    parseSkillTargeting,
+    parseShipTargeting,
+} from '../targetingParser';
 
 describe('parseTarget', () => {
     it('maps enemy-side selections', () => {
@@ -152,5 +157,65 @@ describe('parsePattern', () => {
 
     it('throws on an unrecognizable shape', () => {
         expect(() => parsePattern('Pattern-Nonsense-Range-1')).toThrow(/unknown pattern shape/i);
+    });
+});
+
+describe('parseSkillTargeting', () => {
+    it('combines target + pattern', () => {
+        expect(parseSkillTargeting('front', 'Pattern-Cone-Range-1')).toEqual({
+            target: { raw: 'front', side: 'enemy', selection: 'front' },
+            pattern: { raw: 'Pattern-Cone-Range-1', shape: 'cone', range: 1, modifiers: {} },
+        });
+    });
+});
+
+describe('parseShipTargeting — charged inheritance', () => {
+    const base = {
+        activeTarget: 'front',
+        activePattern: 'Pattern-Line-Range-1',
+        chargedTarget: undefined,
+        chargedPattern: undefined,
+        chargeSkillCharge: undefined,
+    };
+
+    it('parses active when present', () => {
+        const r = parseShipTargeting({ ...base });
+        expect(r.active).toMatchObject({
+            target: { selection: 'front' },
+            pattern: { shape: 'line' },
+        });
+    });
+
+    it('inherits active when charged is empty AND the ship has a charged skill', () => {
+        const r = parseShipTargeting({ ...base, chargeSkillCharge: 4 });
+        expect(r.charged).toEqual(r.active);
+    });
+
+    it('uses the explicit charged override when present', () => {
+        const r = parseShipTargeting({
+            ...base,
+            chargeSkillCharge: 4,
+            chargedTarget: 'front',
+            chargedPattern: 'Pattern-Cone-Range-1',
+        });
+        expect(r.charged?.pattern.shape).toBe('cone');
+        expect(r.charged).not.toEqual(r.active);
+    });
+
+    it('leaves charged undefined when there is no charged skill', () => {
+        const r = parseShipTargeting({ ...base, chargeSkillCharge: undefined });
+        expect(r.charged).toBeUndefined();
+    });
+
+    it('returns empty object when there is no active targeting', () => {
+        const r = parseShipTargeting({
+            activeTarget: undefined,
+            activePattern: undefined,
+            chargedTarget: undefined,
+            chargedPattern: undefined,
+            chargeSkillCharge: 4,
+        });
+        expect(r.active).toBeUndefined();
+        expect(r.charged).toBeUndefined();
     });
 });

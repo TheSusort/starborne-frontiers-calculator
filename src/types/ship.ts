@@ -26,6 +26,10 @@ export interface Ship {
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
     thirdPassiveSkillText?: string;
+    activeTarget?: string;
+    activePattern?: string;
+    chargedTarget?: string;
+    chargedPattern?: string;
     bio?: string;
     quote?: string;
     quoteAuthor?: string;
@@ -76,6 +80,10 @@ export interface ShipData {
     firstPassiveSkillText?: string;
     secondPassiveSkillText?: string;
     thirdPassiveSkillText?: string;
+    activeTarget?: string;
+    activePattern?: string;
+    chargedTarget?: string;
+    chargedPattern?: string;
     bio?: string;
     quote?: string;
     quoteAuthor?: string;
