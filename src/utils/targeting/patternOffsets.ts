@@ -2,8 +2,8 @@ import { ParsedPattern } from '../targetingParser';
 
 export type CellRole = 'origin' | 'covered';
 
-/** A covered/origin cell expressed as an axial offset from the origin (0,0).
- *  Offsets are in board-axial space; see the plan's direction table. */
+/** A covered/origin cell as an axial offset from the origin (0,0).
+ *  Offsets use the same axial deltas as DIRECTIONS in ./board (depth toward back = (-1,0)). */
 export interface OffsetCell {
     dq: number;
     dr: number;
@@ -11,6 +11,14 @@ export interface OffsetCell {
 }
 
 const ORIGIN: OffsetCell = { dq: 0, dr: 0, role: 'origin' };
+
+/** Shorthand for a covered (non-origin) offset cell — keeps offset tables scannable. */
+export const cov = (dq: number, dr: number): OffsetCell => ({ dq, dr, role: 'covered' });
+
+/** Support whole-lane (Pattern-Line-Support-whole-lane): caster-centered line,
+ *  2 forward (+q) + caster + 2 back (-q), clipped to the board. Selected by
+ *  range === 'lane' in resolvePattern, not by signature. */
+export const WHOLE_LANE: OffsetCell[] = [cov(2, 0), cov(1, 0), ORIGIN, cov(-1, 0), cov(-2, 0)];
 
 /** Build a stable signature for a pattern from its parsed form. `shape` and `range`
  *  both participate (whole-lane is shape 'line' + range 'lane'); modifiers are appended
@@ -39,10 +47,5 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Pattern-Base -> shape 'base', range 0, no mods
     'base|0|': [ORIGIN],
     // Pattern-Range-3 -> shape 'range', range 3: origin + 3 steps toward back
-    'range|3|': [
-        ORIGIN,
-        { dq: -1, dr: 0, role: 'covered' },
-        { dq: -2, dr: 0, role: 'covered' },
-        { dq: -3, dr: 0, role: 'covered' },
-    ],
+    'range|3|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-3, 0)],
 };

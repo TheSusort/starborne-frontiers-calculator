@@ -1,22 +1,19 @@
 import { Position } from '../../types/encounters';
 import { ParsedPattern } from '../targetingParser';
 import { ALL_POSITIONS, axialToPosition, positionToAxial } from './board';
-import { CellRole, OFFSET_TABLES, OffsetCell, patternSignature } from './patternOffsets';
+import {
+    CellRole,
+    OFFSET_TABLES,
+    OffsetCell,
+    patternSignature,
+    WHOLE_LANE,
+} from './patternOffsets';
 
 export type { CellRole } from './patternOffsets';
 export interface ResolvedCell {
     position: Position;
     role: CellRole;
 }
-
-// whole-lane: caster-centered line, 2 forward (+q) + caster + 2 back (-q), clipped.
-const WHOLE_LANE: OffsetCell[] = [
-    { dq: 2, dr: 0, role: 'covered' },
-    { dq: 1, dr: 0, role: 'covered' },
-    { dq: 0, dr: 0, role: 'origin' },
-    { dq: -1, dr: 0, role: 'covered' },
-    { dq: -2, dr: 0, role: 'covered' },
-];
 
 function stamp(table: OffsetCell[], anchor: Position): ResolvedCell[] {
     const a = positionToAxial(anchor);
@@ -37,11 +34,10 @@ export function resolveCells(pattern: ParsedPattern, anchor: Position): Resolved
     if (pattern.range === 'lane') {
         return stamp(WHOLE_LANE, anchor);
     }
-    const table = OFFSET_TABLES[patternSignature(pattern)];
+    const sig = patternSignature(pattern);
+    const table = OFFSET_TABLES[sig];
     if (!table) {
-        throw new Error(
-            `No offset table for pattern signature: "${patternSignature(pattern)}" (${pattern.raw})`
-        );
+        throw new Error(`No offset table for pattern signature: "${sig}" (${pattern.raw})`);
     }
     return stamp(table, anchor);
 }
