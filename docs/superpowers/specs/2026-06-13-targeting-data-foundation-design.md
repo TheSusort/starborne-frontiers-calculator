@@ -66,7 +66,13 @@ ALTER TABLE public.ship_templates
 ```
 
 - No RLS changes — `ship_templates` is an existing, already-policied table.
-- Charged columns are sparse (only 9 ships have charged targeting in the corpus).
+- **Charged columns are an OVERRIDE, not a full value.** The gathered data only
+  fills `charged_target` / `charged_pattern` when the charged skill's targeting
+  **differs** from the active skill's. An empty charged column therefore means
+  "the charged skill targets the same as the active skill" (inheritance) — **not**
+  "no charged targeting." We store the data verbatim (empty = inherit); the
+  inheritance is resolved at parse time (see §4), so the DB stays minimal and
+  matches the maintainer's intent. The populate script does **not** back-fill.
 - Naming follows the existing `active_skill_text` / `charge_skill_text` convention.
 
 ### 2. Populate script
@@ -163,8 +169,28 @@ export function parseTarget(raw: string): ParsedTarget;
 export function parsePattern(raw: string): ParsedPattern;
 export function parseSkillTargeting(target: string, pattern: string): SkillTargeting;
 export function parseShipTargeting(ship: Pick<Ship,
-  'activeTarget' | 'activePattern' | 'chargedTarget' | 'chargedPattern'>): ShipTargeting;
+  'activeTarget' | 'activePattern' | 'chargedTarget' | 'chargedPattern' | 'chargeSkillCharge'>): ShipTargeting;
 ```
+
+**Charged-targeting inheritance (resolved here, not in the DB).** Because empty
+charged columns mean "same as active", `parseShipTargeting` resolves charged as
+follows:
+
+- `active` = `parseSkillTargeting(activeTarget, activePattern)` when both are
+  present, else `undefined`.
+- `charged`:
+  - If **both** `chargedTarget` and `chargedPattern` are present → parse them
+    (an explicit override).
+  - Else if the ship **has a charged skill** (`chargeSkillCharge != null`) and
+    `active` is defined → `charged` **inherits** `active` (a structural copy of the
+    active `SkillTargeting`).
+  - Else → `undefined` (no charged skill, or no active to inherit from).
+
+This means a consumer never has to special-case "empty = same as active"; the
+model already carries the resolved charged targeting. The gate on
+`chargeSkillCharge` prevents fabricating charged targeting for ships that have no
+charged skill at all. `parseSkillTargeting` itself stays pure (one skill, no
+inheritance) so it is independently testable.
 
 **Grammar handled** (loosely — modifiers are order-flexible, so the parser should
 detect tokens by presence, **not** by fixed position):
@@ -215,6 +241,10 @@ shape. Also do not assume `Prolonged_Cone` always carries an anchor (AEGIS's
 - **Per-token unit tests** — each of the 8 target values; each shape; each
   modifier (support, prolonged, reverse, notSelf, fromCentre, anchorMod variants);
   range numeric / `all` / `lane`.
+- **Charged-inheritance tests** for `parseShipTargeting`: (a) empty charged +
+  `chargeSkillCharge != null` → `charged` deep-equals `active`; (b) explicit
+  charged override → `charged` reflects the override, not active; (c) empty
+  charged + `chargeSkillCharge == null` → `charged` is `undefined`.
 - **Corpus test** — reads `docs/ship-targeting.csv` and asserts every `active`
   and (non-empty) `charged` value parses with **no `'unknown'` shape or selection
   and no unconsumed tokens**. This is the coverage gate that the entire vocabulary
