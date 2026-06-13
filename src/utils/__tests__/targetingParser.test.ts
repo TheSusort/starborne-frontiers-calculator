@@ -212,6 +212,26 @@ describe('parseShipTargeting — charged inheritance', () => {
         expect(r.charged).not.toEqual(r.active);
     });
 
+    it('merges a one-sided charged TARGET override with the active pattern', () => {
+        const r = parseShipTargeting({
+            ...base,
+            chargeSkillCharge: 4,
+            chargedTarget: 'back', // differs from active target only
+        });
+        expect(r.charged?.target.selection).toBe('back');
+        expect(r.charged?.pattern.shape).toBe('line'); // inherited from active
+    });
+
+    it('merges a one-sided charged PATTERN override with the active target', () => {
+        const r = parseShipTargeting({
+            ...base,
+            chargeSkillCharge: 4,
+            chargedPattern: 'Pattern-Cone-Range-1', // differs from active pattern only
+        });
+        expect(r.charged?.target.selection).toBe('front'); // inherited from active
+        expect(r.charged?.pattern.shape).toBe('cone');
+    });
+
     it('leaves charged undefined when there is no charged skill', () => {
         const r = parseShipTargeting({ ...base, chargeSkillCharge: undefined });
         expect(r.charged).toBeUndefined();
@@ -227,6 +247,27 @@ describe('parseShipTargeting — charged inheritance', () => {
         });
         expect(r.active).toBeUndefined();
         expect(r.charged).toBeUndefined();
+    });
+});
+
+describe('parseTargetingCsv', () => {
+    it('parses well-formed rows (incl. empty trailing charged columns)', () => {
+        const rows = parseTargetingCsv('name,at,ap,ct,cp\nAEGIS,allies,Pattern-Base,,');
+        expect(rows).toEqual([
+            {
+                name: 'AEGIS',
+                activeTarget: 'allies',
+                activePattern: 'Pattern-Base',
+                chargedTarget: '',
+                chargedPattern: '',
+            },
+        ]);
+    });
+
+    it('throws on a row with the wrong number of columns', () => {
+        expect(() => parseTargetingCsv('name,at,ap,ct,cp\nAEGIS,allies,Pattern-Base')).toThrow(
+            /Malformed ship-targeting\.csv row 2: expected 5 columns, got 3/
+        );
     });
 });
 

@@ -75,9 +75,14 @@ export function parseTargetingCsv(csvText: string): TargetingCsvRow[] {
         .split(/\r?\n/)
         .filter((l) => l.trim().length > 0)
         .slice(1) // drop header
-        .map((line) => {
-            const [name, activeTarget, activePattern, chargedTarget, chargedPattern] =
-                line.split(',');
+        .map((line, i) => {
+            const parts = line.split(',');
+            if (parts.length !== 5) {
+                throw new Error(
+                    `Malformed ship-targeting.csv row ${i + 2}: expected 5 columns, got ${parts.length}: "${line}"`
+                );
+            }
+            const [name, activeTarget, activePattern, chargedTarget, chargedPattern] = parts;
             return {
                 name: (name ?? '').trim(),
                 activeTarget: (activeTarget ?? '').trim(),
@@ -221,11 +226,16 @@ export function parseShipTargeting(
         result.active = parseSkillTargeting(ship.activeTarget, ship.activePattern);
     }
 
-    if (ship.chargedTarget && ship.chargedPattern) {
-        // Explicit override (charged differs from active).
-        result.charged = parseSkillTargeting(ship.chargedTarget, ship.chargedPattern);
+    // Charged columns are a per-column override: the data only fills a charged
+    // field when it differs from active, so a charged skill that differs in only
+    // ONE axis (e.g. a different target but the same pattern) fills just that
+    // column. Merge per-column, falling back to active for the unfilled axis.
+    const chargedTarget = ship.chargedTarget || ship.activeTarget;
+    const chargedPattern = ship.chargedPattern || ship.activePattern;
+    if ((ship.chargedTarget || ship.chargedPattern) && chargedTarget && chargedPattern) {
+        result.charged = parseSkillTargeting(chargedTarget, chargedPattern);
     } else if (result.active && ship.chargeSkillCharge != null) {
-        // Empty charged columns mean "charged targets the same as active"; only
+        // Both charged columns empty = "charged targets the same as active"; only
         // inherit when the ship actually has a charged skill.
         result.charged = result.active;
     }
