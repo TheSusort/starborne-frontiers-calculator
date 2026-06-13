@@ -90,9 +90,7 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // PNG: caster icon left + 3 yellow hexes.
     'line|3|support': [ORIGIN, cov(-1, 0), cov(-2, 0)],
 
-    // Pattern-Line-Support-Not-Self-Range-2: no PNG — derived from Support-Range-2
-    // ([ORIGIN, cov(-1,0)]) with the origin (caster's cell) removed per notSelf rule.
-    // notSelf → zero ORIGIN cells, all cov.
-    // TODO verify vs PNG
-    'line|2|support+notSelf': [cov(-1, 0)],
+    // Pattern-Line-Support-Not-Self-Range-2: range-2 reach beyond the caster, caster excluded
+    // (notSelf). Two covered cells extending deeper toward back; no origin.
+    'line|2|support+notSelf': [cov(-1, 0), cov(-2, 0)],
 };

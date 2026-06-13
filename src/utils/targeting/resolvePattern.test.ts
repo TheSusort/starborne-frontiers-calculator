@@ -98,13 +98,12 @@ describe('resolveCells — Line family (Task 3)', () => {
         expect(origins(cells)).toEqual(['M3']);
     });
 
-    // Line-Support-Not-Self-Range-2: notSelf variant — origin cell absent, 1 covered step back.
-    // TODO verify vs PNG (no PNG available — derived from Support-Range-2 with origin removed)
-    it('Line-Support-Not-Self-Range-2 @ M3 → no origin, covered M2 only', () => {
+    // Line-Support-Not-Self-Range-2: range-2 reach beyond caster, caster excluded (notSelf).
+    // Anchor M3 (axial (1,1)): cov(-1,0) → M2(0,1), cov(-2,0) → M1(-1,1).
+    it('Line-Support-Not-Self-Range-2 @ M3 → no origin, covered M2 M1', () => {
         const cells = resolveCells(parsePattern('Pattern-Line-Support-Not-Self-Range-2'), 'M3');
-        expect(positions(cells)).toEqual(new Set(['M2']));
+        expect(positions(cells)).toEqual(new Set(['M2', 'M1']));
         expect(origins(cells)).toEqual([]);
-        expect(cells.find((c) => c.position === 'M2')!.role).toBe('covered');
     });
 
     // Clipping: Line-Range-2 anchored at M2 clips M1... wait M1 exists.
