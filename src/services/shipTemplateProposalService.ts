@@ -33,6 +33,10 @@ export interface ShipTemplate {
     first_passive_skill_text: string | null;
     second_passive_skill_text: string | null;
     third_passive_skill_text: string | null;
+    active_target?: string | null;
+    active_pattern?: string | null;
+    charged_target?: string | null;
+    charged_pattern?: string | null;
     definition_id: string | null;
     base_stats: {
         hp: number;
