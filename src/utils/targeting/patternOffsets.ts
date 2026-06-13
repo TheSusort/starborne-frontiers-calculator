@@ -261,4 +261,134 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // B covered at c=50: delta=+10 from origin c=40 → down-back(-1,+1) ✓
     // Verified @ M3(q=1,r=1): origin M3, covered {M4(+1,0), T2(0,-1), B2(-1,+1)}.
     'root|1|': [ORIGIN, cov(1, 0), cov(0, -1), cov(-1, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Split family (Task 7)
+    //
+    // PNG orientation: LEFT = FRONT (high q), RIGHT = BACK (low q).
+    // ORIGIN = DARK hex (min brightness) at front-M; covered cells extend into the
+    // two T/B rows and M-spine going toward back.
+    //
+    // Pattern-Split-Range-1:
+    //   5 hexes — dark origin at FRONT-M + M-back(-1,0) + M-back2(-2,0) +
+    //   T-head between M-back and M-back2 (-1,-1) + B-head (-2,+1).
+    //   Shape: 3-cell M-spine + T/B "tines" at the far-back junction.
+    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T2(-1,-1), B2(-2,+1)}.
+    'split|1|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-1, -1), cov(-2, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Burst family (Task 7)
+    //
+    // Pattern-Burst-Range-1:
+    //   6 hexes — dark origin at FRONT-M + M-back(-1,0) + both T/B at origin's column
+    //   (up-back 0,-1 and down-back -1,+1) + both T/B at the back-M column (-1,-1 and -2,+1).
+    //   Shape: 2-column T+M+B cluster (origin column + back column).
+    //   T-row: T3(0,-1) and T2(-1,-1). B-row: B3(-1,+1) and B2(-2,+1).
+    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1)}.
+    'burst|1|': [ORIGIN, cov(-1, 0), cov(0, -1), cov(-1, -1), cov(-1, 1), cov(-2, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Scattershot family (Task 7)
+    //
+    // Pattern-Scattershot-Range-1:
+    //   Same hex footprint as split|1| (5 cells) — origin at FRONT-M + back M-spine +
+    //   T/B tines. Visual difference from Split (M-back2 is dark-red rather than white)
+    //   has no effect on which cells are in the footprint.
+    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T2(-1,-1), B2(-2,+1)}.
+    'scattershot|1|': [ORIGIN, cov(-1, 0), cov(-2, 0), cov(-1, -1), cov(-2, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Wings family (Task 7)
+    //
+    // Wings-Range-1: all-T+B diagonal neighbors of origin M (same geometry as cross|1|).
+    // Origin at center-M (darkest cell), 2 T cells + 2 B cells flanking it diagonally.
+    //   Verified @ M3(1,1): origin M3, covered {T2(0,-1), T3(+1,-1), B2(-1,+1), B3(0,+1)}.
+    'wings|1|': [ORIGIN, cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
+
+    // Wings-Range-2: extends each wing arm by one more step back.
+    //   T-row: adds T1(-1,-1) to the back of the upper wing.
+    //   B-row: adds B1(-2,+1) to the back of the lower wing.
+    //   Total 7 cells: origin M + T3(+1,-1) + T2(0,-1) + T1(-1,-1) + B3(0,+1) + B2(-1,+1) + B1(-2,+1).
+    //   Verified @ M4(2,1): origin M4, covered {T4(+1,-1), T3(0,-1), T2(-1,-1), B4(0,+1), B3(-1,+1), B2(-2,+1)}.
+    'wings|2|': [ORIGIN, cov(1, -1), cov(0, -1), cov(-1, -1), cov(0, 1), cov(-1, 1), cov(-2, 1)],
+
+    // Wings-Range-2-Support-Not-Self: support variant (buffs allies), caster excluded (notSelf).
+    // Derived from wings|2| by removing ORIGIN (notSelf → zero origins).
+    // TODO verify vs PNG (only Range-1 support-notSelf PNG available; Range-2 derived by extension).
+    'wings|2|support+notSelf': [
+        cov(1, -1),
+        cov(0, -1),
+        cov(-1, -1),
+        cov(0, 1),
+        cov(-1, 1),
+        cov(-2, 1),
+    ],
+
+    // ---------------------------------------------------------------------------
+    // Circle-forward family (Task 7)
+    //
+    // Pattern-Support-Forward-Circle-Range-1:
+    //   7 hexes — anchor:forward places ORIGIN at FRONT-M (leftmost M cell, cx≈11).
+    //   Covered cells extend back along the M-spine (-1,0 and -2,0) plus T/B cells
+    //   adjacent to origin and the first-back M:
+    //     T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1).
+    //   Shape: 3-wide T+M+B rectangle with origin at the front-M.
+    //   Verified @ M4(2,1): origin M4, covered {M3(-1,0), M2(-2,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1)}.
+    'circle|1|support+anchor:forward': [
+        ORIGIN,
+        cov(-1, 0),
+        cov(-2, 0),
+        cov(0, -1),
+        cov(-1, -1),
+        cov(-1, 1),
+        cov(-2, 1),
+    ],
+
+    // ---------------------------------------------------------------------------
+    // Pickaxe-double family (Task 7)
+    //
+    // "Double pickaxe" = two T/B heads (one at each end of the M-spine) + full M-spine.
+    // Support variant — ORIGIN is the brightest cell = center M cell.
+    //
+    // Pattern-Support-Double-Pickaxe-Range-0:
+    //   7 hexes — origin at M3(1,1) [center of M4,M3,M2 spine]:
+    //     M4(+1,0), M2(-1,0) extend spine by 1 each direction.
+    //     Front head: T4(+2,-1) + B4(+1,+1) [adjacent to M4, outside the board-far end].
+    //     Back head:  T1(-1,-1) + B1(-2,+1) [adjacent to M2, at back-far end].
+    //   Verified @ M3(1,1): spine {M4, M2}, front-head {T4(+2,-1), B4(+1,+1)},
+    //     back-head {T1(-1,-1), B1(-2,+1)}.
+    'pickaxe|0|support+double': [
+        ORIGIN,
+        cov(1, 0),
+        cov(-1, 0),
+        cov(2, -1),
+        cov(1, 1),
+        cov(-1, -1),
+        cov(-2, 1),
+    ],
+
+    // Pattern-Support-Double-Pickaxe-Range-1:
+    //   8 hexes — origin at M3(1,1) [2nd-from-front in M4,M3,M2,M1 spine]:
+    //     M4(+1,0), M2(-1,0), M1(-2,0) extend spine.
+    //     Front head: T3(+1,-1) + B3(0,+1) [adjacent to M4 and M3 — at the M3/M4 junction].
+    //     Back head:  T1(-1,-1) + B1(-2,+1) [adjacent to M2 and M1 — at the M1/M2 junction].
+    //   Verified @ M3(1,1): spine {M4, M2, M1}, front-head {T3(+1,-1), B3(0,+1)},
+    //     back-head {T1(-1,-1), B1(-2,+1)}.
+    'pickaxe|1|support+double': [
+        ORIGIN,
+        cov(1, 0),
+        cov(-1, 0),
+        cov(-2, 0),
+        cov(1, -1),
+        cov(-1, -1),
+        cov(0, 1),
+        cov(-2, 1),
+    ],
+
+    // ---------------------------------------------------------------------------
+    // Base-Support (Task 7)
+    //
+    // Pattern-Base-Support: same single-cell shape as base|0| — just the origin.
+    // No PNG needed; identical footprint to 'base|0|'.
+    'base|0|support': [ORIGIN],
 };

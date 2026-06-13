@@ -371,3 +371,151 @@ describe('resolveCells — Cone family (Task 4)', () => {
         expect(origins(cells)).toEqual(['M4']);
     });
 });
+
+describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe / Base-Support', () => {
+    // -----------------------------------------------------------------------
+    // Split-Range-1: origin front-M + 2-cell M-spine back + T/B at spine-end.
+    // Shape: 3 M cells (M4 origin, M3, M2) + T2 + B2 = 5 cells.
+    // Anchor M4(2,1): origin M4, M3(-1,0), M2(-2,0), T2(-1,-1), B2(-2,+1).
+    // T2(1,0)=(2-1,1-1)=(1,0)✓  B2(0,2)=(2-2,1+1)=(0,2)✓
+    // -----------------------------------------------------------------------
+    it('Split-Range-1 @ M4 → origin M4, covered {M3, M2, T2, B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Split-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T2', 'B2']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'M3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T2')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M2(0,1): cov(-1,0)→M1(-1,1)✓, cov(-2,0)→off, cov(-1,-1)→off, cov(-2,+1)→off.
+    it('Split-Range-1 @ M2 clips off-board back cells', () => {
+        const cells = resolveCells(parsePattern('Pattern-Split-Range-1'), 'M2');
+        expect(positions(cells)).toEqual(new Set(['M2', 'M1']));
+        expect(origins(cells)).toEqual(['M2']);
+    });
+
+    // -----------------------------------------------------------------------
+    // Burst-Range-1: origin front-M + 2-col T+M+B cluster (6 cells).
+    // Origin M4, covered: M3(-1,0), T3(0,-1), T2(-1,-1), B3(-1,+1), B2(-2,+1).
+    // T3(2,0)=(2+0,1-1)=(2,0)✓  B3(1,2)=(2-1,1+1)=(1,2)✓
+    // -----------------------------------------------------------------------
+    it('Burst-Range-1 @ M4 → origin M4, covered {M3, T3, T2, B3, B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Burst-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'T3', 'T2', 'B3', 'B2']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M3(1,1): cov(-1,0)→M2✓, cov(0,-1)→T2(1,0)✓, cov(-1,-1)→T1(0,0)✓,
+    //   cov(-1,+1)→B2(0,2)✓, cov(-2,+1)→B1(-1,2)✓. All land on-board.
+    it('Burst-Range-1 @ M3 → origin M3, covered {M2, T2, T1, B2, B1}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Burst-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M2', 'T2', 'T1', 'B2', 'B1']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+
+    // -----------------------------------------------------------------------
+    // Scattershot-Range-1: same footprint as Split-Range-1.
+    // Anchor M4: origin M4, covered {M3, M2, T2, B2}.
+    // -----------------------------------------------------------------------
+    it('Scattershot-Range-1 @ M4 → origin M4, covered {M3, M2, T2, B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Scattershot-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T2', 'B2']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'M3')!.role).toBe('covered');
+    });
+
+    // -----------------------------------------------------------------------
+    // Wings-Support-Not-Self-Range-2: support, notSelf — zero origins.
+    // Derived from wings|2| (Range-2 wings) minus the ORIGIN.
+    // Covered cells: T(+1,-1), T(0,-1), T(-1,-1), B(0,+1), B(-1,+1), B(-2,+1).
+    // Anchor M4(2,1): T4(3,0)✓, T3(2,0)✓, T2(1,0)✓, B4(2,2)✓, B3(1,2)✓, B2(0,2)✓.
+    // TODO verify vs PNG (only Range-1 support-notSelf PNG available).
+    // -----------------------------------------------------------------------
+    it('Wings-Support-Not-Self-Range-2 @ M4 → no origin, covered {T4, T3, T2, B4, B3, B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Wings-Support-Not-Self-Range-2'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['T4', 'T3', 'T2', 'B4', 'B3', 'B2']));
+        expect(origins(cells)).toEqual([]);
+        expect(cells.every((c) => c.role === 'covered')).toBe(true);
+    });
+
+    // Clipping: anchor M2(0,1): cov(+1,-1)→T2(1,0)✓, cov(0,-1)→T1(0,0)✓, cov(-1,-1)→(-1,0)=off,
+    //   cov(0,+1)→B2(0,2)✓, cov(-1,+1)→B1(-1,2)✓, cov(-2,+1)→(-2,2)=off.
+    it('Wings-Support-Not-Self-Range-2 @ M2 clips 2 off-board cells', () => {
+        const cells = resolveCells(parsePattern('Pattern-Wings-Support-Not-Self-Range-2'), 'M2');
+        expect(positions(cells)).toEqual(new Set(['T2', 'T1', 'B2', 'B1']));
+        expect(origins(cells)).toEqual([]);
+    });
+
+    // -----------------------------------------------------------------------
+    // Support-Forward-Circle-Range-1: circle with anchor:forward → origin at front-M.
+    // 7 cells: origin M4 + M3(-1,0) + M2(-2,0) + T3(0,-1) + T2(-1,-1) + B3(-1,+1) + B2(-2,+1).
+    // Anchor M4(2,1): all 6 covered land on-board.
+    // -----------------------------------------------------------------------
+    it('Support-Forward-Circle-Range-1 @ M4 → origin M4, covered {M3,M2,T3,T2,B3,B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Forward-Circle-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T3', 'T2', 'B3', 'B2']));
+        expect(origins(cells)).toEqual(['M4']);
+        expect(cells.find((c) => c.position === 'M3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M3(1,1): cov(-1,0)→M2✓, cov(-2,0)→M1✓, cov(0,-1)→T2(1,0)✓,
+    //   cov(-1,-1)→T1(0,0)✓, cov(-1,+1)→B2(0,2)✓, cov(-2,+1)→B1(-1,2)✓.
+    it('Support-Forward-Circle-Range-1 @ M3 → origin M3, covered {M2,M1,T2,T1,B2,B1}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Forward-Circle-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M2', 'M1', 'T2', 'T1', 'B2', 'B1']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+
+    // -----------------------------------------------------------------------
+    // Support-Double-Pickaxe-Range-0: origin center-M + spine + T/B heads (7 cells).
+    // ORIGIN(M3) + M4(+1,0) + M2(-1,0) + T4(+2,-1) + B4(+1,+1) + T1(-1,-1) + B1(-2,+1).
+    // Anchor M3(1,1): M4=(2,1)✓, M2=(0,1)✓, T4=(3,0)✓, B4=(2,2)✓, T1=(0,0)✓, B1=(-1,2)✓.
+    // -----------------------------------------------------------------------
+    it('Support-Double-Pickaxe-Range-0 @ M3 → origin M3, covered {M4,M2,T4,B4,T1,B1}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-0'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4', 'M2', 'T4', 'B4', 'T1', 'B1']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'M4')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T4')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M2(0,1): cov(+1,0)→M3✓, cov(-1,0)→M1✓,
+    //   cov(+2,-1)→T3(2,0)✓, cov(+1,+1)→B3(1,2)✓,
+    //   cov(-1,-1)→(-1,0)=off, cov(-2,+1)→(-2,2)=off.
+    it('Support-Double-Pickaxe-Range-0 @ M2 clips 2 off-board back-head cells', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-0'), 'M2');
+        expect(positions(cells)).toEqual(new Set(['M2', 'M3', 'M1', 'T3', 'B3']));
+        expect(origins(cells)).toEqual(['M2']);
+    });
+
+    // -----------------------------------------------------------------------
+    // Support-Double-Pickaxe-Range-1: origin M3 + 3 spine M cells + 2 T/B heads (8 cells).
+    // ORIGIN(M3) + M4(+1,0) + M2(-1,0) + M1(-2,0) + T3(+1,-1) + T1(-1,-1) + B3(0,+1) + B1(-2,+1).
+    // Anchor M3(1,1): M4✓, M2✓, M1✓, T3=(2,0)✓, T1=(0,0)✓, B3=(1,2)✓, B1=(-1,2)✓.
+    // -----------------------------------------------------------------------
+    it('Support-Double-Pickaxe-Range-1 @ M3 → origin M3, covered {M4,M2,M1,T3,T1,B3,B1}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4', 'M2', 'M1', 'T3', 'T1', 'B3', 'B1']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'T3')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B1')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M4(2,1): cov(+1,0)→(3,1)=off, cov(-1,0)→M3✓, cov(-2,0)→M2✓,
+    //   cov(+1,-1)→T4(3,0)✓, cov(-1,-1)→T2(1,0)✓, cov(0,+1)→B4(2,2)✓, cov(-2,+1)→B2(0,2)✓.
+    it('Support-Double-Pickaxe-Range-1 @ M4 clips off-board front spine cell', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T4', 'T2', 'B4', 'B2']));
+        expect(origins(cells)).toEqual(['M4']);
+    });
+
+    // -----------------------------------------------------------------------
+    // Base-Support: same as Base — single origin cell only.
+    // -----------------------------------------------------------------------
+    it('Base-Support @ M2 → origin M2 only', () => {
+        const cells = resolveCells(parsePattern('Pattern-Base-Support'), 'M2');
+        expect(cells).toEqual([{ position: 'M2', role: 'origin' }]);
+    });
+});
