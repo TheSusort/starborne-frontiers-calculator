@@ -153,4 +153,52 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     //   B-downfront(0,+1).
     // Verified @ M3: origin M3, covered {M4, T3, B3}.
     'cone|1|reverse': [ORIGIN, cov(1, 0), cov(1, -1), cov(0, 1)],
+
+    // ---------------------------------------------------------------------------
+    // Circle family (Task 5)
+    //
+    // Convention: bright center = ORIGIN; surrounding 6 darker hexes = covered.
+    // A circle is the full ring — origin + all 6 neighbor directions.
+    // ---------------------------------------------------------------------------
+
+    // Pattern-Circle-Range-1
+    // PNG: 7 hexes — bright-red center origin + 6 darker-red neighbors forming a full ring.
+    // Directions from origin: back(-1,0), front(+1,0), up-back(0,-1), up-front(+1,-1),
+    //   down-back(-1,+1), down-front(0,+1).
+    // Verified @ M3(q=1,r=1): origin M3, covered {M2, M4, T2, T3, B2, B3}.
+    'circle|1|': [ORIGIN, cov(-1, 0), cov(1, 0), cov(0, -1), cov(1, -1), cov(-1, 1), cov(0, 1)],
+
+    // Pattern-Circle-Support-Range-1
+    // PNG: 7 hexes — bright-yellow center origin + 6 darker-yellow neighbors (support variant).
+    // Same geometry as circle|1|, yellow = support (allies).
+    // Verified @ M3(q=1,r=1): origin M3, covered {M2, M4, T2, T3, B2, B3}.
+    'circle|1|support': [
+        ORIGIN,
+        cov(-1, 0),
+        cov(1, 0),
+        cov(0, -1),
+        cov(1, -1),
+        cov(-1, 1),
+        cov(0, 1),
+    ],
+
+    // ---------------------------------------------------------------------------
+    // Backline family (Task 5)
+    //
+    // Convention: ORIGIN is the BACK (deep enemy) cell; splash extends FORWARD (+q).
+    // "backline" patterns target the back of the enemy formation and splash toward front.
+    // Image orientation: back = right (bright origin), forward = left (darker covered).
+    // ---------------------------------------------------------------------------
+
+    // Pattern-Backline-Range-1
+    // PNG: 2 hexes in a row — bright-red origin (right/back) + 1 darker covered step forward.
+    // Covered: M-front(+1,0).
+    // Verified @ M1(q=-1,r=1): origin M1, covered M2.
+    'backline|1|': [ORIGIN, cov(1, 0)],
+
+    // Pattern-Backline-Range-2
+    // PNG: 3 hexes in a row — bright-red origin (right/back) + 2 darker covered steps forward.
+    // Covered: M-front(+1,0), M-2front(+2,0).
+    // Verified @ M1(q=-1,r=1): origin M1, covered {M2, M3}.
+    'backline|2|': [ORIGIN, cov(1, 0), cov(2, 0)],
 };

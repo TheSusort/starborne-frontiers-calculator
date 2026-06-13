@@ -115,6 +115,90 @@ describe('resolveCells — Line family (Task 3)', () => {
     });
 });
 
+describe('resolveCells — Circle family (Task 5)', () => {
+    // ---------------------------------------------------------------------------
+    // Circle-Range-1: origin + all 6 neighbor directions (full ring, 7 cells).
+    // Anchor M3(q=1,r=1) keeps the entire ring on-board:
+    //   back(-1,0)→M2, front(+1,0)→M4, up-back(0,-1)→T2, up-front(+1,-1)→T3,
+    //   down-back(-1,+1)→B2, down-front(0,+1)→B3.
+    // ---------------------------------------------------------------------------
+    it('Circle-Range-1 @ M3 → origin M3, covered {M2, M4, T2, T3, B2, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Circle-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M2', 'M4', 'T2', 'T3', 'B2', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+        expect(cells.find((c) => c.position === 'M2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'T2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'B3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M4(q=2,r=1) — front(+1,0)→(3,1) off-board; rest land on-board.
+    // back(-1,0)→M3, up-back(0,-1)→T3, up-front(+1,-1)→T4, down-back(-1,+1)→B3,
+    // down-front(0,+1)→B4.
+    it('Circle-Range-1 @ M4 clips off-board front cell', () => {
+        const cells = resolveCells(parsePattern('Pattern-Circle-Range-1'), 'M4');
+        expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'T3', 'T4', 'B3', 'B4']));
+        expect(origins(cells)).toEqual(['M4']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Circle-Support-Range-1: same geometry as Circle-Range-1, support variant (yellow).
+    // Anchor M3.
+    // ---------------------------------------------------------------------------
+    it('Circle-Support-Range-1 @ M3 → origin M3, covered {M2, M4, T2, T3, B2, B3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Circle-Support-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M2', 'M4', 'T2', 'T3', 'B2', 'B3']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+});
+
+describe('resolveCells — Backline family (Task 5)', () => {
+    // ---------------------------------------------------------------------------
+    // Backline-Range-1: origin at BACK cell, 1 covered step forward (+q).
+    // Game rule: backline patterns target the back of the enemy formation and
+    // splash toward the front (+q direction).
+    // Anchor M1(q=-1,r=1): front(+1,0)→M2(0,1).
+    // ---------------------------------------------------------------------------
+    it('Backline-Range-1 @ M1 → origin M1, covered M2', () => {
+        const cells = resolveCells(parsePattern('Pattern-Backline-Range-1'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1', 'M2']));
+        expect(origins(cells)).toEqual(['M1']);
+        expect(cells.find((c) => c.position === 'M2')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M3(q=1,r=1) — front(+1,0)→M4(2,1) ✓, 2-front would be off-board.
+    it('Backline-Range-1 @ M3 → origin M3, covered M4', () => {
+        const cells = resolveCells(parsePattern('Pattern-Backline-Range-1'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+
+    // ---------------------------------------------------------------------------
+    // Backline-Range-2: origin at BACK, 2 covered steps forward (+q, +2q).
+    // Anchor M1(q=-1,r=1): front(+1,0)→M2(0,1), 2front(+2,0)→M3(1,1).
+    // ---------------------------------------------------------------------------
+    it('Backline-Range-2 @ M1 → origin M1, covered {M2, M3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Backline-Range-2'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1', 'M2', 'M3']));
+        expect(origins(cells)).toEqual(['M1']);
+        expect(cells.find((c) => c.position === 'M2')!.role).toBe('covered');
+        expect(cells.find((c) => c.position === 'M3')!.role).toBe('covered');
+    });
+
+    // Clipping: anchor M2(q=0,r=1) — front(+1,0)→M3(1,1) ✓, 2front(+2,0)→M4(2,1) ✓.
+    it('Backline-Range-2 @ M2 → origin M2, covered {M3, M4}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Backline-Range-2'), 'M2');
+        expect(positions(cells)).toEqual(new Set(['M2', 'M3', 'M4']));
+        expect(origins(cells)).toEqual(['M2']);
+    });
+
+    // Clipping: anchor M3(q=1,r=1) — front(+1,0)→M4(2,1) ✓, 2front(+2,0)→(3,1) off-board.
+    it('Backline-Range-2 @ M3 clips off-board 2-front cell', () => {
+        const cells = resolveCells(parsePattern('Pattern-Backline-Range-2'), 'M3');
+        expect(positions(cells)).toEqual(new Set(['M3', 'M4']));
+        expect(origins(cells)).toEqual(['M3']);
+    });
+});
+
 describe('resolveCells — unknown signature', () => {
     it('throws on a pattern with no offset table', () => {
         // Cross has no table yet in Task 2 — this test is REMOVED in Task 6 when Cross gets a table.
