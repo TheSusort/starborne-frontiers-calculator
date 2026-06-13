@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
 import {
     parseTarget,
@@ -217,5 +218,51 @@ describe('parseShipTargeting — charged inheritance', () => {
         });
         expect(r.active).toBeUndefined();
         expect(r.charged).toBeUndefined();
+    });
+});
+
+// docs/ is gitignored (dev-machine-local reference data). Skip cleanly if absent.
+const CSV_PATH = 'docs/ship-targeting.csv';
+const csvAvailable = existsSync(CSV_PATH);
+
+describe.skipIf(!csvAvailable)('ship-targeting.csv corpus coverage', () => {
+    const rows = readFileSync(CSV_PATH, 'utf8')
+        .split(/\r?\n/)
+        .filter((l) => l.trim().length > 0)
+        .slice(1) // drop header
+        .map((line) => {
+            const [name, activeTarget, activePattern, chargedTarget, chargedPattern] =
+                line.split(',');
+            return {
+                name: name.trim(),
+                activeTarget: (activeTarget ?? '').trim(),
+                activePattern: (activePattern ?? '').trim(),
+                chargedTarget: (chargedTarget ?? '').trim(),
+                chargedPattern: (chargedPattern ?? '').trim(),
+            };
+        });
+
+    it('has rows to test', () => {
+        expect(rows.length).toBeGreaterThan(100);
+    });
+
+    it('every active target+pattern tokenizes with no unknown / no throw', () => {
+        for (const row of rows) {
+            expect(
+                () => parseSkillTargeting(row.activeTarget, row.activePattern),
+                `active for ${row.name}: "${row.activeTarget}" / "${row.activePattern}"`
+            ).not.toThrow();
+        }
+    });
+
+    it('every explicit charged target+pattern tokenizes with no unknown / no throw', () => {
+        for (const row of rows) {
+            if (row.chargedTarget && row.chargedPattern) {
+                expect(
+                    () => parseSkillTargeting(row.chargedTarget, row.chargedPattern),
+                    `charged for ${row.name}: "${row.chargedTarget}" / "${row.chargedPattern}"`
+                ).not.toThrow();
+            }
+        }
     });
 });
