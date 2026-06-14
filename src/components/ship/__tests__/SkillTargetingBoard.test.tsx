@@ -8,22 +8,29 @@ function active(target: string, pattern: string) {
 }
 
 describe('SkillTargetingBoard', () => {
-    it('renders two boards + arrow for an enemy (attacker) pattern', () => {
-        const { container, getByText } = render(
+    it('renders a single board with origin + covered cells for an enemy pattern', () => {
+        const { container } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        expect(container.querySelectorAll('[data-board]').length).toBe(2);
-        expect(getByText('▶')).toBeInTheDocument();
+        // Single board for both sides — no second (empty) board, no arrow.
+        expect(container.querySelectorAll('[data-board]').length).toBe(1);
         expect(container.querySelectorAll('[data-role="origin"]').length).toBeGreaterThan(0);
         expect(container.querySelectorAll('[data-role="covered"]').length).toBeGreaterThan(0);
     });
 
     it('renders a single board for a support (ally) pattern', () => {
-        const { container, queryByText } = render(
+        const { container } = render(
             <SkillTargetingBoard targeting={active('allies', 'Pattern-Circle-Support-Range-1')} />
         );
         expect(container.querySelectorAll('[data-board]').length).toBe(1);
-        expect(queryByText('▶')).toBeNull();
+    });
+
+    it('does not render per-cell position labels (compact, label-free board)', () => {
+        const { container } = render(
+            <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
+        );
+        // No <text> elements inside the board group (labels removed).
+        expect(container.querySelectorAll('svg text').length).toBe(0);
     });
 
     it('shows the caption', () => {
@@ -53,20 +60,13 @@ describe('SkillTargetingBoard', () => {
         expect(queryByText('covered')).toBeInTheDocument();
     });
 
-    it('all-pattern attacker: two boards, enemy board has 12 origin cells, team board has 0', () => {
-        // Pattern-All with target 'all' → shape 'all' → all 12 positions role 'origin'.
-        // target 'all' maps to side 'enemy' → attacker (dual-board) layout.
+    it('all-pattern: single board with all 12 cells as origin', () => {
+        // Pattern-All → shape 'all' → all 12 positions role 'origin'.
         const { container } = render(
             <SkillTargetingBoard targeting={active('all', 'Pattern-All')} />
         );
-        // Attacker layout: two boards
-        expect(container.querySelectorAll('[data-board]').length).toBe(2);
-        const enemyBoard = container.querySelector('[data-board="enemy"]')!;
-        const teamBoard = container.querySelector('[data-board="team"]')!;
-        // Enemy board: all 12 cells are origin
-        expect(enemyBoard.querySelectorAll('[data-role="origin"]').length).toBe(12);
-        // Team board: empty map — no origin cells
-        expect(teamBoard.querySelectorAll('[data-role="origin"]').length).toBe(0);
+        expect(container.querySelectorAll('[data-board]').length).toBe(1);
+        expect(container.querySelectorAll('[data-role="origin"]').length).toBe(12);
     });
 
     it('renders nothing when the pattern has an unknown signature (try/catch → null)', () => {
