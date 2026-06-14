@@ -38,10 +38,18 @@ working directory — never `git checkout` there.
 |------|----------------|--------|
 | `src/utils/targeting/board.ts` | board geometry (exists) | **Modify** — add `rowOf`/`colOf` accessors + `BoardRow` type |
 | `src/utils/targeting/selectTargets.ts` | pure selection: parsed target + occupancy → ordered list + anchor | **Create** |
-| `src/utils/targeting/__tests__/selectTargets.test.ts` | unit + golden selection tests | **Create** |
-| `src/utils/targeting/__tests__/board.test.ts` | board tests (exists) | **Modify** — add `rowOf`/`colOf` tests |
-| `src/utils/combat/engine.ts` | engine input + target binding seam | **Modify** — optional position/target fields, positional-mode helper, gated binding at 3 `runPlayerTurn` sites |
+| `src/utils/targeting/selectTargets.test.ts` | unit + golden selection tests (**co-located**, project convention) | **Create** |
+| `src/utils/targeting/board.test.ts` | board tests (exists, **co-located**) | **Modify** — add `rowOf`/`colOf` tests |
+| `src/utils/combat/positionalBinding.ts` | engine↔selectTargets glue: `isPositional`, `resolvePositionalTarget` (keeps `engine.ts` focused + unit-testable) | **Create** |
+| `src/utils/combat/state.ts` | `CombatActor` (exists) | **Modify** — add `position?: Position`; widen `createActor` param to accept it |
+| `src/utils/combat/engine.ts` | engine input + target binding seam | **Modify** — optional position/target on `CombatEngineInput`+`TeamActorEngineInput`+`enemyAttackers`(768)+`EnemyActorInput`(304); set `position` on actors; gated binding at 3 `runPlayerTurn` sites |
 | `src/utils/combat/__tests__/positionalSelection.test.ts` | engine integration tests (synthetic positioned teams) | **Create** |
+
+> **Test-file convention:** `src/utils/targeting/` uses **co-located** tests
+> (`board.test.ts` imports `'./board'`) — there is NO `__tests__/` subdir there. Put
+> `selectTargets.test.ts` co-located (`import { selectTargets } from './selectTargets'`,
+> `import type { ParsedTarget } from '../targetingParser'`). `src/utils/combat/` uses a
+> `__tests__/` subdir — `positionalSelection.test.ts` goes there.
 
 **Decomposition:** Part A is pure and carries zero engine risk — land it fully first. Part B
 adds optional input fields + the internal selection helper with **no behavior change**
@@ -56,12 +64,13 @@ adds optional input fields + the internal selection helper with **no behavior ch
 
 **Files:**
 - Modify: `src/utils/targeting/board.ts`
-- Test: `src/utils/targeting/__tests__/board.test.ts`
+- Test: `src/utils/targeting/board.test.ts` (co-located, exists)
 
-- [ ] **Step 1: Write failing tests** — append to `board.test.ts`:
+- [ ] **Step 1: Write failing tests** — append to `board.test.ts` (co-located; it imports
+  from `'./board'`):
 
 ```ts
-import { rowOf, colOf } from '../board';
+import { rowOf, colOf } from './board';
 
 describe('rowOf / colOf', () => {
   it('extracts the row letter', () => {
@@ -79,7 +88,7 @@ describe('rowOf / colOf', () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `npm test -- src/utils/targeting/__tests__/board.test.ts`
+Run: `npm test -- src/utils/targeting/board.test.ts`
 Expected: FAIL — `rowOf`/`colOf` not exported.
 
 - [ ] **Step 3: Implement** — add to `board.ts`:
@@ -100,12 +109,12 @@ export function colOf(pos: Position): number {
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `npm test -- src/utils/targeting/__tests__/board.test.ts` → PASS.
+Run: `npm test -- src/utils/targeting/board.test.ts` → PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/targeting/board.ts src/utils/targeting/__tests__/board.test.ts
+git add src/utils/targeting/board.ts src/utils/targeting/board.test.ts
 git commit -m "feat(targeting): rowOf/colOf board accessors
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -117,16 +126,16 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Create: `src/utils/targeting/selectTargets.ts`
-- Test: `src/utils/targeting/__tests__/selectTargets.test.ts`
+- Test: `src/utils/targeting/selectTargets.test.ts` (co-located)
 
-- [ ] **Step 1: Write failing tests** — create `selectTargets.test.ts`. Use board layouts in
-the test names (the eyeball-against-game gate). `ParsedTarget` shapes mirror
+- [ ] **Step 1: Write failing tests** — create `selectTargets.test.ts` co-located. Use board
+layouts in the test names (the eyeball-against-game gate). `ParsedTarget` shapes mirror
 `targetingParser` output.
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { selectTargets, rowScanOrder } from '../selectTargets';
-import type { ParsedTarget } from '../../targetingParser';
+import { selectTargets, rowScanOrder } from './selectTargets';
+import type { ParsedTarget } from '../targetingParser';
 
 const enemy = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: `enemy-${selection}`, side: 'enemy', selection,
@@ -193,7 +202,7 @@ describe('selectTargets — row-first scan (caster M, enemies only in top row T1
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `npm test -- src/utils/targeting/__tests__/selectTargets.test.ts`
+Run: `npm test -- src/utils/targeting/selectTargets.test.ts`
 Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement** — create `selectTargets.ts`:
@@ -276,7 +285,7 @@ export function selectTargets(target: ParsedTarget, ctx: SelectTargetsContext): 
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `npm test -- src/utils/targeting/__tests__/selectTargets.test.ts` → PASS.
+Run: `npm test -- src/utils/targeting/selectTargets.test.ts` → PASS.
 
 - [ ] **Step 5: Lint + types**
 
@@ -285,7 +294,7 @@ Run: `npm run lint && npx tsc --noEmit` → clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/utils/targeting/selectTargets.ts src/utils/targeting/__tests__/selectTargets.test.ts
+git add src/utils/targeting/selectTargets.ts src/utils/targeting/selectTargets.test.ts
 git commit -m "feat(targeting): selectTargets — row-first anchor selection (front/back/skip/ally)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -296,7 +305,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task A3: `selectTargets` — enemy `all` cross-row ordering
 
 **Files:**
-- Test: `src/utils/targeting/__tests__/selectTargets.test.ts` (append)
+- Test: `src/utils/targeting/selectTargets.test.ts` (append)
 
 (The implementation already handles `all` in A2; this task pins its cross-row behavior with
 dedicated goldens. If A2's `all` branch is already covered, this is a fast confirmation
@@ -325,7 +334,7 @@ describe('selectTargets — enemy all spans every row in scan order (caster M2)'
 running before committing A2 — implementer's choice).
 
 ```bash
-git add src/utils/targeting/__tests__/selectTargets.test.ts
+git add src/utils/targeting/selectTargets.test.ts
 git commit -m "test(targeting): pin selectTargets enemy-all cross-row ordering
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
@@ -342,16 +351,21 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (`CombatEngineInput` ~716; `TeamActorEngineInput`;
-  the `enemyAttackers` entry type ~768)
+  the inline `enemyAttackers` entry type ~768; **`EnemyActorInput` ~304**)
 
-Read the current `CombatEngineInput`, `TeamActorEngineInput`, and the `enemyAttackers` entry
-shape first.
+Read the current `CombatEngineInput`, `TeamActorEngineInput`, the inline `enemyAttackers`
+entry, and `EnemyActorInput` first. **Note:** there are TWO enemy-attacker input shapes —
+the inline `CombatEngineInput['enemyAttackers'][number]` (~768) AND the separate
+`EnemyActorInput` interface (~304) that `buildEnemyPlayerActorRuntime` actually consumes.
+The field must be added to **both** or it never reaches the actor builder.
 
 - [ ] **Step 1: Add optional fields (no consumption):**
   - `CombatEngineInput`: `position?: Position;` and `target?: ParsedTarget;` (the focus
     attacker's cell + parsed targeting).
   - `TeamActorEngineInput`: `position?: Position;` and `target?: ParsedTarget;`.
-  - `enemyAttackers[]` entry: `position?: Position;` and `target?: ParsedTarget;`.
+  - inline `enemyAttackers[]` entry (~768): `position?: Position;` and `target?: ParsedTarget;`.
+  - **`EnemyActorInput` (~304): `position?: Position;` and `target?: ParsedTarget;`** (the
+    shape `buildEnemyPlayerActorRuntime` reads).
   - Add imports: `import { Position } from '../../types/encounters';` and
     `import { ParsedTarget } from '../targetingParser';` (check they aren't already imported).
 
@@ -374,32 +388,85 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ---
 
-### Task B2: internal `resolvePositionalTarget` helper (built, still unused)
+### Task B2a: `CombatActor.position` + `createActor` widening (set everywhere, read nowhere)
 
 **Files:**
-- Modify: `src/utils/combat/engine.ts`
-- Test: `src/utils/combat/__tests__/positionalSelection.test.ts` (create)
+- Modify: `src/utils/combat/state.ts` (`CombatActor` ~93; `createActor` param ~116)
+- Modify: `src/utils/combat/engine.ts` (the 3 `createActor` call sites)
 
-Add an engine-internal helper that, given an acting actor's position + parsed target and the
-*living, positioned* actors of the opposing side, returns the selected `CombatActor` (or
-`null`). This is the bridge between `selectTargets` (Positions) and the engine (actors).
+- [ ] **Step 1:** Add `position?: Position;` to the `CombatActor` interface (state.ts ~93;
+  add `import { Position } from '../../types/encounters'` there if absent).
 
-- [ ] **Step 1: Write the helper.** Place it near the actor setup (after `createActor`
-  helpers). Sketch:
+- [ ] **Step 2:** Widen `createActor`'s param (state.ts ~116) — its accepted partial is
+  `Pick<CombatActor,'id'|'side'|'kind'> & { stats; chargeCount?; startCharged? }`, which does
+  NOT include `position`. Add `position?: Position;` to that inline type and assign it onto
+  the returned actor (e.g. `position: partial.position` / spread).
+
+- [ ] **Step 3:** Set `position` at the 3 construction sites:
+  - attacker `createActor` (engine.ts ~961): `position: input.position` (the focus cell).
+  - team-actor `createActor` (engine.ts ~1007 region): `position: <teamActorInput>.position`.
+  - enemy-attacker `createActor` **inside `buildEnemyPlayerActorRuntime`** (engine.ts ~394):
+    `position: e.position` (from `EnemyActorInput`). This is a DIFFERENT function from the
+    top-level attacker/team setup — the enemy actor is built there, not in the main loop.
+
+- [ ] **Step 4:** `npx tsc --noEmit` clean; `npm test` — full suite green, **goldens
+  byte-identical** (`position` is set but read nowhere yet).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/utils/combat/state.ts src/utils/combat/engine.ts
+git commit -m "feat(combat): CombatActor.position threaded through createActor (unused)
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task B2b: `positionalBinding.ts` — the selectTargets↔actor glue (built, unused)
+
+**Files:**
+- Create: `src/utils/combat/positionalBinding.ts`
+- Test: `src/utils/combat/positionalBinding.test.ts` (co-located; `src/utils/combat/` also has
+  a `__tests__/` dir, but a small co-located unit test for a pure helper is fine — match
+  whichever the implementer prefers; engine-integration tests go in `__tests__/`)
+
+Extract the glue into its own module so `engine.ts` doesn't grow and the helpers are
+unit-testable without importing the 3000-line engine.
+
+- [ ] **Step 1: Write failing tests** with hand-built `CombatActor`-shaped objects (only the
+  fields the helpers read: `id`, `position`, `currentHp`). Cases:
 
 ```ts
-import { selectTargets } from '../targeting/selectTargets';
-// ...
+// caster M4, positioned enemies front M4 / back M1, target front -> selects the M4 actor
+// same, target skip -> selects the M1 actor (2nd-from-front == back-most here)
+// caster has no position -> isPositional() === false
+// all opposing actors currentHp <= 0 -> resolvePositionalTarget() === null
+// opposing roster has no positions -> isPositional() === false
+```
 
-/** True when positional selection should run for `actor` against `opposingLiving`:
- *  a positioned opposing roster exists AND the acting actor has a position. */
-function isPositional(actorPosition: Position | undefined, opposingLiving: CombatActor[]): boolean {
+- [ ] **Step 2: Run** → FAIL (module missing).
+
+- [ ] **Step 3: Implement `positionalBinding.ts`:**
+
+```ts
+import { Position } from '../../types/encounters';
+import { ParsedTarget } from '../targetingParser';
+import { CombatActor } from './state';
+import { selectTargets } from '../targeting/selectTargets';
+
+/** Positional selection runs for an actor only when it has a position AND the opposing
+ *  side has at least one positioned actor (the spec's exact predicate). */
+export function isPositional(
+    actorPosition: Position | undefined,
+    opposingLiving: CombatActor[]
+): boolean {
     return !!actorPosition && opposingLiving.some((a) => a.position !== undefined);
 }
 
 /** Map the selectTargets anchor back to a single living positioned opposing actor.
- *  Returns null when no valid target (empty side / anchor null). Invariant: ≤1 actor/cell. */
-function resolvePositionalTarget(
+ *  null = no valid target (empty side / anchor null). Invariant: ≤1 living actor per cell. */
+export function resolvePositionalTarget(
     actorPosition: Position,
     target: ParsedTarget,
     opposingLiving: CombatActor[]
@@ -416,34 +483,16 @@ function resolvePositionalTarget(
 }
 ```
 
-  - This requires `CombatActor` to carry an optional `position`. Add `position?: Position` to
-    the `CombatActor` interface (`src/utils/combat/state.ts`) and thread it through
-    `createActor` (default `undefined`); set it from the input `position` when the
-    attacker / team / enemy actors are constructed (still consumed by nothing downstream).
+- [ ] **Step 4: Run** new test → PASS. Full suite → goldens byte-identical (nothing in the
+  engine imports this module yet).
 
-- [ ] **Step 2: Unit-test the helper directly** in `positionalSelection.test.ts` by importing
-  the engine module is awkward (helper not exported). Instead **export `resolvePositionalTarget`
-  and `isPositional`** (or move them into a small `src/utils/combat/positionalBinding.ts`
-  module and import into engine.ts — preferred for testability and to keep engine.ts focused).
-  Test with hand-built `CombatActor`-shaped objects:
+- [ ] **Step 5: Lint + types** clean.
 
-```ts
-// front caster vs positioned enemies front M4 / back M1 -> selects M4 actor
-// skip -> selects M1 actor (2nd from front; or fallback)
-// no caster position -> isPositional false
-// all enemies dead -> resolvePositionalTarget returns null
-```
-
-- [ ] **Step 3: Run** the new test → PASS. Run full suite → goldens byte-identical (helper
-  unused by the turn loop; `position` set but not read).
-
-- [ ] **Step 4: Lint + types** clean.
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/utils/combat/ src/utils/targeting/
-git commit -m "feat(combat): positional target-resolution helper (built, unused)
+git add src/utils/combat/positionalBinding.ts src/utils/combat/positionalBinding.test.ts
+git commit -m "feat(combat): positionalBinding glue (isPositional/resolvePositionalTarget, unused)
 
 Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ```
@@ -467,24 +516,33 @@ Read the focus-turn `runPlayerTurn({...})` call (~2360) and how `enemy`, `target
 `enemyDefense`, `enemyHpDecline`, and the DoT containers are passed. The dummy `enemy`
 (created ~969) is the current binding.
 
-- [ ] **Step 1: Write failing engine test** — synthetic input with the focus attacker
-  positioned and a positioned enemy roster (use `enemyAttackers` entries given `position`
-  + zero/low attack so they're pure targets; the attacker's `target` = `front`). Tap the
-  `bus` and assert the focus attacker's `ability-performed` event carries
-  `targetId === <front enemy id>`. Add a second case: `target` = `back` → `targetId` ===
-  back enemy id. (See Task C3 / the spec for how `enemyAttackers` become positioned targets;
-  confirm enemy-attacker actors are built into `enemyAttackerActors` regardless of healing
-  mode, or set `healTargetId` to enable that path — document whichever the test needs.)
+- [ ] **Step 1: Write failing engine test.** **Required setup:** `enemyAttackerActors` is
+  only populated when `enemyAttackers` is non-empty AND `healTargetId` is set — `engine.ts`
+  ~1311 **throws** `enemyAttackers require healTargetId` otherwise (verified). So the test
+  MUST set `healTargetId` to a player actor id; there is no DPS-mode-only path to a positioned
+  enemy roster. Build: focus attacker positioned with `target: front`; `enemyAttackers` =
+  ≥2 entries each given a `position` (e.g. front M4 / back M1) + low/zero attack so they're
+  effectively pure targets; `healTargetId` = the focus (or a team) actor id. Tap the `bus`
+  and assert the focus attacker's `ability-performed` event carries `targetId === <M4 enemy
+  id>`. Add a second case: `target: back` → `targetId === <M1 enemy id>`.
 
 - [ ] **Step 2: Run** → FAIL (still binds the dummy; targetId === 'enemy').
 
 - [ ] **Step 3: Implement the gated branch** at the focus-turn call: compute
   `const selectedEnemy = isPositional(focusPosition, enemyAttackerActors) ? resolvePositionalTarget(focusPosition!, focusTarget!, enemyAttackerActors) : null;`
-  then when `selectedEnemy`:
+  then when `selectedEnemy`, swap the bare module vars the call currently passes (`enemy`,
+  `enemyDefense`, `enemyHp`, `corrosionEntries`/`infernoEntries`/`pendingBombs`/
+  `pendingAccumulators`, and `enemyHpDecline: cumulativeDamage + cumulativeTeamDamage`) for the
+  selected actor's fields:
   - bind `enemy: selectedEnemy`, `targetId: selectedEnemy.id`,
-  - pass `selectedEnemy`'s DoT/bomb/accumulator containers,
-  - `enemyDefense: selectedEnemy.stats.defence`, `enemyHp: <selectedEnemy max hp>`,
-  - `enemyHpDecline: 0` (per-target decline is Phase 4 — see spec).
+  - pass `selectedEnemy`'s OWN DoT/bomb/accumulator containers
+    (`selectedEnemy.corrosionEntries`, etc. — enemy attackers are real `CombatActor`s, so
+    these exist),
+  - `enemyDefense: selectedEnemy.stats.defence`,
+  - `enemyHp: selectedEnemy.stats.hp` (the selected actor's **max** HP — NOT `currentHp`,
+    which may have declined; and NOT the dummy's `enemyHp`),
+  - `enemyHpDecline: 0` — explicitly override the cumulative expression; per-target decline
+    is Phase 4 (gates read the target's entering HP — see spec).
   Otherwise the existing dummy binding, unchanged.
   - If `isPositional` but `selectedEnemy` is null (no living target), skip the attack /
     no-op for this action (document the chosen no-op; death-fallback is Phase 4).
@@ -518,7 +576,9 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 3: Implement** the same gated branch at the team-turn call, using the team
   actor's `position` + `target` (carried on its `CombatActor` / `TeamActorEngineInput`).
-  Reuse `resolvePositionalTarget`.
+  Reuse `resolvePositionalTarget` and the same field-swap as C1 (selected actor's
+  defence/max-HP/containers, `enemyHpDecline: 0`). As in C1: `isPositional` but `selected`
+  null → no-op for this action (death-fallback is Phase 4).
 
 - [ ] **Step 4: Run** new test → PASS; **full suite goldens byte-identical.**
 
@@ -607,5 +667,6 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
   which player actor receives), never per-target damage totals (that accounting is Phase 4).
 - `resolveCells` (the geometry footprint resolver) is intentionally **not** imported by the
   engine this phase.
-- Prefer extracting `selectTargets`-to-actor glue into `src/utils/combat/positionalBinding.ts`
-  to keep `engine.ts` from growing and to make the helper unit-testable without the engine.
+- The `selectTargets`-to-actor glue lives in `src/utils/combat/positionalBinding.ts`
+  (Task B2b) — keeps `engine.ts` from growing and makes the helpers unit-testable without
+  importing the engine. `engine.ts` imports `{ isPositional, resolvePositionalTarget }` from it.
