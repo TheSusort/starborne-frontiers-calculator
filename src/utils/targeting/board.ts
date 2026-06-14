@@ -1,5 +1,7 @@
 import { Position } from '../../types/encounters';
 
+export type BoardRow = 'T' | 'M' | 'B';
+
 export interface Axial {
     q: number;
     r: number;
@@ -59,4 +61,14 @@ export function neighbors(pos: Position): Position[] {
         if (n) out.push(n);
     }
     return out;
+}
+
+/** The row letter of a Position ('T1' -> 'T'). */
+export function rowOf(pos: Position): BoardRow {
+    return pos[0] as BoardRow;
+}
+
+/** The 1-based column of a Position ('M3' -> 3); column 4 = front (nearest enemy). */
+export function colOf(pos: Position): number {
+    return Number(pos[1]);
 }

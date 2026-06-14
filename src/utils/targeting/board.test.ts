@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_POSITIONS, neighbors, inBoundsAxial, positionToAxial, axialToPosition } from './board';
+import {
+    ALL_POSITIONS,
+    neighbors,
+    inBoundsAxial,
+    positionToAxial,
+    axialToPosition,
+    rowOf,
+    colOf,
+} from './board';
 
 describe('board adjacency', () => {
     it('M2 has the confirmed six neighbors', () => {
@@ -51,5 +59,18 @@ describe('axial conversion', () => {
         expect(inBoundsAxial(-2, 1)).toBe(false); // past M1
         expect(inBoundsAxial(4, 0)).toBe(false); // past T4
         expect(axialToPosition(-2, 1)).toBeUndefined();
+    });
+});
+
+describe('rowOf / colOf', () => {
+    it('extracts the row letter', () => {
+        expect(rowOf('T1')).toBe('T');
+        expect(rowOf('M3')).toBe('M');
+        expect(rowOf('B4')).toBe('B');
+    });
+    it('extracts the column number', () => {
+        expect(colOf('T1')).toBe(1);
+        expect(colOf('M3')).toBe(3);
+        expect(colOf('B4')).toBe(4);
     });
 });

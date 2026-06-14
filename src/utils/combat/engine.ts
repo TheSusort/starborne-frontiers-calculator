@@ -1,6 +1,8 @@
 import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
+import type { Position } from '../../types/encounters';
+import type { ParsedTarget } from '../targetingParser';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -31,6 +33,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
+import { isPositional, resolvePositionalTarget } from './positionalBinding';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
@@ -324,6 +327,10 @@ export interface EnemyActorInput {
      *  Computed by the healing adapter from enemy hacking vs heal-target security. Omitted →
      *  100% (1) for backward compatibility (every existing test/the dummy path omits it). */
     debuffLandingChance?: number;
+    /** Board position of this enemy (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -406,6 +413,7 @@ export function buildEnemyPlayerActorRuntime(
         },
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
+        position: e.position,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -711,6 +719,10 @@ export type TeamActorEngineInput = TeamActorInput & {
         /** Caster heal-modifier stat (healing calc). Default 0. */
         healModifier?: number;
     };
+    /** Board position of this team actor (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 };
 
 export interface CombatEngineInput {
@@ -790,9 +802,17 @@ export interface CombatEngineInput {
          *  (computed by the healing adapter from enemy hacking vs heal-target security).
          *  Omitted → 100% (1) for backward compatibility. */
         debuffLandingChance?: number;
+        /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
+        position?: Position;
+        /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
+        target?: ParsedTarget;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
+    /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -965,6 +985,7 @@ export function runCombat(input: CombatEngineInput): {
         stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: speed ?? 100 },
         chargeCount,
         startCharged,
+        position: input.position,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1030,8 +1051,34 @@ export function runCombat(input: CombatEngineInput): {
                   },
             chargeCount: t.chargeCount,
             startCharged: t.startCharged,
+            position: t.position,
         })
     );
+
+    // Per-team-actor parsed positional target (Task C2). The team actor's `position`
+    // already rides on its CombatActor (createActor above), but its parsed `target`
+    // lives only on the TeamActorEngineInput — thread it to the team-turn call site by
+    // id. Empty for every non-positional input (no team actor passes a target) → the
+    // gated branch never fires and the legacy binding stays byte-identical.
+    const teamTargetById = new Map<string, ParsedTarget>();
+    for (const t of teamActors) {
+        if (t.target) {
+            teamTargetById.set(t.id, t.target);
+        }
+    }
+
+    // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
+    // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
+    // but its parsed `target` lives only on the EnemyActorInput — thread it to the enemy-turn
+    // call site by id, mirroring teamTargetById. Empty for every non-positional input (no enemy
+    // passes a target) → the gated branch never fires and the legacy heal-target binding stays
+    // byte-identical.
+    const enemyTargetById = new Map<string, ParsedTarget>();
+    for (const e of input.enemyAttackers ?? []) {
+        if (e.target) {
+            enemyTargetById.set(e.id, e.target);
+        }
+    }
 
     // Deterministic event gates — replace Math.random / expected-value math so
     // identical inputs always produce identical output. Crit uses one gate PER
@@ -1839,16 +1886,23 @@ export function runCombat(input: CombatEngineInput): {
         // taken-leech punch-through gate; hpDamage is 0 under Barrier so the leech reads 0). Both
         // the per-attack enemy intake (below) and the tank DoT-tick intake (turn-start) route
         // through here so the bleed accounting is identical.
+        // `victim` defaults to the heal target — the legacy (non-positional) caller passes no
+        // arg, so every existing path reads/mutates `healTarget!` exactly as before (byte-
+        // identical). The positional enemy-turn path (Task C3) passes the SELECTED player actor
+        // so the enemy's incoming drains the actor its parsed target picked. Heal-target-specific
+        // bookkeeping (healTargetDestroyedRound) stays gated on `victim === healTarget` below so
+        // it is never written for a non-heal-target victim.
         const applyIncomingToTarget = (
-            damage: number
+            damage: number,
+            victim: CombatActor = healTarget!
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
             roundIncomingDamage += damage;
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
             // the pre-hit value (not 1).
-            const hpBefore = healTarget!.currentHp;
-            const maxHp = recipientMaxHp(healTarget!.id);
+            const hpBefore = victim.currentHp;
+            const maxHp = recipientMaxHp(victim.id);
             // Barrier — FULL DAMAGE IMMUNITY (locked game rule). While the heal target carries
             // an active BARRIER_BUFFS status, ALL incoming damage is fully blocked: direct
             // attacks, DoT ticks, AND bomb detonations (all three funnel through this closure).
@@ -1861,28 +1915,28 @@ export function runCombat(input: CombatEngineInput): {
             // HP does not move → the emit below is a no-op crossing (oldPct === newPct), which we
             // still fire once for emission consistency. Detection mirrors the Cheat-Death check
             // (selfBuffNamesForOwners aggregates snapshot + timed + active ability self statuses).
-            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [healTarget!.id]).some(
-                (n) => BARRIER_BUFFS.has(n)
+            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
+                BARRIER_BUFFS.has(n)
             );
             if (carriesBarrier) {
                 roundBarrierAbsorbed += damage;
-                if (healTarget!.currentHp > 0 && maxHp > 0) {
+                if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',
-                        targetId: healTarget!.id,
+                        targetId: victim.id,
                         round: r,
                         oldPct: (100 * hpBefore) / maxHp,
-                        newPct: (100 * healTarget!.currentHp) / maxHp,
+                        newPct: (100 * victim.currentHp) / maxHp,
                     });
                 }
-                return { shieldBefore: healTarget!.shieldPool, hpDamage: 0, barriered: true };
+                return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
             }
-            const shieldBefore = healTarget!.shieldPool;
-            const absorbed = Math.min(healTarget!.shieldPool, damage);
-            healTarget!.shieldPool -= absorbed;
+            const shieldBefore = victim.shieldPool;
+            const absorbed = Math.min(victim.shieldPool, damage);
+            victim.shieldPool -= absorbed;
             roundShieldAbsorbed += absorbed;
             const hpDamage = damage - absorbed;
-            healTarget!.currentHp = Math.max(0, healTarget!.currentHp - hpDamage);
+            victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
             // it is never stored/timed — consumption is the per-actor cheatDeathConsumed flag
@@ -1900,13 +1954,13 @@ export function runCombat(input: CombatEngineInput): {
             // ability-sourced case AND the non-attacker-owner case. selfBuffNamesForOwners
             // aggregates snapshot + timed + active ability self statuses keyed by the actor's
             // own id, covering every Cheat Death source.
-            if (healTarget!.currentHp <= 0) {
-                const targetId = healTarget!.id;
+            if (victim.currentHp <= 0) {
+                const targetId = victim.id;
                 const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
                     (n) => CHEAT_DEATH_BUFFS.has(n)
                 );
                 if (carriesCheatDeath && !cheatDeathConsumed.has(targetId)) {
-                    healTarget!.currentHp = 1;
+                    victim.currentHp = 1;
                     cheatDeathConsumed.add(targetId);
                     // Display-only: remember the round it was spent so the chip is dropped
                     // from rounds AFTER this one (see hideSpentCheatDeath). First write wins —
@@ -1921,16 +1975,21 @@ export function runCombat(input: CombatEngineInput): {
                     // the turn-start DoT-tick intake reads (healTarget.corrosion/infernoEntries).
                     // Both DoT types are removable; bombs (Blast, treated as persistent here) and
                     // accumulators are intentionally left untouched.
-                    healTarget!.corrosionEntries.length = 0;
-                    healTarget!.infernoEntries.length = 0;
+                    victim.corrosionEntries.length = 0;
+                    victim.infernoEntries.length = 0;
                     bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: r });
                 } else {
                     // First reach 0 (no intercept) → record the destroyed round + emit
                     // ship-destroyed once (shared helper; idempotent via the per-actor
                     // destroyedRound field). The healing result reads the destroyed round back
                     // off the heal target's runtime field below.
-                    recordDestroyed(healTarget!, r, bus);
-                    healTargetDestroyedRound = healTarget!.destroyedRound;
+                    recordDestroyed(victim, r, bus);
+                    // healTargetDestroyedRound tracks the HEAL TARGET specifically — only write it
+                    // when the victim IS the heal target. A positional-selected non-heal-target
+                    // victim records its own destroyedRound (on `victim`) without touching this.
+                    if (victim === healTarget) {
+                        healTargetDestroyedRound = victim.destroyedRound;
+                    }
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -1940,13 +1999,13 @@ export function runCombat(input: CombatEngineInput): {
             // counts as a downward crossing — spec §5). Exact percentages (the enemy dummy's
             // post-round emission stays integer-granularity — asymmetry intended, events.ts).
             // A killed tank emits ship-destroyed above, never a posthumous crossing.
-            if (healTarget!.currentHp > 0 && maxHp > 0) {
+            if (victim.currentHp > 0 && maxHp > 0) {
                 bus.emit({
                     type: 'hp-changed',
-                    targetId: healTarget!.id,
+                    targetId: victim.id,
                     round: r,
                     oldPct: (100 * hpBefore) / maxHp,
-                    newPct: (100 * healTarget!.currentHp) / maxHp,
+                    newPct: (100 * victim.currentHp) / maxHp,
                 });
             }
             return { shieldBefore, hpDamage, barriered: false };
@@ -2357,22 +2416,45 @@ export function runCombat(input: CombatEngineInput): {
                     // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                     // ====================================================================
                     const attackerMaxHp = baseHpFor(actor.id);
+                    // Positional target selection (Task C1, GATED). When the focus attacker
+                    // (`actor`) carries a board position AND the positioned enemy roster
+                    // (`enemyAttackerActors`) has positioned actors, resolve the focus's parsed
+                    // target (`input.target`) to a single living enemy and bind THIS turn to it.
+                    // When `selectedEnemy` is null — not positional, OR positional but no living
+                    // positioned enemy target — we diverge NOTHING from the legacy dummy `enemy`
+                    // binding (keeps every existing path byte-identical; the null-target sub-case
+                    // is treated as a no-op fallthrough to legacy). No existing test passes
+                    // positions, so this branch never fires for them.
+                    const selectedEnemy =
+                        isPositional(actor.position, enemyAttackerActors) && input.target
+                            ? resolvePositionalTarget(
+                                  actor.position!,
+                                  input.target,
+                                  enemyAttackerActors
+                              )
+                            : null;
+                    // Positional target (phase 2): the selected enemy actor, else the dummy sink.
+                    // Both are full CombatActors, so all per-target bindings derive from `tgt`
+                    // uniformly. For the legacy (non-positional) path tgt === enemy, whose
+                    // stats.defence/stats.hp and DoT/bomb containers ARE the legacy module vars
+                    // (see ~line 1297) — so deriving every binding from `tgt` is byte-identical.
+                    // Per-target HP decline is a later phase, so enemyHpDecline stays its own
+                    // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
+                    const tgt = selectedEnemy ?? enemy;
                     const turn = runPlayerTurn({
                         runtime: attackerRuntime,
-                        enemy,
+                        enemy: tgt,
                         statusEngine,
-                        corrosionEntries,
-                        infernoEntries,
-                        pendingBombs,
-                        pendingAccumulators,
-                        enemyDefense,
-                        enemyHp,
+                        corrosionEntries: tgt.corrosionEntries,
+                        infernoEntries: tgt.infernoEntries,
+                        pendingBombs: tgt.pendingBombs,
+                        pendingAccumulators: tgt.pendingAccumulators,
+                        enemyDefense: tgt.stats.defence,
+                        enemyHp: tgt.stats.hp,
                         enemyType,
                         bus,
                         round: r,
-                        // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
-                        // reflects all players' damage so far (gates/HP% column react to it).
-                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        enemyHpDecline: selectedEnemy ? 0 : cumulativeDamage + cumulativeTeamDamage,
                         grantAllyCharges,
                         // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
                         // block inert, goldens byte-identical).
@@ -2447,20 +2529,43 @@ export function runCombat(input: CombatEngineInput): {
                     // the legacy sourceFired block below is fully superseded for walked actors.
                     // ====================================================================
                     const teamMaxHp = baseHpFor(actor.id);
+                    // Positional target selection (Task C2, GATED). Mirrors the focus-turn
+                    // branch (C1) but keyed to THIS team actor's own board position
+                    // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
+                    // focus attacker's. When `selectedTeamEnemy` is null — not positional, no
+                    // parsed target, or no living positioned enemy — we diverge NOTHING from the
+                    // legacy dummy `enemy` binding. No existing test threads a team target →
+                    // this branch never fires for them (goldens byte-identical).
+                    const teamTarget = teamTargetById.get(actor.id);
+                    const selectedTeamEnemy =
+                        isPositional(actor.position, enemyAttackerActors) && teamTarget
+                            ? resolvePositionalTarget(
+                                  actor.position!,
+                                  teamTarget,
+                                  enemyAttackerActors
+                              )
+                            : null;
+                    // Same `tgt` consolidation as the focus turn: both branches are full
+                    // CombatActors, so every per-target binding derives from `tgt` uniformly.
+                    // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
+                    // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
+                    const tgt = selectedTeamEnemy ?? enemy;
                     const teamTurn = runPlayerTurn({
                         runtime: teamRuntimeById.get(actor.id)!,
-                        enemy,
+                        enemy: tgt,
                         statusEngine,
-                        corrosionEntries,
-                        infernoEntries,
-                        pendingBombs,
-                        pendingAccumulators,
-                        enemyDefense,
-                        enemyHp,
+                        corrosionEntries: tgt.corrosionEntries,
+                        infernoEntries: tgt.infernoEntries,
+                        pendingBombs: tgt.pendingBombs,
+                        pendingAccumulators: tgt.pendingAccumulators,
+                        enemyDefense: tgt.stats.defence,
+                        enemyHp: tgt.stats.hp,
                         enemyType,
                         bus,
                         round: r,
-                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        enemyHpDecline: selectedTeamEnemy
+                            ? 0
+                            : cumulativeDamage + cumulativeTeamDamage,
                         grantAllyCharges,
                         // Healing mode only — walked team turns heal/shield through the same ctx.
                         healing: healingCtx,
@@ -2658,7 +2763,28 @@ export function runCombat(input: CombatEngineInput): {
                     // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
                     // ====================================================================
                     const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
-                    const targetDead = healTarget!.currentHp <= 0;
+                    // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
+                    // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
+                    // enemy's view is the PLAYER TEAM (`allPlayerActors` = focus + walked team), the
+                    // acting position is THIS enemy's board position (`actor.position`), and its
+                    // parsed target rides on `enemyTargetById` (keyed by enemy actor id). When
+                    // `selectedPlayer` is null — not positional, no parsed target, or no living
+                    // positioned player — we diverge NOTHING from the legacy `healTarget` victim
+                    // binding: the enemy's whole turn (defence/hp/decline lookup, the runPlayerTurn
+                    // bind, AND the applyIncomingToTarget intake) reads `tgt === healTarget!`, so
+                    // every existing path stays byte-identical. No existing test threads an enemy
+                    // target → this branch never fires for them.
+                    const enemyTarget = enemyTargetById.get(actor.id);
+                    const selectedPlayer =
+                        isPositional(actor.position, allPlayerActors) && enemyTarget
+                            ? resolvePositionalTarget(actor.position!, enemyTarget, allPlayerActors)
+                            : null;
+                    // The enemy's victim THIS turn: the positionally-selected player actor, else the
+                    // legacy heal target. A full CombatActor in both cases, so every per-victim
+                    // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
+                    // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
+                    const tgt = selectedPlayer ?? healTarget!;
+                    const targetDead = tgt.currentHp <= 0;
                     let damage = 0;
                     // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                     // scoped inside the else block below; this flag carries its roundCrit out.
@@ -2680,16 +2806,13 @@ export function runCombat(input: CombatEngineInput): {
                         // Target's CURRENT effective defence: prefer its last-turn ctx (live buffs),
                         // else its base defence (pre-first-turn fallback).
                         const targetDefence =
-                            lastTurnCtxByActor.get(healTarget!.id)?.effectiveDefence ??
-                            baseDefenceFor(healTarget!.id);
+                            lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ??
+                            baseDefenceFor(tgt.id);
                         // Target's max-HP pool + its damage-so-far → the enemyHpPct the enemy's OWN
                         // condition gates read (a bare neutral enemy has no such gates, so this is inert
                         // for current fixtures; computed for correctness when Task 7+ adds gated kits).
-                        const targetMaxHpForEnemy = recipientMaxHp(healTarget!.id);
-                        const targetHpDecline = Math.max(
-                            0,
-                            targetMaxHpForEnemy - healTarget!.currentHp
-                        );
+                        const targetMaxHpForEnemy = recipientMaxHp(tgt.id);
+                        const targetHpDecline = Math.max(0, targetMaxHpForEnemy - tgt.currentHp);
                         // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
                         const enemyActorMaxHp = enemyRuntime.hp;
                         const enemySelfHpPct =
@@ -2699,18 +2822,24 @@ export function runCombat(input: CombatEngineInput): {
                                 : 100;
                         const enemyTurn = runPlayerTurn({
                             runtime: enemyRuntime,
-                            // The heal target is the enemy's victim — bind it as the `enemy` arg so
+                            // The victim (`tgt`) is the enemy's target — bind it as the `enemy` arg so
                             // damage/debuffs resolve against it and route to its per-target store.
-                            enemy: healTarget!,
-                            targetId: healTarget!.id,
+                            // Legacy path: tgt === healTarget! (byte-identical). Positional path:
+                            // the selected player actor.
+                            enemy: tgt,
+                            targetId: tgt.id,
                             statusEngine,
                             // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
-                            corrosionEntries: healTarget!.corrosionEntries,
-                            infernoEntries: healTarget!.infernoEntries,
-                            pendingBombs: healTarget!.pendingBombs,
-                            pendingAccumulators: healTarget!.pendingAccumulators,
+                            corrosionEntries: tgt.corrosionEntries,
+                            infernoEntries: tgt.infernoEntries,
+                            pendingBombs: tgt.pendingBombs,
+                            pendingAccumulators: tgt.pendingAccumulators,
                             enemyDefense: targetDefence,
                             enemyHp: targetMaxHpForEnemy,
+                            // NOTE: unlike the focus/team turns (which force 0 for a selected enemy sink),
+                            // the enemy-turn victim is a REAL player actor with live HP, so its decline
+                            // derives from tgt's actual HP for BOTH the legacy and positional paths.
+                            // Do NOT convert this to a `selected ? 0 : …` ternary.
                             enemyHpDecline: targetHpDecline,
                             // No class is carried on a CombatActor → undefined (no enemyType matchup).
                             enemyType: undefined,
@@ -2740,9 +2869,10 @@ export function runCombat(input: CombatEngineInput): {
                             // mutating the heal target. Player/team calls leave this falsy.
                             healEventOnly: true,
                             selfHpPct: enemySelfHpPct,
-                            // Heal target's live HP% (the enemy is bound to it). Inert for current
-                            // fixtures (a bare enemy has no `hpSubject:'target'` gate) but threaded
-                            // for consistency with the player-turn dispatches.
+                            // Reports the HEAL TARGET's HP%, not tgt's — when positional selection picks
+                            // a different player as `tgt`, this still tracks the heal target (not the
+                            // struck actor). Per-actor target-HP% is deferred to a later phase; inert
+                            // today (bare enemies have no `hpSubject:'target'` gate).
                             targetHpPct: healTargetHpPctNow(),
                         });
                         // Total damage the enemy dealt to the bound target this turn. secondary/
@@ -2817,7 +2947,13 @@ export function runCombat(input: CombatEngineInput): {
                         // hpDamage comes straight from the closure (0 under Barrier — damage fully
                         // blocked, not shield-absorbed — otherwise damage - absorbed). barriered = the
                         // attack was fully blocked by an active Barrier (decision #7, below).
-                        const { shieldBefore, hpDamage, barriered } = applyIncomingToTarget(damage);
+                        // Route the enemy's incoming to its selected victim (`tgt`). Legacy path:
+                        // tgt === healTarget! → no-arg-equivalent call, byte-identical. Positional
+                        // path: drains the SELECTED player actor instead of the heal target.
+                        const { shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
+                            damage,
+                            tgt
+                        );
 
                         // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                         // AFTER this attack's drain so the proc never absorbs its own trigger.
@@ -2829,7 +2965,14 @@ export function runCombat(input: CombatEngineInput): {
                         // delta is below the fidelity of the flat enemy model — on the in-game
                         // verify list (spec §5).
                         // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
-                        // to the heal target (enemy attacks only ever hit it).
+                        // to the heal target — the healing-accounting model is single-target. With
+                        // positional selection (Task C3) the enemy's HP/shield drain re-routes to the
+                        // selected player (`tgt`, above), but these damage-taken HEAL/SHIELD leech
+                        // procs still credit the heal target's accounting. Inert unless a player runs
+                        // a "when damaged, heal/shield" reactive (takenLeeches non-empty) — no current
+                        // fixture does — so the legacy path stays byte-identical. Retargeting the
+                        // single-target healing accounting to an arbitrary victim is out of scope for
+                        // Phase 2 (incoming-damage routing).
                         // Barrier carve-out (decision #7): an attack FULLY BLOCKED by Barrier deals no
                         // damage taken at all, so its damage-taken procs are skipped entirely — there is
                         // nothing to leech from. (Distinct from a shield absorb, where the convention
@@ -2872,7 +3015,10 @@ export function runCombat(input: CombatEngineInput): {
                         for (const hitCrit of hitOutcomes) {
                             bus.emit({
                                 type: 'attacked',
-                                targetId: healTarget!.id,
+                                // The actor actually hit this turn (`tgt`). Legacy path:
+                                // tgt === healTarget! → byte-identical. Positional path: the
+                                // selected player actor.
+                                targetId: tgt.id,
                                 attackerId: actor.id,
                                 round: r,
                                 ...(hitCrit ? { didCrit: true } : {}),
