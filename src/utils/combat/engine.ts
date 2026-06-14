@@ -1055,6 +1055,18 @@ export function runCombat(input: CombatEngineInput): {
         })
     );
 
+    // Per-team-actor parsed positional target (Task C2). The team actor's `position`
+    // already rides on its CombatActor (createActor above), but its parsed `target`
+    // lives only on the TeamActorEngineInput — thread it to the team-turn call site by
+    // id. Empty for every non-positional input (no team actor passes a target) → the
+    // gated branch never fires and the legacy binding stays byte-identical.
+    const teamTargetById = new Map<string, ParsedTarget>();
+    for (const t of teamActors) {
+        if (t.target) {
+            teamTargetById.set(t.id, t.target);
+        }
+    }
+
     // Deterministic event gates — replace Math.random / expected-value math so
     // identical inputs always produce identical output. Crit uses one gate PER
     // ACTION STREAM so the charged hit crits at exactly the crit rate regardless
@@ -2492,20 +2504,43 @@ export function runCombat(input: CombatEngineInput): {
                     // the legacy sourceFired block below is fully superseded for walked actors.
                     // ====================================================================
                     const teamMaxHp = baseHpFor(actor.id);
+                    // Positional target selection (Task C2, GATED). Mirrors the focus-turn
+                    // branch (C1) but keyed to THIS team actor's own board position
+                    // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
+                    // focus attacker's. When `selectedTeamEnemy` is null — not positional, no
+                    // parsed target, or no living positioned enemy — we diverge NOTHING from the
+                    // legacy dummy `enemy` binding. No existing test threads a team target →
+                    // this branch never fires for them (goldens byte-identical).
+                    const teamTarget = teamTargetById.get(actor.id);
+                    const selectedTeamEnemy =
+                        isPositional(actor.position, enemyAttackerActors) && teamTarget
+                            ? resolvePositionalTarget(
+                                  actor.position!,
+                                  teamTarget,
+                                  enemyAttackerActors
+                              )
+                            : null;
+                    // Same `tgt` consolidation as the focus turn: both branches are full
+                    // CombatActors, so every per-target binding derives from `tgt` uniformly.
+                    // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
+                    // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
+                    const tgt = selectedTeamEnemy ?? enemy;
                     const teamTurn = runPlayerTurn({
                         runtime: teamRuntimeById.get(actor.id)!,
-                        enemy,
+                        enemy: tgt,
                         statusEngine,
-                        corrosionEntries,
-                        infernoEntries,
-                        pendingBombs,
-                        pendingAccumulators,
-                        enemyDefense,
-                        enemyHp,
+                        corrosionEntries: tgt.corrosionEntries,
+                        infernoEntries: tgt.infernoEntries,
+                        pendingBombs: tgt.pendingBombs,
+                        pendingAccumulators: tgt.pendingAccumulators,
+                        enemyDefense: tgt.stats.defence,
+                        enemyHp: tgt.stats.hp,
                         enemyType,
                         bus,
                         round: r,
-                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        enemyHpDecline: selectedTeamEnemy
+                            ? 0
+                            : cumulativeDamage + cumulativeTeamDamage,
                         grantAllyCharges,
                         // Healing mode only — walked team turns heal/shield through the same ctx.
                         healing: healingCtx,

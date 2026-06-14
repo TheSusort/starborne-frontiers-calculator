@@ -119,3 +119,85 @@ describe('Task C1 — player attacker positional target selection (focus turn)',
         expect(focusAbilityTargetId(BASE('back'))).toBe('enemy-back');
     });
 });
+
+// ============================================================================
+// Task C2 — walked TEAM actor positional target selection (team turn).
+//
+// A walked team actor carries its OWN board `position` and parsed `target`; the
+// engine resolves them against the SAME positioned enemy roster, independently of
+// the focus attacker. To pin team-actor-specific selection, the team actor uses the
+// OPPOSITE selection from the focus attacker so its `ability-performed.targetId`
+// resolves to a DIFFERENT enemy than the focus's.
+//
+// Layout: focus attacker at M4 selects `front` → enemy-front (M4). Walked team actor
+// at M1 selects `back` → enemy-back (M1). The team actor deals a real basic-attack hit,
+// so its own `ability-performed` event fires with targetId === selected enemy id.
+//
+// RED baseline: the team turn binds the dummy `enemy`, so the team actor's
+// `ability-performed.targetId === 'enemy'` → assertion FAILS. After the gated branch it
+// carries the selected enemy's id.
+// ============================================================================
+
+type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
+
+// A walked team actor with a real basic attack, its own position + parsed target.
+const teamActorAt = (
+    id: string,
+    position: Position,
+    selection: ParsedTarget['selection']
+): TeamActor => ({
+    id,
+    speed: 200, // faster than the focus so it acts first (order is irrelevant to selection)
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget(selection),
+    walk: {
+        shipSkills: { slots: [basicAttack()] },
+        stats: {
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+const teamAbilityTargetId = (input: CombatEngineInput, teamId: string): string | undefined => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+    runCombat({ ...input, bus });
+    const teamPerformed = events.find(
+        (e) => e.type === 'ability-performed' && e.actorId === teamId
+    );
+    return teamPerformed && teamPerformed.type === 'ability-performed'
+        ? teamPerformed.targetId
+        : undefined;
+};
+
+describe('Task C2 — walked team actor positional target selection (team turn)', () => {
+    it("binds the team turn to the team actor's OWN positional target (back → M1), distinct from the focus (front → M4)", () => {
+        idc = 0;
+        // Focus attacker at M4 selects `front`; team actor at M1 selects `back`.
+        const input: CombatEngineInput = {
+            ...BASE('front'),
+            teamActors: [teamActorAt('team-1', 'M1', 'back')],
+        };
+        // Focus resolves to the front-most enemy; team resolves to the back-most enemy.
+        expect(focusAbilityTargetId(input)).toBe('enemy-front');
+        expect(teamAbilityTargetId(input, 'team-1')).toBe('enemy-back');
+    });
+});
