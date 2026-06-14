@@ -5,6 +5,9 @@ import { resolveCells } from './resolvePattern';
 
 // Center-front bias so footprints frame like the prototype; also the deterministic
 // tie-break when several anchors clip equally little.
+// INVARIANT: ANCHOR_PREFERENCE must list every member of ALL_POSITIONS (all 12).
+// If any position is missing, ANCHOR_PREFERENCE.indexOf(anchor) returns -1, which
+// would always win every tie and silently break the center-front preference order.
 const ANCHOR_PREFERENCE: Position[] = [
     'M3',
     'M4',
@@ -49,6 +52,8 @@ function cap(s: string): string {
     return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// 'support' is intentionally omitted from the caption — the ally target side already
+// conveys it (see spec caption rules). Do NOT add a "Support" prefix here.
 function shapeSegment(p: ParsedPattern): string {
     if (p.shape === 'base') return 'Single target';
     if (p.shape === 'all') return 'Whole board';
