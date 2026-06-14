@@ -118,6 +118,22 @@ describe('Task C1 — player attacker positional target selection (focus turn)',
         idc = 0;
         expect(focusAbilityTargetId(BASE('back'))).toBe('enemy-back');
     });
+
+    it('skip selection binds the focus turn to the 2nd-from-front enemy (M2), distinct from front (M4) and back (M1)', () => {
+        // Three enemies in row M: M4 (front), M2 (middle), M1 (back).
+        // colsFrontToBack sorts cols [4,2,1]; skip = cols.slice(1) + cols[0] → anchor = cols[1] = M2 enemy.
+        // Confirms skip resolves a target that is neither front nor back.
+        idc = 0;
+        const input: CombatEngineInput = {
+            ...BASE('skip'),
+            enemyAttackers: [
+                enemyAt('enemy-front', 'M4'),
+                enemyAt('enemy-mid', 'M2'),
+                enemyAt('enemy-back', 'M1'),
+            ],
+        };
+        expect(focusAbilityTargetId(input)).toBe('enemy-mid');
+    });
 });
 
 // ============================================================================
