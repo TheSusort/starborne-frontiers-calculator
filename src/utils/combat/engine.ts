@@ -33,6 +33,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
+import { isPositional, resolvePositionalTarget } from './positionalBinding';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
@@ -2378,22 +2379,49 @@ export function runCombat(input: CombatEngineInput): {
                     // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                     // ====================================================================
                     const attackerMaxHp = baseHpFor(actor.id);
+                    // Positional target selection (Task C1, GATED). When the focus attacker
+                    // (`actor`) carries a board position AND the positioned enemy roster
+                    // (`enemyAttackerActors`) has positioned actors, resolve the focus's parsed
+                    // target (`input.target`) to a single living enemy and bind THIS turn to it.
+                    // When `selectedEnemy` is null — not positional, OR positional but no living
+                    // positioned enemy target — we diverge NOTHING from the legacy dummy `enemy`
+                    // binding (keeps every existing path byte-identical; the null-target sub-case
+                    // is treated as a no-op fallthrough to legacy). No existing test passes
+                    // positions, so this branch never fires for them.
+                    const selectedEnemy =
+                        isPositional(actor.position, enemyAttackerActors) && input.target
+                            ? resolvePositionalTarget(
+                                  actor.position!,
+                                  input.target,
+                                  enemyAttackerActors
+                              )
+                            : null;
                     const turn = runPlayerTurn({
                         runtime: attackerRuntime,
-                        enemy,
+                        enemy: selectedEnemy ?? enemy,
                         statusEngine,
-                        corrosionEntries,
-                        infernoEntries,
-                        pendingBombs,
-                        pendingAccumulators,
-                        enemyDefense,
-                        enemyHp,
+                        corrosionEntries: selectedEnemy
+                            ? selectedEnemy.corrosionEntries
+                            : corrosionEntries,
+                        infernoEntries: selectedEnemy
+                            ? selectedEnemy.infernoEntries
+                            : infernoEntries,
+                        pendingBombs: selectedEnemy ? selectedEnemy.pendingBombs : pendingBombs,
+                        pendingAccumulators: selectedEnemy
+                            ? selectedEnemy.pendingAccumulators
+                            : pendingAccumulators,
+                        enemyDefense: selectedEnemy ? selectedEnemy.stats.defence : enemyDefense,
+                        // Selected enemy's MAX hp (stats.hp), NOT currentHp. Per-target HP decline
+                        // is a later phase — gates read the entering-round HP, so override to 0.
+                        enemyHp: selectedEnemy ? selectedEnemy.stats.hp : enemyHp,
                         enemyType,
                         bus,
                         round: r,
                         // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
                         // reflects all players' damage so far (gates/HP% column react to it).
-                        enemyHpDecline: cumulativeDamage + cumulativeTeamDamage,
+                        // For a positional selected target, per-target decline is a later phase →
+                        // override to 0 (gates read entering HP).
+                        enemyHpDecline: selectedEnemy ? 0 : cumulativeDamage + cumulativeTeamDamage,
                         grantAllyCharges,
                         // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
                         // block inert, goldens byte-identical).
