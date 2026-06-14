@@ -8,101 +8,97 @@ function active(target: string, pattern: string) {
 }
 
 describe('SkillTargetingBoard', () => {
-    it('renders a single board with origin + covered cells for an enemy pattern', () => {
+    it('renders the rule label and plain-English description for the selection', () => {
+        const { getByText } = render(
+            <SkillTargetingBoard targeting={active('skip', 'Pattern-Cone-Range-1')} />
+        );
+        expect(getByText('Skip')).toBeInTheDocument();
+        expect(getByText(/leaps the front line/i)).toBeInTheDocument();
+    });
+
+    it('renders one primary cell and splash cells for a cone', () => {
         const { container } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        // Single board for both sides — no second (empty) board, no arrow.
-        expect(container.querySelectorAll('[data-board]').length).toBe(1);
-        expect(container.querySelectorAll('[data-role="origin"]').length).toBeGreaterThan(0);
-        expect(container.querySelectorAll('[data-role="covered"]').length).toBeGreaterThan(0);
+        expect(container.querySelectorAll('[data-role="primary"]').length).toBe(1);
+        expect(container.querySelectorAll('[data-role="splash"]').length).toBeGreaterThan(0);
     });
 
-    it('renders a single board for a support (ally) pattern', () => {
-        const { container } = render(
-            <SkillTargetingBoard targeting={active('allies', 'Pattern-Circle-Support-Range-1')} />
-        );
-        expect(container.querySelectorAll('[data-board]').length).toBe(1);
-    });
-
-    it('does not render per-cell position labels (compact, label-free board)', () => {
+    it('colors enemy cells red (primary) and lighter red (splash)', () => {
         const { container } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        // No <text> elements inside the board group (labels removed).
-        expect(container.querySelectorAll('svg text').length).toBe(0);
+        expect(container.querySelector('[data-role="primary"]')!.getAttribute('stroke')).toBe(
+            '#ff3b5c'
+        );
+        expect(container.querySelector('[data-role="splash"]')!.getAttribute('stroke')).toBe(
+            '#ff8a9c'
+        );
     });
 
-    it('shows a "Targeting" header and the target selection (not shape/range)', () => {
-        const { getByText, queryByText } = render(
+    it('colors ally cells green (splash) and darker green (caster/primary)', () => {
+        const { container } = render(
+            <SkillTargetingBoard targeting={active('allies', 'Pattern-Cone-Support-Range-1')} />
+        );
+        expect(container.querySelector('[data-role="primary"]')!.getAttribute('stroke')).toBe(
+            '#16a34a'
+        );
+        expect(container.querySelector('[data-role="splash"]')!.getAttribute('stroke')).toBe(
+            '#4ade80'
+        );
+    });
+
+    it('mirrors the cluster for enemy (attacker) targets but not for ally targets', () => {
+        const base = active('skip', 'Pattern-Cone-Range-1'); // enemy side
+        const allyVariant = {
+            ...base,
+            target: { ...base.target, side: 'ally' as const },
+        };
+        // The primary sits at offset (0,0) (unaffected by a horizontal flip), so compare a
+        // splash cell, which is off-origin and moves when mirrored.
+        const firstSplashPoints = (t: SkillTargeting) => {
+            const { container } = render(<SkillTargetingBoard targeting={t} />);
+            return container.querySelector('[data-role="splash"]')!.getAttribute('points');
+        };
+        expect(firstSplashPoints(base)).not.toBe(firstSplashPoints(allyVariant));
+    });
+
+    it('shows Primary/Splash legend for enemy targets', () => {
+        const { getByText } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        expect(getByText('Targeting')).toBeInTheDocument();
-        expect(getByText('front')).toBeInTheDocument(); // CSS-capitalized to "Front"
-        // shape/range no longer shown as visible text
-        expect(queryByText('Cone · Range 1 · enemy front')).toBeNull();
+        expect(getByText('Primary')).toBeInTheDocument();
+        expect(getByText('Splash')).toBeInTheDocument();
+    });
+
+    it('notSelf ally pattern: splash cells only, no caster, Allies legend only', () => {
+        // 'line|2|support+notSelf' → only cov() cells, no origin/primary; ally side.
+        const { container, getByText, queryByText } = render(
+            <SkillTargetingBoard
+                targeting={active('allies', 'Pattern-Line-Support-Not-Self-Range-2')}
+            />
+        );
+        expect(container.querySelectorAll('[data-role="primary"]').length).toBe(0);
+        expect(container.querySelectorAll('[data-role="splash"]').length).toBeGreaterThan(0);
+        expect(queryByText('Caster')).toBeNull();
+        expect(getByText('Allies')).toBeInTheDocument();
     });
 
     it('puts the full shape/range/side caption in the SVG aria-label', () => {
         const { container } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        const svg = container.querySelector('svg')!;
-        expect(svg.getAttribute('aria-label')).toBe(
-            'Targeting footprint: Cone · Range 1 · enemy front'
+        expect(container.querySelector('svg')!.getAttribute('aria-label')).toContain(
+            'Cone · Range 1 · enemy front'
         );
     });
 
-    it('mirrors the board for enemy targets but not for ally targets', () => {
-        const xs = (targeting: ReturnType<typeof active>) => {
-            const { container } = render(<SkillTargetingBoard targeting={targeting} />);
-            const poly = container.querySelector('[data-position="T1"]')!;
-            return poly.getAttribute('points');
-        };
-        const enemyPts = xs(active('front', 'Pattern-Cone-Range-1'));
-        const allyPts = xs(active('allies', 'Pattern-Cone-Support-Range-1'));
-        // T1's polygon points differ between mirrored (enemy) and un-mirrored (ally) renders.
-        expect(enemyPts).not.toBe(allyPts);
-    });
-
-    it('notSelf support pattern: single board, covered cells only, no origin, no legend text', () => {
-        // Pattern-Line-Support-Not-Self-Range-2 with allies target
-        // Signature: 'line|2|support+notSelf' → [cov(1,0), cov(2,0)] — no origin cells.
-        const { container, queryByText } = render(
-            <SkillTargetingBoard
-                targeting={active('allies', 'Pattern-Line-Support-Not-Self-Range-2')}
-            />
-        );
-        // Single board
-        expect(container.querySelectorAll('[data-board]').length).toBe(1);
-        // There are covered cells
-        expect(container.querySelectorAll('[data-role="covered"]').length).toBeGreaterThan(0);
-        // No origin cells anywhere (notSelf pattern has no ORIGIN in the offset table)
-        expect(container.querySelectorAll('[data-role="origin"]').length).toBe(0);
-        // Legend removed entirely — no origin/covered swatch text
-        expect(queryByText('origin')).toBeNull();
-        expect(queryByText('covered')).toBeNull();
-    });
-
-    it('all-pattern: single board with all 12 cells as origin', () => {
-        // Pattern-All → shape 'all' → all 12 positions role 'origin'.
-        const { container } = render(
-            <SkillTargetingBoard targeting={active('all', 'Pattern-All')} />
-        );
-        expect(container.querySelectorAll('[data-board]').length).toBe(1);
-        expect(container.querySelectorAll('[data-role="origin"]').length).toBe(12);
-    });
-
-    it('renders nothing when the pattern has an unknown signature (try/catch → null)', () => {
-        // Construct a SkillTargeting whose pattern signature has no offset table entry.
-        // shape='cone', range=99 produces signature "cone|99|" which is not in OFFSET_TABLES,
-        // so resolveCells throws and the component returns null.
+    it('renders nothing for an unknown pattern signature (try/catch → null)', () => {
         const broken = {
             target: { raw: 'front', side: 'enemy', selection: 'front' },
             pattern: { raw: 'Pattern-Cone-Range-99', shape: 'cone', range: 99, modifiers: {} },
         } as unknown as SkillTargeting;
         const { container } = render(<SkillTargetingBoard targeting={broken} />);
         expect(container.querySelector('svg')).toBeNull();
-        expect(container.querySelector('[data-board]')).toBeNull();
     });
 });

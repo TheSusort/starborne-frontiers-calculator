@@ -1,61 +1,7 @@
-import { Position } from '../../types/encounters';
 import { ParsedPattern, ParsedTarget, SkillTargeting } from '../targetingParser';
-import { ALL_POSITIONS } from './board';
-import { resolveCells } from './resolvePattern';
-
-// Center-front bias so footprints frame like the prototype; also the deterministic
-// tie-break when several anchors clip equally little.
-// INVARIANT: ANCHOR_PREFERENCE must list every member of ALL_POSITIONS (all 12).
-// If any position is missing, ANCHOR_PREFERENCE.indexOf(anchor) returns -1, which
-// would always win every tie and silently break the center-front preference order.
-const ANCHOR_PREFERENCE: Position[] = [
-    'M3',
-    'M4',
-    'M2',
-    'M1',
-    'T3',
-    'T4',
-    'T2',
-    'T1',
-    'B3',
-    'B4',
-    'B2',
-    'B1',
-];
-
-// Enforce the invariant at module load time so a future board change can't silently
-// break tie-breaking. Runs once — cheap enough to keep unconditional.
-/* istanbul ignore next */
-if (import.meta.env?.DEV) {
-    const missing = ALL_POSITIONS.filter((p) => !ANCHOR_PREFERENCE.includes(p));
-    if (missing.length) {
-        throw new Error(`ANCHOR_PREFERENCE missing positions: ${missing.join(', ')}`);
-    }
-}
-
-/**
- * Pick the board cell to anchor a footprint preview on: the anchor that leaves the
- * most cells on-board (resolveCells clips off-board cells), tie-broken by ANCHOR_PREFERENCE.
- * Pure. Throws only if resolveCells throws (unknown pattern signature) — callers guard.
- */
-export function pickDisplayAnchor(pattern: ParsedPattern): Position {
-    let best: Position = ANCHOR_PREFERENCE[0];
-    let bestCount = -1;
-    let bestRank = Infinity;
-    for (const anchor of ALL_POSITIONS) {
-        const count = resolveCells(pattern, anchor).length;
-        const rank = ANCHOR_PREFERENCE.indexOf(anchor);
-        if (count > bestCount || (count === bestCount && rank < bestRank)) {
-            best = anchor;
-            bestCount = count;
-            bestRank = rank;
-        }
-    }
-    return best;
-}
 
 // ---------------------------------------------------------------------------
-// targetingLabel — human-readable caption
+// targetingLabel — human-readable caption (used for the footprint's aria-label)
 // ---------------------------------------------------------------------------
 
 function cap(s: string): string {
