@@ -81,6 +81,12 @@ No offset-table introspection and no hand-maintained per-pattern table. `'all'` 
 full from any anchor; `'lane'` always clips slightly on a 4-wide board, so "most on-board"
 yields the best available framing. Pure and unit-tested.
 
+**Non-goal:** pixel-identical reproduction of the prototype's hand-picked anchors. The
+prototype framed back-anchored / forward-support patterns at specific cells (e.g.
+`Cone-Back` → M2, `Backline` → M1); several candidates can yield the same on-board count,
+so auto-fit may frame those differently. Tests therefore assert "fully on-board / sensible
+and deterministic", **not** "equals the prototype anchor".
+
 ### 2. Board diagram — `src/components/ship/SkillTargetingBoard.tsx` (new)
 
 Presentational, SVG-based (adapts the prototype's `hexPath` / `rawXY` / mirror math,
@@ -112,7 +118,16 @@ Behavior:
 
 A small `targetingLabel(targeting): string` helper (co-located in the component file or in
 `displayAnchor.ts`/a sibling util) produces the caption from the parsed shape, range,
-modifiers, side, and selection.
+modifiers, side, and selection. Range rendering rules (pin these in the plan):
+
+- numeric `range: 0` → omit the range segment entirely (e.g. base/point-blank reads
+  `Single target · enemy front`, not `Range 0`);
+- `range: 'all'` → `Whole board` (no separate range segment);
+- `range: 'lane'` → `Whole lane`;
+- numeric `range >= 1` → `Range N`.
+
+Modifiers (`reverse`, `prolonged`, `notSelf`, `double`, `fromCentre`, `anchorMod`) are
+appended as short qualifiers where present; shape name is title-cased.
 
 ### 3. `SkillTooltip` integration
 
@@ -129,8 +144,9 @@ text. When absent, behavior is unchanged.
 
 - **`ShipSkillList`:** compute `const targeting = parseShipTargeting(ship)` once. For the
   Active row pass `targeting.active`; for the Charge row pass `targeting.charged`; pass
-  nothing for the Passive row. Row identity comes from the existing `row.label`
-  (`Active` / `Charge` / `Passive …`).
+  nothing for the Passive row. Row identity comes from the existing `row.label` — match the
+  exact strings `'Active'` and `'Charge'` (passive labels are `Passive R0` / `Passive R2` /
+  `Passive R4`, per `getShipSkillRows`), **not** a prefix match.
 - **`ShipIndexPage`:** same — compute `parseShipTargeting(ship)` and pass `.active` to the
   Active `SkillTooltip` and `.charged` to the Charge `SkillTooltip`.
 
