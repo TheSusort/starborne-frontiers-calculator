@@ -1,6 +1,8 @@
 import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
+import type { Position } from '../../types/encounters';
+import type { ParsedTarget } from '../targetingParser';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -324,6 +326,10 @@ export interface EnemyActorInput {
      *  Computed by the healing adapter from enemy hacking vs heal-target security. Omitted →
      *  100% (1) for backward compatibility (every existing test/the dummy path omits it). */
     debuffLandingChance?: number;
+    /** Board position of this enemy (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -711,6 +717,10 @@ export type TeamActorEngineInput = TeamActorInput & {
         /** Caster heal-modifier stat (healing calc). Default 0. */
         healModifier?: number;
     };
+    /** Board position of this team actor (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 };
 
 export interface CombatEngineInput {
@@ -790,9 +800,17 @@ export interface CombatEngineInput {
          *  (computed by the healing adapter from enemy hacking vs heal-target security).
          *  Omitted → 100% (1) for backward compatibility. */
         debuffLandingChance?: number;
+        /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
+        position?: Position;
+        /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
+        target?: ParsedTarget;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
+    /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
+    position?: Position;
+    /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
+    target?: ParsedTarget;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
