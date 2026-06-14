@@ -396,6 +396,10 @@ export default defineConfig({
         },
     },
     build: {
+        // Matches Vite's default 'modules' target but raises the Safari floor 14 -> 15.
+        // esbuild 0.28+ refuses to emit destructuring for Safari 14 (known browser bug),
+        // which breaks minification under the default target.
+        target: ['es2020', 'edge88', 'firefox78', 'chrome87', 'safari15'],
         rollupOptions: {
             output: {
                 manualChunks: {
