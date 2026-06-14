@@ -544,8 +544,9 @@ Read the focus-turn `runPlayerTurn({...})` call (~2360) and how `enemy`, `target
   - `enemyHpDecline: 0` — explicitly override the cumulative expression; per-target decline
     is Phase 4 (gates read the target's entering HP — see spec).
   Otherwise the existing dummy binding, unchanged.
-  - If `isPositional` but `selectedEnemy` is null (no living target), skip the attack /
-    no-op for this action (document the chosen no-op; death-fallback is Phase 4).
+  - If `isPositional` but `selectedEnemy` is null (no living target), fall through to the
+    legacy dummy binding (`tgt = selectedEnemy ?? enemy` → `enemy`); the action still
+    resolves against the legacy target. A true no-op / death-fallback retarget is Phase 4.
 
 - [ ] **Step 4: Run** the new test → PASS. **Run full suite → goldens byte-identical.** If a
   golden moved, the gate is leaking (a non-positional input entered the branch) — fix the
@@ -578,7 +579,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
   actor's `position` + `target` (carried on its `CombatActor` / `TeamActorEngineInput`).
   Reuse `resolvePositionalTarget` and the same field-swap as C1 (selected actor's
   defence/max-HP/containers, `enemyHpDecline: 0`). As in C1: `isPositional` but `selected`
-  null → no-op for this action (death-fallback is Phase 4).
+  null → fall through to the legacy dummy binding (`?? enemy`); death-fallback is Phase 4.
 
 - [ ] **Step 4: Run** new test → PASS; **full suite goldens byte-identical.**
 
@@ -618,7 +619,8 @@ Read the enemy-attacker binding (~2700, `enemy: healTarget!`) and `applyIncoming
   and bind `enemy: selectedPlayer`, `targetId: selectedPlayer.id`, and route
   `applyIncomingToTarget` to `selectedPlayer` (generalize the helper from the hard-coded
   `healTarget`). Otherwise the existing `healTarget` binding.
-  - `selectedPlayer` null → no-op for this enemy action (Phase-4 death-fallback note).
+  - `selectedPlayer` null → fall through to the legacy `healTarget` binding (`?? healTarget`);
+    the enemy still attacks the legacy victim. Death-fallback retarget is Phase 4.
 
 - [ ] **Step 4: Run** new test → PASS; **full suite goldens byte-identical** (no caller
   passes enemy positions).

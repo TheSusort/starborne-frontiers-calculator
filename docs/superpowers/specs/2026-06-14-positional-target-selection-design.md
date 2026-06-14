@@ -122,8 +122,10 @@ Worked examples:
 
 ### Empty side
 
-No living targets on the requested side → `anchor: null` (the engine treats this as "no
-valid target for this action"; death-fallback *retargeting* is Phase 4).
+No living targets on the requested side → `anchor: null`. In Phase 2 the engine handles a
+null anchor by **falling back to the legacy dummy/heal-target binding** (the golden-safe
+minimal choice — only the positive-selection path diverges from today). A true no-op or
+death-fallback *retargeting* is Phase 4.
 
 ## Design
 
@@ -200,7 +202,7 @@ enemy attacker's `healTarget` binding (engine.ts ~2700–2747) — branch on pos
 - **Positional:** build the living-positioned `Map<Position, CombatActor>` for the target
   side (own frame for the acting side), call `selectTargets` with its keys as
   `enemyOccupied`, map the returned `anchor` Position → that map's actor → the target for
-  this action. (`anchor: null` → no valid target this action.)
+  this action. (`anchor: null` → fall back to the legacy binding below; Phase-2 minimal.)
 - **Non-positional:** today's binding (dummy sink for player attacks; `healTarget` for
   enemy attacks). **Goldens byte-identical.**
 
