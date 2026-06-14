@@ -327,6 +327,8 @@ export function buildForcedTargetingStatus(
 
 (Buff-name constants live in `src/constants/buffs.ts`; the existing query helpers use bare string literals, so match that style.)
 
+**Caveat for the Phase-4 applier follow-up (not this PR):** the always-active enemy-debuff snapshot (`enemyAlwaysSnap`, statusEngine.ts ~702) ignores `enemyTargetId`, so an *always-active* Concentrate Fire would surface as `concentrated` for **every** queried id. This is harmless in Phase 3 (read-only, no applier — nothing applies CF, so the flag is never set in goldens/tests). But when Provoke/CF application is wired later, Concentrate Fire MUST be applied as a per-target (`enemyTargetId`-keyed) timed debuff, not an always-active seed, or it will over-mark all actors.
+
 - [ ] **Step 4: Run the test to verify it passes**
 
 Run: `npx vitest run src/utils/combat/__tests__/forcedTargetingStatus.test.ts`
@@ -444,7 +446,7 @@ const statusLookupFor = (roster: CombatActor[]) => {
 };
 ```
 
-then pass `statusLookupFor(enemyAttackerActors)` as the 4th arg. Place `statusLookupFor` where all 3 call sites can see it and `statusEngine` is in scope (it is, throughout the turn loop). Confirm the chosen scope does not rebuild the map more than once per turn unnecessarily (acceptable either way for these roster sizes, but keep it tidy).
+then pass `statusLookupFor(enemyAttackerActors)` as the 4th arg. **Placement anchor:** the 3 call sites (~2429 focus, ~2541 team, ~2779 enemy) all live in the same per-actor turn-processing body inside the round loop, but ~350 lines apart. Define `statusLookupFor` once at the top of the round loop body (near the `statusEngine.beginRound(r)` region, ~line 1791) or at the top of the per-turn block above ~2429 — anywhere all 3 sites see it and `statusEngine` is in scope. Confirm the chosen scope does not rebuild the map more than once per turn unnecessarily (acceptable either way for these roster sizes, but keep it tidy).
 
 - [ ] **Step 4: Wire the team call site** (engine.ts ~2540-2547):
 
