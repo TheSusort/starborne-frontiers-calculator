@@ -23,6 +23,16 @@ const ANCHOR_PREFERENCE: Position[] = [
     'B1',
 ];
 
+// Enforce the invariant at module load time so a future board change can't silently
+// break tie-breaking. Runs once — cheap enough to keep unconditional.
+/* istanbul ignore next */
+if (import.meta.env?.DEV) {
+    const missing = ALL_POSITIONS.filter((p) => !ANCHOR_PREFERENCE.includes(p));
+    if (missing.length) {
+        throw new Error(`ANCHOR_PREFERENCE missing positions: ${missing.join(', ')}`);
+    }
+}
+
 /**
  * Pick the board cell to anchor a footprint preview on: the anchor that leaves the
  * most cells on-board (resolveCells clips off-board cells), tie-broken by ANCHOR_PREFERENCE.

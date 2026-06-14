@@ -9,6 +9,33 @@ const W = 44;
 const H = 38;
 const HEX_RX = 21;
 const HEX_RY = 24;
+// Padding added to each board's rawXY so the leftmost/topmost hex stays
+// inside the SVG frame.  rawX ∈ [-22, 132], rawY ∈ [0, 76].
+// Half-extents per hex: HEX_RX*cos(30°) ≈ 18 px wide, HEX_RY = 24 px tall.
+// With GRID_PAD_X=41: leftmost cx = -22+41 = 19, left vertex = 19-18 = 1 ✓
+// With GRID_PAD_Y=26: top vertex = 0+26-24 = 2, bottom vertex = 76+26+24 = 126 ✓
+const GRID_PAD_X = 41;
+const GRID_PAD_Y = 26;
+
+// ---- Support (single-board) SVG dimensions ----
+// Board cx ∈ [19, 173], right vertex = 173 + 18 = 191 → width 194 with 3 px spare.
+// Board cy ∈ [26, 102], bottom vertex = 102 + 24 = 126 → footer at y=138, height 142.
+const SUPPORT_SVG_W = 194;
+const SUPPORT_SVG_H = 142;
+const SUPPORT_LABEL_X = 97; // horizontal centre of the single board
+const SUPPORT_LABEL_Y = 138;
+
+// ---- Attacker (dual-board) SVG dimensions ----
+// Team board: ox=0, cx ∈ [19, 173], right vertex = 191.
+// Enemy board (mirrored, ox=ENEMY_OX): cx ∈ [ox+19, ox+173], right vertex = ox+191.
+// Arrow sits at horizontal midpoint between the two boards.
+// Choose ENEMY_OX=212 → gap between boards = (212+19) - 191 = 40 px wide enough.
+// Arrow x = (191 + 212+19)/2 = (191+231)/2 = 211, but centre of gap = 191 + 20 = 211. OK.
+// Total width = ENEMY_OX + 191 + 3 = 212 + 191 + 3 = 406.
+const ENEMY_OX = 212;
+const ATTACKER_SVG_W = ENEMY_OX + 191 + 3; // = 406
+const ATTACKER_SVG_H = SUPPORT_SVG_H; // same row geometry, same height
+const ARROW_X = Math.round((191 + ENEMY_OX + 19) / 2); // midpoint of gap ≈ 211
 
 const COLORS: Record<CellRole | 'empty', { fill: string; stroke: string }> = {
     origin: { fill: '#7a1020', stroke: '#e0455f' },
@@ -45,8 +72,8 @@ const Board: React.FC<BoardProps> = ({ ox, oy, mirror, roles, label }) => (
         {ALL_POSITIONS.map((pos) => {
             const [rawX, y] = rawXY(pos);
             const x = mirror ? 110 - rawX : rawX;
-            const cx = ox + x + 30;
-            const cy = oy + y + 22;
+            const cx = ox + x + GRID_PAD_X;
+            const cy = oy + y + GRID_PAD_Y;
             const role = roles.get(pos);
             const colors = COLORS[role ?? 'empty'];
             return (
@@ -94,28 +121,40 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
             <div className="mb-1">{caption}</div>
             {isSupport ? (
                 <svg
-                    width={178}
-                    height={120}
+                    width={SUPPORT_SVG_W}
+                    height={SUPPORT_SVG_H}
                     role="img"
                     aria-label={`Targeting footprint: ${caption}`}
                 >
-                    <Board ox={0} oy={12} mirror={false} roles={roles} label="own" />
-                    <text x={89} y={112} textAnchor="middle" fontSize={10} fill="#5a6a86">
+                    <Board ox={0} oy={0} mirror={false} roles={roles} label="own" />
+                    <text
+                        x={SUPPORT_LABEL_X}
+                        y={SUPPORT_LABEL_Y}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fill="#5a6a86"
+                    >
                         your board
                     </text>
                 </svg>
             ) : (
                 <svg
-                    width={402}
-                    height={120}
+                    width={ATTACKER_SVG_W}
+                    height={ATTACKER_SVG_H}
                     role="img"
                     aria-label={`Targeting footprint: ${caption}`}
                 >
-                    <Board ox={0} oy={12} mirror={false} roles={new Map()} label="team" />
-                    <text x={201} y={62} textAnchor="middle" fontSize={20} fill="#6ca8ff">
+                    <Board ox={0} oy={0} mirror={false} roles={new Map()} label="team" />
+                    <text
+                        x={ARROW_X}
+                        y={Math.round(ATTACKER_SVG_H / 2)}
+                        textAnchor="middle"
+                        fontSize={20}
+                        fill="#6ca8ff"
+                    >
                         ▶
                     </text>
-                    <Board ox={224} oy={12} mirror roles={roles} label="enemy" />
+                    <Board ox={ENEMY_OX} oy={0} mirror roles={roles} label="enemy" />
                 </svg>
             )}
             <div className="flex gap-3 mt-1">
