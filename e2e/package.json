@@ -19,5 +19,9 @@
   },
   "devDependencies": {
     "typescript": "^5.5.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1",
+    "ws": "^8.20.1"
   }
 }
