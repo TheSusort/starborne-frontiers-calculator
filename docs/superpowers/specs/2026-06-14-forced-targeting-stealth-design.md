@@ -44,6 +44,11 @@ goldens remain byte-identical.
   this chain in the follow-up PR.
 - **Concentrate Fire** bypasses stealth and is applied **only to the anchor target**
   (user-confirmed) — i.e. it is a single-actor marker, never a team-wide debuff.
+  **Note:** combat-system.md §9 (line 210) describes CF as a debuff "applied to a team";
+  that description is **stale**. The user-confirmed model is the one used here — CF is a
+  debuff on the *target* actor, which is why the `concentrated` flag is read from the
+  per-target enemy-debuff store (§4.1), not from the attacker. Treat the spec as
+  authoritative over §9 on this point.
 - **Taunt:** if multiple ships taunt, "last applied wins". The status query layer exposes
   no application round, so this PR degrades to a deterministic **front-most board order**
   tiebreak; the resolution helper carries an optional `tauntAppliedRound` field so exact
@@ -76,7 +81,17 @@ export function buildForcedTargetingStatus(
   `'Stealth'` / `'Taunt'`.
 - `concentrated`: `ownerDebuffNamesFor(statusEngine, id)` includes `'Concentrate Fire'`
   (Concentrate Fire is a debuff on the focus target, so it lives in the per-target store,
-  not the self-buff store).
+  not the self-buff store). engine.ts already reads a player actor's own debuffs from this
+  store via `ownerDebuffNamesFor(statusEngine, ownerId)` (~line 1440), confirming
+  per-actor-id keying works.
+
+**Applier deferral (important):** Phase 3 has **no production path that *applies*
+Concentrate Fire** to a specific actor's per-target store — that wiring (an attacker
+marking a victim) belongs to the simulator/Phase-4 work, exactly like Provoke's applier.
+So `buildForcedTargetingStatus` is the *read* half only. The CF/Taunt/Stealth test
+fixtures (§6) therefore set up the status-engine store state directly (or assert against a
+stubbed `statusOf`), rather than driving an in-game applier. This keeps Phase 3 a pure
+read-and-resolve capability.
 
 Buff-name constants already exist in `src/constants/buffs.ts` (`'Stealth'`, `'Taunt'`,
 `'Concentrate Fire'`). Reference them rather than re-typing literals where a constant is
@@ -98,21 +113,31 @@ export function resolvePositionalTarget(
 **When `statusOf` is omitted → Phase-2 behaviour verbatim** (the load-bearing
 backward-compat guarantee — every existing positional test omits it and stays green).
 
+`statusOf(id)` returns `(ActorTargetingStatus | undefined)`; an `undefined` result (actor
+not in the map, or no relevant statuses) **must be treated as all-`false`** — never throw,
+never skip the actor. This is the actual production shape (a status map is built but every
+actor is statusless), and it is the real basis for the byte-identical-goldens guarantee
+(see §5).
+
 When `statusOf` is provided **and `target.side === 'enemy'`**, resolution runs before
 delegating to `selectTargets`:
 
-1. Build the `position → actor` map of living, positioned opposing actors (as today;
-   invariant ≤1 actor per cell). If empty → return `null`.
+1. Build the `position → actor` map (`byCell`) of living, positioned opposing actors (as
+   today; invariant ≤1 actor per cell). If empty → return `null`. **`byCell` stays intact**
+   for the final anchor→actor lookup; the stealth filter (step 4) operates on a *derived
+   candidate cell list*, never by mutating `byCell`.
 2. **Concentrate Fire** (bypasses stealth): among the mapped actors, collect those whose
-   status is `concentrated`. If any, force-target one — front-most (highest column) when
-   multiple. Return that actor.
+   status is `concentrated`. If any, force-target one — **front-most when multiple, computed
+   by explicitly sorting candidates by `colOf` descending** (do not rely on `byCell`
+   insertion/roster order, which is not column-ordered). Return that actor.
 3. **Taunt** (evaluated before stealth): else collect `taunting` actors. If any,
-   force-target one — most-recent `tauntAppliedRound` if present, otherwise/tie front-most.
-   Return that actor.
-4. **Stealth filter**: else remove `stealthed` cells from the candidate set. If the set
-   becomes empty (all stealthed), restore the full set (no-targets-without-stealth
-   fallback). Call `selectTargets` over the surviving cells and map the resulting anchor
-   back to its actor (as today).
+   force-target one — most-recent `tauntAppliedRound` if present, otherwise/tie the same
+   explicit front-most (`colOf` descending) tiebreak. Return that actor.
+4. **Stealth filter**: else build the candidate cell list `[...byCell.keys()]` minus the
+   `stealthed` cells. If that list becomes empty (all stealthed), restore the full
+   `[...byCell.keys()]` (no-targets-without-stealth fallback). Call `selectTargets` over the
+   surviving cells and map the resulting anchor back to its actor via the untouched
+   `byCell` (as today).
 
 Ally-side selection (`target.side === 'ally'`) returns the caster anchor unchanged — no
 stealth or forced-targeting branch.
@@ -123,7 +148,7 @@ targeting only changes *which* actor is returned. `resolveCells`/splash stay unw
 
 ### 4.3 Engine wiring — 3 call sites in `src/utils/combat/engine.ts`
 
-At each existing `resolvePositionalTarget` call (focus ~2429, team ~2541, enemy ~2779):
+At each existing `resolvePositionalTarget` call (focus ~2430, team ~2542, enemy ~2780):
 build the status map for the opposing roster with `buildForcedTargetingStatus(statusEngine,
 <opposingIds>)` and pass `(id) => map.get(id)` as the new `statusOf` arg.
 
@@ -142,6 +167,11 @@ all-`false` for them → identical anchor selection → no snapshot churn. The s
 **no golden snapshot file appears in the diff.** If one moves, the gate leaked — fix the
 gate, never `vitest -u`.
 
+Note the two distinct code paths: the *omitted-`statusOf`* path (existing Phase-2 tests)
+and the *provided-`statusOf`-returning-all-`false`* path (the real production shape once the
+simulator passes positions). **Both** must be byte-identical to Phase-2 selection, and §6
+asserts both explicitly.
+
 ## 6. Testing
 
 - **`positionalBinding.test.ts`** (extend): with `statusOf` —
@@ -150,8 +180,10 @@ gate, never `vitest -u`.
   - Taunt forces the taunting actor even when it is not the default anchor;
   - Concentrate Fire forces the marked actor and reaches it through stealth;
   - priority: Concentrate Fire beats a simultaneous Taunt;
-  - multi-taunt → front-most;
-  - `statusOf` omitted → identical to the Phase-2 result.
+  - multi-taunt → front-most (asserts the explicit `colOf`-descending tiebreak, not roster order);
+  - `statusOf` omitted → identical to the Phase-2 result;
+  - **`statusOf` provided but returning `undefined` for every id → identical to the
+    Phase-2 result** (the production all-statusless shape; the real goldens-invariant basis).
 - **`triggers` test**: `buildForcedTargetingStatus` reads `Stealth`/`Taunt` (self-buff) and
   `Concentrate Fire` (enemy-debuff) into the right flags; absent statuses → all `false`.
 - **Engine integration test**: a positional scenario where an opposing actor carries Taunt
