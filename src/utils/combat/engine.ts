@@ -2836,6 +2836,10 @@ export function runCombat(input: CombatEngineInput): {
                             pendingAccumulators: tgt.pendingAccumulators,
                             enemyDefense: targetDefence,
                             enemyHp: targetMaxHpForEnemy,
+                            // NOTE: unlike the focus/team turns (which force 0 for a selected enemy sink),
+                            // the enemy-turn victim is a REAL player actor with live HP, so its decline
+                            // derives from tgt's actual HP for BOTH the legacy and positional paths.
+                            // Do NOT convert this to a `selected ? 0 : …` ternary.
                             enemyHpDecline: targetHpDecline,
                             // No class is carried on a CombatActor → undefined (no enemyType matchup).
                             enemyType: undefined,
@@ -2865,9 +2869,10 @@ export function runCombat(input: CombatEngineInput): {
                             // mutating the heal target. Player/team calls leave this falsy.
                             healEventOnly: true,
                             selfHpPct: enemySelfHpPct,
-                            // Heal target's live HP% (the enemy is bound to it). Inert for current
-                            // fixtures (a bare enemy has no `hpSubject:'target'` gate) but threaded
-                            // for consistency with the player-turn dispatches.
+                            // Reports the HEAL TARGET's HP%, not tgt's — when positional selection picks
+                            // a different player as `tgt`, this still tracks the heal target (not the
+                            // struck actor). Per-actor target-HP% is deferred to a later phase; inert
+                            // today (bare enemies have no `hpSubject:'target'` gate).
                             targetHpPct: healTargetHpPctNow(),
                         });
                         // Total damage the enemy dealt to the bound target this turn. secondary/
