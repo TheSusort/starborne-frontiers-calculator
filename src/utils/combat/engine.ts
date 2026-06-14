@@ -2396,31 +2396,27 @@ export function runCombat(input: CombatEngineInput): {
                                   enemyAttackerActors
                               )
                             : null;
+                    // Positional target (phase 2): the selected enemy actor, else the dummy sink.
+                    // Both are full CombatActors, so all per-target bindings derive from `tgt`
+                    // uniformly. For the legacy (non-positional) path tgt === enemy, whose
+                    // stats.defence/stats.hp and DoT/bomb containers ARE the legacy module vars
+                    // (see ~line 1297) — so deriving every binding from `tgt` is byte-identical.
+                    // Per-target HP decline is a later phase, so enemyHpDecline stays its own
+                    // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
+                    const tgt = selectedEnemy ?? enemy;
                     const turn = runPlayerTurn({
                         runtime: attackerRuntime,
-                        enemy: selectedEnemy ?? enemy,
+                        enemy: tgt,
                         statusEngine,
-                        corrosionEntries: selectedEnemy
-                            ? selectedEnemy.corrosionEntries
-                            : corrosionEntries,
-                        infernoEntries: selectedEnemy
-                            ? selectedEnemy.infernoEntries
-                            : infernoEntries,
-                        pendingBombs: selectedEnemy ? selectedEnemy.pendingBombs : pendingBombs,
-                        pendingAccumulators: selectedEnemy
-                            ? selectedEnemy.pendingAccumulators
-                            : pendingAccumulators,
-                        enemyDefense: selectedEnemy ? selectedEnemy.stats.defence : enemyDefense,
-                        // Selected enemy's MAX hp (stats.hp), NOT currentHp. Per-target HP decline
-                        // is a later phase — gates read the entering-round HP, so override to 0.
-                        enemyHp: selectedEnemy ? selectedEnemy.stats.hp : enemyHp,
+                        corrosionEntries: tgt.corrosionEntries,
+                        infernoEntries: tgt.infernoEntries,
+                        pendingBombs: tgt.pendingBombs,
+                        pendingAccumulators: tgt.pendingAccumulators,
+                        enemyDefense: tgt.stats.defence,
+                        enemyHp: tgt.stats.hp,
                         enemyType,
                         bus,
                         round: r,
-                        // enemyHpDecline: focus + team cumulative — the enemy's entering-round HP%
-                        // reflects all players' damage so far (gates/HP% column react to it).
-                        // For a positional selected target, per-target decline is a later phase →
-                        // override to 0 (gates read entering HP).
                         enemyHpDecline: selectedEnemy ? 0 : cumulativeDamage + cumulativeTeamDamage,
                         grantAllyCharges,
                         // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
