@@ -24,6 +24,7 @@ import { StatName } from '../../types/stats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Modal } from '../../components/ui/layout/Modal';
 import { BioContent } from '../../components/ship/BioContent';
+import { parseShipTargeting } from '../../utils/targetingParser';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -409,6 +410,9 @@ export const ShipIndexPage: React.FC = () => {
                                                             <SkillTooltip
                                                                 skillText={ship.activeSkillText}
                                                                 skillType="Active Skill"
+                                                                targeting={
+                                                                    parseShipTargeting(ship).active
+                                                                }
                                                             />
                                                         </Tooltip>
                                                     </div>
@@ -455,6 +459,9 @@ export const ShipIndexPage: React.FC = () => {
                                                                 skillText={ship.chargeSkillText}
                                                                 skillType="Charge Skill"
                                                                 charge={ship.chargeSkillCharge}
+                                                                targeting={
+                                                                    parseShipTargeting(ship).charged
+                                                                }
                                                             />
                                                         </Tooltip>
                                                     </div>
