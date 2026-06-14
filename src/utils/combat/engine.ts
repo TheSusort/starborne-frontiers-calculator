@@ -412,6 +412,7 @@ export function buildEnemyPlayerActorRuntime(
         },
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
+        position: e.position,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -983,6 +984,7 @@ export function runCombat(input: CombatEngineInput): {
         stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: speed ?? 100 },
         chargeCount,
         startCharged,
+        position: input.position,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1048,6 +1050,7 @@ export function runCombat(input: CombatEngineInput): {
                   },
             chargeCount: t.chargeCount,
             startCharged: t.startCharged,
+            position: t.position,
         })
     );
 

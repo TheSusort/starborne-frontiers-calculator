@@ -1,3 +1,4 @@
+import type { Position } from '../../types/encounters';
 import type { CombatEventBus } from './events';
 
 /** Per-actor damage contributions within one round (spec: per-actor accounting —
@@ -111,6 +112,8 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
+    /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
+    position?: Position;
 }
 
 export function createActor(
@@ -118,6 +121,7 @@ export function createActor(
         stats: ActorStats;
         chargeCount?: number;
         startCharged?: boolean;
+        position?: Position;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -134,6 +138,7 @@ export function createActor(
         infernoEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
+        position: partial.position,
     };
 }
 
