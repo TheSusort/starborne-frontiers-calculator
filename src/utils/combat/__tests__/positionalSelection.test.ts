@@ -201,3 +201,86 @@ describe('Task C2 — walked team actor positional target selection (team turn)'
         expect(teamAbilityTargetId(input, 'team-1')).toBe('enemy-back');
     });
 });
+
+// ============================================================================
+// Task C3 — enemy attacker positional target selection (side-symmetric).
+//
+// The mirror of C1/C2: a positioned ENEMY attacker resolves its OWN parsed `target`
+// against the positioned PLAYER team (`allPlayerActors` = focus + walked team), and its
+// incoming damage lands on the SELECTED player actor — not unconditionally on the heal
+// target.
+//
+// Layout: the player team has the focus attacker at M4 (col 4 = front-most) and a walked
+// team actor at M1 (col 1 = back-most). The enemy attacker at M4 selects `front`, so from
+// its frame the front-most player is the focus (M4). The heal target is the TEAM actor
+// (M1) — so the legacy (unrouted) path would always drain the team actor's HP, while the
+// positional path drains the SELECTED focus actor's HP instead.
+//
+// Observable: `hp-changed` events carry the `targetId` of whichever actor took the hit
+// (emitted from applyIncomingToTarget). The focus actor (selected) must show an hp-changed
+// crossing; the heal target (team, NOT selected) must not be the one that was hit.
+//
+// RED baseline: the enemy always bombards the heal target, so the hit lands on the team
+// actor (M1) and no hp-changed targets the focus → assertion FAILS. After the gated branch
+// + applyIncomingToTarget re-route, the focus actor (front-most) takes the hit.
+// ============================================================================
+
+// A real damaging enemy attacker positioned with its own parsed target.
+const damagingEnemyAt = (
+    id: string,
+    position: Position,
+    selection: ParsedTarget['selection']
+): EnemyAttacker =>
+    ({
+        id,
+        stats: {
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget(selection),
+        shipSkills: { slots: [basicAttack()] },
+    }) as EnemyAttacker;
+
+// Run a combat and return the set of distinct player actor ids that took an hp-changed hit.
+const hpChangedTargets = (input: CombatEngineInput): Set<string> => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('hp-changed', (e) => events.push(e as CombatEvent));
+    runCombat({ ...input, bus });
+    return new Set(
+        events
+            .filter(
+                (e): e is Extract<CombatEvent, { type: 'hp-changed' }> => e.type === 'hp-changed'
+            )
+            .map((e) => e.targetId)
+    );
+};
+
+describe('Task C3 — enemy attacker positional target selection (side-symmetric)', () => {
+    it("routes the enemy's incoming damage to its OWN positional selection (front → focus M4), not the heal target (team M1)", () => {
+        idc = 0;
+        // Player team: focus at M4 (front-most), walked team actor at M1 (back-most).
+        // Heal target = the TEAM actor (M1) so the legacy path drains it; the positioned
+        // enemy at M4 selects `front` → the focus (M4) actor.
+        const input: CombatEngineInput = {
+            ...BASE('front'),
+            // Focus attacker should NOT itself attack the player team — it has its own enemy
+            // target; we only care about the enemy's incoming routing. Keep its basic attack.
+            healTargetId: 'team-1',
+            teamActors: [teamActorAt('team-1', 'M1', 'front')],
+            enemyAttackers: [damagingEnemyAt('enemy-atk', 'M4', 'front')],
+        };
+        const hit = hpChangedTargets(input);
+        // The selected (front-most) player — the focus — received the enemy's incoming.
+        expect(hit.has('attacker')).toBe(true);
+        // The heal target (team actor, M1) was NOT the actor the enemy hit.
+        expect(hit.has('team-1')).toBe(false);
+    });
+});
