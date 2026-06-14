@@ -33,14 +33,39 @@ describe('SkillTargetingBoard', () => {
         expect(container.querySelectorAll('svg text').length).toBe(0);
     });
 
-    it('shows the caption', () => {
-        const { getByText } = render(
+    it('shows a "Targeting" header and the target selection (not shape/range)', () => {
+        const { getByText, queryByText } = render(
             <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
         );
-        expect(getByText('Cone · Range 1 · enemy front')).toBeInTheDocument();
+        expect(getByText('Targeting')).toBeInTheDocument();
+        expect(getByText('front')).toBeInTheDocument(); // CSS-capitalized to "Front"
+        // shape/range no longer shown as visible text
+        expect(queryByText('Cone · Range 1 · enemy front')).toBeNull();
     });
 
-    it('notSelf support pattern: single board, covered cells only, no origin in legend', () => {
+    it('puts the full shape/range/side caption in the SVG aria-label', () => {
+        const { container } = render(
+            <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
+        );
+        const svg = container.querySelector('svg')!;
+        expect(svg.getAttribute('aria-label')).toBe(
+            'Targeting footprint: Cone · Range 1 · enemy front'
+        );
+    });
+
+    it('mirrors the board for enemy targets but not for ally targets', () => {
+        const xs = (targeting: ReturnType<typeof active>) => {
+            const { container } = render(<SkillTargetingBoard targeting={targeting} />);
+            const poly = container.querySelector('[data-position="T1"]')!;
+            return poly.getAttribute('points');
+        };
+        const enemyPts = xs(active('front', 'Pattern-Cone-Range-1'));
+        const allyPts = xs(active('allies', 'Pattern-Cone-Support-Range-1'));
+        // T1's polygon points differ between mirrored (enemy) and un-mirrored (ally) renders.
+        expect(enemyPts).not.toBe(allyPts);
+    });
+
+    it('notSelf support pattern: single board, covered cells only, no origin, no legend text', () => {
         // Pattern-Line-Support-Not-Self-Range-2 with allies target
         // Signature: 'line|2|support+notSelf' → [cov(1,0), cov(2,0)] — no origin cells.
         const { container, queryByText } = render(
@@ -48,16 +73,15 @@ describe('SkillTargetingBoard', () => {
                 targeting={active('allies', 'Pattern-Line-Support-Not-Self-Range-2')}
             />
         );
-        // Support layout: single board
+        // Single board
         expect(container.querySelectorAll('[data-board]').length).toBe(1);
         // There are covered cells
         expect(container.querySelectorAll('[data-role="covered"]').length).toBeGreaterThan(0);
         // No origin cells anywhere (notSelf pattern has no ORIGIN in the offset table)
         expect(container.querySelectorAll('[data-role="origin"]').length).toBe(0);
-        // Legend must NOT render the "origin" swatch
+        // Legend removed entirely — no origin/covered swatch text
         expect(queryByText('origin')).toBeNull();
-        // Legend must render the "covered" swatch
-        expect(queryByText('covered')).toBeInTheDocument();
+        expect(queryByText('covered')).toBeNull();
     });
 
     it('all-pattern: single board with all 12 cells as origin', () => {

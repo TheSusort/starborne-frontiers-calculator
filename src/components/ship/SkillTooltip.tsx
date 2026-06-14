@@ -91,19 +91,22 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
                     return null;
                 })}
             </div>
-            {targeting && <SkillTargetingBoard targeting={targeting} />}
         </>
     );
 
     if (inline) {
-        return content;
+        return (
+            <>
+                {targeting && <SkillTargetingBoard targeting={targeting} />}
+                {content}
+            </>
+        );
     }
 
     return (
         <>
-            <div
-                className={`bg-dark-lighter p-2 shadow-lg ${targeting ? 'max-w-md' : 'max-w-xs'} border border-dark-border`}
-            >
+            {targeting && <SkillTargetingBoard targeting={targeting} />}
+            <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border">
                 {content}
             </div>
 

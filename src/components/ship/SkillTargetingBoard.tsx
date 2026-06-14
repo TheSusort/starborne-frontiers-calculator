@@ -5,9 +5,9 @@ import { ALL_POSITIONS, positionToAxial } from '../../utils/targeting/board';
 import { CellRole, resolveCells } from '../../utils/targeting/resolvePattern';
 import { pickDisplayAnchor, targetingLabel } from '../../utils/targeting/targetingDisplay';
 
-// Compact single-board footprint. One board for both ally and enemy targets — the
-// resolved cells are identical regardless of side, so we draw one un-mirrored board
-// and let the caption convey which side it targets.
+// Compact single-board footprint shown as its own hovercard box (sibling to the
+// buff-description boxes). One board per skill; the enemy board is mirrored so its
+// front column faces the viewer the way enemies appear in-game.
 const W = 24;
 const H = 20;
 const HEX_RX = 11;
@@ -22,6 +22,9 @@ const GRID_PAD_X = 24;
 const GRID_PAD_Y = 15;
 const SVG_W = 108;
 const SVG_H = 70;
+// Mirroring maps x → (rawXmin + rawXmax) − x = 60 − x, which keeps the x-range onto
+// itself so the SVG dimensions stay valid for the mirrored (enemy) board.
+const MIRROR_CONST = -12 + 72;
 
 const COLORS: Record<CellRole | 'empty', { fill: string; stroke: string }> = {
     origin: { fill: '#7a1020', stroke: '#e0455f' },
@@ -58,24 +61,24 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
         return null; // unknown pattern signature — show nothing rather than crash
     }
 
-    const caption = targetingLabel(targeting);
-    const roleValues = Array.from(roles.values());
-    const hasOrigin = roleValues.includes('origin');
-    const hasCovered = roleValues.includes('covered');
+    const mirror = targeting.target.side === 'enemy';
 
     return (
-        <div className="mt-2 text-[11px] text-theme-text/70">
-            <div className="mb-1">{caption}</div>
+        <div className="bg-dark-lighter p-2 shadow-lg max-w-xs mb-1 border border-dark-border">
+            <div className="font-semibold text-sm text-primary">Targeting</div>
+            <div className="text-sm text-theme-text capitalize mb-1">
+                {targeting.target.selection}
+            </div>
             <svg
                 width={SVG_W}
                 height={SVG_H}
                 role="img"
-                aria-label={`Targeting footprint: ${caption}`}
+                aria-label={`Targeting footprint: ${targetingLabel(targeting)}`}
             >
                 <g data-board="footprint">
                     {ALL_POSITIONS.map((pos) => {
-                        const [x, y] = rawXY(pos);
-                        const cx = x + GRID_PAD_X;
+                        const [rawX, y] = rawXY(pos);
+                        const cx = (mirror ? MIRROR_CONST - rawX : rawX) + GRID_PAD_X;
                         const cy = y + GRID_PAD_Y;
                         const role = roles.get(pos);
                         const colors = COLORS[role ?? 'empty'];
@@ -93,20 +96,6 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                     })}
                 </g>
             </svg>
-            <div className="flex gap-3 mt-1">
-                {hasOrigin && (
-                    <span className="inline-flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 bg-[#e0455f]" />
-                        origin
-                    </span>
-                )}
-                {hasCovered && (
-                    <span className="inline-flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 bg-[#e09a45]" />
-                        covered
-                    </span>
-                )}
-            </div>
         </div>
     );
 };
