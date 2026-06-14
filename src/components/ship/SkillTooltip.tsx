@@ -1,13 +1,16 @@
 import React from 'react';
 import { parseSkillText, extractSkillNames } from '../../utils/skillTextParser';
 import { ClockIcon } from '../ui/icons';
+import { SkillTargeting } from '../../utils/targetingParser';
 import { BuffTooltip } from './BuffTooltip';
+import { SkillTargetingBoard } from './SkillTargetingBoard';
 
 interface SkillTooltipProps {
     skillText: string;
     skillType: string;
     charge?: number;
     inline?: boolean;
+    targeting?: SkillTargeting;
 }
 
 export const SkillTooltip: React.FC<SkillTooltipProps> = ({
@@ -15,6 +18,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
     skillType,
     charge,
     inline,
+    targeting,
 }) => {
     const segments = parseSkillText(skillText);
     const skillNames = extractSkillNames(skillText);
@@ -87,6 +91,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
                     return null;
                 })}
             </div>
+            {targeting && <SkillTargetingBoard targeting={targeting} />}
         </>
     );
 
