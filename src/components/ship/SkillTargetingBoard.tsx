@@ -29,8 +29,11 @@ const SUPPORT_LABEL_Y = 138;
 // Team board: ox=0, cx ∈ [19, 173], right vertex = 191.
 // Enemy board (mirrored, ox=ENEMY_OX): cx ∈ [ox+19, ox+173], right vertex = ox+191.
 // Arrow sits at horizontal midpoint between the two boards.
-// Choose ENEMY_OX=212 → gap between boards = (212+19) - 191 = 40 px wide enough.
-// Arrow x = (191 + 212+19)/2 = (191+231)/2 = 211, but centre of gap = 191 + 20 = 211. OK.
+// Choose ENEMY_OX=212 → vertex-to-vertex gap = (212+19) - 191 = 40 px? No:
+//   right vertex of team board  = 191 (HEX_RX·cos30° ≈ 18 → 173+18 = 191)
+//   left  vertex of enemy board = ENEMY_OX + 19 - 18 = 212 + 1 = 213
+//   true vertex-to-vertex gap   = 213 - 191 = 22 px ≈ 21 px — fine for the ▶ glyph.
+// Arrow x = midpoint of gap = (191 + 213)/2 = 202, but computed below as midpoint of board centres.
 // Total width = ENEMY_OX + 191 + 3 = 212 + 191 + 3 = 406.
 const ENEMY_OX = 212;
 const ATTACKER_SVG_W = ENEMY_OX + 191 + 3; // = 406
@@ -61,19 +64,18 @@ function hexPath(cx: number, cy: number): string {
 
 interface BoardProps {
     ox: number;
-    oy: number;
     mirror: boolean;
     roles: Map<Position, CellRole>;
     label: string;
 }
 
-const Board: React.FC<BoardProps> = ({ ox, oy, mirror, roles, label }) => (
+const Board: React.FC<BoardProps> = ({ ox, mirror, roles, label }) => (
     <g data-board={label}>
         {ALL_POSITIONS.map((pos) => {
             const [rawX, y] = rawXY(pos);
             const x = mirror ? 110 - rawX : rawX;
             const cx = ox + x + GRID_PAD_X;
-            const cy = oy + y + GRID_PAD_Y;
+            const cy = y + GRID_PAD_Y;
             const role = roles.get(pos);
             const colors = COLORS[role ?? 'empty'];
             return (
@@ -115,6 +117,9 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
     const isSupport =
         targeting.pattern.modifiers.support === true || targeting.target.side === 'ally';
     const caption = targetingLabel(targeting);
+    const roleValues = Array.from(roles.values());
+    const hasOrigin = roleValues.includes('origin');
+    const hasCovered = roleValues.includes('covered');
 
     return (
         <div className="mt-2 text-[11px] text-theme-text/70">
@@ -126,7 +131,7 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                     role="img"
                     aria-label={`Targeting footprint: ${caption}`}
                 >
-                    <Board ox={0} oy={0} mirror={false} roles={roles} label="own" />
+                    <Board ox={0} mirror={false} roles={roles} label="own" />
                     <text
                         x={SUPPORT_LABEL_X}
                         y={SUPPORT_LABEL_Y}
@@ -144,7 +149,7 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                     role="img"
                     aria-label={`Targeting footprint: ${caption}`}
                 >
-                    <Board ox={0} oy={0} mirror={false} roles={new Map()} label="team" />
+                    <Board ox={0} mirror={false} roles={new Map()} label="team" />
                     <text
                         x={ARROW_X}
                         y={Math.round(ATTACKER_SVG_H / 2)}
@@ -154,18 +159,40 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                     >
                         ▶
                     </text>
-                    <Board ox={ENEMY_OX} oy={0} mirror roles={roles} label="enemy" />
+                    <Board ox={ENEMY_OX} mirror roles={roles} label="enemy" />
+                    <text
+                        x={97}
+                        y={SUPPORT_LABEL_Y}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fill="#5a6a86"
+                    >
+                        your fleet
+                    </text>
+                    <text
+                        x={ENEMY_OX + 97}
+                        y={SUPPORT_LABEL_Y}
+                        textAnchor="middle"
+                        fontSize={10}
+                        fill="#5a6a86"
+                    >
+                        enemies
+                    </text>
                 </svg>
             )}
             <div className="flex gap-3 mt-1">
-                <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 bg-[#e0455f]" />
-                    origin
-                </span>
-                <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 bg-[#e09a45]" />
-                    covered
-                </span>
+                {hasOrigin && (
+                    <span className="inline-flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 bg-[#e0455f]" />
+                        origin
+                    </span>
+                )}
+                {hasCovered && (
+                    <span className="inline-flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 bg-[#e09a45]" />
+                        covered
+                    </span>
+                )}
             </div>
         </div>
     );

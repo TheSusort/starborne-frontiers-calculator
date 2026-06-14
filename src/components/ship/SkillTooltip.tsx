@@ -101,7 +101,9 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
 
     return (
         <>
-            <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border">
+            <div
+                className={`bg-dark-lighter p-2 shadow-lg ${targeting ? 'max-w-md' : 'max-w-xs'} border border-dark-border`}
+            >
                 {content}
             </div>
 
