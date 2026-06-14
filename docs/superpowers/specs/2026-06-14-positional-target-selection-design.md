@@ -210,8 +210,28 @@ enemy attacker's `healTarget` binding (engine.ts ~2700–2747) — branch on pos
 team via the *same* `selectTargets`; their incoming routes through the existing
 `applyIncomingToTarget` path, generalized from "the heal target" to "the selected actor".
 
-**DPS HP%-gates:** in positional mode read the selected anchor's real `currentHp` (each
-positioned enemy is a real HP-tracking actor) rather than the dummy-sink cumulative scalar.
+**DPS HP%-gates:** in positional mode the attacker's turn resolves against the selected
+anchor's stat-block (its `defence` / entering `currentHp` drive the damage calc and
+HP%-gates) rather than the dummy sink.
+
+**Observability & the per-target-HP boundary (defines what Phase 2 can assert):** the engine
+credits damage by *source* actor, not target — there is no per-target damage record on the
+player→enemy direction (the dummy tracks only a cumulative scalar). Per-target damage
+accounting is Phase 4. So Phase 2's observable is the **binding itself**:
+
+- **player→enemy:** the attacker's `runPlayerTurn` is bound to the selected enemy actor
+  (`enemy:` arg), so the emitted `ability-performed` event carries `targetId = selected
+  enemy id` and the damage calc uses that enemy's `defence`. **Tests assert the emitted
+  `targetId`.**
+- **enemy→player:** the enemy attacker binds to the selected player actor and its incoming
+  routes through `applyIncomingToTarget` to that actor — observable via that actor's
+  incoming/HP, exactly as today's heal-target path is.
+
+Consequently **per-target HP does not *decline* from accumulated damage in Phase 2** (no
+per-target cumulative): HP%-gates evaluate against each positioned target's *entering* HP.
+The global `enemyHpDecline` scalar (which models the single dummy's decline) is **not**
+applied to a selected real target — `enemyHpDecline: 0` for that binding. Per-target HP
+accumulation/decline arrives with Phase-4 accounting.
 
 ### Data flow
 
