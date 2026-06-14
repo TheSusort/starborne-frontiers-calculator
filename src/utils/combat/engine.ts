@@ -49,6 +49,7 @@ import {
     Intent,
     MAX_INTENT_GENERATIONS,
     buildActorConditionContext,
+    buildForcedTargetingStatus,
     executeIntent,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
@@ -1790,6 +1791,17 @@ export function runCombat(input: CombatEngineInput): {
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
 
+        // Forced-targeting/stealth lookup for a roster (phase 3). Reads the status engine
+        // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
+        // can redirect or stealth-filter. Identical to phase 2 when no such status is live.
+        const statusLookupFor = (roster: CombatActor[]) => {
+            const m = buildForcedTargetingStatus(
+                statusEngine,
+                roster.map((a) => a.id)
+            );
+            return (id: string) => m.get(id);
+        };
+
         // Combat-start seeding (round 1) for PASSIVE-sourced finite (timed) self-statuses.
         // Player runtimes face the dummy enemy, so an `enemy-type` gate resolves against
         // `enemyType`. Enemy-attacker runtimes face the player heal target (which has no
@@ -2430,7 +2442,8 @@ export function runCombat(input: CombatEngineInput): {
                             ? resolvePositionalTarget(
                                   actor.position!,
                                   input.target,
-                                  enemyAttackerActors
+                                  enemyAttackerActors,
+                                  statusLookupFor(enemyAttackerActors)
                               )
                             : null;
                     // Positional target (phase 2): the selected enemy actor, else the dummy sink.
@@ -2542,7 +2555,8 @@ export function runCombat(input: CombatEngineInput): {
                             ? resolvePositionalTarget(
                                   actor.position!,
                                   teamTarget,
-                                  enemyAttackerActors
+                                  enemyAttackerActors,
+                                  statusLookupFor(enemyAttackerActors)
                               )
                             : null;
                     // Same `tgt` consolidation as the focus turn: both branches are full
@@ -2777,7 +2791,12 @@ export function runCombat(input: CombatEngineInput): {
                     const enemyTarget = enemyTargetById.get(actor.id);
                     const selectedPlayer =
                         isPositional(actor.position, allPlayerActors) && enemyTarget
-                            ? resolvePositionalTarget(actor.position!, enemyTarget, allPlayerActors)
+                            ? resolvePositionalTarget(
+                                  actor.position!,
+                                  enemyTarget,
+                                  allPlayerActors,
+                                  statusLookupFor(allPlayerActors)
+                              )
                             : null;
                     // The enemy's victim THIS turn: the positionally-selected player actor, else the
                     // legacy heal target. A full CombatActor in both cases, so every per-victim
