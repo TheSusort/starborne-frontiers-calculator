@@ -89,17 +89,26 @@ M (empty), B (empty), T (occupied) → targetRow = T.
 Let `cols` = the occupied columns of `targetRow`, sorted **front→back** (column 4 is the
 front / nearest the attacker; column 1 is the back). Then:
 
-| Selection | Anchor | Ordered list | Single-enemy fallback |
-|-----------|--------|--------------|-----------------------|
-| `front` | front-most (`cols[0]`) | `cols` (front→back) | — |
-| `back` | back-most (`cols[last]`) | `cols` reversed (back→front) | that enemy |
-| `skip` | 2nd-from-front (`cols[1]`) | `[cols[1], cols[2], …, cols[last], cols[0]]` — continue toward the back, the skipped front-most goes **last** | that enemy |
+| Selection | Anchor | Ordered list |
+|-----------|--------|--------------|
+| `front` | front-most (`cols[0]`) | `cols` (front→back) |
+| `back` | back-most (`cols[last]`) | `cols` reversed (back→front) |
+| `skip` | 2nd-from-front (`cols[1]`) | `[cols[1], cols[2], …, cols[last], cols[0]]` — continue toward the back, the skipped front-most goes **last** |
 
-Worked example — enemies at M4, M2, M1 (`cols = [4, 2, 1]`):
+`front` and `back` degrade naturally for any `cols.length ≥ 1` (no special case). **`skip`
+needs a single-occupied fallback:** when `cols.length === 1`, `skip` resolves like `front`
+— `ordered = cols`, anchor `cols[0]`. (So for `cols.length === 1`, all three selections
+yield `ordered = cols`, anchor `cols[0]`.)
 
-- `front` → ordered `[M4, M2, M1]`, anchor M4
-- `skip`  → ordered `[M2, M1, M4]`, anchor M2
-- `back`  → ordered `[M1, M2, M4]`, anchor M1
+Worked examples:
+
+- 3 enemies at M4, M2, M1 (`cols = [4, 2, 1]`):
+  - `front` → ordered `[M4, M2, M1]`, anchor M4
+  - `skip`  → ordered `[M2, M1, M4]`, anchor M2
+  - `back`  → ordered `[M1, M2, M4]`, anchor M1
+- 2 enemies at M4, M1 (`cols = [4, 1]`): `skip` → anchor `cols[1]` = M1, ordered
+  `[cols[1], cols[0]] = [M1, M4]`.
+- 1 enemy at M4 (`cols = [4]`): `front`/`back`/`skip` all → anchor M4, ordered `[M4]`.
 
 ### Enemy `all` and ally selections
 
@@ -125,9 +134,9 @@ unit-tested — the same isolation as the rest of the geometry layer.
 
 ```ts
 export interface SelectTargetsContext {
-  casterPosition: Position;
-  enemyOccupied: Position[]; // living, targetable enemy cells (own frame)
-  allyOccupied: Position[];  // living ally cells, including the caster
+  casterPosition: Position;  // the acting actor's own cell — REQUIRED (drives the row scan)
+  enemyOccupied: Position[]; // living, targetable enemy cells (own frame); ≤1 actor per cell
+  allyOccupied?: Position[]; // forward-looking (Phase-4 ally splash); UNUSED in Phase-2 selection
 }
 
 export interface SelectionResult {
@@ -141,18 +150,19 @@ export function selectTargets(
 ): SelectionResult;
 ```
 
-Algorithm:
+Algorithm (branch on `target.side`/`selection` *before* the single-row work):
 
 1. **Ally side** (`target.side === 'ally'`): `anchor = ctx.casterPosition`; `ordered` =
    `[casterPosition]` for Phase 2 (full ally footprint is Phase-4 splash). `self` is the
-   same — caster only.
+   same — caster only. (`allyOccupied` is not consulted.)
 2. **Enemy side:** if `ctx.enemyOccupied` is empty → `{ ordered: [], anchor: null }`.
-3. Compute the row scan order from `casterPosition`'s row (table above). Pick `targetRow` =
-   first row in that order with ≥1 cell in `enemyOccupied`.
-4. `cols` = occupied columns of `targetRow`, sorted front→back.
-5. Apply the `selection` rule (table above) to produce `ordered`; `anchor = ordered[0]`.
-   For `all`, `ordered` spans every living enemy across rows (row-scan order, front→back
-   within row).
+3. **Enemy `all`:** iterate every row in `casterPosition`'s row-scan order, each row's cols
+   front→back; `ordered` = that full living-enemy list; `anchor = ordered[0]`. (Does **not**
+   use a single `targetRow`.) Return.
+4. **Enemy `front`/`back`/`skip`:** compute the row scan order from `casterPosition`'s row
+   (table above); `targetRow` = first row in that order with ≥1 cell in `enemyOccupied`;
+   `cols` = occupied columns of `targetRow`, sorted front→back; apply the within-row rule
+   (table above) to produce `ordered`; `anchor = ordered[0]`.
 
 The row/column helpers (`rowScanOrder(row)`, `colsFrontToBack`) live in or beside
 `board.ts` (which already encodes "col 4 = front" and row/column extraction from a
@@ -169,16 +179,28 @@ The row/column helpers (`rowScanOrder(row)`, `colsFrontToBack`) live in or besid
   attackers already do). Player team actors are already real `CombatActor`s — they gain a
   `position` and become targetable.
 
-**Positional mode detection:** "positions present on the relevant actors + a positioned
-receiving roster." When false, every binding below uses today's exact path.
+**Positional mode detection — exact predicate:** positional mode is on **iff a positioned
+receiving roster is supplied AND the acting actor has a `position`**. Any other shape
+(no roster, or the acting actor lacks a position) → non-positional fallback. This is the
+precondition that guarantees `selectTargets` always has a `casterPosition`; a
+partially-positioned input never enters the positional branch (so it can never half-bind or
+regress). When the predicate is false, every binding below uses today's exact path.
+
+**One-actor-per-cell invariant:** at most one living actor occupies any `Position`. The
+engine builds a `Map<Position, CombatActor>` over the *living, positioned* actors of the
+target side and feeds exactly that map's keys to `selectTargets` as `enemyOccupied`.
+`selectTargets` only ever returns Positions drawn from that input, so a non-null `anchor`
+always round-trips to exactly one actor. Actors without a `position` are **not** in the
+occupied set and are not targetable in positional mode.
 
 **Target binding (the seam):** at the points where the target is currently hard-coded —
 the player attacker's `enemy` (engine.ts ~969 / damage emission in `runPlayerTurn`) and the
 enemy attacker's `healTarget` binding (engine.ts ~2700–2747) — branch on positional mode:
 
-- **Positional:** build `enemyOccupied` / `allyOccupied` from *living* positioned actors
-  (own frame for the acting side), call `selectTargets`, map the returned `anchor` Position
-  → the actor occupying that cell → that actor is the target for this action.
+- **Positional:** build the living-positioned `Map<Position, CombatActor>` for the target
+  side (own frame for the acting side), call `selectTargets` with its keys as
+  `enemyOccupied`, map the returned `anchor` Position → that map's actor → the target for
+  this action. (`anchor: null` → no valid target this action.)
 - **Non-positional:** today's binding (dummy sink for player attacks; `healTarget` for
   enemy attacks). **Goldens byte-identical.**
 
