@@ -125,3 +125,77 @@ describe('resolvePositionalTarget — stealth + forced targeting (statusOf)', ()
         expect(resolvePositionalTarget('M4', enemyTarget('front'), [], so)).toBeNull();
     });
 });
+
+describe('resolvePositionalTarget — Provoke redirect + ignore gating', () => {
+    // front=M4 (front-most), back=M1 (back-most)
+    // 'front' selection normally hits 'front'; used to prove override when provokedBy='back'.
+    const enemies = [actor('front', 'M4'), actor('back', 'M1')];
+    const noStatus = statusFrom({});
+
+    it('provoked attacker targets the provoker even when normal selection would pick a different actor', () => {
+        // Normal 'front' selection picks 'front'; provokedBy='back' must override to 'back'.
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, noStatus, {
+                provokedBy: 'back',
+            })?.id
+        ).toBe('back');
+    });
+
+    it('provoker dead/absent → falls through to normal selectTargets', () => {
+        // 'ghost' is not in the opposing list → normal 'front' selection wins.
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, noStatus, {
+                provokedBy: 'ghost',
+            })?.id
+        ).toBe('front');
+    });
+
+    it('provoke bypasses stealth (provoker is stealthed, still targeted)', () => {
+        const so = statusFrom({ back: { stealthed: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                provokedBy: 'back',
+            })?.id
+        ).toBe('back');
+    });
+
+    it('ignoresForcedTargeting skips Taunt (taunting actor is NOT force-targeted)', () => {
+        // 'back' is taunting; without ignore it would be forced; with ignore, 'front' selection wins.
+        const so = statusFrom({ back: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresForcedTargeting: true,
+            })?.id
+        ).toBe('front');
+    });
+
+    it('ignoresForcedTargeting skips Provoke (provokedBy set, but normal selection wins)', () => {
+        // provokedBy='back' would normally force 'back'; ignore skips it, 'front' selection wins.
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, noStatus, {
+                ignoresForcedTargeting: true,
+                provokedBy: 'back',
+            })?.id
+        ).toBe('front');
+    });
+
+    it('ignoresForcedTargeting does NOT skip Concentrate Fire (CF actor is still force-targeted)', () => {
+        // 'back' has CF; even with ignore, CF is unconditional — must return 'back'.
+        const so = statusFrom({ back: { concentrated: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('front'), enemies, so, {
+                ignoresForcedTargeting: true,
+            })?.id
+        ).toBe('back');
+    });
+
+    it('Taunt beats Provoke when both apply (Taunt higher priority)', () => {
+        // 'front' is taunting (should win), 'back' is the provoker; result must be 'front'.
+        const so = statusFrom({ front: { taunting: true } });
+        expect(
+            resolvePositionalTarget('M4', enemyTarget('back'), enemies, so, {
+                provokedBy: 'back',
+            })?.id
+        ).toBe('front');
+    });
+});
