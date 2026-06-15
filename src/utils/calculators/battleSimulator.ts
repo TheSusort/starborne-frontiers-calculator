@@ -87,6 +87,20 @@ interface RosterEntry {
 const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
 
 /**
+ * The CombatEvent types `assembleBattleResult` actually consumes. The `simulateBattle`
+ * adapter subscribes its event bus from THIS list, so adding a consumed event type here
+ * can't silently leave the adapter unsubscribed (the two would otherwise drift apart).
+ */
+export const ASSEMBLED_EVENT_TYPES = [
+    'ability-performed',
+    'heal-performed',
+    'ship-destroyed',
+    'buff-applied',
+    'buff-expired',
+    'debuff-applied',
+] as const satisfies readonly CombatEvent['type'][];
+
+/**
  * Precondition: expects BOTH sides of `roster` to be non-empty. The wipe checks guard
  * against empty sides (a side with zero members is never treated as "wiped"), so a
  * degenerate single-side roster fails safe to `draw` at numRounds rather than awarding
@@ -275,10 +289,17 @@ export function assembleBattleResult(args: {
 /** A ship placed on the board for a battle: the ship (skills + base stats +
  *  affinity + raw targeting strings), optional combat-stat overrides (fully derived
  *  stats from the page in PR2; falls back to the ship's baseStats here), and its grid
- *  position (drives the positional combat path on both sides). */
+ *  position (drives the positional combat path on both sides).
+ *
+ *  WARNING: with no `statOverrides` this resolves to UN-GEARED base stats → combat
+ *  results are MEANINGLESS (no gear/refits/engineering). `statOverrides` is kept
+ *  optional only for test ergonomics. PR2's page MUST pass fully gear/refit/engineering-
+ *  resolved stats (including `speed`) via `statOverrides`. */
 export interface BattlePlacement {
     ship: Ship;
-    statOverrides?: Partial<CombatStatBlock>;
+    /** Fully-derived combat stats (gear + refits + engineering). `speed` drives turn order.
+     *  See the WARNING on `BattlePlacement`: omitting this yields un-geared base stats. */
+    statOverrides?: Partial<CombatStatBlock & { speed: number }>;
     position: Position;
 }
 
@@ -290,8 +311,12 @@ export interface BattleSimulationInput {
 }
 
 /** The combat stats simulateBattle resolves per placement. Derived from the ship's
- *  baseStats, then `statOverrides` win field-by-field. The page (PR2) passes fully
- *  gear/refit/engineering-resolved stats via `statOverrides`. */
+ *  baseStats, then `statOverrides` win field-by-field. `speed` drives turn order on
+ *  both sides (focus, walked team actors, enemy attackers).
+ *
+ *  WARNING: with no `statOverrides`, `resolveStats` resolves to UN-GEARED base stats →
+ *  combat results are MEANINGLESS (no gear/refits/engineering). PR2's page MUST pass
+ *  fully gear/refit/engineering-resolved stats via `statOverrides`. */
 interface DerivedCombatStats {
     attack: number;
     crit: number;
@@ -300,10 +325,16 @@ interface DerivedCombatStats {
     hacking: number;
     defence: number;
     hp: number;
+    /** Turn-order speed. Defaults to baseStats.speed ?? 100. */
+    speed: number;
 }
 
 /** Resolve a placement's combat stats: ship.baseStats as the floor (with the page's
- *  magic defaults — hacking ?? 200), then `statOverrides` applied field-by-field. */
+ *  magic defaults — hacking ?? 200, speed ?? 100), then `statOverrides` applied
+ *  field-by-field.
+ *
+ *  WARNING: with no `statOverrides` this returns UN-GEARED base stats → combat results
+ *  are MEANINGLESS. PR2's page MUST pass fully gear/refit/engineering-resolved stats. */
 function resolveStats(p: BattlePlacement): DerivedCombatStats {
     const b = p.ship.baseStats;
     const o = p.statOverrides ?? {};
@@ -315,6 +346,42 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         hacking: o.hacking ?? b.hacking ?? 200,
         defence: o.defence ?? b.defence ?? 0,
         hp: o.hp ?? b.hp ?? 0,
+        speed: o.speed ?? b.speed ?? 100,
+    };
+}
+
+/** Shape `DerivedCombatStats` into the walk bundle's `stats` (player team actors).
+ *  Centralized so a future stat addition can't be missed at one of the call sites. */
+function toWalkStats(
+    stats: DerivedCombatStats
+): Pick<
+    DerivedCombatStats,
+    'attack' | 'crit' | 'critDamage' | 'defensePenetration' | 'hacking' | 'defence' | 'hp' | 'speed'
+> {
+    return {
+        attack: stats.attack,
+        crit: stats.crit,
+        critDamage: stats.critDamage,
+        defensePenetration: stats.defensePenetration,
+        hacking: stats.hacking,
+        defence: stats.defence,
+        hp: stats.hp,
+        speed: stats.speed,
+    };
+}
+
+/** Shape `DerivedCombatStats` into the enemy attacker's `stats` bundle. Centralized so a
+ *  future stat addition can't be missed at one of the call sites. */
+function toEnemyStats(
+    stats: DerivedCombatStats
+): Pick<DerivedCombatStats, 'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp'> {
+    return {
+        attack: stats.attack,
+        crit: stats.crit,
+        critDamage: stats.critDamage,
+        speed: stats.speed,
+        defence: stats.defence,
+        hp: stats.hp,
     };
 }
 
@@ -328,7 +395,7 @@ interface PlacementPlan {
     shipSkills: ReturnType<typeof buildShipAbilities>;
     affinity: AffinityName | undefined;
     /** Parsed ACTIVE targeting ({ target, pattern }); undefined if the ship has no targeting data. */
-    target: SkillTargeting | undefined;
+    targeting: SkillTargeting | undefined;
     chargeCount: number;
 }
 
@@ -344,7 +411,7 @@ function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
         stats: resolveStats(p),
         shipSkills: buildShipAbilities(p.ship),
         affinity: p.ship.affinity,
-        target: targeting.active,
+        targeting: targeting.active,
         chargeCount: p.ship.chargeSkillCharge ?? 0,
     };
 }
@@ -421,25 +488,17 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         const aff = computeAffinityModifiers(plan.affinity, enemyRepAffinity);
         return {
             id: plan.id,
-            speed: 100,
+            speed: plan.stats.speed,
             chargeCount: plan.chargeCount,
             startCharged: false,
             selfBuffs: [],
             enemyDebuffs: [],
             position: plan.position,
-            target: plan.target?.target,
-            pattern: plan.target?.pattern,
+            target: plan.targeting?.target,
+            pattern: plan.targeting?.pattern,
             walk: {
                 shipSkills: plan.shipSkills,
-                stats: {
-                    attack: plan.stats.attack,
-                    crit: plan.stats.crit,
-                    critDamage: plan.stats.critDamage,
-                    defensePenetration: plan.stats.defensePenetration,
-                    hacking: plan.stats.hacking,
-                    defence: plan.stats.defence,
-                    hp: plan.stats.hp,
-                },
+                stats: toWalkStats(plan.stats),
                 debuffLandingChance: landingChance(plan, aff, enemyRepSecurity),
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
@@ -458,14 +517,7 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
             const aff = computeAffinityModifiers(plan.affinity, playerRepAffinity);
             return {
                 id: plan.id,
-                stats: {
-                    attack: plan.stats.attack,
-                    crit: plan.stats.crit,
-                    critDamage: plan.stats.critDamage,
-                    speed: 100,
-                    defence: plan.stats.defence,
-                    hp: plan.stats.hp,
-                },
+                stats: toEnemyStats(plan.stats),
                 chargeCount: plan.chargeCount,
                 startCharged: false,
                 shipSkills: plan.shipSkills,
@@ -474,8 +526,8 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
                 affinityCritPenalty: aff.critPenalty,
                 debuffLandingChance: landingChance(plan, aff, playerRepSecurity),
                 position: plan.position,
-                target: plan.target?.target,
-                pattern: plan.target?.pattern,
+                target: plan.targeting?.target,
+                pattern: plan.targeting?.pattern,
                 affinity: plan.affinity,
             };
         }
@@ -484,15 +536,8 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
     // ----- Capture the event stream + run -----
     const bus = createEventBus();
     const events: CombatEvent[] = [];
-    const EVENT_TYPES: CombatEvent['type'][] = [
-        'ability-performed',
-        'heal-performed',
-        'ship-destroyed',
-        'buff-applied',
-        'buff-expired',
-        'debuff-applied',
-    ];
-    for (const t of EVENT_TYPES) {
+    // Subscribe exactly the events the assembler consumes (shared list — can't drift).
+    for (const t of ASSEMBLED_EVENT_TYPES) {
         bus.on(t, (e) => events.push(e as CombatEvent));
     }
 
@@ -521,9 +566,10 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         affinity: focus.affinity,
         defence: focus.stats.defence,
         hp: focus.stats.hp,
+        speed: focus.stats.speed,
         position: focus.position,
-        target: focus.target?.target,
-        pattern: focus.target?.pattern,
+        target: focus.targeting?.target,
+        pattern: focus.targeting?.pattern,
         // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
         // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
         healTargetId: focus.id,
