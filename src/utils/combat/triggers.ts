@@ -871,6 +871,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             side: 'enemy',
             sourceSlot: intent.sourceSlot,
             conditions: gateConditions,
+            casterId: intent.ownerId,
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
         };
