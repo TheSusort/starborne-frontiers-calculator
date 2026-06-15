@@ -358,3 +358,73 @@ describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
         expect(focusAbilityTargetId(input)).toBe('enemy-back');
     });
 });
+
+// ============================================================================
+// Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker.
+//
+// A back-most enemy (M1) casts a Provoke debuff onto the focus attacker via its ACTIVE
+// slot. The focus attacker at M4 selects `front` — which WITHOUT the Provoke resolves to
+// the front-most enemy (M4 = decoy). With Provoke LIVE when the focus resolves its target,
+// resolvePositionalTarget (acting.provokedBy = provokerOf(...)) must redirect the focus to
+// the provoker (M1) — the actor whose id matches the Provoke debuff's casterId.
+//
+// Provoke is sourced the realistic way: the provoking enemy applies a 99-turn 'Provoke'
+// debuff (application 'inflict', target 'enemy' = the player focus) from an active skill.
+// The engine registers that debuff with casterId = the enemy's ownerId (engine.ts shared
+// `base`), so provokerOf returns the enemy's id and the chain resolves end-to-end.
+//
+// Turn order: the provoking enemy runs with speed ≫ the focus, so it acts first and lands
+// Provoke before the focus resolves its target.
+//
+// Non-vacuous: the baseline (the Phase-3 'front' test above, and the C1 'front' test) proves
+// `front` resolves to the front-most enemy (M4) absent any redirect — so binding to the
+// back-most M1 provoker here can only be the Provoke override.
+// ============================================================================
+
+// A pure-target enemy that casts a 99-turn 'Provoke' debuff onto its target (the player
+// focus) from a high-speed ACTIVE slot. With speed ≫ focus it acts first; the inflicted
+// Provoke carries casterId = this enemy's id, so provokerOf(focus) returns this enemy.
+const provokingEnemyAt = (id: string, position: Position): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Provoke',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 99,
+                            } as Ability['config'],
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+describe('Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker', () => {
+    it('front selection redirects to the back-most enemy when it cast-applies Provoke to the focus', () => {
+        idc = 0;
+        const input: CombatEngineInput = {
+            ...BASE('front'),
+            numRounds: 2,
+            // enemy-front (M4) is the decoy that `front` would naturally pick; the provoker
+            // sits at M1 (back-most) and Provokes the focus, flipping its target to M1.
+            enemyAttackers: [enemyAt('enemy-front', 'M4'), provokingEnemyAt('enemy-back', 'M1')],
+        };
+        expect(focusAbilityTargetId(input)).toBe('enemy-back');
+    });
+});
