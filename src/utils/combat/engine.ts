@@ -36,6 +36,7 @@ import {
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
 import { applyPositionalDamage } from './positionalApply';
+import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
@@ -2192,6 +2193,56 @@ export function runCombat(input: CombatEngineInput): {
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
         // first round it is built is sufficient. Inert in production (the field is never set).
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
+
+        // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
+        // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
+        // already GATED (isPositional + non-null target/pattern/positionalScalars) and computed
+        // its own `positional` flag (also used for credit suppression); this helper just runs the
+        // per-victim apply against the resolved inputs. What differs per site is parameterized:
+        //  - `scalars`/`hitCrits` — sourced from that site's turn result,
+        //  - `pattern`/`target` — that actor's parsed pattern + parsed target,
+        //  - `opposingLiving` — focus/team → enemyAttackerActors; enemy → allPlayerActors,
+        //  - `applyToVictim` — focus/team → applyOutgoingToEnemy; enemy → applyIncomingToTarget,
+        //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
+        // `defenseProfileOf` is identical across all three sites in PR1 (defenceModifierPct 0 —
+        // per-victim defense-debuff sourcing is the documented Phase-5 refinement) so it lives here.
+        // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
+        // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
+        const drivePositionalApply = (args: {
+            scalars: AttackerDamageScalars;
+            // hitCrits is co-populated with positionalScalars by Task 7 (both are set iff a damage
+            // ability fired), so the `?? []` below is DEFENSIVE only — never empty when scalars != null.
+            hitCrits?: boolean[];
+            pattern: ParsedPattern;
+            target: ParsedTarget;
+            actingPosition: Position;
+            ignoresForcedTargeting?: boolean;
+            actingId: string;
+            opposingLiving: CombatActor[];
+            applyToVictim: (victim: CombatActor, damage: number) => void;
+        }): void => {
+            applyPositionalDamage({
+                hits: args.scalars.hits,
+                hitCrits: args.hitCrits ?? [],
+                scalars: args.scalars,
+                pattern: args.pattern,
+                actorPosition: args.actingPosition,
+                target: args.target,
+                opposingLiving: args.opposingLiving,
+                statusOf: statusLookupFor(args.opposingLiving),
+                acting: {
+                    ignoresForcedTargeting: args.ignoresForcedTargeting,
+                    provokedBy: provokerOf(statusEngine, args.actingId),
+                },
+                defenseProfileOf: (v) => ({
+                    defence: v.stats.defence,
+                    defenceModifierPct: 0,
+                    affinity: v.affinity ?? 'antimatter',
+                }),
+                applyToVictim: args.applyToVictim,
+            });
+        };
+
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -2693,37 +2744,18 @@ export function runCombat(input: CombatEngineInput): {
                         input.pattern != null &&
                         turn.positionalScalars != null;
                     if (positional) {
-                        applyPositionalDamage({
-                            hits: turn.positionalScalars!.hits,
-                            hitCrits: turn.hitCrits ?? [],
+                        // Opposing roster = enemyAttackerActors; player→enemy victim wrapper.
+                        // pattern/target are non-null via the `positional` gate above.
+                        drivePositionalApply({
                             scalars: turn.positionalScalars!,
-                            // Non-null via the `positional` gate (input.pattern/target != null).
+                            hitCrits: turn.hitCrits,
                             pattern: input.pattern!,
-                            actorPosition: actor.position!,
                             target: input.target!,
+                            actingPosition: actor.position!,
+                            ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                            actingId: actor.id,
                             opposingLiving: enemyAttackerActors,
-                            statusOf: statusLookupFor(enemyAttackerActors),
-                            acting: {
-                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
-                                provokedBy: provokerOf(statusEngine, actor.id),
-                            },
-                            // defenceModifierPct 0 for PR1 — per-victim defense-debuff sourcing is
-                            // a documented Phase-5/9 refinement; the integration test uses no enemy
-                            // defense debuffs so parity is exact.
-                            defenseProfileOf: (v) => ({
-                                defence: v.stats.defence,
-                                defenceModifierPct: 0,
-                                affinity: v.affinity ?? 'antimatter',
-                            }),
-                            // applyToVictim is (victim, damage); applyOutgoingToEnemy is
-                            // (damage, victim) — adapt the argument order.
                             applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
-                            // NO emitHit (intentionally omitted): runPlayerTurn already emits ONE
-                            // aggregate `ability-performed` against the bound primary target; adding
-                            // per-hit emitHit here would double-emit. For PR1 (capability-only) we
-                            // apply real per-victim HP/death but leave the event surface as the
-                            // existing aggregate emit. Per-hit/per-victim event fidelity is a
-                            // documented Phase-5 follow-up.
                         });
                     }
 
@@ -2852,31 +2884,18 @@ export function runCombat(input: CombatEngineInput): {
                         teamPattern != null &&
                         teamTurn.positionalScalars != null;
                     if (teamPositional) {
-                        applyPositionalDamage({
-                            hits: teamTurn.positionalScalars!.hits,
-                            hitCrits: teamTurn.hitCrits ?? [],
+                        // Same direction as the focus site (player→enemy); keyed to THIS team
+                        // actor's position / parsed target / parsed pattern. Non-null via the gate.
+                        drivePositionalApply({
                             scalars: teamTurn.positionalScalars!,
+                            hitCrits: teamTurn.hitCrits,
                             pattern: teamPattern,
-                            actorPosition: actor.position!,
                             target: teamTarget,
+                            actingPosition: actor.position!,
+                            ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                            actingId: actor.id,
                             opposingLiving: enemyAttackerActors,
-                            statusOf: statusLookupFor(enemyAttackerActors),
-                            acting: {
-                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
-                                provokedBy: provokerOf(statusEngine, actor.id),
-                            },
-                            // defenceModifierPct 0 for PR1 — see the focus-site note.
-                            defenseProfileOf: (v) => ({
-                                defence: v.stats.defence,
-                                defenceModifierPct: 0,
-                                affinity: v.affinity ?? 'antimatter',
-                            }),
-                            // applyToVictim is (victim, damage); applyOutgoingToEnemy is
-                            // (damage, victim) — adapt the argument order.
                             applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
-                            // NO emitHit — same rationale as the focus site (runPlayerTurn already
-                            // emits the single aggregate ability-performed; per-hit fidelity is a
-                            // documented Phase-5 follow-up).
                         });
                     }
 
