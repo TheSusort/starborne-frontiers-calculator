@@ -300,3 +300,61 @@ describe('Task C3 — enemy attacker positional target selection (side-symmetric
         expect(hit.has('team-1')).toBe(false);
     });
 });
+
+// ============================================================================
+// Phase 3 — Taunt forces the focus attacker to redirect.
+//
+// A back-most enemy (M1) carries a Taunt self-buff. The focus attacker at M4 selects
+// `front` — which without Taunt resolves to the front-most enemy (M4). With Taunt LIVE
+// when the focus resolves its target, resolvePositionalTarget (now wired with a statusOf
+// lookup) must redirect the focus to the taunter (M1) instead.
+//
+// To make Taunt LIVE before the focus resolves its target, the taunter casts a Taunt
+// self-buff from an ACTIVE slot and runs with speed ≫ the focus, so it takes its turn
+// (self-buffing) first and the buff is in the status engine when the focus acts.
+// ============================================================================
+
+// A pure-target enemy with a high-speed ACTIVE-slot Taunt self-buff. With speed ≫ focus,
+// it acts first and self-buffs Taunt before the focus resolves its target. Its own basic
+// attack would target the player heal target (irrelevant to the focus's selection).
+const tauntingEnemyAt = (id: string, position: Position): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Taunt',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            } as Ability['config'],
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
+    it('front selection redirects to the back-most enemy when it carries Taunt', () => {
+        idc = 0;
+        const input: CombatEngineInput = {
+            ...BASE('front'),
+            numRounds: 2,
+            enemyAttackers: [enemyAt('enemy-front', 'M4'), tauntingEnemyAt('enemy-back', 'M1')],
+        };
+        expect(focusAbilityTargetId(input)).toBe('enemy-back');
+    });
+});

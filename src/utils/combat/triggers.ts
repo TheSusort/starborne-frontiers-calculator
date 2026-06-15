@@ -17,6 +17,7 @@ import {
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
 import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx } from './playerTurn';
+import type { ActorTargetingStatus } from './positionalBinding';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
  *  types/abilities.ts (so UI consumers don't import the engine for one constant)
@@ -676,6 +677,28 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
         names.add(s.active.buffName);
     }
     return [...names];
+}
+
+/** Per-actor forced-targeting/stealth status, read from the status engine for the given
+ *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
+ *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
+ *  phase. `tauntAppliedRound` is left unset (the query layer exposes no application round →
+ *  callers degrade to front-most board order). */
+export function buildForcedTargetingStatus(
+    statusEngine: StatusEngine,
+    actorIds: string[]
+): Map<string, ActorTargetingStatus> {
+    const map = new Map<string, ActorTargetingStatus>();
+    for (const id of actorIds) {
+        const selfNames = selfBuffNamesForOwners(statusEngine, [id]);
+        const debuffNames = ownerDebuffNamesFor(statusEngine, id);
+        map.set(id, {
+            stealthed: selfNames.includes('Stealth'),
+            taunting: selfNames.includes('Taunt'),
+            concentrated: debuffNames.includes('Concentrate Fire'),
+        });
+    }
+    return map;
 }
 
 function payloadFromConfig(cfg: {
