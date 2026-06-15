@@ -867,10 +867,12 @@ export interface CombatEngineInput {
     affinity?: AffinityName;
     /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
      *  once on the first round it is built, so unit tests can exercise the player→enemy victim
-     *  wrapper against a hand-built enemy actor BEFORE Task 8 wires a production caller. Never set
-     *  by production code; the closure runs the real applyVictimDamage path (no mocks).
-     *  TODO(Task 8): remove once positional wiring provides a production caller; fold these
-     *  tests into positionalDamage.integration.test.ts. */
+     *  wrapper against a hand-built enemy actor. Never set by production code; the closure runs the
+     *  real applyVictimDamage path (no mocks).
+     *  KEPT (not removed once Task 8/9 wired production callers): `applyOutgoingToEnemy.test.ts`
+     *  behaviour #6 — the enemy-side sink is a no-op (tank accumulators stay 0) — is unique coverage
+     *  the positionalDamage integration test cannot observe (it only sees `ship-destroyed`). Inert
+     *  (optional, never set in production). Revisit if that no-op contract gains an observable seam. */
     __testTapApplyOutgoingToEnemy?: (
         fn: (
             damage: number,
@@ -2215,6 +2217,10 @@ export function runCombat(input: CombatEngineInput): {
         // defense-debuff SOURCE differs BY DIRECTION: the focus/team sites read the ENEMY victim's
         // defense debuffs, while the enemy site reads the PLAYER victim's defense debuffs (sourced
         // from a different place). So this single zero-stub eventually splits into two lookups.
+        // SAME Phase-5 caveat applies to victimHitDamage's incoming/outgoing damage modifiers:
+        // they're carried as attacker-fixed scalars here, but in the aggregate they derive from the
+        // BOUND victim's debuffs — so a covered (non-anchor) victim's incoming/outgoing modifiers are
+        // an approximation today (exact for the anchor). Per-victim re-sourcing covers these too.
         // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
         // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
         const drivePositionalApply = (args: {
