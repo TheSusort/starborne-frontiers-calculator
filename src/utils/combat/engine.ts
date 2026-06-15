@@ -53,6 +53,7 @@ import {
     executeIntent,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
+    provokerOf,
     registerReactiveListeners,
     selfBuffNamesForOwners,
 } from './triggers';
@@ -330,6 +331,8 @@ export interface EnemyActorInput {
     debuffLandingChance?: number;
     /** Board position of this enemy (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 }
@@ -415,6 +418,7 @@ export function buildEnemyPlayerActorRuntime(
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
         position: e.position,
+        ignoresForcedTargeting: e.ignoresForcedTargeting,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -722,6 +726,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     };
     /** Board position of this team actor (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 };
@@ -805,6 +811,8 @@ export interface CombatEngineInput {
         debuffLandingChance?: number;
         /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
         position?: Position;
+        /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+        ignoresForcedTargeting?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
     }[];
@@ -812,6 +820,8 @@ export interface CombatEngineInput {
     bus?: CombatEventBus;
     /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 }
@@ -987,6 +997,7 @@ export function runCombat(input: CombatEngineInput): {
         chargeCount,
         startCharged,
         position: input.position,
+        ignoresForcedTargeting: input.ignoresForcedTargeting,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1053,6 +1064,7 @@ export function runCombat(input: CombatEngineInput): {
             chargeCount: t.chargeCount,
             startCharged: t.startCharged,
             position: t.position,
+            ignoresForcedTargeting: t.ignoresForcedTargeting,
         })
     );
 
@@ -2443,7 +2455,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   input.target,
                                   enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors)
+                                  statusLookupFor(enemyAttackerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // Positional target (phase 2): the selected enemy actor, else the dummy sink.
@@ -2556,7 +2572,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   teamTarget,
                                   enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors)
+                                  statusLookupFor(enemyAttackerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // Same `tgt` consolidation as the focus turn: both branches are full
@@ -2795,7 +2815,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   enemyTarget,
                                   allPlayerActors,
-                                  statusLookupFor(allPlayerActors)
+                                  statusLookupFor(allPlayerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // The enemy's victim THIS turn: the positionally-selected player actor, else the
@@ -3069,6 +3093,18 @@ export function runCombat(input: CombatEngineInput): {
                     // enemy → no self-buffs) is a safe no-op. The enemy debuffs it lands on the heal
                     // target live in the enemy-side per-target store keyed by the TARGET's id; those
                     // decrement when the TARGET takes its Post Turn (the player-side branch below).
+                    //
+                    // POSITIONAL-PROVOKE DEFERRAL (Phase 4 per-actor-per-side accounting): a debuff a
+                    // PLAYER lands ON this enemy attacker (e.g. a Provoke) lives in the enemy-side store
+                    // keyed by THIS actor's id, which is NOT decremented here — only the dummy-enemy and
+                    // heal-target enemy-side stores decrement. Inert today: positional target resolution
+                    // (provokerOf / resolvePositionalTarget redirect) runs ONLY when board positions are
+                    // passed, which no production caller does yet, and the e2e Provoke fixtures use a
+                    // non-expiring duration. When Phase 4 wires per-actor decrement, the enemy-side store
+                    // for every positioned carrier must decrement here too, else a finite-duration Provoke
+                    // on an enemy attacker (or a non-heal-target player) would persist and keep redirecting
+                    // past its intended duration. (Pre-existing gap, surfaced — not introduced — by the
+                    // capability-only Provoke wiring.)
                     for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
                         bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                     }

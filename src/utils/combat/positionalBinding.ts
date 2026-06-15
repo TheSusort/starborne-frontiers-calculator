@@ -30,16 +30,25 @@ export function isPositional(
  * When `statusOf` is omitted, or the target is ally-side, behaviour is identical to
  * Phase 2 (the load-bearing byte-identical-goldens guarantee). When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
- *   1. Concentrate Fire (bypasses stealth) — force the marked actor (front-most if many).
+ *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (front-most if many).
  *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).
- *   3. Stealth filter — drop stealthed cells; if that empties the set, restore all.
+ *      Skipped when `acting.ignoresForcedTargeting` is true.
+ *   3. Provoke — attacker must target the actor whose id matches `acting.provokedBy`.
+ *      Bypasses stealth (forced-targeting override). Falls through if the provoker is dead/absent.
+ *      Skipped when `acting.ignoresForcedTargeting` is true.
+ *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all.
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
+ *
+ * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
+ *   actor that provoked this attacker (pre-resolved by the engine). `ignoresForcedTargeting`
+ *   skips both Taunt and Provoke overrides, but NOT Concentrate Fire.
  */
 export function resolvePositionalTarget(
     actorPosition: Position,
     target: ParsedTarget,
     opposingLiving: CombatActor[],
-    statusOf?: (id: string) => ActorTargetingStatus | undefined
+    statusOf?: (id: string) => ActorTargetingStatus | undefined,
+    acting?: { ignoresForcedTargeting?: boolean; provokedBy?: string }
 ): CombatActor | null {
     const byCell = new Map<Position, CombatActor>();
     for (const a of opposingLiving) {
@@ -66,24 +75,39 @@ export function resolvePositionalTarget(
         const frontMost = (cands: CombatActor[]): CombatActor =>
             [...cands].sort((x, y) => colOf(y.position!) - colOf(x.position!))[0];
 
-        // 1. Concentrate Fire — bypasses stealth.
+        const ignore = acting?.ignoresForcedTargeting;
+
+        // 1. Concentrate Fire — bypasses stealth, never skipped (even when ignore is true).
         const concentrated = actors.filter((a) => statusOf(a.id)?.concentrated);
         if (concentrated.length) {
             return frontMost(concentrated);
         }
 
-        // 2. Taunt — evaluated before the stealth filter.
-        const taunting = actors.filter((a) => statusOf(a.id)?.taunting);
-        if (taunting.length) {
-            // -Infinity sentinel: when all taunters lack tauntAppliedRound, every round(a) is -Infinity,
-            // they all tie at maxRound, and frontMost resolves the tie (roundless multi-taunt → front-most).
-            const round = (a: CombatActor) => statusOf(a.id)?.tauntAppliedRound ?? -Infinity;
-            const maxRound = Math.max(...taunting.map(round));
-            const latest = taunting.filter((a) => round(a) === maxRound);
-            return frontMost(latest);
+        // 2. Taunt — evaluated before the stealth filter. Skipped when the attacker ignores
+        //    forced targeting.
+        if (!ignore) {
+            const taunting = actors.filter((a) => statusOf(a.id)?.taunting);
+            if (taunting.length) {
+                // -Infinity sentinel: when all taunters lack tauntAppliedRound, every round(a) is -Infinity,
+                // they all tie at maxRound, and frontMost resolves the tie (roundless multi-taunt → front-most).
+                const round = (a: CombatActor) => statusOf(a.id)?.tauntAppliedRound ?? -Infinity;
+                const maxRound = Math.max(...taunting.map(round));
+                const latest = taunting.filter((a) => round(a) === maxRound);
+                return frontMost(latest);
+            }
         }
 
-        // 3. Stealth filter — restore all if every candidate is stealthed.
+        // 3. Provoke — attacker must target the actor that provoked it. Bypasses stealth
+        //    (forced-targeting override). Falls through if the provoker is dead/absent.
+        //    Skipped when the attacker ignores forced targeting.
+        if (!ignore && acting?.provokedBy !== undefined) {
+            const provoker = actors.find((a) => a.id === acting.provokedBy);
+            if (provoker) {
+                return provoker;
+            }
+        }
+
+        // 4. Stealth filter — restore all if every candidate is stealthed.
         const visible = cells.filter((p) => !statusOf(byCell.get(p)!.id)?.stealthed);
         if (visible.length) {
             cells = visible;

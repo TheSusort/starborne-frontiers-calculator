@@ -358,3 +358,211 @@ describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
         expect(focusAbilityTargetId(input)).toBe('enemy-back');
     });
 });
+
+// ============================================================================
+// Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker.
+//
+// A back-most enemy (M1) casts a Provoke debuff onto the focus attacker via its ACTIVE
+// slot. The focus attacker at M4 selects `front` — which WITHOUT the Provoke resolves to
+// the front-most enemy (M4 = decoy). With Provoke LIVE when the focus resolves its target,
+// resolvePositionalTarget (acting.provokedBy = provokerOf(...)) must redirect the focus to
+// the provoker (M1) — the actor whose id matches the Provoke debuff's casterId.
+//
+// Provoke is sourced the realistic way: the provoking enemy applies a 99-turn 'Provoke'
+// debuff (application 'inflict', target 'enemy' = the player focus) from an active skill.
+// The engine registers that debuff with casterId = the enemy's ownerId (engine.ts shared
+// `base`), so provokerOf returns the enemy's id and the chain resolves end-to-end.
+//
+// Turn order: the provoking enemy runs with speed ≫ the focus, so it acts first and lands
+// Provoke before the focus resolves its target.
+//
+// Non-vacuous: the baseline (the Phase-3 'front' test above, and the C1 'front' test) proves
+// `front` resolves to the front-most enemy (M4) absent any redirect — so binding to the
+// back-most M1 provoker here can only be the Provoke override.
+// ============================================================================
+
+// A pure-target enemy that casts a 99-turn 'Provoke' debuff onto its target (the player
+// focus) from a high-speed ACTIVE slot. With speed ≫ focus it acts first; the inflicted
+// Provoke carries casterId = this enemy's id, so provokerOf(focus) returns this enemy.
+const provokingEnemyAt = (id: string, position: Position): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Provoke',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 99,
+                            } as Ability['config'],
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+describe('Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker', () => {
+    it('front selection redirects to the back-most enemy when it cast-applies Provoke to the focus', () => {
+        idc = 0;
+        const input: CombatEngineInput = {
+            ...BASE('front'),
+            numRounds: 2,
+            // enemy-front (M4) is the decoy that `front` would naturally pick; the provoker
+            // sits at M1 (back-most) and Provokes the focus, flipping its target to M1.
+            enemyAttackers: [enemyAt('enemy-front', 'M4'), provokingEnemyAt('enemy-back', 'M1')],
+        };
+        expect(focusAbilityTargetId(input)).toBe('enemy-back');
+    });
+});
+
+// ============================================================================
+// Phase 3 (Task 7) — REACTIVE Provoke redirects an enemy attacker to the provoker.
+//
+// This exercises the reactive-debuff branch in triggers.ts (`if (cfg.type === 'debuff')`),
+// NOT the cast path (which the Task-6 test above covers). The reactive trigger used is
+// `on-ally-attacked` — Guardian's exact mechanic: a player ally, when one of ITS allies is
+// attacked by an enemy, inflicts Provoke on the attacking enemy ("apply Provoke to that
+// enemy"). The reactive intent carries eventCtx.counterTargetId = the attacker, so the
+// Provoke lands on the attacking ENEMY's per-target store. Chosen because it is the simplest
+// reactive-debuff config that lands Provoke on the to-be-redirected enemy with a
+// counterTargetId, and it is the canonical real-game source of reactive Provoke.
+//
+// Geometry (side-symmetric, mirrors C3): the PLAYER team is the opposing roster from the
+// enemy's frame — focus 'attacker' at M4 (front-most player) and a walked team actor
+// 'team-1' (the provoker) at M1 (back-most player). The enemy attacker at M4 selects
+// `front`, which absent any redirect resolves to the front-most player = the focus.
+//
+// Flow (numRounds: 2): round 1 the enemy attacks the focus → 'team-1's on-ally-attacked
+// reactive fires (its ally, the focus, was hit) → it inflicts a 99-turn Provoke on the
+// attacking enemy. Before the one-line casterId fix that reactive Provoke carries NO
+// casterId, so provokerOf(enemy) returns undefined and round 2 still picks `front` (focus).
+// With the fix the reactive Provoke carries casterId = 'team-1', so round 2 redirects the
+// enemy's target to 'team-1' (the back-most player provoker).
+//
+// Non-vacuous: the no-reactive baseline below proves the enemy targets the focus on EVERY
+// round absent the reactive Provoke, so the redirect assertion can only pass if the
+// reactively-applied Provoke (with its stamped casterId) flips the target.
+// ============================================================================
+
+// A walked team actor positioned at `position` carrying an on-ally-attacked reactive Provoke
+// debuff ("when an ally is attacked, apply Provoke to that enemy"). `provoke: false` drops the
+// reactive ability, yielding the inert baseline actor.
+const reactiveProvokerTeamActorAt = (
+    id: string,
+    position: Position,
+    provoke: boolean
+): TeamActor => ({
+    id,
+    speed: 1, // slower than the enemy is irrelevant; the reactive fires off the attacked event
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    walk: {
+        shipSkills: {
+            slots: [
+                basicAttack(),
+                ...(provoke
+                    ? [
+                          {
+                              slot: 'passive' as const,
+                              abilities: [
+                                  ab({
+                                      type: 'debuff',
+                                      target: 'enemy',
+                                      trigger: 'on-ally-attacked',
+                                      config: {
+                                          type: 'debuff',
+                                          buffName: 'Provoke',
+                                          parsedEffects: {},
+                                          stacks: 1,
+                                          isStackable: false,
+                                          application: 'inflict',
+                                          duration: 99,
+                                      } as Ability['config'],
+                                  }),
+                              ],
+                          },
+                      ]
+                    : []),
+            ],
+        },
+        stats: {
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+// Collect every targetId an enemy attacker bound across the run (round 1 then round 2).
+const enemyAbilityTargetIds = (input: CombatEngineInput, enemyId: string): string[] => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+    runCombat({ ...input, bus });
+    return events
+        .filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === enemyId
+        )
+        .map((e) => e.targetId);
+};
+
+describe('Phase 3 (Task 7) — reactive Provoke redirects the enemy attacker to the provoker', () => {
+    // Player team: focus 'attacker' at M4 (front-most), provoker 'team-1' at M1 (back-most).
+    // Enemy attacker at M4 selects `front` (front-most player = focus). healTargetId is the
+    // focus so it is the one the enemy hits (and whose getting-hit fires team-1's reaction).
+    const reactiveProvokeInput = (provoke: boolean): CombatEngineInput => ({
+        ...BASE('front'),
+        numRounds: 2,
+        healTargetId: 'attacker',
+        teamActors: [reactiveProvokerTeamActorAt('team-1', 'M1', provoke)],
+        enemyAttackers: [damagingEnemyAt('enemy-atk', 'M4', 'front')],
+    });
+
+    it('baseline (no reactive Provoke): the enemy targets the front-most player (focus) every round', () => {
+        idc = 0;
+        const targets = enemyAbilityTargetIds(reactiveProvokeInput(false), 'enemy-atk');
+        // Non-vacuity guard: absent the reactive Provoke the enemy never deviates from `front`.
+        expect(targets.length).toBeGreaterThan(0);
+        expect(targets.every((t) => t === 'attacker')).toBe(true);
+        expect(targets).not.toContain('team-1');
+    });
+
+    it('reactive Provoke on the back-most ally flips the enemy onto that ally on the next round', () => {
+        idc = 0;
+        const targets = enemyAbilityTargetIds(reactiveProvokeInput(true), 'enemy-atk');
+        // Round 1 the enemy hits the focus (front), provoking it via team-1's reaction; round 2
+        // the stamped-casterId Provoke redirects the enemy onto the provoker 'team-1'.
+        expect(targets).toContain('team-1');
+        expect(targets[targets.length - 1]).toBe('team-1');
+    });
+});
