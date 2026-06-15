@@ -104,6 +104,25 @@ describe('buildTargetingSearchText', () => {
         expect(text).toContain('pattern-cone-range-1');
     });
 
+    it('includes the shape label even when it differs from the raw token', () => {
+        const ship = makeShip({ activeTarget: 'allies', activePattern: 'Pattern-Base-Support' });
+        const text = buildTargetingSearchText(ship);
+        expect(text).toContain('single target'); // proves the PATTERN_SHAPES label path
+    });
+
+    it('includes both active and charged shape labels when they differ', () => {
+        const ship = makeShip({
+            activeTarget: 'front',
+            activePattern: 'Pattern-Cone-Range-1',
+            chargedTarget: 'all',
+            chargedPattern: 'Pattern-Circle-Range-1',
+            chargeSkillCharge: 3,
+        });
+        const text = buildTargetingSearchText(ship);
+        expect(text).toContain('cone');
+        expect(text).toContain('circle');
+    });
+
     it('is empty for a ship with no targeting', () => {
         expect(buildTargetingSearchText(makeShip({}))).toBe('');
     });

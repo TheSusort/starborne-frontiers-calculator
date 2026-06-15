@@ -26,6 +26,9 @@ export function getShipTargetingFacets(ship: Ship): ShipTargetingFacets {
 /**
  * OR within an axis, AND across axes (matches the existing faction/type filter
  * semantics). An empty array for an axis means "no constraint on that axis".
+ *
+ * `selections`/`shapes` are typed as string[] (not the enums) because they come
+ * from persisted localStorage filter state — untrusted strings checked by membership.
  */
 export function matchesTargetingFilters(
     ship: Ship,
