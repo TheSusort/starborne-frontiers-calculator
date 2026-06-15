@@ -569,6 +569,52 @@ describe('simulateBattle adapter (Phase 5 PR 1, Task 3)', () => {
     });
 });
 
+describe('simulateBattle adapter — input validation (review fix)', () => {
+    // Shared valid placements reused across the throwing cases.
+    const validPlayer = placement(
+        makeShip('p1', 'Player', { activeTarget: 'front', activePattern: 'Pattern-Base' }),
+        'M4',
+        5000,
+        1_000_000_000
+    );
+    const validEnemy = placement(
+        makeShip('e1', 'Enemy', { activeTarget: 'front', activePattern: 'Pattern-Base' }),
+        'M4',
+        5000,
+        1_000_000_000
+    );
+
+    it('throws when enemyTeam is empty', () => {
+        expect(() => simulateBattle({ playerTeam: [validPlayer], enemyTeam: [] })).toThrow(
+            'simulateBattle: enemyTeam is empty'
+        );
+    });
+
+    it('throws when playerTeam is empty', () => {
+        expect(() => simulateBattle({ playerTeam: [], enemyTeam: [validEnemy] })).toThrow(
+            'simulateBattle: playerTeam is empty'
+        );
+    });
+
+    it('throws when rounds is 0 (not a positive integer)', () => {
+        expect(() =>
+            simulateBattle({ playerTeam: [validPlayer], enemyTeam: [validEnemy], rounds: 0 })
+        ).toThrow('simulateBattle: rounds must be a positive integer');
+    });
+
+    it('throws when rounds is non-integer (2.5)', () => {
+        expect(() =>
+            simulateBattle({ playerTeam: [validPlayer], enemyTeam: [validEnemy], rounds: 2.5 })
+        ).toThrow('simulateBattle: rounds must be a positive integer');
+    });
+
+    it('still runs a valid battle with default rounds (rounds undefined)', () => {
+        const result = simulateBattle({ playerTeam: [validPlayer], enemyTeam: [validEnemy] });
+        expect(result.outcome).toBeDefined();
+        expect(result.rounds.length).toBeGreaterThan(0);
+    });
+});
+
 // ===========================================================================
 // Phase 5 PR 1, Task 4: HARDEN the two-team harness with edge cases the PR2 page +
 // the deferred unify will rely on — win/loss/draw outcomes, death-round correctness,

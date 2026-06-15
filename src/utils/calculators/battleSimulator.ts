@@ -466,7 +466,18 @@ function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
  * avoiding the reserved `'attacker'`/`'enemy'` ids and any duplicate (runCombat throws on either).
  */
 export function simulateBattle(input: BattleSimulationInput): BattleResult {
+    // Validate inputs up front (trust boundary): empty teams or a bad round count
+    // would otherwise flow through and produce misleading draw/empty outcomes.
+    if (input.playerTeam.length === 0) {
+        throw new Error('simulateBattle: playerTeam is empty');
+    }
+    if (input.enemyTeam.length === 0) {
+        throw new Error('simulateBattle: enemyTeam is empty');
+    }
     const numRounds = input.rounds ?? 30;
+    if (input.rounds !== undefined && (!Number.isInteger(numRounds) || numRounds < 1)) {
+        throw new Error('simulateBattle: rounds must be a positive integer');
+    }
 
     // The engine's focus actor is ALWAYS the reserved id `'attacker'` (its damage/per-victim
     // rows key off it), so player[0] must carry that id — minting `p:...` for it and pointing
