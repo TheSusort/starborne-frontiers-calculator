@@ -200,11 +200,14 @@ describe('victim-intake characterization (applyIncomingToTarget — pre-extracti
         expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
         expect(result.healing!.destroyedRound).toBeUndefined();
 
-        // The blocked intake STILL emits one hp-changed per round (no-op crossing: old === new).
+        // The blocked intake STILL emits one hp-changed per round, and EVERY captured crossing is a
+        // no-op (old === new, HP pinned at 100%) — not just the first round's.
         const tankHpChanged = hpChanged.filter((e) => e.targetId === 'attacker');
         expect(tankHpChanged.length).toBeGreaterThanOrEqual(1);
-        expect(tankHpChanged[0].oldPct).toBeCloseTo(100, 6);
-        expect(tankHpChanged[0].newPct).toBeCloseTo(tankHpChanged[0].oldPct, 6);
+        for (const crossing of tankHpChanged) {
+            expect(crossing.oldPct).toBeCloseTo(100, 6);
+            expect(crossing.newPct).toBeCloseTo(crossing.oldPct, 6);
+        }
     });
 
     // ── Branch 4: lethal hit on a Cheat-Death carrier → survives at 1 HP, ──
@@ -215,7 +218,7 @@ describe('victim-intake characterization (applyIncomingToTarget — pre-extracti
     // pins the floor + the event; branch 4b below pins the removable-DoT clear as a multi-round
     // survival signal.
     it('lethal hit + Cheat Death: survives at 1 HP, cheat-death-activated emitted', () => {
-        const { cheated, destroyed, result } = run(
+        const { hpChanged, cheated, destroyed, result } = run(
             healBase({
                 numRounds: 1, // single round: isolate the lethal save
                 hp: 2000, // enemy hits for 3000 → lethal in one hit → intercepted at 1 HP
@@ -230,6 +233,15 @@ describe('victim-intake characterization (applyIncomingToTarget — pre-extracti
         expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
         expect(destroyed.filter((d) => d.actorId === 'attacker')).toHaveLength(0);
         expect(result.healing!.destroyedRound).toBeUndefined();
+
+        // Pin the floor on the DIRECT-hit path: the lethal-direct intake crossing lands the
+        // survivor at exactly 1 HP of 2000 max = 0.05% — strictly positive, NOT 0 (floor + clear
+        // ran, not destroy) and NOT 2 HP. (Branch 4b pins the same floor on the DoT-tick path.)
+        const saveCrossing = hpChanged.find(
+            (e) => e.targetId === 'attacker' && e.round === 1 && e.newPct > 0 && e.newPct < 1
+        );
+        expect(saveCrossing).toBeDefined();
+        expect(saveCrossing!.newPct).toBeCloseTo((100 * 1) / 2000, 6); // 0.05% — floored at 1 HP
     });
 
     // ── Branch 4b: the Cheat-Death save fires off a lethal DoT-TICK intake (the second intake ──
@@ -272,7 +284,8 @@ describe('victim-intake characterization (applyIncomingToTarget — pre-extracti
         // at exactly 1 HP of 500 max = 0.2% — strictly positive, NOT 0 (the floor + removable-clear
         // path ran rather than the destroy path).
         const saveCrossing = hpChanged.find(
-            (e) => e.targetId === 'attacker' && e.round === saveRound && e.newPct > 0 && e.newPct < 1
+            (e) =>
+                e.targetId === 'attacker' && e.round === saveRound && e.newPct > 0 && e.newPct < 1
         );
         expect(saveCrossing).toBeDefined();
         expect(saveCrossing!.newPct).toBeCloseTo((100 * 1) / 500, 6); // 0.2% — floored at 1 HP
