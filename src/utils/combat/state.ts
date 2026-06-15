@@ -1,4 +1,5 @@
 import type { Position } from '../../types/encounters';
+import type { AffinityName } from '../../types/ship';
 import type { CombatEventBus } from './events';
 
 /** Per-actor damage contributions within one round (spec: per-actor accounting —
@@ -117,6 +118,10 @@ export interface CombatActor {
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. */
     ignoresForcedTargeting?: boolean;
+    /** RAW affinity of this actor (positional plumbing — set at construction, not yet consumed
+     *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
+     *  for per-victim affinity re-resolution (Task 8b/9). Absent → treated as neutral downstream. */
+    affinity?: AffinityName;
 }
 
 export function createActor(
@@ -126,6 +131,7 @@ export function createActor(
         startCharged?: boolean;
         position?: Position;
         ignoresForcedTargeting?: boolean;
+        affinity?: AffinityName;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -144,6 +150,7 @@ export function createActor(
         pendingAccumulators: [],
         position: partial.position,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
+        affinity: partial.affinity,
     };
 }
 

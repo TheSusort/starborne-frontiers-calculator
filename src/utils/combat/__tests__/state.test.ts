@@ -74,6 +74,22 @@ describe('createActor', () => {
         });
         expect(actor.charges).toBe(0);
     });
+
+    it('threads raw affinity onto the actor (positional plumbing)', () => {
+        const actor = createActor({
+            id: 'a',
+            side: 'player',
+            kind: 'attacker',
+            stats: baseStats,
+            affinity: 'thermal',
+        });
+        expect(actor.affinity).toBe('thermal');
+    });
+
+    it('leaves affinity undefined when omitted (neutral default downstream)', () => {
+        const actor = createActor({ id: 'a', side: 'player', kind: 'attacker', stats: baseStats });
+        expect(actor.affinity).toBeUndefined();
+    });
 });
 
 describe('selectNextActor', () => {

@@ -2,7 +2,8 @@ import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/ca
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
-import type { ParsedTarget } from '../targetingParser';
+import type { AffinityName } from '../../types/ship';
+import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -34,6 +35,8 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
+import { applyPositionalDamage } from './positionalApply';
+import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
@@ -335,6 +338,13 @@ export interface EnemyActorInput {
     ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
+    pattern?: ParsedPattern;
+    /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
+     *  computeAffinityModifiers to produce `affinityDamageModifier` above (positional plumbing —
+     *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
+     *  CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+    affinity?: AffinityName;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -419,6 +429,7 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
+        affinity: e.affinity,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -463,6 +474,11 @@ export function buildEnemyPlayerActorRuntime(
         affinityCritCap: resolvedCritCap,
         affinityCritPenalty: resolvedCritPenalty,
         affinityDisadvantage,
+        // RAW affinity — sourced from the SAME e.affinity the adapter fed to
+        // computeAffinityModifiers for resolvedDamageMod, so the two never disagree. Positional
+        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // neutral 'antimatter' default downstream.
+        attackerAffinity: e.affinity,
         allyChargePerRound: undefined,
         activeCritGate: enemyActiveCritGate,
         chargedCritGate: enemyChargedCritGate,
@@ -723,13 +739,23 @@ export type TeamActorEngineInput = TeamActorInput & {
         hasChargedSkill: boolean;
         /** Caster heal-modifier stat (healing calc). Default 0. */
         healModifier?: number;
+        /** RAW affinity of this team actor — the SAME affinity (TeamActorInput.affinity) the
+         *  adapter fed to computeAffinityModifiers to produce `affinityDamageModifier` in this
+         *  bundle, so the two never disagree. Positional plumbing — set but not yet consumed by
+         *  apply (threaded onto the runtime's attackerAffinity + the CombatActor.affinity).
+         *  Absent → neutral default ('antimatter') downstream. */
+        affinity?: AffinityName;
     };
     /** Board position of this team actor (positional plumbing — set but not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
+    /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
+     *  positional target selection AND the Task 8b positional apply at the team damage site. */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for this team actor. Consumed by the Task 8b positional
+     *  apply at the team damage site (origin/covered footprint expansion). */
+    pattern?: ParsedPattern;
 };
 
 export interface CombatEngineInput {
@@ -815,6 +841,12 @@ export interface CombatEngineInput {
         ignoresForcedTargeting?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
+        /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
+        pattern?: ParsedPattern;
+        /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
+         *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
+         *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
+        affinity?: AffinityName;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -822,8 +854,31 @@ export interface CombatEngineInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
+    /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
+     *  target selection AND the Task 8b positional apply at the focus damage site. */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for the focus attacker. Consumed by the Task 8b positional
+     *  apply at the focus damage site (origin/covered footprint expansion). */
+    pattern?: ParsedPattern;
+    /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
+     *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
+     *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
+     *  + the CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+    affinity?: AffinityName;
+    /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
+     *  once on the first round it is built, so unit tests can exercise the player→enemy victim
+     *  wrapper against a hand-built enemy actor. Never set by production code; the closure runs the
+     *  real applyVictimDamage path (no mocks).
+     *  KEPT (not removed once Task 8/9 wired production callers): `applyOutgoingToEnemy.test.ts`
+     *  behaviour #6 — the enemy-side sink is a no-op (tank accumulators stay 0) — is unique coverage
+     *  the positionalDamage integration test cannot observe (it only sees `ship-destroyed`). Inert
+     *  (optional, never set in production). Revisit if that no-op contract gains an observable seam. */
+    __testTapApplyOutgoingToEnemy?: (
+        fn: (
+            damage: number,
+            enemyVictim: CombatActor
+        ) => { shieldBefore: number; hpDamage: number; barriered: boolean }
+    ) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -900,6 +955,23 @@ export interface HealingRoundEngine {
     healTargetBuffs: ActiveBuff[];
 }
 
+/**
+ * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
+ * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
+ * core; the four bits that differ between the healing-mode player intake and (future)
+ * other intakes are injected here so the core stays caller-agnostic. The legacy player
+ * wrapper supplies a sink that performs exactly the original closure's mutations.
+ */
+interface DamageAccountingSink {
+    /** today: roundIncomingDamage += amount */
+    addIncoming: (amount: number) => void;
+    /** today: roundShieldAbsorbed += amount */
+    addShieldAbsorbed: (amount: number) => void;
+    /** today: roundBarrierAbsorbed += amount */
+    addBarrierAbsorbed: (amount: number) => void;
+    /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
+    onHealTargetDestroyed?: (victim: CombatActor) => void;
+}
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round builds a turn queue
  * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (default
@@ -998,6 +1070,7 @@ export function runCombat(input: CombatEngineInput): {
         startCharged,
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
+        affinity: input.affinity,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1065,6 +1138,9 @@ export function runCombat(input: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
+            // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
+            // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
+            affinity: t.walk?.affinity,
         })
     );
 
@@ -1080,6 +1156,16 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
+    // Per-team-actor parsed positional pattern (Task 8a), mirroring teamTargetById. The pattern
+    // lives only on the TeamActorEngineInput — thread it to the team-turn call site by id for the
+    // Task 8b apply path. Empty for every non-positional input (no pattern set) → inert today.
+    const teamPatternById = new Map<string, ParsedPattern>();
+    for (const t of teamActors) {
+        if (t.pattern) {
+            teamPatternById.set(t.id, t.pattern);
+        }
+    }
+
     // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
     // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
     // but its parsed `target` lives only on the EnemyActorInput — thread it to the enemy-turn
@@ -1090,6 +1176,16 @@ export function runCombat(input: CombatEngineInput): {
     for (const e of input.enemyAttackers ?? []) {
         if (e.target) {
             enemyTargetById.set(e.id, e.target);
+        }
+    }
+
+    // Per-enemy-attacker parsed positional pattern (Task 8a), mirroring enemyTargetById /
+    // teamPatternById. The pattern lives only on the EnemyActorInput — thread it to the enemy-turn
+    // call site by id for the Task 8b apply path. Empty for every non-positional input → inert today.
+    const enemyPatternById = new Map<string, ParsedPattern>();
+    for (const e of input.enemyAttackers ?? []) {
+        if (e.pattern) {
+            enemyPatternById.set(e.id, e.pattern);
         }
     }
 
@@ -1189,6 +1285,11 @@ export function runCombat(input: CombatEngineInput): {
         affinityCritCap,
         affinityCritPenalty,
         affinityDisadvantage,
+        // RAW focus affinity — sourced from the SAME input.affinity the page resolved into the
+        // pre-resolved affinityDamageModifier above, so the two never disagree. Positional
+        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // neutral 'antimatter' default downstream.
+        attackerAffinity: input.affinity,
         allyChargePerRound,
         activeCritGate,
         chargedCritGate,
@@ -1266,6 +1367,11 @@ export function runCombat(input: CombatEngineInput): {
             affinityCritCap: w.affinityCritCap,
             affinityCritPenalty: w.affinityCritPenalty,
             affinityDisadvantage: teamAffinityDisadvantage,
+            // RAW affinity — sourced from the SAME w.affinity (TeamActorInput.affinity) the adapter
+            // fed to computeAffinityModifiers for w.affinityDamageModifier, so the two never
+            // disagree. Positional plumbing: read by victimHitDamage (Task 8b/9). Undefined →
+            // neutral 'antimatter' default downstream.
+            attackerAffinity: w.affinity,
             allyChargePerRound: undefined, // attacker-only manual input
             activeCritGate: teamActiveCritGate,
             chargedCritGate: teamChargedCritGate,
@@ -1840,6 +1946,11 @@ export function runCombat(input: CombatEngineInput): {
         // The helper `dmg(id)` lazily creates entries on first write — actors that never
         // produce damage in a round simply have no entry, keeping the map sparse.
         const roundDamage = new Map<string, ActorDamage>();
+        // Per-round per-victim positional damage accumulator (victim actor id → summed damage
+        // dealt to it this round). Populated ONLY by the positional apply path's emitHit
+        // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
+        // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
+        const roundPerTargetDamage = new Map<string, number>();
         const dmg = (id: string): ActorDamage => {
             let d = roundDamage.get(id);
             if (!d) {
@@ -1916,11 +2027,19 @@ export function runCombat(input: CombatEngineInput): {
         // so the enemy's incoming drains the actor its parsed target picked. Heal-target-specific
         // bookkeeping (healTargetDestroyedRound) stays gated on `victim === healTarget` below so
         // it is never written for a non-heal-target victim.
-        const applyIncomingToTarget = (
+        // Shared damage-intake core (Phase 4 PR 1, Task 2): the byte-identical body of the
+        // legacy applyIncomingToTarget closure with the four side-specific accounting bits
+        // hoisted into `sink`. Everything keyed off `victim` (Barrier full-immunity, shield
+        // drain, HP decrement, Cheat-Death intercept, recordDestroyed, hp-changed) is moved
+        // verbatim. Kept inside runCombat — it captures statusEngine/bus/r/recipientMaxHp/
+        // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
+        // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
+        const applyVictimDamage = (
             damage: number,
-            victim: CombatActor = healTarget!
+            victim: CombatActor,
+            sink: DamageAccountingSink
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
-            roundIncomingDamage += damage;
+            sink.addIncoming(damage);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -1943,7 +2062,7 @@ export function runCombat(input: CombatEngineInput): {
                 BARRIER_BUFFS.has(n)
             );
             if (carriesBarrier) {
-                roundBarrierAbsorbed += damage;
+                sink.addBarrierAbsorbed(damage);
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',
@@ -1958,7 +2077,7 @@ export function runCombat(input: CombatEngineInput): {
             const shieldBefore = victim.shieldPool;
             const absorbed = Math.min(victim.shieldPool, damage);
             victim.shieldPool -= absorbed;
-            roundShieldAbsorbed += absorbed;
+            sink.addShieldAbsorbed(absorbed);
             const hpDamage = damage - absorbed;
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
@@ -2009,11 +2128,10 @@ export function runCombat(input: CombatEngineInput): {
                     // off the heal target's runtime field below.
                     recordDestroyed(victim, r, bus);
                     // healTargetDestroyedRound tracks the HEAL TARGET specifically — only write it
-                    // when the victim IS the heal target. A positional-selected non-heal-target
-                    // victim records its own destroyedRound (on `victim`) without touching this.
-                    if (victim === healTarget) {
-                        healTargetDestroyedRound = victim.destroyedRound;
-                    }
+                    // when the victim IS the heal target. The guard lives in the sink callback so a
+                    // positional-selected non-heal-target victim records its own destroyedRound (on
+                    // `victim`) without touching this.
+                    sink.onHealTargetDestroyed?.(victim);
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -2034,6 +2152,120 @@ export function runCombat(input: CombatEngineInput): {
             }
             return { shieldBefore, hpDamage, barriered: false };
         };
+        // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
+        // reproduces exactly the original closure's mutations (roundIncomingDamage /
+        // roundShieldAbsorbed / roundBarrierAbsorbed bumps + the heal-target-gated
+        // healTargetDestroyedRound write). Signature, default `victim = healTarget!`, and return
+        // value are unchanged, so every existing call site stays byte-identical.
+        const playerSink: DamageAccountingSink = {
+            addIncoming: (amount) => {
+                roundIncomingDamage += amount;
+            },
+            addShieldAbsorbed: (amount) => {
+                roundShieldAbsorbed += amount;
+            },
+            addBarrierAbsorbed: (amount) => {
+                roundBarrierAbsorbed += amount;
+            },
+            onHealTargetDestroyed: (victim) => {
+                if (victim === healTarget) {
+                    healTargetDestroyedRound = victim.destroyedRound;
+                }
+            },
+        };
+        const applyIncomingToTarget = (
+            damage: number,
+            victim: CombatActor = healTarget!
+        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
+            applyVictimDamage(damage, victim, playerSink);
+        // Player→enemy intake (Phase 4 PR1, Task 3) — the symmetric THIN wrapper over
+        // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
+        // victim still runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path (enemies
+        // actually take damage and can die), but the round accumulators here (roundIncomingDamage/
+        // roundShieldAbsorbed/roundBarrierAbsorbed) are the TANK's incoming bucket — they must NOT
+        // move when a player hits an enemy. So this sink's accounting hooks are no-ops for PR 1
+        // (enemy-incoming accounting is the deferred Phase-5 symmetric surface) and it omits
+        // onHealTargetDestroyed (the enemy victim is never the heal target). Task 8 wires a caller.
+        const enemySink: DamageAccountingSink = {
+            addIncoming: () => {},
+            addShieldAbsorbed: () => {},
+            addBarrierAbsorbed: () => {},
+        };
+        const applyOutgoingToEnemy = (
+            damage: number,
+            enemyVictim: CombatActor
+        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
+            applyVictimDamage(damage, enemyVictim, enemySink);
+        // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
+        // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
+        // first round it is built is sufficient. Inert in production (the field is never set).
+        input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
+
+        // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
+        // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
+        // already GATED (isPositional + non-null target/pattern/positionalScalars) and computed
+        // its own `positional` flag (also used for credit suppression); this helper just runs the
+        // per-victim apply against the resolved inputs. What differs per site is parameterized:
+        //  - `scalars`/`hitCrits` — sourced from that site's turn result,
+        //  - `pattern`/`target` — that actor's parsed pattern + parsed target,
+        //  - `opposingLiving` — focus/team → enemyAttackerActors; enemy → allPlayerActors,
+        //  - `applyToVictim` — focus/team → applyOutgoingToEnemy; enemy → applyIncomingToTarget,
+        //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
+        // `defenseProfileOf` is identical across all three sites in PR1 (defenceModifierPct 0 —
+        // per-victim defense-debuff sourcing is the documented Phase-5 refinement) so it lives here.
+        // NOTE: that Phase-5 refinement is TWO directions, not one — the eventual per-victim
+        // defense-debuff SOURCE differs BY DIRECTION: the focus/team sites read the ENEMY victim's
+        // defense debuffs, while the enemy site reads the PLAYER victim's defense debuffs (sourced
+        // from a different place). So this single zero-stub eventually splits into two lookups.
+        // SAME Phase-5 caveat applies to victimHitDamage's incoming/outgoing damage modifiers:
+        // they're carried as attacker-fixed scalars here, but in the aggregate they derive from the
+        // BOUND victim's debuffs — so a covered (non-anchor) victim's incoming/outgoing modifiers are
+        // an approximation today (exact for the anchor). Per-victim re-sourcing covers these too.
+        // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
+        // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
+        const drivePositionalApply = (args: {
+            scalars: AttackerDamageScalars;
+            // hitCrits is co-populated with positionalScalars by Task 7 (both are set iff a damage
+            // ability fired), so the `?? []` below is DEFENSIVE only — never empty when scalars != null.
+            hitCrits?: boolean[];
+            pattern: ParsedPattern;
+            target: ParsedTarget;
+            actingPosition: Position;
+            ignoresForcedTargeting?: boolean;
+            actingId: string;
+            opposingLiving: CombatActor[];
+            applyToVictim: (victim: CombatActor, damage: number) => void;
+        }): void => {
+            applyPositionalDamage({
+                hitCrits: args.hitCrits ?? [],
+                scalars: args.scalars,
+                pattern: args.pattern,
+                actorPosition: args.actingPosition,
+                target: args.target,
+                opposingLiving: args.opposingLiving,
+                statusOf: statusLookupFor(args.opposingLiving),
+                acting: {
+                    ignoresForcedTargeting: args.ignoresForcedTargeting,
+                    provokedBy: provokerOf(statusEngine, args.actingId),
+                },
+                defenseProfileOf: (v) => ({
+                    defence: v.stats.defence,
+                    defenceModifierPct: 0,
+                    affinity: v.affinity ?? 'antimatter',
+                }),
+                applyToVictim: args.applyToVictim,
+                // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
+                // per-round map so the RoundData row can expose perTargetDamage. Identical
+                // across all three sites (focus / team / enemy), so it lives here.
+                emitHit: (victim, damage) => {
+                    roundPerTargetDamage.set(
+                        victim.id,
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+                    );
+                },
+            });
+        };
+
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -2517,6 +2749,50 @@ export function runCombat(input: CombatEngineInput): {
                         pendingResisted.length = 0;
                     }
 
+                    // Positional APPLY (Task 8b, GATED). When the focus attacker is positional,
+                    // carries a parsed target, AND its firing hit produced scalars (a damage
+                    // ability fired → turn.positionalScalars is set), drive the per-victim apply
+                    // loop against the LIVE enemy roster. Re-resolves anchor + footprint per hit;
+                    // origin cells take full damage, covered cells half. Each victim's HP/shield/
+                    // Barrier/Cheat-Death/death is mutated through the real applyOutgoingToEnemy.
+                    // No production caller threads position+target+pattern yet, so this is false
+                    // for every existing test/golden → byte-identical.
+                    // The pattern is REQUIRED for footprint expansion — without it there is no
+                    // apply to perform (the existing positionalSelection tests set position+target
+                    // to exercise target binding only, never a pattern, so they keep the legacy
+                    // single-sink credit and never enter this branch).
+                    //
+                    // DELIBERATELY no `selectedEnemy != null` precondition (CodeRabbit raised this):
+                    // in positional/simulator mode there is NO dummy enemy sink to fall back to.
+                    // When per-hit resolution inside applyPositionalDamage finds no living opposing
+                    // actor, the correct behaviour is for the attacker to WHIFF (deal 0) — see the
+                    // death-fallback all-dead-whiff test. Gating `positional` on a pre-resolved
+                    // living target would instead route the firing hit back to the legacy dummy
+                    // sink, recording PHANTOM damage against a target that no longer exists. So we
+                    // enter the positional branch on pattern/target/scalars alone and let the
+                    // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
+                    // this: the per-victim apply is the ONLY damage path here.)
+                    const positional =
+                        isPositional(actor.position, enemyAttackerActors) &&
+                        input.target != null &&
+                        input.pattern != null &&
+                        turn.positionalScalars != null;
+                    if (positional) {
+                        // Opposing roster = enemyAttackerActors; player→enemy victim wrapper.
+                        // pattern/target are non-null via the `positional` gate above.
+                        drivePositionalApply({
+                            scalars: turn.positionalScalars!,
+                            hitCrits: turn.hitCrits,
+                            pattern: input.pattern!,
+                            target: input.target!,
+                            actingPosition: actor.position!,
+                            ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                            actingId: actor.id,
+                            opposingLiving: enemyAttackerActors,
+                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                        });
+                    }
+
                     // Fold the focus turn's numeric damage into the round accumulator.
                     // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
                     // accumulator bursts ran earlier this round — a plain assignment would
@@ -2526,9 +2802,18 @@ export function runCombat(input: CombatEngineInput): {
                     // secondary/conditional are display sub-buckets already rolled into
                     // turn.directDamage — they must NOT be routed through creditDamage or the
                     // standing-leech hook would double-count them.
-                    d.secondary += turn.secondaryDamage;
-                    d.conditional += turn.conditionalDamage;
-                    creditDamage(actor.id, 'direct', turn.directDamage);
+                    //
+                    // Credit SUPPRESSION for the positional case (Task 8b): the firing-hit damage
+                    // now lands per-victim via applyPositionalDamage above, so it must NOT also be
+                    // folded into cumulativeDamage here (that would double-count it). Skip the
+                    // direct/secondary/conditional credits; KEEP detonation (bombs are a separate
+                    // mechanic, out of scope). The existing `enemyHpDecline: selected ? 0 : ...`
+                    // already zeroes the legacy single-sink decline for the positional path.
+                    if (!positional) {
+                        d.secondary += turn.secondaryDamage;
+                        d.conditional += turn.conditionalDamage;
+                        creditDamage(actor.id, 'direct', turn.directDamage);
+                    }
                     creditDamage(actor.id, 'detonation', turn.detonationDamage);
                     focusTurns.push(turn);
 
@@ -2616,14 +2901,54 @@ export function runCombat(input: CombatEngineInput): {
                         selfDebuffNames: ownerDebuffNames(actor.id),
                     });
 
+                    // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
+                    // team actor's own position / parsed target (teamTargetById) / parsed pattern
+                    // (teamPatternById). Drives the per-victim apply loop against the LIVE enemy
+                    // roster when this walked team actor is positional, has a parsed target, AND its
+                    // firing hit produced scalars. No production caller threads these yet → false for
+                    // every existing test/golden → byte-identical.
+                    // The pattern (teamPatternById) is REQUIRED for footprint expansion — without
+                    // it there is no apply to perform (the positionalSelection C2 test sets
+                    // position+target only, never a pattern, so it keeps the legacy single-sink
+                    // credit and never enters this branch).
+                    const teamPattern = teamPatternById.get(actor.id);
+                    const teamPositional =
+                        isPositional(actor.position, enemyAttackerActors) &&
+                        teamTarget != null &&
+                        teamPattern != null &&
+                        teamTurn.positionalScalars != null;
+                    if (teamPositional) {
+                        // Same direction as the focus site (player→enemy); keyed to THIS team
+                        // actor's position / parsed target / parsed pattern. Non-null via the gate.
+                        drivePositionalApply({
+                            scalars: teamTurn.positionalScalars!,
+                            hitCrits: teamTurn.hitCrits,
+                            pattern: teamPattern,
+                            target: teamTarget,
+                            actingPosition: actor.position!,
+                            ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                            actingId: actor.id,
+                            opposingLiving: enemyAttackerActors,
+                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                        });
+                    }
+
                     // Fold the team turn's damage into ITS OWN map entry (post-round assembly
                     // sums all non-focus entries into teamDamage). secondary/conditional are
                     // sub-buckets of direct (do NOT double-add) but kept distinct for the
                     // simulator-page seam.
+                    //
+                    // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
+                    // the firing-hit damage already landed per-victim via applyPositionalDamage, so
+                    // skip the direct/secondary/conditional credit; KEEP detonation (bombs are out
+                    // of scope). The team's `enemyHpDecline: selected ? 0 : ...` already zeroed the
+                    // legacy single-sink decline for the positional path.
                     const td = dmg(actor.id);
-                    td.secondary += teamTurn.secondaryDamage;
-                    td.conditional += teamTurn.conditionalDamage;
-                    creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                    if (!teamPositional) {
+                        td.secondary += teamTurn.secondaryDamage;
+                        td.conditional += teamTurn.conditionalDamage;
+                        creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                    }
                     creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
 
                     // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
@@ -2828,6 +3153,11 @@ export function runCombat(input: CombatEngineInput): {
                     // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
                     const tgt = selectedPlayer ?? healTarget!;
                     const targetDead = tgt.currentHp <= 0;
+                    // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
+                    // positional apply (footprint expansion). An enemy with a target but NO pattern
+                    // stays on the legacy single-apply path (same `pattern != null` guard as the
+                    // focus/team sites). Undefined for every current fixture → enemyPositional false.
+                    const enemyPattern = enemyPatternById.get(actor.id);
                     let damage = 0;
                     // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                     // scoped inside the else block below; this flag carries its roundCrit out.
@@ -2836,6 +3166,13 @@ export function runCombat(input: CombatEngineInput): {
                     // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
                     // path and on the manual flat-enemy path (which has no hitCrits to surface).
                     let enemyHitCrits: boolean[] = [];
+                    // Hoisted positional-apply state (Task 9): the enemy-site mirror of the focus/team
+                    // sites. enemyPositional gates BOTH the drivePositionalApply call AND the single-
+                    // apply suppression below; enemyScalars carries this turn's firing-hit scalars out
+                    // of the else block (enemyTurn is scoped inside it). Both stay false/null on the
+                    // dead-target path and whenever the enemy is non-positional → legacy single-apply.
+                    let enemyPositional = false;
+                    let enemyScalars: AttackerDamageScalars | undefined;
                     if (targetDead) {
                         // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                         // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -2927,6 +3264,19 @@ export function runCombat(input: CombatEngineInput): {
                         enemyTurnDidCrit = enemyTurn.roundCrit;
                         // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
                         enemyHitCrits = enemyTurn.hitCrits;
+                        // Positional gate (Task 9, enemy site): mirror of the focus/team gates, but
+                        // the OPPOSING roster from the enemy's view is the PLAYER team
+                        // (allPlayerActors), the parsed target rides on enemyTargetById, and the
+                        // parsed pattern on enemyPatternById. When true, the firing-hit damage lands
+                        // per-victim via drivePositionalApply (below) against the live player roster
+                        // and the legacy single-apply is SUPPRESSED. No production caller threads
+                        // position+target+pattern for an enemy yet → false for every golden.
+                        enemyPositional =
+                            isPositional(actor.position, allPlayerActors) &&
+                            enemyTarget != null &&
+                            enemyPattern != null &&
+                            enemyTurn.positionalScalars != null;
+                        enemyScalars = enemyTurn.positionalScalars;
                         // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                         // its own future DoT entries would tick with this ctx).
                         lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -2985,18 +3335,69 @@ export function runCombat(input: CombatEngineInput): {
                         processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
                     }
                     if (damage > 0) {
+                        // Phase-5 per-victim accounting TODOs (see detailed notes below): (1)
+                        // takenLeeches gated to non-positional — per-victim leech needs the symmetric
+                        // heal surface; (2) playerSink.addIncoming attributes every victim's AoE share
+                        // to the tank's incoming bucket.
+                        //
                         // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
                         // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
                         // hpDamage comes straight from the closure (0 under Barrier — damage fully
                         // blocked, not shield-absorbed — otherwise damage - absorbed). barriered = the
                         // attack was fully blocked by an active Barrier (decision #7, below).
-                        // Route the enemy's incoming to its selected victim (`tgt`). Legacy path:
-                        // tgt === healTarget! → no-arg-equivalent call, byte-identical. Positional
-                        // path: drains the SELECTED player actor instead of the heal target.
-                        const { shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
-                            damage,
-                            tgt
-                        );
+                        // Route the enemy's incoming damage. Two mutually-exclusive paths:
+                        //
+                        //  - NON-positional (legacy): a SINGLE applyIncomingToTarget(damage, tgt)
+                        //    drains the bound victim (tgt === healTarget! on the legacy path → the
+                        //    no-arg-equivalent call, byte-identical). Returns the shield/HP/Barrier
+                        //    outcome consumed by the damage-taken leech block below.
+                        //
+                        //  - POSITIONAL (Task 9): drivePositionalApply lands the firing hit per-victim
+                        //    across the LIVE PLAYER roster (origin full / covered half) via the
+                        //    PLAYER-side applyIncomingToTarget wrapper — each player victim takes REAL
+                        //    HP/shield/death damage. The single apply is SUPPRESSED (else the anchor
+                        //    victim would be double-hit: once by the AoE loop, once by the single
+                        //    apply). enemyPattern is non-null via the enemyPositional gate.
+                        //
+                        // DEFERRED (Phase-5, documented in Step C): on the positional path the per-
+                        // victim shield/HP outcomes are not surfaced, so shieldBefore/hpDamage/barriered
+                        // fall back to neutral defaults — the heal-target damage-taken HEAL/SHIELD leech
+                        // (takenLeeches) is NOT re-derived from the anchor victim's AoE hit. Inert today
+                        // (no fixture runs a "when damaged" reactive in healing mode), so the legacy
+                        // single-target leech path stays byte-identical; per-victim leech symmetry is the
+                        // Phase-5 follow-up. The non-positional path keeps the exact legacy leech values.
+                        let shieldBefore = 0;
+                        let hpDamage = 0;
+                        let barriered = false;
+                        if (enemyPositional) {
+                            drivePositionalApply({
+                                scalars: enemyScalars!,
+                                hitCrits: enemyHitCrits,
+                                pattern: enemyPattern!,
+                                target: enemyTarget!,
+                                actingPosition: actor.position!,
+                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                actingId: actor.id,
+                                opposingLiving: allPlayerActors,
+                                // PLAYER-side wrapper: each player victim takes real incoming damage.
+                                // Every victim's OWN currentHp/shield is mutated and recordDestroyed
+                                // fires for it (its targetHpPct/death derive from the victim itself —
+                                // applyVictimDamage reads recipientMaxHp(victim.id)). DEFERRED (Phase-5):
+                                // playerSink.addIncoming bumps the TANK's roundIncomingDamage bucket
+                                // for EVERY victim — so a covered non-heal-target victim's AoE share
+                                // currently inflates the heal target's reported per-round incomingDamage.
+                                // The healing-accounting model has one row (the heal target's); per-
+                                // victim incoming attribution is the Phase-5 symmetric-accounting surface.
+                                // Inert today (no production caller threads enemy position+pattern).
+                                applyToVictim: (victim, dmgToVictim) =>
+                                    applyIncomingToTarget(dmgToVictim, victim),
+                            });
+                        } else {
+                            ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
+                                damage,
+                                tgt
+                            ));
+                        }
 
                         // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                         // AFTER this attack's drain so the proc never absorbs its own trigger.
@@ -3020,7 +3421,24 @@ export function runCombat(input: CombatEngineInput): {
                         // damage taken at all, so its damage-taken procs are skipped entirely — there is
                         // nothing to leech from. (Distinct from a shield absorb, where the convention
                         // still leeches off the full attack: a shield takes the hit, Barrier nullifies it.)
-                        if (takenLeeches.length > 0 && healingCtx && !barriered) {
+                        //
+                        // POSITIONAL DEFERRAL (Task 9, Step C — Phase-5 follow-up): this damage-taken
+                        // leech is single-target heal-target infrastructure (takenLeeches is collected
+                        // ONLY for the heal target; the healing-accounting model has one row, the heal
+                        // target's). On the positional path the heal target took only its OWN per-victim
+                        // AoE share (origin full / covered half), and shieldBefore/hpDamage are not
+                        // surfaced per victim — crediting off the aggregate `damage` here would be wrong.
+                        // So the leech is gated to the NON-positional path: the legacy heal-target leech
+                        // stays byte-identical, and full per-victim leech symmetry (every player victim
+                        // procing its OWN damage-taken reactive off the damage IT took) is the documented
+                        // Phase-5 follow-up. Inert today either way (no fixture runs a damage-taken
+                        // reactive in healing mode → takenLeeches is empty).
+                        if (
+                            !enemyPositional &&
+                            takenLeeches.length > 0 &&
+                            healingCtx &&
+                            !barriered
+                        ) {
                             const rt = runtimesById.get(healTarget!.id);
                             for (const e of takenLeeches) {
                                 if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
@@ -3265,6 +3683,11 @@ export function runCombat(input: CombatEngineInput): {
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
             // extraTurns set ONLY when ≥ 1 (undefined preserves legacy RoundData shape).
             ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
+            // perTargetDamage set ONLY when the positional path recorded victim damage this
+            // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
+            ...(roundPerTargetDamage.size > 0
+                ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
+                : {}),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,

@@ -9,3 +9,6 @@ supabase/.temp/
 docs/
 .claude/
 video/
+
+# husky internals (generated; symlinked in worktrees)
+.husky/_

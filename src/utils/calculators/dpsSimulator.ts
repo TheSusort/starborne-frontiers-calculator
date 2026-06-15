@@ -45,6 +45,10 @@ export interface DPSSimulationInput {
     affinityCritCap?: number;
     /** Additive pp reduction on effective crit rate (25 for disadvantage, 0 otherwise). */
     affinityCritPenalty?: number;
+    /** RAW affinity of the focus attacker — the SAME matchup the page resolved into the pre-resolved
+     *  affinityDamageModifier/affinityCritCap/affinityCritPenalty above, so the two never disagree
+     *  (positional plumbing; forwarded to the engine's attackerAffinity). Absent → neutral default. */
+    affinity?: AffinityName;
     /** Attacker hacking stat. Landing chance = clamp(hacking - enemySecurity, 0, 100) / 100. Default 200. */
     hacking?: number;
     /** Defender security stat. Default 100. */
@@ -114,6 +118,12 @@ export interface RoundData {
     /** Number of EXTRA focus-actor turns this round (extra actions). Set only when
      *  ≥ 1 — undefined preserves the legacy RoundData shape (golden snapshots). */
     extraTurns?: number;
+    /** Victim actor id → total damage dealt TO it this round, keyed by victim regardless of
+     *  attacker side. In a round where both sides act positionally this map contains BOTH enemy
+     *  victims (from player/team fire) AND player victims (from enemy fire) — do NOT sum it as
+     *  one-directional output. Populated ONLY by the positional apply path (gated on positions +
+     *  pattern); absent in non-positional runs. */
+    perTargetDamage?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -190,6 +200,10 @@ export function deriveTeamEngineActors(
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
+                // RAW affinity — the SAME t.affinity fed to computeAffinityModifiers above, so the
+                // walk bundle's affinityDamageModifier and attackerAffinity never disagree
+                // (positional plumbing; the engine threads it onto the runtime's attackerAffinity).
+                affinity: t.affinity,
                 hasChargedSkill: teamHasChargedSkill,
             },
         };
@@ -269,6 +283,9 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
+        // RAW focus affinity — same matchup as the pre-resolved affinityDamageModifier above
+        // (positional plumbing; the engine threads it onto the focus runtime's attackerAffinity).
+        affinity: input.affinity,
         defence,
         hp,
         allyChargePerRound,

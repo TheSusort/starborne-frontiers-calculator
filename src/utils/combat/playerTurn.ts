@@ -8,6 +8,7 @@ import {
     SelectedGameBuff,
 } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
+import type { AffinityName } from '../../types/ship';
 import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
     selectFiringSkill,
@@ -47,6 +48,7 @@ import {
 import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
+import type { AttackerDamageScalars } from './victimDamage';
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -125,6 +127,13 @@ export interface PlayerTurnResult {
     /** Extra-action grants this turn fired (pre-gated). The ENGINE owns queue
      *  re-insertion + the oncePerRound/backstop bookkeeping. */
     extraActionGrants: ExtraActionGrant[];
+    /** Per-cast attacker-side damage scalars for the positional apply path (Task 7).
+     *  Populated from the SAME locals that feed the aggregate `directDamage`, so feeding
+     *  these + `hitCrits` through `victimHitDamage` for the bound victim's defense profile
+     *  reproduces the firing hit exactly (Task-4 parity). Read ONLY by the future positional
+     *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
+     *  Present whenever a damage ability fired this cast (else undefined). */
+    positionalScalars?: AttackerDamageScalars;
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
@@ -157,6 +166,12 @@ export interface PlayerActorRuntime {
     affinityCritCap: number;
     affinityCritPenalty: number;
     affinityDisadvantage: boolean;
+    /** Raw attacker affinity (Task 7). The numeric modifiers above are PRE-RESOLVED
+     *  (computeAffinityModifiers) against the bound enemy and cannot be inverted, so the
+     *  positional apply path — which re-resolves per VICTIM — needs the raw affinity here.
+     *  Optional: absent → `'antimatter'` (neutral vs anything, modifier 0), matching the
+     *  default neutral matchup; surfaced only on positionalScalars. */
+    attackerAffinity?: AffinityName;
     allyChargePerRound?: number; // attacker-only manual input
     // Per-actor deterministic gates (own instances — determinism isolation)
     activeCritGate: RateGate;
@@ -673,6 +688,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         affinityCritCap,
         affinityCritPenalty,
         affinityDisadvantage,
+        attackerAffinity,
         defence,
         hp,
         allyChargePerRound,
@@ -1632,6 +1648,28 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         incomingHealPct: incomingHealBuff,
     };
 
+    // Per-cast attacker-side scalars for the positional apply path (Task 7). Sourced from
+    // the SAME locals that assemble the aggregate `directDamage` above (preCritDamage +
+    // postDefenseFactor): effectiveMultiplier ALREADY folds the hit count, so multiplierPct
+    // is `effectiveMultiplier + conditionalBonusPct` and `hits` re-splits it per hit inside
+    // victimHitDamage. attackerAffinity is the RAW affinity (the runtime's numeric
+    // affinityDamageModifier is pre-resolved vs the bound enemy and can't be inverted);
+    // defaults to neutral 'antimatter' when unset → modifier 0, matching the default matchup.
+    // Only present when a damage ability actually fired (else there is nothing to apply).
+    const positionalScalars: AttackerDamageScalars | undefined = hasDamageAbility
+        ? {
+              effectiveAttack,
+              multiplierPct: effectiveMultiplier + conditionalBonusPct,
+              secondaryStatValue,
+              hits,
+              effectiveCritDamage,
+              outgoingDamageBuffPct: outgoingDamageBuff,
+              incomingDamageModifierPct: incomingDamageModifier,
+              defensePenetrationPct: effectivePen,
+              attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
+          }
+        : undefined;
+
     return {
         action,
         roundCrit,
@@ -1648,6 +1686,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         conditionalDamage,
         detonationDamage,
         extraActionGrants,
+        positionalScalars,
         turnCtx,
     };
 }
