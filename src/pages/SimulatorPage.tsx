@@ -11,8 +11,7 @@ import {
     BattleResult,
     BattlePlacement,
 } from '../utils/calculators/battleSimulator';
-import FormationGrid from '../components/encounters/FormationGrid';
-import { ShipSelector } from '../components/ship/ShipSelector';
+import PlacementBoard from '../components/simulator/PlacementBoard';
 
 /** One placement board's state: a Position → Ship map. The Position key is the grid cell;
  *  the Ship is the fully-loaded inventory ship whose geared stats Run resolves. */
@@ -141,46 +140,24 @@ const SimulatorPage: React.FC = () => {
         >
             <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="card">
-                        <h2 className="text-lg font-semibold mb-2">
-                            Your Team{playerCount > 0 ? ` (${playerCount})` : ''}
-                        </h2>
-                        <FormationGrid
-                            formation={playerFormation}
-                            selectedPosition={playerSelected}
-                            onPositionSelect={(pos) => handleSelectPosition('player', pos)}
-                            onRemoveShip={(pos) => handleRemoveShip('player', pos)}
-                        />
-                        {playerSelected && (
-                            <ShipSelector
-                                selected={null}
-                                onSelect={(ship) => handlePickShip('player', ship)}
-                                autoOpen
-                                onClose={() => setPlayerSelected(undefined)}
-                                hidden
-                            />
-                        )}
-                    </div>
-                    <div className="card">
-                        <h2 className="text-lg font-semibold mb-2">
-                            Enemy Team{enemyCount > 0 ? ` (${enemyCount})` : ''}
-                        </h2>
-                        <FormationGrid
-                            formation={enemyFormation}
-                            selectedPosition={enemySelected}
-                            onPositionSelect={(pos) => handleSelectPosition('enemy', pos)}
-                            onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
-                        />
-                        {enemySelected && (
-                            <ShipSelector
-                                selected={null}
-                                onSelect={(ship) => handlePickShip('enemy', ship)}
-                                autoOpen
-                                onClose={() => setEnemySelected(undefined)}
-                                hidden
-                            />
-                        )}
-                    </div>
+                    <PlacementBoard
+                        title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
+                        formation={playerFormation}
+                        selectedPosition={playerSelected}
+                        onSelectPosition={(pos) => handleSelectPosition('player', pos)}
+                        onRemoveShip={(pos) => handleRemoveShip('player', pos)}
+                        onPickShip={(ship) => handlePickShip('player', ship)}
+                        onCloseSelector={() => setPlayerSelected(undefined)}
+                    />
+                    <PlacementBoard
+                        title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
+                        formation={enemyFormation}
+                        selectedPosition={enemySelected}
+                        onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
+                        onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
+                        onPickShip={(ship) => handlePickShip('enemy', ship)}
+                        onCloseSelector={() => setEnemySelected(undefined)}
+                    />
                 </div>
 
                 <div className="flex items-center gap-4">
