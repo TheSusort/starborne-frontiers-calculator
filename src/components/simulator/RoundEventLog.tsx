@@ -1,5 +1,6 @@
 import React from 'react';
 import { BattleRound, BattleResult, BattleLogEvent } from '../../utils/calculators/battleSimulator';
+import { fmt } from '../../utils/simulator/boardOverlays';
 
 interface RoundEventLogProps {
     /** The current round whose events to render. */
@@ -7,8 +8,6 @@ interface RoundEventLogProps {
     /** Roster (maps actorIds to display names). */
     roster: BattleResult['roster'];
 }
-
-const fmt = (n: number): string => Math.round(n).toLocaleString();
 
 /**
  * Scrollable readable log of the current round's events. Maps actorIds to names via the

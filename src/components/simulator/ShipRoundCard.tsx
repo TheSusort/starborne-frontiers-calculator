@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatCard } from '../ui/StatCard';
 import { BattleRound, BattleResult } from '../../utils/calculators/battleSimulator';
+import { LOW_HP_PCT, fmt } from '../../utils/simulator/boardOverlays';
 
 interface ShipRoundCardProps {
     /** The pinned ship's actorId (synthetic roster id). */
@@ -10,8 +11,6 @@ interface ShipRoundCardProps {
     /** Roster (for the ship name). */
     roster: BattleResult['roster'];
 }
-
-const fmt = (n: number): string => Math.round(n).toLocaleString();
 
 /**
  * Pinned per-ship detail for the current round: name + this-round stats via StatCard, plus
@@ -41,7 +40,7 @@ const ShipRoundCard: React.FC<ShipRoundCardProps> = ({ actorId, round, roster })
                 <StatCard
                     title="HP"
                     value={`${Math.round(state.hpPct)}%`}
-                    color={state.hpPct < 30 ? 'red' : 'green'}
+                    color={state.hpPct < LOW_HP_PCT ? 'red' : 'green'}
                 />
                 <StatCard title="Damage dealt" value={fmt(state.damageDealt)} color="orange" />
                 <StatCard title="Damage taken" value={fmt(state.damageTaken)} color="red" />

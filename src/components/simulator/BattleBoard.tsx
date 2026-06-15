@@ -1,6 +1,6 @@
 import React from 'react';
 import { Position } from '../../types/encounters';
-import { CellOverlay } from '../../utils/simulator/boardOverlays';
+import { CellOverlay, LOW_HP_PCT } from '../../utils/simulator/boardOverlays';
 
 interface BattleBoardProps {
     /** Side heading (e.g. "Your Team", "Enemy Team"). */
@@ -17,9 +17,6 @@ interface BattleBoardProps {
 
 const ROWS: Array<'T' | 'M' | 'B'> = ['T', 'M', 'B'];
 const COLS = [1, 2, 3, 4];
-
-/** Below this HP% the bar turns red; at/above it stays green. */
-const HP_RED_THRESHOLD = 30;
 
 /**
  * Read-only playback board: a side's 3×4 grid with per-cell overlays. Deliberately NOT a
@@ -59,7 +56,7 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
 
                             const pinned = pinnedActorId === overlay.actorId;
                             const hpClass =
-                                overlay.hpPct < HP_RED_THRESHOLD ? 'bg-red-500' : 'bg-green-500';
+                                overlay.hpPct < LOW_HP_PCT ? 'bg-red-500' : 'bg-green-500';
 
                             return (
                                 <button
@@ -75,7 +72,7 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                                             : 'border-dark-border hover:border-primary'
                                     } ${overlay.alive ? 'bg-dark' : 'bg-dark opacity-40 grayscale'}`}
                                 >
-                                    <div className="flex items-center justify-between gap-1">
+                                    <div className="flex items-center justify-between gap-1 min-w-0">
                                         <span className="text-xs font-medium truncate">
                                             {overlay.name}
                                         </span>
