@@ -1666,7 +1666,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               outgoingDamageBuffPct: outgoingDamageBuff,
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
-              attackerAffinity: attackerAffinity ?? 'antimatter',
+              attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
           }
         : undefined;
 

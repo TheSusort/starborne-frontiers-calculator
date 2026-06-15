@@ -24,7 +24,21 @@
  *   3. enemy carrying Barrier → full block, HP unchanged, barriered:true;
  *   4. lethal damage, no Cheat Death → currentHp 0 + ship-destroyed emitted once;
  *   5. lethal damage on an enemy Cheat-Death carrier → survives at 1 HP;
- *   6. enemy-side sink is a no-op: tank-incoming round accumulators stay at 0.
+ *   6. enemy-side sink is a no-op: invoking the wrapper DURING the run does not bump the tank's
+ *      round-incoming accumulators (incomingDamage/shieldAbsorbed/barrierAbsorbed) that are
+ *      snapshotted into the round result AFTER the wrapper runs.
+ *
+ * NON-VACUITY (behaviour #6): the round accumulators (roundIncomingDamage/…) are CLOSURE
+ * variables reset at the top of each round and folded into `rounds[r]` only at post-round
+ * assembly. Invoking the wrapper post-`runCombat` (as the other 5 behaviours do) can never move
+ * those already-finalized numbers, so a post-run assertion on them would be VACUOUS — it would
+ * pass even if the enemy sink bumped the accumulators. To make #6 genuinely catch a regression we
+ * invoke the captured wrapper MID-RUN (inside the test tap, after the accumulators are reset to 0
+ * for the round but before they are snapshotted). The same closure variables back both the
+ * enemy-side sink (no-op) and the player-side sink (which DOES bump them), so if the enemy sink
+ * ever started crediting incoming/shield/barrier, the bump would land in `rounds[0]` and the
+ * assertion below would FAIL. Proven by inverting the sink locally (addIncoming → += amount) which
+ * flips rounds[0].incomingDamage to non-zero and reds the test.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -123,7 +137,17 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
  * sink can be asserted. `enemyAttackers` are passed so any self-buff carrier exists as a real
  * enemy actor whose id matches the hand-built victim's id (so selfBuffNamesForOwners sees it).
  */
-const captureWrapper = (overrides: Partial<CombatEngineInput> = {}) => {
+const captureWrapper = (
+    overrides: Partial<CombatEngineInput> = {},
+    /**
+     * Optional MID-RUN hook. When provided, it is called with the genuine wrapper INSIDE the test
+     * tap — i.e. during the round, after the round-incoming accumulators are reset to 0 but before
+     * they are snapshotted into the round result. This is what makes the no-op assertion in
+     * behaviour #6 non-vacuous: any accumulator bump the enemy sink performed here would surface in
+     * `result.healing.rounds[0]`. Behaviours 1-5 omit it and invoke the wrapper post-run instead.
+     */
+    invokeDuringRun?: (fn: ApplyOutgoing) => void
+) => {
     const bus = createEventBus();
     const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
     const cheated: Extract<CombatEvent, { type: 'cheat-death-activated' }>[] = [];
@@ -134,7 +158,12 @@ const captureWrapper = (overrides: Partial<CombatEngineInput> = {}) => {
         ...healBase(overrides),
         bus,
         __testTapApplyOutgoingToEnemy: (fn) => {
-            if (!wrapper) wrapper = fn;
+            if (!wrapper) {
+                wrapper = fn;
+                // Invoke mid-run on the FIRST round only, so the wrapper's effect (or lack of it)
+                // on this round's live accumulators is observable in the finalized round result.
+                invokeDuringRun?.(fn);
+            }
         },
     } as CombatEngineInput);
     if (!wrapper) throw new Error('test tap was never invoked — applyOutgoingToEnemy not built');
@@ -198,15 +227,26 @@ describe('applyOutgoingToEnemy (player→enemy per-victim damage apply wrapper)'
         expect(destroyed.filter((d) => d.actorId === 'cdEnemy')).toHaveLength(0);
     });
 
-    it('enemy-side sink is a no-op: tank-incoming round accumulators stay untouched', () => {
-        const { wrapper, result } = captureWrapper();
-        // Drive several enemy-victim intakes through the wrapper — none should touch the
-        // tank-incoming buckets (those belong to the enemy→player direction only).
-        wrapper(3000, enemyVictim('e1', 10_000));
-        wrapper(4000, enemyVictim('e2', 10_000));
+    it('enemy-side sink is a no-op: invoking the wrapper MID-RUN does not bump the round accumulators', () => {
+        // Drive several enemy-victim intakes through the REAL wrapper DURING the round (inside the
+        // tap), so the accumulators are still live and will be snapshotted afterwards. A shield
+        // hit (overflow), a Barrier full block, and a plain HP hit each exercise a different sink
+        // hook (addShieldAbsorbed / addBarrierAbsorbed / addIncoming) — all no-ops here.
+        const { result } = captureWrapper(
+            { enemyAttackers: [enemyAttacker('barrierEnemy', selfBuffSkills('Barrier'))] },
+            (fn) => {
+                const shielded = enemyVictim('e1', 10_000);
+                shielded.shieldPool = 1000; // 3000 dmg → 1000 absorbed by shield, 2000 overflow to HP
+                fn(3000, shielded);
+                fn(4000, enemyVictim('barrierEnemy', 10_000)); // fully Barrier-blocked
+                fn(2000, enemyVictim('e2', 10_000)); // plain HP hit
+            }
+        );
         const rounds = result.healing!.rounds;
-        // No enemy attacked the tank in this scenario, so all incoming accumulators are 0 and
-        // must STAY 0 despite the wrapper's calls (the enemy-side sink writes nothing here).
+        // No enemy attacked the TANK this round, so the tank-incoming buckets start at 0. The
+        // mid-run wrapper calls above route through the enemy-side no-op sink, so the buckets must
+        // STILL read 0 in the finalized round — if the enemy sink ever credited these, the bumps
+        // would have landed here (the player-side sink, sharing these same closure vars, would).
         expect(rounds[0].incomingDamage).toBe(0);
         expect(rounds[0].shieldAbsorbed).toBe(0);
         expect(rounds[0].barrierAbsorbed).toBe(0);

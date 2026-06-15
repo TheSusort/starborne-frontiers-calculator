@@ -59,11 +59,14 @@ export function footprintVictims(
 /**
  * Per-hit positional damage driver with live re-resolution.
  *
- * Drives `hits` discrete hits of one skill. For EACH hit it re-resolves the anchor and
+ * Drives `scalars.hits` discrete hits of one skill. For EACH hit it re-resolves the anchor and
  * re-expands the footprint against the LIVE `opposingLiving` roster — so when a victim
  * dies mid-skill (its `currentHp` drops to 0 inside `applyToVictim`), it disappears from
  * the roster and later hits redirect to the next living target automatically. This is the
  * heart of the task: target resolution and footprint expansion MUST run inside the loop.
+ *
+ * The per-hit loop count is `scalars.hits` — the SAME field victimHitDamage reads to re-split
+ * the folded multiplier, keeping hit count from a single canonical source.
  *
  * Whiff (spec §5.1): if `resolvePositionalTarget` returns `null` for a hit (no living
  * opposing actor resolvable — e.g. everything died), that hit lands nothing: no
@@ -73,7 +76,6 @@ export function footprintVictims(
  * Task 8); this file imports no engine state.
  */
 export function applyPositionalDamage(args: {
-    hits: number;
     hitCrits: boolean[];
     scalars: AttackerDamageScalars;
     pattern: ParsedPattern;
@@ -89,7 +91,6 @@ export function applyPositionalDamage(args: {
     emitHit?: (victim: CombatActor, damage: number, didCrit: boolean) => void;
 }): void {
     const {
-        hits,
         hitCrits,
         scalars,
         pattern,
@@ -103,7 +104,10 @@ export function applyPositionalDamage(args: {
         emitHit,
     } = args;
 
-    for (let h = 0; h < hits; h++) {
+    // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
+    // truth that victimHitDamage also reads), avoiding silent under/over-application from a
+    // divergent separate `hits` arg.
+    for (let h = 0; h < scalars.hits; h++) {
         // Re-resolve the anchor against the LIVE roster (a victim killed on an earlier hit
         // is already gone from opposingLiving via currentHp === 0 filtering).
         const anchorActor = resolvePositionalTarget(

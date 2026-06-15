@@ -94,9 +94,8 @@ describe('applyPositionalDamage', () => {
         const emitCalls: Call[] = [];
 
         applyPositionalDamage({
-            hits: 3,
             hitCrits: [false, false, false],
-            scalars: scalars(),
+            scalars: scalars(), // scalars.hits === 3 is the canonical loop count
             pattern,
             actorPosition: 'M2',
             target,
@@ -129,9 +128,8 @@ describe('applyPositionalDamage', () => {
         const emitCalls: Call[] = [];
 
         applyPositionalDamage({
-            hits: 3,
             hitCrits: [false, false, false],
-            scalars: scalars(),
+            scalars: scalars(), // scalars.hits === 3 is the canonical loop count
             pattern,
             actorPosition: 'M2',
             target,
@@ -162,9 +160,9 @@ describe('applyPositionalDamage', () => {
         const emitCalls: Call[] = [];
 
         applyPositionalDamage({
-            hits: 2,
             hitCrits: [false, false],
-            scalars: scalars(),
+            // scalars.hits drives the loop; override to 2 for this 2-hit fixture.
+            scalars: { ...scalars(), hits: 2 },
             pattern,
             actorPosition: 'M2',
             target,
@@ -199,8 +197,8 @@ describe('applyPositionalDamage', () => {
 
         expect(() =>
             applyPositionalDamage({
-                hits: 3,
                 hitCrits: [true], // only one entry; hits 2-3 fall back to false
+                // scalars.hits === 3 drives the loop (canonical count)
                 scalars: { ...scalars(), effectiveCritDamage: 50 },
                 pattern,
                 actorPosition: 'M2',

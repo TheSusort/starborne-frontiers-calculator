@@ -2237,7 +2237,6 @@ export function runCombat(input: CombatEngineInput): {
             applyToVictim: (victim: CombatActor, damage: number) => void;
         }): void => {
             applyPositionalDamage({
-                hits: args.scalars.hits,
                 hitCrits: args.hitCrits ?? [],
                 scalars: args.scalars,
                 pattern: args.pattern,
@@ -2762,6 +2761,17 @@ export function runCombat(input: CombatEngineInput): {
                     // apply to perform (the existing positionalSelection tests set position+target
                     // to exercise target binding only, never a pattern, so they keep the legacy
                     // single-sink credit and never enter this branch).
+                    //
+                    // DELIBERATELY no `selectedEnemy != null` precondition (CodeRabbit raised this):
+                    // in positional/simulator mode there is NO dummy enemy sink to fall back to.
+                    // When per-hit resolution inside applyPositionalDamage finds no living opposing
+                    // actor, the correct behaviour is for the attacker to WHIFF (deal 0) — see the
+                    // death-fallback all-dead-whiff test. Gating `positional` on a pre-resolved
+                    // living target would instead route the firing hit back to the legacy dummy
+                    // sink, recording PHANTOM damage against a target that no longer exists. So we
+                    // enter the positional branch on pattern/target/scalars alone and let the
+                    // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
+                    // this: the per-victim apply is the ONLY damage path here.)
                     const positional =
                         isPositional(actor.position, enemyAttackerActors) &&
                         input.target != null &&
