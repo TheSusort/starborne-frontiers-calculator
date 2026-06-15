@@ -74,7 +74,7 @@ describe('SkillTargetingBoard', () => {
     it('notSelf ally pattern: gray caster cell at origin, no primary, Caster + Allies legend', () => {
         // 'line|2|support+notSelf' → only cov() cells, no origin/primary; ally side.
         // notSelf adds a single gray caster cell at the origin (0,0).
-        const { container, getByText } = render(
+        const { container, getByText, getAllByText } = render(
             <SkillTargetingBoard
                 targeting={active('allies', 'Pattern-Line-Support-Not-Self-Range-2')}
             />
@@ -82,9 +82,12 @@ describe('SkillTargetingBoard', () => {
         expect(container.querySelectorAll('[data-role="primary"]').length).toBe(0);
         expect(container.querySelectorAll('[data-role="caster"]').length).toBe(1);
         expect(container.querySelectorAll('[data-role="splash"]').length).toBeGreaterThan(0);
-        // Legend shows the (gray) Caster marker and the Allies effect.
+        // Legend shows the (gray) Caster marker and the Allies effect. The rule title also reads
+        // "Allies" (the 'team' selection label), so scope the Allies assertion to the legend entry.
         expect(getByText('Caster')).toBeInTheDocument();
-        expect(getByText('Allies')).toBeInTheDocument();
+        expect(getAllByText('Allies').some((el) => el.className.includes('inline-flex'))).toBe(
+            true
+        );
     });
 
     it('non-notSelf patterns have no caster cell', () => {

@@ -36,8 +36,8 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
     },
     team: {
         id: 'team',
-        label: 'Team',
-        description: 'Affects your whole team.',
+        label: 'Allies',
+        description: 'Affects your allies.',
     },
     others: {
         id: 'others',

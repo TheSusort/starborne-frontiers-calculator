@@ -23,6 +23,7 @@ export const CORPUS_PATTERNS: readonly string[] = [
     'Pattern-Line-Support-Not-Self-Range-3',
     'Pattern-Line-Support-Range-1',
     'Pattern-Line-Support-Range-3',
+    'Pattern-Line-Support-from-centre-Range-1',
     'Pattern-Line-Support-whole-lane',
     'Pattern-Line-from-centre-Range-1',
     'Pattern-Prolonged_Cone-Support-Center-Range-2',
