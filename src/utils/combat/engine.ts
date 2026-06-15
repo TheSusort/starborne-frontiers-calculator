@@ -3093,6 +3093,18 @@ export function runCombat(input: CombatEngineInput): {
                     // enemy → no self-buffs) is a safe no-op. The enemy debuffs it lands on the heal
                     // target live in the enemy-side per-target store keyed by the TARGET's id; those
                     // decrement when the TARGET takes its Post Turn (the player-side branch below).
+                    //
+                    // POSITIONAL-PROVOKE DEFERRAL (Phase 4 per-actor-per-side accounting): a debuff a
+                    // PLAYER lands ON this enemy attacker (e.g. a Provoke) lives in the enemy-side store
+                    // keyed by THIS actor's id, which is NOT decremented here — only the dummy-enemy and
+                    // heal-target enemy-side stores decrement. Inert today: positional target resolution
+                    // (provokerOf / resolvePositionalTarget redirect) runs ONLY when board positions are
+                    // passed, which no production caller does yet, and the e2e Provoke fixtures use a
+                    // non-expiring duration. When Phase 4 wires per-actor decrement, the enemy-side store
+                    // for every positioned carrier must decrement here too, else a finite-duration Provoke
+                    // on an enemy attacker (or a non-heal-target player) would persist and keep redirecting
+                    // past its intended duration. (Pre-existing gap, surfaced — not introduced — by the
+                    // capability-only Provoke wiring.)
                     for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
                         bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                     }
