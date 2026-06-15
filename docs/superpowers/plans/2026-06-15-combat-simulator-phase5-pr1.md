@@ -22,6 +22,7 @@
 ---
 
 ## File structure
+
 | File | Responsibility | Change |
 |---|---|---|
 | `src/utils/calculators/battleSimulator.ts` | **new** — `simulateBattle(input): BattleResult`; the event-driven `assembleBattleResult(...)`; result types | Create |
