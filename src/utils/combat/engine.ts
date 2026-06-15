@@ -911,6 +911,23 @@ export interface HealingRoundEngine {
  * enemy, making this a byte-identical relocation of the old single-block round —
  * events are write-only taps that never read or change a sim value.
  */
+/**
+ * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
+ * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
+ * core; the four bits that differ between the healing-mode player intake and (future)
+ * other intakes are injected here so the core stays caller-agnostic. The legacy player
+ * wrapper supplies a sink that performs exactly the original closure's mutations.
+ */
+interface DamageAccountingSink {
+    /** today: roundIncomingDamage += amount */
+    addIncoming: (amount: number) => void;
+    /** today: roundShieldAbsorbed += amount */
+    addShieldAbsorbed: (amount: number) => void;
+    /** today: roundBarrierAbsorbed += amount */
+    addBarrierAbsorbed: (amount: number) => void;
+    /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
+    onHealTargetDestroyed?: (victim: CombatActor) => void;
+}
 export function runCombat(input: CombatEngineInput): {
     rounds: RoundData[];
     rawTotals: {
@@ -1916,11 +1933,19 @@ export function runCombat(input: CombatEngineInput): {
         // so the enemy's incoming drains the actor its parsed target picked. Heal-target-specific
         // bookkeeping (healTargetDestroyedRound) stays gated on `victim === healTarget` below so
         // it is never written for a non-heal-target victim.
-        const applyIncomingToTarget = (
+        // Shared damage-intake core (Phase 4 PR 1, Task 2): the byte-identical body of the
+        // legacy applyIncomingToTarget closure with the four side-specific accounting bits
+        // hoisted into `sink`. Everything keyed off `victim` (Barrier full-immunity, shield
+        // drain, HP decrement, Cheat-Death intercept, recordDestroyed, hp-changed) is moved
+        // verbatim. Kept inside runCombat — it captures statusEngine/bus/r/recipientMaxHp/
+        // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
+        // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
+        const applyVictimDamage = (
             damage: number,
-            victim: CombatActor = healTarget!
+            victim: CombatActor,
+            sink: DamageAccountingSink
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
-            roundIncomingDamage += damage;
+            sink.addIncoming(damage);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -1943,7 +1968,7 @@ export function runCombat(input: CombatEngineInput): {
                 BARRIER_BUFFS.has(n)
             );
             if (carriesBarrier) {
-                roundBarrierAbsorbed += damage;
+                sink.addBarrierAbsorbed(damage);
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',
@@ -1958,7 +1983,7 @@ export function runCombat(input: CombatEngineInput): {
             const shieldBefore = victim.shieldPool;
             const absorbed = Math.min(victim.shieldPool, damage);
             victim.shieldPool -= absorbed;
-            roundShieldAbsorbed += absorbed;
+            sink.addShieldAbsorbed(absorbed);
             const hpDamage = damage - absorbed;
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
@@ -2009,11 +2034,10 @@ export function runCombat(input: CombatEngineInput): {
                     // off the heal target's runtime field below.
                     recordDestroyed(victim, r, bus);
                     // healTargetDestroyedRound tracks the HEAL TARGET specifically — only write it
-                    // when the victim IS the heal target. A positional-selected non-heal-target
-                    // victim records its own destroyedRound (on `victim`) without touching this.
-                    if (victim === healTarget) {
-                        healTargetDestroyedRound = victim.destroyedRound;
-                    }
+                    // when the victim IS the heal target. The guard lives in the sink callback so a
+                    // positional-selected non-heal-target victim records its own destroyedRound (on
+                    // `victim`) without touching this.
+                    sink.onHealTargetDestroyed?.(victim);
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -2034,6 +2058,32 @@ export function runCombat(input: CombatEngineInput): {
             }
             return { shieldBefore, hpDamage, barriered: false };
         };
+        // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
+        // reproduces exactly the original closure's mutations (roundIncomingDamage /
+        // roundShieldAbsorbed / roundBarrierAbsorbed bumps + the heal-target-gated
+        // healTargetDestroyedRound write). Signature, default `victim = healTarget!`, and return
+        // value are unchanged, so every existing call site stays byte-identical.
+        const playerSink: DamageAccountingSink = {
+            addIncoming: (a) => {
+                roundIncomingDamage += a;
+            },
+            addShieldAbsorbed: (a) => {
+                roundShieldAbsorbed += a;
+            },
+            addBarrierAbsorbed: (a) => {
+                roundBarrierAbsorbed += a;
+            },
+            onHealTargetDestroyed: (v) => {
+                if (v === healTarget) {
+                    healTargetDestroyedRound = v.destroyedRound;
+                }
+            },
+        };
+        const applyIncomingToTarget = (
+            damage: number,
+            victim: CombatActor = healTarget!
+        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
+            applyVictimDamage(damage, victim, playerSink);
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
