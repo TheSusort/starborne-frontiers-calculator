@@ -3069,10 +3069,13 @@ describe('healing mode — Salvation on-destroyed ally-heal (Phase 4b Task 9)', 
         expect(destroyed.filter((e) => e.actorId === 'attacker')).toHaveLength(1);
         expect(result.healing!.destroyedRound).toBe(1);
         // The on-destroyed all-allies heal fired ONCE: basis = caster (Salvation) max HP 2000,
-        // pct 80 → 1600 raw per recipient. Recipients = ['attacker', 't1'] → directHeal 3200,
-        // all credited to the owner 'attacker'. (A phantom on-cast heal firing every round
-        // would still only run once here — numRounds 1 — but the directHeal magnitude proves
-        // BOTH all-allies recipients were repaired, i.e. the heal parsed and reached allies.)
-        expect(focusHeal(result, 'directHeal')).toBeCloseTo(3200, 6);
+        // pct 80 → 1600 raw per recipient. Recipients = ['attacker', 't1'], but the caster
+        // ('attacker') is DEAD when its own on-destroyed heal fires, so the dead recipient is
+        // excluded from the gross credit (Phase 4 PR 2 Task 3 — formerly Phase 4b KNOWN
+        // LIMITATION 5). Only the one LIVING ally ('t1') is credited → directHeal 1600, all
+        // credited to the owner 'attacker'. (A phantom on-cast heal firing every round would
+        // still only run once here — numRounds 1 — but the directHeal magnitude proves the
+        // living all-allies recipient was repaired, i.e. the heal parsed and reached allies.)
+        expect(focusHeal(result, 'directHeal')).toBeCloseTo(1600, 6);
     });
 });
