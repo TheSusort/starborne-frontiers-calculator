@@ -18,6 +18,11 @@
  * HP% is derived as maxHp - cumulative(damageTaken over rounds <= r), uniform for both
  * sides (ignores healing/shields on the HP curve — acceptable for PR1's surface).
  *
+ * Debuff persistence: `activeDebuffs` is infliction-only — there is no `debuff-expired`
+ * event in the stream, so once a debuff is added it accumulates and persists for the rest
+ * of the battle. This is asymmetric with `activeBuffs`, which DOES expire via `buff-expired`.
+ * A PR2 consumer should not expect debuffs to clear over time.
+ *
  * `simulateBattle` (the runCombat wrapper that produces these inputs) is Task 3 — NOT here.
  */
 import type { CombatEvent } from '../combat/events';
@@ -73,6 +78,12 @@ interface RosterEntry {
 
 const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
 
+/**
+ * Precondition: expects BOTH sides of `roster` to be non-empty. The wipe checks guard
+ * against empty sides (a side with zero members is never treated as "wiped"), so a
+ * degenerate single-side roster fails safe to `draw` at numRounds rather than awarding
+ * a spurious winner at round 1.
+ */
 export function assembleBattleResult(args: {
     events: CombatEvent[];
     perRoundPerTarget: Record<number, Record<string, number>>;
@@ -194,6 +205,10 @@ export function assembleBattleResult(args: {
                     });
                 }
                 if (e.targets.length === 0) {
+                    // Divergence from the aggregation site above: that splits `amount`
+                    // across targets, so an empty-targets heal credits nobody's
+                    // healingReceived. Here the log instead surfaces a single full-amount
+                    // line so the heal is still visible in the per-round log.
                     log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
                 }
             } else if (e.type === 'ship-destroyed') {
@@ -204,18 +219,21 @@ export function assembleBattleResult(args: {
         rounds.push({ round, ships, events: log });
 
         // Termination: first round where ALL of one side's actors are destroyed.
-        const playerWiped = roster
-            .filter((r) => r.side === 'player')
-            .every((r) => {
-                const d = destroyedAt.get(r.actorId);
-                return d !== undefined && d <= round;
-            });
-        const enemyWiped = roster
-            .filter((r) => r.side === 'enemy')
-            .every((r) => {
-                const d = destroyedAt.get(r.actorId);
-                return d !== undefined && d <= round;
-            });
+        // A side counts as wiped only if it has >=1 member AND all are destroyed —
+        // an empty side ([].every(...) === true) must NOT be treated as wiped, or a
+        // degenerate single-side roster would award a spurious winner at round 1.
+        const isWiped = (side: 'player' | 'enemy'): boolean => {
+            const members = roster.filter((r) => r.side === side);
+            return (
+                members.length > 0 &&
+                members.every((r) => {
+                    const d = destroyedAt.get(r.actorId);
+                    return d !== undefined && d <= round;
+                })
+            );
+        };
+        const playerWiped = isWiped('player');
+        const enemyWiped = isWiped('enemy');
 
         if (playerWiped || enemyWiped) {
             lastRound = round;
