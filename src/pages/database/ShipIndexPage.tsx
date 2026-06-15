@@ -24,6 +24,7 @@ import { StatName } from '../../types/stats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Modal } from '../../components/ui/layout/Modal';
 import { BioContent } from '../../components/ship/BioContent';
+import { parseShipTargeting } from '../../utils/targetingParser';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -347,270 +348,293 @@ export const ShipIndexPage: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {filteredAndSortedShips.length > 0 ? (
-                            filteredAndSortedShips.map((ship, index) => (
-                                <div
-                                    key={ship.name}
-                                    data-tutorial={index === 0 ? 'ship-db-first-card' : undefined}
-                                >
-                                    <ShipDisplayImage
-                                        ship={ship}
-                                        panelVariant="compact"
-                                        onQuickAdd={onQuickAdd}
-                                        isAdded={addedShips.has(ship.name)}
-                                        onAddToComparison={addToComparison}
-                                        isInComparison={isInComparison(ship.id)}
-                                        onBioClick={setBioShipName}
+                            filteredAndSortedShips.map((ship, index) => {
+                                const shipTargeting = parseShipTargeting(ship);
+                                return (
+                                    <div
+                                        key={ship.name}
+                                        data-tutorial={
+                                            index === 0 ? 'ship-db-first-card' : undefined
+                                        }
                                     >
-                                        <div
-                                            className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3"
-                                            {...(index === 0
-                                                ? { 'data-tutorial': 'ship-db-skill-buttons' }
-                                                : {})}
+                                        <ShipDisplayImage
+                                            ship={ship}
+                                            panelVariant="compact"
+                                            onQuickAdd={onQuickAdd}
+                                            isAdded={addedShips.has(ship.name)}
+                                            onAddToComparison={addToComparison}
+                                            isInComparison={isInComparison(ship.id)}
+                                            onBioClick={setBioShipName}
                                         >
-                                            <div className="flex flex-wrap gap-2 justify-center">
-                                                {ship.activeSkillText && (
-                                                    <div className="relative">
-                                                        <div
-                                                            ref={(el) => {
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_active`
-                                                                ] = el;
-                                                            }}
-                                                            onMouseEnter={() =>
-                                                                setActiveHover(ship.name)
-                                                            }
-                                                            onMouseLeave={() => setActiveHover('')}
-                                                        >
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    void copySkillText(
-                                                                        ship.name,
-                                                                        'Active',
-                                                                        ship.activeSkillText!
-                                                                    )
+                                            <div
+                                                className="flex flex-col items-center justify-center border-b border-dark-border pb-2 m-3"
+                                                {...(index === 0
+                                                    ? { 'data-tutorial': 'ship-db-skill-buttons' }
+                                                    : {})}
+                                            >
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {ship.activeSkillText && (
+                                                        <div className="relative">
+                                                            <div
+                                                                ref={(el) => {
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_active`
+                                                                    ] = el;
+                                                                }}
+                                                                onMouseEnter={() =>
+                                                                    setActiveHover(ship.name)
+                                                                }
+                                                                onMouseLeave={() =>
+                                                                    setActiveHover('')
                                                                 }
                                                             >
-                                                                {copiedSkill ===
-                                                                `${ship.name}_Active`
-                                                                    ? 'Copied!'
-                                                                    : 'Active'}
-                                                            </Button>
-                                                        </div>
-                                                        <Tooltip
-                                                            isVisible={activeHover === ship.name}
-                                                            targetElement={
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_active`
-                                                                ]
-                                                            }
-                                                        >
-                                                            <SkillTooltip
-                                                                skillText={ship.activeSkillText}
-                                                                skillType="Active Skill"
-                                                            />
-                                                        </Tooltip>
-                                                    </div>
-                                                )}
-                                                {ship.chargeSkillText && (
-                                                    <div className="relative">
-                                                        <div
-                                                            ref={(el) => {
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_charge`
-                                                                ] = el;
-                                                            }}
-                                                            onMouseEnter={() =>
-                                                                setChargeHover(ship.name)
-                                                            }
-                                                            onMouseLeave={() => setChargeHover('')}
-                                                        >
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    void copySkillText(
-                                                                        ship.name,
-                                                                        'Charge',
-                                                                        ship.chargeSkillText!
-                                                                    )
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        void copySkillText(
+                                                                            ship.name,
+                                                                            'Active',
+                                                                            ship.activeSkillText!
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {copiedSkill ===
+                                                                    `${ship.name}_Active`
+                                                                        ? 'Copied!'
+                                                                        : 'Active'}
+                                                                </Button>
+                                                            </div>
+                                                            <Tooltip
+                                                                isVisible={
+                                                                    activeHover === ship.name
+                                                                }
+                                                                targetElement={
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_active`
+                                                                    ]
                                                                 }
                                                             >
-                                                                {copiedSkill ===
-                                                                `${ship.name}_Charge`
-                                                                    ? 'Copied!'
-                                                                    : 'Charge'}
-                                                            </Button>
+                                                                <SkillTooltip
+                                                                    skillText={ship.activeSkillText}
+                                                                    skillType="Active Skill"
+                                                                    targeting={shipTargeting.active}
+                                                                />
+                                                            </Tooltip>
                                                         </div>
-                                                        <Tooltip
-                                                            isVisible={chargeHover === ship.name}
-                                                            targetElement={
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_charge`
-                                                                ]
-                                                            }
-                                                        >
-                                                            <SkillTooltip
-                                                                skillText={ship.chargeSkillText}
-                                                                skillType="Charge Skill"
-                                                                charge={ship.chargeSkillCharge}
-                                                            />
-                                                        </Tooltip>
-                                                    </div>
-                                                )}
-                                                {ship.firstPassiveSkillText && (
-                                                    <div className="relative">
-                                                        <div
-                                                            ref={(el) => {
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive1`
-                                                                ] = el;
-                                                            }}
-                                                            onMouseEnter={() =>
-                                                                setPassive1Hover(ship.name)
-                                                            }
-                                                            onMouseLeave={() =>
-                                                                setPassive1Hover('')
-                                                            }
-                                                        >
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    void copySkillText(
-                                                                        ship.name,
-                                                                        'Passive',
-                                                                        ship.firstPassiveSkillText!
-                                                                    )
+                                                    )}
+                                                    {ship.chargeSkillText && (
+                                                        <div className="relative">
+                                                            <div
+                                                                ref={(el) => {
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_charge`
+                                                                    ] = el;
+                                                                }}
+                                                                onMouseEnter={() =>
+                                                                    setChargeHover(ship.name)
+                                                                }
+                                                                onMouseLeave={() =>
+                                                                    setChargeHover('')
                                                                 }
                                                             >
-                                                                {copiedSkill ===
-                                                                `${ship.name}_Passive`
-                                                                    ? 'Copied!'
-                                                                    : 'Passive'}
-                                                            </Button>
-                                                        </div>
-                                                        <Tooltip
-                                                            isVisible={passive1Hover === ship.name}
-                                                            targetElement={
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive1`
-                                                                ]
-                                                            }
-                                                        >
-                                                            <SkillTooltip
-                                                                skillText={
-                                                                    ship.firstPassiveSkillText
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        void copySkillText(
+                                                                            ship.name,
+                                                                            'Charge',
+                                                                            ship.chargeSkillText!
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {copiedSkill ===
+                                                                    `${ship.name}_Charge`
+                                                                        ? 'Copied!'
+                                                                        : 'Charge'}
+                                                                </Button>
+                                                            </div>
+                                                            <Tooltip
+                                                                isVisible={
+                                                                    chargeHover === ship.name
                                                                 }
-                                                                skillType="Passive Skill"
-                                                            />
-                                                        </Tooltip>
-                                                    </div>
-                                                )}
-                                                {ship.secondPassiveSkillText && (
-                                                    <div className="relative">
-                                                        <div
-                                                            ref={(el) => {
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive2`
-                                                                ] = el;
-                                                            }}
-                                                            onMouseEnter={() =>
-                                                                setPassive2Hover(ship.name)
-                                                            }
-                                                            onMouseLeave={() =>
-                                                                setPassive2Hover('')
-                                                            }
-                                                        >
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    void copySkillText(
-                                                                        ship.name,
-                                                                        'Passive R2',
-                                                                        ship.secondPassiveSkillText!
-                                                                    )
+                                                                targetElement={
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_charge`
+                                                                    ]
                                                                 }
                                                             >
-                                                                {copiedSkill ===
-                                                                `${ship.name}_Passive R2`
-                                                                    ? 'Copied!'
-                                                                    : 'Passive R2'}
-                                                            </Button>
+                                                                <SkillTooltip
+                                                                    skillText={ship.chargeSkillText}
+                                                                    skillType="Charge Skill"
+                                                                    charge={ship.chargeSkillCharge}
+                                                                    targeting={
+                                                                        shipTargeting.charged
+                                                                    }
+                                                                />
+                                                            </Tooltip>
                                                         </div>
-                                                        <Tooltip
-                                                            isVisible={passive2Hover === ship.name}
-                                                            targetElement={
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive2`
-                                                                ]
-                                                            }
-                                                        >
-                                                            <SkillTooltip
-                                                                skillText={
-                                                                    ship.secondPassiveSkillText
+                                                    )}
+                                                    {ship.firstPassiveSkillText && (
+                                                        <div className="relative">
+                                                            <div
+                                                                ref={(el) => {
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive1`
+                                                                    ] = el;
+                                                                }}
+                                                                onMouseEnter={() =>
+                                                                    setPassive1Hover(ship.name)
                                                                 }
-                                                                skillType="Passive Skill R2"
-                                                            />
-                                                        </Tooltip>
-                                                    </div>
-                                                )}
-                                                {ship.thirdPassiveSkillText && (
-                                                    <div className="relative">
-                                                        <div
-                                                            ref={(el) => {
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive3`
-                                                                ] = el;
-                                                            }}
-                                                            onMouseEnter={() =>
-                                                                setPassive3Hover(ship.name)
-                                                            }
-                                                            onMouseLeave={() =>
-                                                                setPassive3Hover('')
-                                                            }
-                                                        >
-                                                            <Button
-                                                                variant="secondary"
-                                                                size="xs"
-                                                                onClick={() =>
-                                                                    void copySkillText(
-                                                                        ship.name,
-                                                                        'Passive R4',
-                                                                        ship.thirdPassiveSkillText!
-                                                                    )
+                                                                onMouseLeave={() =>
+                                                                    setPassive1Hover('')
                                                                 }
                                                             >
-                                                                {copiedSkill ===
-                                                                `${ship.name}_Passive R4`
-                                                                    ? 'Copied!'
-                                                                    : 'Passive R4'}
-                                                            </Button>
-                                                        </div>
-                                                        <Tooltip
-                                                            isVisible={passive3Hover === ship.name}
-                                                            targetElement={
-                                                                tooltipRefs.current[
-                                                                    `${ship.name}_passive3`
-                                                                ]
-                                                            }
-                                                        >
-                                                            <SkillTooltip
-                                                                skillText={
-                                                                    ship.thirdPassiveSkillText
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        void copySkillText(
+                                                                            ship.name,
+                                                                            'Passive',
+                                                                            ship.firstPassiveSkillText!
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {copiedSkill ===
+                                                                    `${ship.name}_Passive`
+                                                                        ? 'Copied!'
+                                                                        : 'Passive'}
+                                                                </Button>
+                                                            </div>
+                                                            <Tooltip
+                                                                isVisible={
+                                                                    passive1Hover === ship.name
                                                                 }
-                                                                skillType="Passive Skill R4"
-                                                            />
-                                                        </Tooltip>
-                                                    </div>
-                                                )}
+                                                                targetElement={
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive1`
+                                                                    ]
+                                                                }
+                                                            >
+                                                                <SkillTooltip
+                                                                    skillText={
+                                                                        ship.firstPassiveSkillText
+                                                                    }
+                                                                    skillType="Passive Skill"
+                                                                />
+                                                            </Tooltip>
+                                                        </div>
+                                                    )}
+                                                    {ship.secondPassiveSkillText && (
+                                                        <div className="relative">
+                                                            <div
+                                                                ref={(el) => {
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive2`
+                                                                    ] = el;
+                                                                }}
+                                                                onMouseEnter={() =>
+                                                                    setPassive2Hover(ship.name)
+                                                                }
+                                                                onMouseLeave={() =>
+                                                                    setPassive2Hover('')
+                                                                }
+                                                            >
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        void copySkillText(
+                                                                            ship.name,
+                                                                            'Passive R2',
+                                                                            ship.secondPassiveSkillText!
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {copiedSkill ===
+                                                                    `${ship.name}_Passive R2`
+                                                                        ? 'Copied!'
+                                                                        : 'Passive R2'}
+                                                                </Button>
+                                                            </div>
+                                                            <Tooltip
+                                                                isVisible={
+                                                                    passive2Hover === ship.name
+                                                                }
+                                                                targetElement={
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive2`
+                                                                    ]
+                                                                }
+                                                            >
+                                                                <SkillTooltip
+                                                                    skillText={
+                                                                        ship.secondPassiveSkillText
+                                                                    }
+                                                                    skillType="Passive Skill R2"
+                                                                />
+                                                            </Tooltip>
+                                                        </div>
+                                                    )}
+                                                    {ship.thirdPassiveSkillText && (
+                                                        <div className="relative">
+                                                            <div
+                                                                ref={(el) => {
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive3`
+                                                                    ] = el;
+                                                                }}
+                                                                onMouseEnter={() =>
+                                                                    setPassive3Hover(ship.name)
+                                                                }
+                                                                onMouseLeave={() =>
+                                                                    setPassive3Hover('')
+                                                                }
+                                                            >
+                                                                <Button
+                                                                    variant="secondary"
+                                                                    size="xs"
+                                                                    onClick={() =>
+                                                                        void copySkillText(
+                                                                            ship.name,
+                                                                            'Passive R4',
+                                                                            ship.thirdPassiveSkillText!
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    {copiedSkill ===
+                                                                    `${ship.name}_Passive R4`
+                                                                        ? 'Copied!'
+                                                                        : 'Passive R4'}
+                                                                </Button>
+                                                            </div>
+                                                            <Tooltip
+                                                                isVisible={
+                                                                    passive3Hover === ship.name
+                                                                }
+                                                                targetElement={
+                                                                    tooltipRefs.current[
+                                                                        `${ship.name}_passive3`
+                                                                    ]
+                                                                }
+                                                            >
+                                                                <SkillTooltip
+                                                                    skillText={
+                                                                        ship.thirdPassiveSkillText
+                                                                    }
+                                                                    skillType="Passive Skill R4"
+                                                                />
+                                                            </Tooltip>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    </ShipDisplayImage>
-                                </div>
-                            ))
+                                        </ShipDisplayImage>
+                                    </div>
+                                );
+                            })
                         ) : (
                             <div className="col-span-full text-center py-8 text-theme-text-secondary bg-dark-lighter border-2 border-dashed">
                                 No matching ships found

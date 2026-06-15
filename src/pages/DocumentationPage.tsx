@@ -749,7 +749,10 @@ const DocumentationPage: React.FC = () => {
                                     Charge (with turn count), and Passive R1/R2/R4 — with full
                                     formatted skill text. Damage values are highlighted in orange,
                                     buff and debuff names are underlined with tooltip descriptions,
-                                    and beneficial effects appear in green.
+                                    and beneficial effects appear in green. Hovering an Active or
+                                    Charge skill shows a board diagram of its targeting footprint —
+                                    which cells the skill hits (red = primary target, orange =
+                                    splash).
                                 </p>
                             </div>
                         </div>
@@ -2421,19 +2424,18 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Enemy Hacking &amp; Heal-Target Security:
                                         </span>{' '}
-                                        Each enemy has a Hacking stat, and the heal target
-                                        has a Security stat. An enemy&apos;s debuffs — both timed
-                                        effects and damage-over-time — land based on its Hacking
-                                        versus the target&apos;s Security: the higher the
-                                        enemy&apos;s Hacking over the target&apos;s Security, the
-                                        more reliably its debuffs stick (and high enough Security
-                                        can shrug them off entirely). The exact landing chance is
-                                        (enemy Hacking − target Security), clamped to a 0–100%
-                                        range. Defaults: a freshly added manual enemy starts at 200
-                                        Hacking (picking an enemy ship fills Hacking from the
-                                        ship&apos;s stats), and the target&apos;s Security defaults
-                                        to 0 — so debuffs land at full chance until you raise the
-                                        target&apos;s Security.
+                                        Each enemy has a Hacking stat, and the heal target has a
+                                        Security stat. An enemy&apos;s debuffs — both timed effects
+                                        and damage-over-time — land based on its Hacking versus the
+                                        target&apos;s Security: the higher the enemy&apos;s Hacking
+                                        over the target&apos;s Security, the more reliably its
+                                        debuffs stick (and high enough Security can shrug them off
+                                        entirely). The exact landing chance is (enemy Hacking −
+                                        target Security), clamped to a 0–100% range. Defaults: a
+                                        freshly added manual enemy starts at 200 Hacking (picking an
+                                        enemy ship fills Hacking from the ship&apos;s stats), and
+                                        the target&apos;s Security defaults to 0 — so debuffs land
+                                        at full chance until you raise the target&apos;s Security.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

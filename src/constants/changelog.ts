@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.63.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Skill hovercards now show a board diagram of each Active and Charge skill's targeting footprint — which cells the skill hits (red = primary target, orange = splash).",
     "DPS/Healing Calculator: finite-duration passive buffs now correctly expire. Buffs a ship grants itself at the start of combat for a set number of turns — such as Everliving Regeneration on Yazid and Tycho, Atlas Coordination, or Iridium's Taunt — were treated as permanent and even persisted through a destroyed-and-revived (Cheat Death) ship. They now run for their stated turns and clear on death like any other buff.",
     "Healing Calculator: the hover-gated round panel now has a dedicated Heal Target section showing the target's own active buffs (Cheat Death, Everliving Regeneration, Barrier, and the like) alongside the debuffs and damage-over-time effects currently on it (aggregated across all enemies) — a target-centric survivability view, separate from the per-enemy breakdown.",
     'Fixed voting on community gear recommendations — votes were silently failing due to a leftover from the old recommendation system in the database.',
