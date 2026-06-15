@@ -24,7 +24,13 @@ import { StatName } from '../../types/stats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Modal } from '../../components/ui/layout/Modal';
 import { BioContent } from '../../components/ship/BioContent';
-import { parseShipTargeting } from '../../utils/targetingParser';
+import { parseShipTargeting, PatternShape } from '../../utils/targetingParser';
+import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
+import {
+    getShipTargetingFacets,
+    matchesTargetingFilters,
+    buildTargetingSearchText,
+} from '../../utils/targeting/targetingFilter';
 
 export const ShipIndexPage: React.FC = () => {
     const { ships: templateShips, loading, error } = useShipsData();
@@ -40,6 +46,8 @@ export const ShipIndexPage: React.FC = () => {
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
         (state.filters.affinities?.length ?? 0) > 0 ||
+        (state.filters.targetSelections?.length ?? 0) > 0 ||
+        (state.filters.patternShapes?.length ?? 0) > 0 ||
         searchQuery.length > 0;
     const [addedShips, setAddedShips] = useState<Set<string>>(new Set());
     const {
@@ -114,6 +122,20 @@ export const ShipIndexPage: React.FC = () => {
         }));
     };
 
+    const setSelectedTargetSelections = (targetSelections: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, targetSelections },
+        }));
+    };
+
+    const setSelectedPatternShapes = (patternShapes: string[]) => {
+        setState((prev) => ({
+            ...prev,
+            filters: { ...prev.filters, patternShapes },
+        }));
+    };
+
     const setSort = (sort: SortConfig) => {
         setState((prev) => ({ ...prev, sort }));
     };
@@ -138,6 +160,17 @@ export const ShipIndexPage: React.FC = () => {
                 .filter((affinity): affinity is AffinityName => affinity !== undefined)
         );
         return Array.from(affinities).sort((a, b) => a.localeCompare(b));
+    }, [templateShips]);
+
+    const uniquePatternShapes = useMemo(() => {
+        if (!templateShips) return [];
+        const shapes = new Set<PatternShape>();
+        templateShips.forEach((ship) => {
+            getShipTargetingFacets(ship).shapes.forEach((s) => shapes.add(s));
+        });
+        return Array.from(shapes).sort((a, b) =>
+            PATTERN_SHAPES[a].label.localeCompare(PATTERN_SHAPES[b].label)
+        );
     }, [templateShips]);
 
     const filters: FilterConfig[] = [
@@ -181,6 +214,26 @@ export const ShipIndexPage: React.FC = () => {
                 label: affinity.charAt(0).toUpperCase() + affinity.slice(1),
             })),
         },
+        {
+            id: 'targetSelection',
+            label: 'Who it hits',
+            values: state.filters.targetSelections ?? [],
+            onChange: setSelectedTargetSelections,
+            options: Object.values(TARGETING_RULES).map((rule) => ({
+                value: rule.id,
+                label: rule.label,
+            })),
+        },
+        {
+            id: 'patternShape',
+            label: 'Pattern',
+            values: state.filters.patternShapes ?? [],
+            onChange: setSelectedPatternShapes,
+            options: uniquePatternShapes.map((shape) => ({
+                value: shape,
+                label: PATTERN_SHAPES[shape].label,
+            })),
+        },
     ];
 
     const filteredAndSortedShips = useMemo(() => {
@@ -213,9 +266,19 @@ export const ShipIndexPage: React.FC = () => {
                 (ship.secondPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false) ||
                 (ship.thirdPassiveSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
-                    false);
+                    false) ||
+                buildTargetingSearchText(ship).includes(searchQuery.toLowerCase());
+            const matchesTargeting = matchesTargetingFilters(ship, {
+                selections: state.filters.targetSelections,
+                shapes: state.filters.patternShapes,
+            });
             return (
-                matchesFaction && matchesType && matchesRarity && matchesAffinity && matchesSearch
+                matchesFaction &&
+                matchesType &&
+                matchesRarity &&
+                matchesAffinity &&
+                matchesTargeting &&
+                matchesSearch
             );
         });
 
@@ -328,7 +391,7 @@ export const ShipIndexPage: React.FC = () => {
                             setSort={setSort}
                             searchValue={searchQuery}
                             onSearchChange={setSearchQuery}
-                            searchPlaceholder="Search ships by name or skills..."
+                            searchPlaceholder="Search ships by name, skills, or targeting…"
                         />
                     </div>
 
