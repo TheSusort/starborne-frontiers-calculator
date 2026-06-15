@@ -242,3 +242,146 @@ describe('Task 1 — all-dead positional whiff (player→enemy)', () => {
         expect(dead.size).toBe(0);
     });
 });
+
+/**
+ * Task 2 — Harvester `on-ally-destroyed` extra action under a POSITIONAL ally death.
+ *
+ * PR 1 made an enemy positional AoE able to KILL a non-heal-target player ally: the enemy
+ * positional apply hits each player victim via `applyIncomingToTarget` → `recordDestroyed` →
+ * emits `ship-destroyed{victimId}`. The Phase-4b `on-ally-destroyed` reactive listener (registered
+ * per player owner) fires on that emit and routes the GRANTER's `extra-action` ability through the
+ * reactive bridge into `grantExtraAction`. Because the ally dies DURING the enemy's turn while the
+ * round-local queue is still being walked, the grant splices into the CURRENT round (Path A):
+ * the surviving Harvester focus takes a SAME-round extra turn.
+ *
+ * Before PR 1 this was DORMANT — no positioned ally could be killed by an AoE. This proves the
+ * bridge activates under the new positional-death capability. It mirrors the non-positional
+ * `reactiveExtraAction.test.ts` Path A case, swapping the direct enemy hit for a positional AoE.
+ *
+ * Observable: `RoundData.extraTurns` (focus-actor extra turn count) === 1 in round 1.
+ *
+ * Layout: the Harvester focus = heal target 'attacker' at M1 (far back, OUTSIDE the footprint so
+ * it SURVIVES). The dying ally 'team-victim' is the front-most player at M4. The enemy 'atk1' at
+ * M1 fires Line-Range-1 `front` → anchors the front-most player (M4 ally) for FULL damage (5000 >
+ * its 3000 HP → lethal) and covers M3 (empty). The focus at M1 is not in the M4+M3 footprint, so
+ * it lives to take the extra turn. Speeds: enemy 100 (acts first, kills the ally), focus 50, ally
+ * 10 (slowest). The ally dies on the enemy's earlier turn → the focus's on-ally-destroyed listener
+ * enqueues → the per-turn drain splices the focus's extra turn into the remaining round-1 queue.
+ */
+const lineRange1Pattern = (): ParsedPattern => ({
+    raw: 'line-range-1',
+    shape: 'line',
+    range: 1,
+    modifiers: {},
+});
+
+// Harvester focus skills: a basic 1x enemy attack + an on-ally-destroyed extra-action passive.
+const harvesterSkills = (): ShipSkills => {
+    idc = 0;
+    return {
+        slots: [
+            basicAttack(),
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'extra-action',
+                        target: 'self',
+                        trigger: 'on-ally-destroyed',
+                        config: { type: 'extra-action', oncePerRound: true },
+                    }),
+                ],
+            },
+        ],
+    };
+};
+
+// A passive, positioned player victim (walked team actor, zero offense). HP sized to bracket the
+// enemy AoE damage; it deals nothing on its own turn.
+const passivePlayerAt = (id: string, position: Position, hp: number, speed: number): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+// A positioned ENEMY attacker that deals real damage via a parsed target + pattern (drives the
+// Task-9 enemy-site positional apply against the PLAYER roster).
+const offensiveEnemyAt = (
+    id: string,
+    position: Position,
+    selection: ParsedTarget['selection'],
+    pattern: ParsedPattern,
+    speed: number,
+    attack: number
+): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget(selection),
+        pattern,
+        // A real basic-attack damage ability — REQUIRED for the firing hit to produce
+        // `positionalScalars` so the enemy-site positional apply (Task 9) lands on the player roster.
+        shipSkills: { slots: [basicAttack()] } as ShipSkills,
+    }) as EnemyAttacker;
+
+describe('Task 2 — Harvester on-ally-destroyed extra action under positional ally death', () => {
+    it('the surviving Harvester focus takes a same-round extra turn when an enemy AoE kills a positioned ally', () => {
+        idc = 0;
+        const input = BASE(
+            {
+                shipSkills: harvesterSkills(),
+                hp: 1_000_000_000, // focus survives (and is outside the footprint anyway)
+                position: 'M1', // far back, NOT in the M4+M3 AoE footprint
+                speed: 50, // acts after the enemy (100), before the ally (10)
+                // No positional target on the focus → its own turn uses the legacy sink (the
+                // dummy enemy never dies → no Path-B noise). The on-ally-destroyed passive is
+                // what we are exercising.
+                teamActors: [passivePlayerAt('team-victim', 'M4', 3000, 10)],
+                enemyAttackers: [
+                    // attack 5000 vs the M4 ally's 3000 HP → lethal full-damage origin hit.
+                    offensiveEnemyAt('atk1', 'M1', 'front', lineRange1Pattern(), 100, 5000),
+                ],
+            },
+            // Focus is NON-positional (no target) → it does not fire a positional hit of its own.
+            undefined,
+            undefined
+        );
+
+        const bus = createEventBus();
+        const destroyed: string[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e.actorId));
+        const result = runCombat({ ...input, bus });
+
+        // The ally actually died this round (otherwise on-ally-destroyed never fired).
+        expect(destroyed).toContain('team-victim');
+        // The on-ally-destroyed → extra-action bridge spliced the focus's extra turn into the live
+        // round-1 queue (Path A): the focus took exactly ONE extra turn.
+        expect(result.rounds[0].extraTurns).toBe(1);
+    });
+});
