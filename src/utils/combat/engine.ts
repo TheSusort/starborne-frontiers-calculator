@@ -35,6 +35,7 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
+import { applyPositionalDamage } from './positionalApply';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
@@ -748,9 +749,11 @@ export type TeamActorEngineInput = TeamActorInput & {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
+    /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
+     *  positional target selection AND the Task 8b positional apply at the team damage site. */
     target?: ParsedTarget;
-    /** Pre-parsed positional pattern for this team actor (positional plumbing — set but not yet consumed by apply). */
+    /** Pre-parsed positional pattern for this team actor. Consumed by the Task 8b positional
+     *  apply at the team damage site (origin/covered footprint expansion). */
     pattern?: ParsedPattern;
 };
 
@@ -850,9 +853,11 @@ export interface CombatEngineInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
-    /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
+    /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
+     *  target selection AND the Task 8b positional apply at the focus damage site. */
     target?: ParsedTarget;
-    /** Pre-parsed positional pattern for the focus attacker (positional plumbing — set but not yet consumed by apply). */
+    /** Pre-parsed positional pattern for the focus attacker. Consumed by the Task 8b positional
+     *  apply at the focus damage site (origin/covered footprint expansion). */
     pattern?: ParsedPattern;
     /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
      *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
@@ -2670,6 +2675,58 @@ export function runCombat(input: CombatEngineInput): {
                         pendingResisted.length = 0;
                     }
 
+                    // Positional APPLY (Task 8b, GATED). When the focus attacker is positional,
+                    // carries a parsed target, AND its firing hit produced scalars (a damage
+                    // ability fired → turn.positionalScalars is set), drive the per-victim apply
+                    // loop against the LIVE enemy roster. Re-resolves anchor + footprint per hit;
+                    // origin cells take full damage, covered cells half. Each victim's HP/shield/
+                    // Barrier/Cheat-Death/death is mutated through the real applyOutgoingToEnemy.
+                    // No production caller threads position+target+pattern yet, so this is false
+                    // for every existing test/golden → byte-identical.
+                    // The pattern is REQUIRED for footprint expansion — without it there is no
+                    // apply to perform (the existing positionalSelection tests set position+target
+                    // to exercise target binding only, never a pattern, so they keep the legacy
+                    // single-sink credit and never enter this branch).
+                    const positional =
+                        isPositional(actor.position, enemyAttackerActors) &&
+                        input.target != null &&
+                        input.pattern != null &&
+                        turn.positionalScalars != null;
+                    if (positional) {
+                        applyPositionalDamage({
+                            hits: turn.positionalScalars!.hits,
+                            hitCrits: turn.hitCrits ?? [],
+                            scalars: turn.positionalScalars!,
+                            // Non-null via the `positional` gate (input.pattern/target != null).
+                            pattern: input.pattern!,
+                            actorPosition: actor.position!,
+                            target: input.target!,
+                            opposingLiving: enemyAttackerActors,
+                            statusOf: statusLookupFor(enemyAttackerActors),
+                            acting: {
+                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                provokedBy: provokerOf(statusEngine, actor.id),
+                            },
+                            // defenceModifierPct 0 for PR1 — per-victim defense-debuff sourcing is
+                            // a documented Phase-5/9 refinement; the integration test uses no enemy
+                            // defense debuffs so parity is exact.
+                            defenseProfileOf: (v) => ({
+                                defence: v.stats.defence,
+                                defenceModifierPct: 0,
+                                affinity: v.affinity ?? 'antimatter',
+                            }),
+                            // applyToVictim is (victim, damage); applyOutgoingToEnemy is
+                            // (damage, victim) — adapt the argument order.
+                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                            // NO emitHit (intentionally omitted): runPlayerTurn already emits ONE
+                            // aggregate `ability-performed` against the bound primary target; adding
+                            // per-hit emitHit here would double-emit. For PR1 (capability-only) we
+                            // apply real per-victim HP/death but leave the event surface as the
+                            // existing aggregate emit. Per-hit/per-victim event fidelity is a
+                            // documented Phase-5 follow-up.
+                        });
+                    }
+
                     // Fold the focus turn's numeric damage into the round accumulator.
                     // += (not =) on detonation: with a FASTER enemy, the enemy's bomb/
                     // accumulator bursts ran earlier this round — a plain assignment would
@@ -2679,9 +2736,18 @@ export function runCombat(input: CombatEngineInput): {
                     // secondary/conditional are display sub-buckets already rolled into
                     // turn.directDamage — they must NOT be routed through creditDamage or the
                     // standing-leech hook would double-count them.
-                    d.secondary += turn.secondaryDamage;
-                    d.conditional += turn.conditionalDamage;
-                    creditDamage(actor.id, 'direct', turn.directDamage);
+                    //
+                    // Credit SUPPRESSION for the positional case (Task 8b): the firing-hit damage
+                    // now lands per-victim via applyPositionalDamage above, so it must NOT also be
+                    // folded into cumulativeDamage here (that would double-count it). Skip the
+                    // direct/secondary/conditional credits; KEEP detonation (bombs are a separate
+                    // mechanic, out of scope). The existing `enemyHpDecline: selected ? 0 : ...`
+                    // already zeroes the legacy single-sink decline for the positional path.
+                    if (!positional) {
+                        d.secondary += turn.secondaryDamage;
+                        d.conditional += turn.conditionalDamage;
+                        creditDamage(actor.id, 'direct', turn.directDamage);
+                    }
                     creditDamage(actor.id, 'detonation', turn.detonationDamage);
                     focusTurns.push(turn);
 
@@ -2769,14 +2835,67 @@ export function runCombat(input: CombatEngineInput): {
                         selfDebuffNames: ownerDebuffNames(actor.id),
                     });
 
+                    // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
+                    // team actor's own position / parsed target (teamTargetById) / parsed pattern
+                    // (teamPatternById). Drives the per-victim apply loop against the LIVE enemy
+                    // roster when this walked team actor is positional, has a parsed target, AND its
+                    // firing hit produced scalars. No production caller threads these yet → false for
+                    // every existing test/golden → byte-identical.
+                    // The pattern (teamPatternById) is REQUIRED for footprint expansion — without
+                    // it there is no apply to perform (the positionalSelection C2 test sets
+                    // position+target only, never a pattern, so it keeps the legacy single-sink
+                    // credit and never enters this branch).
+                    const teamPattern = teamPatternById.get(actor.id);
+                    const teamPositional =
+                        isPositional(actor.position, enemyAttackerActors) &&
+                        teamTarget != null &&
+                        teamPattern != null &&
+                        teamTurn.positionalScalars != null;
+                    if (teamPositional) {
+                        applyPositionalDamage({
+                            hits: teamTurn.positionalScalars!.hits,
+                            hitCrits: teamTurn.hitCrits ?? [],
+                            scalars: teamTurn.positionalScalars!,
+                            pattern: teamPattern,
+                            actorPosition: actor.position!,
+                            target: teamTarget,
+                            opposingLiving: enemyAttackerActors,
+                            statusOf: statusLookupFor(enemyAttackerActors),
+                            acting: {
+                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                provokedBy: provokerOf(statusEngine, actor.id),
+                            },
+                            // defenceModifierPct 0 for PR1 — see the focus-site note.
+                            defenseProfileOf: (v) => ({
+                                defence: v.stats.defence,
+                                defenceModifierPct: 0,
+                                affinity: v.affinity ?? 'antimatter',
+                            }),
+                            // applyToVictim is (victim, damage); applyOutgoingToEnemy is
+                            // (damage, victim) — adapt the argument order.
+                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                            // NO emitHit — same rationale as the focus site (runPlayerTurn already
+                            // emits the single aggregate ability-performed; per-hit fidelity is a
+                            // documented Phase-5 follow-up).
+                        });
+                    }
+
                     // Fold the team turn's damage into ITS OWN map entry (post-round assembly
                     // sums all non-focus entries into teamDamage). secondary/conditional are
                     // sub-buckets of direct (do NOT double-add) but kept distinct for the
                     // simulator-page seam.
+                    //
+                    // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
+                    // the firing-hit damage already landed per-victim via applyPositionalDamage, so
+                    // skip the direct/secondary/conditional credit; KEEP detonation (bombs are out
+                    // of scope). The team's `enemyHpDecline: selected ? 0 : ...` already zeroed the
+                    // legacy single-sink decline for the positional path.
                     const td = dmg(actor.id);
-                    td.secondary += teamTurn.secondaryDamage;
-                    td.conditional += teamTurn.conditionalDamage;
-                    creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                    if (!teamPositional) {
+                        td.secondary += teamTurn.secondaryDamage;
+                        td.conditional += teamTurn.conditionalDamage;
+                        creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                    }
                     creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
 
                     // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
