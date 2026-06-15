@@ -464,6 +464,15 @@ describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe
         expect(origins(cells)).toEqual([]);
     });
 
+    // Top wing (outer 3-row + inner 2-row) lands on-board at a back anchor.
+    // Anchor B2(0,2): top cov(0,-2)→T1(0,0)✓, cov(1,-2)→T2(1,0)✓, cov(2,-2)→T3(2,0)✓,
+    //   cov(0,-1)→M2(0,1)✓, cov(1,-1)→M3(1,1)✓; bottom wing all clips off-board.
+    it('Wings-Support-Not-Self-Range-2 @ B2 → no origin, top wing covered {T1,T2,T3,M2,M3}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Wings-Support-Not-Self-Range-2'), 'B2');
+        expect(positions(cells)).toEqual(new Set(['T1', 'T2', 'T3', 'M2', 'M3']));
+        expect(origins(cells)).toEqual([]);
+    });
+
     // -----------------------------------------------------------------------
     // Support-Forward-Circle-Range-1: forward-circle centered one cell ahead of caster.
     // ORIGIN = caster (anchor); circle extends forward (+q).
@@ -509,12 +518,13 @@ describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe
     });
 
     // -----------------------------------------------------------------------
-    // Support-Double-Pickaxe-Range-1: derived from pickaxe|0| + cov(-2,0) + cov(3,0).
-    // ORIGIN(M3) + M4(+1,0) + M2(-1,0) + M1(-2,0) + off-board(+3,0) + T4(+2,-1) + B4(+1,+1)
-    //   + T1(-1,-1) + B1(-2,+1).  Verified vs Pattern-Support-Double-Pickaxe-Range-1.png.
-    // Anchor M3(1,1): M4✓, M2✓, M1✓, cov(3,0)→(4,1)=off, T4=(3,0)✓, B4=(2,2)✓, T1=(0,0)✓, B1=(-1,2)✓.
+    // Support-Double-Pickaxe-Range-1: derived from pickaxe|0| + cov(-2,0) + cov(2,0)
+    //   (contiguous 5-cell M-spine {-2,-1,0,+1,+2}; the +2 forward tip clips at front anchors).
+    // ORIGIN(M3) + M4(+1,0) + M2(-1,0) + M1(-2,0) + forward(+2,0) + T4(+2,-1) + B4(+1,+1)
+    //   + T1(-1,-1) + B1(-2,+1).
+    // Anchor M3(1,1): M4✓, M2✓, M1✓, cov(2,0)→(3,1)=off, T4=(3,0)✓, B4=(2,2)✓, T1=(0,0)✓, B1=(-1,2)✓.
     // -----------------------------------------------------------------------
-    it('Support-Double-Pickaxe-Range-1 @ M3 → origin M3, covered {M4,M2,M1,T4,B4,T1,B1} (cov(3,0) clips)', () => {
+    it('Support-Double-Pickaxe-Range-1 @ M3 → origin M3, covered {M4,M2,M1,T4,B4,T1,B1} (cov(2,0) clips)', () => {
         const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-1'), 'M3');
         expect(positions(cells)).toEqual(new Set(['M3', 'M4', 'M2', 'M1', 'T4', 'B4', 'T1', 'B1']));
         expect(origins(cells)).toEqual(['M3']);
@@ -529,6 +539,15 @@ describe('resolveCells — Task 7: Split / Burst / Scattershot / Wings / Pickaxe
         const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-1'), 'M4');
         expect(positions(cells)).toEqual(new Set(['M4', 'M3', 'M2', 'T2', 'B2']));
         expect(origins(cells)).toEqual(['M4']);
+    });
+
+    // Forward spine tip cov(2,0) lands on-board at a back anchor → spine is contiguous (no gap).
+    // Anchor M1(-1,1): ORIGIN M1, cov(+1,0)→M2✓, cov(+2,0)→M3✓, cov(-1,0)/cov(-2,0)→off,
+    //   cov(+2,-1)→T2(1,0)✓, cov(+1,+1)→B2(0,2)✓, back-head cells→off.
+    it('Support-Double-Pickaxe-Range-1 @ M1 → contiguous spine, covered {M2,M3,T2,B2}', () => {
+        const cells = resolveCells(parsePattern('Pattern-Support-Double-Pickaxe-Range-1'), 'M1');
+        expect(positions(cells)).toEqual(new Set(['M1', 'M2', 'M3', 'T2', 'B2']));
+        expect(origins(cells)).toEqual(['M1']);
     });
 
     // -----------------------------------------------------------------------

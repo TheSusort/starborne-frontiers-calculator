@@ -281,12 +281,20 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Wings family (Task 7)
     //
     // Wings-Range-2-Support-Not-Self: support variant (buffs allies), caster excluded (notSelf).
-    // 0 origins (notSelf).  7 offset cells; many clip off-board depending on anchor.
-    // Human-verified @ M3: covered {T2,T3,B2,B3} (3 offsets clip off-board).
-    // Human-verified @ T2: covered {M2,M3,B1,B2,B3} (2 offsets clip off-board).
+    // 0 origins (notSelf). Two symmetric wings around the (excluded) caster — each wing has an
+    // inner 2-cell row and an outer 3-cell row. The top wing mirrors the bottom across the
+    // caster row: vertical mirror (q,r) → (q+r, -r). 10 offset cells; many clip off-board
+    // depending on anchor.
+    // Human-verified @ M3: covered {T2,T3,B2,B3} (top-wing outer row + both wings' far cells clip).
+    // Human-verified @ T2: covered {M2,M3,B1,B2,B3} (top wing clips off-board).
     'wings|2|support+notSelf': [
+        // top wing (outer 3-row then inner 2-row)
+        cov(0, -2),
+        cov(1, -2),
+        cov(2, -2),
         cov(0, -1),
         cov(1, -1),
+        // bottom wing (inner 2-row then outer 3-row) — mirror of the top
         cov(-1, 1),
         cov(0, 1),
         cov(-2, 2),
@@ -337,18 +345,18 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
 
     // Pattern-Support-Double-Pickaxe-Range-1:
     //   Derived from pickaxe|0|support+double by extending the M-spine one step back
-    //   (cov(-2,0) = M1) and one further step forward (cov(3,0), clips off-board at M3 anchor).
-    //   Verified vs Pattern-Support-Double-Pickaxe-Range-1.png.
-    //   9-cell table (cov(3,0) clips at most anchors): origin center-M + 4-cell spine +
-    //     front-head {T(+2,-1), B(+1,+1)} + back-head {T(-1,-1), B(-2,+1)} + off-board forward.
+    //   (cov(-2,0) = M1) and one step forward (cov(2,0)) — a contiguous 5-cell spine
+    //   {-2,-1,0,+1,+2}. (Forward tip cov(2,0) clips off-board at the M3/M4 anchors.)
+    //   9-cell table: origin center-M + 4-cell spine extension +
+    //     front-head {T(+2,-1), B(+1,+1)} + back-head {T(-1,-1), B(-2,+1)}.
     //   Verified @ M3(1,1): {M3(origin), M4, M2, M1, T4(+2,-1), B4(+1,+1), T1(-1,-1), B1(-2,+1)};
-    //     cov(3,0)→(4,1) clips off-board.
+    //     cov(2,0)→(3,1) clips off-board.
     'pickaxe|1|support+double': [
         ORIGIN,
         cov(1, 0),
         cov(-1, 0),
         cov(-2, 0),
-        cov(3, 0),
+        cov(2, 0),
         cov(2, -1),
         cov(1, 1),
         cov(-1, -1),
