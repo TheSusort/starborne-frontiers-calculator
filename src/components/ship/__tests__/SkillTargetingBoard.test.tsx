@@ -71,17 +71,27 @@ describe('SkillTargetingBoard', () => {
         expect(getByText('Splash')).toBeInTheDocument();
     });
 
-    it('notSelf ally pattern: splash cells only, no caster, Allies legend only', () => {
+    it('notSelf ally pattern: gray caster cell at origin, no primary, Caster + Allies legend', () => {
         // 'line|2|support+notSelf' → only cov() cells, no origin/primary; ally side.
-        const { container, getByText, queryByText } = render(
+        // notSelf adds a single gray caster cell at the origin (0,0).
+        const { container, getByText } = render(
             <SkillTargetingBoard
                 targeting={active('allies', 'Pattern-Line-Support-Not-Self-Range-2')}
             />
         );
         expect(container.querySelectorAll('[data-role="primary"]').length).toBe(0);
+        expect(container.querySelectorAll('[data-role="caster"]').length).toBe(1);
         expect(container.querySelectorAll('[data-role="splash"]').length).toBeGreaterThan(0);
-        expect(queryByText('Caster')).toBeNull();
+        // Legend shows the (gray) Caster marker and the Allies effect.
+        expect(getByText('Caster')).toBeInTheDocument();
         expect(getByText('Allies')).toBeInTheDocument();
+    });
+
+    it('non-notSelf patterns have no caster cell', () => {
+        const { container } = render(
+            <SkillTargetingBoard targeting={active('front', 'Pattern-Cone-Range-1')} />
+        );
+        expect(container.querySelectorAll('[data-role="caster"]').length).toBe(0);
     });
 
     it('puts the full shape/range/side caption in the SVG aria-label', () => {

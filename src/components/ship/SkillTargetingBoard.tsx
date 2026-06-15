@@ -11,32 +11,36 @@ const RADIUS = 22;
 const GAP = 2;
 const PAD = 6; // viewBox margin so the glow filter isn't clipped
 
+// The excluded caster (notSelf patterns) renders as a neutral gray marker on either side.
+const CASTER_COLOR = { fill: 'rgba(148,163,184,0.16)', stroke: '#94a3b8' };
+
 // Cell colors depend on the target side: enemy (attacker) reads red, ally (support) reads
 // green. Primary/caster is the stronger shade; splash/allies is the lighter shade.
 const ROLE_STYLE: Record<TargetSide, Record<AoeCellRole, { fill: string; stroke: string }>> = {
     enemy: {
         primary: { fill: 'rgba(255,59,92,0.18)', stroke: '#ff3b5c' }, // red
         splash: { fill: 'rgba(255,138,156,0.18)', stroke: '#ff8a9c' }, // lighter red
+        caster: CASTER_COLOR,
     },
     ally: {
         primary: { fill: 'rgba(22,163,74,0.26)', stroke: '#16a34a' }, // darker green (caster)
         splash: { fill: 'rgba(74,222,128,0.20)', stroke: '#4ade80' }, // green
+        caster: CASTER_COLOR,
     },
 };
 
 // Legend labels + swatch classes per side. Swatch classes are written as literals so
 // Tailwind's JIT picks them up.
-const LEGEND: Record<
-    TargetSide,
-    { primary: { label: string; dot: string }; splash: { label: string; dot: string } }
-> = {
+const LEGEND: Record<TargetSide, Record<AoeCellRole, { label: string; dot: string }>> = {
     enemy: {
         primary: { label: 'Primary', dot: 'bg-[#ff3b5c]' },
         splash: { label: 'Splash', dot: 'bg-[#ff8a9c]' },
+        caster: { label: 'Caster', dot: 'bg-[#94a3b8]' },
     },
     ally: {
         primary: { label: 'Caster', dot: 'bg-[#16a34a]' },
         splash: { label: 'Allies', dot: 'bg-[#4ade80]' },
+        caster: { label: 'Caster', dot: 'bg-[#94a3b8]' },
     },
 };
 
@@ -94,6 +98,7 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
         2 * PAD
     ).toFixed(1)} ${(maxY - minY + 2 * PAD).toFixed(1)}`;
 
+    const hasCaster = cells.some((c) => c.role === 'caster');
     const hasPrimary = cells.some((c) => c.role === 'primary');
     const hasSplash = cells.some((c) => c.role === 'splash');
     const legend = LEGEND[side];
@@ -138,6 +143,14 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                     <div className="font-semibold text-sm text-primary">{rule.label}</div>
                     <p className="text-sm text-theme-text mt-1">{rule.description}</p>
                     <div className="flex gap-3 mt-2 text-[11px] text-theme-text/70">
+                        {hasCaster && (
+                            <span className="inline-flex items-center gap-1">
+                                <span
+                                    className={`inline-block w-2 h-2 rounded-sm ${legend.caster.dot}`}
+                                />
+                                {legend.caster.label}
+                            </span>
+                        )}
                         {hasPrimary && (
                             <span className="inline-flex items-center gap-1">
                                 <span
