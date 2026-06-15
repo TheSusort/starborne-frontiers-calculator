@@ -335,6 +335,19 @@ function stripUnitTags(text: string): string {
     return text.replace(/<\/?unit-(?:aid|skill|damage)>/gi, '');
 }
 
+// "ignores Taunt and Provoke" / "ignoring Taunt and Provoke" / "ignores Taunt and Provoke effects"
+// Requires ignor… THEN taunt THEN provoke in order within a sentence so applier/reader texts don't match.
+const IGNORES_FORCED_TARGETING_RE = /\bignor\w*\b[^.]*\btaunt\b[^.]*\bprovoke\b/i;
+
+/** True if any of the given skill texts states the unit ignores Taunt/Provoke (forced
+ *  targeting). Per-ship: every corpus ignore-ship ignores uniformly across active/charged/
+ *  passive. Does NOT cover Concentrate Fire (no ship text ignores CF). */
+export function detectIgnoresForcedTargeting(
+    ...skillTexts: Array<string | null | undefined>
+): boolean {
+    return skillTexts.some((t) => !!t && IGNORES_FORCED_TARGETING_RE.test(stripUnitTags(t)));
+}
+
 // Phrases that disqualify a charge phrase from being a self-gain we model:
 // ally-grant to others, on-kill (enemy never dies). The enemy-REPAIR phrasings were
 // lifted OUT (Phase 4c PR 4): a self charge gain "when an enemy repairs" now rides the

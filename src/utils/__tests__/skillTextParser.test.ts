@@ -30,6 +30,7 @@ import {
     parseCleanse,
     parseHealNoCrit,
     statusEffectCondition,
+    detectIgnoresForcedTargeting,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -3162,5 +3163,76 @@ describe('Chakara "starts each round with" extraction (Gap A)', () => {
 
     it('maps the phrasing to the start-of-round trigger', () => {
         expect(detectReactiveTrigger(txt, 'Attack Up II')).toBe('start-of-round');
+    });
+});
+
+describe('detectIgnoresForcedTargeting', () => {
+    it('returns true for "ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill>" (Akula)', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                "This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals 160% damage."
+            )
+        ).toBe(true);
+    });
+
+    it('returns true for "ignoring Taunt and Provoke" without tags (Anjian)', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                'This Unit deals 130% damage, ignoring Taunt and Provoke.'
+            )
+        ).toBe(true);
+    });
+
+    it('returns true for "ignores Taunt and Provoke effects" (Judge passive)', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                'This Unit ignores Taunt and Provoke effects and has 20% defense penetration'
+            )
+        ).toBe(true);
+    });
+
+    it('returns true for "ignores Taunt and Provoke, deals 230% damage" (Judge active)', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                "This Unit's attack ignores Taunt and Provoke, deals 230% damage, and applies Concentrate Fire for 1 turn."
+            )
+        ).toBe(true);
+    });
+
+    it('returns false for a Provoke APPLIER (not an ignorer)', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                'This Unit deals 180% damage and applies Provoke for 1 turn.'
+            )
+        ).toBe(false);
+    });
+
+    it('returns false for a condition reader ("against Taunted or Provoked enemies")', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                'deals 180% damage with additional 60% damage against Taunted or Provoked enemies.'
+            )
+        ).toBe(false);
+    });
+
+    it('returns false for null', () => {
+        expect(detectIgnoresForcedTargeting(null)).toBe(false);
+    });
+
+    it('returns false for undefined', () => {
+        expect(detectIgnoresForcedTargeting(undefined)).toBe(false);
+    });
+
+    it('returns false for empty string', () => {
+        expect(detectIgnoresForcedTargeting('')).toBe(false);
+    });
+
+    it('returns true when any of the variadic args matches', () => {
+        expect(
+            detectIgnoresForcedTargeting(
+                null,
+                'This Unit deals 130% damage, ignoring Taunt and Provoke.'
+            )
+        ).toBe(true);
     });
 });
