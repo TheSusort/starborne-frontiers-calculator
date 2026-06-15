@@ -3119,6 +3119,11 @@ export function runCombat(input: CombatEngineInput): {
                     // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
                     const tgt = selectedPlayer ?? healTarget!;
                     const targetDead = tgt.currentHp <= 0;
+                    // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
+                    // positional apply (footprint expansion). An enemy with a target but NO pattern
+                    // stays on the legacy single-apply path (same `pattern != null` guard as the
+                    // focus/team sites). Undefined for every current fixture → enemyPositional false.
+                    const enemyPattern = enemyPatternById.get(actor.id);
                     let damage = 0;
                     // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                     // scoped inside the else block below; this flag carries its roundCrit out.
@@ -3127,6 +3132,13 @@ export function runCombat(input: CombatEngineInput): {
                     // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
                     // path and on the manual flat-enemy path (which has no hitCrits to surface).
                     let enemyHitCrits: boolean[] = [];
+                    // Hoisted positional-apply state (Task 9): the enemy-site mirror of the focus/team
+                    // sites. enemyPositional gates BOTH the drivePositionalApply call AND the single-
+                    // apply suppression below; enemyScalars carries this turn's firing-hit scalars out
+                    // of the else block (enemyTurn is scoped inside it). Both stay false/null on the
+                    // dead-target path and whenever the enemy is non-positional → legacy single-apply.
+                    let enemyPositional = false;
+                    let enemyScalars: AttackerDamageScalars | undefined;
                     if (targetDead) {
                         // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                         // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -3218,6 +3230,19 @@ export function runCombat(input: CombatEngineInput): {
                         enemyTurnDidCrit = enemyTurn.roundCrit;
                         // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
                         enemyHitCrits = enemyTurn.hitCrits;
+                        // Positional gate (Task 9, enemy site): mirror of the focus/team gates, but
+                        // the OPPOSING roster from the enemy's view is the PLAYER team
+                        // (allPlayerActors), the parsed target rides on enemyTargetById, and the
+                        // parsed pattern on enemyPatternById. When true, the firing-hit damage lands
+                        // per-victim via drivePositionalApply (below) against the live player roster
+                        // and the legacy single-apply is SUPPRESSED. No production caller threads
+                        // position+target+pattern for an enemy yet → false for every golden.
+                        enemyPositional =
+                            isPositional(actor.position, allPlayerActors) &&
+                            enemyTarget != null &&
+                            enemyPattern != null &&
+                            enemyTurn.positionalScalars != null;
+                        enemyScalars = enemyTurn.positionalScalars;
                         // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                         // its own future DoT entries would tick with this ctx).
                         lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -3281,13 +3306,59 @@ export function runCombat(input: CombatEngineInput): {
                         // hpDamage comes straight from the closure (0 under Barrier — damage fully
                         // blocked, not shield-absorbed — otherwise damage - absorbed). barriered = the
                         // attack was fully blocked by an active Barrier (decision #7, below).
-                        // Route the enemy's incoming to its selected victim (`tgt`). Legacy path:
-                        // tgt === healTarget! → no-arg-equivalent call, byte-identical. Positional
-                        // path: drains the SELECTED player actor instead of the heal target.
-                        const { shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
-                            damage,
-                            tgt
-                        );
+                        // Route the enemy's incoming damage. Two mutually-exclusive paths:
+                        //
+                        //  - NON-positional (legacy): a SINGLE applyIncomingToTarget(damage, tgt)
+                        //    drains the bound victim (tgt === healTarget! on the legacy path → the
+                        //    no-arg-equivalent call, byte-identical). Returns the shield/HP/Barrier
+                        //    outcome consumed by the damage-taken leech block below.
+                        //
+                        //  - POSITIONAL (Task 9): drivePositionalApply lands the firing hit per-victim
+                        //    across the LIVE PLAYER roster (origin full / covered half) via the
+                        //    PLAYER-side applyIncomingToTarget wrapper — each player victim takes REAL
+                        //    HP/shield/death damage. The single apply is SUPPRESSED (else the anchor
+                        //    victim would be double-hit: once by the AoE loop, once by the single
+                        //    apply). enemyPattern is non-null via the enemyPositional gate.
+                        //
+                        // DEFERRED (Phase-5, documented in Step C): on the positional path the per-
+                        // victim shield/HP outcomes are not surfaced, so shieldBefore/hpDamage/barriered
+                        // fall back to neutral defaults — the heal-target damage-taken HEAL/SHIELD leech
+                        // (takenLeeches) is NOT re-derived from the anchor victim's AoE hit. Inert today
+                        // (no fixture runs a "when damaged" reactive in healing mode), so the legacy
+                        // single-target leech path stays byte-identical; per-victim leech symmetry is the
+                        // Phase-5 follow-up. The non-positional path keeps the exact legacy leech values.
+                        let shieldBefore = 0;
+                        let hpDamage = 0;
+                        let barriered = false;
+                        if (enemyPositional) {
+                            drivePositionalApply({
+                                scalars: enemyScalars!,
+                                hitCrits: enemyHitCrits,
+                                pattern: enemyPattern!,
+                                target: enemyTarget!,
+                                actingPosition: actor.position!,
+                                ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                actingId: actor.id,
+                                opposingLiving: allPlayerActors,
+                                // PLAYER-side wrapper: each player victim takes real incoming damage.
+                                // Every victim's OWN currentHp/shield is mutated and recordDestroyed
+                                // fires for it (its targetHpPct/death derive from the victim itself —
+                                // applyVictimDamage reads recipientMaxHp(victim.id)). DEFERRED (Phase-5):
+                                // playerSink.addIncoming bumps the TANK's roundIncomingDamage bucket
+                                // for EVERY victim — so a covered non-heal-target victim's AoE share
+                                // currently inflates the heal target's reported per-round incomingDamage.
+                                // The healing-accounting model has one row (the heal target's); per-
+                                // victim incoming attribution is the Phase-5 symmetric-accounting surface.
+                                // Inert today (no production caller threads enemy position+pattern).
+                                applyToVictim: (victim, dmgToVictim) =>
+                                    applyIncomingToTarget(dmgToVictim, victim),
+                            });
+                        } else {
+                            ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
+                                damage,
+                                tgt
+                            ));
+                        }
 
                         // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
                         // AFTER this attack's drain so the proc never absorbs its own trigger.
@@ -3311,7 +3382,24 @@ export function runCombat(input: CombatEngineInput): {
                         // damage taken at all, so its damage-taken procs are skipped entirely — there is
                         // nothing to leech from. (Distinct from a shield absorb, where the convention
                         // still leeches off the full attack: a shield takes the hit, Barrier nullifies it.)
-                        if (takenLeeches.length > 0 && healingCtx && !barriered) {
+                        //
+                        // POSITIONAL DEFERRAL (Task 9, Step C — Phase-5 follow-up): this damage-taken
+                        // leech is single-target heal-target infrastructure (takenLeeches is collected
+                        // ONLY for the heal target; the healing-accounting model has one row, the heal
+                        // target's). On the positional path the heal target took only its OWN per-victim
+                        // AoE share (origin full / covered half), and shieldBefore/hpDamage are not
+                        // surfaced per victim — crediting off the aggregate `damage` here would be wrong.
+                        // So the leech is gated to the NON-positional path: the legacy heal-target leech
+                        // stays byte-identical, and full per-victim leech symmetry (every player victim
+                        // procing its OWN damage-taken reactive off the damage IT took) is the documented
+                        // Phase-5 follow-up. Inert today either way (no fixture runs a damage-taken
+                        // reactive in healing mode → takenLeeches is empty).
+                        if (
+                            !enemyPositional &&
+                            takenLeeches.length > 0 &&
+                            healingCtx &&
+                            !barriered
+                        ) {
                             const rt = runtimesById.get(healTarget!.id);
                             for (const e of takenLeeches) {
                                 if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {

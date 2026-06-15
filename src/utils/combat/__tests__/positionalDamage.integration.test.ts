@@ -1,5 +1,16 @@
 /**
- * Task 8b — positional AoE damage APPLY wired into the focus + team damage sites.
+ * Task 8b/9 — positional AoE damage APPLY wired into the focus + team (8b) and enemy (9)
+ * damage sites.
+ *
+ * Task 9 adds the enemy→player direction: a positioned enemy attacker with a parsed target +
+ * pattern drives `applyPositionalDamage` against the LIVE PLAYER roster (`allPlayerActors`) via
+ * the PLAYER-side `applyIncomingToTarget` wrapper — landing real per-victim HP damage on player
+ * ships (origin full, covered half) — and SUPPRESSES the legacy single `applyIncomingToTarget`
+ * call for that case (else the anchor victim is double-hit). A `ship-destroyed{actorId}` fires
+ * per player victim that reaches 0 HP (player victims have known max HP via recipientMaxHp), so
+ * the same lethality-bracket idiom pins each player victim's landed damage. The Task-9 describe
+ * block below also confirms a single-target enemy attack hits ONLY its target, and that a
+ * non-positional enemy (target but no pattern) keeps the legacy single-apply (heal target only).
  *
  * Tasks 1–7 built the per-victim damage pipeline (victimHitDamage / applyOutgoingToEnemy /
  * applyPositionalDamage) but left it unreachable through `runCombat`. Task 8b wires it in: when
@@ -260,5 +271,144 @@ describe('Task 8b — positional AoE damage apply at the walked-team site', () =
         expect(hi.has('enemy-front')).toBe(false);
         expect(lo.has('enemy-back')).toBe(true);
         expect(hi.has('enemy-back')).toBe(false);
+    });
+});
+
+// A passive, positioned player victim (a walked team actor with no offense). HP is sized
+// per-test to bracket the enemy AoE damage it takes; attack 0 → it deals nothing on its turn.
+const passivePlayerAt = (id: string, position: Position, hp: number): TeamActor => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [basicAttack()] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+// A positioned ENEMY attacker that actually deals damage: attack 5000, multiplier 100% (1x),
+// 1 hit, no crit vs defence-0 player victims → firing-hit damage = 5000. `target`/`pattern`
+// drive the Task 9 enemy-site positional apply against the PLAYER roster.
+type EnemyAttacker2 = EnemyAttacker;
+const offensiveEnemyAt = (
+    id: string,
+    position: Position,
+    selection: ParsedTarget['selection'],
+    pattern: ParsedPattern,
+    attack = 5000
+): EnemyAttacker2 =>
+    ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget(selection),
+        pattern,
+        shipSkills: { slots: [basicAttack()] },
+    }) as EnemyAttacker2;
+
+describe('Task 9 — positional AoE damage apply at the enemy site (enemy→player)', () => {
+    // Player roster: focus 'attacker' at M4 (front, the heal target) + a passive team victim at
+    // M3 (mid). An enemy at M1 fires Line-Range-1 `front` → anchors on the front-most player
+    // (M4) for FULL damage and covers M3 for HALF. The focus carries NO target/pattern so its
+    // OWN turn stays non-positional (legacy dummy sink — it never touches these player HPs).
+    it('AoE: front player (heal target) takes FULL (5000) and the covered player takes HALF (2500)', () => {
+        const run = (frontHp: number, midHp: number): CombatEngineInput =>
+            BASE(
+                {
+                    hp: frontHp, // focus = heal target = origin victim
+                    teamActors: [passivePlayerAt('player-mid', 'M3', midHp)],
+                    enemyAttackers: [
+                        offensiveEnemyAt('enemy-1', 'M1', 'front', lineRange1Pattern()),
+                    ],
+                },
+                undefined, // focus is NON-positional (no target) → its own turn uses the dummy sink
+                undefined
+            );
+        // Origin (front player / heal target): full 5000 → dies at HP 5000, survives at 5001.
+        // Covered (mid player): half 2500 → dies at HP 2500, survives at 2501.
+        idc = 0;
+        const lo = destroyedIds(run(5000, 2500));
+        idc = 0;
+        const hi = destroyedIds(run(5001, 2501));
+        expect(lo.has('attacker')).toBe(true); // origin pinned to exactly 5000 (full)
+        expect(hi.has('attacker')).toBe(false);
+        expect(lo.has('player-mid')).toBe(true); // covered pinned to exactly 2500 (half)
+        expect(hi.has('player-mid')).toBe(false);
+    });
+
+    it('single-target enemy attack hits ONLY its targeted player (origin-only footprint)', () => {
+        // Same roster but a base (origin-only) pattern: anchors on the front player (M4) and hits
+        // nothing else. The covered-cell player at M3 is never touched — survives at trivial HP.
+        const run = (frontHp: number): CombatEngineInput =>
+            BASE(
+                {
+                    hp: frontHp,
+                    teamActors: [passivePlayerAt('player-mid', 'M3', 1)],
+                    enemyAttackers: [offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern())],
+                },
+                undefined,
+                undefined
+            );
+        idc = 0;
+        const lo = destroyedIds(run(5000));
+        idc = 0;
+        const hi = destroyedIds(run(5001));
+        expect(lo.has('attacker')).toBe(true); // front player took exactly 5000
+        expect(hi.has('attacker')).toBe(false);
+        // The M3 player (HP 1) is outside the origin-only footprint → never hit, never dies.
+        expect(lo.has('player-mid')).toBe(false);
+        expect(hi.has('player-mid')).toBe(false);
+    });
+
+    it('byte-identical sanity: a NON-positional enemy (no pattern) hits only the heal target via the legacy single-apply', () => {
+        // Enemy has a target but NO pattern → enemyPositional is false → legacy single-apply path:
+        // it drains the heal target (the focus) only. The M3 player is never touched. This is the
+        // pre-Task-9 behaviour (the legacy enemy single-apply always hit the heal target).
+        const run = (frontHp: number): CombatEngineInput =>
+            BASE(
+                {
+                    hp: frontHp,
+                    teamActors: [passivePlayerAt('player-mid', 'M3', 1)],
+                    enemyAttackers: [
+                        {
+                            ...offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern()),
+                            pattern: undefined, // no pattern → legacy single-apply path
+                        } as EnemyAttacker2,
+                    ],
+                },
+                undefined,
+                undefined
+            );
+        idc = 0;
+        const lo = destroyedIds(run(5000));
+        idc = 0;
+        const hi = destroyedIds(run(5001));
+        // Legacy single-apply: the enemy's full damage lands on the heal target (front).
+        expect(lo.has('attacker')).toBe(true);
+        expect(hi.has('attacker')).toBe(false);
+        // The M3 player (HP 1) is untouched on the non-positional path.
+        expect(lo.has('player-mid')).toBe(false);
+        expect(hi.has('player-mid')).toBe(false);
     });
 });
