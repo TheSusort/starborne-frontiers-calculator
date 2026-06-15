@@ -384,7 +384,15 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
 const makeShip = (
     id: string,
     name: string,
-    opts: { activeTarget: string; activePattern: string } = {
+    opts: {
+        activeTarget: string;
+        activePattern: string;
+        // Override the active skill text — defaults to a single-hit 100% damage skill. The
+        // healer cases pass a bare-repair phrasing the parser flips to an ally heal.
+        activeSkillText?: string;
+        // Ship class — defaults to 'Attacker'. Only matters for skill-text parsing branches.
+        type?: Ship['type'];
+    } = {
         activeTarget: 'front',
         activePattern: 'Pattern-Base',
     }
@@ -393,7 +401,7 @@ const makeShip = (
     name,
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: opts.type ?? 'Attacker',
     baseStats: {
         hp: 0,
         attack: 0,
@@ -410,7 +418,8 @@ const makeShip = (
     affinity: 'antimatter',
     // A single-hit 100% active damage skill (corpus phrasing with the <unit-damage> tag so
     // skillTextParser produces a real damage ability) — so the engine fires actual damage.
-    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    activeSkillText:
+        opts.activeSkillText ?? 'This Unit deals <unit-damage>100% damage</unit-damage>.',
     chargeSkillCharge: 0,
     activeTarget: opts.activeTarget,
     activePattern: opts.activePattern,
@@ -557,5 +566,220 @@ describe('simulateBattle adapter (Phase 5 PR 1, Task 3)', () => {
         const finalRound = result.rounds[result.rounds.length - 1];
         const deadEnemies = finalRound.ships.filter((s) => s.side === 'enemy' && !s.alive);
         expect(deadEnemies.length).toBeGreaterThan(0);
+    });
+});
+
+// ===========================================================================
+// Phase 5 PR 1, Task 4: HARDEN the two-team harness with edge cases the PR2 page +
+// the deferred unify will rely on — win/loss/draw outcomes, death-round correctness,
+// healing attribution, AoE per-victim accounting, and the per-round event log.
+// Driven through `simulateBattle` (the Task 3 adapter), reusing the makeShip /
+// placement helpers above. These EXERCISE the Task 2/3 code; they do not change it.
+// ===========================================================================
+
+// Targeting-string shorthands for the placements below (the engine's raw active
+// columns parseShipTargeting reads). FRONT/BACK anchor enemy selections; ALLIES is an
+// ally-side selection used by the support healer (its heal recipient is decided by the
+// parsed heal ability's target, not by this column).
+const FRONT = { activeTarget: 'front', activePattern: 'Pattern-Base' } as const;
+const BACK = { activeTarget: 'back', activePattern: 'Pattern-Base' } as const;
+
+describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
+    it('outcome: a one-sided wipe in the ENEMY→PLAYER direction makes the enemy the winner', () => {
+        // Mirror of the player-wins case above: fragile players (tiny HP) vs strong enemies
+        // (huge attack + huge HP). Players die fast; enemies never die → enemy team wins.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Player Front', FRONT), 'M4', 1, 5000),
+                placement(makeShip('p2', 'Player Back', BACK), 'M3', 1, 5000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'Enemy Front', FRONT), 'M4', 100_000, 1_000_000_000),
+                placement(makeShip('e2', 'Enemy Back', BACK), 'M1', 100_000, 1_000_000_000),
+            ],
+        });
+
+        expect(result.outcome.winner).toBe('enemy');
+        expect(result.outcome.lastRound).toBeLessThan(30);
+
+        // At least one player ship ends not-alive in the final round.
+        const finalRound = result.rounds[result.rounds.length - 1];
+        const deadPlayers = finalRound.ships.filter((s) => s.side === 'player' && !s.alive);
+        expect(deadPlayers.length).toBeGreaterThan(0);
+    });
+
+    it('outcome: two tanky low-damage squads that cannot kill each other within the cap → DRAW', () => {
+        // Huge HP + 1 attack on every ship → no ship can be wiped in 3 rounds. The battle runs
+        // to the cap with no side wiped → draw at the final round, all 3 rounds present.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Player Front', FRONT), 'M4', 1, 1_000_000_000),
+                placement(makeShip('p2', 'Player Back', BACK), 'M3', 1, 1_000_000_000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'Enemy Front', FRONT), 'M4', 1, 1_000_000_000),
+                placement(makeShip('e2', 'Enemy Back', BACK), 'M1', 1, 1_000_000_000),
+            ],
+            rounds: 3,
+        });
+
+        expect(result.outcome.winner).toBe('draw');
+        expect(result.outcome.lastRound).toBe(3);
+        // The full (untrimmed) round window is present for a draw — no early termination.
+        expect(result.rounds).toHaveLength(3);
+        expect(result.rounds.map((r) => r.round)).toEqual([1, 2, 3]);
+    });
+
+    it('death-round: a victim is alive for rounds < N and not alive for rounds >= N', () => {
+        // Strong players (1800 attack vs 5000-HP enemies) → an enemy dies once cumulative
+        // damage crosses its HP. 1800/round: r1=1800, r2=3600 (alive), r3=5400 (>=5000 → dead).
+        // So the front enemy is alive rounds 1-2 and not alive from round 3. Players are
+        // immortal (huge HP) so the battle keeps running through the death round.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Player Front', FRONT), 'M4', 1800, 1_000_000_000),
+                placement(makeShip('p2', 'Player Back', BACK), 'M3', 1800, 1_000_000_000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'Enemy Front', FRONT), 'M4', 1, 5000),
+                placement(makeShip('e2', 'Enemy Back', BACK), 'M1', 1, 1_000_000_000),
+            ],
+            rounds: 5,
+        });
+
+        // Track the front enemy (the focus fires `front` → anchors it) across rounds.
+        const VICTIM = 'e:e1:0';
+        const stateAt = (round: number) =>
+            result.rounds.find((r) => r.round === round)?.ships.find((s) => s.actorId === VICTIM);
+
+        // Sanity: it took the expected per-round damage before dying.
+        expect(stateAt(1)?.damageTaken).toBe(1800);
+
+        // Alive strictly before the death round, not-alive from it onward (trimmed result).
+        expect(stateAt(1)?.alive).toBe(true);
+        expect(stateAt(2)?.alive).toBe(true);
+        expect(stateAt(3)?.alive).toBe(false);
+        // The transition is monotonic: once dead, it never flips back to alive.
+        for (const round of result.rounds) {
+            const s = round.ships.find((x) => x.actorId === VICTIM);
+            if (round.round >= 3) expect(s?.alive).toBe(false);
+        }
+    });
+
+    it('healing: a healer credits healingDone and the damaged ally it heals gets healingReceived', () => {
+        // player[0] = focus 'attacker' (the heal target / damaged ally), taking enemy fire.
+        // player[1] = a support healer with a bare active repair the parser flips to an ally
+        // heal — its recipient routes to the focus (the engine's heal target). The enemy keeps
+        // the focus damaged so the heal lands on a hurt ally.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Focus', FRONT), 'M4', 5000, 1_000_000),
+                placement(
+                    makeShip('p2', 'Healer', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Base',
+                        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+                        type: 'Support',
+                    }),
+                    'M3',
+                    0,
+                    1_000_000
+                ),
+            ],
+            enemyTeam: [placement(makeShip('e1', 'Enemy', FRONT), 'M4', 5000, 1_000_000_000)],
+            rounds: 3,
+        });
+
+        const HEALER = 'p:p2:1';
+        const FOCUS = 'attacker';
+        const healerStates = result.rounds.flatMap((r) =>
+            r.ships.filter((s) => s.actorId === HEALER)
+        );
+        const focusStates = result.rounds.flatMap((r) =>
+            r.ships.filter((s) => s.actorId === FOCUS)
+        );
+
+        // The healer repairs an ally → its healingDone is positive in at least one round.
+        expect(healerStates.some((s) => s.healingDone > 0)).toBe(true);
+        // The damaged focus is the recipient → its healingReceived is positive.
+        expect(focusStates.some((s) => s.healingReceived > 0)).toBe(true);
+        // And the focus actually took damage that round (the heal lands on a hurt ally).
+        expect(focusStates.some((s) => s.damageTaken > 0)).toBe(true);
+    });
+
+    it('AoE accounting: a 2-cell pattern hits the origin for FULL and the covered cell for HALF', () => {
+        // One enemy at M1 fires Pattern-Line-Range-1 anchored on the front-most player (M4) →
+        // covers M3 as the second cell. Origin (front player) takes full damage; the covered
+        // player takes half. Players carry no offense so only the enemy AoE lands this round.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Front', FRONT), 'M4', 0, 1_000_000_000),
+                placement(makeShip('p2', 'Mid', BACK), 'M3', 0, 1_000_000_000),
+            ],
+            enemyTeam: [
+                placement(
+                    makeShip('e1', 'AoE Enemy', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Line-Range-1',
+                    }),
+                    'M1',
+                    5000,
+                    1_000_000_000
+                ),
+            ],
+            rounds: 1,
+        });
+
+        const r1 = result.rounds[0];
+        const origin = r1.ships.find((s) => s.actorId === 'attacker')!; // front-most player
+        const covered = r1.ships.find((s) => s.actorId === 'p:p2:1')!; // M3, the 2nd AoE cell
+
+        // Both AoE cells were struck (the footprint genuinely covers 2 occupied cells).
+        expect(origin.damageTaken).toBeGreaterThan(0);
+        expect(covered.damageTaken).toBeGreaterThan(0);
+        // Origin full (5000) / covered half (2500) → origin === 2 × covered.
+        expect(origin.damageTaken).toBe(5000);
+        expect(covered.damageTaken).toBe(2500);
+        expect(origin.damageTaken).toBe(covered.damageTaken * 2);
+    });
+
+    it('event log: a round carries the expected damage/death lines and no spurious entries', () => {
+        // Strong players one-shot a fragile front enemy. Round 1: damage lines for the firing
+        // attackers and a death line for the wiped enemy; no `attacked`-derived or other noise.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(makeShip('p1', 'Player Front', FRONT), 'M4', 5000, 1_000_000_000),
+                placement(makeShip('p2', 'Player Back', BACK), 'M3', 5000, 1_000_000_000),
+            ],
+            enemyTeam: [
+                placement(makeShip('e1', 'Enemy Front', FRONT), 'M4', 1, 5000),
+                placement(makeShip('e2', 'Enemy Back', BACK), 'M1', 1, 1_000_000_000),
+            ],
+            rounds: 3,
+        });
+
+        const r1 = result.rounds[0];
+
+        // Only the three modelled log kinds appear — `attacked` (no amount) is NOT logged.
+        for (const e of r1.events) {
+            expect(['damage', 'heal', 'death']).toContain(e.kind);
+        }
+
+        // The focus's damage line: attacker → its anchored enemy, full firing-hit amount.
+        const focusDamage = r1.events.find((e) => e.kind === 'damage' && e.actorId === 'attacker');
+        expect(focusDamage).toBeDefined();
+        expect(focusDamage?.targetId).toBe('e:e1:0'); // focus fires `front` → front enemy
+        expect(focusDamage?.amount).toBe(5000);
+
+        // The wiped front enemy produces exactly one death line that round.
+        const deaths = r1.events.filter((e) => e.kind === 'death');
+        expect(deaths.map((e) => e.actorId)).toContain('e:e1:0');
+        expect(deaths.filter((e) => e.actorId === 'e:e1:0')).toHaveLength(1);
+
+        // No spurious death line for a ship that did NOT die this round (the back enemy / players).
+        const deathIds = new Set(deaths.map((e) => e.actorId));
+        expect(deathIds.has('e:e2:1')).toBe(false);
+        expect(deathIds.has('attacker')).toBe(false);
+        expect(deathIds.has('p:p2:1')).toBe(false);
     });
 });
