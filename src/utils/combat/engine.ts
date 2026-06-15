@@ -827,7 +827,9 @@ export interface CombatEngineInput {
     /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
      *  once on the first round it is built, so unit tests can exercise the player→enemy victim
      *  wrapper against a hand-built enemy actor BEFORE Task 8 wires a production caller. Never set
-     *  by production code; the closure runs the real applyVictimDamage path (no mocks). */
+     *  by production code; the closure runs the real applyVictimDamage path (no mocks).
+     *  TODO(Task 8): remove once positional wiring provides a production caller; fold these
+     *  tests into positionalDamage.integration.test.ts. */
     __testTapApplyOutgoingToEnemy?: (
         fn: (
             damage: number,
