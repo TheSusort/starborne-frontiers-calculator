@@ -97,7 +97,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
     if (inline) {
         return (
             <>
-                {targeting && <SkillTargetingBoard targeting={targeting} />}
+                {targeting && <SkillTargetingBoard targeting={targeting} skillText={skillText} />}
                 {content}
             </>
         );
@@ -105,7 +105,7 @@ export const SkillTooltip: React.FC<SkillTooltipProps> = ({
 
     return (
         <>
-            {targeting && <SkillTargetingBoard targeting={targeting} />}
+            {targeting && <SkillTargetingBoard targeting={targeting} skillText={skillText} />}
             <div className="bg-dark-lighter p-2 shadow-lg max-w-xs border border-dark-border">
                 {content}
             </div>

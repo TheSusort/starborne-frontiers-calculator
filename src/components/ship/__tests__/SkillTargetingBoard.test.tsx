@@ -111,4 +111,25 @@ describe('SkillTargetingBoard', () => {
         const { container } = render(<SkillTargetingBoard targeting={broken} />);
         expect(container.querySelector('svg')).toBeNull();
     });
+
+    it('shows an "Also affects" tag for a secondary effect scope in the skill text', () => {
+        const { getByText } = render(
+            <SkillTargetingBoard
+                targeting={active('front', 'Pattern-Base')}
+                skillText="This Unit deals 150% damage, then inflicts Defense Down on all enemies."
+            />
+        );
+        expect(getByText('Also affects:')).toBeInTheDocument();
+        expect(getByText('all enemies')).toBeInTheDocument();
+    });
+
+    it('omits the "Also affects" tag when the skill text has no broader scope', () => {
+        const { queryByText } = render(
+            <SkillTargetingBoard
+                targeting={active('front', 'Pattern-Base')}
+                skillText="This Unit deals 160% damage."
+            />
+        );
+        expect(queryByText('Also affects:')).toBeNull();
+    });
 });

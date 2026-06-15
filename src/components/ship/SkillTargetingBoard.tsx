@@ -2,6 +2,7 @@ import React from 'react';
 import { SkillTargeting, TargetSide } from '../../utils/targetingParser';
 import { AoeCellRole, PatternCell, toPatternCells } from '../../utils/targeting/aoePattern';
 import { targetingLabel } from '../../utils/targeting/targetingDisplay';
+import { parseEffectScope } from '../../utils/targeting/effectScope';
 import { TARGETING_RULES } from '../../constants/targetingRules';
 
 // Pointy-top hexes. Center-to-vertex radius; a small gap shrinks the drawn polygon so cells
@@ -62,9 +63,14 @@ function hexPoints(cx: number, cy: number, radius: number): string {
 
 interface SkillTargetingBoardProps {
     targeting: SkillTargeting;
+    /** Raw skill text — used to surface secondary effect scopes (e.g. "all enemies"). */
+    skillText?: string;
 }
 
-export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ targeting }) => {
+export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({
+    targeting,
+    skillText,
+}) => {
     let cells: PatternCell[];
     try {
         cells = toPatternCells(targeting.pattern);
@@ -102,6 +108,11 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
     const hasPrimary = cells.some((c) => c.role === 'primary');
     const hasSplash = cells.some((c) => c.role === 'splash');
     const legend = LEGEND[side];
+
+    // Secondary effect scope (debuffs/buffs that reach beyond the damage hit). Skip when the
+    // footprint already covers the whole board — the scope would be redundant.
+    const effectScope =
+        skillText && targeting.pattern.shape !== 'all' ? parseEffectScope(skillText) : null;
 
     return (
         <div className="bg-dark-lighter p-2 shadow-lg max-w-sm mb-1 border border-dark-border">
@@ -168,6 +179,11 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
                             </span>
                         )}
                     </div>
+                    {effectScope && (
+                        <p className="text-[11px] text-theme-text/70 mt-1">
+                            Also affects: <span className="text-theme-text">{effectScope}</span>
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
