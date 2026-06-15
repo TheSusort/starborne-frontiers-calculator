@@ -330,6 +330,8 @@ export interface EnemyActorInput {
     debuffLandingChance?: number;
     /** Board position of this enemy (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 }
@@ -415,6 +417,7 @@ export function buildEnemyPlayerActorRuntime(
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
         position: e.position,
+        ignoresForcedTargeting: e.ignoresForcedTargeting,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -722,6 +725,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     };
     /** Board position of this team actor (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 };
@@ -805,6 +810,8 @@ export interface CombatEngineInput {
         debuffLandingChance?: number;
         /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
         position?: Position;
+        /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+        ignoresForcedTargeting?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
     }[];
@@ -812,6 +819,8 @@ export interface CombatEngineInput {
     bus?: CombatEventBus;
     /** Board position of the focus attacker (positional plumbing — set but not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
+    ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
 }
@@ -987,6 +996,7 @@ export function runCombat(input: CombatEngineInput): {
         chargeCount,
         startCharged,
         position: input.position,
+        ignoresForcedTargeting: input.ignoresForcedTargeting,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1053,6 +1063,7 @@ export function runCombat(input: CombatEngineInput): {
             chargeCount: t.chargeCount,
             startCharged: t.startCharged,
             position: t.position,
+            ignoresForcedTargeting: t.ignoresForcedTargeting,
         })
     );
 

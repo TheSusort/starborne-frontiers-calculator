@@ -114,6 +114,9 @@ export interface CombatActor {
     destroyedRound?: number;
     /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
     position?: Position;
+    /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
+     *  plumbing — set at construction, consumed by resolvePositionalTarget. */
+    ignoresForcedTargeting?: boolean;
 }
 
 export function createActor(
@@ -122,6 +125,7 @@ export function createActor(
         chargeCount?: number;
         startCharged?: boolean;
         position?: Position;
+        ignoresForcedTargeting?: boolean;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -139,6 +143,7 @@ export function createActor(
         pendingBombs: [],
         pendingAccumulators: [],
         position: partial.position,
+        ignoresForcedTargeting: partial.ignoresForcedTargeting,
     };
 }
 
