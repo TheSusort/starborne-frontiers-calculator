@@ -679,6 +679,26 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
+/** The id of the actor that applied an active 'Provoke' debuff to `actorId`, or undefined
+ *  if `actorId` carries no Provoke or the Provoke was applied without a caster identity.
+ *  Provoke is a debuff ON the provoked attacker, so it lives in that actor's own enemy-side
+ *  per-target store. Single entry expected (family-overwrite keys on 'Provoke'); the casterId
+ *  is the provoker, mapped to a living opposing actor by resolvePositionalTarget. */
+export function provokerOf(statusEngine: StatusEngine, actorId: string): string | undefined {
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, actorId)) {
+        if (s.active.buffName === 'Provoke' && s.casterId !== undefined) return s.casterId;
+    }
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        actorId
+    )) {
+        if (s.active.buffName === 'Provoke' && s.casterId !== undefined) return s.casterId;
+    }
+    return undefined;
+}
+
 /** Per-actor forced-targeting/stealth status, read from the status engine for the given
  *  actor ids. Stealth/Taunt are self-buffs (selfBuffNamesForOwners); Concentrate Fire is a
  *  debuff on the focus target (ownerDebuffNamesFor). Read-half only — no applier wiring this
