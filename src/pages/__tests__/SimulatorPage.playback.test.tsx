@@ -50,8 +50,48 @@ const battleResult: BattleResult = {
                 },
             ],
         },
+        {
+            round: 2,
+            ships: [
+                {
+                    actorId: 'attacker',
+                    side: 'player',
+                    damageDealt: 1500,
+                    damageTaken: 0,
+                    healingDone: 0,
+                    healingReceived: 0,
+                    shieldsAbsorbed: 0,
+                    hpPct: 100,
+                    alive: true,
+                    activeBuffs: [],
+                    activeDebuffs: [],
+                },
+                {
+                    actorId: 'e:enemy:0',
+                    side: 'enemy',
+                    damageDealt: 0,
+                    damageTaken: 2500,
+                    healingDone: 0,
+                    healingReceived: 0,
+                    shieldsAbsorbed: 0,
+                    hpPct: 0,
+                    alive: false,
+                    activeBuffs: [],
+                    activeDebuffs: [],
+                },
+            ],
+            events: [
+                {
+                    round: 2,
+                    kind: 'damage',
+                    actorId: 'attacker',
+                    targetId: 'e:enemy:0',
+                    amount: 1500,
+                },
+            ],
+        },
     ],
-    outcome: { winner: 'player', lastRound: 1 },
+    outcome: { winner: 'player', lastRound: 2 },
     roster: [
         { actorId: 'attacker', side: 'player', name: 'Nova', position: 'T1' },
         { actorId: 'e:enemy:0', side: 'enemy', name: 'Hexa', position: 'T4' },
@@ -89,6 +129,7 @@ vi.mock('../../components/simulator/PlacementBoard', () => ({
 }));
 
 vi.mock('../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
+vi.mock('../../components/seo/Seo', () => ({ default: () => null }));
 vi.mock('../../contexts/ShipsContext', () => ({
     useShips: () => ({ ships: [], getShipById: () => undefined }),
 }));
@@ -130,5 +171,13 @@ describe('SimulatorPage playback', () => {
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '40%' });
         // Event log line.
         expect(screen.getByText('Nova -> Hexa: 1,000')).toBeInTheDocument();
+        // Stepper reports two rounds, starting on round 1.
+        expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
+
+        // Step to round 2: the enemy is destroyed (HP 0%) and the event line + total change.
+        fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
+        expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
+        expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
+        expect(screen.getByText('Nova -> Hexa: 1,500')).toBeInTheDocument();
     });
 });
