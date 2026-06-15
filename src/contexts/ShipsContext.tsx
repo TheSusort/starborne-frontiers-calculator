@@ -334,6 +334,8 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const templateMap = new Map(data.map((t) => [t.name, t]));
                 setLocalShips(
                     storageShips.map((ship) => {
+                        // Outer filter casts a wide net (missing text OR targeting);
+                        // skip only ships that already have both.
                         if (ship.activeSkillText && ship.activeTarget) return ship;
                         const t = templateMap.get(ship.name);
                         if (!t) return ship;
@@ -348,10 +350,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                                 t.second_passive_skill_text ?? ship.secondPassiveSkillText,
                             thirdPassiveSkillText:
                                 t.third_passive_skill_text ?? ship.thirdPassiveSkillText,
-                            activeTarget: t.active_target ?? undefined,
-                            activePattern: t.active_pattern ?? undefined,
-                            chargedTarget: t.charged_target ?? undefined,
-                            chargedPattern: t.charged_pattern ?? undefined,
+                            activeTarget: t.active_target ?? ship.activeTarget,
+                            activePattern: t.active_pattern ?? ship.activePattern,
+                            chargedTarget: t.charged_target ?? ship.chargedTarget,
+                            chargedPattern: t.charged_pattern ?? ship.chargedPattern,
                         };
                     })
                 );
