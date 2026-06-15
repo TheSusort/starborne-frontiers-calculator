@@ -669,6 +669,14 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Equipment Lock Filter:</span>{' '}
                                         Show only ships with locked equipment
                                     </li>
+                                    <li>
+                                        <span className="text-primary">
+                                            Skill Targeting Filters:
+                                        </span>{' '}
+                                        Filter by &quot;Who it hits&quot; (target selection: Front,
+                                        Back, Skip, All, Self, Team, Others) and &quot;Pattern&quot;
+                                        (AoE pattern shape)
+                                    </li>
                                 </ul>
                             </div>
 
@@ -700,6 +708,10 @@ const DocumentationPage: React.FC = () => {
                                     <li>Ship type</li>
                                     <li>Faction name</li>
                                     <li>Affinity</li>
+                                    <li>
+                                        Targeting terms (e.g. &quot;cone&quot; or
+                                        &quot;backline&quot;)
+                                    </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
                                     The search is case-insensitive and updates results in real-time
