@@ -1944,6 +1944,11 @@ export function runCombat(input: CombatEngineInput): {
         // The helper `dmg(id)` lazily creates entries on first write — actors that never
         // produce damage in a round simply have no entry, keeping the map sparse.
         const roundDamage = new Map<string, ActorDamage>();
+        // Per-round per-victim positional damage accumulator (victim actor id → summed damage
+        // dealt to it this round). Populated ONLY by the positional apply path's emitHit
+        // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
+        // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
+        const roundPerTargetDamage = new Map<string, number>();
         const dmg = (id: string): ActorDamage => {
             let d = roundDamage.get(id);
             if (!d) {
@@ -2244,6 +2249,15 @@ export function runCombat(input: CombatEngineInput): {
                     affinity: v.affinity ?? 'antimatter',
                 }),
                 applyToVictim: args.applyToVictim,
+                // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
+                // per-round map so the RoundData row can expose perTargetDamage. Identical
+                // across all three sites (focus / team / enemy), so it lives here.
+                emitHit: (victim, damage) => {
+                    roundPerTargetDamage.set(
+                        victim.id,
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + damage
+                    );
+                },
             });
         };
 
@@ -3653,6 +3667,11 @@ export function runCombat(input: CombatEngineInput): {
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
             // extraTurns set ONLY when ≥ 1 (undefined preserves legacy RoundData shape).
             ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
+            // perTargetDamage set ONLY when the positional path recorded victim damage this
+            // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
+            ...(roundPerTargetDamage.size > 0
+                ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
+                : {}),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,

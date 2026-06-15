@@ -118,6 +118,9 @@ export interface RoundData {
     /** Number of EXTRA focus-actor turns this round (extra actions). Set only when
      *  ≥ 1 — undefined preserves the legacy RoundData shape (golden snapshots). */
     extraTurns?: number;
+    /** Victim actor id → damage dealt to it this round. Populated ONLY by the positional
+     *  apply path (gated on positions + pattern); absent in non-positional runs. */
+    perTargetDamage?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;

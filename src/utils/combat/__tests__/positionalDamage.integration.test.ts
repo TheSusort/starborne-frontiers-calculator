@@ -380,6 +380,47 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
         expect(hi.has('player-mid')).toBe(false);
     });
 
+    it('records perTargetDamage per victim: origin FULL (5000) + covered HALF (2500); non-positional run has it absent', () => {
+        // AoE enemy at M1 fires Line-Range-1 `front` → origin = front player (heal target,
+        // 5000 full), covered = M3 player (2500 half). Roster HP kept huge so nobody dies and
+        // the per-round map records the actual landed damage rather than clamping at death.
+        const positionalRun = BASE(
+            {
+                hp: 1_000_000_000,
+                teamActors: [passivePlayerAt('player-mid', 'M3', 1_000_000_000)],
+                enemyAttackers: [offensiveEnemyAt('enemy-1', 'M1', 'front', lineRange1Pattern())],
+            },
+            undefined,
+            undefined
+        );
+        idc = 0;
+        const result = runCombat(positionalRun);
+        const round = result.rounds[0];
+        expect(round.perTargetDamage).toBeDefined();
+        expect(round.perTargetDamage?.['attacker']).toBe(5000); // origin = heal target, full
+        expect(round.perTargetDamage?.['player-mid']).toBe(2500); // covered, half
+
+        // Non-positional run (no enemy pattern → legacy single-apply): no positional emitHit
+        // accumulation → perTargetDamage absent on every round.
+        const nonPositionalRun = BASE(
+            {
+                hp: 1_000_000_000,
+                teamActors: [passivePlayerAt('player-mid', 'M3', 1_000_000_000)],
+                enemyAttackers: [
+                    {
+                        ...offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern()),
+                        pattern: undefined,
+                    } as EnemyAttacker,
+                ],
+            },
+            undefined,
+            undefined
+        );
+        idc = 0;
+        const legacyResult = runCombat(nonPositionalRun);
+        expect(legacyResult.rounds[0].perTargetDamage).toBeUndefined();
+    });
+
     it('byte-identical sanity: a NON-positional enemy (no pattern) hits only the heal target via the legacy single-apply', () => {
         // Enemy has a target but NO pattern → enemyPositional is false → legacy single-apply path:
         // it drains the heal target (the focus) only. The M3 player is never touched. This is the
