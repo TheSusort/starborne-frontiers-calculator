@@ -2,7 +2,8 @@ import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/ca
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
-import type { ParsedTarget } from '../targetingParser';
+import type { AffinityName } from '../../types/ship';
+import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import {
@@ -335,6 +336,13 @@ export interface EnemyActorInput {
     ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
+    pattern?: ParsedPattern;
+    /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
+     *  computeAffinityModifiers to produce `affinityDamageModifier` above (positional plumbing —
+     *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
+     *  CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+    affinity?: AffinityName;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -419,6 +427,7 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
+        affinity: e.affinity,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -463,6 +472,11 @@ export function buildEnemyPlayerActorRuntime(
         affinityCritCap: resolvedCritCap,
         affinityCritPenalty: resolvedCritPenalty,
         affinityDisadvantage,
+        // RAW affinity — sourced from the SAME e.affinity the adapter fed to
+        // computeAffinityModifiers for resolvedDamageMod, so the two never disagree. Positional
+        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // neutral 'antimatter' default downstream.
+        attackerAffinity: e.affinity,
         allyChargePerRound: undefined,
         activeCritGate: enemyActiveCritGate,
         chargedCritGate: enemyChargedCritGate,
@@ -723,6 +737,12 @@ export type TeamActorEngineInput = TeamActorInput & {
         hasChargedSkill: boolean;
         /** Caster heal-modifier stat (healing calc). Default 0. */
         healModifier?: number;
+        /** RAW affinity of this team actor — the SAME affinity (TeamActorInput.affinity) the
+         *  adapter fed to computeAffinityModifiers to produce `affinityDamageModifier` in this
+         *  bundle, so the two never disagree. Positional plumbing — set but not yet consumed by
+         *  apply (threaded onto the runtime's attackerAffinity + the CombatActor.affinity).
+         *  Absent → neutral default ('antimatter') downstream. */
+        affinity?: AffinityName;
     };
     /** Board position of this team actor (positional plumbing — set but not yet consumed). */
     position?: Position;
@@ -730,6 +750,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for this team actor (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for this team actor (positional plumbing — set but not yet consumed by apply). */
+    pattern?: ParsedPattern;
 };
 
 export interface CombatEngineInput {
@@ -815,6 +837,12 @@ export interface CombatEngineInput {
         ignoresForcedTargeting?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
+        /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
+        pattern?: ParsedPattern;
+        /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
+         *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
+         *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
+        affinity?: AffinityName;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -824,6 +852,13 @@ export interface CombatEngineInput {
     ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
+    /** Pre-parsed positional pattern for the focus attacker (positional plumbing — set but not yet consumed by apply). */
+    pattern?: ParsedPattern;
+    /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
+     *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
+     *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
+     *  + the CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
+    affinity?: AffinityName;
     /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
      *  once on the first round it is built, so unit tests can exercise the player→enemy victim
      *  wrapper against a hand-built enemy actor BEFORE Task 8 wires a production caller. Never set
@@ -1027,6 +1062,7 @@ export function runCombat(input: CombatEngineInput): {
         startCharged,
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
+        affinity: input.affinity,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1094,6 +1130,9 @@ export function runCombat(input: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
+            // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
+            // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
+            affinity: t.walk?.affinity,
         })
     );
 
@@ -1109,6 +1148,16 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
+    // Per-team-actor parsed positional pattern (Task 8a), mirroring teamTargetById. The pattern
+    // lives only on the TeamActorEngineInput — thread it to the team-turn call site by id for the
+    // Task 8b apply path. Empty for every non-positional input (no pattern set) → inert today.
+    const teamPatternById = new Map<string, ParsedPattern>();
+    for (const t of teamActors) {
+        if (t.pattern) {
+            teamPatternById.set(t.id, t.pattern);
+        }
+    }
+
     // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
     // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
     // but its parsed `target` lives only on the EnemyActorInput — thread it to the enemy-turn
@@ -1119,6 +1168,16 @@ export function runCombat(input: CombatEngineInput): {
     for (const e of input.enemyAttackers ?? []) {
         if (e.target) {
             enemyTargetById.set(e.id, e.target);
+        }
+    }
+
+    // Per-enemy-attacker parsed positional pattern (Task 8a), mirroring enemyTargetById /
+    // teamPatternById. The pattern lives only on the EnemyActorInput — thread it to the enemy-turn
+    // call site by id for the Task 8b apply path. Empty for every non-positional input → inert today.
+    const enemyPatternById = new Map<string, ParsedPattern>();
+    for (const e of input.enemyAttackers ?? []) {
+        if (e.pattern) {
+            enemyPatternById.set(e.id, e.pattern);
         }
     }
 
@@ -1218,6 +1277,11 @@ export function runCombat(input: CombatEngineInput): {
         affinityCritCap,
         affinityCritPenalty,
         affinityDisadvantage,
+        // RAW focus affinity — sourced from the SAME input.affinity the page resolved into the
+        // pre-resolved affinityDamageModifier above, so the two never disagree. Positional
+        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // neutral 'antimatter' default downstream.
+        attackerAffinity: input.affinity,
         allyChargePerRound,
         activeCritGate,
         chargedCritGate,
@@ -1295,6 +1359,11 @@ export function runCombat(input: CombatEngineInput): {
             affinityCritCap: w.affinityCritCap,
             affinityCritPenalty: w.affinityCritPenalty,
             affinityDisadvantage: teamAffinityDisadvantage,
+            // RAW affinity — sourced from the SAME w.affinity (TeamActorInput.affinity) the adapter
+            // fed to computeAffinityModifiers for w.affinityDamageModifier, so the two never
+            // disagree. Positional plumbing: read by victimHitDamage (Task 8b/9). Undefined →
+            // neutral 'antimatter' default downstream.
+            attackerAffinity: w.affinity,
             allyChargePerRound: undefined, // attacker-only manual input
             activeCritGate: teamActiveCritGate,
             chargedCritGate: teamChargedCritGate,
