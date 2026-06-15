@@ -1,6 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { PageLayout } from '../components/ui';
 import { Button } from '../components/ui/Button';
+import Seo from '../components/seo/Seo';
+import { SEO_CONFIG } from '../constants/seo';
 import { Ship } from '../types/ship';
 import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
@@ -12,12 +14,7 @@ import {
     BattlePlacement,
 } from '../utils/calculators/battleSimulator';
 import PlacementBoard from '../components/simulator/PlacementBoard';
-import RoundStepper from '../components/simulator/RoundStepper';
-import BattleBoard from '../components/simulator/BattleBoard';
-import RoundEventLog from '../components/simulator/RoundEventLog';
-import ShipRoundCard from '../components/simulator/ShipRoundCard';
-import { StatCard } from '../components/ui/StatCard';
-import { overlaysForRound } from '../utils/simulator/boardOverlays';
+import BattlePlayback from '../components/simulator/BattlePlayback';
 
 /** One placement board's state: a Position → Ship map. The Position key is the grid cell;
  *  the Ship is the fully-loaded inventory ship whose geared stats Run resolves. */
@@ -39,10 +36,6 @@ const SimulatorPage: React.FC = () => {
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
-    // Round-stepper playback position (1-based). Tasks 4 render this round's board/log/card.
-    const [currentRound, setCurrentRound] = useState(1);
-    // Pinned ship (synthetic roster actorId) for the per-ship detail card; null = none.
-    const [pinned, setPinned] = useState<string | null>(null);
 
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
@@ -130,120 +123,60 @@ const SimulatorPage: React.FC = () => {
                 enemyTeam: buildTeam(enemyBoard),
             });
             setBattleResult(result);
-            setCurrentRound(1);
-            setPinned(null);
         } catch (err) {
             setBattleResult(null);
             setRunError(err instanceof Error ? err.message : 'Simulation failed');
         }
     };
 
-    const outcomeLabel = (result: BattleResult): string => {
-        const { winner } = result.outcome;
-        return winner === 'player' ? 'Your team wins' : winner === 'enemy' ? 'Enemy wins' : 'Draw';
-    };
-
-    // The round currently shown by the stepper (1-based, clamped to the trimmed rounds).
-    const total = battleResult?.rounds.length ?? 0;
-    const curRound =
-        battleResult && total > 0
-            ? battleResult.rounds[Math.min(currentRound, total) - 1]
-            : undefined;
-
     return (
-        <PageLayout
-            title="Combat Simulator"
-            description="Place your team and an enemy team on the boards, then run a full battle simulation using geared stats."
-        >
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <PlacementBoard
-                        title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
-                        formation={playerFormation}
-                        selectedPosition={playerSelected}
-                        onSelectPosition={(pos) => handleSelectPosition('player', pos)}
-                        onRemoveShip={(pos) => handleRemoveShip('player', pos)}
-                        onPickShip={(ship) => handlePickShip('player', ship)}
-                        onCloseSelector={() => setPlayerSelected(undefined)}
-                    />
-                    <PlacementBoard
-                        title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
-                        formation={enemyFormation}
-                        selectedPosition={enemySelected}
-                        onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
-                        onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
-                        onPickShip={(ship) => handlePickShip('enemy', ship)}
-                        onCloseSelector={() => setEnemySelected(undefined)}
-                    />
-                </div>
+        <>
+            <Seo {...SEO_CONFIG.simulator} />
+            <PageLayout
+                title="Combat Simulator"
+                description="Place your team and an enemy team on the boards, then run a full battle simulation using geared stats."
+            >
+                <div className="space-y-6">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <PlacementBoard
+                            title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
+                            formation={playerFormation}
+                            selectedPosition={playerSelected}
+                            onSelectPosition={(pos) => handleSelectPosition('player', pos)}
+                            onRemoveShip={(pos) => handleRemoveShip('player', pos)}
+                            onPickShip={(ship) => handlePickShip('player', ship)}
+                            onCloseSelector={() => setPlayerSelected(undefined)}
+                        />
+                        <PlacementBoard
+                            title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
+                            formation={enemyFormation}
+                            selectedPosition={enemySelected}
+                            onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
+                            onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
+                            onPickShip={(ship) => handlePickShip('enemy', ship)}
+                            onCloseSelector={() => setEnemySelected(undefined)}
+                        />
+                    </div>
 
-                <div className="flex items-center gap-4">
-                    <Button variant="primary" onClick={handleRun} disabled={!canRun}>
-                        Run Simulation
-                    </Button>
-                    {!canRun && (
-                        <span className="text-sm text-theme-text-secondary">
-                            Place at least one ship on each team to run.
-                        </span>
-                    )}
-                </div>
-
-                {runError && <div className="card text-red-400">Simulation error: {runError}</div>}
-
-                {battleResult && (
-                    <StatCard
-                        title="Outcome"
-                        value={outcomeLabel(battleResult)}
-                        subtitle={`Round ${battleResult.outcome.lastRound}`}
-                        color={
-                            battleResult.outcome.winner === 'player'
-                                ? 'green'
-                                : battleResult.outcome.winner === 'enemy'
-                                  ? 'red'
-                                  : 'yellow'
-                        }
-                    />
-                )}
-
-                {battleResult && curRound && (
-                    <RoundStepper
-                        round={Math.min(currentRound, total)}
-                        total={total}
-                        onChange={setCurrentRound}
-                    />
-                )}
-
-                {battleResult && curRound && (
-                    <>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <BattleBoard
-                                title="Your Team"
-                                overlays={overlaysForRound(curRound, 'player', battleResult.roster)}
-                                pinnedActorId={pinned}
-                                onPinShip={setPinned}
-                            />
-                            <BattleBoard
-                                title="Enemy Team"
-                                overlays={overlaysForRound(curRound, 'enemy', battleResult.roster)}
-                                mirrored
-                                pinnedActorId={pinned}
-                                onPinShip={setPinned}
-                            />
-                        </div>
-
-                        {pinned && (
-                            <ShipRoundCard
-                                actorId={pinned}
-                                round={curRound}
-                                roster={battleResult.roster}
-                            />
+                    <div className="flex items-center gap-4">
+                        <Button variant="primary" onClick={handleRun} disabled={!canRun}>
+                            Run Simulation
+                        </Button>
+                        {!canRun && (
+                            <span className="text-sm text-theme-text-secondary">
+                                Place at least one ship on each team to run.
+                            </span>
                         )}
+                    </div>
 
-                        <RoundEventLog round={curRound} roster={battleResult.roster} />
-                    </>
-                )}
-            </div>
-        </PageLayout>
+                    {runError && (
+                        <div className="card text-red-400">Simulation error: {runError}</div>
+                    )}
+
+                    {battleResult && <BattlePlayback result={battleResult} />}
+                </div>
+            </PageLayout>
+        </>
     );
 };
 

@@ -16,6 +16,7 @@ vi.mock('../../hooks/useEngineeringStats', () => ({
 }));
 vi.mock('../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('../../hooks/useShipsData', () => ({ useShipsData: () => ({ ships: [] }) }));
+vi.mock('../../components/seo/Seo', () => ({ default: () => null }));
 
 describe('SimulatorPage', () => {
     it('renders the page title, two placement boards, and a Run button', () => {
