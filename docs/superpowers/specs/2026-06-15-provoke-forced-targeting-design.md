@@ -27,8 +27,8 @@ The critical open question — *is the provoker's identity retrievable at resolu
 
 - An ability-sourced Provoke infliction stamps `casterId = applier's ownerId` at registration (`engine.ts:181` — the shared `base` object covers enemy-side timed statuses, not just self-side buffs).
 - `applyTimedAbilityStatus` persists it onto the provoked actor's debuff store: `casterId: status.casterId` (`statusEngine.ts:962`), keyed by the provoked target's id.
-- The read path surfaces it: `timedAbilityStatuses('enemy', undefined, provokedId)[].casterId` (`statusEngine.ts:1034`); `activeAbilityStatuses` likewise (`:990`/`:1011`).
-- Guardian's reactive Provoke counter ("when an ally is critically hit, apply Provoke to that enemy") also carries `casterId: intent.ownerId` (`triggers.ts:830`).
+- The read path surfaces it: `timedAbilityStatuses('enemy', undefined, provokedId)[].casterId` (`statusEngine.ts:1034`, where `provokedId` fills the `enemyTargetId` param). `timedAbilityStatuses` does **not** re-gate on read (`statusEngine.ts:1028-1037` — no `conditionsMet`/`resolveCtx`); it returns stored entries verbatim, so a stored `casterId` is consumed only by readers that opt in.
+- **CAVEAT (reviewer-caught, blocking-fixed): the cast path carries `casterId`, but the *reactive*-debuff path does NOT today.** Ability-cast Provoke (active/charged — the bulk of the corpus appliers) flows through `engine.ts:181`'s shared `base` → carries `casterId`. But Guardian's reactive Provoke counter ("when an ally is critically hit, apply Provoke to that enemy") is a reactive *debuff* routed through the `cfg.type === 'debuff'` branch (`triggers.ts:848-891`), whose timed status object (`triggers.ts:849-856`) **omits `casterId`** (the `casterId: intent.ownerId` at `triggers.ts:830` is the reactive-*buff* branch, `side: 'self'` — a different path). Under `provokerOf` (§4.1), a casterId-less Provoke is inert. **Fix (in scope, see §4 component 0): stamp `casterId: intent.ownerId` in the reactive-debuff status object.** Verified churn-free: `timedAbilityStatuses` doesn't re-gate on read, and the only existing reader of enemy-side timed-debuff `casterId` (`ownerDebuffNamesFor`, `triggers.ts:668`) ignores it — `provokerOf` is the first consumer. `casterId` is not part of family-key/tier/persistent-stacking logic, so storing it changes nothing else.
 - The existing name-only path (`ownerDebuffNamesFor`, `triggers.ts:662`) **discards** `casterId` → a new casterId-bearing query is required.
 - Only **one** Provoke entry exists per target at a time (the family-overwrite rule keys on `'Provoke'`), so there is no multi-applier ambiguity; "last applied wins" falls out of the family rule naturally.
 - `'Provoke'` is **not** a persistent-stacking buff, so it takes the normal timed path (no `PERSISTENT_STACKING_BUFFS` early-return at `statusEngine.ts:935`).
@@ -52,6 +52,8 @@ The critical open question — *is the provoker's identity retrievable at resolu
 
 ### Components
 
+0. **Stamp `casterId` on the reactive-debuff path (`triggers.ts:849-856`).** Add `casterId: intent.ownerId` to the timed status object in the `cfg.type === 'debuff'` branch, mirroring the cast path (`engine.ts:181`) and the reactive-buff branch (`triggers.ts:830`). This makes Guardian's reactive Provoke (and any future reactive debuff) carry its applier identity. Churn-free (see §3 caveat). Without this, Guardian's reactive Provoke would be inert under `provokerOf`.
+
 1. **`provokerOf(statusEngine, actorId): string | undefined` — new read-only helper in `triggers.ts`.**
    Scans the actor's own enemy-side debuff store (`timedAbilityStatuses('enemy', undefined, actorId)` and `activeAbilityStatuses('enemy', …, undefined, actorId)`) for `buffName === 'Provoke'`; returns its `casterId`. Single entry expected (family-overwrite). Returns `undefined` if no Provoke is present or the entry carries no `casterId` (manual/scheduled application without caster identity → Provoke is inert and resolution falls through to normal targeting). Mirrors the read style of `buildForcedTargetingStatus`.
 
@@ -72,7 +74,7 @@ The critical open question — *is the provoker's identity retrievable at resolu
    Parser detects "ignores Taunt and Provoke" on the ship's skill texts (tag-stripped regex — texts contain `<unit-skill>Taunt</unit-skill>`; reuse the parser's existing tag-stripping). Emits a **per-ship boolean** (corpus-justified: every ignore-ship ignores uniformly across active/charged/passive — matches Phase 2's single-target-field grain; per-action is a future extension if a ship ever ignores on only one skill). Threaded like `position`/`target`: `CombatActor.ignoresForcedTargeting` + the actor-input types (`TeamActorEngineInput`, `EnemyActorInput`, inline enemy-attacker input), populated where actor capabilities derive (e.g. `buildShipAbilities` / actor construction).
 
 4. **Engine wiring (3 `runPlayerTurn` resolve sites).**
-   At each site compute:
+   At each site, assemble `acting` and call `provokerOf` **only inside the existing `isPositional(...) && input.target` gate** (do NOT compute it eagerly on every turn) so the non-positional path runs zero new queries — keeping the dormant-code / byte-identical guarantee airtight:
    ```ts
    const acting = {
      ignoresForcedTargeting: actor.ignoresForcedTargeting,
@@ -91,7 +93,10 @@ The critical open question — *is the provoker's identity retrievable at resolu
   - Provoke bypasses stealth.
 - **`provokerOf` unit test:** a real timed Provoke debuff applied via the status engine → `casterId` surfaced; no Provoke → `undefined`; Provoke without `casterId` → `undefined`.
 - **Parser test:** ignore detection across all 9 corpus ignore-ships + negative cases (a Provoke applier that does NOT ignore must not be flagged).
-- **Integration test (through `runCombat`):** positioned actors, a real ship applies Provoke via its skill; verify the provoked actor's target resolves to the provoker. Exercises the `casterId` path end-to-end (the novel risk). Feasible because tests can pass positions. (Phase 3 lacked an e2e for CF/stealth because no applier existed; Provoke's applier exists, so this e2e is in scope.)
+- **Integration tests (through `runCombat`):** positioned actors; verify the provoked actor's target resolves to the provoker. Cover **both** applier paths — exercising the `casterId` path end-to-end (the novel risk):
+  - **Cast-path Provoke** (active/charged skill applies Provoke).
+  - **Reactive Provoke** (Guardian-style on-ally-critically-hit counter) — locks component 0: confirms the reactive-debuff branch now stamps `casterId` and the redirect fires.
+  Feasible because tests can pass positions. (Phase 3 lacked an e2e for CF/stealth because no applier existed; Provoke's appliers exist, so this e2e is in scope.)
 - **Golden parity:** DPS + healing goldens **byte-identical** (no production caller passes positions → the new code is dormant). Confirm byte-identical; hand-write any new locking scenario rather than `-u`.
 
 ## 6. Scope boundaries (deferred / out of scope)
@@ -99,7 +104,7 @@ The critical open question — *is the provoker's identity retrievable at resolu
 - **Vindicator AoE Provoke** ("all enemies adjacent to the target") — multi-target → Phase 4 (multi-target AoE consequences + per-actor-per-side accounting).
 - **Implant-sourced Provoke** (`constants/implants.ts`) — not modeled in the combat engine.
 - **Ignore-of-Concentrate-Fire** — out by user decision; CF remains the top override even for ignore-ships.
-- **Manual/scheduled Provoke without `casterId`** — inert (documented); the simulator's appliers are ability-sourced.
+- **Manual/scheduled Provoke without `casterId`** — inert (documented). With component 0, *both* ability-sourced paths (cast + reactive) carry `casterId`, so this boundary now only covers a Provoke injected directly into the status store with no caster identity (e.g. a future simulator-side manual debuff that bypasses the ability pipeline). Not a corpus case.
 - **Per-action ignore granularity** — per-ship boolean suffices for the current corpus; revisit only if a ship ignores on only one of active/charged.
 
 ## 7. Workflow notes
