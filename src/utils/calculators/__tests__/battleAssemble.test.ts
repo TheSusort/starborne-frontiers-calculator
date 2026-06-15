@@ -125,6 +125,28 @@ describe('assembleBattleResult — hpPct from cumulative taken', () => {
         });
         expect(find(result, 1, 'attacker').hpPct).toBe(0);
     });
+
+    it('yields hpPct 0 (not NaN) for an actor with maxHp 0', () => {
+        const zeroHpRoster: ReturnType<typeof roster> = [
+            { actorId: 'attacker', side: 'player', name: 'Focus', position: 'M4', maxHp: 0 },
+            {
+                actorId: 'enemy-front',
+                side: 'enemy',
+                name: 'EnemyFront',
+                position: 'M4',
+                maxHp: 10000,
+            },
+        ];
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            roster: zeroHpRoster,
+            numRounds: 1,
+        });
+        const hp = find(result, 1, 'attacker').hpPct;
+        expect(hp).toBe(0);
+        expect(Number.isNaN(hp)).toBe(false);
+    });
 });
 
 describe('assembleBattleResult — heals', () => {

@@ -39,9 +39,26 @@ import { computeAffinityModifiers } from './affinityUtils';
 export interface ShipRoundState {
     actorId: string;
     side: 'player' | 'enemy';
+    /**
+     * Attacker's per-turn aggregate (`ability-performed.damage` by `actorId`, anchor full).
+     * Uses a DIFFERENT base from `damageTaken` (which is per-victim from `perTargetDamage`,
+     * AoE origin full / covered half), so they are NOT expected to reconcile: under AoE,
+     * `Σ damageDealt ≠ Σ damageTaken` — by design. (Per-hit/per-victim event fidelity is a
+     * deferred follow-up.)
+     */
     damageDealt: number;
+    /**
+     * Per-victim damage from `perRoundPerTarget[round][victimId]` (AoE origin full / covered
+     * half). Uses a DIFFERENT base from `damageDealt` (the attacker's per-turn aggregate), so
+     * the two do NOT reconcile under AoE — see `damageDealt`.
+     */
     damageTaken: number;
     healingDone: number;
+    /**
+     * Heal `amount` split EVENLY across the heal's targets — the `heal-performed` event
+     * carries no per-recipient breakdown, so this is an approximation (not a true per-recipient
+     * amount).
+     */
     healingReceived: number;
     /**
      * Shield absorption. The `heal-performed` payload carries no shield channel flag
@@ -52,6 +69,12 @@ export interface ShipRoundState {
     hpPct: number;
     alive: boolean;
     activeBuffs: string[];
+    /**
+     * Infliction-only: there is no `debuff-expired` event in the stream, so once a debuff is
+     * added it accumulates and persists for the rest of the battle. This is asymmetric with
+     * `activeBuffs`, which DOES expire via `buff-expired`. Consumers should not expect debuffs
+     * to clear over time.
+     */
     activeDebuffs: string[];
 }
 
@@ -197,7 +220,10 @@ export function assembleBattleResult(args: {
                 healingDone: healDone.get(entry.actorId) ?? 0,
                 healingReceived: healReceived.get(entry.actorId) ?? 0,
                 shieldsAbsorbed: 0,
-                hpPct: clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp),
+                hpPct:
+                    entry.maxHp > 0
+                        ? clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp)
+                        : 0,
                 alive,
                 activeBuffs: [...(activeBuffs.get(entry.actorId) ?? [])],
                 activeDebuffs: [...(activeDebuffs.get(entry.actorId) ?? [])],
