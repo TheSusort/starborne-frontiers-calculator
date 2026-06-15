@@ -73,6 +73,10 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // PNG: 3 hexes in a row, all vivid red.
     'line|1|fromCentre': [ORIGIN, cov(-1, 0), cov(1, 0)],
 
+    // Pattern-Line-Support-from-centre-Range-1: caster-centered support line; caster IS included
+    // (ORIGIN, middle) with one covered cell each side along the lane — "1 caster 1".  1 origin.
+    'line|1|support+fromCentre': [ORIGIN, cov(-1, 0), cov(1, 0)],
+
     // Pattern-Line-Support-Range-1: support extends FORWARD (+q) from caster; caster IS included (ORIGIN).
     // Caster + 1 covered cell one step forward.  1 origin.
     'line|1|support': [ORIGIN, cov(1, 0)],
@@ -81,9 +85,17 @@ export const OFFSET_TABLES: Record<string, OffsetCell[]> = {
     // Caster + 3 covered cells extending forward.  1 origin.
     'line|3|support': [ORIGIN, cov(1, 0), cov(2, 0), cov(3, 0)],
 
+    // Pattern-Line-Support-Not-Self-Range-1: range-1 support extending FORWARD, caster excluded (notSelf).
+    // One covered cell one step forward from caster.  No origin.
+    'line|1|support+notSelf': [cov(1, 0)],
+
     // Pattern-Line-Support-Not-Self-Range-2: range-2 support extending FORWARD, caster excluded (notSelf).
     // Two covered cells extending forward from caster.  No origin.
     'line|2|support+notSelf': [cov(1, 0), cov(2, 0)],
+
+    // Pattern-Line-Support-Not-Self-Range-3: range-3 support extending FORWARD, caster excluded (notSelf).
+    // Three covered cells extending forward from caster.  No origin.
+    'line|3|support+notSelf': [cov(1, 0), cov(2, 0), cov(3, 0)],
 
     // ---------------------------------------------------------------------------
     // Cone family (Task 4)

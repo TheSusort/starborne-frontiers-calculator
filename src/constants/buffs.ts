@@ -319,7 +319,7 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Security Up II',
-        description: '+40Security',
+        description: '+40 Security',
         type: 'buff',
     },
     {

@@ -20,6 +20,8 @@ export interface FilterState {
         equipmentLocked?: boolean;
         starred?: boolean;
         affinities?: string[];
+        targetSelections?: string[];
+        patternShapes?: string[];
         // New advanced filters
         levelRange?: {
             min: number;
@@ -43,6 +45,8 @@ const DEFAULT_STATE: FilterState = {
         equipmentLocked: false,
         starred: false,
         affinities: [],
+        targetSelections: [],
+        patternShapes: [],
         levelRange: undefined,
         statFilters: [],
         mainStatFilters: [],

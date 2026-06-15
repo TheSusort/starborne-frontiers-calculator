@@ -105,6 +105,10 @@ interface RawShipData {
         first_passive_skill_text: string | null;
         second_passive_skill_text: string | null;
         third_passive_skill_text: string | null;
+        active_target: string | null;
+        active_pattern: string | null;
+        charged_target: string | null;
+        charged_pattern: string | null;
     };
 }
 
@@ -253,6 +257,10 @@ const transformShipData = (data: RawShipData): Ship | null => {
             firstPassiveSkillText: data.ship_templates.first_passive_skill_text ?? undefined,
             secondPassiveSkillText: data.ship_templates.second_passive_skill_text ?? undefined,
             thirdPassiveSkillText: data.ship_templates.third_passive_skill_text ?? undefined,
+            activeTarget: data.ship_templates.active_target ?? undefined,
+            activePattern: data.ship_templates.active_pattern ?? undefined,
+            chargedTarget: data.ship_templates.charged_target ?? undefined,
+            chargedPattern: data.ship_templates.charged_pattern ?? undefined,
         };
         return isValidShip(ship) ? ship : null;
     } catch (error) {
@@ -302,7 +310,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         // Unauthenticated path: fetch skill text from ship_templates for ships that are missing it
-        const shipsNeedingText = storageShips.filter((s) => !s.activeSkillText);
+        const shipsNeedingText = storageShips.filter((s) => !s.activeSkillText || !s.activeTarget);
         if (shipsNeedingText.length === 0) {
             setLocalShips(storageShips);
             return;
@@ -313,7 +321,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         void supabase
             .from('ship_templates')
             .select(
-                'name, active_skill_text, charge_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text'
+                'name, active_skill_text, charge_skill_text, charge_skill_charge, first_passive_skill_text, second_passive_skill_text, third_passive_skill_text, active_target, active_pattern, charged_target, charged_pattern'
             )
             .in('name', uniqueNames)
             .abortSignal(controller.signal)
@@ -326,17 +334,26 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const templateMap = new Map(data.map((t) => [t.name, t]));
                 setLocalShips(
                     storageShips.map((ship) => {
-                        if (ship.activeSkillText) return ship;
+                        // Outer filter casts a wide net (missing text OR targeting);
+                        // skip only ships that already have both.
+                        if (ship.activeSkillText && ship.activeTarget) return ship;
                         const t = templateMap.get(ship.name);
                         if (!t) return ship;
                         return {
                             ...ship,
-                            activeSkillText: t.active_skill_text ?? undefined,
-                            chargeSkillText: t.charge_skill_text ?? undefined,
-                            chargeSkillCharge: t.charge_skill_charge ?? undefined,
-                            firstPassiveSkillText: t.first_passive_skill_text ?? undefined,
-                            secondPassiveSkillText: t.second_passive_skill_text ?? undefined,
-                            thirdPassiveSkillText: t.third_passive_skill_text ?? undefined,
+                            activeSkillText: t.active_skill_text ?? ship.activeSkillText,
+                            chargeSkillText: t.charge_skill_text ?? ship.chargeSkillText,
+                            chargeSkillCharge: t.charge_skill_charge ?? ship.chargeSkillCharge,
+                            firstPassiveSkillText:
+                                t.first_passive_skill_text ?? ship.firstPassiveSkillText,
+                            secondPassiveSkillText:
+                                t.second_passive_skill_text ?? ship.secondPassiveSkillText,
+                            thirdPassiveSkillText:
+                                t.third_passive_skill_text ?? ship.thirdPassiveSkillText,
+                            activeTarget: t.active_target ?? ship.activeTarget,
+                            activePattern: t.active_pattern ?? ship.activePattern,
+                            chargedTarget: t.charged_target ?? ship.chargedTarget,
+                            chargedPattern: t.charged_pattern ?? ship.chargedPattern,
                         };
                     })
                 );
@@ -373,7 +390,11 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         charge_skill_charge,
                         first_passive_skill_text,
                         second_passive_skill_text,
-                        third_passive_skill_text
+                        third_passive_skill_text,
+                        active_target,
+                        active_pattern,
+                        charged_target,
+                        charged_pattern
                     )
                 `
                     )

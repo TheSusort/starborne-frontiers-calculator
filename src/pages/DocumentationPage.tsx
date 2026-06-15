@@ -669,6 +669,14 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Equipment Lock Filter:</span>{' '}
                                         Show only ships with locked equipment
                                     </li>
+                                    <li>
+                                        <span className="text-primary">
+                                            Skill Targeting Filters:
+                                        </span>{' '}
+                                        Filter by &quot;Who it hits&quot; (target selection: Front,
+                                        Back, Skip, All, Self, Allies, Other Allies) and{' '}
+                                        &quot;Pattern&quot; (AoE pattern shape)
+                                    </li>
                                 </ul>
                             </div>
 
@@ -700,6 +708,10 @@ const DocumentationPage: React.FC = () => {
                                     <li>Ship type</li>
                                     <li>Faction name</li>
                                     <li>Affinity</li>
+                                    <li>
+                                        Targeting terms (e.g. &quot;cone&quot; or
+                                        &quot;backline&quot;)
+                                    </li>
                                 </ul>
                                 <p className="text-theme-text mt-2">
                                     The search is case-insensitive and updates results in real-time
@@ -1824,7 +1836,15 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>View base stats for all ships at level 60</li>
                                     <li>Filter by faction, ship type, rarity, and affinity</li>
-                                    <li>Search ships by name</li>
+                                    <li>
+                                        Filter by skill targeting — &quot;Who it hits&quot; (target
+                                        selection: Front, Back, Skip, All, Self, Allies, Other
+                                        Allies) and &quot;Pattern&quot; (AoE pattern shape)
+                                    </li>
+                                    <li>
+                                        Search ships by name or targeting terms (e.g.
+                                        &quot;cone&quot; or &quot;backline&quot;)
+                                    </li>
                                     <li>Sort by various stats</li>
                                     <li>View detailed ship information including abilities</li>
                                     <li>

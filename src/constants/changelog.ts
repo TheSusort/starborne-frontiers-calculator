@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.63.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Renamed the "Others" targeting category to "Other Allies" for clarity, and corrected a few ships\' footprints: Faust and Refine exclude the caster (now showing the gray excluded marker), and Volk\'s support line is centered on the caster (one ally each side) rather than spanning the whole lane.',
+    'Ship Database and Ships pages can now be filtered and searched by skill targeting — two new multi-select filters let you narrow to ships whose skills hit a specific target selection (Front, Back, Skip, All, Self, Allies, Other Allies) or AoE pattern shape. The free-text search box on both pages also matches targeting terms (e.g. typing "cone" or "backline").',
     "Skill targeting footprints: fixed two patterns that were drawn wrong — Purifier's wings were missing their top row, and Oleander's double-pickaxe had a detached cell — and skills that exclude the caster (allies-only buffs) now show a gray marker where the caster sits.",
     'Skill targeting footprints now note secondary effects that reach beyond the hit — single-target attacks that also debuff or buff a wider group (e.g. all enemies, or adjacent enemies) show an "Also affects" line.',
     "Skill hovercards now show a board diagram of each Active and Charge skill's targeting footprint — which cells the skill hits (red = primary target, orange = splash).",

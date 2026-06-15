@@ -1,4 +1,4 @@
-import { TargetSelection } from '../utils/targetingParser';
+import { PatternShape, TargetSelection } from '../utils/targetingParser';
 
 /**
  * A targeting rule = how the game picks the target for a skill. Cards reference a rule by
@@ -36,12 +36,12 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
     },
     team: {
         id: 'team',
-        label: 'Team',
-        description: 'Affects your whole team.',
+        label: 'Allies',
+        description: 'Affects your allies.',
     },
     others: {
         id: 'others',
-        label: 'Others',
+        label: 'Other Allies',
         description: 'Affects allies other than the caster.',
     },
     self: {
@@ -49,4 +49,32 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
         label: 'Self',
         description: 'Affects the caster only.',
     },
+};
+
+/**
+ * Human-readable labels for parsed AoE pattern shapes. Mirrors TARGETING_RULES:
+ * keep display copy here, never hardcoded in components. Add a new shape by
+ * adding a row keyed on its PatternShape id.
+ */
+export interface PatternShapeInfo {
+    id: PatternShape;
+    label: string;
+}
+
+export const PATTERN_SHAPES: Record<PatternShape, PatternShapeInfo> = {
+    base: { id: 'base', label: 'Single Target' },
+    cone: { id: 'cone', label: 'Cone' },
+    line: { id: 'line', label: 'Line' },
+    cross: { id: 'cross', label: 'Cross' },
+    curve: { id: 'curve', label: 'Curve' },
+    circle: { id: 'circle', label: 'Circle' },
+    backline: { id: 'backline', label: 'Backline' },
+    root: { id: 'root', label: 'Root' },
+    split: { id: 'split', label: 'Split' },
+    burst: { id: 'burst', label: 'Burst' },
+    scattershot: { id: 'scattershot', label: 'Scattershot' },
+    wings: { id: 'wings', label: 'Wings' },
+    range: { id: 'range', label: 'Range' },
+    pickaxe: { id: 'pickaxe', label: 'Pickaxe' },
+    all: { id: 'all', label: 'All' },
 };

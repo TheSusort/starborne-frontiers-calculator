@@ -1,5 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { Ship, AffinityName } from '../../types/ship';
+import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
+import { PatternShape } from '../../utils/targetingParser';
+import {
+    getShipTargetingFacets,
+    matchesTargetingFilters,
+    buildTargetingSearchText,
+} from '../../utils/targeting/targetingFilter';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import {
@@ -120,6 +127,8 @@ export const ShipInventory: React.FC<Props> = ({
         (state.filters.shipTypes?.length ?? 0) > 0 ||
         (state.filters.rarities?.length ?? 0) > 0 ||
         (state.filters.affinities?.length ?? 0) > 0 ||
+        (state.filters.targetSelections?.length ?? 0) > 0 ||
+        (state.filters.patternShapes?.length ?? 0) > 0 ||
         state.filters.equipmentLocked ||
         state.filters.starred ||
         searchQuery.length > 0;
@@ -149,6 +158,20 @@ export const ShipInventory: React.FC<Props> = ({
         setState((prev: FilterState) => ({
             ...prev,
             filters: { ...prev.filters, affinities },
+        }));
+    };
+
+    const setSelectedTargetSelections = (targetSelections: string[]) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: { ...prev.filters, targetSelections },
+        }));
+    };
+
+    const setSelectedPatternShapes = (patternShapes: string[]) => {
+        setState((prev: FilterState) => ({
+            ...prev,
+            filters: { ...prev.filters, patternShapes },
         }));
     };
 
@@ -188,7 +211,12 @@ export const ShipInventory: React.FC<Props> = ({
                 ship.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 SHIP_TYPES[ship.type]?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 FACTIONS[ship.faction]?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                ship.affinity?.toLowerCase().includes(searchQuery.toLowerCase());
+                ship.affinity?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                buildTargetingSearchText(ship).includes(searchQuery.toLowerCase());
+            const matchesTargeting = matchesTargetingFilters(ship, {
+                selections: state.filters.targetSelections,
+                shapes: state.filters.patternShapes,
+            });
 
             return (
                 matchesFaction &&
@@ -197,6 +225,7 @@ export const ShipInventory: React.FC<Props> = ({
                 matchesAffinity &&
                 matchesEquipmentLocked &&
                 matchesStarred &&
+                matchesTargeting &&
                 matchesSearch
             );
         });
@@ -311,6 +340,16 @@ export const ShipInventory: React.FC<Props> = ({
         return Array.from(affinities).sort((a, b) => a.localeCompare(b));
     }, [ships]);
 
+    const uniquePatternShapes = useMemo(() => {
+        const shapes = new Set<PatternShape>();
+        ships.forEach((ship) => {
+            getShipTargetingFacets(ship).shapes.forEach((s) => shapes.add(s));
+        });
+        return Array.from(shapes).sort((a, b) =>
+            PATTERN_SHAPES[a].label.localeCompare(PATTERN_SHAPES[b].label)
+        );
+    }, [ships]);
+
     const filters: FilterConfig[] = [
         {
             id: 'faction',
@@ -365,6 +404,26 @@ export const ShipInventory: React.FC<Props> = ({
                 { value: 'starred', label: 'Starred' },
             ],
         },
+        {
+            id: 'targetSelection',
+            label: 'Who it hits',
+            values: state.filters.targetSelections ?? [],
+            onChange: setSelectedTargetSelections,
+            options: Object.values(TARGETING_RULES).map((rule) => ({
+                value: rule.id,
+                label: rule.label,
+            })),
+        },
+        {
+            id: 'patternShape',
+            label: 'Pattern',
+            values: state.filters.patternShapes ?? [],
+            onChange: setSelectedPatternShapes,
+            options: uniquePatternShapes.map((shape) => ({
+                value: shape,
+                label: PATTERN_SHAPES[shape].label,
+            })),
+        },
     ];
 
     const sortOptions = [
@@ -414,7 +473,7 @@ export const ShipInventory: React.FC<Props> = ({
                     setSort={setSort}
                     searchValue={searchQuery}
                     onSearchChange={setSearchQuery}
-                    searchPlaceholder="Search ships..."
+                    searchPlaceholder="Search ships by name or targeting…"
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
                 />
