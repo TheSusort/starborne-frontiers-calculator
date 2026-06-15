@@ -901,17 +901,6 @@ export interface HealingRoundEngine {
 }
 
 /**
- * The combat-engine turn loop (combat-system.md §10). Each round builds a turn queue
- * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (default
- * speed 100) runs the full damage/buff/DoT-application pipeline; the enemy (default
- * speed 50) ticks the DoT containers it carries (DoTs tick at the start of the
- * afflicted ship's turn). When enemySpeed > speed the order inverts — the enemy acts
- * before the attacker, deferring round-1 DoT ticks to round 2. The round's RoundData
- * row is assembled after all turns. At default speeds the attacker always precedes the
- * enemy, making this a byte-identical relocation of the old single-block round —
- * events are write-only taps that never read or change a sim value.
- */
-/**
  * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
  * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
  * core; the four bits that differ between the healing-mode player intake and (future)
@@ -928,6 +917,17 @@ interface DamageAccountingSink {
     /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
     onHealTargetDestroyed?: (victim: CombatActor) => void;
 }
+/**
+ * The combat-engine turn loop (combat-system.md §10). Each round builds a turn queue
+ * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (default
+ * speed 100) runs the full damage/buff/DoT-application pipeline; the enemy (default
+ * speed 50) ticks the DoT containers it carries (DoTs tick at the start of the
+ * afflicted ship's turn). When enemySpeed > speed the order inverts — the enemy acts
+ * before the attacker, deferring round-1 DoT ticks to round 2. The round's RoundData
+ * row is assembled after all turns. At default speeds the attacker always precedes the
+ * enemy, making this a byte-identical relocation of the old single-block round —
+ * events are write-only taps that never read or change a sim value.
+ */
 export function runCombat(input: CombatEngineInput): {
     rounds: RoundData[];
     rawTotals: {
@@ -2064,18 +2064,18 @@ export function runCombat(input: CombatEngineInput): {
         // healTargetDestroyedRound write). Signature, default `victim = healTarget!`, and return
         // value are unchanged, so every existing call site stays byte-identical.
         const playerSink: DamageAccountingSink = {
-            addIncoming: (a) => {
-                roundIncomingDamage += a;
+            addIncoming: (amount) => {
+                roundIncomingDamage += amount;
             },
-            addShieldAbsorbed: (a) => {
-                roundShieldAbsorbed += a;
+            addShieldAbsorbed: (amount) => {
+                roundShieldAbsorbed += amount;
             },
-            addBarrierAbsorbed: (a) => {
-                roundBarrierAbsorbed += a;
+            addBarrierAbsorbed: (amount) => {
+                roundBarrierAbsorbed += amount;
             },
-            onHealTargetDestroyed: (v) => {
-                if (v === healTarget) {
-                    healTargetDestroyedRound = v.destroyedRound;
+            onHealTargetDestroyed: (victim) => {
+                if (victim === healTarget) {
+                    healTargetDestroyedRound = victim.destroyedRound;
                 }
             },
         };
