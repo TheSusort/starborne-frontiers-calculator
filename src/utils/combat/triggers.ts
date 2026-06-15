@@ -1012,6 +1012,20 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                   ? ctx.playerIds
                   : [intent.ownerId];
         for (const rid of recipients) {
+            // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
+            // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
+            // destroyed, but `recipients = ctx.playerIds` then still includes that dead
+            // caster — inflating gross directHeal/shield by one phantom share. The live
+            // heal target's effectiveHeal/overheal/shield are already isolated by the
+            // `rid === ctx.healing.targetId` guard below and are unaffected.
+            //
+            // Determinism (byte-identical goldens): an `rid` may have NO runtime entry
+            // (an unwalked legacy team actor). A MISSING runtime is treated as ALIVE —
+            // credit it, preserving today's behavior. Only a runtime that EXISTS with
+            // currentHp <= 0 is skipped. The live heal target is alive during a normal
+            // heal, so no existing fixture's recipient is skipped.
+            const recipientHp = ctx.runtimes.get(rid)?.actor.currentHp;
+            if (recipientHp !== undefined && recipientHp <= 0) continue;
             const basisValue =
                 cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
             const raw =
