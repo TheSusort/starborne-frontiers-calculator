@@ -239,7 +239,7 @@ Detects "ignores Taunt and Provoke" (and "ignoring …", "… effects") in a shi
 
 **Files:**
 - Modify: `src/utils/skillTextParser.ts`
-- Test: the existing `skillTextParser` test file (find it: `ls src/utils/__tests__/ | grep -i skillTextParser` or co-located `src/utils/skillTextParser.test.ts`)
+- Test: `src/utils/__tests__/skillTextParser.test.ts` (confirmed path; the plan's `import { detectIgnoresForcedTargeting } from '../skillTextParser'` resolves from there)
 
 - [ ] **Step 1: Write the failing tests.** Positive: the 9 ignore-ship texts (use the literal strings, e.g. `"This Unit's attack ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> and deals 160% damage."`, `"deals 130% damage, ignoring Taunt and Provoke."`, `"ignores Taunt and Provoke effects"`). Negative: a Provoke APPLIER (`"applies Provoke for 1 turn"`) and a Provoke-condition reader (`"additional damage against Taunted or Provoked enemies"`) must return `false`.
 
