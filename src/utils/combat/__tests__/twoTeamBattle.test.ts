@@ -72,6 +72,8 @@ import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import type { Ship } from '../../../types/ship';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -366,5 +368,194 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
         // their max HP). Pins the HP-crossing source for the player direction.
         expect(hpChanged.length).toBeGreaterThan(0);
         expect(hpChanged.some((e) => PLAYER_IDS.has(e.targetId))).toBe(true);
+    });
+});
+
+// ===========================================================================
+// Phase 5 PR 1, Task 3: end-to-end `simulateBattle` adapter (positioned squads →
+// runCombat → symmetric BattleResult). Driven through `simulateBattle`, not raw runCombat.
+// ===========================================================================
+
+// Minimal Ship factory: only the fields simulateBattle reads — baseStats (stat
+// derivation), affinity, charge threshold, the raw active targeting strings
+// (parseShipTargeting → target+pattern), and a single-hit damage active skill so
+// the ship fires real damage. statOverrides on the placement supply the combat
+// stats actually used; baseStats only need to be present/valid.
+const makeShip = (
+    id: string,
+    name: string,
+    opts: { activeTarget: string; activePattern: string } = {
+        activeTarget: 'front',
+        activePattern: 'Pattern-Base',
+    }
+): Ship => ({
+    id,
+    name,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'Attacker',
+    baseStats: {
+        hp: 0,
+        attack: 0,
+        defence: 0,
+        hacking: 200,
+        security: 100,
+        crit: 0,
+        critDamage: 0,
+        speed: 100,
+    },
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    // A single-hit 100% active damage skill (corpus phrasing with the <unit-damage> tag so
+    // skillTextParser produces a real damage ability) — so the engine fires actual damage.
+    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    chargeSkillCharge: 0,
+    activeTarget: opts.activeTarget,
+    activePattern: opts.activePattern,
+});
+
+const placement = (
+    ship: Ship,
+    position: Position,
+    attack: number,
+    hp: number
+): BattlePlacement => ({
+    ship,
+    position,
+    statOverrides: {
+        attack,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        hacking: 200,
+        defence: 0,
+        hp,
+    },
+});
+
+describe('simulateBattle adapter (Phase 5 PR 1, Task 3)', () => {
+    it('produces non-zero per-ship damage dealt/taken on BOTH sides', () => {
+        const result = simulateBattle({
+            playerTeam: [
+                placement(
+                    makeShip('p1', 'Player Front', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M4',
+                    5000,
+                    1_000_000_000
+                ),
+                placement(
+                    makeShip('p2', 'Player Back', {
+                        activeTarget: 'back',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M3',
+                    5000,
+                    1_000_000_000
+                ),
+            ],
+            enemyTeam: [
+                placement(
+                    makeShip('e1', 'Enemy Front', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M4',
+                    5000,
+                    1_000_000_000
+                ),
+                placement(
+                    makeShip('e2', 'Enemy Back', {
+                        activeTarget: 'back',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M1',
+                    5000,
+                    1_000_000_000
+                ),
+            ],
+            rounds: 3,
+        });
+
+        // Roster covers all four placed ships, both sides represented.
+        expect(result.roster.filter((r) => r.side === 'player')).toHaveLength(2);
+        expect(result.roster.filter((r) => r.side === 'enemy')).toHaveLength(2);
+
+        // Aggregate dealt/taken per side across all rounds.
+        const sumBySide = (sel: (s: { damageDealt: number; damageTaken: number }) => number) => {
+            const out: Record<'player' | 'enemy', number> = { player: 0, enemy: 0 };
+            for (const round of result.rounds) {
+                for (const s of round.ships) out[s.side] += sel(s);
+            }
+            return out;
+        };
+        const dealt = sumBySide((s) => s.damageDealt);
+        const taken = sumBySide((s) => s.damageTaken);
+
+        // BOTH sides deal AND take damage (symmetric mutual combat).
+        expect(dealt.player).toBeGreaterThan(0);
+        expect(dealt.enemy).toBeGreaterThan(0);
+        expect(taken.player).toBeGreaterThan(0);
+        expect(taken.enemy).toBeGreaterThan(0);
+    });
+
+    it('marks a low-HP ship dead and a one-sided matchup wipes the weaker team before round 30', () => {
+        // Strong players (high attack, huge HP) vs fragile enemies (tiny HP, no offense
+        // worth surviving). Enemies die fast; players never die → enemy team wiped early.
+        const result = simulateBattle({
+            playerTeam: [
+                placement(
+                    makeShip('p1', 'Player Front', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M4',
+                    100_000,
+                    1_000_000_000
+                ),
+                placement(
+                    makeShip('p2', 'Player Back', {
+                        activeTarget: 'back',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M3',
+                    100_000,
+                    1_000_000_000
+                ),
+            ],
+            enemyTeam: [
+                placement(
+                    makeShip('e1', 'Enemy Front', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M4',
+                    1,
+                    5000
+                ),
+                placement(
+                    makeShip('e2', 'Enemy Back', {
+                        activeTarget: 'back',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M1',
+                    1,
+                    5000
+                ),
+            ],
+        });
+
+        // The default 30-round cap was NOT reached — the battle terminated early on a wipe.
+        expect(result.outcome.lastRound).toBeLessThan(30);
+        expect(result.outcome.winner).toBe('player');
+
+        // At least one enemy ship ends not-alive in the final round.
+        const finalRound = result.rounds[result.rounds.length - 1];
+        const deadEnemies = finalRound.ships.filter((s) => s.side === 'enemy' && !s.alive);
+        expect(deadEnemies.length).toBeGreaterThan(0);
     });
 });

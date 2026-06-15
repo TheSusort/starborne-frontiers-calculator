@@ -27,6 +27,14 @@
  */
 import type { CombatEvent } from '../combat/events';
 import type { Position } from '../../types/encounters';
+import type { Ship, AffinityName } from '../../types/ship';
+import type { CombatStatBlock } from '../../types/calculator';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../combat/engine';
+import { createEventBus } from '../combat/events';
+import { buildShipAbilities } from '../abilities/buildShipAbilities';
+import { selectFiringSkill } from '../abilities/applyAbilities';
+import { parseShipTargeting, SkillTargeting } from '../targetingParser';
+import { computeAffinityModifiers } from './affinityUtils';
 
 export interface ShipRoundState {
     actorId: string;
@@ -256,4 +264,298 @@ export function assembleBattleResult(args: {
             position,
         })),
     };
+}
+
+// ===========================================================================
+// Task 3: `simulateBattle` — the runCombat wrapper that turns two positioned
+// squads into the symmetric BattleResult above. New caller only (no engine
+// change) — goldens stay byte-identical.
+// ===========================================================================
+
+/** A ship placed on the board for a battle: the ship (skills + base stats +
+ *  affinity + raw targeting strings), optional combat-stat overrides (fully derived
+ *  stats from the page in PR2; falls back to the ship's baseStats here), and its grid
+ *  position (drives the positional combat path on both sides). */
+export interface BattlePlacement {
+    ship: Ship;
+    statOverrides?: Partial<CombatStatBlock>;
+    position: Position;
+}
+
+export interface BattleSimulationInput {
+    playerTeam: BattlePlacement[];
+    enemyTeam: BattlePlacement[];
+    /** Fixed round cap. Default 30. The result is trimmed at the first wipe. */
+    rounds?: number;
+}
+
+/** The combat stats simulateBattle resolves per placement. Derived from the ship's
+ *  baseStats, then `statOverrides` win field-by-field. The page (PR2) passes fully
+ *  gear/refit/engineering-resolved stats via `statOverrides`. */
+interface DerivedCombatStats {
+    attack: number;
+    crit: number;
+    critDamage: number;
+    defensePenetration: number;
+    hacking: number;
+    defence: number;
+    hp: number;
+}
+
+/** Resolve a placement's combat stats: ship.baseStats as the floor (with the page's
+ *  magic defaults — hacking ?? 200), then `statOverrides` applied field-by-field. */
+function resolveStats(p: BattlePlacement): DerivedCombatStats {
+    const b = p.ship.baseStats;
+    const o = p.statOverrides ?? {};
+    return {
+        attack: o.attack ?? b.attack ?? 0,
+        crit: o.crit ?? b.crit ?? 0,
+        critDamage: o.critDamage ?? b.critDamage ?? 0,
+        defensePenetration: o.defensePenetration ?? b.defensePenetration ?? 0,
+        hacking: o.hacking ?? b.hacking ?? 200,
+        defence: o.defence ?? b.defence ?? 0,
+        hp: o.hp ?? b.hp ?? 0,
+    };
+}
+
+/** Per-placement plan: its minted actor id, derived stats, ship skills, affinity,
+ *  parsed active targeting, charge threshold, and its display name for the roster. */
+interface PlacementPlan {
+    id: string;
+    name: string;
+    position: Position;
+    stats: DerivedCombatStats;
+    shipSkills: ReturnType<typeof buildShipAbilities>;
+    affinity: AffinityName | undefined;
+    /** Parsed ACTIVE targeting ({ target, pattern }); undefined if the ship has no targeting data. */
+    target: SkillTargeting | undefined;
+    chargeCount: number;
+}
+
+function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
+    const targeting = parseShipTargeting(p.ship);
+    // Use the ACTIVE targeting (target + pattern). The engine input takes ONE target/pattern
+    // per actor, so charged-skill targeting is a follow-up (PR2) — when a ship's charged
+    // skill targets differently the active selection is used for every turn here.
+    return {
+        id,
+        name: p.ship.name,
+        position: p.position,
+        stats: resolveStats(p),
+        shipSkills: buildShipAbilities(p.ship),
+        affinity: p.ship.affinity,
+        target: targeting.active,
+        chargeCount: p.ship.chargeSkillCharge ?? 0,
+    };
+}
+
+/**
+ * Thin adapter over the combat engine: positions two squads, runs a fixed-round mutual
+ * battle through `runCombat`, and assembles the symmetric `BattleResult` from the event
+ * stream + per-round per-victim damage.
+ *
+ * Side mapping (mirrors how the DPS/healing adapters feed the engine):
+ *   - player[0]  → the focus `attacker` (its stats/position/target/pattern ride the top-level input).
+ *   - player[1+] → `teamActors`, each with a `walk` bundle (own stats + skills + affinity-resolved
+ *                  rates), position, target, pattern.
+ *   - enemyTeam  → `enemyAttackers`, each with stats + shipSkills + position/target/pattern.
+ *
+ * `healTargetId` is set to the focus player actor's id as a VESTIGIAL workaround: the engine only
+ * builds the positioned enemy roster (and lets enemies fire on players) when `healTargetId` is set
+ * — it throws otherwise. The battle is driven by positions on both sides, not by the heal pipeline,
+ * which stays inert beyond unlocking the enemy roster.
+ *
+ * Affinity: each actor's matchup is resolved against the FIRST opposing placement's affinity (the
+ * single-opponent-affinity convention the DPS/healing adapters already use). The RAW affinity is
+ * also threaded so the engine's positional path and the pre-resolved modifiers never disagree.
+ *
+ * Actor ids are minted globally-unique across both squads (`p:<shipId>:<idx>` / `e:<shipId>:<idx>`),
+ * avoiding the reserved `'attacker'`/`'enemy'` ids and any duplicate (runCombat throws on either).
+ */
+export function simulateBattle(input: BattleSimulationInput): BattleResult {
+    const numRounds = input.rounds ?? 30;
+
+    // The engine's focus actor is ALWAYS the reserved id `'attacker'` (its damage/per-victim
+    // rows key off it), so player[0] must carry that id — minting `p:...` for it and pointing
+    // healTargetId there fails the engine's "is a player actor" check. The REST of the player
+    // team + every enemy get minted globally-unique ids that avoid `'attacker'`/`'enemy'`.
+    const FOCUS_ID = 'attacker';
+    const playerPlans = input.playerTeam.map((p, i) =>
+        planPlacement(p, i === 0 ? FOCUS_ID : `p:${p.ship.id}:${i}`)
+    );
+    const enemyPlans = input.enemyTeam.map((p, i) => planPlacement(p, `e:${p.ship.id}:${i}`));
+
+    // Representative opposing affinity for each side's matchup resolution (first opponent).
+    const enemyRepAffinity = enemyPlans[0]?.affinity;
+    const playerRepAffinity = playerPlans[0]?.affinity;
+
+    // Landing chance from an actor's hacking vs the opposing security. baseStats carry a
+    // `security` field; the enemy/player representative security drives the clamp. Default 100.
+    const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
+    const playerRepSecurity = input.playerTeam[0]?.ship.baseStats.security ?? 100;
+
+    const landingChance = (
+        plan: PlacementPlan,
+        aff: ReturnType<typeof computeAffinityModifiers>,
+        defenderSecurity: number
+    ): number => {
+        const effectiveHacking = plan.stats.hacking * (1 + aff.damageModifier / 100);
+        return Math.min(100, Math.max(0, effectiveHacking - defenderSecurity)) / 100;
+    };
+
+    const hasCharged = (plan: PlacementPlan): boolean => {
+        const charged = selectFiringSkill(plan.shipSkills, 'charged');
+        return plan.chargeCount >= 1 && (charged?.abilities.length ?? 0) > 0;
+    };
+
+    // ----- Focus player actor (player[0]) -----
+    const focus = playerPlans[0];
+    if (!focus) {
+        throw new Error('simulateBattle: playerTeam must contain at least one placement');
+    }
+    const focusAff = computeAffinityModifiers(focus.affinity, enemyRepAffinity);
+    const focusLanding = landingChance(focus, focusAff, enemyRepSecurity);
+
+    // ----- The rest of the player team → walked teamActors -----
+    const teamActors: TeamActorEngineInput[] = playerPlans.slice(1).map((plan) => {
+        const aff = computeAffinityModifiers(plan.affinity, enemyRepAffinity);
+        return {
+            id: plan.id,
+            speed: 100,
+            chargeCount: plan.chargeCount,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: plan.position,
+            target: plan.target?.target,
+            pattern: plan.target?.pattern,
+            walk: {
+                shipSkills: plan.shipSkills,
+                stats: {
+                    attack: plan.stats.attack,
+                    crit: plan.stats.crit,
+                    critDamage: plan.stats.critDamage,
+                    defensePenetration: plan.stats.defensePenetration,
+                    hacking: plan.stats.hacking,
+                    defence: plan.stats.defence,
+                    hp: plan.stats.hp,
+                },
+                debuffLandingChance: landingChance(plan, aff, enemyRepSecurity),
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: aff.damageModifier,
+                affinityCritCap: aff.critCap,
+                affinityCritPenalty: aff.critPenalty,
+                affinity: plan.affinity,
+                hasChargedSkill: hasCharged(plan),
+            },
+        };
+    });
+
+    // ----- Enemy team → enemyAttackers -----
+    const enemyAttackers: NonNullable<CombatEngineInput['enemyAttackers']> = enemyPlans.map(
+        (plan) => {
+            const aff = computeAffinityModifiers(plan.affinity, playerRepAffinity);
+            return {
+                id: plan.id,
+                stats: {
+                    attack: plan.stats.attack,
+                    crit: plan.stats.crit,
+                    critDamage: plan.stats.critDamage,
+                    speed: 100,
+                    defence: plan.stats.defence,
+                    hp: plan.stats.hp,
+                },
+                chargeCount: plan.chargeCount,
+                startCharged: false,
+                shipSkills: plan.shipSkills,
+                affinityDamageModifier: aff.damageModifier,
+                affinityCritCap: aff.critCap,
+                affinityCritPenalty: aff.critPenalty,
+                debuffLandingChance: landingChance(plan, aff, playerRepSecurity),
+                position: plan.position,
+                target: plan.target?.target,
+                pattern: plan.target?.pattern,
+                affinity: plan.affinity,
+            };
+        }
+    );
+
+    // ----- Capture the event stream + run -----
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    const EVENT_TYPES: CombatEvent['type'][] = [
+        'ability-performed',
+        'heal-performed',
+        'ship-destroyed',
+        'buff-applied',
+        'buff-expired',
+        'debuff-applied',
+    ];
+    for (const t of EVENT_TYPES) {
+        bus.on(t, (e) => events.push(e as CombatEvent));
+    }
+
+    const { rounds: engineRounds } = runCombat({
+        attack: focus.stats.attack,
+        crit: focus.stats.crit,
+        critDamage: focus.stats.critDamage,
+        defensePenetration: focus.stats.defensePenetration,
+        chargeCount: focus.chargeCount,
+        shipSkills: focus.shipSkills,
+        // The dummy player-offense enemy target (vestigial alongside the positioned roster):
+        // a huge HP / 0 defence punching bag — the real per-victim damage flows positionally.
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        debuffLandingChance: focusLanding,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: hasCharged(focus),
+        startCharged: false,
+        affinityDamageModifier: focusAff.damageModifier,
+        affinityCritCap: focusAff.critCap,
+        affinityCritPenalty: focusAff.critPenalty,
+        affinity: focus.affinity,
+        defence: focus.stats.defence,
+        hp: focus.stats.hp,
+        position: focus.position,
+        target: focus.target?.target,
+        pattern: focus.target?.pattern,
+        // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
+        // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
+        healTargetId: focus.id,
+        teamActors,
+        enemyAttackers,
+        bus,
+    });
+
+    // Per-round per-victim damage, keyed by each returned round's own `round` field
+    // (the rows are player-centric but each carries the round's full perTargetDamage map).
+    const perRoundPerTarget: Record<number, Record<string, number>> = {};
+    for (const rd of engineRounds) {
+        perRoundPerTarget[rd.round] = rd.perTargetDamage ?? {};
+    }
+
+    // Roster: every placed ship, with maxHp from its derived stats.
+    const roster: RosterEntry[] = [
+        ...playerPlans.map((plan) => ({
+            actorId: plan.id,
+            side: 'player' as const,
+            name: plan.name,
+            position: plan.position,
+            maxHp: plan.stats.hp,
+        })),
+        ...enemyPlans.map((plan) => ({
+            actorId: plan.id,
+            side: 'enemy' as const,
+            name: plan.name,
+            position: plan.position,
+            maxHp: plan.stats.hp,
+        })),
+    ];
+
+    return assembleBattleResult({ events, perRoundPerTarget, roster, numRounds });
 }
