@@ -41,7 +41,7 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
     },
     others: {
         id: 'others',
-        label: 'Others',
+        label: 'Other Allies',
         description: 'Affects allies other than the caster.',
     },
     self: {
