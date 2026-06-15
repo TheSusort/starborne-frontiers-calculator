@@ -12,6 +12,7 @@ import {
     BattlePlacement,
 } from '../utils/calculators/battleSimulator';
 import PlacementBoard from '../components/simulator/PlacementBoard';
+import RoundStepper from '../components/simulator/RoundStepper';
 
 /** One placement board's state: a Position → Ship map. The Position key is the grid cell;
  *  the Ship is the fully-loaded inventory ship whose geared stats Run resolves. */
@@ -33,6 +34,8 @@ const SimulatorPage: React.FC = () => {
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
+    // Round-stepper playback position (1-based). Tasks 4 render this round's board/log/card.
+    const [currentRound, setCurrentRound] = useState(1);
 
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
@@ -120,6 +123,7 @@ const SimulatorPage: React.FC = () => {
                 enemyTeam: buildTeam(enemyBoard),
             });
             setBattleResult(result);
+            setCurrentRound(1);
         } catch (err) {
             setBattleResult(null);
             setRunError(err instanceof Error ? err.message : 'Simulation failed');
@@ -173,10 +177,23 @@ const SimulatorPage: React.FC = () => {
 
                 {runError && <div className="card text-red-400">Simulation error: {runError}</div>}
 
+                {battleResult && battleResult.rounds.length > 0 && (
+                    <RoundStepper
+                        round={currentRound}
+                        total={battleResult.rounds.length}
+                        onChange={setCurrentRound}
+                    />
+                )}
+
                 {battleResult && (
                     <div className="card">
                         <h2 className="text-lg font-semibold mb-1">Result</h2>
                         <p className="text-theme-text">{outcomeLabel(battleResult)}</p>
+                        {battleResult.rounds.length > 0 && (
+                            <p className="text-sm text-theme-text-secondary">
+                                Viewing round {currentRound}
+                            </p>
+                        )}
                     </div>
                 )}
             </div>
