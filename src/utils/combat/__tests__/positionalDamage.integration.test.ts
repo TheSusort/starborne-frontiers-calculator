@@ -308,14 +308,13 @@ const passivePlayerAt = (id: string, position: Position, hp: number): TeamActor 
 // A positioned ENEMY attacker that actually deals damage: attack 5000, multiplier 100% (1x),
 // 1 hit, no crit vs defence-0 player victims → firing-hit damage = 5000. `target`/`pattern`
 // drive the Task 9 enemy-site positional apply against the PLAYER roster.
-type EnemyAttacker2 = EnemyAttacker;
 const offensiveEnemyAt = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection'],
     pattern: ParsedPattern,
     attack = 5000
-): EnemyAttacker2 =>
+): EnemyAttacker =>
     ({
         id,
         stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
@@ -325,7 +324,7 @@ const offensiveEnemyAt = (
         target: parsedTarget(selection),
         pattern,
         shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker2;
+    }) as EnemyAttacker;
 
 describe('Task 9 — positional AoE damage apply at the enemy site (enemy→player)', () => {
     // Player roster: focus 'attacker' at M4 (front, the heal target) + a passive team victim at
@@ -394,7 +393,7 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
                         {
                             ...offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern()),
                             pattern: undefined, // no pattern → legacy single-apply path
-                        } as EnemyAttacker2,
+                        } as EnemyAttacker,
                     ],
                 },
                 undefined,

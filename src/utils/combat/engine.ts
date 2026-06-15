@@ -2206,6 +2206,10 @@ export function runCombat(input: CombatEngineInput): {
         //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
         // `defenseProfileOf` is identical across all three sites in PR1 (defenceModifierPct 0 —
         // per-victim defense-debuff sourcing is the documented Phase-5 refinement) so it lives here.
+        // NOTE: that Phase-5 refinement is TWO directions, not one — the eventual per-victim
+        // defense-debuff SOURCE differs BY DIRECTION: the focus/team sites read the ENEMY victim's
+        // defense debuffs, while the enemy site reads the PLAYER victim's defense debuffs (sourced
+        // from a different place). So this single zero-stub eventually splits into two lookups.
         // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
         // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
         const drivePositionalApply = (args: {
@@ -3301,6 +3305,11 @@ export function runCombat(input: CombatEngineInput): {
                         processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
                     }
                     if (damage > 0) {
+                        // Phase-5 per-victim accounting TODOs (see detailed notes below): (1)
+                        // takenLeeches gated to non-positional — per-victim leech needs the symmetric
+                        // heal surface; (2) playerSink.addIncoming attributes every victim's AoE share
+                        // to the tank's incoming bucket.
+                        //
                         // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
                         // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
                         // hpDamage comes straight from the closure (0 under Barrier — damage fully
