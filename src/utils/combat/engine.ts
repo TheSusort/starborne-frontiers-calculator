@@ -824,6 +824,16 @@ export interface CombatEngineInput {
     ignoresForcedTargeting?: boolean;
     /** Pre-parsed targeting preference for the focus attacker (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
+    /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
+     *  once on the first round it is built, so unit tests can exercise the player→enemy victim
+     *  wrapper against a hand-built enemy actor BEFORE Task 8 wires a production caller. Never set
+     *  by production code; the closure runs the real applyVictimDamage path (no mocks). */
+    __testTapApplyOutgoingToEnemy?: (
+        fn: (
+            damage: number,
+            enemyVictim: CombatActor
+        ) => { shieldBefore: number; hpDamage: number; barriered: boolean }
+    ) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -2084,6 +2094,28 @@ export function runCombat(input: CombatEngineInput): {
             victim: CombatActor = healTarget!
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
             applyVictimDamage(damage, victim, playerSink);
+        // Player→enemy intake (Phase 4 PR1, Task 3) — the symmetric THIN wrapper over
+        // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
+        // victim still runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path (enemies
+        // actually take damage and can die), but the round accumulators here (roundIncomingDamage/
+        // roundShieldAbsorbed/roundBarrierAbsorbed) are the TANK's incoming bucket — they must NOT
+        // move when a player hits an enemy. So this sink's accounting hooks are no-ops for PR 1
+        // (enemy-incoming accounting is the deferred Phase-5 symmetric surface) and it omits
+        // onHealTargetDestroyed (the enemy victim is never the heal target). Task 8 wires a caller.
+        const enemySink: DamageAccountingSink = {
+            addIncoming: () => {},
+            addShieldAbsorbed: () => {},
+            addBarrierAbsorbed: () => {},
+        };
+        const applyOutgoingToEnemy = (
+            damage: number,
+            enemyVictim: CombatActor
+        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
+            applyVictimDamage(damage, enemyVictim, enemySink);
+        // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
+        // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
+        // first round it is built is sufficient. Inert in production (the field is never set).
+        input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
