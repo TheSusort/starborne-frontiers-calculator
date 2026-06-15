@@ -17,7 +17,7 @@ import {
     buildDefaultShipSkills,
     configShipSkillsToSimInputs,
 } from '../../utils/abilities/configToSimInputs';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { shipFinalStats, combatStatsFromShip } from '../../utils/ship/combatStats';
 import { simulateDPS, DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
@@ -41,35 +41,8 @@ const DPSCalculatorPage: React.FC = () => {
     const shipInitialized = useRef(false);
     const nextTeamIdRef = useRef(2);
 
-    // Shared final-stats derivation for ship selection (attacker config, team slots,
-    // URL-seeded initial config) — one calculateTotalStats pattern, three call sites.
-    const shipFinalStats = (ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        return calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        ).final;
-    };
-
-    // Shared combat-stat extraction from a resolved final-stats object.
-    // Single source of truth for the magic defaults (hacking ?? 200, speed ?? 100, etc.)
-    // so selectShipForConfig and selectShipForTeamSlot can never silently diverge.
-    const combatStatsFromShip = (final: ReturnType<typeof shipFinalStats>) => ({
-        attack: Math.round(final.attack),
-        crit: Math.round(final.crit),
-        critDamage: Math.round(final.critDamage),
-        defensePenetration: Math.round(final.defensePenetration || 0),
-        hacking: Math.round(final.hacking ?? 200),
-        defence: Math.round(final.defence ?? 0),
-        hp: Math.round(final.hp ?? 0),
-        healModifier: Math.round(final.healModifier ?? 0),
-        speed: Math.round(final.speed ?? 100),
-    });
+    // Shared combat-stat resolution — see src/utils/ship/combatStats.ts.
+    const statsDeps = { getGearPiece, getEngineeringStatsForShipType };
 
     const getInitialConfig = (): { configs: DPSShipConfig[]; nextId: number } => {
         const shipId = searchParams.get('shipId');
@@ -78,7 +51,7 @@ const DPSCalculatorPage: React.FC = () => {
             if (ship) {
                 // Drop healModifier — it's not part of DPSShipConfig (attacker config).
                 const { healModifier: _healModifier, ...stats } = combatStatsFromShip(
-                    shipFinalStats(ship)
+                    shipFinalStats(ship, statsDeps)
                 );
                 return {
                     configs: [
@@ -384,7 +357,9 @@ const DPSCalculatorPage: React.FC = () => {
     const selectShipForConfig = (configId: string, ship: Ship) => {
         // healModifier is a team/heal-target concern, not part of DPSShipConfig — drop it
         // from the attacker config spread (mirrors how team slots keep it separately).
-        const { healModifier: _healModifier, ...stats } = combatStatsFromShip(shipFinalStats(ship));
+        const { healModifier: _healModifier, ...stats } = combatStatsFromShip(
+            shipFinalStats(ship, statsDeps)
+        );
 
         setConfigs((prev) =>
             prev.map((c) => {
@@ -452,7 +427,7 @@ const DPSCalculatorPage: React.FC = () => {
             ship.secondPassiveSkillText,
             ship.thirdPassiveSkillText,
         ]);
-        const { speed, ...combatStats } = combatStatsFromShip(shipFinalStats(ship));
+        const { speed, ...combatStats } = combatStatsFromShip(shipFinalStats(ship, statsDeps));
         setTeamShips((prev) =>
             prev.map((t) => {
                 if (t.id !== id) return t;
