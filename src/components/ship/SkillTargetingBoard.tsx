@@ -104,7 +104,7 @@ export const SkillTargetingBoard: React.FC<SkillTargetingBoardProps> = ({ target
     const legend = LEGEND[side];
 
     return (
-        <div className="bg-dark-lighter p-2 shadow-lg max-w-sm mb-1 border border-dark-border">
+        <div className="bg-dark-lighter p-2 shadow-lg max-w-xs mb-1 border border-dark-border">
             <div className="flex items-stretch gap-3">
                 <div className="w-[130px] shrink-0 flex items-center justify-center">
                     <svg
