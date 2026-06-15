@@ -118,8 +118,11 @@ export interface RoundData {
     /** Number of EXTRA focus-actor turns this round (extra actions). Set only when
      *  ≥ 1 — undefined preserves the legacy RoundData shape (golden snapshots). */
     extraTurns?: number;
-    /** Victim actor id → damage dealt to it this round. Populated ONLY by the positional
-     *  apply path (gated on positions + pattern); absent in non-positional runs. */
+    /** Victim actor id → total damage dealt TO it this round, keyed by victim regardless of
+     *  attacker side. In a round where both sides act positionally this map contains BOTH enemy
+     *  victims (from player/team fire) AND player victims (from enemy fire) — do NOT sum it as
+     *  one-directional output. Populated ONLY by the positional apply path (gated on positions +
+     *  pattern); absent in non-positional runs. */
     perTargetDamage?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
