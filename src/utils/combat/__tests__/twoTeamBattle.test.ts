@@ -46,11 +46,22 @@
  *
  * HEALS / HP / DEATH:
  *   - heals: `heal-performed` { casterId, targets[], amount, critHits? } (healing mode only).
- *   - HP fraction crossings: `hp-changed` { targetId, oldPct, newPct } — tank-side (heal
- *     target + player victims with known max HP) per HP-intake event; enemy-dummy integer
- *     granularity post-round. NOTE: per-victim hp-changed is SUPPRESSED for enemy victims
- *     (their max HP is unknown to the engine) — so enemy "taken damage" comes from
- *     perTargetDamage, not hp-changed.
+ *   - HP fraction crossings: `hp-changed` { targetId, oldPct, newPct }. This fires for BOTH
+ *     sides, but with caveats that make it UNSUITABLE as a sole HP source:
+ *       * Positioned enemy ATTACKERS DO emit hp-changed from round 2 onward — they walk
+ *         `runPlayerTurn` and set `lastTurnCtxByActor`, so `recipientMaxHp` knows their
+ *         `effectiveMaxHp` and the `maxHp > 0` gate passes. Suppression holds ONLY for
+ *         (a) the legacy dummy `enemy` actor and (b) round 1, before any enemy turn has run.
+ *       * So enemy hp-changed events DO appear — but at integer / low granularity and with
+ *         round-1-suppression timing that differs from the player side. Treat hp-changed as
+ *         informational, NOT as a reliable per-actor HP curve.
+ *   - PER-VICTIM DAMAGE TAKEN (reliable, symmetric): `RoundData.perTargetDamage`
+ *     (Record<victimId, number>) is the RELIABLE per-victim damage-taken source for BOTH
+ *     directions — use it, not hp-changed. The Task-2 assembler should derive each actor's
+ *     HP% as `maxHp - cumulative(perTargetDamage for that victim)` over rounds, using the
+ *     roster's maxHp. This is uniform for both sides and independent of hp-changed timing /
+ *     granularity quirks. (It ignores healing/shields applied to HP — acceptable for PR1's
+ *     surface; refine if needed.)
  *   - death: `ship-destroyed` { actorId } — emitted once per actor (player OR enemy) whose
  *     HP first reaches 0. Fires for BOTH sides as HP allows.
  * ================================================================================
