@@ -139,8 +139,11 @@ delegating to `selectTargets`:
    surviving cells and map the resulting anchor back to its actor via the untouched
    `byCell` (as today).
 
-Ally-side selection (`target.side === 'ally'`) returns the caster anchor unchanged — no
-stealth or forced-targeting branch.
+Ally-side selection (`target.side === 'ally'`) skips the stealth/forced-targeting branch
+entirely and returns `null` (the function resolves an *opposing*-side target, and an
+ally-side target has no opposing actor; the engine then falls back to its legacy
+heal-target binding). This matches the `CombatActor | null` contract — `null` means "no
+positional opposing target".
 
 The function still returns a single `CombatActor | null` (the anchor actor); forced
 targeting only changes *which* actor is returned. `resolveCells`/splash stay unwired
