@@ -53,6 +53,7 @@ import {
     executeIntent,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
+    provokerOf,
     registerReactiveListeners,
     selfBuffNamesForOwners,
 } from './triggers';
@@ -2454,7 +2455,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   input.target,
                                   enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors)
+                                  statusLookupFor(enemyAttackerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // Positional target (phase 2): the selected enemy actor, else the dummy sink.
@@ -2567,7 +2572,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   teamTarget,
                                   enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors)
+                                  statusLookupFor(enemyAttackerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // Same `tgt` consolidation as the focus turn: both branches are full
@@ -2806,7 +2815,11 @@ export function runCombat(input: CombatEngineInput): {
                                   actor.position!,
                                   enemyTarget,
                                   allPlayerActors,
-                                  statusLookupFor(allPlayerActors)
+                                  statusLookupFor(allPlayerActors),
+                                  {
+                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
+                                      provokedBy: provokerOf(statusEngine, actor.id),
+                                  }
                               )
                             : null;
                     // The enemy's victim THIS turn: the positionally-selected player actor, else the
