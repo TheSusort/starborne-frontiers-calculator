@@ -179,7 +179,7 @@ const SimulatorPage: React.FC = () => {
 
                 {battleResult && battleResult.rounds.length > 0 && (
                     <RoundStepper
-                        round={currentRound}
+                        round={Math.min(currentRound, battleResult.rounds.length)}
                         total={battleResult.rounds.length}
                         onChange={setCurrentRound}
                     />
@@ -191,7 +191,7 @@ const SimulatorPage: React.FC = () => {
                         <p className="text-theme-text">{outcomeLabel(battleResult)}</p>
                         {battleResult.rounds.length > 0 && (
                             <p className="text-sm text-theme-text-secondary">
-                                Viewing round {currentRound}
+                                Viewing round {Math.min(currentRound, battleResult.rounds.length)}
                             </p>
                         )}
                     </div>

@@ -107,7 +107,7 @@ describe('RoundStepper', () => {
             expect(onChange).toHaveBeenLastCalledWith(3);
         });
 
-        it('Play stops at total (no advance past total)', () => {
+        it('Play stops immediately at total (no advance past total)', () => {
             const onChange = vi.fn();
             render(<RoundStepper round={4} total={4} onChange={onChange} />);
             act(() => {
@@ -117,6 +117,41 @@ describe('RoundStepper', () => {
                 vi.advanceTimersByTime(5000);
             });
             expect(onChange).not.toHaveBeenCalled();
+        });
+
+        it('Play advances to total then stops (no tick past total)', () => {
+            const onChange = vi.fn();
+            // Stateful wrapper feeds the new round back, so play advances across ticks.
+            const Wrapper = () => {
+                const [round, setRound] = useState(3);
+                return (
+                    <RoundStepper
+                        round={round}
+                        total={4}
+                        onChange={(r) => {
+                            onChange(r);
+                            setRound(r);
+                        }}
+                    />
+                );
+            };
+            render(<Wrapper />);
+            act(() => {
+                fireEvent.click(screen.getByRole('button', { name: /play/i }));
+            });
+            // First tick: advances 3 -> 4 (total).
+            act(() => {
+                vi.advanceTimersByTime(900);
+            });
+            expect(onChange).toHaveBeenLastCalledWith(4);
+            // Further time should not advance past total.
+            act(() => {
+                vi.advanceTimersByTime(5000);
+            });
+            expect(onChange).not.toHaveBeenCalledWith(5);
+            expect(onChange).toHaveBeenCalledTimes(1);
+            // Playing auto-stopped at total: the button reverts to "Play".
+            expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
         });
     });
 });
