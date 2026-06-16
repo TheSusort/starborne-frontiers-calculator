@@ -23,6 +23,7 @@
 ---
 
 ## File structure
+
 | File | Responsibility | Change |
 |---|---|---|
 | `src/utils/ship/combatStats.ts` | **new** — extracted `shipFinalStats(ship, deps)` + `combatStatsFromShip(final)` (shared by DPS page + simulator) | Create |
