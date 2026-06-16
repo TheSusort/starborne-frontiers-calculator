@@ -131,23 +131,22 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
 }
 
 /**
- * Register each player owner's reactive abilities as bus listeners. Listener bodies are
+ * Register each owner's reactive abilities as bus listeners. Listener bodies are
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once per CRITTING HIT (critHits field; falls back to the didCrit binary for events without it)
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
- *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied with `sourceId !== ownerId &&
- *    !isEnemySide(sourceId)` (any OTHER PLAYER's infliction is an ally-infliction from this
- *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
- *    Every enemy-side actor (dummy wall + enemy attackers) is excluded — an enemy is never an
- *    ally. The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
- *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER PLAYER actor (ally crit-cast DoT;
- *    enemy-side sources excluded)
+ *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
+ *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
+ *    PLAYER's infliction; for the ENEMY registration this is any other enemy actor's infliction.
+ *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
+ *    excluded, own casts excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
- *    fires once PER CRITTING HIT; the owner's own casts and every enemy-side actor are excluded
+ *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
  *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - on-bomb-detonated → bomb-detonated (global)
@@ -158,21 +157,22 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    triggerCritFilter discriminates on the hit's own crit outcome: 'crit' → critting hits only,
  *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
  *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
- *  - on-ally-attacked → attacked where targetId !== ownerId && !isEnemySide(targetId) (per hit;
- *    critFilter + roleFilter applied). Fires when ANY OTHER player actor is hit — own hits are
- *    on-attacked's job; an enemy-side target is never an ally. triggerCritFilter discriminates on
- *    the hit's own crit outcome (same contract as on-attacked); roleFilter (Graphite) matches the
- *    DAMAGED ally's role category via the optional roleOf lookup.
+ *  - on-ally-attacked → attacked where the target is a same-side ally (not opposing, not self)
+ *    (per hit; critFilter + roleFilter applied). Fires when ANY OTHER same-side actor is hit —
+ *    own hits are on-attacked's job; an opposing-side target is never an ally.
+ *    triggerCritFilter discriminates on the hit's own crit outcome (same contract as on-attacked);
+ *    roleFilter (Graphite) matches the DAMAGED ally's role category via the optional roleOf lookup.
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
- *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
- *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
- *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
- *    (any enemy-side actor — dummy wall + walked enemy attackers).
- *  - on-enemy-repaired → heal-performed where isEnemySide(casterId)
- *    (any enemy-side actor's repair cast — dummy wall + enemy attackers). One enqueue per cast.
- *  - on-enemy-cleansed → cleanse-performed where isEnemySide(casterId)
- *    (any enemy-side actor's cleanse cast — dummy wall + enemy attackers). One enqueue per cast.
+ *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not self)
+ *    (any OTHER same-side actor's destruction; mirrors on-ally-crit's ally scoping).
+ *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
+ *    (any opposing-side actor — for players: dummy wall + walked enemy attackers;
+ *    for enemy owners: any player actor).
+ *  - on-enemy-repaired → heal-performed where isOpposing(casterId)
+ *    (any opposing-side actor's repair cast). One enqueue per cast.
+ *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
+ *    (any opposing-side actor's cleanse cast). One enqueue per cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -193,21 +193,23 @@ export function registerReactiveListeners(args: {
     bus: CombatEventBus;
     perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
     enqueue: (intent: Intent) => void;
-    /** True for ANY enemy-side actor id: the singular dummy wall enemy AND every enemy
-     *  ATTACKER (healing mode). Enemy attackers now walk runPlayerTurn (commit 6c456a14) and
-     *  therefore emit the full reactive event suite (`ability-performed` with crits,
-     *  `dot-applied`, `debuff-applied`, …) with `side === 'enemy'`. Ally-scoped player
-     *  listeners treat "any OTHER player actor" as an ally, so they MUST exclude every
-     *  enemy-side id — not just the dummy — or an enemy's crit/debuff wrongly fires a
-     *  player's on-ally-* reaction. The engine passes a predicate closing over the dummy id
-     *  + all enemy-attacker ids; for an attacker-only/DPS run only the dummy is enemy-side. */
-    isEnemySide: (actorId: string) => boolean;
+    /** True for any actor on the side OPPOSING this listener set's owners. The engine
+     *  passes a per-call predicate: the PLAYER registration passes the enemy-side
+     *  predicate (opposing = enemy-side); the ENEMY registration passes its negation
+     *  (opposing = player-side). This per-call approach ensures an enemy owner's
+     *  opposing/ally reactions route against the correct side (bySide PR2). */
+    isOpposing: (actorId: string) => boolean;
     /** Damaged-ally role lookup for role-filtered ally-damage reactions (Graphite).
      *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
      *  Optional: DPS-mode runs and unit fixtures omit it. */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
 }): void {
-    const { bus, perOwner, enqueue, isEnemySide, roleOf } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf } = args;
+    // Same-side ally = NOT opposing AND not the owner itself (own events route to the
+    // self-scoped triggers). For the player registration (opposing = enemy-side) this
+    // is byte-identical to the old pattern.
+    const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
+        !isOpposing(actorId) && actorId !== ownerId;
     for (const { ownerId, reactiveAbilities } of perOwner) {
         for (const ra of reactiveAbilities) {
             const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
@@ -232,25 +234,25 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        // Ally = ANY OTHER player's infliction. Exclude this owner (own
-                        // inflictions go to on-debuff-inflicted) AND every enemy-side actor
-                        // (dummy wall + enemy attackers — an enemy is never an ally).
-                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
+                        // Ally = any OTHER same-side actor's infliction. Exclude this owner
+                        // (own inflictions go to on-debuff-inflicted) AND every opposing actor
+                        // (an opposing actor is never an ally).
+                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications now emit dot-applied with the team sourceId
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
-                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
+                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
                     });
                     break;
                 case 'on-ally-crit-dot':
                     bus.on('dot-applied', (e) => {
                         // Ally DoT infliction whose cast crit (viaCrit): any OTHER
-                        // player's crit-cast DoT. Own casts and every enemy-side actor are
-                        // excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
+                        // same-side actor's crit-cast DoT. Own casts and every opposing actor
+                        // are excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
                         // enqueue per qualifying infliction EVENT (per-infliction-event rule).
-                        if (e.viaCrit && e.sourceId !== ownerId && !isEnemySide(e.sourceId)) {
+                        if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
                             enqueue(intent);
                         }
                     });
@@ -272,10 +274,10 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
                         // An ALLY's critting hits (mirrors on-crit with ally scoping):
-                        // fires once PER CRITTING HIT, own casts and every enemy-side actor
-                        // (dummy wall + enemy attackers) excluded — an enemy crit is NOT an
-                        // ally crit, even though a walked enemy now emits ability-performed.
-                        if (e.actorId === ownerId || isEnemySide(e.actorId)) return;
+                        // fires once PER CRITTING HIT, own casts and every opposing actor
+                        // excluded — an opposing crit is NOT an ally crit, even though a
+                        // walked enemy now emits ability-performed.
+                        if (!isSameSideAlly(e.actorId, ownerId)) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
                         for (let i = 0; i < n; i++) enqueue(intent);
                     });
@@ -310,16 +312,16 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
-                        // Ally-scoped: fires when ANY OTHER player actor is hit — per HIT (the
-                        // engine emits one event per hit, PR 1). Excludes this owner (own hits
-                        // are on-attacked's job) and every enemy-side actor, mirroring
+                        // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
+                        // (the engine emits one event per hit, PR 1). Excludes this owner (own
+                        // hits are on-attacked's job) and every opposing actor, mirroring
                         // on-ally-destroyed's scoping. triggerCritFilter discriminates on the
                         // hit's own crit outcome, same contract as on-attacked. roleFilter
                         // (Graphite) matches the DAMAGED ally's role category; an unknown role
                         // never matches (conservative — a manual actor with no ship picked keeps
                         // role-filtered reactions dormant rather than inflating numbers); an
                         // EMPTY filter array is treated as absent (any ally), not never-match.
-                        if (e.targetId === ownerId || isEnemySide(e.targetId)) return;
+                        if (!isSameSideAlly(e.targetId, ownerId)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -349,31 +351,34 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Ally-scoped: any OTHER player actor's destruction. Exclude this
-                        // owner (own death goes to on-destroyed) AND every enemy-side actor
-                        // (dummy wall + enemy attackers — an enemy is never an ally), mirroring
-                        // on-ally-crit's scoping.
-                        if (e.actorId !== ownerId && !isEnemySide(e.actorId)) enqueue(intent);
+                        // Ally-scoped: any OTHER same-side actor's destruction. Exclude this
+                        // owner (own death goes to on-destroyed) AND every opposing actor
+                        // (an opposing actor is never an ally), mirroring on-ally-crit's scoping.
+                        if (isSameSideAlly(e.actorId, ownerId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Enemy-scoped: fires when any enemy-side actor (dummy wall + enemy
-                        // attackers) is destroyed. One enqueue per destruction event.
-                        if (isEnemySide(e.actorId)) enqueue(intent);
+                        // Opposing-scoped: fires when any opposing-side actor is destroyed.
+                        // For the player call: dummy wall + enemy attackers.
+                        // For the enemy call: any player actor. One enqueue per destruction event.
+                        if (isOpposing(e.actorId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-repaired':
                     bus.on('heal-performed', (e) => {
-                        // Enemy-scoped: any enemy-side actor's repair (dummy wall + enemy
-                        // attackers). One enqueue per qualifying cast — Zosimos banks a charge.
-                        if (isEnemySide(e.casterId)) enqueue(intent);
+                        // Opposing-scoped: any opposing-side actor's repair. For the player
+                        // call: dummy wall + enemy attackers. For the enemy call: any player
+                        // actor. One enqueue per qualifying cast — Zosimos banks a charge.
+                        if (isOpposing(e.casterId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-cleansed':
                     bus.on('cleanse-performed', (e) => {
-                        // Enemy-scoped: any enemy-side actor's cleanse. One enqueue per cast.
-                        if (isEnemySide(e.casterId)) enqueue(intent);
+                        // Opposing-scoped: any opposing-side actor's cleanse. For the player
+                        // call: enemy side. For the enemy call: player side.
+                        // One enqueue per cast.
+                        if (isOpposing(e.casterId)) enqueue(intent);
                     });
                     break;
                 case 'on-cheat-death-activated':

@@ -1471,7 +1471,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         const base = { round: 1, amount: 1000 };
 
@@ -1531,7 +1531,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         const base = {
             round: 1,
@@ -1579,7 +1579,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             bus: handBus,
             perOwner: [{ ownerId: 'attacker', reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         const base = { round: 1, targetId: 'enemy', buffName: 'Speed Down II' };
 

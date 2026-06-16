@@ -1841,7 +1841,7 @@ export function runCombat(input: CombatEngineInput): {
         bus,
         perOwner: reactivePerOwner,
         enqueue: (intent) => intentQueue.push(intent),
-        isEnemySide,
+        isOpposing: isEnemySide,
         roleOf: (id) => roleByActorId.get(id),
     });
 
@@ -1862,7 +1862,10 @@ export function runCombat(input: CombatEngineInput): {
             bus,
             perOwner: enemyReactivePerOwner,
             enqueue: (intent) => enemyIntentQueue.push(intent),
-            isEnemySide,
+            // Enemy owners: the PLAYER team is opposing. Negating the player-centric
+            // isEnemySide flips on-enemy-* / on-ally-* to the enemy's own frame
+            // (bySide PR2 — fixes the enemy reactive-routing bug).
+            isOpposing: (id: string) => !isEnemySide(id),
             roleOf: (id) => roleByActorId.get(id),
         });
     }

@@ -102,7 +102,7 @@ export type CombatEvent =
      *  (player or enemy); enemy-side emission carries NO numeric effect (Phase 4c PR 4 —
      *  cast-fires-regardless: emitted on every qualifying cast, with no check that a
      *  debuff actually existed to cleanse). The `on-enemy-cleansed` listener filters
-     *  `isEnemySide(casterId)`. */
+     *  `isOpposing(casterId)`. */
     | { type: 'cleanse-performed'; casterId: string; count: number; round: number }
     | {
           type: 'dot-ticked';

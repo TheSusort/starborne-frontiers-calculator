@@ -1466,7 +1466,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner,
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit(event);
         return intents;
@@ -1535,7 +1535,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner: [{ ownerId: 't', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         // Before any event: no intents enqueued
         expect(intents).toHaveLength(0);
@@ -1745,7 +1745,7 @@ describe('on-attacked live trigger (Task 4)', () => {
 // actor takes a direct hit. Unit-level harness mirroring the on-attacked
 // crit-filter tests: bare bus + registerReactiveListeners + manual emits.
 // Owner is 'graphite' (the reacting ship); 'tank' is another player actor;
-// 'enemy' and 'ea1' are enemy-side per the isEnemySide predicate.
+// 'enemy' and 'ea1' are enemy-side per the isOpposing predicate.
 // ----------------------------------------------------------------------
 describe('on-ally-attacked listener', () => {
     // Build a minimal on-ally-attacked reactive ability (Graphite/Cultivator shape).
@@ -1778,7 +1778,7 @@ describe('on-ally-attacked listener', () => {
             bus,
             perOwner: [{ ownerId: 'graphite', reactiveAbilities }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy' || id === 'ea1',
+            isOpposing: (id) => id === 'enemy' || id === 'ea1',
             roleOf,
         });
         for (const e of events) bus.emit(e);
@@ -1934,7 +1934,7 @@ describe('on-ally-attacked listener', () => {
 // Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
 // on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
 // createEventBus directly. Owner is always 'A' (a player actor); 'B' is
-// another player actor; 'enemy' is enemy-side per the isEnemySide predicate.
+// another player actor; 'enemy' is enemy-side per the isOpposing predicate.
 // ----------------------------------------------------------------------
 describe('death-trigger live listeners (Task 5)', () => {
     // Build a minimal reactive ability carrying the given death trigger.
@@ -1964,7 +1964,7 @@ describe('death-trigger live listeners (Task 5)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'ship-destroyed', actorId: destroyedActorId, round: 1 });
         return intents;
@@ -2032,7 +2032,7 @@ describe('death-trigger live listeners (Task 5)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         expect(intents).toHaveLength(0);
         bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1 });
@@ -2066,7 +2066,7 @@ describe('on-cheat-death-activated live listener (Task 8)', () => {
             bus,
             perOwner: [{ ownerId, reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'cheat-death-activated', actorId: activatedActorId, round: 1 });
         return intents;
@@ -2091,7 +2091,7 @@ describe('on-cheat-death-activated live listener (Task 8)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         expect(intents).toHaveLength(0);
         bus.emit({ type: 'cheat-death-activated', actorId: 'B', round: 1 });
