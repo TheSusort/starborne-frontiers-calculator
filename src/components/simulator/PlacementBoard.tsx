@@ -1,9 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Position, ShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import FormationGrid from '../encounters/FormationGrid';
 import { ShipSelector } from '../ship/ShipSelector';
 import { Select } from '../ui/Select';
+import { Button } from '../ui/Button';
+import { Modal } from '../ui/layout/Modal';
+import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useShips } from '../../contexts/ShipsContext';
 
@@ -44,8 +47,25 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     onLoadEncounter,
     mirrored = false,
 }) => {
-    const { encounters } = useEncounterNotes();
+    const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
+
+    const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+    const [encounterName, setEncounterName] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    const handleSaveEncounter = async () => {
+        const trimmedName = encounterName.trim();
+        if (!trimmedName || formation.length === 0) return;
+        setIsSaving(true);
+        try {
+            await addEncounter({ name: trimmedName, formation });
+            setIsSaveModalOpen(false);
+            setEncounterName('');
+        } finally {
+            setIsSaving(false);
+        }
+    };
 
     const handleLoadEncounter = (encounterId: string) => {
         if (!encounterId) return;
@@ -78,6 +98,16 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                     />
                 </div>
             )}
+            <div className="mb-3">
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={formation.length === 0}
+                    onClick={() => setIsSaveModalOpen(true)}
+                >
+                    Save as encounter
+                </Button>
+            </div>
             <FormationGrid
                 formation={formation}
                 selectedPosition={selectedPosition}
@@ -98,6 +128,34 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                     hidden
                 />
             )}
+            <Modal
+                isOpen={isSaveModalOpen}
+                onClose={() => setIsSaveModalOpen(false)}
+                title="Save as encounter"
+                maxWidth="max-w-md"
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="Encounter name"
+                        value={encounterName}
+                        placeholder="Simulator team"
+                        autoFocus
+                        onChange={(e) => setEncounterName(e.target.value)}
+                    />
+                    <div className="flex justify-end gap-2">
+                        <Button variant="secondary" onClick={() => setIsSaveModalOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            disabled={!encounterName.trim() || isSaving}
+                            onClick={() => void handleSaveEncounter()}
+                        >
+                            Save
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 };
