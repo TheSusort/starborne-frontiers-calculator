@@ -2599,6 +2599,41 @@ export function runCombat(input: CombatEngineInput): {
                     continue;
                 }
 
+                // General dead-actor turn skip (correctness): an actor DESTROYED earlier this
+                // round (e.g. a player AoE killed an enemy attacker scheduled later in the turn
+                // order, or a walked team ship that died) must NOT act when its turn comes up —
+                // no turn-started/turn-ended emit, no runPlayerTurn, no damage, no own
+                // drain/decrement. A plain `continue` is correct: every per-iteration step below
+                // (turn-started emit, the kind-branch turn body, drainIntents/drainEnemyIntents,
+                // the Post-Turn decrement, turn-ended) is THIS actor's own turn work, which a dead
+                // actor does none of. Extra-action grants only fire from inside a live turn body,
+                // so a skipped actor produces none.
+                //
+                // The signal is `destroyedRound !== undefined` (set by recordDestroyed when the
+                // actor's HP first reaches 0) — NOT `currentHp <= 0`: a manual/flat enemy attacker
+                // is constructed with stats.hp 0 (HP not modelled) → currentHp starts at 0 yet it
+                // was never destroyed and MUST keep acting. Only an actor that ACTUALLY died is
+                // skipped.
+                //
+                // TWO actors are deliberately exempt (they keep flowing through their EXISTING
+                // special handling even after destruction):
+                //  - the dead HEAL TARGET → handleDeadTargetSkip above (healTargetBuffs=[] + the
+                //    synthesized dead-focus turn). It already `continue`d if dead, so reaching here
+                //    means it's alive; the exemption is belt-and-suspenders.
+                //  - the dummy `enemy` sink → the DPS/healing legacy enemy. The post-round block
+                //    stamps its destroyedRound once its HP decline crosses enemyHp (~line 3674),
+                //    yet "the sim keeps hitting the dead dummy regardless": its turn banks enemy
+                //    charges and runs the enemy-side DoT/decrement bookkeeping that MUST still tick.
+                //    Skipping it would drop a turn-started/ended pair and break every DPS golden.
+                const isDummyEnemy = actor.kind === 'enemy' && actor.id === enemy.id;
+                if (
+                    actor.destroyedRound !== undefined &&
+                    !(healTarget && actor.id === healTarget.id) &&
+                    !isDummyEnemy
+                ) {
+                    continue;
+                }
+
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
 
                 // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start

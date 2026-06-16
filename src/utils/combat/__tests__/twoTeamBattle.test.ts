@@ -327,15 +327,32 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
 
     it('ship-destroyed fires for BOTH sides when HP is low enough', () => {
         idc = 0;
-        // Low HP both sides: 5000 attack lands exactly 5000/turn, HP 5000 → first hit kills.
-        const { events } = run(
-            battle({
-                playerHp: 5000,
-                enemyHp: 5000,
-                playerAttack: 5000,
-                enemyAttack: 5000,
-            })
-        );
+        // Both sides die — but the kills must happen on LIVE turns (the dead-actor guard means a
+        // ship destroyed before its own turn never acts). Ordering: the focus/team players (speed
+        // 100/150) act first and one-shot their 5000-HP enemy anchors in round 1 → both enemies
+        // destroyed. To kill the players too, ONE enemy must act BEFORE it dies, so we give the
+        // front enemy a high speed (200 > the players) so it takes its turn at the TOP of round 1
+        // — before the players fire — landing a lethal 5000 on the 5000-HP front player. That
+        // player is dead; the surviving team player still wipes the enemies. So both sides record
+        // a ship-destroyed without any dead actor acting.
+        const fastEnemyBattle: CombatEngineInput = {
+            ...battle({ playerHp: 5000, enemyHp: 5000, playerAttack: 5000, enemyAttack: 5000 }),
+            enemyAttackers: [
+                {
+                    ...offensiveEnemyAt('enemy-front', 'M4', 'front', 5000, 5000),
+                    stats: {
+                        attack: 5000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 5000,
+                        speed: 200,
+                    },
+                } as EnemyAttacker,
+                offensiveEnemyAt('enemy-back', 'M1', 'back', 5000, 5000),
+            ],
+        };
+        const { events } = run(fastEnemyBattle);
         const destroyed = new Set(
             events
                 .filter(
@@ -349,6 +366,103 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
         // BOTH sides take lethal damage → ship-destroyed fires for each.
         expect(destroyedEnemies.length).toBeGreaterThan(0);
         expect(destroyedPlayers.length).toBeGreaterThan(0);
+    });
+
+    it('a destroyed enemy does NOT act after death (no turn-started/ability-performed/attacked, no damage dealt)', () => {
+        idc = 0;
+        // Killer-first ordering: player actors (speed 100 focus / 150 team) act BEFORE the
+        // enemy attackers (speed 1 in offensiveEnemyAt), so the player AoE lands in round 1
+        // before either enemy reaches its own (later) turn in that same round. enemyHp 5000 vs
+        // playerAttack 5000 → each enemy is one-shot in round 1, BEFORE its scheduled turn.
+        // The dead enemy must then be skipped entirely (the general dead-actor guard) for every
+        // round at/after its death: no turn-started, no ability-performed, no attacked, and it
+        // lands no per-victim damage on any player.
+        const { events, result } = run(
+            battle({
+                playerHp: 1_000_000_000, // players are immortal so the battle runs all rounds
+                enemyHp: 5000,
+                playerAttack: 5000,
+                enemyAttack: 5000,
+            })
+        );
+
+        // The enemies die in round 1 (killed before their own turn).
+        const destroyedByRound = new Map<string, number>();
+        for (const e of events) {
+            if (e.type === 'ship-destroyed' && ENEMY_IDS.has(e.actorId)) {
+                if (!destroyedByRound.has(e.actorId)) destroyedByRound.set(e.actorId, e.round);
+            }
+        }
+        // Both enemies were destroyed (the focus + team AoE wiped the roster in round 1).
+        expect(destroyedByRound.get('enemy-front')).toBe(1);
+        expect(destroyedByRound.get('enemy-back')).toBe(1);
+
+        // From the death round onward, the dead enemy emits NO turn-started and NO
+        // ability-performed (it never acts), and never appears as an `attacked` attacker.
+        for (const [enemyId, deathRound] of destroyedByRound) {
+            const actedAfterDeath = events.filter(
+                (e) =>
+                    e.round >= deathRound &&
+                    (e.type === 'turn-started' || e.type === 'ability-performed') &&
+                    e.actorId === enemyId
+            );
+            expect(actedAfterDeath).toEqual([]);
+
+            const attackedAfterDeath = events.filter(
+                (e) => e.type === 'attacked' && e.round >= deathRound && e.attackerId === enemyId
+            );
+            expect(attackedAfterDeath).toEqual([]);
+        }
+
+        // And the dead enemies deal NO per-victim damage to any player in any round (they were
+        // dead before their first turn; players are immortal so any player damageTaken would
+        // have to come from a dead enemy acting).
+        for (const round of result.rounds) {
+            if (!round.perTargetDamage) continue;
+            for (const playerId of PLAYER_IDS) {
+                expect(round.perTargetDamage[playerId] ?? 0).toBe(0);
+            }
+        }
+    });
+
+    it('a living actor scheduled AFTER a death still acts normally', () => {
+        idc = 0;
+        // enemy-front (anchored by the focus `front`) dies in round 1; enemy-back has huge HP and
+        // survives. enemy-back is scheduled (speed 1, like enemy-front) AFTER the player killers,
+        // so the dead-actor skip must NOT swallow it — it keeps acting every round.
+        const input: CombatEngineInput = {
+            ...battle({
+                playerHp: 1_000_000_000,
+                enemyHp: 5000,
+                playerAttack: 5000,
+                enemyAttack: 5000,
+            }),
+            enemyAttackers: [
+                offensiveEnemyAt('enemy-front', 'M4', 'front', 5000, 5000), // dies round 1
+                offensiveEnemyAt('enemy-back', 'M1', 'back', 5000, 1_000_000_000), // immortal
+            ],
+        };
+        const { events } = run(input);
+
+        // enemy-front dies round 1 → no acts after.
+        const frontActsR1Plus = events.filter(
+            (e) =>
+                e.round >= 1 &&
+                (e.type === 'turn-started' || e.type === 'ability-performed') &&
+                e.actorId === 'enemy-front'
+        );
+        expect(frontActsR1Plus).toEqual([]);
+
+        // enemy-back survives → it DOES act (turn-started + ability-performed) in every round.
+        for (const round of [1, 2, 3]) {
+            const backActed = events.some(
+                (e) =>
+                    e.round === round &&
+                    e.type === 'ability-performed' &&
+                    e.actorId === 'enemy-back'
+            );
+            expect(backActed).toBe(true);
+        }
     });
 
     it('hp-changed fires for player victims (tank-side, known max HP)', () => {
