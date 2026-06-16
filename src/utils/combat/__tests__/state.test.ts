@@ -93,6 +93,34 @@ describe('createActor', () => {
     });
 });
 
+describe('createActor indestructible flag', () => {
+    const baseStats = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 100,
+        speed: 50,
+    };
+
+    it('defaults indestructible to undefined when not provided', () => {
+        const a = createActor({ id: 'x', side: 'player', kind: 'attacker', stats: baseStats });
+        expect(a.indestructible).toBeUndefined();
+    });
+
+    it('passes indestructible through when provided', () => {
+        const a = createActor({
+            id: 'dummy',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: baseStats,
+            indestructible: true,
+        });
+        expect(a.indestructible).toBe(true);
+    });
+});
+
 describe('selectNextActor', () => {
     it('selects attacker (speed 100) over enemy (speed 0) after ticks reach the threshold', () => {
         const attacker = createActor({

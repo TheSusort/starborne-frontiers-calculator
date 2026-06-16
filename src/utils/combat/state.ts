@@ -113,6 +113,10 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
+    /** True for the DPS dummy sink: drains currentHp like any actor but the death /
+     *  combat-end path skips it (never recordDestroyed, never ends combat). Inert
+     *  plumbing here — first read by the death path in a later PR (bySide unification). */
+    indestructible?: boolean;
     /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
@@ -132,6 +136,7 @@ export function createActor(
         position?: Position;
         ignoresForcedTargeting?: boolean;
         affinity?: AffinityName;
+        indestructible?: boolean;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -151,6 +156,7 @@ export function createActor(
         position: partial.position,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         affinity: partial.affinity,
+        indestructible: partial.indestructible,
     };
 }
 
