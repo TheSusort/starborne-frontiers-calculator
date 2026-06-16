@@ -1030,8 +1030,6 @@ interface DamageAccountingSink {
     addShieldAbsorbed: (amount: number, victimId: string) => void;
     /** today: intakeFor(victimId).barrierAbsorbed += amount */
     addBarrierAbsorbed: (amount: number, victimId: string) => void;
-    /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
-    onHealTargetDestroyed?: (victim: CombatActor) => void;
 }
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
@@ -1736,7 +1734,12 @@ export function runCombat(input: CombatEngineInput): {
     // The healing rounds + first-destroyed-round seam (target HP can only reach 0 via enemy
     // attacks, which land in Task 8 — the detection just never fires this task).
     const healingRounds: HealingRoundEngine[] = [];
-    let healTargetDestroyedRound: number | undefined;
+    // Backstop-only local (PR5c): holds ONLY the post-round backstop's independent contribution
+    // — the start-dead / no-`recordDestroyed` path where the heal target enters a round at
+    // currentHp<=0 without ever being stamped by recordDestroyed (Task-1 OUTCOME B). The normal
+    // death round now comes from the per-actor `healTarget.destroyedRound` field; this captures
+    // only the case that field never sees.
+    let backstopDestroyedRound: number | undefined;
     // Cheat Death consumption (Phase 4b). A 'recurring'/always-active Cheat Death buff is
     // re-derived every round and is NOT stored in the StatusEngine's timed maps, so it cannot
     // be consumed by deleting it from a store (it would regenerate next round). Consumption is
@@ -2177,9 +2180,9 @@ export function runCombat(input: CombatEngineInput): {
         // `victim` defaults to the heal target — the legacy (non-positional) caller passes no
         // arg, so every existing path reads/mutates `healTarget!` exactly as before (byte-
         // identical). The positional enemy-turn path (Task C3) passes the SELECTED player actor
-        // so the enemy's incoming drains the actor its parsed target picked. Heal-target-specific
-        // bookkeeping (healTargetDestroyedRound) stays gated on `victim === healTarget` below so
-        // it is never written for a non-heal-target victim.
+        // so the enemy's incoming drains the actor its parsed target picked. The heal target's
+        // death round is read back off its per-actor `destroyedRound` field (stamped by
+        // recordDestroyed below) at the result site — no heal-target-gated scalar write here.
         // Shared damage-intake core (Phase 4 PR 1, Task 2): the byte-identical body of the
         // legacy applyIncomingToTarget closure with the four side-specific accounting bits
         // hoisted into `sink`. Everything keyed off `victim` (Barrier full-immunity, shield
@@ -2279,13 +2282,9 @@ export function runCombat(input: CombatEngineInput): {
                     // First reach 0 (no intercept) → record the destroyed round + emit
                     // ship-destroyed once (shared helper; idempotent via the per-actor
                     // destroyedRound field). The healing result reads the destroyed round back
-                    // off the heal target's runtime field below.
+                    // off the heal target's runtime `destroyedRound` field at the result site —
+                    // no side-specific scalar write is needed here.
                     recordDestroyed(victim, r, bus);
-                    // healTargetDestroyedRound tracks the HEAL TARGET specifically — only write it
-                    // when the victim IS the heal target. The guard lives in the sink callback so a
-                    // positional-selected non-heal-target victim records its own destroyedRound (on
-                    // `victim`) without touching this.
-                    sink.onHealTargetDestroyed?.(victim);
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -2308,9 +2307,10 @@ export function runCombat(input: CombatEngineInput): {
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
         // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor
-        // bucket (intakeFor) plus the heal-target-gated healTargetDestroyedRound write. Signature,
-        // default `victim = healTarget!`, and return value are unchanged, so every existing call
-        // site stays byte-identical.
+        // bucket (intakeFor). The heal target's death round is no longer tracked via the sink —
+        // it is read back off `healTarget.destroyedRound` (stamped by recordDestroyed) at the
+        // result site. Signature, default `victim = healTarget!`, and return value are unchanged,
+        // so every existing call site stays byte-identical.
         const playerSink: DamageAccountingSink = {
             addIncoming: (amount, victimId) => {
                 intakeFor(victimId).incoming += amount;
@@ -2320,11 +2320,6 @@ export function runCombat(input: CombatEngineInput): {
             },
             addBarrierAbsorbed: (amount, victimId) => {
                 intakeFor(victimId).barrierAbsorbed += amount;
-            },
-            onHealTargetDestroyed: (victim) => {
-                if (victim === healTarget) {
-                    healTargetDestroyedRound = victim.destroyedRound;
-                }
             },
         };
         const applyIncomingToTarget = (
@@ -2338,8 +2333,9 @@ export function runCombat(input: CombatEngineInput): {
         // actually take damage and can die), but the per-actor intake buckets here are the TANK's
         // incoming accounting — they must NOT move when a player hits an enemy. So this sink's
         // accounting hooks are no-ops for PR 1
-        // (enemy-incoming accounting is the deferred Phase-5 symmetric surface) and it omits
-        // onHealTargetDestroyed (the enemy victim is never the heal target). Task 8 wires a caller.
+        // (enemy-incoming accounting is the deferred Phase-5 symmetric surface). The enemy victim
+        // is never the heal target, so no heal-target death-round bookkeeping applies. Task 8
+        // wires a caller.
         const enemySink: DamageAccountingSink = {
             addIncoming: (_amount, _victimId) => {},
             addShieldAbsorbed: (_amount, _victimId) => {},
@@ -3933,11 +3929,30 @@ export function runCombat(input: CombatEngineInput): {
                 // The destroyed-tank branch already set this to [] (filtering [] is a no-op).
                 healTargetBuffs: hideSpentCheatDeath(healTargetBuffs, healTarget.id, r),
             });
-            if (healTargetDestroyedRound === undefined && healTarget.currentHp <= 0) {
-                healTargetDestroyedRound = r;
+            // Post-round backstop (Task-1 OUTCOME B): captures ONLY the start-dead /
+            // no-`recordDestroyed` path — a heal target that ENTERS a round already at
+            // currentHp<=0 (e.g. seeded hp:0) takes no damage, so recordDestroyed never stamps
+            // its destroyedRound. The `healTarget.destroyedRound === undefined` clause makes that
+            // intent explicit (on any recordDestroyed path the field is already set). This must
+            // NOT call recordDestroyed (would emit a spurious ship-destroyed the old code never
+            // produced) nor stamp the actor field (would leak into the turn-skip dead-actor reader
+            // and the combat-end readers, changing subsequent-round behavior). First such round
+            // wins (`backstopDestroyedRound === undefined`), matching the old first-wins behavior.
+            if (
+                backstopDestroyedRound === undefined &&
+                healTarget.destroyedRound === undefined &&
+                healTarget.currentHp <= 0
+            ) {
+                backstopDestroyedRound = r;
             }
         }
     }
+
+    // The heal target's death round comes from its per-actor `destroyedRound` field (stamped by
+    // recordDestroyed), falling back to the post-round backstop's start-dead capture for the
+    // no-`recordDestroyed` path (Task-1 OUTCOME B). Computed unconditionally — in non-healing mode
+    // healTarget is undefined → undefined, never read (the healing shape is omitted below).
+    const healTargetDestroyedRound = healTarget?.destroyedRound ?? backstopDestroyedRound;
 
     return {
         rounds: roundData,
