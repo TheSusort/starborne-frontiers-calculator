@@ -238,6 +238,33 @@ export function orderByTurnPriority<T extends { speed: number; side: 'player' | 
 }
 
 /**
+ * Pick the next actor to act by CURRENT effective speed (dynamic-speed turn order, Task 2).
+ *
+ * Side-agnostic and pure: among `actors` with `pendingOf(id) > 0`, returns the one with the
+ * highest effective speed (per the `effectiveSpeedOf` callback), tiebroken by side (player
+ * before enemy) then input order; returns `undefined` when none have pending > 0.
+ *
+ * `actors` MUST be supplied in canonical input order (team 1..4, attacker, enemy) — the
+ * input-order tiebreak in `orderByTurnPriority` relies on this. Filtering is stable so input
+ * order is preserved into the comparator.
+ *
+ * Effective speed is read live via the callback (NOT `actor.stats.speed`), so a Speed Up/Down
+ * applied mid-combat changes the ordering. This helper is UNWIRED in Task 2 — Task 3 calls it.
+ */
+export function selectNextBySpeed(
+    actors: CombatActor[],
+    pendingOf: (id: string) => number,
+    effectiveSpeedOf: (actor: CombatActor) => number
+): CombatActor | undefined {
+    const ranked = orderByTurnPriority(
+        actors
+            .filter((a) => pendingOf(a.id) > 0)
+            .map((actor) => ({ actor, speed: effectiveSpeedOf(actor), side: actor.side }))
+    );
+    return ranked[0]?.actor;
+}
+
+/**
  * Advance an actor's charge bank by one turn: fire+reset at cap, else +1.
  * No-op when `hasChargedSkill` is false or the actor's chargeCount is 0 (belt-and-suspenders).
  *

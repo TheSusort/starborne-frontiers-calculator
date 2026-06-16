@@ -267,7 +267,7 @@ export interface PlayerTurnArgs {
 // Mirror toSimBuffs/toEnemyModifiers semantics for an ability-status payload: wrap it as
 // a SelectedGameBuff so the existing buff-fold helpers apply (effect × stacks). The payload's
 // own stacks (current count for accumulating; configured stacks otherwise) become the buff stacks.
-function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff {
+export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff {
     // NOTE: the derived id `ability-${buffName}` is non-unique by design for duplicate buffNames
     // (only summed by stat downstream, never deduped by id).
     return {

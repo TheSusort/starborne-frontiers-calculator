@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { calculateBuffTotals } from '../playerTurn';
+import { foldSpeedBuffPct } from '../engine';
+import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { toSimBuffs } from '../../calculators/dpsBuffHelpers';
 import { SelectedGameBuff } from '../../../types/calculator';
 
@@ -55,5 +57,86 @@ describe('toSimBuffs — speed channel', () => {
         expect(result).toHaveLength(2);
         const speedEntry = result.find((b) => b.stat === 'speed');
         expect(speedEntry).toEqual({ id: 'x-spd', stat: 'speed', value: 30 });
+    });
+});
+
+// Task 2: foldSpeedBuffPct is the live-speed authority behind effectiveSpeedOf — it reads the
+// status engine's two timed sources (scheduled self-buffs + timed ability statuses) for an
+// owner and sums only the speed channel. Exercised against a real status engine (no mocks).
+// effectiveSpeedOf itself = base × (1 + foldSpeedBuffPct / 100); the multiply is trivial and
+// tested at the pct level here.
+const timedSpeedStatus = (
+    buffName: string,
+    speed: number,
+    duration = 5
+): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+    payload: { buffName, stacks: 1, parsedEffects: { speed } },
+    side: 'self',
+    sourceSlot: 'active',
+    duration,
+    conditions: [],
+    kind: 'timed',
+});
+
+describe('foldSpeedBuffPct — live two-source speed fold', () => {
+    const emptyLookup = new Map<string, SelectedGameBuff[]>();
+    const OWNER = 'ship-1';
+
+    it('returns 0 when the actor has no speed buff', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(0);
+        // effectiveSpeedOf would be base × (1 + 0/100) = base.
+    });
+
+    it('reflects a Speed Up II (+30%) timed status applied mid-combat', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const speedUp = timedSpeedStatus('Speed Up II', 30);
+        eng.registerAbilityStatuses([speedUp], OWNER);
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, speedUp, OWNER);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(30);
+        // effectiveSpeedOf would be base × 1.30.
+    });
+
+    it('sums a Speed Up II (+30%) and a Speed Down I (-15%) → +15% net', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const speedUp = timedSpeedStatus('Speed Up II', 30);
+        const speedDown = timedSpeedStatus('Speed Down I', -15);
+        eng.registerAbilityStatuses([speedUp, speedDown], OWNER);
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, speedUp, OWNER);
+        eng.applyTimedAbilityStatus(1, speedDown, OWNER);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(15);
+        // effectiveSpeedOf would be base × 1.15.
+    });
+
+    it('folds a scheduled self-buff via the selfBuffLookup source', () => {
+        const speedBuff: SelectedGameBuff = {
+            id: 'sched-spd',
+            buffName: 'Recurring Speed',
+            stacks: 1,
+            parsedEffects: { speed: 20 },
+            isStackable: false,
+        };
+        // No skillSource/skillDuration → classified always-active (isAlwaysActive), so it is
+        // attacker-owned and appears every round in the 'attacker' snapshot as 'recurring'.
+        const eng = createStatusEngine({
+            selfBuffs: [speedBuff],
+            enemyDebuffs: [],
+        });
+        const lookup = new Map<string, SelectedGameBuff[]>([['Recurring Speed', [speedBuff]]]);
+        eng.beginRound(1);
+        expect(foldSpeedBuffPct(eng, lookup, 'attacker')).toBe(20);
+    });
+
+    it('is keyed by owner id — a buff on one owner does not leak to another', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const speedUp = timedSpeedStatus('Speed Up III', 50);
+        eng.registerAbilityStatuses([speedUp], OWNER);
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, speedUp, OWNER);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(50);
+        expect(foldSpeedBuffPct(eng, emptyLookup, 'other-ship')).toBe(0);
     });
 });

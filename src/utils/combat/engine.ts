@@ -12,6 +12,7 @@ import {
     damageInputsFromSkill,
 } from '../abilities/applyAbilities';
 import { conditionsMet } from '../abilities/evaluateConditions';
+import { toSimBuffs } from '../calculators/dpsBuffHelpers';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -47,6 +48,8 @@ import {
     PlayerRoundCtx,
     PlayerTurnResult,
     runPlayerTurn,
+    calculateBuffTotals,
+    payloadToSelectedBuff,
 } from './playerTurn';
 import {
     Intent,
@@ -66,6 +69,46 @@ import {
  *  self-limited (charged-skill grants consume charges; passive grants are once per
  *  round), so any round needing more than this is a config/parser bug. */
 const MAX_EXTRA_TURNS_PER_ROUND = 8;
+
+/**
+ * Sum an actor's LIVE speed-buff percentage from the status engine (Task 2 authority for
+ * effectiveSpeedOf; pure read, no mutation). Folds the same two sources the per-actor buff
+ * fold uses, keyed by owner id so it is correct for any actor on either side:
+ *   1. Scheduled self-buffs: snapshot(actorId).activeSelfBuffs, each expanded via selfBuffLookup
+ *      (accumulating buffs override their static stacks with the per-round count; 0 → dropped).
+ *   2. Timed ability statuses: timedAbilityStatuses('self', actorId), each payload wrapped via
+ *      payloadToSelectedBuff.
+ * Both fold through toSimBuffs → calculateBuffTotals, summing only `.speedBuff`.
+ *
+ * Task 0 corpus investigation: every corpus speed buff (Speed Up I/II/III, Speed Down I/II,
+ * XAOC Swiftness I/II/III) is an UNCONDITIONAL timed status grant — there is NO conditional/
+ * gated speed buff, NO always-active/aura speed buff, and NO standing speed modifier — so the
+ * ctx-gated activeAbilityStatuses path and a ModifierChannel speed entry are intentionally
+ * omitted. Returns a percentage (e.g. 30 for +30%); effective speed is uncapped.
+ */
+export function foldSpeedBuffPct(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    actorId: string
+): number {
+    const scheduledSelfBuffs = statusEngine.snapshot(actorId).activeSelfBuffs.flatMap((ab) => {
+        const bufs = selfBuffLookup.get(ab.buffName) ?? [];
+        // Accumulating buff: override static stacks with per-round count; skip when 0.
+        return ab.stacks !== undefined
+            ? ab.stacks > 0
+                ? bufs.map((b) => ({ ...b, stacks: ab.stacks! }))
+                : []
+            : bufs;
+    });
+    const scheduledSpeedBuff = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs)).speedBuff;
+
+    const timedEffects = statusEngine
+        .timedAbilityStatuses('self', actorId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    const timedSpeedBuff = calculateBuffTotals(toSimBuffs(timedEffects)).speedBuff;
+
+    return scheduledSpeedBuff + timedSpeedBuff;
+}
 
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
 // and register them under the correct status-engine recipients. Returns the timed-by-slot
@@ -1411,6 +1454,26 @@ export function runCombat(input: CombatEngineInput): {
     const lowestSpeedAllyIds = new Set(
         allPlayerActors.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
     );
+
+    // Live effective speed for ANY actor on EITHER side (Task 2 authority; UNWIRED — Task 3
+    // wires it into the turn loop via selectNextBySpeed). Effective speed =
+    // baseSpeed × (1 + Σ speedBuff% / 100), where baseSpeed is the actor's construction-time
+    // stats.speed and the speedBuff% is folded LIVE from the status engine so a Speed Up/Down
+    // applied mid-combat is reflected. Two sources are summed (Task 0 corpus investigation:
+    // every corpus speed buff — Speed Up I/II/III, Speed Down I/II, XAOC Swiftness I/II/III — is
+    // an UNCONDITIONAL timed status grant; there is NO conditional/gated speed buff, NO
+    // always-active/aura speed buff, and NO standing speed modifier, so the ctx-gated
+    // activeAbilityStatuses path is intentionally omitted):
+    //   1. Scheduled self-buffs: snapshot(id).activeSelfBuffs expanded via selfBuffLookup.
+    //   2. Timed ability statuses: timedAbilityStatuses('self', id) payloads.
+    // Both fold through toSimBuffs → calculateBuffTotals, taking only .speedBuff. snapshot(id)
+    // and timedAbilityStatuses('self', id) are keyed by owner id, so this is correct for any
+    // actor regardless of side. Effective speed is UNCAPPED (magnitude only orders turns).
+    const effectiveSpeedOf = (actor: CombatActor): number => {
+        const speedBuffPct = foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id);
+        return actor.stats.speed * (1 + speedBuffPct / 100);
+    };
+    void effectiveSpeedOf; // Task 2: authority only — Task 3 wires it into the turn loop.
 
     // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
     // its OWN chargeCount, skipping chargeCount 0 (no charge skill → nothing to bank). Called
