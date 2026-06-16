@@ -798,8 +798,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // statuses are removed and their stored buffName reported so the engine emits
     // buff-expired. Ability-sourced timed statuses live in the same maps and decrement here.
 
-    /** Decrement all timed statuses for the named player-side carrier. Calling on an owner
-     *  with no statuses (lazy-empty map) is a safe no-op. */
+    /** Decrement all timed statuses in the SELF-BUFF STORE for the named carrier (side-agnostic;
+     *  the 'Player' suffix is legacy — this is the store for buffs the actor applied to itself).
+     *  Calling on a carrier with no statuses (lazy-empty map) is a safe no-op. */
     const decrementPlayer = (ownerId: string): { expired: string[] } => {
         const map = selfMaps.get(ownerId);
         const expired: string[] = [];
@@ -815,9 +816,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return { expired };
     };
 
-    /** Decrement all timed enemy statuses for the given targetId.
-     *  Defaults to DEFAULT_ENEMY_TARGET (pre-Task-1 path, byte-identical).
-     *  Calling on a target with no statuses (lazy-empty map) is a safe no-op. */
+    /** Decrement all timed statuses in the DEBUFFS-LANDED-ON store for the given actor id
+     *  (side-agnostic; the 'Enemy' suffix is legacy — this is the store for debuffs landed ON
+     *  the named carrier by an opposing actor). Defaults to DEFAULT_ENEMY_TARGET (the DPS-dummy
+     *  sentinel '__enemy__'; pre-Task-1 path, byte-identical).
+     *  Calling on a carrier with no statuses (lazy-empty map) is a safe no-op. */
     const decrementEnemy = (targetId = DEFAULT_ENEMY_TARGET): { expired: string[] } => {
         const map = enemyMaps.get(targetId);
         const expired: string[] = [];

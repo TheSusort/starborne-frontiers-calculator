@@ -3673,56 +3673,29 @@ export function runCombat(input: CombatEngineInput): {
                 drainIntents();
                 drainEnemyIntents();
 
-                // Post Turn (combat-system.md section 4): the status CARRIER decrements.
-                // Player-side actors call decrementPlayer(actor.id) — team actors have empty
-                // maps now and calling on an empty owner is a safe no-op. The DUMMY enemy calls
-                // decrementEnemy() (it carries the singular enemy status maps).
-                if (actor.kind === 'enemy' && actor.id === enemy.id) {
-                    for (const buffName of statusEngine.decrementEnemy().expired) {
-                        bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                    }
-                } else if (actor.kind === 'enemy') {
-                    // Enemy ATTACKER (Task 6b): now a runPlayerTurn walker. It carries its OWN
-                    // player-side status map (self-buffs land under its actor id) — decrement that
-                    // exactly like an attacker/team owner. An attacker with an empty self map (manual
-                    // enemy → no self-buffs) is a safe no-op. The enemy debuffs it lands on the heal
-                    // target live in the enemy-side per-target store keyed by the TARGET's id; those
-                    // decrement when the TARGET takes its Post Turn (the player-side branch below).
-                    //
-                    // POSITIONAL-PROVOKE DEFERRAL (Phase 4 per-actor-per-side accounting): a debuff a
-                    // PLAYER lands ON this enemy attacker (e.g. a Provoke) lives in the enemy-side store
-                    // keyed by THIS actor's id, which is NOT decremented here — only the dummy-enemy and
-                    // heal-target enemy-side stores decrement. Inert today: positional target resolution
-                    // (provokerOf / resolvePositionalTarget redirect) runs ONLY when board positions are
-                    // passed, which no production caller does yet, and the e2e Provoke fixtures use a
-                    // non-expiring duration. When Phase 4 wires per-actor decrement, the enemy-side store
-                    // for every positioned carrier must decrement here too, else a finite-duration Provoke
-                    // on an enemy attacker (or a non-heal-target player) would persist and keep redirecting
-                    // past its intended duration. (Pre-existing gap, surfaced — not introduced — by the
-                    // capability-only Provoke wiring.)
-                    for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
-                        bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                    }
-                } else {
-                    // 'attacker' and 'team' kinds: decrement this actor's player-side self map.
-                    for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
-                        bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
-                    }
-                    // Heal target also carries the enemy-side debuffs an enemy attacker landed on it
-                    // (per-target store keyed by its id — Task 1/6b). Decrement that store on its
-                    // own Post Turn (the afflicted ship is the carrier, combat-system §4). Empty for
-                    // damage-only enemies → no-op (goldens unaffected); the default '__enemy__' store
-                    // is decremented separately on the dummy enemy's turn (above), never here.
-                    if (healTarget && actor.id === healTarget.id) {
-                        for (const buffName of statusEngine.decrementEnemy(actor.id).expired) {
-                            bus.emit({
-                                type: 'buff-expired',
-                                actorId: actor.id,
-                                round: r,
-                                buffName,
-                            });
-                        }
-                    }
+                // Post Turn (combat-system.md section 4): the status CARRIER decrements ALL its
+                // timed statuses by one turn — both its self-buff store and the debuff store of
+                // effects landed ON it. (Side-agnostic: PR4 unification of the former 4-branch
+                // player/enemy/heal-target split.) Empty stores are a safe no-op.
+                //
+                // The DPS dummy's debuffs live under the sentinel key, not its actor id — the
+                // dummy/real-actor duality is removed in PR5; until then every real actor keys
+                // its debuff store by actor.id and the dummy keeps the sentinel.
+                // (isDummyEnemy is already declared above for the dead-actor skip guard.)
+                for (const buffName of statusEngine.decrementPlayer(actor.id).expired) {
+                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
+                }
+                // debuffs landed on this actor — closes the decrement gap: every non-dummy actor
+                // now decrements its own debuff store. Reachable today for a non-heal-target team
+                // actor an enemy debuffs in positional mode (decrementUnification Case 5); the
+                // player→enemy-attacker variant is fixed by this same line but stays latent (no
+                // firing site threads a player→enemy targetId yet — a future per-victim-accounting
+                // PR lights it up).
+                const debuffResult = isDummyEnemy
+                    ? statusEngine.decrementEnemy() // sentinel '__enemy__' store
+                    : statusEngine.decrementEnemy(actor.id); // per-actor debuff store
+                for (const buffName of debuffResult.expired) {
+                    bus.emit({ type: 'buff-expired', actorId: actor.id, round: r, buffName });
                 }
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
