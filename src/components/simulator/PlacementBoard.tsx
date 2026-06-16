@@ -3,6 +3,12 @@ import { Position, ShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import FormationGrid from '../encounters/FormationGrid';
 import { ShipSelector } from '../ship/ShipSelector';
+import { Select } from '../ui/Select';
+import { useEncounterNotes } from '../../hooks/useEncounterNotes';
+import { useShips } from '../../contexts/ShipsContext';
+
+/** One placement board's state: a Position → Ship map (shared shape with SimulatorPage). */
+export type BoardState = Partial<Record<Position, Ship>>;
 
 interface PlacementBoardProps {
     /** Heading for this side (e.g. "Your Team", "Enemy Team"); count suffix is included by the caller. */
@@ -19,12 +25,14 @@ interface PlacementBoardProps {
     onPickShip: (ship: Ship) => void;
     /** Clear the current cell selection (fires when the picker modal closes). */
     onCloseSelector: () => void;
+    /** Replace this board with a BoardState built from a saved encounter's formation. */
+    onLoadEncounter: (board: BoardState) => void;
     /** Mirror the column order (enemy board): col 4 = front renders leftmost, facing the player. */
     mirrored?: boolean;
 }
 
-/** One placement board: a side heading, a FormationGrid, and a cell-selection-driven ship picker.
- *  Rendered once per side (player + enemy) from SimulatorPage. */
+/** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
+ *  and a cell-selection-driven ship picker. Rendered once per side (player + enemy) from SimulatorPage. */
 const PlacementBoard: React.FC<PlacementBoardProps> = ({
     title,
     formation,
@@ -33,11 +41,43 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     onRemoveShip,
     onPickShip,
     onCloseSelector,
+    onLoadEncounter,
     mirrored = false,
 }) => {
+    const { encounters } = useEncounterNotes();
+    const { getShipById } = useShips();
+
+    const handleLoadEncounter = (encounterId: string) => {
+        if (!encounterId) return;
+        const encounter = encounters.find((e) => e.id === encounterId);
+        if (!encounter) return;
+        // Build the board from the encounter's formation. Skip cells whose ship the user no
+        // longer owns (getShipById undefined) so we never place a missing ship.
+        const board: BoardState = {};
+        for (const { shipId, position } of encounter.formation) {
+            const ship = getShipById(shipId);
+            if (ship) board[position] = ship;
+        }
+        onLoadEncounter(board);
+    };
+
     return (
         <div className="card">
             <h2 className="text-lg font-semibold mb-2">{title}</h2>
+            {encounters.length > 0 && (
+                <div className="mb-3">
+                    <Select
+                        label="Load encounter"
+                        searchable
+                        searchPlaceholder="Search encounters..."
+                        noDefaultSelection
+                        // Action, not persistent state: leave empty so it always reads as a prompt.
+                        value=""
+                        options={encounters.map((enc) => ({ value: enc.id, label: enc.name }))}
+                        onChange={handleLoadEncounter}
+                    />
+                </div>
+            )}
             <FormationGrid
                 formation={formation}
                 selectedPosition={selectedPosition}

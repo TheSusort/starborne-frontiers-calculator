@@ -13,12 +13,8 @@ import {
     BattleResult,
     BattlePlacement,
 } from '../utils/calculators/battleSimulator';
-import PlacementBoard from '../components/simulator/PlacementBoard';
+import PlacementBoard, { BoardState } from '../components/simulator/PlacementBoard';
 import BattlePlayback from '../components/simulator/BattlePlayback';
-
-/** One placement board's state: a Position → Ship map. The Position key is the grid cell;
- *  the Ship is the fully-loaded inventory ship whose geared stats Run resolves. */
-type BoardState = Partial<Record<Position, Ship>>;
 
 type Side = 'player' | 'enemy';
 
@@ -99,6 +95,14 @@ const SimulatorPage: React.FC = () => {
         setSelected(undefined);
     };
 
+    // Replace one side's board with a saved encounter's formation (built in PlacementBoard).
+    // Leaves battleResult as-is, matching add/remove — the user re-runs after setting teams.
+    const handleLoadEncounter = (side: Side, board: BoardState) => {
+        const { setBoard, setSelected } = boardSetters[side];
+        setBoard(board);
+        setSelected(undefined);
+    };
+
     // Build the engine input for one side: each placed ship → BattlePlacement with
     // fully gear/refit/engineering-resolved stats as statOverrides (else combat floors to
     // un-geared base stats — see the WARNING in battleSimulator.ts).
@@ -146,6 +150,7 @@ const SimulatorPage: React.FC = () => {
                             onRemoveShip={(pos) => handleRemoveShip('player', pos)}
                             onPickShip={(ship) => handlePickShip('player', ship)}
                             onCloseSelector={() => setPlayerSelected(undefined)}
+                            onLoadEncounter={(board) => handleLoadEncounter('player', board)}
                         />
                         <PlacementBoard
                             title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
@@ -155,6 +160,7 @@ const SimulatorPage: React.FC = () => {
                             onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
                             onPickShip={(ship) => handlePickShip('enemy', ship)}
                             onCloseSelector={() => setEnemySelected(undefined)}
+                            onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
                             mirrored
                         />
                     </div>

@@ -14,6 +14,9 @@ vi.mock('../../contexts/InventoryProvider', () => ({
 vi.mock('../../hooks/useEngineeringStats', () => ({
     useEngineeringStats: () => ({ getEngineeringStatsForShipType: () => undefined }),
 }));
+vi.mock('../../hooks/useEncounterNotes', () => ({
+    useEncounterNotes: () => ({ encounters: [], loading: false }),
+}));
 vi.mock('../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('../../hooks/useShipsData', () => ({ useShipsData: () => ({ ships: [] }) }));
 vi.mock('../../components/seo/Seo', () => ({ default: () => null }));
