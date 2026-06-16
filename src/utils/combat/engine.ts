@@ -1450,14 +1450,6 @@ export function runCombat(input: CombatEngineInput): {
     // bump. Built once. Used by grantAllyCharges below (passed into every runPlayerTurn call).
     const allPlayerActors = [attacker, ...teamCombatActors];
 
-    // Phase 4c PR 6: player-team actors sharing the minimum Speed (ties → all). Speed is static
-    // turn-ORDER in this sim, so compute once. Feeds the lowest-speed-ally gate (Chakara).
-    // Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
-    const minPlayerSpeed = Math.min(...allPlayerActors.map((a) => a.stats.speed));
-    const lowestSpeedAllyIds = new Set(
-        allPlayerActors.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
-    );
-
     // Live effective speed for ANY actor on EITHER side (Task 2 authority; UNWIRED — Task 3
     // wires it into the turn loop via selectNextBySpeed). Effective speed =
     // baseSpeed × (1 + Σ speedBuff% / 100), where baseSpeed is the actor's construction-time
@@ -1475,6 +1467,15 @@ export function runCombat(input: CombatEngineInput): {
     const effectiveSpeedOf = (actor: CombatActor): number => {
         const speedBuffPct = foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id);
         return actor.stats.speed * (1 + speedBuffPct / 100);
+    };
+
+    // Player-team actors sharing the minimum LIVE effective speed (ties → all). Recomputed per
+    // gate eval — speed is now dynamic (Speed Up/Down reorder turns), so a buff can change who is
+    // slowest. Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
+    const lowestSpeedAllyIds = (): Set<string> => {
+        const speeds = allPlayerActors.map((a) => effectiveSpeedOf(a));
+        const min = Math.min(...speeds);
+        return new Set(allPlayerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
     };
 
     // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
@@ -1595,15 +1596,15 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
-    // Enemy-side lowest-speed set (ties → all; a lone enemy is trivially slowest → true).
-    // Empty in DPS mode (no enemy attackers).
-    const lowestSpeedEnemyIds = new Set<string>();
-    if (enemyAttackerActors.length > 0) {
-        const minEnemySpeed = Math.min(...enemyAttackerActors.map((a) => a.stats.speed));
-        for (const a of enemyAttackerActors) {
-            if (a.stats.speed === minEnemySpeed) lowestSpeedEnemyIds.add(a.id);
-        }
-    }
+    // Enemy-side lowest LIVE effective speed (ties → all; a lone enemy is trivially slowest).
+    // Empty in DPS mode (no enemy attackers). Recomputed per gate eval for the same reason as
+    // lowestSpeedAllyIds above — a speed buff on an enemy can shift which enemy is slowest.
+    const lowestSpeedEnemyIds = (): Set<string> => {
+        if (enemyAttackerActors.length === 0) return new Set<string>();
+        const speeds = enemyAttackerActors.map((a) => effectiveSpeedOf(a));
+        const min = Math.min(...speeds);
+        return new Set(enemyAttackerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
+    };
 
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
@@ -2605,7 +2606,7 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(intentQueue, {
                 runtimes: runtimesById,
                 recipientIds: playerIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds.has(ownerId),
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds().has(ownerId),
                 grantAllyCharges,
             });
 
@@ -2624,7 +2625,7 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(enemyIntentQueue, {
                 runtimes: enemyPlayerRuntimeByActorId,
                 recipientIds: enemyAttackerActorIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds.has(ownerId),
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds().has(ownerId),
                 grantAllyCharges: grantEnemyAllyCharges,
             });
         };
