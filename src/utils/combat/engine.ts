@@ -974,6 +974,10 @@ interface ReactiveSideCtx {
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
     grantAllyCharges: (amount: number) => void;
+    /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
+     *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
+     *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
+    selfHpPctFor?: (ownerId: string) => number;
 }
 
 export interface HealingRoundEngine {
@@ -1448,7 +1452,7 @@ export function runCombat(input: CombatEngineInput): {
     const hasWalkedTeam = teamRuntimeById.size > 0;
 
     // All player actors (attacker + team turn-order carriers) — the universe ally-charge grants
-    // bump. Built once. Used by grantAllyCharges below (passed into every runPlayerTurn call).
+    // bump. Built once. Used by `actorsBySide`/`bySide` below.
     const allPlayerActors = [attacker, ...teamCombatActors];
 
     // Live effective speed for ANY actor on EITHER side (Task 2 authority; UNWIRED — Task 3
@@ -1468,28 +1472,6 @@ export function runCombat(input: CombatEngineInput): {
     const effectiveSpeedOf = (actor: CombatActor): number => {
         const speedBuffPct = foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id);
         return actor.stats.speed * (1 + speedBuffPct / 100);
-    };
-
-    // Player-team actors sharing the minimum LIVE effective speed (ties → all). Recomputed per
-    // gate eval — speed is now dynamic (Speed Up/Down reorder turns), so a buff can change who is
-    // slowest. Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
-    const lowestSpeedAllyIds = (): Set<string> => {
-        const speeds = allPlayerActors.map((a) => effectiveSpeedOf(a));
-        const min = Math.min(...speeds);
-        return new Set(allPlayerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
-    };
-
-    // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
-    // its OWN chargeCount, skipping chargeCount 0 (no charge skill → nothing to bank). Called
-    // from a caster's active-round charge step (runPlayerTurn). For an attacker-only run this
-    // loops the sole attacker → identical net charge to the pre-Task-5 own-only path (no team
-    // actors means no ally-targeted charge abilities reach this either). `allyChargePerRound`
-    // (the manual attacker-side input) is unchanged and applied separately in runPlayerTurn.
-    const grantAllyCharges = (amount: number): void => {
-        for (const a of allPlayerActors) {
-            if (a.chargeCount <= 0) continue;
-            a.charges = Math.min(a.charges + amount, a.chargeCount);
-        }
     };
 
     // All mutable state declared fresh on every call
@@ -1601,27 +1583,6 @@ export function runCombat(input: CombatEngineInput): {
     // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
-    // Enemy-team charge grant (enemy-team PR3): the mirror of grantAllyCharges — bump every
-    // ENEMY attacker's charges by `amount`, each capped at its own chargeCount, skipping 0. Lets
-    // an enemy supporter (Hayyan charged grant / Graphite start-of-round / Liberator on-kill)
-    // accelerate the enemy attackers' charged bursts. Empty enemy list (DPS mode) → never called.
-    const grantEnemyAllyCharges = (amount: number): void => {
-        for (const a of enemyAttackerActors) {
-            if (a.chargeCount <= 0) continue;
-            a.charges = Math.min(a.charges + amount, a.chargeCount);
-        }
-    };
-
-    // Enemy-side lowest LIVE effective speed (ties → all; a lone enemy is trivially slowest).
-    // Empty in DPS mode (no enemy attackers). Recomputed per gate eval for the same reason as
-    // lowestSpeedAllyIds above — a speed buff on an enemy can shift which enemy is slowest.
-    const lowestSpeedEnemyIds = (): Set<string> => {
-        if (enemyAttackerActors.length === 0) return new Set<string>();
-        const speeds = enemyAttackerActors.map((a) => effectiveSpeedOf(a));
-        const min = Math.min(...speeds);
-        return new Set(enemyAttackerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
-    };
-
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
     // are folded exactly once via snapshot()/activeAbilityStatuses/timedAbilityStatuses), so
@@ -1648,6 +1609,77 @@ export function runCombat(input: CombatEngineInput): {
         ...teamActors.map((t) => [t.id, t.walk ? t.walk.stats.hp : 1] as const),
     ]);
     const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
+
+    // ── Side-context bundle (bySide unification PR3) ───────────────────────────
+    // Collapses the four hand-paired side closures — the per-side ally-charge grant and the
+    // per-side lowest-speed-ally set (plus the drain-time self-HP% lookup) — into ONE
+    // side-parameterized SideContext. `actorsBySide(side)` is the primitive (its first
+    // consumers are the closures below + the drain/turn call sites). Built once into cached
+    // playerSide/enemySide objects so each field is a stable reference.
+    //
+    // BYTE-IDENTICAL: the player context reproduces the old player closures verbatim; the enemy
+    // context reproduces the old enemy closures verbatim — lowestSpeedIds keeps the enemy
+    // `length === 0 → ∅` guard (inert for the player side, which always has the attacker), grant
+    // loops the side's own actors, and selfHpPctFor returns 100 for every enemy owner (exactly what
+    // the old shared healTarget closure returned for a non-healTarget id; an enemy owner id can
+    // never equal healTarget.id — reservedActorIds forbids it). The genuine per-actor enemy
+    // self-HP% (real enemy currentHp) lands in PR5 with per-actor accounting.
+    type Side = CombatActor['side'];
+
+    const actorsBySide = (side: Side): CombatActor[] =>
+        side === 'player' ? allPlayerActors : enemyAttackerActors;
+
+    interface SideContext {
+        /** Bump every same-side actor's charges by `amount` (capped at each actor's own
+         *  chargeCount; chargeCount 0 skipped — no charge skill to bank). */
+        grantAllyCharges: (amount: number) => void;
+        /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
+         *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
+        lowestSpeedIds: () => Set<string>;
+        /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
+         *  heal target's live HP (every other id → 100), undefined in DPS mode (→ buildDrainContext
+         *  defaults to 100). Enemy side returns 100 for every owner (no per-actor enemy HP until
+         *  PR5). Consumed in Task 2. */
+        selfHpPctFor?: (ownerId: string) => number;
+    }
+
+    const buildSideContext = (side: Side): SideContext => {
+        const actors = actorsBySide(side);
+        return {
+            grantAllyCharges: (amount: number): void => {
+                for (const a of actors) {
+                    if (a.chargeCount <= 0) continue;
+                    a.charges = Math.min(a.charges + amount, a.chargeCount);
+                }
+            },
+            lowestSpeedIds: (): Set<string> => {
+                if (actors.length === 0) return new Set<string>();
+                const speeds = actors.map((a) => effectiveSpeedOf(a));
+                const min = Math.min(...speeds);
+                return new Set(actors.filter((_, i) => speeds[i] === min).map((a) => a.id));
+            },
+            selfHpPctFor:
+                side === 'player'
+                    ? healTarget
+                        ? (ownerId: string): number => {
+                              if (ownerId !== healTarget.id) return 100;
+                              // Same denominator as the cast-path selfHpPct (baseHpFor) so the gate
+                              // flips at the same threshold at cast vs drain time.
+                              const maxHp = baseHpFor(healTarget.id);
+                              if (maxHp <= 0) return 100;
+                              return Math.max(
+                                  0,
+                                  Math.min(100, (healTarget.currentHp / maxHp) * 100)
+                              );
+                          }
+                        : undefined
+                    : (): number => 100,
+        };
+    };
+
+    const playerSide = buildSideContext('player');
+    const enemySide = buildSideContext('enemy');
+    const bySide = (side: Side): SideContext => (side === 'player' ? playerSide : enemySide);
 
     // Base-DEFENCE fallback for an enemy attacker's target-defence read before the target has
     // taken its first turn (no ctx yet): attacker → input.defence; walked team → walk defence;
@@ -2594,27 +2626,12 @@ export function runCombat(input: CombatEngineInput): {
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
                         isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
-                        // Healing mode: the heal target's current/max HP is read from the SAME
-                        // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure
-                        // always sees post-drain HP state. Any non-tank id returns 100 (pre-4c
-                        // default). DPS mode: no healTarget → every id returns 100 → byte-identical.
-                        ...(healTarget
-                            ? {
-                                  selfHpPctFor: (ownerId: string): number => {
-                                      if (ownerId !== healTarget.id) return 100;
-                                      // Same denominator as the cast-path selfHpPct (baseHpFor) —
-                                      // a buffed max HP must not make the gate flip at different
-                                      // thresholds at cast vs drain time.
-                                      const maxHp = baseHpFor(healTarget.id);
-                                      if (maxHp <= 0) return 100;
-                                      return Math.max(
-                                          0,
-                                          Math.min(100, (healTarget.currentHp / maxHp) * 100)
-                                      );
-                                  },
-                              }
-                            : {}),
+                        // Phase 4c PR 1 Task 6 / bySide PR3 Task 2: live self-HP% for drain-time
+                        // hp-threshold gates, now sourced per-side from sideCtx.selfHpPctFor.
+                        // Player side: heal-target current/max HP (every other id → 100); DPS mode
+                        // has no closure (undefined → buildDrainContext defaults to 100). Enemy
+                        // side: 100 for every owner until PR5. byte-identical to the old inline spread.
+                        selfHpPctFor: sideCtx.selfHpPctFor,
                     });
                 }
             }
@@ -2626,13 +2643,14 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(intentQueue, {
                 runtimes: runtimesById,
                 recipientIds: playerIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds().has(ownerId),
-                grantAllyCharges,
+                isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
+                grantAllyCharges: bySide('player').grantAllyCharges,
+                selfHpPctFor: bySide('player').selfHpPctFor,
             });
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
         // recipientIds is the enemy-attacker ids (PR1 exercises self-target only; this
-        // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is the enemy mirror
+        // future-proofs PR2 enemy→enemy reactions). grantAllyCharges is bySide('enemy').grantAllyCharges
         // (Gap F — enemy ally-charge grants, done in enemy-team PR3): a reactive enemy
         // ally-charge grant now bumps the enemy attackers' charges, not the player team.
         // Skips entirely when the enemy queue is empty (DPS / no enemy reactives) so the
@@ -2645,8 +2663,9 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(enemyIntentQueue, {
                 runtimes: enemyPlayerRuntimeByActorId,
                 recipientIds: enemyAttackerActorIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds().has(ownerId),
-                grantAllyCharges: grantEnemyAllyCharges,
+                isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
+                grantAllyCharges: bySide('enemy').grantAllyCharges,
+                selfHpPctFor: bySide('enemy').selfHpPctFor,
             });
         };
 
@@ -2872,7 +2891,7 @@ export function runCombat(input: CombatEngineInput): {
                         bus,
                         round: r,
                         enemyHpDecline: selectedEnemy ? 0 : cumulativeDamage + cumulativeTeamDamage,
-                        grantAllyCharges,
+                        grantAllyCharges: bySide('player').grantAllyCharges,
                         // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
                         // block inert, goldens byte-identical).
                         healing: healingCtx,
@@ -3042,7 +3061,7 @@ export function runCombat(input: CombatEngineInput): {
                         enemyHpDecline: selectedTeamEnemy
                             ? 0
                             : cumulativeDamage + cumulativeTeamDamage,
-                        grantAllyCharges,
+                        grantAllyCharges: bySide('player').grantAllyCharges,
                         // Healing mode only — walked team turns heal/shield through the same ctx.
                         healing: healingCtx,
                         // Live HP% for self-HP-threshold gates (same logic as attacker above).
@@ -3390,14 +3409,15 @@ export function runCombat(input: CombatEngineInput): {
                             // by THIS actor's id (its per-target store). Empty for the current fixtures —
                             // no player ability targets enemy attackers — but threaded for the full kit.
                             selfDebuffNames: ownerDebuffNames(actor.id),
-                            // grantAllyCharges for the enemy walk uses the ENEMY mirror (enemy-team PR3):
-                            // an enemy supporter running runPlayerTurn grants charges to its OWN (enemy)
-                            // attackers via grantEnemyAllyCharges (which bumps enemyAttackerActors), NEVER
-                            // the player team — the player closure bumps only allPlayerActors. Inert for the
-                            // current synthesized manual enemy (damage-only, no ally-charge ability, so
-                            // runPlayerTurn never calls it → goldens byte-identical), but a future full-kit
-                            // enemy supporter (Hayyan/Graphite/Liberator) now accelerates enemy charged bursts.
-                            grantAllyCharges: grantEnemyAllyCharges,
+                            // grantAllyCharges for the enemy walk uses bySide('enemy').grantAllyCharges
+                            // (enemy-team PR3): an enemy supporter running runPlayerTurn grants charges to
+                            // its OWN (enemy) attackers via bySide('enemy').grantAllyCharges (which bumps
+                            // enemyAttackerActors), NEVER the player team — the player side bumps only
+                            // allPlayerActors. Inert for the current synthesized manual enemy (damage-only,
+                            // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
+                            // but a future full-kit enemy supporter (Hayyan/Graphite/Liberator) now
+                            // accelerates enemy charged bursts.
+                            grantAllyCharges: bySide('enemy').grantAllyCharges,
                             healing: healingCtx,
                             // Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): the enemy
                             // shares the player healingCtx, so its cast heal/cleanse must EMIT

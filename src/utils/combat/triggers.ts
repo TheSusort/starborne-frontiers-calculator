@@ -72,7 +72,7 @@ export interface ReactiveAbility {
 }
 
 /** A queued follow-up execution. Listeners push these; the engine drains them.
- *  `ownerId` (Task 6) is the player actor whose reactive ability fired — the executor
+ *  `ownerId` (Task 6) is the actor (either side) whose reactive ability fired — the executor
  *  routes charge/buff/debuff/dot follow-ups against THIS owner's runtime (its charges,
  *  its landing gates, its sourceId, its last-turn ctx for bombs). For an attacker-only
  *  run every Intent carries ownerId 'attacker' → identical routing to pre-Task-6. */
@@ -501,7 +501,7 @@ export interface IntentExecContext {
  *  so crit-gated conditions are evaluated with effectiveCritRate 0 (treated as
  *  not-crit at drain time). */
 /**
- * Build a ConditionContext for ONE player actor (`ownerId`) from the status engine + the shared
+ * Build a ConditionContext for ONE actor (`ownerId`, either side) from the status engine + the shared
  * enemy state. Reused by the drain-time gate (buildDrainContext) and by the player-turn aura/accum
  * resolver (Task 5: an ally-cast aura sitting on a recipient is gated by its CASTER's context —
  * the resolver maps casterId → this ctx). The `selfBuffNames` come from that owner's snapshot, so
@@ -638,9 +638,11 @@ const NEUTRAL_NAMES_CTX = buildRoundContext({
 /** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).
  *  Scheduled non-payload buffs come from snapshot().activeSelfBuffs; payload-carrying
  *  ability self statuses (timed window-persisting + aura/accum) come from the
- *  ability-status reads. Used to populate `enemyBuffNames` for a player actor's
- *  `enemy-buff` gates: the OPPOSING side from a player gate's view is the enemy
- *  attacker(s). Aggregation choice: UNION across all enemy owners (the condition is
+ *  ability-status reads. Used to populate `enemyBuffNames` for any actor's
+ *  `enemy-buff` gate: a player actor sees the enemy attackers, an enemy actor sees
+ *  the player team — the engine passes the correct opposing owner ids; this function
+ *  just unions self-buff names for whatever owner ids it's given. Aggregation choice:
+ *  UNION across all the given owners (the condition is
  *  conceptually "does an enemy have a buff", not "does THIS enemy" — the simplest
  *  correct interpretation for multi-enemy healing mode). De-duplicated. */
 export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: string[]): string[] {
@@ -667,7 +669,7 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
  *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
  *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads
- *  keyed by the same target. Used to populate `selfDebuffNames` for a player actor whose own
+ *  keyed by the same target. Used to populate `selfDebuffNames` for an actor (either side) whose own
  *  enemy-applied debuffs live under its id (the heal target / tank). De-duplicated. */
 export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string): string[] {
     const names = new Set<string>();
@@ -814,7 +816,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'charge') {
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
-        // EVERY player actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
+        // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
             ctx.grantAllyCharges(cfg.amount);
             return;
