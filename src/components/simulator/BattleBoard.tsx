@@ -1,6 +1,7 @@
 import React from 'react';
 import { Position } from '../../types/encounters';
 import { CellOverlay, LOW_HP_PCT } from '../../utils/simulator/boardOverlays';
+import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons';
 
 interface BattleBoardProps {
     /** Side heading (e.g. "Your Team", "Enemy Team"). */
@@ -110,6 +111,24 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                         })}
                     </div>
                 ))}
+            </div>
+            <div
+                className={`flex items-center gap-1 text-[0.65rem] uppercase tracking-wide text-theme-text-secondary mt-2 ${
+                    mirrored ? 'justify-start' : 'justify-end'
+                }`}
+                aria-label="front line faces the opposing team"
+            >
+                {mirrored ? (
+                    <>
+                        <ChevronLeftIcon className="w-3 h-3" />
+                        <span>front</span>
+                    </>
+                ) : (
+                    <>
+                        <span>front</span>
+                        <ChevronRightIcon className="w-3 h-3" />
+                    </>
+                )}
             </div>
         </div>
     );

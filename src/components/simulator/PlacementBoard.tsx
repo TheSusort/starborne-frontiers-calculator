@@ -19,6 +19,8 @@ interface PlacementBoardProps {
     onPickShip: (ship: Ship) => void;
     /** Clear the current cell selection (fires when the picker modal closes). */
     onCloseSelector: () => void;
+    /** Mirror the column order (enemy board): col 4 = front renders leftmost, facing the player. */
+    mirrored?: boolean;
 }
 
 /** One placement board: a side heading, a FormationGrid, and a cell-selection-driven ship picker.
@@ -31,6 +33,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     onRemoveShip,
     onPickShip,
     onCloseSelector,
+    mirrored = false,
 }) => {
     return (
         <div className="card">
@@ -40,6 +43,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 selectedPosition={selectedPosition}
                 onPositionSelect={onSelectPosition}
                 onRemoveShip={onRemoveShip}
+                mirrored={mirrored}
+                showFacingCue
             />
             {/* ShipSelector contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — autoOpen fires the picker open on mount; onClose clears the selection, which

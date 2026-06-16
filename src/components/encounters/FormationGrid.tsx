@@ -5,6 +5,7 @@ import { HexButton } from '../ui/HexButton';
 import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
+import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons';
 
 interface FormationGridProps {
     formation: ShipPosition[] | SharedShipPosition[];
@@ -12,6 +13,18 @@ interface FormationGridProps {
     selectedPosition?: Position;
     onRemoveShip?: (position: Position) => void;
     onSetSortOrder?: (position: Position, order: number | undefined) => void;
+    /**
+     * When true, reverse the COLUMN order within each row so col 4 (front) renders leftmost —
+     * used by the simulator's enemy board so its front column faces the player board. Default
+     * false → the encounter feature (its existing callers) is UNAFFECTED.
+     */
+    mirrored?: boolean;
+    /**
+     * When true, render a small "front" facing cue under the grid (chevron pointing toward the
+     * front column). Off by default so the encounter feature is unaffected; the simulator's
+     * placement boards opt in.
+     */
+    showFacingCue?: boolean;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -20,6 +33,8 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     selectedPosition,
     onRemoveShip,
     onSetSortOrder,
+    mirrored = false,
+    showFacingCue = false,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -98,7 +113,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     key={rowIndex}
                     className={`grid grid-cols-4 ${rowIndex === 1 ? 'ml-[-12.5%] mr-[12.5%]' : ''}`}
                 >
-                    {row.map((pos) => {
+                    {(mirrored ? [...row].reverse() : row).map((pos) => {
                         const shipPosition = formation.find((s) => s.position === pos);
                         const ship = getShipForPosition(pos);
                         const fullShip = ship && isFullShip(ship) ? ship : null;
@@ -197,6 +212,26 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     })}
                 </div>
             ))}
+            {showFacingCue && (
+                <div
+                    className={`flex items-center gap-1 text-[0.65rem] uppercase tracking-wide text-theme-text-secondary mt-2 ${
+                        mirrored ? 'justify-start' : 'justify-end'
+                    }`}
+                    aria-label="front line faces the opposing team"
+                >
+                    {mirrored ? (
+                        <>
+                            <ChevronLeftIcon className="w-3 h-3" />
+                            <span>front</span>
+                        </>
+                    ) : (
+                        <>
+                            <span>front</span>
+                            <ChevronRightIcon className="w-3 h-3" />
+                        </>
+                    )}
+                </div>
+            )}
             {onRemoveShip && (
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack

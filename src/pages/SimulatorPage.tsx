@@ -155,6 +155,7 @@ const SimulatorPage: React.FC = () => {
                             onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
                             onPickShip={(ship) => handlePickShip('enemy', ship)}
                             onCloseSelector={() => setEnemySelected(undefined)}
+                            mirrored
                         />
                     </div>
 
