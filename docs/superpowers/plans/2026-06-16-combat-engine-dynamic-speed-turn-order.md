@@ -46,6 +46,13 @@
 - [ ] **Step 2:** Determine whether any speed buff is applied with a CONDITION (gated self-buff) or as a passive standing MODIFIER (vs a timed status). Grep the parser output / `buildShipAbilities` for any `modifier` with a speed channel or any conditionally-gated speed grant.
 - [ ] **Step 3:** Record the result inline here: the buff-name → % table, and the verdict "all unconditional timed statuses" (expected) or the list of exceptions. This decides whether `effectiveSpeedOf` needs the gated-status path (Task 2b) or just the timed/always path. If a standing speed MODIFIER exists, Task 1 must also add `'speed'` to `ModifierChannel` and the modifier fold; otherwise skip that.
 
+### Task 0 FINDINGS (2026-06-16, complete)
+
+- **Speed buffs in corpus:** Speed Up I/II/III (+10/+30/+45%), Speed Down I/II (−15/−30%), XAOC Swiftness I/II/III (+10/+20/+30%), plus combined faction buffs (`constants/buffs.ts` lines 178/357/503) carrying `% Speed` components. All carry `"+X% Speed"` in their `description`.
+- **`ParsedBuffEffects.speed` ALREADY EXISTS** (`types/calculator.ts`) and **`parseBuffEffects` ALREADY extracts it** (`buffParser.ts:56-57`, `/([+-]\d+(?:\.\d+)?)%\s*Speed/`). → **No parser/type work in Task 1.**
+- **Verdict: all unconditional timed status grants.** No conditionally-gated speed buff; no standing speed MODIFIER. → `effectiveSpeedOf` needs only the timed/always + ability-status fold (NO gated-ctx path); **skip the `ModifierChannel` change entirely.**
+- **Remaining gap (downstream only):** sim `Buff.stat` union (`calculator.ts:62`) lacks `'speed'`; `toSimBuffs` (`dpsBuffHelpers.ts`) doesn't forward `parsedEffects.speed`; `calculateBuffTotals` (`playerTurn.ts:283`) has no speed channel. **Task 1 is reduced to these three edits.**
+
 ---
 
 ## Task 1: Speed as a buff stat (model + parser fold)
