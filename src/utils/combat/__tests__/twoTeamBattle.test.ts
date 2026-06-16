@@ -806,16 +806,25 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
 
         const r1 = result.rounds[0];
 
-        // Only the three modelled log kinds appear — `attacked` (no amount) is NOT logged.
+        // Only the modelled log kinds appear — `attacked` (no amount) is NOT logged.
         for (const e of r1.events) {
-            expect(['damage', 'heal', 'death']).toContain(e.kind);
+            expect(['damage', 'heal', 'buff', 'debuff', 'dot', 'death']).toContain(e.kind);
         }
 
-        // The focus's damage line: attacker → its anchored enemy, full firing-hit amount.
-        const focusDamage = r1.events.find((e) => e.kind === 'damage' && e.actorId === 'attacker');
-        expect(focusDamage).toBeDefined();
-        expect(focusDamage?.targetId).toBe('e:e1:0'); // focus fires `front` → front enemy
-        expect(focusDamage?.amount).toBe(5000);
+        // Damage is VICTIM-centric (from perRoundPerTarget), not attacker→target: the
+        // struck front enemy carries a damage line keyed by its own (victim) actorId, with
+        // its damage-TAKEN amount (5000), carrying no targetId.
+        const victimDamage = r1.events.find((e) => e.kind === 'damage' && e.actorId === 'e:e1:0');
+        expect(victimDamage).toBeDefined();
+        expect(victimDamage?.amount).toBe(5000);
+        expect(victimDamage?.targetId).toBeUndefined();
+
+        // Every damage line's amount equals that victim's damageTaken this round — proving
+        // the lines come from per-victim damage, NOT the attacker's ability-performed aggregate.
+        for (const e of r1.events.filter((ev) => ev.kind === 'damage')) {
+            const victim = r1.ships.find((s) => s.actorId === e.actorId)!;
+            expect(e.amount).toBe(victim.damageTaken);
+        }
 
         // The wiped front enemy produces exactly one death line that round.
         const deaths = r1.events.filter((e) => e.kind === 'death');

@@ -8,8 +8,9 @@
  *   - damage TAKEN per victim   = perRoundPerTarget[round][victimId]
  *   - heals = heal-performed { casterId, targets[], amount }
  *   - death = ship-destroyed { actorId }
- *   - buffs = buff-applied / buff-expired / debuff-applied
+ *   - buffs = buff-applied / buff-expired / debuff-applied / dot-applied
  *   - hpPct = maxHp - cumulative(damageTaken) over rounds <= r
+ *   - per-round LOG damage is victim-centric (perRoundPerTarget), NOT ability-performed
  */
 import { describe, it, expect } from 'vitest';
 import { assembleBattleResult } from '../battleSimulator';
@@ -264,26 +265,64 @@ describe('assembleBattleResult — buff tracking', () => {
     });
 });
 
-describe('assembleBattleResult — per-round event log', () => {
-    it('logs damage, heal, death lines (not attacked)', () => {
+describe('assembleBattleResult — per-round event log (victim-centric + rich)', () => {
+    it('logs victim-centric damage from perRoundPerTarget — NOT attacker→target from ability-performed', () => {
         const events: CombatEvent[] = [
+            // ability-performed targets the dummy/wrong target — must NOT produce a damage line.
             {
                 type: 'ability-performed',
                 actorId: 'attacker',
-                targetId: 'enemy-front',
+                targetId: 'enemy',
                 round: 1,
                 abilityType: 'damage',
                 damage: 5000,
             },
             { type: 'attacked', attackerId: 'enemy-front', targetId: 'attacker', round: 1 },
+        ];
+        const perRoundPerTarget = { 1: { 'enemy-front': 2140, attacker: 900 } };
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget,
+            roster: roster(),
+            numRounds: 1,
+        });
+        const log = result.rounds[0].events;
+        // Victim-centric damage from perRoundPerTarget.
+        expect(log).toContainEqual({
+            round: 1,
+            kind: 'damage',
+            actorId: 'enemy-front',
+            amount: 2140,
+        });
+        expect(log).toContainEqual({ round: 1, kind: 'damage', actorId: 'attacker', amount: 900 });
+        // No damage line is sourced from ability-performed (would have actorId 'attacker'
+        // with amount 5000 / targetId 'enemy').
+        expect(log.some((e) => e.kind === 'damage' && e.amount === 5000)).toBe(false);
+        // `attacked` is NOT logged.
+        expect(log.some((e) => (e as { kind: string }).kind === 'attacked')).toBe(false);
+    });
+
+    it('skips zero/absent damage victims', () => {
+        const perRoundPerTarget = { 1: { 'enemy-front': 0, attacker: 1200 } };
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget,
+            roster: roster(),
+            numRounds: 1,
+        });
+        const damage = result.rounds[0].events.filter((e) => e.kind === 'damage');
+        expect(damage).toEqual([{ round: 1, kind: 'damage', actorId: 'attacker', amount: 1200 }]);
+    });
+
+    it('logs heal lines (caster + per-target even-split amount)', () => {
+        const events: CombatEvent[] = [
             {
                 type: 'heal-performed',
                 casterId: 'attacker',
-                targets: ['attacker'],
+                targets: ['attacker', 'player-team'],
                 round: 1,
                 amount: 1000,
             },
-            { type: 'ship-destroyed', actorId: 'enemy-front', round: 1 },
         ];
         const result = assembleBattleResult({
             events,
@@ -294,21 +333,108 @@ describe('assembleBattleResult — per-round event log', () => {
         const log = result.rounds[0].events;
         expect(log).toContainEqual({
             round: 1,
-            kind: 'damage',
+            kind: 'heal',
             actorId: 'attacker',
-            targetId: 'enemy-front',
-            amount: 5000,
+            targetId: 'attacker',
+            amount: 500,
         });
         expect(log).toContainEqual({
             round: 1,
             kind: 'heal',
             actorId: 'attacker',
-            targetId: 'attacker',
-            amount: 1000,
+            targetId: 'player-team',
+            amount: 500,
         });
-        expect(log).toContainEqual({ round: 1, kind: 'death', actorId: 'enemy-front' });
-        // `attacked` is NOT logged (no amount)
-        expect(log.some((e) => (e as { kind: string }).kind === 'attacked')).toBe(false);
+    });
+
+    it('logs buff lines with the buff carrier as actorId and buffName as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'buff-applied',
+                actorId: 'player-team',
+                round: 1,
+                buffName: 'Attack Up',
+                duration: 2,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'buff',
+            actorId: 'player-team',
+            label: 'Attack Up',
+        });
+    });
+
+    it('logs debuff lines with the victim (targetId) as actorId and buffName as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-front',
+                round: 1,
+                buffName: 'Def Down',
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'debuff',
+            actorId: 'enemy-front',
+            label: 'Def Down',
+        });
+    });
+
+    it('logs dot lines with the victim (targetId) as actorId and dotType as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'dot-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-back',
+                round: 1,
+                dotType: 'corrosion',
+                stacks: 3,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'dot',
+            actorId: 'enemy-back',
+            label: 'corrosion',
+        });
+    });
+
+    it('logs death lines with the destroyed actor as actorId', () => {
+        const events: CombatEvent[] = [
+            { type: 'ship-destroyed', actorId: 'enemy-front', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'death',
+            actorId: 'enemy-front',
+        });
     });
 });
 

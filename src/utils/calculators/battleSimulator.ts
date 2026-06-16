@@ -13,7 +13,12 @@
  *     symmetric source for BOTH sides; we do NOT use `hp-changed`).
  *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only).
  *   - death = `ship-destroyed` { actorId }.
- *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied`.
+ *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied` / `dot-applied`.
+ *
+ * The per-round event LOG is victim-centric + team-labeled: damage lines come from
+ * `perRoundPerTarget` (per-victim damage taken), NOT from `ability-performed` (whose
+ * targetId is the dummy 'enemy' sink for ally/self-targeting ships). Buff/debuff/dot/
+ * death/heal lines come from their respective events.
  *
  * HP% is derived as maxHp - cumulative(damageTaken over rounds <= r), uniform for both
  * sides (ignores healing/shields on the HP curve — acceptable for PR1's surface).
@@ -78,12 +83,26 @@ export interface ShipRoundState {
     activeDebuffs: string[];
 }
 
+/**
+ * A single render-ready line in a round's event log. `actorId` is the SUBJECT of the
+ * line — the victim for `damage`/`debuff`/`dot`/`death`, the caster for `heal`/`buff`.
+ *
+ *   - damage: victim took `amount` (per-victim, from `perRoundPerTarget` — NOT the
+ *     attacker→dummy-target `ability-performed` lines, which are misleading).
+ *   - heal:   `actorId` (caster) heals `targetId` for `amount` (even-split per recipient).
+ *   - buff:   `actorId` gains `label` (buff name).
+ *   - debuff: `actorId` (victim) afflicted with `label` (debuff name).
+ *   - dot:    `actorId` (victim) afflicted with `label` (dot type name).
+ *   - death:  `actorId` (victim) destroyed.
+ */
 export interface BattleLogEvent {
     round: number;
-    kind: 'damage' | 'heal' | 'death';
+    kind: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'death';
     actorId: string;
     targetId?: string;
     amount?: number;
+    /** Buff/debuff/dot name. */
+    label?: string;
 }
 
 export interface BattleRound {
@@ -127,6 +146,7 @@ export const ASSEMBLED_EVENT_TYPES = [
     'buff-applied',
     'buff-expired',
     'debuff-applied',
+    'dot-applied',
     'turn-started',
 ] as const satisfies readonly CombatEvent['type'][];
 
@@ -241,19 +261,22 @@ export function assembleBattleResult(args: {
             };
         });
 
-        // Readable per-round log: damage (ability-performed), heal (heal-performed),
-        // death (ship-destroyed). NOT `attacked` (no amount).
+        // Readable per-round log, victim-centric + team-labeled at render time.
+        // Built in a deterministic fixed kind order: damage, heal, buff, debuff, dot,
+        // death. Damage comes from `perRoundPerTarget` (the reliable per-victim
+        // damage-taken) — NOT `ability-performed` (whose targetId is the dummy 'enemy'
+        // sink for ally/self-targeting ships, so attacker→target lines mislead).
         const log: BattleLogEvent[] = [];
+
+        // damage: one line per damaged victim this round (skip 0/absent).
+        for (const [victimId, amount] of Object.entries(takenThisRound)) {
+            if (typeof amount === 'number' && amount !== 0) {
+                log.push({ round, kind: 'damage', actorId: victimId, amount });
+            }
+        }
+
         for (const e of roundEvents) {
-            if (e.type === 'ability-performed' && typeof e.damage === 'number') {
-                log.push({
-                    round,
-                    kind: 'damage',
-                    actorId: e.actorId,
-                    targetId: e.targetId,
-                    amount: e.damage,
-                });
-            } else if (e.type === 'heal-performed') {
+            if (e.type === 'heal-performed') {
                 for (const tid of e.targets) {
                     log.push({
                         round,
@@ -270,7 +293,33 @@ export function assembleBattleResult(args: {
                     // line so the heal is still visible in the per-round log.
                     log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
                 }
-            } else if (e.type === 'ship-destroyed') {
+            }
+        }
+
+        // buff: subject is the buff carrier (actorId).
+        for (const e of roundEvents) {
+            if (e.type === 'buff-applied') {
+                log.push({ round, kind: 'buff', actorId: e.actorId, label: e.buffName });
+            }
+        }
+
+        // debuff: subject is the victim (targetId).
+        for (const e of roundEvents) {
+            if (e.type === 'debuff-applied') {
+                log.push({ round, kind: 'debuff', actorId: e.targetId, label: e.buffName });
+            }
+        }
+
+        // dot: subject is the victim (targetId); label is the dot type.
+        for (const e of roundEvents) {
+            if (e.type === 'dot-applied') {
+                log.push({ round, kind: 'dot', actorId: e.targetId, label: e.dotType });
+            }
+        }
+
+        // death: subject is the destroyed actor.
+        for (const e of roundEvents) {
+            if (e.type === 'ship-destroyed') {
                 log.push({ round, kind: 'death', actorId: e.actorId });
             }
         }

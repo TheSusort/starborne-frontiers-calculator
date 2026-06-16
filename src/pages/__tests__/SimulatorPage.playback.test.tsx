@@ -44,8 +44,7 @@ const battleResult: BattleResult = {
                 {
                     round: 1,
                     kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
+                    actorId: 'e:enemy:0',
                     amount: 1000,
                 },
             ],
@@ -85,8 +84,7 @@ const battleResult: BattleResult = {
                 {
                     round: 2,
                     kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
+                    actorId: 'e:enemy:0',
                     amount: 1500,
                 },
             ],
@@ -173,7 +171,7 @@ describe('SimulatorPage playback', () => {
         expect(screen.getByTestId('hp-bar-T1')).toHaveStyle({ width: '100%' });
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '40%' });
         // Event log line.
-        expect(screen.getByText('Nova -> Hexa: 1,000')).toBeInTheDocument();
+        expect(screen.getByText('Enemy Hexa took 1,000')).toBeInTheDocument();
         // Stepper reports two rounds, starting on round 1.
         expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
 
@@ -181,6 +179,6 @@ describe('SimulatorPage playback', () => {
         fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
         expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
-        expect(screen.getByText('Nova -> Hexa: 1,500')).toBeInTheDocument();
+        expect(screen.getByText('Enemy Hexa took 1,500')).toBeInTheDocument();
     });
 });

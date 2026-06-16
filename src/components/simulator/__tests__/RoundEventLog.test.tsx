@@ -4,37 +4,53 @@ import RoundEventLog from '../RoundEventLog';
 import type { BattleRound, BattleResult } from '../../../utils/calculators/battleSimulator';
 
 const roster: BattleResult['roster'] = [
-    { actorId: 'attacker', side: 'player', name: 'Nova', position: 'T1' },
-    { actorId: 'e:s3:0', side: 'enemy', name: 'Hexa', position: 'T4' },
+    { actorId: 'attacker', side: 'player', name: 'Graphite', position: 'T1' },
+    { actorId: 'p:judge:1', side: 'player', name: 'Judge', position: 'T2' },
+    { actorId: 'e:s3:0', side: 'enemy', name: 'Selenite', position: 'T4' },
+    { actorId: 'e:s3:1', side: 'enemy', name: 'Curator', position: 'B4' },
 ];
 
+const renderRound = (events: BattleRound['events']) => {
+    const round: BattleRound = { round: 1, ships: [], events, turnOrder: [] };
+    render(<RoundEventLog round={round} roster={roster} />);
+};
+
 describe('RoundEventLog', () => {
-    it('renders a damage line mapping actorIds to names', () => {
-        const round: BattleRound = {
-            round: 1,
-            ships: [],
-            events: [
-                { round: 1, kind: 'damage', actorId: 'attacker', targetId: 'e:s3:0', amount: 2140 },
-            ],
-            turnOrder: [],
-        };
-        render(<RoundEventLog round={round} roster={roster} />);
-        expect(screen.getByText('Nova -> Hexa: 2,140')).toBeInTheDocument();
+    it('renders victim-centric damage with the enemy "Enemy " prefix', () => {
+        renderRound([{ round: 1, kind: 'damage', actorId: 'e:s3:0', amount: 2140 }]);
+        expect(screen.getByText('Enemy Selenite took 2,140')).toBeInTheDocument();
     });
 
-    it('renders heal and death lines', () => {
-        const round: BattleRound = {
-            round: 2,
-            ships: [],
-            events: [
-                { round: 2, kind: 'heal', actorId: 'attacker', targetId: 'attacker', amount: 800 },
-                { round: 2, kind: 'death', actorId: 'e:s3:0' },
-            ],
-            turnOrder: [],
-        };
-        render(<RoundEventLog round={round} roster={roster} />);
-        expect(screen.getByText('Nova heals Nova: 800')).toBeInTheDocument();
-        expect(screen.getByText('Hexa destroyed')).toBeInTheDocument();
+    it('renders a player damage line without an Enemy prefix', () => {
+        renderRound([{ round: 1, kind: 'damage', actorId: 'attacker', amount: 900 }]);
+        expect(screen.getByText('Graphite took 900')).toBeInTheDocument();
+    });
+
+    it('renders a heal line with caster + target', () => {
+        renderRound([
+            { round: 1, kind: 'heal', actorId: 'attacker', targetId: 'p:judge:1', amount: 1411 },
+        ]);
+        expect(screen.getByText('Graphite heals Judge for 1,411')).toBeInTheDocument();
+    });
+
+    it('renders a buff line', () => {
+        renderRound([{ round: 1, kind: 'buff', actorId: 'p:judge:1', label: 'Attack Up' }]);
+        expect(screen.getByText('Judge gains Attack Up')).toBeInTheDocument();
+    });
+
+    it('renders a debuff line with the enemy prefix', () => {
+        renderRound([{ round: 1, kind: 'debuff', actorId: 'e:s3:1', label: 'Def Down' }]);
+        expect(screen.getByText('Enemy Curator afflicted with Def Down')).toBeInTheDocument();
+    });
+
+    it('renders a dot line with a title-cased label', () => {
+        renderRound([{ round: 1, kind: 'dot', actorId: 'e:s3:0', label: 'corrosion' }]);
+        expect(screen.getByText('Enemy Selenite afflicted with Corrosion')).toBeInTheDocument();
+    });
+
+    it('renders a death line with the enemy prefix', () => {
+        renderRound([{ round: 1, kind: 'death', actorId: 'e:s3:0' }]);
+        expect(screen.getByText('Enemy Selenite destroyed')).toBeInTheDocument();
     });
 
     it('shows an empty message when there are no events', () => {
