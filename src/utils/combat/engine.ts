@@ -974,6 +974,10 @@ interface ReactiveSideCtx {
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
     grantAllyCharges: (amount: number) => void;
+    /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
+     *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
+     *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
+    selfHpPctFor?: (ownerId: string) => number;
 }
 
 export interface HealingRoundEngine {
@@ -2622,27 +2626,12 @@ export function runCombat(input: CombatEngineInput): {
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.
                         isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
-                        // Phase 4c PR 1 Task 6: live self-HP% for drain-time hp-threshold gates.
-                        // Healing mode: the heal target's current/max HP is read from the SAME
-                        // `healTarget` actor that `applyIncomingToTarget` mutates, so the closure
-                        // always sees post-drain HP state. Any non-tank id returns 100 (pre-4c
-                        // default). DPS mode: no healTarget → every id returns 100 → byte-identical.
-                        ...(healTarget
-                            ? {
-                                  selfHpPctFor: (ownerId: string): number => {
-                                      if (ownerId !== healTarget.id) return 100;
-                                      // Same denominator as the cast-path selfHpPct (baseHpFor) —
-                                      // a buffed max HP must not make the gate flip at different
-                                      // thresholds at cast vs drain time.
-                                      const maxHp = baseHpFor(healTarget.id);
-                                      if (maxHp <= 0) return 100;
-                                      return Math.max(
-                                          0,
-                                          Math.min(100, (healTarget.currentHp / maxHp) * 100)
-                                      );
-                                  },
-                              }
-                            : {}),
+                        // Phase 4c PR 1 Task 6 / bySide PR3 Task 2: live self-HP% for drain-time
+                        // hp-threshold gates, now sourced per-side from sideCtx.selfHpPctFor.
+                        // Player side: heal-target current/max HP (every other id → 100); DPS mode
+                        // has no closure (undefined → buildDrainContext defaults to 100). Enemy
+                        // side: 100 for every owner until PR5. byte-identical to the old inline spread.
+                        selfHpPctFor: sideCtx.selfHpPctFor,
                     });
                 }
             }
@@ -2656,6 +2645,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: playerIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('player').grantAllyCharges,
+                selfHpPctFor: bySide('player').selfHpPctFor,
             });
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
@@ -2675,6 +2665,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: enemyAttackerActorIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
+                selfHpPctFor: bySide('enemy').selfHpPctFor,
             });
         };
 
