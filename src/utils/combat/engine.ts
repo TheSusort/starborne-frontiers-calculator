@@ -980,6 +980,14 @@ interface ReactiveSideCtx {
     selfHpPctFor?: (ownerId: string) => number;
 }
 
+/** Per-victim incoming accounting bucket (PR5a foundation — written in parallel with the
+ *  heal-target scalars; no reader until PR5b flips them). Keyed by victim actor id. */
+interface ActorIntake {
+    incoming: number;
+    shieldAbsorbed: number;
+    barrierAbsorbed: number;
+}
+
 export interface HealingRoundEngine {
     perActor: Map<string, ActorHealing>;
     targetHpPctStart: number;
@@ -990,6 +998,10 @@ export interface HealingRoundEngine {
      *  separately from shieldAbsorbed (Barrier does not drain the shield pool). Task 2 adds the
      *  UI display surface; this field exists now so the blocked total is observable. */
     barrierAbsorbed: number;
+    /** Per-actor incoming accounting bucket (PR5a foundation). Written in parallel with the
+     *  per-round scalars above; readers flip to this map in PR5b. Adapters must NOT read this
+     *  field until PR5b — it is write-only in PR5a. Keyed by victim actor id. */
+    perActorIncoming: Map<string, ActorIntake>;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
@@ -1012,11 +1024,11 @@ export interface HealingRoundEngine {
  */
 interface DamageAccountingSink {
     /** today: roundIncomingDamage += amount */
-    addIncoming: (amount: number) => void;
+    addIncoming: (amount: number, victimId: string) => void;
     /** today: roundShieldAbsorbed += amount */
-    addShieldAbsorbed: (amount: number) => void;
+    addShieldAbsorbed: (amount: number, victimId: string) => void;
     /** today: roundBarrierAbsorbed += amount */
-    addBarrierAbsorbed: (amount: number) => void;
+    addBarrierAbsorbed: (amount: number, victimId: string) => void;
     /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
     onHealTargetDestroyed?: (victim: CombatActor) => void;
 }
@@ -2111,6 +2123,18 @@ export function runCombat(input: CombatEngineInput): {
         // SEPARATELY from shieldAbsorbed (Barrier does NOT drain the shield pool) so the UI
         // can attribute the blocked total to the Barrier, not the shield.
         let roundBarrierAbsorbed = 0;
+        // PR5a foundation: per-actor incoming accounting bucket — written in parallel with the
+        // scalars above; no reader until PR5b flips them.  Fresh map each round (same scope as the
+        // scalars so all three go stale together).  intakeFor() get-or-creates on first write.
+        const perActorIncoming = new Map<string, ActorIntake>();
+        const intakeFor = (id: string): ActorIntake => {
+            let entry = perActorIncoming.get(id);
+            if (!entry) {
+                entry = { incoming: 0, shieldAbsorbed: 0, barrierAbsorbed: 0 };
+                perActorIncoming.set(id, entry);
+            }
+            return entry;
+        };
         // Enemy-effects accounting (healing mode, Task 10a): per-enemy self-buffs + the debuffs
         // each enemy lands on the heal target this round, surfaced for the UI's enemy-effects
         // round overview ATTRIBUTED to the source enemy ship. Keyed by the enemy actor id; an
@@ -2170,7 +2194,7 @@ export function runCombat(input: CombatEngineInput): {
             victim: CombatActor,
             sink: DamageAccountingSink
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
-            sink.addIncoming(damage);
+            sink.addIncoming(damage, victim.id);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
             // so oldPct reflects the entering state and a Cheat-Death save's oldPct stays
@@ -2193,7 +2217,7 @@ export function runCombat(input: CombatEngineInput): {
                 BARRIER_BUFFS.has(n)
             );
             if (carriesBarrier) {
-                sink.addBarrierAbsorbed(damage);
+                sink.addBarrierAbsorbed(damage, victim.id);
                 if (victim.currentHp > 0 && maxHp > 0) {
                     bus.emit({
                         type: 'hp-changed',
@@ -2208,7 +2232,7 @@ export function runCombat(input: CombatEngineInput): {
             const shieldBefore = victim.shieldPool;
             const absorbed = Math.min(victim.shieldPool, damage);
             victim.shieldPool -= absorbed;
-            sink.addShieldAbsorbed(absorbed);
+            sink.addShieldAbsorbed(absorbed, victim.id);
             const hpDamage = damage - absorbed;
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
@@ -2289,14 +2313,17 @@ export function runCombat(input: CombatEngineInput): {
         // healTargetDestroyedRound write). Signature, default `victim = healTarget!`, and return
         // value are unchanged, so every existing call site stays byte-identical.
         const playerSink: DamageAccountingSink = {
-            addIncoming: (amount) => {
+            addIncoming: (amount, victimId) => {
                 roundIncomingDamage += amount;
+                intakeFor(victimId).incoming += amount;
             },
-            addShieldAbsorbed: (amount) => {
+            addShieldAbsorbed: (amount, victimId) => {
                 roundShieldAbsorbed += amount;
+                intakeFor(victimId).shieldAbsorbed += amount;
             },
-            addBarrierAbsorbed: (amount) => {
+            addBarrierAbsorbed: (amount, victimId) => {
                 roundBarrierAbsorbed += amount;
+                intakeFor(victimId).barrierAbsorbed += amount;
             },
             onHealTargetDestroyed: (victim) => {
                 if (victim === healTarget) {
@@ -2318,9 +2345,9 @@ export function runCombat(input: CombatEngineInput): {
         // (enemy-incoming accounting is the deferred Phase-5 symmetric surface) and it omits
         // onHealTargetDestroyed (the enemy victim is never the heal target). Task 8 wires a caller.
         const enemySink: DamageAccountingSink = {
-            addIncoming: () => {},
-            addShieldAbsorbed: () => {},
-            addBarrierAbsorbed: () => {},
+            addIncoming: (_amount, _victimId) => {},
+            addShieldAbsorbed: (_amount, _victimId) => {},
+            addBarrierAbsorbed: (_amount, _victimId) => {},
         };
         const applyOutgoingToEnemy = (
             damage: number,
@@ -3880,6 +3907,7 @@ export function runCombat(input: CombatEngineInput): {
                 incomingDamage: roundIncomingDamage,
                 shieldAbsorbed: roundShieldAbsorbed,
                 barrierAbsorbed: roundBarrierAbsorbed,
+                perActorIncoming,
                 // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
                 // (keep the first occurrence so the UI shows each effect once per enemy per round),
                 // preserving the order enemies first acted this round. Active enemy-applied DoTs on
