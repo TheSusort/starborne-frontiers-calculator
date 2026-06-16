@@ -1122,6 +1122,7 @@ export function runCombat(input: CombatEngineInput): {
         id: 'enemy',
         side: 'enemy',
         kind: 'enemy',
+        indestructible: true,
         stats: {
             attack: 0,
             crit: 0,
@@ -1585,6 +1586,15 @@ export function runCombat(input: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
+    // ── Unified roster seam (bySide unification PR1) ───────────────────────────
+    // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
+    // the per-round turn order — `roundActors` is assigned to it each round —
+    // [team…, attacker, dummy enemy, enemy attackers…], identical to the array
+    // `roundActors` used inline before PR1. The companion accessors allActorsById /
+    // actorsBySide arrive in later PRs with their first consumers (deferred —
+    // unread now = YAGNI/lint).
+    const allActors: CombatActor[] = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
+
     // Enemy-team charge grant (enemy-team PR3): the mirror of grantAllyCharges — bump every
     // ENEMY attacker's charges by `amount`, each capped at its own chargeCount, skipping 0. Lets
     // an enemy supporter (Hayyan charged grant / Graphite start-of-round / Liberator on-kill)
@@ -2008,7 +2018,7 @@ export function runCombat(input: CombatEngineInput): {
         // unacted actors automatically (no re-sort hook). Dead actors keep their seeded pending=1
         // — the death-skip below consumes it via a plain `continue` (identical to the old loop
         // visiting then continue-ing). The dummy `enemy` (no speed buffs) keeps its DoT-tick turn.
-        const roundActors = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
+        const roundActors = allActors;
         const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
         const pendingOf = (id: string) => pending.get(id) ?? 0;
 
