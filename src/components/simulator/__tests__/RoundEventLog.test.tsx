@@ -16,6 +16,7 @@ describe('RoundEventLog', () => {
             events: [
                 { round: 1, kind: 'damage', actorId: 'attacker', targetId: 'e:s3:0', amount: 2140 },
             ],
+            turnOrder: [],
         };
         render(<RoundEventLog round={round} roster={roster} />);
         expect(screen.getByText('Nova -> Hexa: 2,140')).toBeInTheDocument();
@@ -29,6 +30,7 @@ describe('RoundEventLog', () => {
                 { round: 2, kind: 'heal', actorId: 'attacker', targetId: 'attacker', amount: 800 },
                 { round: 2, kind: 'death', actorId: 'e:s3:0' },
             ],
+            turnOrder: [],
         };
         render(<RoundEventLog round={round} roster={roster} />);
         expect(screen.getByText('Nova heals Nova: 800')).toBeInTheDocument();
@@ -36,7 +38,7 @@ describe('RoundEventLog', () => {
     });
 
     it('shows an empty message when there are no events', () => {
-        const round: BattleRound = { round: 3, ships: [], events: [] };
+        const round: BattleRound = { round: 3, ships: [], events: [], turnOrder: [] };
         render(<RoundEventLog round={round} roster={roster} />);
         expect(screen.getByText(/no events this round/i)).toBeInTheDocument();
     });

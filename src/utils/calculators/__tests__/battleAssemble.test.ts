@@ -312,6 +312,50 @@ describe('assembleBattleResult — per-round event log', () => {
     });
 });
 
+describe('assembleBattleResult — per-round turn order', () => {
+    it('collects distinct acting roster actorIds per round in emission order', () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+            // duplicate in the same round is collapsed (distinct)
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+            { type: 'turn-started', actorId: 'player-team', round: 1 },
+            // round 2 has its own ordering
+            { type: 'turn-started', actorId: 'attacker', round: 2 },
+            { type: 'turn-started', actorId: 'enemy-back', round: 2 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 2,
+        });
+        expect(result.rounds.find((r) => r.round === 1)!.turnOrder).toEqual([
+            'enemy-front',
+            'attacker',
+            'player-team',
+        ]);
+        expect(result.rounds.find((r) => r.round === 2)!.turnOrder).toEqual([
+            'attacker',
+            'enemy-back',
+        ]);
+    });
+
+    it('filters out turn-started for ids not on the roster (the dummy "enemy")', () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'enemy', round: 1 },
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].turnOrder).toEqual(['attacker']);
+    });
+});
+
 describe('assembleBattleResult — roster passthrough', () => {
     it('returns the roster without maxHp', () => {
         const result = assembleBattleResult({

@@ -30,6 +30,7 @@ describe('overlaysForRound', () => {
                 shipState({ actorId: 'attacker', side: 'player', hpPct: 30, damageTaken: 500 }),
             ],
             events: [],
+            turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
         expect(overlays.T1).toMatchObject({
@@ -46,6 +47,7 @@ describe('overlaysForRound', () => {
             round: 2,
             ships: [shipState({ actorId: 'attacker', side: 'player', hpPct: 0, alive: false })],
             events: [],
+            turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
         expect(overlays.T1?.alive).toBe(false);
@@ -58,6 +60,7 @@ describe('overlaysForRound', () => {
                 shipState({ actorId: 'attacker', side: 'player', healingReceived: 200, hpPct: 80 }),
             ],
             events: [],
+            turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
         expect(overlays.T1?.effect).toBe('heal');
@@ -75,6 +78,7 @@ describe('overlaysForRound', () => {
                 }),
             ],
             events: [],
+            turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('damage');
     });
@@ -84,6 +88,7 @@ describe('overlaysForRound', () => {
             round: 5,
             ships: [shipState({ actorId: 'attacker', side: 'player' })],
             events: [],
+            turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBeUndefined();
     });
@@ -100,6 +105,7 @@ describe('overlaysForRound', () => {
                 }),
             ],
             events: [],
+            turnOrder: [],
         };
         const overlay = overlaysForRound(round, 'player', roster).T1;
         expect(overlay?.buffs).toEqual(['Attack Up']);
@@ -114,6 +120,7 @@ describe('overlaysForRound', () => {
                 shipState({ actorId: 'e:s3:0', side: 'enemy', hpPct: 70 }),
             ],
             events: [],
+            turnOrder: [],
         };
         const enemy = overlaysForRound(round, 'enemy', roster);
         expect(Object.keys(enemy)).toEqual(['T4']);
@@ -128,6 +135,7 @@ describe('overlaysForRound', () => {
             // Only one of two player ships has a state this round.
             ships: [shipState({ actorId: 'attacker', side: 'player' })],
             events: [],
+            turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
         expect(overlays.M2).toBeUndefined();

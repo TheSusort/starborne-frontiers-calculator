@@ -6,6 +6,7 @@ import RoundStepper from './RoundStepper';
 import BattleBoard from './BattleBoard';
 import ShipRoundCard from './ShipRoundCard';
 import RoundEventLog from './RoundEventLog';
+import TurnOrderStrip from './TurnOrderStrip';
 
 interface BattlePlaybackProps {
     /** A completed simulation. Owns the round-stepper position and pinned-ship detail card. */
@@ -79,6 +80,8 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result }) => {
                             onPinShip={setPinned}
                         />
                     </div>
+
+                    <TurnOrderStrip order={curRound.turnOrder} roster={result.roster} />
 
                     {pinned && (
                         <ShipRoundCard actorId={pinned} round={curRound} roster={result.roster} />

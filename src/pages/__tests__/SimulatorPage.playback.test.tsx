@@ -49,6 +49,7 @@ const battleResult: BattleResult = {
                     amount: 1000,
                 },
             ],
+            turnOrder: ['attacker', 'e:enemy:0'],
         },
         {
             round: 2,
@@ -89,6 +90,7 @@ const battleResult: BattleResult = {
                     amount: 1500,
                 },
             ],
+            turnOrder: ['attacker', 'e:enemy:0'],
         },
     ],
     outcome: { winner: 'player', lastRound: 2 },
@@ -163,8 +165,9 @@ describe('SimulatorPage playback', () => {
 
         // Outcome surfaced.
         expect(screen.getByText('Your team wins')).toBeInTheDocument();
-        // Boards render the roster ships at their positions.
-        expect(screen.getByText('Nova')).toBeInTheDocument();
+        // Boards render the roster ships at their positions. "Nova" also appears in the
+        // turn-order strip below the boards, so assert at least one (board) occurrence.
+        expect(screen.getAllByText('Nova').length).toBeGreaterThan(0);
         expect(screen.getByText('Hexa')).toBeInTheDocument();
         // HP bars present (player full, enemy at 40%).
         expect(screen.getByTestId('hp-bar-T1')).toHaveStyle({ width: '100%' });

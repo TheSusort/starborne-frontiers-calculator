@@ -90,6 +90,12 @@ export interface BattleRound {
     round: number;
     ships: ShipRoundState[];
     events: BattleLogEvent[];
+    /**
+     * Distinct acting `actorId`s for this round in true speed order (emission order of
+     * `turn-started`). Only roster actorIds — the dummy player-offense `'enemy'` id is
+     * filtered out since it's not on the board.
+     */
+    turnOrder: string[];
 }
 
 export interface BattleResult {
@@ -121,6 +127,7 @@ export const ASSEMBLED_EVENT_TYPES = [
     'buff-applied',
     'buff-expired',
     'debuff-applied',
+    'turn-started',
 ] as const satisfies readonly CombatEvent['type'][];
 
 /**
@@ -160,6 +167,10 @@ export function assembleBattleResult(args: {
 
     // Cumulative damage taken per actor across rounds (for HP% derivation).
     const cumulativeTaken = new Map<string, number>();
+
+    // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
+    // is filtered out of turnOrder since it's not on the board.
+    const rosterIds = new Set(roster.map((r) => r.actorId));
 
     const rounds: BattleRound[] = [];
     let lastRound = numRounds;
@@ -264,7 +275,22 @@ export function assembleBattleResult(args: {
             }
         }
 
-        rounds.push({ round, ships, events: log });
+        // Per-round turn order: distinct acting roster actorIds in `turn-started` emission
+        // order (true speed order). Dummy/non-roster ids are dropped.
+        const turnOrder: string[] = [];
+        const seenActors = new Set<string>();
+        for (const e of roundEvents) {
+            if (
+                e.type === 'turn-started' &&
+                rosterIds.has(e.actorId) &&
+                !seenActors.has(e.actorId)
+            ) {
+                seenActors.add(e.actorId);
+                turnOrder.push(e.actorId);
+            }
+        }
+
+        rounds.push({ round, ships, events: log, turnOrder });
 
         // Termination: first round where ALL of one side's actors are destroyed.
         // A side counts as wiped only if it has >=1 member AND all are destroyed —
