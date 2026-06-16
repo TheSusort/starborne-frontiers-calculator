@@ -808,23 +808,28 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
 
         // Only the modelled log kinds appear — `attacked` (no amount) is NOT logged.
         for (const e of r1.events) {
-            expect(['damage', 'heal', 'buff', 'debuff', 'dot', 'death']).toContain(e.kind);
+            expect(['turn', 'damage', 'heal', 'buff', 'debuff', 'dot', 'death']).toContain(e.kind);
         }
 
-        // Damage is VICTIM-centric (from perRoundPerTarget), not attacker→target: the
-        // struck front enemy carries a damage line keyed by its own (victim) actorId, with
-        // its damage-TAKEN amount (5000), carrying no targetId.
-        const victimDamage = r1.events.find((e) => e.kind === 'damage' && e.actorId === 'e:e1:0');
-        expect(victimDamage).toBeDefined();
-        expect(victimDamage?.amount).toBe(5000);
-        expect(victimDamage?.targetId).toBeUndefined();
+        // Damage is ATTACKER-centric (from ability-performed): the focus player fires `front`
+        // and anchors the front enemy, so a damage line is keyed by the ATTACKER's actorId
+        // with the firing amount and a targetId.
+        const attackerDamage = r1.events.find(
+            (e) => e.kind === 'damage' && e.actorId === 'attacker'
+        );
+        expect(attackerDamage).toBeDefined();
+        expect(attackerDamage?.amount).toBe(5000);
+        expect(attackerDamage?.targetId).toBeDefined();
 
-        // Every damage line's amount equals that victim's damageTaken this round — proving
-        // the lines come from per-victim damage, NOT the attacker's ability-performed aggregate.
-        for (const e of r1.events.filter((ev) => ev.kind === 'damage')) {
-            const victim = r1.ships.find((s) => s.actorId === e.actorId)!;
-            expect(e.amount).toBe(victim.damageTaken);
-        }
+        // The log is chronological: a turn delimiter for the attacker precedes its damage line.
+        const attackerTurnIdx = r1.events.findIndex(
+            (e) => e.kind === 'turn' && e.actorId === 'attacker'
+        );
+        const attackerDamageIdx = r1.events.findIndex(
+            (e) => e.kind === 'damage' && e.actorId === 'attacker'
+        );
+        expect(attackerTurnIdx).toBeGreaterThanOrEqual(0);
+        expect(attackerTurnIdx).toBeLessThan(attackerDamageIdx);
 
         // The wiped front enemy produces exactly one death line that round.
         const deaths = r1.events.filter((e) => e.kind === 'death');

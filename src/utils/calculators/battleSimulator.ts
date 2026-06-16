@@ -15,10 +15,13 @@
  *   - death = `ship-destroyed` { actorId }.
  *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied` / `dot-applied`.
  *
- * The per-round event LOG is victim-centric + team-labeled: damage lines come from
- * `perRoundPerTarget` (per-victim damage taken), NOT from `ability-performed` (whose
- * targetId is the dummy 'enemy' sink for ally/self-targeting ships). Buff/debuff/dot/
- * death/heal lines come from their respective events.
+ * The per-round event LOG is a CHRONOLOGICAL (emission-order) play-by-play, team-labeled
+ * at render time. It walks the round's events in bus-emission order and emits one line per
+ * relevant event: turn delimiters (`turn-started`), ATTACKER-centric damage (from
+ * `ability-performed` — actorId=attacker, targetId, amount; dummy-'enemy' target lines are
+ * kept), heals, buffs, debuffs, dots, deaths. (The dummy-'enemy' targetId on ally/self-
+ * targeting ships means some damage lines read as "X → enemy"; that's accepted — the
+ * per-victim unification is a deferred follow-up.)
  *
  * HP% is derived as maxHp - cumulative(damageTaken over rounds <= r), uniform for both
  * sides (ignores healing/shields on the HP curve — acceptable for PR1's surface).
@@ -84,11 +87,12 @@ export interface ShipRoundState {
 }
 
 /**
- * A single render-ready line in a round's event log. `actorId` is the SUBJECT of the
- * line — the victim for `damage`/`debuff`/`dot`/`death`, the caster for `heal`/`buff`.
+ * A single render-ready line in a round's event log, emitted in CHRONOLOGICAL
+ * (bus-emission) order. `actorId` is the SUBJECT of the line.
  *
- *   - damage: victim took `amount` (per-victim, from `perRoundPerTarget` — NOT the
- *     attacker→dummy-target `ability-performed` lines, which are misleading).
+ *   - turn:   `actorId`'s turn began — a delimiter line (no amount/label/target).
+ *   - damage: `actorId` (ATTACKER) dealt `amount` to `targetId` (from `ability-performed`;
+ *     a `targetId` not on the roster — the dummy 'enemy' — renders as "enemy").
  *   - heal:   `actorId` (caster) heals `targetId` for `amount` (even-split per recipient).
  *   - buff:   `actorId` gains `label` (buff name).
  *   - debuff: `actorId` (victim) afflicted with `label` (debuff name).
@@ -97,7 +101,7 @@ export interface ShipRoundState {
  */
 export interface BattleLogEvent {
     round: number;
-    kind: 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'death';
+    kind: 'turn' | 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'death';
     actorId: string;
     targetId?: string;
     amount?: number;
@@ -261,66 +265,60 @@ export function assembleBattleResult(args: {
             };
         });
 
-        // Readable per-round log, victim-centric + team-labeled at render time.
-        // Built in a deterministic fixed kind order: damage, heal, buff, debuff, dot,
-        // death. Damage comes from `perRoundPerTarget` (the reliable per-victim
-        // damage-taken) — NOT `ability-performed` (whose targetId is the dummy 'enemy'
-        // sink for ally/self-targeting ships, so attacker→target lines mislead).
+        // Readable per-round log, in CHRONOLOGICAL (bus-emission) order — a turn-by-turn
+        // play-by-play. We walk `roundEvents` ONCE (it preserves emission order) and emit
+        // one line per relevant event. Damage is ATTACKER-centric (from `ability-performed`:
+        // actorId=attacker, targetId, amount) — dummy-'enemy' target lines are KEPT (they
+        // render as "X → enemy"; the per-victim unification is a deferred follow-up).
         const log: BattleLogEvent[] = [];
-
-        // damage: one line per damaged victim this round (skip 0/absent).
-        for (const [victimId, amount] of Object.entries(takenThisRound)) {
-            if (typeof amount === 'number' && amount !== 0) {
-                log.push({ round, kind: 'damage', actorId: victimId, amount });
-            }
-        }
-
         for (const e of roundEvents) {
-            if (e.type === 'heal-performed') {
-                for (const tid of e.targets) {
-                    log.push({
-                        round,
-                        kind: 'heal',
-                        actorId: e.casterId,
-                        targetId: tid,
-                        amount: e.targets.length > 0 ? e.amount / e.targets.length : e.amount,
-                    });
-                }
-                if (e.targets.length === 0) {
-                    // Divergence from the aggregation site above: that splits `amount`
-                    // across targets, so an empty-targets heal credits nobody's
-                    // healingReceived. Here the log instead surfaces a single full-amount
-                    // line so the heal is still visible in the per-round log.
-                    log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
-                }
-            }
-        }
-
-        // buff: subject is the buff carrier (actorId).
-        for (const e of roundEvents) {
-            if (e.type === 'buff-applied') {
-                log.push({ round, kind: 'buff', actorId: e.actorId, label: e.buffName });
-            }
-        }
-
-        // debuff: subject is the victim (targetId).
-        for (const e of roundEvents) {
-            if (e.type === 'debuff-applied') {
-                log.push({ round, kind: 'debuff', actorId: e.targetId, label: e.buffName });
-            }
-        }
-
-        // dot: subject is the victim (targetId); label is the dot type.
-        for (const e of roundEvents) {
-            if (e.type === 'dot-applied') {
-                log.push({ round, kind: 'dot', actorId: e.targetId, label: e.dotType });
-            }
-        }
-
-        // death: subject is the destroyed actor.
-        for (const e of roundEvents) {
-            if (e.type === 'ship-destroyed') {
-                log.push({ round, kind: 'death', actorId: e.actorId });
+            switch (e.type) {
+                case 'turn-started':
+                    // Turn delimiter. Skip the dummy player-offense 'enemy' (not on the board).
+                    if (rosterIds.has(e.actorId)) {
+                        log.push({ round, kind: 'turn', actorId: e.actorId });
+                    }
+                    break;
+                case 'ability-performed':
+                    if (typeof e.damage === 'number') {
+                        log.push({
+                            round,
+                            kind: 'damage',
+                            actorId: e.actorId,
+                            targetId: e.targetId,
+                            amount: e.damage,
+                        });
+                    }
+                    break;
+                case 'heal-performed':
+                    if (e.targets.length > 0) {
+                        for (const tid of e.targets) {
+                            log.push({
+                                round,
+                                kind: 'heal',
+                                actorId: e.casterId,
+                                targetId: tid,
+                                amount: e.amount / e.targets.length,
+                            });
+                        }
+                    } else {
+                        // Empty-targets heal: surface a single full-amount line so the heal
+                        // is still visible (it credits nobody's healingReceived above).
+                        log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
+                    }
+                    break;
+                case 'buff-applied':
+                    log.push({ round, kind: 'buff', actorId: e.actorId, label: e.buffName });
+                    break;
+                case 'debuff-applied':
+                    log.push({ round, kind: 'debuff', actorId: e.targetId, label: e.buffName });
+                    break;
+                case 'dot-applied':
+                    log.push({ round, kind: 'dot', actorId: e.targetId, label: e.dotType });
+                    break;
+                case 'ship-destroyed':
+                    log.push({ round, kind: 'death', actorId: e.actorId });
+                    break;
             }
         }
 

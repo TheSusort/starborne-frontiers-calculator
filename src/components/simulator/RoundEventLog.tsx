@@ -10,18 +10,22 @@ interface RoundEventLogProps {
 }
 
 /**
- * Scrollable, team-labeled readable log of the current round's events. Maps actorIds to
- * names via the roster, prefixing enemy-side ships with "Enemy ", and colors each line by
- * kind:
- *   - damage: "Enemy Selenite took 2,140"      (red)
- *   - heal:   "Graphite heals Judge for 1,411"  (green)
- *   - buff:   "Sentinel gains Attack Up"         (cyan)
+ * Scrollable, team-labeled readable log of the current round's events, rendered in
+ * CHRONOLOGICAL (emission) order as a turn-by-turn play-by-play. Maps actorIds to names via
+ * the roster, prefixing enemy-side ships with "Enemy ", and colors each line by kind:
+ *   - turn:   "— Sentinel's turn —"               (muted divider)
+ *   - damage: "Judge → Enemy Selenite: 435,312"   (red; attacker-centric)
+ *   - heal:   "Graphite heals Judge for 1,411"    (green)
+ *   - buff:   "Sentinel gains Attack Up"           (cyan)
  *   - debuff: "Enemy Curator afflicted with Def Down" (amber)
  *   - dot:    "Enemy Selenite afflicted with Corrosion" (purple)
- *   - death:  "Enemy Selenite destroyed"         (gray)
+ *   - death:  "Enemy Selenite destroyed"           (gray)
+ *
+ * A damage `targetId` not on the roster (the dummy player-offense 'enemy') renders as "enemy".
  */
 const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
-    /** Resolve an actorId to its team-labeled display name (enemy → "Enemy X"). */
+    /** Resolve an actorId to its team-labeled display name (enemy → "Enemy X"). A target id
+     *  not on the roster (the dummy 'enemy') is returned verbatim ("enemy"). */
     const nameOf = (actorId: string | undefined): string => {
         if (!actorId) return 'Unknown';
         const entry = roster.find((r) => r.actorId === actorId);
@@ -37,8 +41,10 @@ const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
 
     const lineFor = (e: BattleLogEvent): string => {
         switch (e.kind) {
+            case 'turn':
+                return `— ${nameOf(e.actorId)}'s turn —`;
             case 'damage':
-                return `${nameOf(e.actorId)} took ${fmt(e.amount ?? 0)}`;
+                return `${nameOf(e.actorId)} → ${nameOf(e.targetId)}: ${fmt(e.amount ?? 0)}`;
             case 'heal':
                 return e.targetId
                     ? `${nameOf(e.actorId)} heals ${nameOf(e.targetId)} for ${fmt(e.amount ?? 0)}`
@@ -55,6 +61,8 @@ const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
 
     const colorFor = (kind: BattleLogEvent['kind']): string => {
         switch (kind) {
+            case 'turn':
+                return 'text-theme-text-secondary font-semibold border-t border-dark-border mt-1 pt-1';
             case 'damage':
                 return 'text-red-400';
             case 'heal':

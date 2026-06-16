@@ -16,14 +16,23 @@ const renderRound = (events: BattleRound['events']) => {
 };
 
 describe('RoundEventLog', () => {
-    it('renders victim-centric damage with the enemy "Enemy " prefix', () => {
-        renderRound([{ round: 1, kind: 'damage', actorId: 'e:s3:0', amount: 2140 }]);
-        expect(screen.getByText('Enemy Selenite took 2,140')).toBeInTheDocument();
+    it('renders attacker-centric damage "X → Y: N" with the enemy "Enemy " prefix on the target', () => {
+        renderRound([
+            { round: 1, kind: 'damage', actorId: 'p:judge:1', targetId: 'e:s3:0', amount: 435312 },
+        ]);
+        expect(screen.getByText('Judge → Enemy Selenite: 435,312')).toBeInTheDocument();
     });
 
-    it('renders a player damage line without an Enemy prefix', () => {
-        renderRound([{ round: 1, kind: 'damage', actorId: 'attacker', amount: 900 }]);
-        expect(screen.getByText('Graphite took 900')).toBeInTheDocument();
+    it('renders a damage line targeting the dummy "enemy" verbatim', () => {
+        renderRound([
+            { round: 1, kind: 'damage', actorId: 'attacker', targetId: 'enemy', amount: 900 },
+        ]);
+        expect(screen.getByText('Graphite → enemy: 900')).toBeInTheDocument();
+    });
+
+    it('renders a turn delimiter line', () => {
+        renderRound([{ round: 1, kind: 'turn', actorId: 'e:s3:1' }]);
+        expect(screen.getByText("— Enemy Curator's turn —")).toBeInTheDocument();
     });
 
     it('renders a heal line with caster + target', () => {
