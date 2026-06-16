@@ -1590,10 +1590,16 @@ export function runCombat(input: CombatEngineInput): {
     // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
     // the per-round turn order — `roundActors` is assigned to it each round —
     // [team…, attacker, dummy enemy, enemy attackers…], identical to the array
-    // `roundActors` used inline before PR1. The companion accessors allActorsById /
-    // actorsBySide arrive in later PRs with their first consumers (deferred —
-    // unread now = YAGNI/lint).
+    // `roundActors` used inline before PR1. The companion accessor `actorsBySide`
+    // arrives in a later PR with its first consumer (deferred — unread now =
+    // YAGNI/lint); `allActorsById` has now arrived in PR2 (defined just below).
     const allActors: CombatActor[] = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
+
+    // Combined id→actor map over the unified roster (bySide unification PR2 — first
+    // consumer). Unlike allPlayerActorsById (attacker + team only), this includes the
+    // dummy enemy and every enemy attacker, so a reactive granter on EITHER side
+    // resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
+    const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
     // Enemy-team charge grant (enemy-team PR3): the mirror of grantAllyCharges — bump every
     // ENEMY attacker's charges by `amount`, each capped at its own chargeCount, skipping 0. Lets
@@ -1841,7 +1847,7 @@ export function runCombat(input: CombatEngineInput): {
         bus,
         perOwner: reactivePerOwner,
         enqueue: (intent) => intentQueue.push(intent),
-        isEnemySide,
+        isOpposing: isEnemySide,
         roleOf: (id) => roleByActorId.get(id),
     });
 
@@ -1862,7 +1868,10 @@ export function runCombat(input: CombatEngineInput): {
             bus,
             perOwner: enemyReactivePerOwner,
             enqueue: (intent) => enemyIntentQueue.push(intent),
-            isEnemySide,
+            // Enemy owners: the PLAYER team is opposing. Negating the player-centric
+            // isEnemySide flips on-enemy-* / on-ally-* to the enemy's own frame
+            // (bySide PR2 — fixes the enemy reactive-routing bug).
+            isOpposing: (id: string) => !isEnemySide(id),
             roleOf: (id) => roleByActorId.get(id),
         });
     }
@@ -2478,16 +2487,17 @@ export function runCombat(input: CombatEngineInput): {
         // count so the selection loop re-picks it at its live speed-rank among the remaining
         // actors (same machinery the attacker/team turn branches use), so a during-turn death
         // grants a SAME-round extra turn. PATH B (no live loop — post-round enemy death): buffer
-        // onto pendingExtraActions; the next round's pool build flushes it. The granter is always
-        // a player actor (the ship whose death-passive fired); a missing id is impossible (the
-        // reactive owner ids ARE player ids) → skip defensively rather than throw mid-drain.
+        // onto pendingExtraActions; the next round's pool build flushes it. Since bySide PR2 the
+        // granter may be a PLAYER or ENEMY actor (the ship whose death-passive fired), resolved
+        // from the combined allActorsById roster; a missing id is impossible (every reactive owner
+        // id is in allActors) → skip defensively rather than throw mid-drain.
         const grantExtraAction = (
             granterId: string,
             abilityId: string,
             oncePerRound: boolean,
             endOfRound: boolean
         ): void => {
-            const granter = allPlayerActorsById.get(granterId);
+            const granter = allActorsById.get(granterId);
             if (!granter) return;
             if (inTurnLoop) {
                 processExtraActionGrants(granter, [{ abilityId, oncePerRound, endOfRound }]);
@@ -2650,7 +2660,7 @@ export function runCombat(input: CombatEngineInput): {
         if (pendingExtraActions.length > 0) {
             const flush = pendingExtraActions.splice(0, pendingExtraActions.length);
             for (const g of flush) {
-                const granter = allPlayerActorsById.get(g.granterId);
+                const granter = allActorsById.get(g.granterId);
                 if (!granter) continue;
                 processExtraActionGrants(granter, [
                     {

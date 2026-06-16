@@ -365,7 +365,7 @@ describe('Phase 4c PR 3 Task 3 — on-hp-threshold-crossed listener', () => {
             bus,
             perOwner: [{ ownerId, reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            isEnemySide: (id) => id === 'enemy-dummy',
+            isOpposing: (id) => id === 'enemy-dummy',
         });
         const fire = (oldPct: number, newPct: number, targetId = ownerId, round = 1) =>
             bus.emit({ type: 'hp-changed', targetId, round, oldPct, newPct });

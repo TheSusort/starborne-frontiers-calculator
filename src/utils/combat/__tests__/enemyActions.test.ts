@@ -54,7 +54,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                 },
             ],
             enqueue: (i) => enqueued.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({
             type: 'heal-performed',
@@ -87,7 +87,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                 },
             ],
             enqueue: (i) => enqueued.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'cleanse-performed', casterId: 'enemy', count: 1, round: 1 });
         bus.emit({ type: 'cleanse-performed', casterId: 'ally', count: 1, round: 1 });
