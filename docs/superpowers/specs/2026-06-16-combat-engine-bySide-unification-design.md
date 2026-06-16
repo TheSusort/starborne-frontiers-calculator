@@ -65,6 +65,11 @@ most of the work is **deleting** the mirror, not building new machinery.
 
 ### 3.1 Asymmetry surface being collapsed (audited 2026-06-16, file:line)
 
+> **Line numbers are a 2026-06-16 snapshot** of a ~3,900-line file that shifts as each PR lands.
+> Planners for PR3+ must re-locate by **symbol name**, not trust the offset — earlier PRs in the
+> campaign move these lines.
+
+
 1. **Dummy-vs-real duality** — scalar `enemyHpDecline` (engine.ts ~2392) + post-round
    scalar→actor conversion (~3773) vs. real `currentHp`; dummy carries all enemy-side
    DoT/bomb/accumulator containers (~1505–1510, ~2840). → unified `currentHp` + per-actor
@@ -101,11 +106,11 @@ Each PR is independently reviewable. The biting bug dies at **PR2**.
 
 | PR | Scope | Golden expectation |
 |----|-------|--------------------|
-| **1 — Roster + side field** | Add `side` to every actor; single `allActors` / `actorsBySide` / `runtimesByActorId`; explicit `indestructible` flag on dummy (behavior already true). Pure plumbing. | Byte-identical |
-| **2 — Side predicates + FIX enemy reactive routing** | Replace `isEnemySide` with per-call `isOpposing` / `isSameSideAlly`; parameterize `registerReactiveListeners`; fix `grantExtraAction` to resolve the granter from the combined actor map. **Kills the enemy-Liberator extra-action bug + all enemy-side opposing/ally reactions.** | DPS/healing byte-identical; fix verified by NEW team-vs-team tests (goldens don't cover that space) |
+| **1 — Roster + side field** | Add `side` to every actor; single `allActors` / `actorsBySide` / `runtimesByActorId`; add `indestructible` flag to the dummy as **inert plumbing** (declared, not yet read by the death path — that wiring lands in PR5). Pure plumbing. | Byte-identical |
+| **2 — Side predicates + FIX enemy reactive routing** | Replace `isEnemySide` with per-call `isOpposing` / `isSameSideAlly`; parameterize `registerReactiveListeners`; fix `grantExtraAction` to resolve the granter from the combined actor map. **Kills the enemy-Liberator extra-action bug + all enemy-side opposing/ally reactions.** | DPS/healing **must stay** byte-identical: PR2 touches behavior-adjacent code but only the player viewpoint is exercised by goldens, so any golden move here is a refactor **leak** (predicate semantics drifted), NOT acceptable churn — fix the seam. Fix verified by NEW team-vs-team tests |
 | **3 — Unify side-closures** | Collapse `grantAllyCharges`/`grantEnemyAllyCharges`, `lowestSpeed*`, `selfHpPctFor` into `bySide()`. | Byte-identical |
 | **4 — Unify decrement** | One side-aware decrement preserving the 4-branch semantics; closes the audited Provoke enemy-attacker decrement gap. | DPS/healing byte-identical; enemy-team debuff-lifecycle change is team-vs-team (audited) |
-| **5 — Per-actor accounting** | Replace heal-target-only accumulators + `enemyHpDecline` scalar with per-actor `currentHp` / buckets + per-actor `destroyedRound`. Sink decline == old scalar. **The duality dies here.** | **The one churn-risk PR** — audited; sink must reproduce DPS exactly |
+| **5 — Per-actor accounting** | Replace heal-target-only accumulators + `enemyHpDecline` scalar with per-actor `currentHp` / buckets + per-actor `destroyedRound`. Sink decline == old scalar. **Wire the `indestructible` skip into the death / combat-end path here** (the flag from PR1 goes live). **The duality dies here.** | **The one churn-risk PR** — audited; sink must reproduce DPS exactly |
 | **6 — Collapse the 3 call sites** | One `runPlayerTurn` call parameterized by `bySide(actor.side)`; positional direction / `healEventOnly` / UI-effects folded into `SideContext`. The capstone. | Byte-identical |
 | **7 — Phase-5 per-victim accounting** | The `// Phase-5` deferrals: per-victim leech, per-victim incoming attribution, per-victim defense/modifier sourcing. Lights up real AoE accounting in the sim. May itself split. | Additive |
 
@@ -116,7 +121,9 @@ last of it.
 
 PR1+PR2 are tightly coupled (PR2 needs PR1's `side` field) but kept separate so PR1 is trivially
 byte-identical and PR2's behavioral fix is reviewed in isolation. The audit estimated ~10 PRs;
-this 7-slice may expand if PR4/PR5/PR7 need sub-splitting during planning.
+this 7-slice may expand if PR4/PR5/PR7 need sub-splitting during planning. **When a row is
+sub-split, each child plan must re-derive its golden expectation from this parent row** so the
+byte-identical-vs-audited-churn boundary isn't lost in slicing.
 
 ## 5. Safety, testing, workflow
 
