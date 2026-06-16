@@ -1792,19 +1792,23 @@ export function runCombat(input: CombatEngineInput): {
     //    `inTurnLoop` is true only while the loop body walks; the pre-loop / post-round drains
     //    see it false → Path B.
     //
-    //  PATH B — post-round enemy death (on-enemy-destroyed → Sokol, Liberator). The enemy is a
-    //    cumulative-damage wall whose death is reconciled AFTER the turn loop closed and after
-    //    the round's last per-turn drainIntents(). There is NO live queue there. So:
-    //      1. A drainIntents() runs immediately after the enemy ship-destroyed emit (post-
-    //         reconciliation) — this lets on-enemy-destroyed CHARGE reactives (Liberator's "all
-    //         allies add 1 charge") apply immediately; charges carry into the next round → correct.
-    //      2. Extra-action grants from on-enemy-destroyed have no live selection loop this round.
-    //         grantExtraAction (inTurnLoop false) buffers them onto `pendingExtraActions`; at the
-    //         START of the NEXT round's pool construction each buffered granter's pending count is
-    //         bumped one extra (respecting once-per-round via the SAME round extraActionFired set).
-    //         So the on-kill extra action lands the round AFTER the kill is registered — deliberate
-    //         and faithful given the enemy's death is computed post-round in this DPS sim. The
-    //         enemy dies exactly once → the grant fires at most once.
+    //  PATH B — post-round enemy death (cross-round buffered grant). Fires when an enemy death is
+    //    reconciled AFTER the turn loop closed and after the round's last per-turn drainIntents(),
+    //    with NO live queue. The post-round drain block then:
+    //      1. runs drainIntents() right after the ship-destroyed emit — on-enemy-destroyed CHARGE
+    //         reactives (Liberator's "all allies add 1 charge") apply immediately; charges carry
+    //         into the next round → correct.
+    //      2. buffers extra-action grants (inTurnLoop false → grantExtraAction pushes onto
+    //         `pendingExtraActions`); at the START of the NEXT round's pool construction each
+    //         buffered granter's pending count is bumped one extra (respecting once-per-round via
+    //         the SAME round extraActionFired set) → the on-kill extra action lands the round AFTER
+    //         the kill is registered.
+    //    DORMANT TODAY (PR5d): the only actor that died post-round was the DPS dummy enemy, which
+    //    is now `indestructible` and never dies (the death block at ~3834 is gated on
+    //    `!enemy.indestructible`). Real enemy attackers die DURING a turn (positional
+    //    applyOutgoingToEnemy → recordDestroyed in the live queue) → Path A, not B. So no current
+    //    path produces a post-round death; the buffering machinery below is intact and correct,
+    //    and re-activates once a destructible enemy has a genuinely post-round-reconciled death.
     //
     // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
     // end of round R survives into round R+1's pool build. Each entry is flushed (and removed)
@@ -3818,7 +3822,17 @@ export function runCombat(input: CombatEngineInput): {
             });
             lastEnemyHpPctInt = newEnemyHpPctInt;
         }
-        if (enemy.currentHp <= 0) {
+        if (enemy.currentHp <= 0 && !enemy.indestructible) {
+            // An indestructible sink (the DPS dummy) NEVER dies. It keeps accumulating damage as
+            // currentHp decline so HP%-gates still resolve against it, but it is never
+            // recordDestroyed, emits no ship-destroyed, and fires no post-round
+            // on-enemy-destroyed drain. Its turn bookkeeping is unaffected: the turn-skip guard
+            // (~2791) is gated on isDummyEnemy, not destroyedRound, so DoT/decrement ticking
+            // continues exactly as before — this is the byte-identical invariant (suppressing
+            // recordDestroyed moves nothing because there is no observer of the dummy's death in
+            // the golden corpus).
+            //
+            // For a (hypothetical) destructible enemy this still applies:
             // Shared helper: stamps enemy.destroyedRound + emits ship-destroyed exactly once
             // (idempotent), replacing the old destroyedEmitted boolean.
             recordDestroyed(enemy, r, bus);
