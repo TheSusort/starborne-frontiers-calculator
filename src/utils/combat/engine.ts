@@ -998,9 +998,10 @@ export interface HealingRoundEngine {
      *  separately from shieldAbsorbed (Barrier does not drain the shield pool). Task 2 adds the
      *  UI display surface; this field exists now so the blocked total is observable. */
     barrierAbsorbed: number;
-    /** Per-actor incoming accounting bucket (PR5a foundation). Written in parallel with the
-     *  per-round scalars above; readers flip to this map in PR5b. Adapters must NOT read this
-     *  field until PR5b — it is write-only in PR5a. Keyed by victim actor id. */
+    /** Per-actor incoming accounting bucket. The heal target's `incomingDamage`/`shieldAbsorbed`/
+     *  `barrierAbsorbed` row totals above are sourced from this map's `healTarget.id` entry (PR5b);
+     *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
+     *  actor id. */
     perActorIncoming: Map<string, ActorIntake>;
     /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
@@ -1023,11 +1024,11 @@ export interface HealingRoundEngine {
  * wrapper supplies a sink that performs exactly the original closure's mutations.
  */
 interface DamageAccountingSink {
-    /** today: roundIncomingDamage += amount */
+    /** today: intakeFor(victimId).incoming += amount */
     addIncoming: (amount: number, victimId: string) => void;
-    /** today: roundShieldAbsorbed += amount */
+    /** today: intakeFor(victimId).shieldAbsorbed += amount */
     addShieldAbsorbed: (amount: number, victimId: string) => void;
-    /** today: roundBarrierAbsorbed += amount */
+    /** today: intakeFor(victimId).barrierAbsorbed += amount */
     addBarrierAbsorbed: (amount: number, victimId: string) => void;
     /** today: the `if (victim === healTarget) healTargetDestroyedRound = …` write */
     onHealTargetDestroyed?: (victim: CombatActor) => void;
@@ -2114,18 +2115,14 @@ export function runCombat(input: CombatEngineInput): {
         // the adapter owns any rounding. No-op in DPS mode (currentRoundHealing stays unread).
         let targetHpPctStart = 0;
         let targetShieldStart = 0;
-        // Per-round intake accounting (healing mode): folded into this round's HealingRoundEngine
-        // entry at post-round assembly (replacing the 0 placeholders). Enemy attacker turns add
-        // to these via the shield-first drain below.
-        let roundIncomingDamage = 0;
-        let roundShieldAbsorbed = 0;
-        // Per-round total fully blocked by an active Barrier (full damage immunity). Tracked
-        // SEPARATELY from shieldAbsorbed (Barrier does NOT drain the shield pool) so the UI
-        // can attribute the blocked total to the Barrier, not the shield.
-        let roundBarrierAbsorbed = 0;
-        // PR5a foundation: per-actor incoming accounting bucket — written in parallel with the
-        // scalars above; no reader until PR5b flips them.  Fresh map each round (same scope as the
-        // scalars so all three go stale together).  intakeFor() get-or-creates on first write.
+        // Per-round intake accounting (healing mode): per-actor incoming/shield/barrier buckets,
+        // folded into this round's HealingRoundEngine entry at post-round assembly. Enemy attacker
+        // turns add to these via the shield-first drain below (the playerSink writes intakeFor()).
+        // The heal target's row totals (incomingDamage/shieldAbsorbed/barrierAbsorbed) are read off
+        // intakeFor(healTarget.id); barrierAbsorbed tracks the total fully blocked by an active
+        // Barrier (full damage immunity), kept SEPARATE from shieldAbsorbed (Barrier does NOT drain
+        // the shield pool) so the UI can attribute the blocked total to the Barrier, not the shield.
+        // Fresh map each round; intakeFor() get-or-creates on first write.
         const perActorIncoming = new Map<string, ActorIntake>();
         const intakeFor = (id: string): ActorIntake => {
             let entry = perActorIncoming.get(id);
@@ -2171,7 +2168,8 @@ export function runCombat(input: CombatEngineInput): {
         let healTargetBuffs: ActiveBuff[] = [];
         // Shared incoming-damage intake (healing mode): drains the heal target shield-first
         // (pool before HP), reduces HP, records the destroyed round + emits ship-destroyed once,
-        // and folds the totals into roundIncomingDamage / roundShieldAbsorbed. Returns the
+        // and folds the totals into the victim's per-actor intake bucket (incoming / shieldAbsorbed
+        // via the sink's intakeFor). Returns the
         // shield-before + the post-shield hpDamage the caller needs for any per-attack rider (the
         // taken-leech punch-through gate; hpDamage is 0 under Barrier so the leech reads 0). Both
         // the per-attack enemy intake (below) and the tank DoT-tick intake (turn-start) route
@@ -2207,9 +2205,10 @@ export function runCombat(input: CombatEngineInput): {
             // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death
             // — so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers
             // the Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on
-            // first hit. The damage still "arrives" (roundIncomingDamage already incremented
-            // above) but its effect is nullified; the blocked amount is tracked SEPARATELY as
-            // roundBarrierAbsorbed (NOT roundShieldAbsorbed — Barrier never touches the shield).
+            // first hit. The damage still "arrives" (the victim's bucket .incoming already
+            // incremented above) but its effect is nullified; the blocked amount is tracked
+            // SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never
+            // touches the shield).
             // HP does not move → the emit below is a no-op crossing (oldPct === newPct), which we
             // still fire once for emission consistency. Detection mirrors the Cheat-Death check
             // (selfBuffNamesForOwners aggregates snapshot + timed + active ability self statuses).
@@ -2308,21 +2307,18 @@ export function runCombat(input: CombatEngineInput): {
             return { shieldBefore, hpDamage, barriered: false };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
-        // reproduces exactly the original closure's mutations (roundIncomingDamage /
-        // roundShieldAbsorbed / roundBarrierAbsorbed bumps + the heal-target-gated
-        // healTargetDestroyedRound write). Signature, default `victim = healTarget!`, and return
-        // value are unchanged, so every existing call site stays byte-identical.
+        // accumulates the victim's incoming / shield-absorbed / barrier-absorbed into its per-actor
+        // bucket (intakeFor) plus the heal-target-gated healTargetDestroyedRound write. Signature,
+        // default `victim = healTarget!`, and return value are unchanged, so every existing call
+        // site stays byte-identical.
         const playerSink: DamageAccountingSink = {
             addIncoming: (amount, victimId) => {
-                roundIncomingDamage += amount;
                 intakeFor(victimId).incoming += amount;
             },
             addShieldAbsorbed: (amount, victimId) => {
-                roundShieldAbsorbed += amount;
                 intakeFor(victimId).shieldAbsorbed += amount;
             },
             addBarrierAbsorbed: (amount, victimId) => {
-                roundBarrierAbsorbed += amount;
                 intakeFor(victimId).barrierAbsorbed += amount;
             },
             onHealTargetDestroyed: (victim) => {
@@ -2339,9 +2335,9 @@ export function runCombat(input: CombatEngineInput): {
         // Player→enemy intake (Phase 4 PR1, Task 3) — the symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim still runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path (enemies
-        // actually take damage and can die), but the round accumulators here (roundIncomingDamage/
-        // roundShieldAbsorbed/roundBarrierAbsorbed) are the TANK's incoming bucket — they must NOT
-        // move when a player hits an enemy. So this sink's accounting hooks are no-ops for PR 1
+        // actually take damage and can die), but the per-actor intake buckets here are the TANK's
+        // incoming accounting — they must NOT move when a player hits an enemy. So this sink's
+        // accounting hooks are no-ops for PR 1
         // (enemy-incoming accounting is the deferred Phase-5 symmetric surface) and it omits
         // onHealTargetDestroyed (the enemy victim is never the heal target). Task 8 wires a caller.
         const enemySink: DamageAccountingSink = {
@@ -2808,7 +2804,7 @@ export function runCombat(input: CombatEngineInput): {
                 // turn-start). An enemy attacker lands inferno/corrosion in the tank's containers
                 // (Task 6b); without this tick they would never deal damage. Routes the ticked
                 // damage into the INCOMING-damage accounting (shield-first → HP → ship-destroyed →
-                // roundIncoming/roundShield) — NOT the player→enemy damage path. Reuses tickDoTs:
+                // the victim's per-actor intake bucket) — NOT the player→enemy damage path. Reuses tickDoTs:
                 // the applier's effectiveAttack/dotMult/affinityMult come from the entry's sourceId
                 // (the enemy) via lastTurnCtxByActor; corrosion scales with the AFFLICTED ship's
                 // (the tank's) max HP. The dead-target guard above already skipped a destroyed tank,
@@ -3541,10 +3537,12 @@ export function runCombat(input: CombatEngineInput): {
                     if (damage > 0) {
                         // Phase-5 per-victim accounting TODOs (see detailed notes below): (1)
                         // takenLeeches gated to non-positional — per-victim leech needs the symmetric
-                        // heal surface; (2) playerSink.addIncoming attributes every victim's AoE share
-                        // to the tank's incoming bucket.
+                        // heal surface; (2) since PR5b playerSink.addIncoming keys each victim's AoE
+                        // share into ITS OWN per-actor bucket (the heal-target row is no longer
+                        // inflated) — surfacing those other per-actor buckets as result rows is the
+                        // still-deferred symmetric-accounting surface.
                         //
-                        // Shield-first drain → HP → ship-destroyed → roundIncoming/roundShield. The
+                        // Shield-first drain → HP → ship-destroyed → the victim's per-actor bucket. The
                         // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
                         // hpDamage comes straight from the closure (0 under Barrier — damage fully
                         // blocked, not shield-absorbed — otherwise damage - absorbed). barriered = the
@@ -3586,13 +3584,14 @@ export function runCombat(input: CombatEngineInput): {
                                 // PLAYER-side wrapper: each player victim takes real incoming damage.
                                 // Every victim's OWN currentHp/shield is mutated and recordDestroyed
                                 // fires for it (its targetHpPct/death derive from the victim itself —
-                                // applyVictimDamage reads recipientMaxHp(victim.id)). DEFERRED (Phase-5):
-                                // playerSink.addIncoming bumps the TANK's roundIncomingDamage bucket
-                                // for EVERY victim — so a covered non-heal-target victim's AoE share
-                                // currently inflates the heal target's reported per-round incomingDamage.
-                                // The healing-accounting model has one row (the heal target's); per-
-                                // victim incoming attribution is the Phase-5 symmetric-accounting surface.
-                                // Inert today (no production caller threads enemy position+pattern).
+                                // applyVictimDamage reads recipientMaxHp(victim.id)). Since PR5b the
+                                // playerSink keys intake by victim.id, so each covered victim's AoE
+                                // share lands in ITS OWN per-actor bucket — the heal target's row reads
+                                // only intakeFor(healTarget.id) and is no longer inflated by other
+                                // victims. SURFACING those other per-actor buckets as result rows is the
+                                // deferred Phase-5 symmetric-accounting surface (the result still exposes
+                                // a single heal-target row today). Inert here regardless (no production
+                                // caller threads enemy position+pattern).
                                 applyToVictim: (victim, dmgToVictim) =>
                                     applyIncomingToTarget(dmgToVictim, victim),
                             });
@@ -3900,13 +3899,19 @@ export function runCombat(input: CombatEngineInput): {
         // The destroyed-round seam is set the moment the target's HP first reaches 0 (in the
         // enemy attacker turn); this post-round guard is a backstop for any other 0-HP path.
         if (healTarget) {
+            // PR5b: the heal target's intake totals are sourced from its per-actor bucket
+            // (written by playerSink, PR5a). In the single-target path this is byte-identical to
+            // the legacy per-round scalars this replaced (the heal target is the only recorded
+            // victim); in positional AoE it is the correct per-victim share rather than the old
+            // tank-sums-everything scalar. The replaced scalars were removed in this same change.
+            const healTargetIntake = perActorIncoming.get(healTarget.id);
             healingRounds.push({
                 perActor: currentRoundHealing,
                 targetHpPctStart,
                 targetShieldStart,
-                incomingDamage: roundIncomingDamage,
-                shieldAbsorbed: roundShieldAbsorbed,
-                barrierAbsorbed: roundBarrierAbsorbed,
+                incomingDamage: healTargetIntake?.incoming ?? 0,
+                shieldAbsorbed: healTargetIntake?.shieldAbsorbed ?? 0,
+                barrierAbsorbed: healTargetIntake?.barrierAbsorbed ?? 0,
                 perActorIncoming,
                 // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
                 // (keep the first occurrence so the UI shows each effect once per enemy per round),
