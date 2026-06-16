@@ -1943,6 +1943,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            // Nuqtu's grant is an "End Of Round Action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [
                 {
                     subject: 'enemy-buff',
@@ -1960,6 +1962,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'self-debuff',
@@ -1977,6 +1980,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'hp-threshold',
@@ -1995,6 +1999,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            endOfRound: false,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2006,6 +2011,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'enemy-debuff',
@@ -2023,6 +2029,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            // Sokol's "extra end of round action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2034,6 +2042,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            // Harvester's "1 extra end of round action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [],
             trigger: 'on-ally-destroyed',
         });
@@ -2056,7 +2066,24 @@ describe('parseExtraAction', () => {
         const r = parseExtraAction(
             'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
         );
-        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+        expect(r).toEqual({ oncePerRound: true, endOfRound: false, conditions: [] });
+    });
+
+    it('end-of-round flag: "1 extra end of round action" → endOfRound true (Task 4)', () => {
+        const r = parseExtraAction('This Unit gains 1 extra end of round action.');
+        expect(r).toEqual({ oncePerRound: false, endOfRound: true, conditions: [] });
+    });
+
+    it('end-of-round flag: Liberator-style "1 extra action" → endOfRound false (Task 4)', () => {
+        const r = parseExtraAction(
+            'When an enemy dies, once per round, this unit gains 1 extra action.'
+        );
+        expect(r).toEqual({
+            oncePerRound: true,
+            endOfRound: false,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 });
 
@@ -3177,9 +3204,7 @@ describe('detectIgnoresForcedTargeting', () => {
 
     it('returns true for "ignoring Taunt and Provoke" without tags (Anjian)', () => {
         expect(
-            detectIgnoresForcedTargeting(
-                'This Unit deals 130% damage, ignoring Taunt and Provoke.'
-            )
+            detectIgnoresForcedTargeting('This Unit deals 130% damage, ignoring Taunt and Provoke.')
         ).toBe(true);
     });
 

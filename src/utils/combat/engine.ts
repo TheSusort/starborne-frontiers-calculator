@@ -1745,8 +1745,12 @@ export function runCombat(input: CombatEngineInput): {
     // end of round R survives into round R+1's pool build. Each entry is flushed (and removed)
     // exactly once at the next round's start.
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    const pendingExtraActions: { granterId: string; abilityId: string; oncePerRound: boolean }[] =
-        [];
+    const pendingExtraActions: {
+        granterId: string;
+        abilityId: string;
+        oncePerRound: boolean;
+        endOfRound: boolean;
+    }[] = [];
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -2006,6 +2010,14 @@ export function runCombat(input: CombatEngineInput): {
         const roundActors = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
         const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
         const pendingOf = (id: string) => pending.get(id) ?? 0;
+
+        // End-of-round action pool (Task 4): "1 extra end of round action" grants (Harvester)
+        // land here instead of `pending`. The selection closure drains `pending` (speed-positioned)
+        // FIRST and only consults this pool once the normal pool is empty — so end-of-round extra
+        // turns fire AFTER every normal-pool action for the round, regardless of the granter's
+        // speed-rank. Seeded empty each round (no actor starts with an end-of-round action).
+        const endOfRoundPending = new Map<string, number>();
+        const endOfRoundPendingOf = (id: string) => endOfRoundPending.get(id) ?? 0;
 
         // --- Round accumulator, shared by the turn blocks and the post-round assembly.
         // Declared fresh each round (like the old scalar locals). Each actor writes into
@@ -2435,7 +2447,15 @@ export function runCombat(input: CombatEngineInput): {
                             `an extra-action grant is re-firing without bound`
                     );
                 }
-                pending.set(granter.id, (pending.get(granter.id) ?? 0) + 1);
+                // Route by pool (Task 4): end-of-round grants (Harvester) bump the end-of-round
+                // pool, drained after the normal speed pool; default grants stay speed-positioned
+                // in the normal pool. The oncePerRound gate + MAX_EXTRA_TURNS_PER_ROUND backstop
+                // above apply to BOTH pools.
+                if (g.endOfRound) {
+                    endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
+                } else {
+                    pending.set(granter.id, pendingOf(granter.id) + 1);
+                }
             }
         };
 
@@ -2453,14 +2473,15 @@ export function runCombat(input: CombatEngineInput): {
         const grantExtraAction = (
             granterId: string,
             abilityId: string,
-            oncePerRound: boolean
+            oncePerRound: boolean,
+            endOfRound: boolean
         ): void => {
             const granter = allPlayerActorsById.get(granterId);
             if (!granter) return;
             if (inTurnLoop) {
-                processExtraActionGrants(granter, [{ abilityId, oncePerRound }]);
+                processExtraActionGrants(granter, [{ abilityId, oncePerRound, endOfRound }]);
             } else {
-                pendingExtraActions.push({ granterId, abilityId, oncePerRound });
+                pendingExtraActions.push({ granterId, abilityId, oncePerRound, endOfRound });
             }
         };
 
@@ -2621,7 +2642,11 @@ export function runCombat(input: CombatEngineInput): {
                 const granter = allPlayerActorsById.get(g.granterId);
                 if (!granter) continue;
                 processExtraActionGrants(granter, [
-                    { abilityId: g.abilityId, oncePerRound: g.oncePerRound },
+                    {
+                        abilityId: g.abilityId,
+                        oncePerRound: g.oncePerRound,
+                        endOfRound: g.endOfRound,
+                    },
                 ]);
             }
         }
@@ -2641,17 +2666,31 @@ export function runCombat(input: CombatEngineInput): {
         inTurnLoop = true;
         try {
             let selectionGuard = 0;
-            // Pick the unacted actor with the highest CURRENT effective speed each step (reads live
-            // speed buffs → mid-round Speed Up/Down reorders the remainder). selectNextBySpeed
-            // returns undefined once every actor's pending hits 0 → the round ends.
-            let actor = selectNextBySpeed(roundActors, pendingOf, effectiveSpeedOf);
-            for (; actor; actor = selectNextBySpeed(roundActors, pendingOf, effectiveSpeedOf)) {
+            // Pick the next actor to act, OWNING the pending decrement (Task 4). Drain the NORMAL
+            // pool first — the unacted actor with the highest CURRENT effective speed (reads live
+            // speed buffs → mid-round Speed Up/Down reorders the remainder). Only once the normal
+            // pool is fully drained do we consult the END-OF-ROUND pool (Harvester-style grants),
+            // again picked by speed AMONG end-of-round actors but unconditionally after every normal
+            // action. Returns undefined once both pools are empty → the round ends.
+            const selectNext = (): CombatActor | undefined => {
+                const normal = selectNextBySpeed(roundActors, pendingOf, effectiveSpeedOf);
+                if (normal) {
+                    pending.set(normal.id, pendingOf(normal.id) - 1);
+                    return normal;
+                }
+                const eor = selectNextBySpeed(roundActors, endOfRoundPendingOf, effectiveSpeedOf);
+                if (eor) {
+                    endOfRoundPending.set(eor.id, endOfRoundPendingOf(eor.id) - 1);
+                    return eor;
+                }
+                return undefined;
+            };
+            for (let actor = selectNext(); actor; actor = selectNext()) {
                 if (++selectionGuard > MAX_SELECTION_TICKS) {
                     throw new Error(
                         `combat round ${r}: turn selection did not terminate (pending actions not draining)`
                     );
                 }
-                pending.set(actor.id, pendingOf(actor.id) - 1);
 
                 // Dead-target turn skip (top-of-turn): the heal target is already destroyed
                 // entering its turn → skip the turn body (see handleDeadTargetSkip above).
@@ -2662,12 +2701,13 @@ export function runCombat(input: CombatEngineInput): {
                 // General dead-actor turn skip (correctness): an actor DESTROYED earlier this
                 // round (e.g. a player AoE killed an enemy attacker scheduled later in the turn
                 // order, or a walked team ship that died) must NOT act when its turn comes up —
-                // no turn-started/turn-ended emit, no runPlayerTurn, no damage, no own
-                // drain/decrement. A plain `continue` is correct: every per-iteration step below
-                // (turn-started emit, the kind-branch turn body, drainIntents/drainEnemyIntents,
-                // the Post-Turn decrement, turn-ended) is THIS actor's own turn work, which a dead
-                // actor does none of. Extra-action grants only fire from inside a live turn body,
-                // so a skipped actor produces none.
+                // no turn-started/turn-ended emit, no runPlayerTurn, no damage. A plain `continue`
+                // is correct: every per-iteration step below (turn-started emit, the kind-branch
+                // turn body, drainIntents/drainEnemyIntents, turn-ended) is THIS actor's own turn
+                // work, which a dead actor does none of. The pending decrement already happened in
+                // selectNext (Task 4) BEFORE the body runs, so the dead actor's pending is consumed
+                // and termination is preserved. Extra-action grants only fire from inside a live
+                // turn body, so a skipped actor produces none.
                 //
                 // The signal is `destroyedRound !== undefined` (set by recordDestroyed when the
                 // actor's HP first reaches 0) — NOT `currentHp <= 0`: a manual/flat enemy attacker

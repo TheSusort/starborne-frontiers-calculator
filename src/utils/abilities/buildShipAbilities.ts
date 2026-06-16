@@ -1131,7 +1131,11 @@ function abilitiesFromText(
                 // Default on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) keep trigger on-cast.
                 trigger: extra.trigger ?? 'on-cast',
                 conditions: extra.conditions,
-                config: { type: 'extra-action', oncePerRound: extra.oncePerRound },
+                config: {
+                    type: 'extra-action',
+                    oncePerRound: extra.oncePerRound,
+                    endOfRound: extra.endOfRound,
+                },
                 autoFilled: true,
             },
             pos: extraPos >= 0 ? extraPos : MAX_POS,
