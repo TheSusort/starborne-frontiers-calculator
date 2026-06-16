@@ -37,7 +37,8 @@ Add `speed` as a first-class buff/modifier stat:
   - **Speed Up I / II / III** = +10% / +30% / +45%
   - **Speed Down I / II** = −15% / −30%
   - Faction-named speed buffs (e.g. XAOC Swiftness; Harvester grants "Speed Up I"). Audit `constants/buffs.ts` + the skills CSV for the full set.
-- Formula (mirrors `effectiveAttack`): `effectiveSpeed = baseSpeed × (1 + Σ speedBuff% / 100)`, Speed Up positive, Speed Down negative. Speed Up and Speed Down are distinct families (both can be active); within a family the existing family-overwrite rule applies.
+- Formula (mirrors `effectiveAttack`): `effectiveSpeed = baseSpeed × (1 + Σ speedBuff% / 100)`, Speed Up positive, Speed Down negative. **Uncapped** — under order-only the magnitude is irrelevant beyond relative ordering, so no clamp is applied (a 350-base ship with Speed Up III is just fast; only its rank matters).
+- **Family overwrite** is already enforced upstream by the status engine (`statusEngine.ts` `deriveFamilyKey:208` + `familyApplicationWins:220`, applied at infliction): only the winning tier of a family is ever an active status. So the speed channel in `calculateBuffTotals` is a flat sum over the *surviving* active speed statuses — no family logic needed in the speed path. Speed Up and Speed Down are distinct families (both can be active simultaneously); two Speed Ups cannot.
 - A single pure, side-agnostic authority `effectiveSpeedOf(actorId): number` reads the live status engine. All ordering decisions go through it.
 
 ### 2. Selection-based round loop (mechanism B)
