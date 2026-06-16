@@ -2921,9 +2921,10 @@ export function runCombat(input: CombatEngineInput): {
                     // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                     lastTurnCtxByActor.set(actor.id, turn.turnCtx);
 
-                    // Extra-action grants from this turn re-insert the attacker into the
-                    // remaining queue (full extra turn — charge cadence, post-turn
-                    // decrement, and triggers all run again on the inserted iteration).
+                    // Extra-action grants from this turn bump the attacker's pending-action
+                    // count, so selectNextBySpeed re-picks it at its live speed-rank (full extra
+                    // turn — charge cadence, post-turn decrement, and triggers all run again on
+                    // the re-picked iteration).
                     // The extra turn intentionally re-fires statusEngine.sourceFired too:
                     // re-applying timed buffs, adding persistent stacks, and ticking
                     // accumulators are all correct for a real second turn.
@@ -3422,8 +3423,8 @@ export function runCombat(input: CombatEngineInput): {
                             entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
                             entry.resistedDots.push(...resistedEnemyDots);
                         }
-                        // Extra-action grants: re-insert this enemy into the remaining queue for an extra
-                        // turn (full-actor completeness — mirrors the attacker and walked-team branches).
+                        // Extra-action grants: bump this enemy's pending-action count so it is re-picked
+                        // for an extra turn (full-actor completeness — mirrors the attacker and walked-team branches).
                         // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
                         // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
                         // undefined (enemy's "allies" are enemy-side, not the player team).

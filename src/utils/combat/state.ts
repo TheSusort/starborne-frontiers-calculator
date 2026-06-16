@@ -167,7 +167,9 @@ export function recordDestroyed(actor: CombatActor, round: number, bus: CombatEv
 /** Turn meter an actor must reach to act (docs/combat-system.md section 1). */
 export const TURN_METER_THRESHOLD = 1000;
 
-/** Safety cap on selection ticks — converts an all-zero-speed hang into an error. */
+/** Safety cap on selection iterations — converts a non-terminating selection into a
+ *  debuggable error. Used both by `selectNextActor` (all-zero-speed hang) and by the
+ *  engine round loop's `selectNextBySpeed` pool drain (runaway pending actions). */
 export const MAX_SELECTION_TICKS = 10000;
 
 /**
@@ -180,8 +182,8 @@ export const MAX_SELECTION_TICKS = 10000;
  * meter ever advances. The MAX_SELECTION_TICKS cap converts that all-zero-speed
  * hang into a debuggable error rather than an infinite loop.
  *
- * Reserved for future turn-meter manipulation phases; the Phase 2 round loop
- * uses buildTurnQueue instead.
+ * Reserved for future turn-meter manipulation phases; the engine round loop uses
+ * `selectNextBySpeed` (order-only, dynamic effective speed) instead.
  */
 export function selectNextActor(actors: CombatActor[]): CombatActor {
     if (actors.length === 0) {
