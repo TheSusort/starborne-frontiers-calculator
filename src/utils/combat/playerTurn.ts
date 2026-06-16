@@ -280,7 +280,7 @@ function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff 
     };
 }
 
-function calculateBuffTotals(buffs: Buff[]) {
+export function calculateBuffTotals(buffs: Buff[]) {
     const attackBuff = buffs
         .filter((b) => b.stat === 'attack')
         .reduce((sum, b) => sum + b.value, 0);
@@ -303,6 +303,7 @@ function calculateBuffTotals(buffs: Buff[]) {
     const incomingHealBuff = buffs
         .filter((b) => b.stat === 'incomingHeal')
         .reduce((sum, b) => sum + b.value, 0);
+    const speedBuff = buffs.filter((b) => b.stat === 'speed').reduce((sum, b) => sum + b.value, 0);
     return {
         attackBuff,
         critBuff,
@@ -312,6 +313,7 @@ function calculateBuffTotals(buffs: Buff[]) {
         hpBuff,
         outgoingHealBuff,
         incomingHealBuff,
+        speedBuff,
     };
 }
 
