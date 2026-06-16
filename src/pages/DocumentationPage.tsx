@@ -2336,7 +2336,16 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s stats panel. Debuffs that land now persist
                                         their full duration without re-rolling each round. Charged
                                         skills without direct damage (pure utility) still fire on
-                                        their normal cadence and apply their effects.
+                                        their normal cadence and apply their effects. Speed Up buffs
+                                        make a ship act earlier in the round and Speed Down buffs
+                                        push it later — the turn order updates mid-round as speed
+                                        changes take effect, so a buff that fires on one ship&apos;s
+                                        turn is already reflected in the order for ships that have
+                                        not yet acted. Ships with conditional extra actions re-enter
+                                        the turn queue at their current Speed, including any live
+                                        Speed buffs or debuffs. End-of-round extra actions (such as
+                                        Harvester&apos;s on-ally-destroyed passive) drain after
+                                        every other ship has acted, regardless of Speed.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}

@@ -68,7 +68,8 @@ export interface Buff {
         | 'hp'
         | 'outgoingHeal'
         | 'incomingHeal'
-        | 'hotPct';
+        | 'hotPct'
+        | 'speed';
     value: number;
 }
 

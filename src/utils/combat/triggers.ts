@@ -438,7 +438,12 @@ export interface IntentExecContext {
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
      *  round when there is no live queue — the post-round enemy-death case). */
-    grantExtraAction: (granterId: string, abilityId: string, oncePerRound: boolean) => void;
+    grantExtraAction: (
+        granterId: string,
+        abilityId: string,
+        oncePerRound: boolean,
+        endOfRound: boolean
+    ) => void;
     /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
      *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
@@ -1086,7 +1091,12 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // the next round — post-round enemy death, no live queue). The owner is the GRANTER (the
         // ship whose death-triggered passive fired): Sokol/Liberator gain the extra turn, not the
         // dead enemy. The engine's processExtraActionGrants enforces oncePerRound + the backstop.
-        ctx.grantExtraAction(intent.ownerId, intent.ability.id, cfg.oncePerRound);
+        ctx.grantExtraAction(
+            intent.ownerId,
+            intent.ability.id,
+            cfg.oncePerRound,
+            cfg.endOfRound ?? false
+        );
         return;
     }
 

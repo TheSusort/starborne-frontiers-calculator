@@ -12,6 +12,7 @@ import {
     damageInputsFromSkill,
 } from '../abilities/applyAbilities';
 import { conditionsMet } from '../abilities/evaluateConditions';
+import { toSimBuffs } from '../calculators/dpsBuffHelpers';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -20,7 +21,8 @@ import {
     PendingAccumulator,
     PendingBomb,
     createActor,
-    buildTurnQueue,
+    selectNextBySpeed,
+    MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
     advanceChargeCadence,
@@ -47,6 +49,8 @@ import {
     PlayerRoundCtx,
     PlayerTurnResult,
     runPlayerTurn,
+    calculateBuffTotals,
+    payloadToSelectedBuff,
 } from './playerTurn';
 import {
     Intent,
@@ -66,6 +70,46 @@ import {
  *  self-limited (charged-skill grants consume charges; passive grants are once per
  *  round), so any round needing more than this is a config/parser bug. */
 const MAX_EXTRA_TURNS_PER_ROUND = 8;
+
+/**
+ * Sum an actor's LIVE speed-buff percentage from the status engine (Task 2 authority for
+ * effectiveSpeedOf; pure read, no mutation). Folds the same two sources the per-actor buff
+ * fold uses, keyed by owner id so it is correct for any actor on either side:
+ *   1. Scheduled self-buffs: snapshot(actorId).activeSelfBuffs, each expanded via selfBuffLookup
+ *      (accumulating buffs override their static stacks with the per-round count; 0 → dropped).
+ *   2. Timed ability statuses: timedAbilityStatuses('self', actorId), each payload wrapped via
+ *      payloadToSelectedBuff.
+ * Both fold through toSimBuffs → calculateBuffTotals, summing only `.speedBuff`.
+ *
+ * Task 0 corpus investigation: every corpus speed buff (Speed Up I/II/III, Speed Down I/II,
+ * XAOC Swiftness I/II/III) is an UNCONDITIONAL timed status grant — there is NO conditional/
+ * gated speed buff, NO always-active/aura speed buff, and NO standing speed modifier — so the
+ * ctx-gated activeAbilityStatuses path and a ModifierChannel speed entry are intentionally
+ * omitted. Returns a percentage (e.g. 30 for +30%); effective speed is uncapped.
+ */
+export function foldSpeedBuffPct(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    actorId: string
+): number {
+    const scheduledSelfBuffs = statusEngine.snapshot(actorId).activeSelfBuffs.flatMap((ab) => {
+        const bufs = selfBuffLookup.get(ab.buffName) ?? [];
+        // Accumulating buff: override static stacks with per-round count; skip when 0.
+        return ab.stacks !== undefined
+            ? ab.stacks > 0
+                ? bufs.map((b) => ({ ...b, stacks: ab.stacks! }))
+                : []
+            : bufs;
+    });
+    const scheduledSpeedBuff = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs)).speedBuff;
+
+    const timedEffects = statusEngine
+        .timedAbilityStatuses('self', actorId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    const timedSpeedBuff = calculateBuffTotals(toSimBuffs(timedEffects)).speedBuff;
+
+    return scheduledSpeedBuff + timedSpeedBuff;
+}
 
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
 // and register them under the correct status-engine recipients. Returns the timed-by-slot
@@ -973,8 +1017,10 @@ interface DamageAccountingSink {
     onHealTargetDestroyed?: (victim: CombatActor) => void;
 }
 /**
- * The combat-engine turn loop (combat-system.md §10). Each round builds a turn queue
- * (buildTurnQueue, speed-ordered) and every actor takes one turn: the attacker (default
+ * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
+ * pool (one pending action each) and repeatedly selects the unacted actor with the highest
+ * CURRENT effective speed (selectNextBySpeed) until the pool drains — every actor takes one
+ * turn (plus any extra-action grants): the attacker (default
  * speed 100) runs the full damage/buff/DoT-application pipeline; the enemy (default
  * speed 50) ticks the DoT containers it carries (DoTs tick at the start of the
  * afflicted ship's turn). When enemySpeed > speed the order inverts — the enemy acts
@@ -1076,6 +1122,7 @@ export function runCombat(input: CombatEngineInput): {
         id: 'enemy',
         side: 'enemy',
         kind: 'enemy',
+        indestructible: true,
         stats: {
             attack: 0,
             crit: 0,
@@ -1404,13 +1451,33 @@ export function runCombat(input: CombatEngineInput): {
     // bump. Built once. Used by grantAllyCharges below (passed into every runPlayerTurn call).
     const allPlayerActors = [attacker, ...teamCombatActors];
 
-    // Phase 4c PR 6: player-team actors sharing the minimum Speed (ties → all). Speed is static
-    // turn-ORDER in this sim, so compute once. Feeds the lowest-speed-ally gate (Chakara).
-    // Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
-    const minPlayerSpeed = Math.min(...allPlayerActors.map((a) => a.stats.speed));
-    const lowestSpeedAllyIds = new Set(
-        allPlayerActors.filter((a) => a.stats.speed === minPlayerSpeed).map((a) => a.id)
-    );
+    // Live effective speed for ANY actor on EITHER side (Task 2 authority; UNWIRED — Task 3
+    // wires it into the turn loop via selectNextBySpeed). Effective speed =
+    // baseSpeed × (1 + Σ speedBuff% / 100), where baseSpeed is the actor's construction-time
+    // stats.speed and the speedBuff% is folded LIVE from the status engine so a Speed Up/Down
+    // applied mid-combat is reflected. Two sources are summed (Task 0 corpus investigation:
+    // every corpus speed buff — Speed Up I/II/III, Speed Down I/II, XAOC Swiftness I/II/III — is
+    // an UNCONDITIONAL timed status grant; there is NO conditional/gated speed buff, NO
+    // always-active/aura speed buff, and NO standing speed modifier, so the ctx-gated
+    // activeAbilityStatuses path is intentionally omitted):
+    //   1. Scheduled self-buffs: snapshot(id).activeSelfBuffs expanded via selfBuffLookup.
+    //   2. Timed ability statuses: timedAbilityStatuses('self', id) payloads.
+    // Both fold through toSimBuffs → calculateBuffTotals, taking only .speedBuff. snapshot(id)
+    // and timedAbilityStatuses('self', id) are keyed by owner id, so this is correct for any
+    // actor regardless of side. Effective speed is UNCAPPED (magnitude only orders turns).
+    const effectiveSpeedOf = (actor: CombatActor): number => {
+        const speedBuffPct = foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id);
+        return actor.stats.speed * (1 + speedBuffPct / 100);
+    };
+
+    // Player-team actors sharing the minimum LIVE effective speed (ties → all). Recomputed per
+    // gate eval — speed is now dynamic (Speed Up/Down reorder turns), so a buff can change who is
+    // slowest. Sourced from allPlayerActors (NOT runtimesById, which omits non-walked team actors).
+    const lowestSpeedAllyIds = (): Set<string> => {
+        const speeds = allPlayerActors.map((a) => effectiveSpeedOf(a));
+        const min = Math.min(...speeds);
+        return new Set(allPlayerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
+    };
 
     // Ally-charge grant (Task 5): bump EVERY player actor's charges by `amount`, each capped at
     // its OWN chargeCount, skipping chargeCount 0 (no charge skill → nothing to bank). Called
@@ -1519,6 +1586,15 @@ export function runCombat(input: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
+    // ── Unified roster seam (bySide unification PR1) ───────────────────────────
+    // The canonical, side-agnostic actor set, named once. Order MATTERS: it drives
+    // the per-round turn order — `roundActors` is assigned to it each round —
+    // [team…, attacker, dummy enemy, enemy attackers…], identical to the array
+    // `roundActors` used inline before PR1. The companion accessors allActorsById /
+    // actorsBySide arrive in later PRs with their first consumers (deferred —
+    // unread now = YAGNI/lint).
+    const allActors: CombatActor[] = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
+
     // Enemy-team charge grant (enemy-team PR3): the mirror of grantAllyCharges — bump every
     // ENEMY attacker's charges by `amount`, each capped at its own chargeCount, skipping 0. Lets
     // an enemy supporter (Hayyan charged grant / Graphite start-of-round / Liberator on-kill)
@@ -1530,15 +1606,15 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
-    // Enemy-side lowest-speed set (ties → all; a lone enemy is trivially slowest → true).
-    // Empty in DPS mode (no enemy attackers).
-    const lowestSpeedEnemyIds = new Set<string>();
-    if (enemyAttackerActors.length > 0) {
-        const minEnemySpeed = Math.min(...enemyAttackerActors.map((a) => a.stats.speed));
-        for (const a of enemyAttackerActors) {
-            if (a.stats.speed === minEnemySpeed) lowestSpeedEnemyIds.add(a.id);
-        }
-    }
+    // Enemy-side lowest LIVE effective speed (ties → all; a lone enemy is trivially slowest).
+    // Empty in DPS mode (no enemy attackers). Recomputed per gate eval for the same reason as
+    // lowestSpeedAllyIds above — a speed buff on an enemy can shift which enemy is slowest.
+    const lowestSpeedEnemyIds = (): Set<string> => {
+        if (enemyAttackerActors.length === 0) return new Set<string>();
+        const speeds = enemyAttackerActors.map((a) => effectiveSpeedOf(a));
+        const min = Math.min(...speeds);
+        return new Set(enemyAttackerActors.filter((_, i) => speeds[i] === min).map((a) => a.id));
+    };
 
     // Task 7 — NAMES-ONLY condition-context sources for `enemy-buff` / `self-debuff` gates.
     // These read buff/debuff NAMES from the status engine; they NEVER fold effects (effects
@@ -1656,12 +1732,11 @@ export function runCombat(input: CombatEngineInput): {
     //  PATH A — during-turn deaths (on-destroyed self, on-ally-destroyed ally → Harvester).
     //    These fire from applyIncomingToTarget / the general death path, which run DURING an
     //    actor's turn. They are followed by the per-turn drainIntents() (drain point (b)) while
-    //    the round-local `queue`/`qi` are still live → the grant CAN splice into the current
-    //    round via processExtraActionGrants(currentQi, granter, …). `currentQi` is a ROUND-SCOPED
-    //    mutable cursor updated at the top of each `for (qi…)` iteration (NOT a closure over the
-    //    loop binding — drainIntents is defined above the loop and also runs pre-loop where qi
-    //    doesn't exist). `inTurnLoop` is true only while the loop body walks; the pre-loop /
-    //    post-round drains see it false → Path B.
+    //    the selection loop is still walking → the grant CAN bump the granter's pending count
+    //    via processExtraActionGrants(granter, …), and the selection loop then re-picks the
+    //    granter at its live speed-rank among the remaining actors (a same-round extra turn).
+    //    `inTurnLoop` is true only while the loop body walks; the pre-loop / post-round drains
+    //    see it false → Path B.
     //
     //  PATH B — post-round enemy death (on-enemy-destroyed → Sokol, Liberator). The enemy is a
     //    cumulative-damage wall whose death is reconciled AFTER the turn loop closed and after
@@ -1669,20 +1744,24 @@ export function runCombat(input: CombatEngineInput): {
     //      1. A drainIntents() runs immediately after the enemy ship-destroyed emit (post-
     //         reconciliation) — this lets on-enemy-destroyed CHARGE reactives (Liberator's "all
     //         allies add 1 charge") apply immediately; charges carry into the next round → correct.
-    //      2. Extra-action grants from on-enemy-destroyed have no queue to splice this round.
+    //      2. Extra-action grants from on-enemy-destroyed have no live selection loop this round.
     //         grantExtraAction (inTurnLoop false) buffers them onto `pendingExtraActions`; at the
-    //         START of the NEXT round's queue construction each buffered granter is inserted one
-    //         extra time into that round's queue (respecting once-per-round via the SAME round
-    //         extraActionFired set). So the on-kill extra action lands the round AFTER the kill is
-    //         registered — deliberate and faithful given the enemy's death is computed post-round
-    //         in this DPS sim. The enemy dies exactly once → the grant fires at most once.
+    //         START of the NEXT round's pool construction each buffered granter's pending count is
+    //         bumped one extra (respecting once-per-round via the SAME round extraActionFired set).
+    //         So the on-kill extra action lands the round AFTER the kill is registered — deliberate
+    //         and faithful given the enemy's death is computed post-round in this DPS sim. The
+    //         enemy dies exactly once → the grant fires at most once.
     //
     // pendingExtraActions is COMBAT-lifetime (outside the round loop) so a kill reconciled at the
-    // end of round R survives into round R+1's queue build. Each entry is flushed (and removed)
+    // end of round R survives into round R+1's pool build. Each entry is flushed (and removed)
     // exactly once at the next round's start.
     // ═══════════════════════════════════════════════════════════════════════════════════════
-    const pendingExtraActions: { granterId: string; abilityId: string; oncePerRound: boolean }[] =
-        [];
+    const pendingExtraActions: {
+        granterId: string;
+        abilityId: string;
+        oncePerRound: boolean;
+        endOfRound: boolean;
+    }[] = [];
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -1929,16 +2008,27 @@ export function runCombat(input: CombatEngineInput): {
             seedPassiveTimedStatuses(enemyPlayerRuntimes, statusEngine, bus, undefined, r);
         }
 
-        // Team actors listed BEFORE the attacker so the input-order tiebreak yields
-        // team → attacker → enemy at equal speeds (buildTurnQueue requirement). Enemy
-        // attackers (healing mode) are appended after the dummy `enemy`; the queue is
-        // speed-ordered so their actual turn position follows their stats.speed.
-        const queue = buildTurnQueue([
-            ...teamCombatActors,
-            attacker,
-            enemy,
-            ...enemyAttackerActors,
-        ]);
+        // Selection-based action pool (dynamic-speed turn order, Task 3). Each living actor
+        // holds a count of PENDING actions for the round (seeded 1 each; an extra-action grant
+        // pushes +1). Team actors listed BEFORE the attacker so the input-order tiebreak yields
+        // team → attacker → enemy at equal speeds (selectNextBySpeed requirement — it feeds
+        // orderByTurnPriority, whose final tiebreak is this input order). Enemy attackers
+        // (healing mode) are appended after the dummy `enemy`; selection reads each actor's LIVE
+        // effective speed every step, so a Speed Up/Down applied mid-round reorders the remaining
+        // unacted actors automatically (no re-sort hook). Dead actors keep their seeded pending=1
+        // — the death-skip below consumes it via a plain `continue` (identical to the old loop
+        // visiting then continue-ing). The dummy `enemy` (no speed buffs) keeps its DoT-tick turn.
+        const roundActors = allActors;
+        const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
+        const pendingOf = (id: string) => pending.get(id) ?? 0;
+
+        // End-of-round action pool (Task 4): "1 extra end of round action" grants (Harvester)
+        // land here instead of `pending`. The selection closure drains `pending` (speed-positioned)
+        // FIRST and only consults this pool once the normal pool is empty — so end-of-round extra
+        // turns fire AFTER every normal-pool action for the round, regardless of the granter's
+        // speed-rank. Seeded empty each round (no actor starts with an end-of-round action).
+        const endOfRoundPending = new Map<string, number>();
+        const endOfRoundPendingOf = (id: string) => endOfRoundPending.get(id) ?? 0;
 
         // --- Round accumulator, shared by the turn blocks and the post-round assembly.
         // Declared fresh each round (like the old scalar locals). Each actor writes into
@@ -2345,16 +2435,14 @@ export function runCombat(input: CombatEngineInput): {
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
         // per actor per round (key `${actorId}:${abilityId}`); total insertions are
-        // backstopped. The queue is MUTABLE within the round — grants splice the
-        // granting actor back in at its speed position among the REMAINING actors
-        // (game-verified: re-added to the turn queue; acts immediately only when
-        // fastest remaining). Equal-speed remaining actors keep their place (they were
-        // already in line) — deterministic, consistent with the accepted Phase-2
-        // tiebreak simplification.
+        // backstopped. A grant bumps the granter's PENDING count by 1 — the selection
+        // loop then re-picks it at its LIVE speed-rank among the remaining unacted actors
+        // (game-verified: re-added to the turn order; acts immediately only when fastest
+        // remaining). The selection comparator (orderByTurnPriority via selectNextBySpeed)
+        // owns the speed-position + equal-speed tiebreak, so there is no splice to position.
         const extraActionFired = new Set<string>();
         let extraTurnInsertions = 0;
         const processExtraActionGrants = (
-            qi: number,
             granter: CombatActor,
             grants: ExtraActionGrant[]
         ): void => {
@@ -2370,43 +2458,41 @@ export function runCombat(input: CombatEngineInput): {
                             `an extra-action grant is re-firing without bound`
                     );
                 }
-                let insertAt = qi + 1;
-                while (
-                    insertAt < queue.length &&
-                    queue[insertAt].stats.speed >= granter.stats.speed
-                ) {
-                    insertAt += 1;
+                // Route by pool (Task 4): end-of-round grants (Harvester) bump the end-of-round
+                // pool, drained after the normal speed pool; default grants stay speed-positioned
+                // in the normal pool. The oncePerRound gate + MAX_EXTRA_TURNS_PER_ROUND backstop
+                // above apply to BOTH pools.
+                if (g.endOfRound) {
+                    endOfRoundPending.set(granter.id, endOfRoundPendingOf(granter.id) + 1);
+                } else {
+                    pending.set(granter.id, pendingOf(granter.id) + 1);
                 }
-                queue.splice(insertAt, 0, granter);
             }
         };
 
-        // Round-scoped turn-loop cursor (Path A — see the timing-analysis block above). Updated
-        // at the top of each `for (qi…)` iteration; `inTurnLoop` is true only while the loop body
-        // walks. The pre-loop and post-round drains see inTurnLoop=false → Path B (buffer). The
-        // -1 sentinel is harmless: the pre-loop drain never enqueues a death-triggered extra
-        // action (no actor has died yet), and Path B ignores currentQi entirely.
-        let currentQi = -1;
+        // `inTurnLoop` is true only while the selection loop body walks. The pre-loop and
+        // post-round drains see inTurnLoop=false → Path B (buffer).
         let inTurnLoop = false;
 
-        // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): splice the granter into
-        // the LIVE queue at its speed position among the remaining actors (same machinery the
-        // attacker/team turn branches use), so a during-turn death grants a SAME-round extra turn.
-        // PATH B (no live queue — post-round enemy death): buffer onto pendingExtraActions; the
-        // next round's queue build flushes it. The granter is always a player actor (the ship
-        // whose death-passive fired); a missing id is impossible (the reactive owner ids ARE
-        // player ids) → skip defensively rather than throw mid-drain.
+        // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): bump the granter's pending
+        // count so the selection loop re-picks it at its live speed-rank among the remaining
+        // actors (same machinery the attacker/team turn branches use), so a during-turn death
+        // grants a SAME-round extra turn. PATH B (no live loop — post-round enemy death): buffer
+        // onto pendingExtraActions; the next round's pool build flushes it. The granter is always
+        // a player actor (the ship whose death-passive fired); a missing id is impossible (the
+        // reactive owner ids ARE player ids) → skip defensively rather than throw mid-drain.
         const grantExtraAction = (
             granterId: string,
             abilityId: string,
-            oncePerRound: boolean
+            oncePerRound: boolean,
+            endOfRound: boolean
         ): void => {
             const granter = allPlayerActorsById.get(granterId);
             if (!granter) return;
             if (inTurnLoop) {
-                processExtraActionGrants(currentQi, granter, [{ abilityId, oncePerRound }]);
+                processExtraActionGrants(granter, [{ abilityId, oncePerRound, endOfRound }]);
             } else {
-                pendingExtraActions.push({ granterId, abilityId, oncePerRound });
+                pendingExtraActions.push({ granterId, abilityId, oncePerRound, endOfRound });
             }
         };
 
@@ -2530,7 +2616,7 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(intentQueue, {
                 runtimes: runtimesById,
                 recipientIds: playerIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds.has(ownerId),
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedAllyIds().has(ownerId),
                 grantAllyCharges,
             });
 
@@ -2549,25 +2635,29 @@ export function runCombat(input: CombatEngineInput): {
             drainQueue(enemyIntentQueue, {
                 runtimes: enemyPlayerRuntimeByActorId,
                 recipientIds: enemyAttackerActorIds,
-                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds.has(ownerId),
+                isLowestSpeedAllyFor: (ownerId) => lowestSpeedEnemyIds().has(ownerId),
                 grantAllyCharges: grantEnemyAllyCharges,
             });
         };
 
         // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
-        // (on-enemy-destroyed → Sokol/Liberator) are inserted into THIS round's freshly-built
-        // queue at the granter's speed position (qi=-1 → from the queue head among all actors).
+        // (on-enemy-destroyed → Sokol/Liberator) bump the granter's pending count for THIS round,
+        // so the selection loop picks it up at its live speed-rank among all actors.
         // The round's extraActionFired set + MAX_EXTRA_TURNS_PER_ROUND backstop still bound them.
         // The buffer is drained (cleared) here — each pending grant lands exactly one round after
-        // its kill was registered. Insertion happens BEFORE the pre-loop drain/turn loop so the
-        // granter takes its extra turn in queue order. Empty in normal DPS/healing runs → no-op.
+        // its kill was registered. The bump happens BEFORE the pre-loop drain/turn loop so the
+        // granter takes its extra turn in selection order. Empty in normal DPS/healing runs → no-op.
         if (pendingExtraActions.length > 0) {
             const flush = pendingExtraActions.splice(0, pendingExtraActions.length);
             for (const g of flush) {
                 const granter = allPlayerActorsById.get(g.granterId);
                 if (!granter) continue;
-                processExtraActionGrants(-1, granter, [
-                    { abilityId: g.abilityId, oncePerRound: g.oncePerRound },
+                processExtraActionGrants(granter, [
+                    {
+                        abilityId: g.abilityId,
+                        oncePerRound: g.oncePerRound,
+                        endOfRound: g.endOfRound,
+                    },
                 ]);
             }
         }
@@ -2586,12 +2676,32 @@ export function runCombat(input: CombatEngineInput): {
 
         inTurnLoop = true;
         try {
-            for (let qi = 0; qi < queue.length; qi++) {
-                // Path-A cursor (Task 10): a during-turn death's grantExtraAction splices into the
-                // live queue relative to THIS position. Updated each iteration (queue.length grows as
-                // grants splice in, so the for-condition re-reads it).
-                currentQi = qi;
-                const actor = queue[qi];
+            let selectionGuard = 0;
+            // Pick the next actor to act, OWNING the pending decrement (Task 4). Drain the NORMAL
+            // pool first — the unacted actor with the highest CURRENT effective speed (reads live
+            // speed buffs → mid-round Speed Up/Down reorders the remainder). Only once the normal
+            // pool is fully drained do we consult the END-OF-ROUND pool (Harvester-style grants),
+            // again picked by speed AMONG end-of-round actors but unconditionally after every normal
+            // action. Returns undefined once both pools are empty → the round ends.
+            const selectNext = (): CombatActor | undefined => {
+                const normal = selectNextBySpeed(roundActors, pendingOf, effectiveSpeedOf);
+                if (normal) {
+                    pending.set(normal.id, pendingOf(normal.id) - 1);
+                    return normal;
+                }
+                const eor = selectNextBySpeed(roundActors, endOfRoundPendingOf, effectiveSpeedOf);
+                if (eor) {
+                    endOfRoundPending.set(eor.id, endOfRoundPendingOf(eor.id) - 1);
+                    return eor;
+                }
+                return undefined;
+            };
+            for (let actor = selectNext(); actor; actor = selectNext()) {
+                if (++selectionGuard > MAX_SELECTION_TICKS) {
+                    throw new Error(
+                        `combat round ${r}: turn selection did not terminate (pending actions not draining)`
+                    );
+                }
 
                 // Dead-target turn skip (top-of-turn): the heal target is already destroyed
                 // entering its turn → skip the turn body (see handleDeadTargetSkip above).
@@ -2602,12 +2712,13 @@ export function runCombat(input: CombatEngineInput): {
                 // General dead-actor turn skip (correctness): an actor DESTROYED earlier this
                 // round (e.g. a player AoE killed an enemy attacker scheduled later in the turn
                 // order, or a walked team ship that died) must NOT act when its turn comes up —
-                // no turn-started/turn-ended emit, no runPlayerTurn, no damage, no own
-                // drain/decrement. A plain `continue` is correct: every per-iteration step below
-                // (turn-started emit, the kind-branch turn body, drainIntents/drainEnemyIntents,
-                // the Post-Turn decrement, turn-ended) is THIS actor's own turn work, which a dead
-                // actor does none of. Extra-action grants only fire from inside a live turn body,
-                // so a skipped actor produces none.
+                // no turn-started/turn-ended emit, no runPlayerTurn, no damage. A plain `continue`
+                // is correct: every per-iteration step below (turn-started emit, the kind-branch
+                // turn body, drainIntents/drainEnemyIntents, turn-ended) is THIS actor's own turn
+                // work, which a dead actor does none of. The pending decrement already happened in
+                // selectNext (Task 4) BEFORE the body runs, so the dead actor's pending is consumed
+                // and termination is preserved. Extra-action grants only fire from inside a live
+                // turn body, so a skipped actor produces none.
                 //
                 // The signal is `destroyedRound !== undefined` (set by recordDestroyed when the
                 // actor's HP first reaches 0) — NOT `currentHp <= 0`: a manual/flat enemy attacker
@@ -2861,13 +2972,14 @@ export function runCombat(input: CombatEngineInput): {
                     // Record this actor's round-scoped ctx for the enemy's DoT-tick attribution.
                     lastTurnCtxByActor.set(actor.id, turn.turnCtx);
 
-                    // Extra-action grants from this turn re-insert the attacker into the
-                    // remaining queue (full extra turn — charge cadence, post-turn
-                    // decrement, and triggers all run again on the inserted iteration).
+                    // Extra-action grants from this turn bump the attacker's pending-action
+                    // count, so selectNextBySpeed re-picks it at its live speed-rank (full extra
+                    // turn — charge cadence, post-turn decrement, and triggers all run again on
+                    // the re-picked iteration).
                     // The extra turn intentionally re-fires statusEngine.sourceFired too:
                     // re-applying timed buffs, adding persistent stacks, and ticking
                     // accumulators are all correct for a real second turn.
-                    processExtraActionGrants(qi, actor, turn.extraActionGrants);
+                    processExtraActionGrants(actor, turn.extraActionGrants);
                 } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
                     // ====================================================================
                     // WALKED TEAM TURN — a real speed-ordered ally that runs the FULL
@@ -3009,7 +3121,7 @@ export function runCombat(input: CombatEngineInput): {
                         healTargetBuffs = teamTurn.activeSelfBuffs;
                     }
 
-                    processExtraActionGrants(qi, actor, teamTurn.extraActionGrants);
+                    processExtraActionGrants(actor, teamTurn.extraActionGrants);
                 } else if (actor.kind === 'team') {
                     // No healTargetBuffs capture here: the heal target is always a WALKED actor
                     // (HealingCalculatorPage builds it with shipSkills+stats, so it takes the
@@ -3362,12 +3474,12 @@ export function runCombat(input: CombatEngineInput): {
                             entry.resistedDebuffs.push(...enemyTurn.resistedEnemyDebuffs);
                             entry.resistedDots.push(...resistedEnemyDots);
                         }
-                        // Extra-action grants: re-insert this enemy into the remaining queue for an extra
-                        // turn (full-actor completeness — mirrors the attacker and walked-team branches).
+                        // Extra-action grants: bump this enemy's pending-action count so it is re-picked
+                        // for an extra turn (full-actor completeness — mirrors the attacker and walked-team branches).
                         // The oncePerRound / MAX_EXTRA_TURNS_PER_ROUND backstops inside
                         // processExtraActionGrants absorb any runaway grants. grantAllyCharges stays
                         // undefined (enemy's "allies" are enemy-side, not the player team).
-                        processExtraActionGrants(qi, actor, enemyTurn.extraActionGrants);
+                        processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                     }
                     if (damage > 0) {
                         // Phase-5 per-victim accounting TODOs (see detailed notes below): (1)

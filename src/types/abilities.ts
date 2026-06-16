@@ -211,7 +211,7 @@ export type AbilityConfig =
     | { type: 'charge'; amount: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
-    | { type: 'extra-action'; oncePerRound: boolean }
+    | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
     | {
           type: 'heal' | 'shield';
           pct: number;

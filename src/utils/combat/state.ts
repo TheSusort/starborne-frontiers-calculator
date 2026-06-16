@@ -113,6 +113,10 @@ export interface CombatActor {
     pendingAccumulators: PendingAccumulator[];
     /** Round this actor first reached 0 HP (set once via recordDestroyed). Undefined while alive. */
     destroyedRound?: number;
+    /** True for the DPS dummy sink: drains currentHp like any actor but the death /
+     *  combat-end path skips it (never recordDestroyed, never ends combat). Inert
+     *  plumbing here — first read by the death path in a later PR (bySide unification). */
+    indestructible?: boolean;
     /** Board position of this actor (positional plumbing — set at construction, not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
@@ -132,6 +136,7 @@ export function createActor(
         position?: Position;
         ignoresForcedTargeting?: boolean;
         affinity?: AffinityName;
+        indestructible?: boolean;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -151,6 +156,7 @@ export function createActor(
         position: partial.position,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         affinity: partial.affinity,
+        indestructible: partial.indestructible,
     };
 }
 
@@ -167,7 +173,9 @@ export function recordDestroyed(actor: CombatActor, round: number, bus: CombatEv
 /** Turn meter an actor must reach to act (docs/combat-system.md section 1). */
 export const TURN_METER_THRESHOLD = 1000;
 
-/** Safety cap on selection ticks — converts an all-zero-speed hang into an error. */
+/** Safety cap on selection iterations — converts a non-terminating selection into a
+ *  debuggable error. Used both by `selectNextActor` (all-zero-speed hang) and by the
+ *  engine round loop's `selectNextBySpeed` pool drain (runaway pending actions). */
 export const MAX_SELECTION_TICKS = 10000;
 
 /**
@@ -180,8 +188,8 @@ export const MAX_SELECTION_TICKS = 10000;
  * meter ever advances. The MAX_SELECTION_TICKS cap converts that all-zero-speed
  * hang into a debuggable error rather than an infinite loop.
  *
- * Reserved for future turn-meter manipulation phases; the Phase 2 round loop
- * uses buildTurnQueue instead.
+ * Reserved for future turn-meter manipulation phases; the engine round loop uses
+ * `selectNextBySpeed` (order-only, dynamic effective speed) instead.
  */
 export function selectNextActor(actors: CombatActor[]): CombatActor {
     if (actors.length === 0) {
@@ -235,6 +243,33 @@ export function orderByTurnPriority<T extends { speed: number; side: 'player' | 
             return x.i - y.i;
         })
         .map((x) => x.item);
+}
+
+/**
+ * Pick the next actor to act by CURRENT effective speed (dynamic-speed turn order, Task 2).
+ *
+ * Side-agnostic and pure: among `actors` with `pendingOf(id) > 0`, returns the one with the
+ * highest effective speed (per the `effectiveSpeedOf` callback), tiebroken by side (player
+ * before enemy) then input order; returns `undefined` when none have pending > 0.
+ *
+ * `actors` MUST be supplied in canonical input order (team 1..4, attacker, enemy) — the
+ * input-order tiebreak in `orderByTurnPriority` relies on this. Filtering is stable so input
+ * order is preserved into the comparator.
+ *
+ * Effective speed is read live via the callback (NOT `actor.stats.speed`), so a Speed Up/Down
+ * applied mid-combat changes the ordering. This helper is UNWIRED in Task 2 — Task 3 calls it.
+ */
+export function selectNextBySpeed(
+    actors: CombatActor[],
+    pendingOf: (id: string) => number,
+    effectiveSpeedOf: (actor: CombatActor) => number
+): CombatActor | undefined {
+    const ranked = orderByTurnPriority(
+        actors
+            .filter((a) => pendingOf(a.id) > 0)
+            .map((actor) => ({ actor, speed: effectiveSpeedOf(actor), side: actor.side }))
+    );
+    return ranked[0]?.actor;
 }
 
 /**

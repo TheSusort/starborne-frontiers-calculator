@@ -552,7 +552,9 @@ describe('extraActionsFromSkill', () => {
                 },
             ],
         };
-        expect(extraActionsFromSkill(skill)).toEqual([{ abilityId: 'x1', oncePerRound: true }]);
+        expect(extraActionsFromSkill(skill)).toEqual([
+            { abilityId: 'x1', oncePerRound: true, endOfRound: false },
+        ]);
         expect(extraActionsFromSkill(undefined)).toEqual([]);
     });
 
@@ -577,7 +579,7 @@ describe('extraActionsFromSkill', () => {
             selfBuffNames: ['Stealth'],
         });
         expect(extraActionsFromSkill(gatedSkillWith)).toEqual([
-            { abilityId: 'xa', oncePerRound: true },
+            { abilityId: 'xa', oncePerRound: true, endOfRound: false },
         ]);
     });
 });
