@@ -111,7 +111,13 @@ const FormationGrid: React.FC<FormationGridProps> = ({
             {rows.map((row, rowIndex) => (
                 <div
                     key={rowIndex}
-                    className={`grid grid-cols-4 ${rowIndex === 1 ? 'ml-[-12.5%] mr-[12.5%]' : ''}`}
+                    className={`grid grid-cols-4 ${
+                        rowIndex === 1
+                            ? mirrored
+                                ? 'ml-[12.5%] mr-[-12.5%]'
+                                : 'ml-[-12.5%] mr-[12.5%]'
+                            : ''
+                    }`}
                 >
                     {(mirrored ? [...row].reverse() : row).map((pos) => {
                         const shipPosition = formation.find((s) => s.position === pos);
