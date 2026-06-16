@@ -84,7 +84,7 @@ const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
             {round.events.length === 0 ? (
                 <p className="text-sm text-theme-text-secondary">No events this round.</p>
             ) : (
-                <ul className="max-h-64 overflow-y-auto space-y-1 text-sm">
+                <ul className="max-h-[500px] overflow-y-auto space-y-1 text-sm">
                     {round.events.map((e, i) => (
                         <li key={i} className={colorFor(e.kind)}>
                             {lineFor(e)}
