@@ -292,7 +292,7 @@ describe('Phase 3 reactive triggers', () => {
             ],
         };
         const { result } = collectEvents(
-            baseInput({ shipSkills: skills, numRounds: 8, debuffLandingChance: 0 })
+            baseInput({ shipSkills: skills, numRounds: 8, hacking: 0 }) // hacking 0 → landing 0
         );
         const actions = result.rounds.map((r) => r.action);
         expect(actions).toEqual([
@@ -930,7 +930,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // trigger fires every round
-                debuffLandingChance: 0, // 0% landing → always resisted
+                hacking: 0, // hacking 0 → 0% landing → always resisted
                 numRounds: 4,
             })
         );
@@ -1057,7 +1057,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // every round crits → an application is attempted each round
-                debuffLandingChance: 0.5,
+                hacking: 150, // hacking 150 vs default security 100 → 0.5 landing
                 numRounds: 10,
             })
         );
@@ -1416,7 +1416,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // trigger fires every round
-                debuffLandingChance: 0, // always resisted
+                hacking: 0, // hacking 0 → always resisted
                 numRounds: 3,
             })
         );
@@ -2989,7 +2989,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
-                hacking: 0,
+                hacking: 200, // vs enemy default security 100 → landing 1 (was masked by the old gate when enemy had no security; debuffLandingChance: 1 below kept it 100%)
                 defence: 0,
                 hp,
             },

@@ -177,7 +177,7 @@ const teamActorAt = (
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
-            hacking: 0,
+            hacking: 200, // vs enemy default security 100 → landing 1 (an inflict debuff must land; was masked by the old gate when the enemy had no security)
             defence: 0,
             hp: 1_000_000_000,
         },
@@ -508,7 +508,7 @@ const reactiveProvokerTeamActorAt = (
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
-            hacking: 0,
+            hacking: 200, // vs enemy default security 100 → landing 1 (an inflict debuff must land; was masked by the old gate when the enemy had no security)
             defence: 0,
             hp: 1_000_000_000,
         },

@@ -51,14 +51,21 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 });
 
 // An enemy attacker whose kit carries a basic attack + a Corrosion DoT infliction.
-// The DoT lands/misses on the per-enemy debuffLandingChance roll (shared dotsLanded draw).
-const dotEnemy = (debuffLandingChance?: number): EnemyAttacker =>
+// The DoT lands/misses on the live hacking-vs-security landing roll (shared dotsLanded draw):
+// the enemy's `stats.hacking` vs the heal target's default security 100. `hacking` omitted →
+// defaults to 200 → 100% landing.
+const dotEnemy = (hacking?: number): EnemyAttacker =>
     ({
         id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            speed: 10,
+            ...(hacking === undefined ? {} : { hacking }),
+        },
         chargeCount: 0,
         startCharged: false,
-        ...(debuffLandingChance === undefined ? {} : { debuffLandingChance }),
         shipSkills: {
             slots: [
                 {
@@ -84,14 +91,14 @@ const dotEnemy = (debuffLandingChance?: number): EnemyAttacker =>
         } as ShipSkills,
     }) as EnemyAttacker;
 
-const runWithEnemy = (debuffLandingChance: number) =>
+const runWithEnemy = (hacking?: number) =>
     runCombat(
         BASE({
             numRounds: 1,
             hp: 1_000_000,
             defence: 0,
             healTargetId: 'attacker',
-            enemyAttackers: [dotEnemy(debuffLandingChance)],
+            enemyAttackers: [dotEnemy(hacking)],
             shipSkills: { slots: [] },
         })
     );
@@ -100,15 +107,15 @@ const e1Effects = (result: ReturnType<typeof runCombat>) =>
     result.healing?.rounds?.[0]?.enemyEffects.find((e) => e.enemyId === 'e1');
 
 describe('resisted enemy→tank DoTs in EnemyRoundEffects (Task R3)', () => {
-    it('debuffLandingChance: 0 → DoT is in resistedDots, NOT in dots', () => {
+    it('hacking 0 → landing 0 → DoT is in resistedDots, NOT in dots', () => {
         const entry = e1Effects(runWithEnemy(0));
         expect(entry).toBeDefined();
         expect(entry!.resistedDots).toEqual([{ type: 'corrosion', tier: 6, stacks: 3 }]);
         expect(entry!.dots).toHaveLength(0);
     });
 
-    it('debuffLandingChance: 1 → DoT is in dots, resistedDots empty', () => {
-        const entry = e1Effects(runWithEnemy(1));
+    it('hacking default → landing 1 → DoT is in dots, resistedDots empty', () => {
+        const entry = e1Effects(runWithEnemy());
         expect(entry).toBeDefined();
         expect(entry!.dots.map((d) => d.type)).toContain('corrosion');
         expect(entry!.resistedDots).toHaveLength(0);

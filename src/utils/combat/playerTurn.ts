@@ -627,7 +627,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         defensePenetration,
         defensePenetrationBuff,
         selfDotModifier,
-        debuffLandingChance,
+        // debuffLandingChance destructure removed (A-closeout): the live path is the sole
+        // producer; the runtime field itself is deleted in Task 2.
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
@@ -685,28 +686,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const emitDebuffApplied = (sourceId: string, buffName: string) =>
         bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
 
-    // LIVE per-target debuff-landing chance (A2 Task 4). Recomputed each turn from the acting
-    // actor's effective hacking (× this actor's affinity) vs the TURN TARGET's effective
-    // security — the source of truth, demoting the threaded static `debuffLandingChance` scalar
-    // to a fallback. The acting actor's `selfBuffLookup` folds scheduled self-buffs; timed
-    // ability statuses (the hacking/security buffs that move landing) fold lookup-free from the
-    // status engine. Cached once per turn here — every landing consumer below reads this value.
-    // Recompute live ONLY when BOTH the acting actor's hacking base AND the target's security
-    // base are present — then the formula has real inputs and reproduces the static scalar
-    // exactly for a no-buff/neutral fixture (T2 plumbed the SAME `?? 200`/`?? 100` defaults the
-    // static path baked). If either base is absent (truly-legacy actor configs), keep the
-    // threaded scalar — the static path's defaults are the source of truth there.
-    const liveLandingComputable =
-        actor.stats.hacking !== undefined && enemy.stats.security !== undefined;
-    const liveLandingChance = liveLandingComputable
-        ? liveDebuffLandingChance(
-              statusEngine,
-              selfBuffLookup,
-              actor,
-              enemy,
-              affinityDamageModifier
-          )
-        : debuffLandingChance; // fallback: no hacking/security base → use the threaded scalar
+    // LIVE per-target debuff-landing chance (A2 Task 4 / A-closeout). The sole producer of
+    // landing chance: recomputed each turn from the acting actor's effective hacking (× this
+    // actor's affinity) vs the TURN TARGET's effective security. `liveDebuffLandingChance` is
+    // self-sufficient — it defaults a missing attacker hacking → 200 and target security → 100,
+    // reproducing the old static formula for base-less/neutral actors — so the computation is
+    // unconditional and the static `debuffLandingChance` scalar is no longer read. The acting
+    // actor's `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/
+    // security buffs that move landing) fold lookup-free from the status engine. Cached once per
+    // turn here — every landing consumer below reads this value.
+    const liveLandingChance = liveDebuffLandingChance(
+        statusEngine,
+        selfBuffLookup,
+        actor,
+        enemy,
+        affinityDamageModifier
+    );
     // Turn-local landing decision: 'apply' (affinity) lands unless at an affinity disadvantage
     // (UNCHANGED rule); 'inflict' (and unmarked) draws the runtime's deterministic gate against
     // the LIVE chance. Replaces the runtime's pre-baked `landsTimedEnemyApplication` so every
@@ -715,10 +710,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
         application === 'apply' ? !affinityDisadvantage : debuffLandingGate(liveLandingChance);
     // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
-    // the OWNER's landing gate via owner.landsTimedEnemyApplication / owner.debuffLandingGate(
-    // owner.liveDebuffLandingChance ?? owner.debuffLandingChance) — uses the same live value.
-    // Only when computable here (else leave undefined → reactive path keeps the static scalar).
-    runtime.liveDebuffLandingChance = liveLandingComputable ? liveLandingChance : undefined;
+    // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
+    // uses the same live value. Always set now (the live path is unconditional).
+    runtime.liveDebuffLandingChance = liveLandingChance;
     // Point the status engine's sourceFired landing hook at THIS actor's live closure for the
     // duration of this turn (it is invoked synchronously inside sourceFired below).
     statusEngine.setLandsTimedEnemyApplication((buff) =>

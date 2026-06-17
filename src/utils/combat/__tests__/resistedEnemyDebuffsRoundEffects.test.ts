@@ -51,14 +51,21 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 });
 
 // An enemy attacker whose kit carries a basic attack + a TIMED 'Defense Down'
-// debuff infliction (application: 'inflict' → drawn against debuffLandingChance).
-const debuffEnemy = (debuffLandingChance?: number): EnemyAttacker =>
+// debuff infliction (application: 'inflict' → drawn against the live hacking-vs-security
+// landing roll: the enemy's `stats.hacking` vs the heal target's default security 100).
+// `hacking` omitted → defaults to 200 → 100% landing.
+const debuffEnemy = (hacking?: number): EnemyAttacker =>
     ({
         id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            speed: 10,
+            ...(hacking === undefined ? {} : { hacking }),
+        },
         chargeCount: 0,
         startCharged: false,
-        ...(debuffLandingChance === undefined ? {} : { debuffLandingChance }),
         shipSkills: {
             slots: [
                 {
@@ -86,14 +93,14 @@ const debuffEnemy = (debuffLandingChance?: number): EnemyAttacker =>
         } as ShipSkills,
     }) as EnemyAttacker;
 
-const runWithEnemy = (debuffLandingChance: number) =>
+const runWithEnemy = (hacking?: number) =>
     runCombat(
         BASE({
             numRounds: 1,
             hp: 1_000_000,
             defence: 0,
             healTargetId: 'attacker',
-            enemyAttackers: [debuffEnemy(debuffLandingChance)],
+            enemyAttackers: [debuffEnemy(hacking)],
             shipSkills: { slots: [] },
         })
     );
@@ -102,15 +109,15 @@ const e1Effects = (result: ReturnType<typeof runCombat>) =>
     result.healing?.rounds?.[0]?.enemyEffects.find((e) => e.enemyId === 'e1');
 
 describe('resisted enemy→tank TIMED debuffs in EnemyRoundEffects (Task R1)', () => {
-    it('debuffLandingChance: 0 → debuff is in resistedDebuffs, NOT in debuffs', () => {
+    it('hacking 0 → landing 0 → debuff is in resistedDebuffs, NOT in debuffs', () => {
         const entry = e1Effects(runWithEnemy(0));
         expect(entry).toBeDefined();
         expect(entry!.resistedDebuffs.map((d) => d.buffName)).toContain('Defense Down');
         expect(entry!.debuffs.map((d) => d.buffName)).not.toContain('Defense Down');
     });
 
-    it('debuffLandingChance: 1 → debuff is in debuffs, resistedDebuffs empty', () => {
-        const entry = e1Effects(runWithEnemy(1));
+    it('hacking default → landing 1 → debuff is in debuffs, resistedDebuffs empty', () => {
+        const entry = e1Effects(runWithEnemy());
         expect(entry).toBeDefined();
         expect(entry!.debuffs.map((d) => d.buffName)).toContain('Defense Down');
         expect(entry!.resistedDebuffs).toHaveLength(0);

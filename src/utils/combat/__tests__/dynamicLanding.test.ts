@@ -73,8 +73,6 @@ interface RuntimeOpts {
     affinityDamageModifier?: number;
     affinityDisadvantage?: boolean;
     timedEnemyBySlot?: PlayerActorRuntime['timedEnemyBySlot'];
-    /** Fallback static chance (demoted by the live recompute when hacking/security present). */
-    debuffLandingChance?: number;
 }
 
 function makeRuntime(opts: RuntimeOpts = {}): PlayerActorRuntime {
@@ -131,7 +129,7 @@ function makeRuntime(opts: RuntimeOpts = {}): PlayerActorRuntime {
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: opts.debuffLandingChance ?? 1,
+        debuffLandingChance: 1, // inert default (live path is sole producer; field removed in Task 2)
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: affMod,
@@ -203,7 +201,6 @@ function countLanded(opts: {
     apply?: boolean; // use an 'apply' (affinity) debuff instead of 'inflict'
     seedSelf?: Extract<RegisteredAbilityStatus, { kind: 'timed' }>;
     seedEnemy?: Extract<RegisteredAbilityStatus, { kind: 'timed' }>;
-    debuffLandingChance?: number;
 }): number {
     const status = opts.apply ? applyEnemyStatus('Test Debuff') : inflictEnemyStatus('Test Debuff');
     const statuses: RegisteredAbilityStatus[] = [status];
@@ -222,7 +219,6 @@ function countLanded(opts: {
         affinityDamageModifier: opts.affinityDamageModifier,
         affinityDisadvantage: opts.affinityDisadvantage,
         timedEnemyBySlot: [status],
-        debuffLandingChance: opts.debuffLandingChance,
     });
     const enemy = makeEnemy(opts.enemySecurity);
 

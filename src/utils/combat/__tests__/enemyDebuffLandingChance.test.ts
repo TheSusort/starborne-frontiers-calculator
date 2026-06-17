@@ -55,14 +55,20 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 });
 
 // An enemy attacker whose kit carries a basic attack + a Corrosion DoT infliction.
-// `debuffLandingChance` is optional — omitted → 100% landing (backward-compatible default).
-const dotEnemy = (debuffLandingChance?: number): EnemyAttacker =>
+// Landing is the live hacking-vs-security roll: the enemy's `stats.hacking` vs the heal
+// target's default security 100. `hacking` omitted → defaults to 200 → 100% landing.
+const dotEnemy = (hacking?: number): EnemyAttacker =>
     ({
         id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            speed: 10,
+            ...(hacking === undefined ? {} : { hacking }),
+        },
         chargeCount: 0,
         startCharged: false,
-        ...(debuffLandingChance === undefined ? {} : { debuffLandingChance }),
         shipSkills: {
             slots: [
                 {
@@ -89,7 +95,7 @@ const dotEnemy = (debuffLandingChance?: number): EnemyAttacker =>
     }) as EnemyAttacker;
 
 // Count `dot-applied` events the enemy attacker ('e1') emitted over `numRounds`.
-const countDotApplied = (debuffLandingChance: number | undefined, numRounds: number): number => {
+const countDotApplied = (hacking: number | undefined, numRounds: number): number => {
     idCounter = 0;
     const events: CombatEvent[] = [];
     const bus = createEventBus();
@@ -101,7 +107,7 @@ const countDotApplied = (debuffLandingChance: number | undefined, numRounds: num
             defence: 0,
             healTargetId: 'attacker',
             bus,
-            enemyAttackers: [dotEnemy(debuffLandingChance)],
+            enemyAttackers: [dotEnemy(hacking)],
             shipSkills: { slots: [] },
         })
     );
@@ -111,19 +117,19 @@ const countDotApplied = (debuffLandingChance: number | undefined, numRounds: num
 describe('per-enemy debuffLandingChance (PR 5 item 12)', () => {
     const N = 6;
 
-    it('debuffLandingChance: 0 → the enemy attacker NEVER lands its DoT', () => {
+    it('hacking 0 → landing 0 → the enemy attacker NEVER lands its DoT', () => {
         expect(countDotApplied(0, N)).toBe(0);
     });
 
-    it('debuffLandingChance: 1 → the enemy attacker lands its DoT every round', () => {
-        expect(countDotApplied(1, N)).toBe(N);
+    it('hacking 200 → landing 1 → the enemy attacker lands its DoT every round', () => {
+        expect(countDotApplied(200, N)).toBe(N);
     });
 
-    it('omitted debuffLandingChance → 100% landing (backward-compatible)', () => {
+    it('omitted hacking → defaults to 200 → 100% landing (backward-compatible)', () => {
         expect(countDotApplied(undefined, N)).toBe(N);
     });
 
-    it('omitted is byte-identical to explicit 1', () => {
-        expect(countDotApplied(undefined, N)).toBe(countDotApplied(1, N));
+    it('omitted hacking is byte-identical to explicit 200 (both default → landing 1)', () => {
+        expect(countDotApplied(undefined, N)).toBe(countDotApplied(200, N));
     });
 });
