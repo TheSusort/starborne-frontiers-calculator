@@ -166,8 +166,11 @@ if (hacking !== undefined) effects.hacking = hacking;
 
 **Files:**
 - Modify: `src/utils/combat/engine.ts` (landing-chance compute + the gate consumers ~474/1250/1253-1264/467-479) and/or `playerTurn.ts` (`roundDebuffLanded` ~729-734) — wherever the live attacker+defender effective stats are reachable.
+- Modify: `src/utils/calculators/battleSimulator.ts` — **(scope added post-T2)** its `toWalkStats`/`toEnemyStats` shapers omit hacking/security, and it threads its OWN static per-actor `landingChance` (representative-team security, default 100). Plumb base hacking/security onto its actors (same defaults) AND reconcile its static landingChance with the engine recompute, or battle-sim landing breaks (hacking 0) when the engine becomes source of truth.
 - Modify: `src/constants/changelog.ts` (`UNRELEASED_CHANGES`).
 - Test: `src/utils/combat/__tests__/` new team-vs-team landing tests.
+
+**Healing-mode decision (user-ratified 2026-06-17):** UNIFORM — apply affinity ±25% to landing in ALL modes incl. healing (`healingEngineAdapter` currently omits it). Healing goldens with non-neutral affinity on `inflict` debuffs WILL move — audited, explained; this closes the documented divergence.
 
 **This is the high-risk integration task. Steps 1-2 are a tracing/spike step before TDD, because the threading mechanism (the timed-application landing callback is configured at runtime-build, while the live attacker/defender stats are in `runPlayerTurn` scope) must be confirmed against the real flow.**
 
