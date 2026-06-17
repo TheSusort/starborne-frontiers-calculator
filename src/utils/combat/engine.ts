@@ -2505,6 +2505,41 @@ export function runCombat(input: CombatEngineInput): {
             return { tgt: selected ?? tb.legacyVictim, selectedReal: selected != null };
         };
 
+        // Unified runPlayerTurn argument builder (bySide unification PR6a). Produces the
+        // full arg object for any side, folding the per-side divergence through
+        // turnBindings(side) + runtimeFor(actor). targetId / healEventOnly are present
+        // ONLY for the enemy side (player sites omit both → byte-identical). The selfHpPct
+        // denom is unified to runtimeFor(actor).hp (proven equal to baseHpFor(id) by
+        // construction). The per-kind bookkeeping TAILS after each call stay inline.
+        const buildTurnArgs = (a: CombatActor, tgt: CombatActor, selectedReal: boolean) => {
+            const tb = turnBindings(a.side);
+            const rt = runtimeFor(a);
+            const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
+            return {
+                runtime: rt,
+                enemy: tgt,
+                ...(a.side === 'enemy' ? { targetId: tgt.id } : {}),
+                statusEngine,
+                corrosionEntries: tgt.corrosionEntries,
+                infernoEntries: tgt.infernoEntries,
+                pendingBombs: tgt.pendingBombs,
+                pendingAccumulators: tgt.pendingAccumulators,
+                enemyDefense: tb.victimDefenceFor(tgt),
+                enemyHp: tb.victimMaxHpFor(tgt),
+                enemyType: tb.enemyTypeArg,
+                bus,
+                round: r,
+                enemyHpDecline: tb.declineFor(tgt, selectedReal),
+                grantAllyCharges: bySide(a.side).grantAllyCharges,
+                healing: healingCtx,
+                ...(tb.healEventOnly ? { healEventOnly: true } : {}),
+                selfHpPct: maxHp > 0 ? (100 * Math.max(0, a.currentHp)) / maxHp : 100,
+                targetHpPct: healTargetHpPctNow(),
+                enemyBuffNames: tb.enemyBuffNamesUnion(),
+                selfDebuffNames: ownerDebuffNames(a.id),
+            };
+        };
+
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -2956,7 +2991,6 @@ export function runCombat(input: CombatEngineInput): {
                     // ====================================================================
                     const target = parsedTargetFor(actor);
                     const pattern = parsedPatternFor(actor);
-                    const attackerMaxHp = baseHpFor(actor.id);
                     // Positional target selection (Task C1, GATED). When the focus attacker
                     // (`actor`) carries a board position AND the positioned enemy roster
                     // (`enemyAttackerActors`) has positioned actors, resolve the focus's parsed
@@ -2974,45 +3008,7 @@ export function runCombat(input: CombatEngineInput): {
                     // Per-target HP decline is a later phase, so enemyHpDecline stays its own
                     // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
                     const { tgt, selectedReal } = selectTurnTarget(actor);
-                    const tb = turnBindings(actor.side);
-                    const turn = runPlayerTurn({
-                        runtime: runtimeFor(actor),
-                        enemy: tgt,
-                        statusEngine,
-                        corrosionEntries: tgt.corrosionEntries,
-                        infernoEntries: tgt.infernoEntries,
-                        pendingBombs: tgt.pendingBombs,
-                        pendingAccumulators: tgt.pendingAccumulators,
-                        enemyDefense: tb.victimDefenceFor(tgt),
-                        enemyHp: tb.victimMaxHpFor(tgt),
-                        enemyType: tb.enemyTypeArg,
-                        bus,
-                        round: r,
-                        enemyHpDecline: tb.declineFor(tgt, selectedReal),
-                        grantAllyCharges: bySide(actor.side).grantAllyCharges,
-                        // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
-                        // block inert, goldens byte-identical).
-                        healing: healingCtx,
-                        // Live HP% for self-HP-threshold gates. In DPS mode the attacker never
-                        // takes damage (currentHp === maxHp → 100%) so gates don't fire →
-                        // goldens byte-identical. In healing mode the acting actor may be
-                        // below full HP (Task 8 enemy attacks reduce currentHp).
-                        selfHpPct:
-                            attackerMaxHp > 0
-                                ? (100 * Math.max(0, actor.currentHp)) / attackerMaxHp
-                                : 100,
-                        // Heal target's live HP% at THIS turn start (pre-this-cast-heal) for
-                        // `hpSubject:'target'` gates (Hermes' "ally below 40% HP" Cheat-Death grant).
-                        // healTarget.currentHp here reflects the turn-start DoT tick but not this
-                        // cast's heal → exactly the cast-time basis. DPS mode (no healTarget) → 100.
-                        targetHpPct: healTargetHpPctNow(),
-                        // Task 7: enemy-buff gates read the UNION of enemy attackers' self-buffs;
-                        // self-debuff gates read this actor's own enemy-applied debuffs (names only).
-                        // Both empty in DPS mode (no enemy attackers, no debuffs on the focus) →
-                        // byte-identical goldens.
-                        enemyBuffNames: tb.enemyBuffNamesUnion(),
-                        selfDebuffNames: ownerDebuffNames(actor.id),
-                    });
+                    const turn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
 
                     // Drain any team-turn resisted entries staged BEFORE this attacker turn
                     // (faster team actors) into the HEAD of this turn's resisted list — same
@@ -3116,7 +3112,6 @@ export function runCombat(input: CombatEngineInput): {
                     // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
                     // the legacy sourceFired block below is fully superseded for walked actors.
                     // ====================================================================
-                    const teamMaxHp = baseHpFor(actor.id);
                     // Positional target selection (Task C2, GATED). Mirrors the focus-turn
                     // branch (C1) but keyed to THIS team actor's own board position
                     // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
@@ -3130,36 +3125,7 @@ export function runCombat(input: CombatEngineInput): {
                     // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                     // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
                     const { tgt, selectedReal } = selectTurnTarget(actor);
-                    const tb = turnBindings(actor.side);
-                    const teamTurn = runPlayerTurn({
-                        runtime: runtimeFor(actor),
-                        enemy: tgt,
-                        statusEngine,
-                        corrosionEntries: tgt.corrosionEntries,
-                        infernoEntries: tgt.infernoEntries,
-                        pendingBombs: tgt.pendingBombs,
-                        pendingAccumulators: tgt.pendingAccumulators,
-                        enemyDefense: tb.victimDefenceFor(tgt),
-                        enemyHp: tb.victimMaxHpFor(tgt),
-                        enemyType: tb.enemyTypeArg,
-                        bus,
-                        round: r,
-                        enemyHpDecline: tb.declineFor(tgt, selectedReal),
-                        grantAllyCharges: bySide(actor.side).grantAllyCharges,
-                        // Healing mode only — walked team turns heal/shield through the same ctx.
-                        healing: healingCtx,
-                        // Live HP% for self-HP-threshold gates (same logic as attacker above).
-                        selfHpPct:
-                            teamMaxHp > 0 ? (100 * Math.max(0, actor.currentHp)) / teamMaxHp : 100,
-                        // Heal target's live HP% at this turn start (pre-this-cast-heal) for
-                        // `hpSubject:'target'` gates — same basis as the attacker branch.
-                        targetHpPct: healTargetHpPctNow(),
-                        // Task 7: same as the attacker branch — enemy-buff = union of enemy attackers'
-                        // self-buffs; self-debuff = this team actor's own enemy-applied debuffs (names
-                        // only). Empty in DPS mode → byte-identical goldens.
-                        enemyBuffNames: tb.enemyBuffNamesUnion(),
-                        selfDebuffNames: ownerDebuffNames(actor.id),
-                    });
+                    const teamTurn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
 
                     // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
                     // team actor's own position / parsed target (teamTargetById) / parsed pattern
@@ -3398,8 +3364,7 @@ export function runCombat(input: CombatEngineInput): {
                     // legacy heal target. A full CombatActor in both cases, so every per-victim
                     // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
                     // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
-                    const { tgt } = selectTurnTarget(actor);
-                    const tb = turnBindings(actor.side);
+                    const { tgt, selectedReal } = selectTurnTarget(actor);
                     const targetDead = tgt.currentHp <= 0;
                     // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
                     // positional apply (footprint expansion). An enemy with a target but NO pattern
@@ -3431,69 +3396,7 @@ export function runCombat(input: CombatEngineInput): {
                         // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                         // produced no ctx either; this actor has no live DoTs to attribute).
                     } else {
-                        // Enemy's OWN live HP% (Task 3): enemies are at full HP (or hp 0 → guard to 100).
-                        const enemyActorMaxHp = enemyRuntime.hp;
-                        const enemySelfHpPct =
-                            enemyActorMaxHp > 0
-                                ? (100 * Math.max(0, enemyRuntime.actor.currentHp)) /
-                                  enemyActorMaxHp
-                                : 100;
-                        const enemyTurn = runPlayerTurn({
-                            runtime: enemyRuntime,
-                            // The victim (`tgt`) is the enemy's target — bind it as the `enemy` arg so
-                            // damage/debuffs resolve against it and route to its per-target store.
-                            // Legacy path: tgt === healTarget! (byte-identical). Positional path:
-                            // the selected player actor.
-                            enemy: tgt,
-                            targetId: tgt.id,
-                            statusEngine,
-                            // The TARGET's DoT/bomb/accumulator containers (enemy applications land here).
-                            corrosionEntries: tgt.corrosionEntries,
-                            infernoEntries: tgt.infernoEntries,
-                            pendingBombs: tgt.pendingBombs,
-                            pendingAccumulators: tgt.pendingAccumulators,
-                            enemyDefense: tb.victimDefenceFor(tgt),
-                            enemyHp: tb.victimMaxHpFor(tgt),
-                            // NOTE: unlike the focus/team turns (which force 0 for a selected enemy sink),
-                            // the enemy-turn victim is a REAL player actor with live HP, so its decline
-                            // derives from tgt's actual HP for BOTH the legacy and positional paths.
-                            // Do NOT convert this to a `selected ? 0 : …` ternary.
-                            enemyHpDecline: tb.declineFor(tgt, false),
-                            // No class is carried on a CombatActor → undefined (no enemyType matchup).
-                            enemyType: tb.enemyTypeArg,
-                            bus,
-                            round: r,
-                            // Opposing side from the ENEMY's view = the player team (Task 7). UNION of
-                            // player self-buff names for the enemy's own `enemy-buff` gates. A bare enemy
-                            // has no such gate, so this is inert today — computed for the full-kit enemy.
-                            enemyBuffNames: tb.enemyBuffNamesUnion(),
-                            // This enemy's OWN debuffs (a player ability could land some onto it), keyed
-                            // by THIS actor's id (its per-target store). Empty for the current fixtures —
-                            // no player ability targets enemy attackers — but threaded for the full kit.
-                            selfDebuffNames: ownerDebuffNames(actor.id),
-                            // grantAllyCharges for the enemy walk uses bySide('enemy').grantAllyCharges
-                            // (enemy-team PR3): an enemy supporter running runPlayerTurn grants charges to
-                            // its OWN (enemy) attackers via bySide('enemy').grantAllyCharges (which bumps
-                            // enemyAttackerActors), NEVER the player team — the player side bumps only
-                            // allPlayerActors. Inert for the current synthesized manual enemy (damage-only,
-                            // no ally-charge ability, so runPlayerTurn never calls it → goldens byte-identical),
-                            // but a future full-kit enemy supporter (Hayyan/Graphite/Liberator) now
-                            // accelerates enemy charged bursts.
-                            grantAllyCharges: bySide(actor.side).grantAllyCharges,
-                            healing: healingCtx,
-                            // Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): the enemy
-                            // shares the player healingCtx, so its cast heal/cleanse must EMIT
-                            // heal-performed/cleanse-performed (so player on-enemy-repaired/
-                            // -cleansed reactives fire) WITHOUT crediting any player bucket or
-                            // mutating the heal target. Player/team calls leave this falsy.
-                            healEventOnly: tb.healEventOnly,
-                            selfHpPct: enemySelfHpPct,
-                            // Reports the HEAL TARGET's HP%, not tgt's — when positional selection picks
-                            // a different player as `tgt`, this still tracks the heal target (not the
-                            // struck actor). Per-actor target-HP% is deferred to a later phase; inert
-                            // today (bare enemies have no `hpSubject:'target'` gate).
-                            targetHpPct: healTargetHpPctNow(),
-                        });
+                        const enemyTurn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
                         // Total damage the enemy dealt to the bound target this turn. secondary/
                         // conditional are display sub-buckets ALREADY inside directDamage (do NOT
                         // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
