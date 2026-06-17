@@ -18,7 +18,7 @@ describe('ActorStats — hacking/security', () => {
                 hacking: 120,
                 security: 80,
             },
-        } as any);
+        });
         expect(a.stats.hacking).toBe(120);
         expect(a.stats.security).toBe(80);
     });
@@ -37,7 +37,7 @@ describe('ActorStats — hacking/security', () => {
                 hp: 1,
                 speed: 50,
             },
-        } as any);
+        });
         expect(a.stats.hacking).toBeUndefined();
         expect(a.stats.security).toBeUndefined();
     });
