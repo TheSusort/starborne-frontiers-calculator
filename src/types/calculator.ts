@@ -240,10 +240,14 @@ export interface CombatStatBlock {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** `hacking` required since A1a; `security` optional for back-compat with actor configs predating A2. */
     hacking: number;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
     healModifier?: number; // heal-modifier %, folded into walked team-actor heal casts
+    /** Live debuff-resist stat. Optional — base for effectiveStatsOf.security (A2 Task 2 plumbing;
+     *  no production reader until the dynamic-landing computation in A2 Task 4). */
+    security?: number;
 }
 
 export interface TeamShipConfig {

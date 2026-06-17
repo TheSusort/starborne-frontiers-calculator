@@ -1,4 +1,9 @@
-import { EnemyBaseClass, SelectedGameBuff, TeamActorInput } from '../../types/calculator';
+import {
+    CombatStatBlock,
+    EnemyBaseClass,
+    SelectedGameBuff,
+    TeamActorInput,
+} from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
@@ -344,6 +349,12 @@ export interface EnemyActorInput {
         speed: number;
         defence?: number;
         hp?: number;
+        /** Base hacking (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.hacking
+         *  (base for effectiveStatsOf.hacking). No production reader until landing lands (A2 Task 4). */
+        hacking?: number;
+        /** Base security (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.security
+         *  (base for effectiveStatsOf.security). No production reader until landing lands (A2 Task 4). */
+        security?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -450,6 +461,9 @@ export function buildEnemyPlayerActorRuntime(
             defence: e.stats.defence ?? 0,
             hp: e.stats.hp ?? 0,
             speed: e.stats.speed,
+            // Base hacking/security (A2 Task 2) — base for effectiveStatsOf; unread until landing lands (A2 Task 4).
+            hacking: e.stats.hacking,
+            security: e.stats.security,
         },
         chargeCount: e.chargeCount,
         startCharged: e.startCharged,
@@ -747,15 +761,7 @@ type LeechChannel = 'direct' | 'detonation' | 'corrosion' | 'inferno';
 export type TeamActorEngineInput = TeamActorInput & {
     walk?: {
         shipSkills: ShipSkills;
-        stats: {
-            attack: number;
-            crit: number;
-            critDamage: number;
-            defensePenetration: number;
-            hacking: number;
-            defence: number;
-            hp: number;
-        };
+        stats: CombatStatBlock;
         debuffLandingChance: number;
         selfDotModifier: number;
         defensePenetrationBuff: number;
@@ -813,6 +819,14 @@ export interface CombatEngineInput {
     affinityCritPenalty: number;
     defence: number;
     hp: number;
+    /** Focus attacker's base hacking (A2 Task 2). Optional — base for effectiveStatsOf.hacking on the
+     *  attacker actor. The adapter passes `input.hacking ?? 200` (the OLD landing-formula default); no
+     *  production reader until dynamic landing lands (A2 Task 4). */
+    hacking?: number;
+    /** DPS dummy enemy's base security (A2 Task 2). Optional — base for effectiveStatsOf.security on the
+     *  dummy enemy actor. The adapter passes `input.enemySecurity ?? 100` (the OLD landing-formula default);
+     *  no production reader until dynamic landing lands (A2 Task 4). */
+    enemySecurity?: number;
     allyChargePerRound?: number;
     enemyType?: EnemyBaseClass;
     /** Attacker turn-order speed. Default 100. */
@@ -847,6 +861,10 @@ export interface CombatEngineInput {
             defence?: number;
             /** Enemy's own hp stat. Default 0. Task 9 provides real value. */
             hp?: number;
+            /** Base hacking (A2 Task 2). Optional — base for effectiveStatsOf.hacking; unread until A2 Task 4. */
+            hacking?: number;
+            /** Base security (A2 Task 2). Optional — base for effectiveStatsOf.security; unread until A2 Task 4. */
+            security?: number;
         };
         chargeCount: number;
         startCharged: boolean;
@@ -905,6 +923,14 @@ export interface CombatEngineInput {
             enemyVictim: CombatActor
         ) => { shieldBefore: number; hpDamage: number; barriered: boolean }
     ) => void;
+    /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
+     *  are constructed, so unit tests can assert the plumbed base hacking/security on each actor
+     *  (the bases have no production reader yet). Never set by production code; inert when absent.
+     *  IMPORTANT: the passed array and its CombatActors are LIVE references mutated by the run
+     *  (currentHp, currentShield, etc.) — test callbacks must read any mutable values immediately
+     *  in the callback, not after runCombat returns. Base stats (hacking, security, etc.) are
+     *  never mutated, so existing base-stat assertions are safe to read post-run. */
+    __testTapActors?: (actors: CombatActor[]) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -1066,6 +1092,8 @@ export function runCombat(input: CombatEngineInput): {
         affinityCritPenalty,
         defence,
         hp,
+        hacking,
+        enemySecurity,
         allyChargePerRound,
         enemyType,
         speed,
@@ -1108,7 +1136,17 @@ export function runCombat(input: CombatEngineInput): {
         id: 'attacker',
         side: 'player',
         kind: 'attacker',
-        stats: { attack, crit, critDamage, defensePenetration, defence, hp, speed: speed ?? 100 },
+        stats: {
+            attack,
+            crit,
+            critDamage,
+            defensePenetration,
+            defence,
+            hp,
+            speed: speed ?? 100,
+            // Base hacking (A2 Task 2) — base for effectiveStatsOf.hacking; unread until landing lands (A2 Task 4).
+            hacking,
+        },
         chargeCount,
         startCharged,
         position: input.position,
@@ -1128,6 +1166,8 @@ export function runCombat(input: CombatEngineInput): {
             defence: enemyDefense,
             hp: enemyHp,
             speed: enemySpeed ?? 50,
+            // Base security (A2 Task 2) — base for effectiveStatsOf.security; unread until landing lands (A2 Task 4).
+            security: enemySecurity,
         },
     });
 
@@ -1169,7 +1209,7 @@ export function runCombat(input: CombatEngineInput): {
                       hp: t.walk.stats.hp,
                       speed: t.speed,
                       hacking: t.walk.stats.hacking,
-                      // walk bundle has no `security` field today → leave undefined (a later PR plumbs the input)
+                      security: t.walk.stats.security,
                   }
                 : {
                       attack: 0,
@@ -1569,6 +1609,10 @@ export function runCombat(input: CombatEngineInput): {
     // arrives in a later PR with its first consumer (deferred — unread now =
     // YAGNI/lint); `allActorsById` has now arrived in PR2 (defined just below).
     const allActors: CombatActor[] = [...teamCombatActors, attacker, enemy, ...enemyAttackerActors];
+
+    // TEST-ONLY: hand the full roster out once at construction so unit tests can assert the
+    // plumbed base hacking/security on each actor (A2 Task 2). Inert in production (field never set).
+    input.__testTapActors?.(allActors);
 
     // Combined id→actor map over the unified roster (bySide unification PR2 — first
     // consumer). Unlike allPlayerActorsById (attacker + team only), this includes the

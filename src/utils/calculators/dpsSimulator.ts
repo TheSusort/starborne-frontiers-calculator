@@ -288,6 +288,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinity: input.affinity,
         defence,
         hp,
+        // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
+        // this boundary, threaded onto the attacker/dummy actor bases. No production reader yet (A2 Task 4).
+        hacking,
+        enemySecurity,
         allyChargePerRound,
         enemyType,
         speed,
