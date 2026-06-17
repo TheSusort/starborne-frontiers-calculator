@@ -5,7 +5,7 @@ import type { ConditionContext } from '../abilities/evaluateConditions';
 import { toSimBuffs, toDotAndPenModifiers } from '../calculators/dpsBuffHelpers';
 import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
-import { calculateBuffTotals, payloadToSelectedBuff } from './playerTurn';
+import { calculateBuffTotals, payloadToSelectedBuff } from './buffTotals';
 
 export interface EffectiveStats {
     attack: number;
