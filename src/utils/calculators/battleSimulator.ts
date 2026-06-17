@@ -698,9 +698,15 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         speed: focus.stats.speed,
         // Base hacking/security (A2 Task 4) so the engine's live landing recompute has real
         // inputs for the focus actor and the vestigial dummy enemy. The dummy carries the
-        // representative enemy security, so when the focus falls back to it (non-positional) the
-        // live recompute reproduces `focusLanding` exactly (focus hacking × affinity vs enemyRep
-        // security — the same formula `focusLanding` baked).
+        // representative enemy security (first opponent). The live recompute reproduces `focusLanding`
+        // EXACTLY ONLY in the focus-vs-dummy case — i.e. when the focus's turn target is the dummy
+        // sink (it carries enemyRepSecurity, the same value `focusLanding` baked). When the focus
+        // actually targets a POSITIONED enemy with DIFFERING security, the live recompute resolves
+        // against that ACTUAL target's security (effectiveStatsOf(defender).security) and therefore
+        // DIFFERS from the threaded `focusLanding` scalar even at neutral affinity / no buffs. This is
+        // the intended per-target behaviour (spec: defender = the turn's target), more correct than the
+        // old representative-security threading — covered by the heterogeneous-security team-vs-team
+        // test in twoTeamBattle.test.ts. The threaded `focusLanding` is only the legacy fallback.
         hacking: focus.stats.hacking,
         enemySecurity: enemyRepSecurity,
         position: focus.position,

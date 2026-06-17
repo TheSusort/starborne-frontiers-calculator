@@ -169,8 +169,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     const ENEMY_HP = 1_000_000;
     const ENEMY_SECURITY = 100;
 
-    // Landing chance from the healer's hacking vs the dummy's security (no affinity this
-    // increment): clamp(hacking − 100, 0, 100) / 100.
+    // Landing chance from the healer's hacking vs the dummy's security: clamp(hacking − 100, 0,
+    // 100) / 100. Now ONLY a FALLBACK — the same healer.hacking / ENEMY_SECURITY bases are threaded
+    // onto the focus + dummy actors below so the engine's live per-turn recompute drives landing
+    // (holistic review #1). The healer's own offense is hardwired neutral (affinityDamageModifier 0),
+    // so the live value reproduces this scalar exactly today; this stays as the truly-legacy fallback.
     const debuffLandingChance = Math.min(100, Math.max(0, healer.hacking - ENEMY_SECURITY)) / 100;
 
     // Self-side static folds (defPen / dot from self-buffs) — same discipline as simulateDPS.
@@ -243,6 +246,24 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         defence: healer.defence,
         hp: healer.hp,
         speed: healer.speed,
+        // Base hacking/security (holistic review #1) — thread the SAME values the static
+        // `debuffLandingChance` above bakes (healer.hacking vs the ENEMY_SECURITY constant) onto the
+        // focus (healer) actor and the dummy enemy actor. This makes `liveLandingComputable`
+        // (playerTurn.ts) TRUE for healing-mode landing draws, so the engine's LIVE per-turn
+        // recompute engages here exactly as it does in DPS / battle-sim — applying affinity
+        // UNIFORMLY across all three modes (the ratified decision). Walked team-actor hacking flows
+        // via the walk bundle (deriveTeamEngineActors → engine reads walk.stats.hacking); the dummy's
+        // security covers their landing-vs-dummy too.
+        //
+        // NEUTRAL-ONLY in practice: the healer's own offense is hardwired to neutral affinity
+        // (affinityDamageModifier 0 above) and walked team actors are derived with no enemy affinity,
+        // so the live recompute reproduces the static `debuffLandingChance` byte-for-byte today. The
+        // path is engaged (uniform) and WOULD apply affinity if a healing fixture ever introduced a
+        // non-neutral matchup on the LANDING (self/team) side. Enemy INBOUND debuff landing still
+        // falls back to the per-enemy static `debuffLandingChance` field below (the heal-target actor
+        // carries no security base, so its live path stays dormant — unchanged behaviour).
+        hacking: healer.hacking,
+        enemySecurity: ENEMY_SECURITY,
         enemySpeed: 0,
         healModifier: healer.healModifier,
         role: input.healerRole,

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { effectiveStatsOf, foldActorBuffTotals, effectiveDamageStatsOf } from '../effectiveStats';
+import {
+    effectiveStatsOf,
+    foldActorBuffTotals,
+    effectiveDamageStatsOf,
+    liveDebuffLandingChance,
+} from '../effectiveStats';
 import { foldSpeedBuffPct } from '../engine';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
@@ -522,4 +527,69 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
         expect(dmg.selfDotDamageModifier).toBe(0);
         expect(dmg.totals.outgoingDamageBuff).toBe(scheduledTotals.outgoingDamageBuff);
     });
+});
+
+describe('liveDebuffLandingChance — reproduces the static landing formula with no buffs (holistic review #3)', () => {
+    // The OLD static formula every adapter baked at its input boundary:
+    //   clamp(hacking * (1 + affinityDamageModifier/100) - security, 0, 100) / 100
+    // This locks DIRECTLY (not via a turn-driven run) that liveDebuffLandingChance reduces to it
+    // when no hacking/security buffs are active — the reproduction invariant the DPS / battle-sim /
+    // healing adapters all rely on for byte-identical neutral goldens.
+    const staticFormula = (hacking: number, security: number, affMod: number): number =>
+        Math.min(100, Math.max(0, hacking * (1 + affMod / 100) - security)) / 100;
+
+    // Build an attacker + defender on a SINGLE no-buff status engine (no folds occur for either,
+    // so effectiveStatsOf returns the raw base hacking/security).
+    const buildPair = (attackerHacking: number, defenderSecurity: number) => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        const mkActor = (
+            id: string,
+            stats: { hacking?: number; security?: number }
+        ): CombatActor => ({
+            id,
+            side: id === 'attacker' ? 'player' : 'enemy',
+            kind: id === 'attacker' ? 'attacker' : 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 100,
+                ...stats,
+            },
+            currentHp: 1,
+            shieldPool: 0,
+            turnMeter: 0,
+            charges: 0,
+            chargeCount: 0,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            pendingAccumulators: [],
+        });
+        return {
+            eng,
+            attacker: mkActor('attacker', { hacking: attackerHacking }),
+            defender: mkActor('enemy', { security: defenderSecurity }),
+        };
+    };
+
+    const cases: Array<{ hacking: number; security: number; affMod: number }> = [
+        { hacking: 200, security: 100, affMod: 0 }, // ceiling-clamped (1.0)
+        { hacking: 200, security: 150, affMod: 0 }, // partial (0.5)
+        { hacking: 50, security: 100, affMod: 0 }, // floor-clamped (0)
+        { hacking: 200, security: 230, affMod: 25 }, // affinity advantage flips a resist into a partial
+        { hacking: 200, security: 150, affMod: -25 }, // affinity disadvantage lowers the chance
+    ];
+
+    for (const { hacking, security, affMod } of cases) {
+        it(`hacking ${hacking} / security ${security} / affMod ${affMod}`, () => {
+            const { eng, attacker, defender } = buildPair(hacking, security);
+            const live = liveDebuffLandingChance(eng, new Map(), attacker, defender, affMod);
+            expect(live).toBe(staticFormula(hacking, security, affMod));
+        });
+    }
 });

@@ -957,3 +957,146 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
         expect(deathIds.has('p:p2:1')).toBe(false);
     });
 });
+
+// ===========================================================================
+// Holistic review #2: PER-TARGET debuff landing in a team-vs-team battle.
+// The live recompute resolves landing against effectiveStatsOf(THE TURN'S ACTUAL
+// TARGET).security — NOT a representative (first-opposing) security as the old
+// battle-sim threading did. With HETEROGENEOUS opposing security this is observable:
+// the focus's inflict-debuff lands against the security of the enemy it actually
+// FIRES AT, not against some other enemy's security. Non-vacuous: a NON-ZERO baseline
+// (low-security target → lands every round) THEN the per-target difference (a high-
+// security target on the SAME roster → resists), with the OTHER enemy's security held
+// constant so only the actual target's security can be driving the outcome.
+// ===========================================================================
+
+// A focus skill that BOTH deals damage AND inflicts a finite-duration 'inflict' debuff on
+// its enemy target — the debuff's landing draws the live hacking-vs-security gate.
+const inflictDebuffSkill = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+        ab({
+            type: 'debuff',
+            target: 'enemy',
+            config: {
+                type: 'debuff',
+                buffName: 'Defense Down',
+                parsedEffects: { defense: -10 },
+                stacks: 1,
+                isStackable: false,
+                application: 'inflict',
+                duration: 2,
+            },
+        }),
+    ],
+});
+
+// A positioned enemy with an explicit SECURITY stat (and no offense kit — bare basic attack).
+const enemyWithSecurityAt = (
+    id: string,
+    position: Position,
+    selection: ParsedTarget['selection'],
+    security: number
+): EnemyAttacker =>
+    ({
+        id,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget(selection),
+        pattern: basePattern(),
+        shipSkills: { slots: [basicAttack()] },
+    }) as EnemyAttacker;
+
+describe('Two-team battle — per-target debuff landing resolves against the ACTUAL target (holistic review #2)', () => {
+    // Focus 'attacker' at M4 hacking 200, neutral affinity, fires `front` and inflicts a debuff.
+    // Two enemies on the roster with DIFFERING security: the FRONT-most one is the focus's actual
+    // target; the other (held at security 100 throughout) is a decoy that the OLD representative-
+    // security threading would have measured against had it been enemyTeam[0].
+    const focusInflictBattle = (frontTargetSecurity: number): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [inflictDebuffSkill()] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 6,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        // Static fallback scalar 1.0 — DEMOTED by the live recompute when both bases are present.
+        // If the live path ever failed to engage, every round would land (1.0); the assertions
+        // below (resist at high target security) would then fail — so this also guards engagement.
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        hacking: 200, // focus base hacking → live recompute has a real attacker input
+        // The dummy/non-positional sink security (irrelevant here: the focus always anchors a
+        // POSITIONED enemy, so effectiveStatsOf(defender).security comes from that enemy actor).
+        enemySecurity: 100,
+        healTargetId: 'attacker',
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        // Two enemies: the FRONT-most (focus's actual target) carries the parameterized security;
+        // the decoy stays at security 100. enemy-front anchors `front`; enemy-back sits at M1.
+        enemyAttackers: [
+            enemyWithSecurityAt('enemy-front', 'M4', 'front', frontTargetSecurity),
+            enemyWithSecurityAt('enemy-back', 'M1', 'back', 100),
+        ],
+    });
+
+    const countAppliedOnTarget = (input: CombatEngineInput, targetId: string): number => {
+        // Own bus subscription — the shared `run()` helper does NOT tap `debuff-applied`.
+        const bus = createEventBus();
+        const applied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
+        bus.on('debuff-applied', (e) => applied.push(e));
+        runCombat({ ...input, bus });
+        return applied.filter((e) => e.targetId === targetId).length;
+    };
+
+    it('baseline: a LOW-security actual target lands the inflict debuff every round (non-vacuous)', () => {
+        idc = 0;
+        // Front target security 100 vs focus hacking 200 → live chance clamp(200-100)/100 = 1.0 →
+        // lands all 6 rounds. The decoy enemy-back is also security 100 but is never targeted.
+        const landed = countAppliedOnTarget(focusInflictBattle(100), 'enemy-front');
+        expect(landed).toBe(6);
+    });
+
+    it('the SAME roster with a HIGH-security actual target resists — landing follows the TARGET, not a representative', () => {
+        idc = 0;
+        // Front target security 300 vs focus hacking 200 → live chance clamp(200-300)/100 = 0 →
+        // NEVER lands, EVEN THOUGH the decoy enemy-back is still security 100 (which under the OLD
+        // representative-security threading could have governed). Proves landing resolves against
+        // the ACTUAL target's security.
+        const landed = countAppliedOnTarget(focusInflictBattle(300), 'enemy-front');
+        expect(landed).toBe(0);
+    });
+
+    it('a PARTIAL-security actual target lands at the per-target rate (0.5 → 3 of 6)', () => {
+        idc = 0;
+        // Front target security 150 vs focus hacking 200 → live chance clamp(200-150)/100 = 0.5 →
+        // the deterministic RateGate lands on calls 2,4,6 → exactly 3 of 6 rounds. The decoy stays
+        // at security 100, so only the actual target's 150 can produce this 0.5 rate.
+        const landed = countAppliedOnTarget(focusInflictBattle(150), 'enemy-front');
+        expect(landed).toBe(3);
+    });
+});

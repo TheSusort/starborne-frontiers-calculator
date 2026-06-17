@@ -1021,3 +1021,76 @@ describe('Task 10: enemy debuff landing chance from hacking vs heal-target secur
         expect('debuffLandingChance' in (e2 as object)).toBe(false);
     });
 });
+
+// ── Holistic review #1: healing mode engages the LIVE per-turn landing recompute ──
+// Before the fix, simulateHealing passed NO `hacking` / `enemySecurity` to runCombat, so
+// `liveLandingComputable` (playerTurn.ts) was FALSE for every healing-mode actor → landing fell
+// back to the STATIC threaded scalar (computed once at the boundary, with NO buff fold). After the
+// fix the healer's hacking + the ENEMY_SECURITY constant are threaded onto the focus + dummy
+// actors, so the engine's live recompute drives the healer's OWN debuff landing — exactly as in
+// DPS / battle-sim (the ratified UNIFORM-affinity decision). This is observable: a self Hacking
+// Down buff on the healer FOLDS into effectiveStatsOf(focus).hacking and lowers landing — which
+// the old static path (no fold) could NOT do.
+describe('Holistic review #1: healing mode engages the live debuff-landing recompute', () => {
+    // A heal + an 'inflict' Defense Down debuff on the dummy enemy. The debuff's landing draws the
+    // live hacking-vs-(dummy)security gate. We capture `debuff-applied` to count landed rounds.
+    const healPlusInflictSkills = (): ShipSkills =>
+        healSkills([
+            ab({ type: 'heal', target: 'self', config: { type: 'heal', pct: 10, basis: 'hp' } }),
+            ab({
+                type: 'debuff',
+                target: 'enemy',
+                config: {
+                    type: 'debuff',
+                    buffName: 'Defense Down',
+                    parsedEffects: { defense: -10 },
+                    stacks: 1,
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 2,
+                },
+            }),
+        ]);
+
+    const countHealerApplied = (input: HealingSimulationInput): number => {
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => events.push(e));
+        simulateHealing({ ...input, bus });
+        return events.filter((e) => e.type === 'debuff-applied').length;
+    };
+
+    it('baseline: healer hacking 200 vs dummy security 100 → its inflict debuff lands every round', () => {
+        idCounter = 0;
+        // clamp(200 - 100)/100 = 1.0 → lands all 6 rounds (non-vacuous baseline).
+        const landed = countHealerApplied(
+            BASE({ rounds: 6, healer: { ...HEALER }, shipSkills: healPlusInflictSkills() })
+        );
+        expect(landed).toBe(6);
+    });
+
+    it('a self Hacking Down buff on the healer FOLDS into live hacking and stops the debuff landing', () => {
+        idCounter = 0;
+        // Hacking Down -120 → effective hacking 80 < dummy security 100 → live chance 0 → NEVER
+        // lands. Only possible because the live recompute (now engaged) folds the buff; the old
+        // static scalar (1.0, no fold) would still have landed every round. The contrast vs the
+        // baseline above is the engagement proof.
+        const landed = countHealerApplied(
+            BASE({
+                rounds: 6,
+                healer: { ...HEALER },
+                shipSkills: healPlusInflictSkills(),
+                selfBuffs: [
+                    {
+                        id: 'hd1',
+                        buffName: 'Hacking Down',
+                        stacks: 1,
+                        parsedEffects: { hacking: -120 },
+                        isStackable: false,
+                    },
+                ],
+            })
+        );
+        expect(landed).toBe(0);
+    });
+});
