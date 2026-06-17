@@ -67,7 +67,9 @@ Remove:
   (`dpsSimulator.ts:187`) + the field on the A.3 `teamActorWalk.ts` synthesis.
 - **Runtime + param:** `runtime.debuffLandingChance` (`PlayerActorRuntime`, and the enemy runtime
   shape) + the `playerTurn` arg (`:156/:630/:709`).
-- Any `healingEngineAdapter.ts` threading of the scalar.
+- **Healing adapter (definite, not optional):** `healingEngineAdapter.ts` computes the scalar at
+  `:177` (`Math.min(100, Math.max(0, healer.hacking - ENEMY_SECURITY)) / 100`) and threads it at
+  `:221`/`:238`. Remove all three; healing goldens are the parity gate (already named in §7).
 
 **Closure timing watch-point (the one correctness subtlety):** each closure ends
 `runtime.liveDebuffLandingChance ?? <scalar>`. Replace with `runtime.liveDebuffLandingChance`, but
@@ -98,7 +100,8 @@ duplicated direct field read. Byte-identical.
     `clamp(hacking − security, 0, 100)/100 = 0` (e.g. hacking 0, or hacking 100 vs security 200).
     Sites: `enemyDebuffLandingChance`, `enemyBuffSelfDebuffGate`, `resistedEnemyDebuffsRoundEffects`,
     `resistedEnemyDotsRoundEffects`, and the focus fixtures in `dpsSimulator`/`triggers`.
-  - `0.5` → hacking 150 vs security 100 → 0.5.
+  - `0.5` → hacking 150 vs security 100 → 0.5. (This single `0.5` fixture lives in `triggers.test.ts`,
+    which also carries `0` fixtures.)
   The plan enumerates all 7 with file:line + exact stat substitution. **If more than 7 non-default
   fixtures surface during execution, STOP and surface the fuller list before converting.**
 
