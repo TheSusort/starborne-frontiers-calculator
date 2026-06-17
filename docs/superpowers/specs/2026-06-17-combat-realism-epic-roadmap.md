@@ -33,6 +33,7 @@ the gaps now are *which mechanics it simulates*, not *how it routes sides*.
 | **F** | Pre-fight stat modifiers | Squad leaders + pre-fight passives (Lionheart) establish combat-entry base stats. |
 | **G** | Damage-reaction mechanics | Reflect (new) + counterattack condition/AoE refinements. |
 | **H** | Shield system | Per-actor shield grant (beyond heal-target) + surface shield gains/pool in the sim + shield-pen 80/20 split + max-shield=maxHP. Sources extend via D. |
+| **I** | Conditional-aura fidelity | buffName-specific condition gates (e.g. "vs enemies with Concentrate Fire" ≠ "any debuff") + per-target conditional damage (Lodolite) + conditional-recipient auras (Panguan "stealthed allies +40%"). Overlaps E; rides A. |
 
 ### Dependency notes
 - **A is the backbone.** A's `effectiveStatsOf` = **pre-fight base (F) + in-fight deltas (A)**;
@@ -96,6 +97,14 @@ the gaps now are *which mechanics it simulates*, not *how it routes sides*.
   a gear set + some passives.
 - **Counterattack** (partially modeled via on-attacked → damage reactive): Nyxen counters only
   *if shielded*; Centurion counters *including all adjacent allies*.
+
+### Conditional passive auras / "hidden buffs" (I)
+- The `conditionalBonusPct` / `conditionalDamage` machinery exists, but gates are imprecise:
+  **enemy-debuff conditions are name-agnostic** (any debuff counts, not a specific one), and
+  conditional-recipient auras gated on ally status (Stealth) aren't wired.
+- Examples: **Lodolite** — team deals increased damage vs enemies carrying **Concentrate Fire**
+  (per-victim, buffName-specific); **Panguan** — all **stealthed** allies get +40% damage
+  (recipient gated on live ally Stealth).
 
 ### Already covered (do not re-model)
 extra-turn-on-kill (Liberator, once/round), leech (damage-leech heals/shields), Cheat Death as
