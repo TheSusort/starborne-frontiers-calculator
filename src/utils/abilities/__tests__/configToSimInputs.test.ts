@@ -1,9 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { buildDefaultShipSkills, configShipSkillsToSimInputs } from '../configToSimInputs';
+import {
+    buildDefaultShipSkills,
+    buildEmptyShipSkills,
+    configShipSkillsToSimInputs,
+} from '../configToSimInputs';
 import { ShipSkills } from '../../../types/abilities';
 import { ParsedBuffEffects } from '../../../types/calculator';
 
 describe('configToSimInputs', () => {
+    describe('buildEmptyShipSkills', () => {
+        it('returns a kit with no slots and therefore no abilities', () => {
+            const kit = buildEmptyShipSkills();
+            expect(kit.slots).toEqual([]);
+        });
+    });
+
     describe('buildDefaultShipSkills', () => {
         it('returns one active slot with a single damage ability multiplier 100', () => {
             const result = buildDefaultShipSkills();
