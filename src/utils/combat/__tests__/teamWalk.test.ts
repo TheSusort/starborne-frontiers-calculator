@@ -521,6 +521,67 @@ describe('walked team actors (Task 4)', () => {
         expect(withLegacy.rounds.every((r) => r.teamDamage === 0)).toBe(true);
         expect(withLegacy.summary.teamTotalDamage).toBeUndefined();
     });
+
+    // 11. A.3 routing coverage: a SLOWER walked team actor whose timed enemy debuff RESISTS must
+    //     land in the SAME round's `resistedEnemyDebuffs` row (the slower-team same-round path).
+    //
+    //     When the team acts AFTER the attacker (speed 80 < attacker 100), `focusTurns` already
+    //     contains the attacker's turn for this round. The engine appends the team's resisted
+    //     applications to `focusTurns[last].resistedEnemyDebuffs`, which becomes the round row's
+    //     `resistedEnemyDebuffs`. This is the invariant the A.3 migration removed coverage for
+    //     (buff-only actors now always land at 1.0 — they never resist — so the routing code at
+    //     engine.ts ~3244 was left without a test).
+    //
+    //     To force a deterministic resist: set the team's hacking to 50 vs enemySecurity 100
+    //     (neutral affinity). Live landing = clamp(50 − 100, 0, 100) / 100 = 0 → always resists.
+    //     The static scalar (teamLandingChance computed in deriveTeamEngineActors) also = 0, so
+    //     both the per-turn live gate and the fallback path give the same result.
+    //
+    //     Turn order per round: attacker (100) → team (80) → enemy (50).
+    //     Since the team acts after the attacker, its resist is routed to the LAST attacker turn's
+    //     list → visible in `result.rounds[i].resistedEnemyDebuffs` from round 1 onward.
+    it('a slower walked team actor with a resisted timed enemy debuff lands in the same-round resistedEnemyDebuffs row', () => {
+        // A walked team ship carrying one inflict-type timed enemy debuff.
+        // hacking: 50 → landing chance 0 vs enemySecurity 100 → always resists.
+        const slowerTeam = walkedTeam(
+            {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [debuffAbility('Armor Crack', 3, { defense: -20 }, 'acd')],
+                    },
+                ],
+            },
+            {
+                id: 'tslow',
+                speed: 80, // SLOWER than the attacker (100) → attacker acts first each round
+                stats: teamStats({ hacking: 50 }), // hacking 50 vs enemySecurity 100 → rate 0
+            }
+        );
+
+        const result = simulateDPS(
+            baseInput({
+                // enemySecurity 100 (default in baseInput) vs team hacking 50 → landing = 0.
+                teamActors: [slowerTeam],
+                rounds: 4,
+            })
+        );
+
+        const hasResisted = (i: number) =>
+            result.rounds[i].resistedEnemyDebuffs.some((b) => b.buffName === 'Armor Crack');
+        const hasActive = (i: number) =>
+            result.rounds[i].activeEnemyDebuffs.some((b) => b.buffName === 'Armor Crack');
+
+        // Every round: the team acts AFTER the attacker → its resist appends to the last
+        // attacker turn's resistedEnemyDebuffs in the SAME round (the slower-team same-round
+        // routing). The debuff never lands so it never appears in activeEnemyDebuffs.
+        for (let i = 0; i < 4; i++) {
+            // The resisted application must appear in the same round's resistedEnemyDebuffs row.
+            expect(hasResisted(i)).toBe(true);
+            // A resist means the debuff never activated → not in activeEnemyDebuffs.
+            expect(hasActive(i)).toBe(false);
+        }
+    });
 });
 
 describe('ally-target routing (Task 5)', () => {
