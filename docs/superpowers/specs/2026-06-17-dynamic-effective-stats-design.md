@@ -70,7 +70,9 @@ effectiveStatsOf(actor): EffectiveStats
 ```
 
 - Computed per round (speeds/landing can change as buffs expire), cached per `(actor, round)`.
-- `EffectiveStats` carries every stat in the canonical list the engine consumes.
+- `EffectiveStats` carries every stat in the canonical list the engine consumes. `hp` is a
+  **pure pass-through** value (base max HP) — there is no in-fight HP fold path; its presence in
+  the snapshot must not be read as implying one.
 - `calculateBuffTotals` is extended to fold **hacking** and **security** (stat keys already exist
   in `StatName`); flat-vs-percentage handling follows the existing convention
   (`PERCENTAGE_ONLY_STATS`; hacking/security are flexible).
@@ -84,8 +86,10 @@ effectiveStatsOf(actor): EffectiveStats
 | **A1** | Add hacking/security to `ActorStats`; extend `calculateBuffTotals` to fold them; build `effectiveStatsOf` + `EffectiveStats`; **migrate all existing consumers** (damage scalars, defence modifier, speed/turn-order, HP%/decline) to read it. No new dynamic behavior. | **Byte-identical** — reproduces today's piecemeal values exactly (hacking/security folded but not yet consumed). |
 | **A2** | **Light up the newly-dynamic stats:** dynamic debuff landing/resist from effective hacking/security; add affinity ±25% to the hacking roll + enforce the disadvantage "non-hacking effects not applied" rule; sweep any remaining stat that should be dynamic. (Shield-pen *split* is sub-project H.) | **Audited churn** — landing/resist shift only when a hacking/security buff is active or affinity is non-neutral on a hacking effect. Synthetic goldens that use none of these stay byte-identical; every moved snapshot explained. |
 
-A1 may sub-split if the consumer migration is large (e.g. A1a accessor + fold written alongside
-with no reader = byte-identical à la PR5a, then A1b flip consumers).
+**A1 sub-split decision is made up-front during planning**, based on the consumer count the §5
+exhaustive sweep surfaces: if migration touches many sites, split into A1a (accessor + fold
+written **alongside, with no reader** → trivially byte-identical, the PR5a pattern) then A1b
+(flip consumers one group at a time). Decide before implementation, not mid-stream.
 
 ## 5. Stat-by-stat consumer map (to verify exhaustively during A1)
 
