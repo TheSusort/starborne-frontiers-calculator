@@ -585,19 +585,8 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
     const enemyRepAffinity = enemyPlans[0]?.affinity;
     const playerRepAffinity = playerPlans[0]?.affinity;
 
-    // Landing chance from an actor's hacking vs the opposing security. baseStats carry a
-    // `security` field; the enemy/player representative security drives the clamp. Default 100.
+    // Representative enemy security (threaded onto the dummy target for live landing recompute).
     const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
-    const playerRepSecurity = input.playerTeam[0]?.ship.baseStats.security ?? 100;
-
-    const landingChance = (
-        plan: PlacementPlan,
-        aff: ReturnType<typeof computeAffinityModifiers>,
-        defenderSecurity: number
-    ): number => {
-        const effectiveHacking = plan.stats.hacking * (1 + aff.damageModifier / 100);
-        return Math.min(100, Math.max(0, effectiveHacking - defenderSecurity)) / 100;
-    };
 
     const hasCharged = (plan: PlacementPlan): boolean => {
         const charged = selectFiringSkill(plan.shipSkills, 'charged');
@@ -610,7 +599,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         throw new Error('simulateBattle: playerTeam must contain at least one placement');
     }
     const focusAff = computeAffinityModifiers(focus.affinity, enemyRepAffinity);
-    const focusLanding = landingChance(focus, focusAff, enemyRepSecurity);
 
     // ----- The rest of the player team → walked teamActors -----
     const teamActors: TeamActorEngineInput[] = playerPlans.slice(1).map((plan) => {
@@ -628,7 +616,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
-                debuffLandingChance: landingChance(plan, aff, enemyRepSecurity),
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
@@ -653,7 +640,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
-                debuffLandingChance: landingChance(plan, aff, playerRepSecurity),
                 position: plan.position,
                 target: plan.targeting?.target,
                 pattern: plan.targeting?.pattern,
@@ -684,7 +670,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: focusLanding,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: hasCharged(focus),
@@ -696,17 +681,12 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         defence: focus.stats.defence,
         hp: focus.stats.hp,
         speed: focus.stats.speed,
-        // Base hacking/security (A2 Task 4) so the engine's live landing recompute has real
-        // inputs for the focus actor and the vestigial dummy enemy. The dummy carries the
-        // representative enemy security (first opponent). The live recompute reproduces `focusLanding`
-        // EXACTLY ONLY in the focus-vs-dummy case — i.e. when the focus's turn target is the dummy
-        // sink (it carries enemyRepSecurity, the same value `focusLanding` baked). When the focus
-        // actually targets a POSITIONED enemy with DIFFERING security, the live recompute resolves
-        // against that ACTUAL target's security (effectiveStatsOf(defender).security) and therefore
-        // DIFFERS from the threaded `focusLanding` scalar even at neutral affinity / no buffs. This is
-        // the intended per-target behaviour (spec: defender = the turn's target), more correct than the
-        // old representative-security threading — covered by the heterogeneous-security team-vs-team
-        // test in twoTeamBattle.test.ts. The threaded `focusLanding` is only the legacy fallback.
+        // Base hacking/security so the engine's live landing recompute has real inputs for
+        // the focus actor and the vestigial dummy enemy. The dummy carries the representative
+        // enemy security (first opponent). When the focus targets a POSITIONED enemy with
+        // differing security, the live recompute resolves against that actual target's security
+        // and therefore differs from the representative-security basis — the intended per-target
+        // behaviour covered by the heterogeneous-security team-vs-team test in twoTeamBattle.test.ts.
         hacking: focus.stats.hacking,
         enemySecurity: enemyRepSecurity,
         position: focus.position,

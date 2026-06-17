@@ -133,7 +133,6 @@ const teamAttackerAt = (
             defence: 0,
             hp,
         },
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
@@ -185,7 +184,6 @@ const battle = (opts: {
     numRounds: 3,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -1038,7 +1036,6 @@ describe('Two-team battle — per-target debuff landing resolves against the ACT
         // Static fallback scalar 1.0 — DEMOTED by the live recompute when both bases are present.
         // If the live path ever failed to engage, every round would land (1.0); the assertions
         // below (resist at high target security) would then fail — so this also guards engagement.
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,

@@ -143,7 +143,6 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             attack: 800,
             landsTimedEnemyApplication: () => true,
             debuffLandingGate: (_rate: number) => true,
-            debuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
     // defence/maxHp/heal fields are sentinels not read by the damage branch.
@@ -305,7 +304,6 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             defence: 0,
             hp: 10000,
             healModifier: 0,
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -526,7 +524,6 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             defence: 0,
             hp: 10000,
             healModifier: 0,
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -653,7 +650,6 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,

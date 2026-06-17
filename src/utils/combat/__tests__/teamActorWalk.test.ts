@@ -20,7 +20,6 @@ describe('synthesizeBuffOnlyWalk', () => {
         expect(w.stats.defence).toBe(0);
         expect(w.stats.hacking).toBe(200);
         expect(w.affinityDamageModifier).toBe(0);
-        expect(w.debuffLandingChance).toBe(1);
     });
 
     it('sets hasChargedSkill from chargeCount (reproduces the legacy charge cadence gate)', () => {

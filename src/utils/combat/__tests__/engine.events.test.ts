@@ -53,7 +53,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1, // hacking 250 vs security 100 → clamps to 100%
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: true,
@@ -541,7 +540,6 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 startCharged: true,
                 chargeCount: 99,
                 numRounds: 5,
-                debuffLandingChance: 1,
             })
         );
 
@@ -648,7 +646,7 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
 
     // Case 3: dot-applied carries sourceId 'attacker'.
     it('dot-applied carries sourceId "attacker"', () => {
-        const { events } = collect(baseInput({ numRounds: 3, debuffLandingChance: 1 }));
+        const { events } = collect(baseInput({ numRounds: 3 }));
         const dotApplied = events.filter((e) => e.type === 'dot-applied');
         expect(dotApplied.length).toBeGreaterThan(0);
         for (const e of dotApplied) {
@@ -729,7 +727,6 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
             baseInput({
                 shipSkills: bombSkills(),
                 numRounds: 4,
-                debuffLandingChance: 1,
             })
         );
 
@@ -778,7 +775,6 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 numRounds: 5,
-                debuffLandingChance: 1,
                 teamActors: [
                     {
                         id: 't1',
@@ -847,7 +843,6 @@ describe('accumulate-detonate display in activeEnemyDebuffs', () => {
             numRounds: 8,
             selfBuffs: [],
             enemyDebuffs: [],
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             hasChargedSkill: true,
@@ -1123,7 +1118,6 @@ const healBase = (): CombatEngineInput => ({
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,

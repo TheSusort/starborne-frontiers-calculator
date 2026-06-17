@@ -285,7 +285,6 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         numRounds: 8,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: focusChargeCount >= 1,
@@ -297,7 +296,7 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         hp: 1_000_000_000, // huge focus HP so the enemy's attack-1 pokes never destroy it
         speed: 100,
         healTargetId: 'attacker', // required for enemyAttackers; the focus is the heal target
-        teamActors: deriveTeamEngineActors([graphiteTeammate(amount)], 100, undefined),
+        teamActors: deriveTeamEngineActors([graphiteTeammate(amount)], undefined),
         enemyAttackers: [enemy],
     });
 
@@ -348,7 +347,7 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         };
         const selfControl = runCombat({
             ...buildInput(2, stealthEnemy(), 3),
-            teamActors: deriveTeamEngineActors([selfTeammate], 100, undefined),
+            teamActors: deriveTeamEngineActors([selfTeammate], undefined),
         });
 
         const grantCharged = firstChargedRound(allAlliesGrant.rounds);
@@ -473,7 +472,6 @@ describe('enemy-side Hayyan ally-charge acceleration', () => {
         numRounds: 6,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,
@@ -595,7 +593,6 @@ describe('enemy-side Graphite (dormant — no player Stealth)', () => {
         numRounds: 6,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,

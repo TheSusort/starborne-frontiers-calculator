@@ -31,7 +31,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     numRounds: 1,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,

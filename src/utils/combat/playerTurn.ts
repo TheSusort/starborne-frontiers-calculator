@@ -153,13 +153,11 @@ export interface PlayerActorRuntime {
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier: number;
     // Per-actor adapter-derived rates
-    debuffLandingChance: number;
     /** LIVE per-target debuff-landing chance (0..1) for THIS actor, set at turn start by
      *  runPlayerTurn from current effective hacking-vs-target-security + affinity (A2 Task 4).
      *  Read by the REACTIVE (triggers.ts) landing path via the runtime's landing closure /
      *  debuffLandingGate so an owner's reactive inflictions draw against the live chance too.
-     *  Undefined until the actor's first turn (or when its hacking/security base is absent) →
-     *  callers fall back to the static `debuffLandingChance`. */
+     *  Undefined until the actor's first turn — callers use `?? 1` as a neutral default. */
     liveDebuffLandingChance?: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
@@ -627,8 +625,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         defensePenetration,
         defensePenetrationBuff,
         selfDotModifier,
-        // debuffLandingChance destructure removed (A-closeout): the live path is the sole
-        // producer; the runtime field itself is deleted in Task 2.
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
@@ -690,11 +686,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
     // actor's affinity) vs the TURN TARGET's effective security. `liveDebuffLandingChance` is
     // self-sufficient — it defaults a missing attacker hacking → 200 and target security → 100,
-    // reproducing the old static formula for base-less/neutral actors — so the computation is
-    // unconditional and the static `debuffLandingChance` scalar is no longer read. The acting
-    // actor's `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/
-    // security buffs that move landing) fold lookup-free from the status engine. Cached once per
-    // turn here — every landing consumer below reads this value.
+    // reproducing the old static formula for base-less/neutral actors. The acting actor's
+    // `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/security
+    // buffs that move landing) fold lookup-free from the status engine. Cached once per turn here
+    // — every landing consumer below reads this value.
     const liveLandingChance = liveDebuffLandingChance(
         statusEngine,
         selfBuffLookup,

@@ -365,10 +365,6 @@ export interface EnemyActorInput {
     affinityCritCap?: number;
     /** Pre-resolved crit penalty (from computeAffinityModifiers). Default 0 (neutral). */
     affinityCritPenalty?: number;
-    /** Pre-computed debuff landing chance (0..1) for THIS enemy's inflictions on the tank.
-     *  Computed by the healing adapter from enemy hacking vs heal-target security. Omitted →
-     *  100% (1) for backward compatibility (every existing test/the dummy path omits it). */
-    debuffLandingChance?: number;
     /** Board position of this enemy (positional plumbing — set but not yet consumed). */
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
@@ -506,7 +502,6 @@ export function buildEnemyPlayerActorRuntime(
         defence: e.stats.defence ?? 0,
         hp: e.stats.hp ?? 0,
         healModifier: 0,
-        debuffLandingChance: e.debuffLandingChance ?? 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: resolvedDamageMod,
@@ -765,7 +760,6 @@ export type TeamActorEngineInput = TeamActorInput & {
     walk?: {
         shipSkills: ShipSkills;
         stats: CombatStatBlock;
-        debuffLandingChance: number;
         selfDotModifier: number;
         defensePenetrationBuff: number;
         affinityDamageModifier: number;
@@ -810,9 +804,8 @@ export interface CombatEngineInput {
      *  their own turns via the status engine's teamSources, NOT merged into selfBuffs/
      *  enemyDebuffs (no-double-count). */
     teamActors?: TeamActorEngineInput[];
-    // Rate/fold fields below (debuffLandingChance, selfDotModifier, defensePenetrationBuff)
+    // Rate/fold fields below (selfDotModifier, defensePenetrationBuff)
     // are pre-derived by the adapter (simulateDPS) — pass the resolved values, not raw hacking.
-    debuffLandingChance: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
     hasChargedSkill: boolean;
@@ -878,10 +871,6 @@ export interface CombatEngineInput {
         affinityCritCap?: number;
         /** Pre-resolved crit penalty vs the heal target. Default 0 (neutral). */
         affinityCritPenalty?: number;
-        /** Pre-computed debuff landing chance (0..1) for THIS enemy's inflictions on the tank
-         *  (computed by the healing adapter from enemy hacking vs heal-target security).
-         *  Omitted → 100% (1) for backward compatibility. */
-        debuffLandingChance?: number;
         /** Board position of this enemy attacker (positional plumbing — set but not yet consumed). */
         position?: Position;
         /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
@@ -957,15 +946,14 @@ export interface EnemyRoundEffects {
      *  NAMES ONLY for display — never folded into any sim value. Empty when no DoTs are active. */
     dots: EnemyDoTState[];
     /** TIMED debuffs this enemy attacker ATTEMPTED to inflict on the heal target this round but
-     *  that were RESISTED by the hacking-vs-security landing roll (per-enemy `debuffLandingChance`).
+     *  that were RESISTED by the live hacking-vs-security landing roll.
      *  De-duped by buffName WITHIN this enemy. NAMES ONLY for display — never folded into any sim
      *  value. Empty when every attempted debuff landed (or the enemy attempted none). */
     resistedDebuffs: ActiveBuff[];
     /** DoTs this enemy attacker ATTEMPTED to inflict on the heal target this round but that were
-     *  RESISTED by the hacking-vs-security landing roll (per-enemy `debuffLandingChance`; the whole
-     *  turn's DoTs share one draw). Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display —
-     *  never folded into any sim value. Empty when the turn's DoTs landed (or the enemy attempted
-     *  none). */
+     *  RESISTED by the live hacking-vs-security landing roll (the whole turn's DoTs share one draw).
+     *  Summed per type+tier like `dots`. NAMES/COUNTS ONLY for display — never folded into any sim
+     *  value. Empty when the turn's DoTs landed (or the enemy attempted none). */
     resistedDots: EnemyDoTState[];
 }
 
@@ -1084,7 +1072,6 @@ export function runCombat(input: CombatEngineInput): {
         numRounds,
         selfBuffs,
         enemyDebuffs,
-        debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
         hasChargedSkill,
@@ -1377,7 +1364,6 @@ export function runCombat(input: CombatEngineInput): {
         defence,
         hp,
         healModifier: input.healModifier ?? 0,
-        debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
         affinityDamageModifier,
@@ -1462,7 +1448,6 @@ export function runCombat(input: CombatEngineInput): {
             defence: w.stats.defence,
             hp: w.stats.hp,
             healModifier: w.healModifier ?? 0,
-            debuffLandingChance: w.debuffLandingChance,
             selfDotModifier: w.selfDotModifier,
             defensePenetrationBuff: w.defensePenetrationBuff,
             affinityDamageModifier: w.affinityDamageModifier,

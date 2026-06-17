@@ -140,7 +140,6 @@ const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput 
     numRounds: 5,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -335,7 +334,6 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
             stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
             chargeCount: 0,
             startCharged: false,
-            debuffLandingChance: 1,
             shipSkills: debuffEnemySkills('Def Down', 1),
         }) as EnemyAttacker;
 
@@ -472,7 +470,6 @@ describe('Case 4 — invariant: non-heal-target actors have empty debuff stores 
             stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
             chargeCount: 0,
             startCharged: false,
-            debuffLandingChance: 1,
             shipSkills: debuffEnemySkills('Def Down', 1),
         }) as EnemyAttacker;
 
@@ -596,7 +593,6 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
             stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
             chargeCount: 0,
             startCharged: false,
-            debuffLandingChance: 1,
             position: 'M4' as Position,
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -624,7 +620,6 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
                 // Very high HP: 200 rounds of attack:1 with no defence never kills it.
                 hp: 500_000,
             },
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -649,7 +644,6 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,

@@ -220,7 +220,6 @@ const BASE = (enemyAttacker: EnemyAttacker): CombatEngineInput => ({
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,

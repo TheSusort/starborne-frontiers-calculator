@@ -69,7 +69,6 @@ function makeRuntime(skills: ShipSkills, attackStat = 10000): PlayerActorRuntime
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: 0,

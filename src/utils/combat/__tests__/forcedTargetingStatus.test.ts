@@ -52,9 +52,7 @@ describe('buildForcedTargetingStatus', () => {
     });
 });
 
-const timedProvoke = (
-    casterId?: string
-): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+const timedProvoke = (casterId?: string): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
     payload: { buffName: 'Provoke', stacks: 1, parsedEffects: {} },
     side: 'enemy',
     sourceSlot: 'active',

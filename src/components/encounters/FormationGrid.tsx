@@ -107,7 +107,10 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     };
 
     return (
-        <div className={`grid p-4 py-6 !mt-auto ${mirrored ? 'mr-[9.5%]' : 'ml-[9.5%]'}`} role="grid">
+        <div
+            className={`grid p-4 py-6 !mt-auto ${mirrored ? 'mr-[9.5%]' : 'ml-[9.5%]'}`}
+            role="grid"
+        >
             {rows.map((row, rowIndex) => (
                 <div
                     key={rowIndex}

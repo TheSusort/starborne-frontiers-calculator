@@ -50,7 +50,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     numRounds: 6,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -118,7 +117,6 @@ describe('A.3 equivalence — buff-only team actor applies both debuff sources',
         const { events } = collect(
             baseInput({
                 numRounds: 4,
-                debuffLandingChance: 1,
                 teamActors: [
                     {
                         id: 'support-1',

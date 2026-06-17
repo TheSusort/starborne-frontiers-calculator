@@ -89,7 +89,6 @@ const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -127,7 +126,7 @@ describe('A2 Task 2 — base hacking/security on every actor', () => {
                 },
             },
         ];
-        const engineTeam = deriveTeamEngineActors(teamActors, 100, undefined);
+        const engineTeam = deriveTeamEngineActors(teamActors, undefined);
         // The walk bundle must carry the security threaded from CombatStatBlock.security.
         expect(engineTeam?.[0].walk?.stats.security).toBe(65);
         expect(engineTeam?.[0].walk?.stats.hacking).toBe(175);

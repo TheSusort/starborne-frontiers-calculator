@@ -90,7 +90,6 @@ const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput 
     numRounds: 4,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,

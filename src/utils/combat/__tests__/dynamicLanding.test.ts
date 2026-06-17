@@ -129,7 +129,6 @@ function makeRuntime(opts: RuntimeOpts = {}): PlayerActorRuntime {
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: 1, // inert default (live path is sole producer; field removed in Task 2)
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: affMod,

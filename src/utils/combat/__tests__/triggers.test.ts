@@ -38,7 +38,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     numRounds: 8,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1, // 100% landing
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: true,
@@ -2520,7 +2519,6 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
             actor: { id: 'attacker' } as CombatActor,
             landsTimedEnemyApplication: () => true,
             debuffLandingGate: (_rate: number) => true,
-            debuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
     const makeDebuffIntent = (counterTargetId?: string): Intent => ({
@@ -2761,7 +2759,6 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
                         // landsTimedEnemyApplication returns false → resist path
                         landsTimedEnemyApplication: () => false,
                         debuffLandingGate: (_rate: number) => false,
-                        debuffLandingChance: 1,
                     } as unknown as PlayerActorRuntime,
                 ],
             ]),
@@ -2993,7 +2990,6 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 defence: 0,
                 hp,
             },
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,

@@ -27,9 +27,6 @@ export function synthesizeBuffOnlyWalk(actor: TeamActorEngineInput): TeamActorEn
         walk: {
             shipSkills: buildEmptyShipSkills(),
             stats: { ...NEUTRAL_WALK_STATS },
-            // Fallback only — the live A2 path recomputes from stats.hacking when the enemy carries a
-            // security base; both yield 1.0 for this neutral actor.
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
