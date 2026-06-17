@@ -358,7 +358,6 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             enemyType: undefined,
             bus: createEventBus(),
             round: 1,
-            enemyHpDecline: 0,
             healing,
             healEventOnly,
         };
@@ -584,7 +583,6 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             enemyType: undefined,
             bus: createEventBus(),
             round: 1,
-            enemyHpDecline: 0,
             healing,
             healEventOnly,
         };

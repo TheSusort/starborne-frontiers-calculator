@@ -124,7 +124,6 @@ function makeArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
     } as PlayerTurnArgs;
 }
 

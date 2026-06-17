@@ -338,7 +338,6 @@ function makeHitCritArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
     };
 }
 

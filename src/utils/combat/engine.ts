@@ -2442,14 +2442,14 @@ export function runCombat(input: CombatEngineInput): {
 
         // ── Unified per-side turn bindings (bySide unification PR6a) ────────────────
         // Per-side values the three runPlayerTurn sites diverge on. Each reproduces the
-        // exact value its site used before → byte-identical. PR6b folds declineFor into a
-        // uniform currentHp read; the credit/intake & emit TAILS stay per-kind (→ PR7).
+        // exact value its site used before → byte-identical. PR6b (DONE): decline is now
+        // derived inside runPlayerTurn from the struck victim's currentHp — declineFor has
+        // been removed from this interface; the credit/intake & emit TAILS stay per-kind (→ PR7).
         interface TurnBindings {
             opposingRoster: CombatActor[];
             legacyVictim: CombatActor;
             victimDefenceFor: (tgt: CombatActor) => number;
             victimMaxHpFor: (tgt: CombatActor) => number;
-            declineFor: (tgt: CombatActor) => number;
             enemyTypeArg: EnemyBaseClass | undefined;
             enemyBuffNamesUnion: () => string[];
             healEventOnly: boolean;
@@ -2461,12 +2461,6 @@ export function runCombat(input: CombatEngineInput): {
             legacyVictim: enemy,
             victimDefenceFor: (tgt) => tgt.stats.defence,
             victimMaxHpFor: (tgt) => tgt.stats.hp,
-            // PR6b: decline unified to the victim's live HP loss — for the DPS dummy this equals
-            // the old cumulative scalar (sink update ~3771); for a real positional victim it now
-            // reflects that victim's actual HP. The two bindings DELIBERATELY keep different
-            // max-HP sources (tgt.stats.hp here vs recipientMaxHp(tgt.id) on the enemy binding) —
-            // that mirrors the existing victimMaxHpFor split, not an oversight.
-            declineFor: (tgt) => Math.max(0, tgt.stats.hp - tgt.currentHp),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             healEventOnly: false,
@@ -2478,12 +2472,6 @@ export function runCombat(input: CombatEngineInput): {
             victimDefenceFor: (tgt) =>
                 lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id),
             victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
-            // PR6b has now unified BOTH sides to the same currentHp-derived shape: the player
-            // binding uses tgt.stats.hp − tgt.currentHp; this enemy binding uses
-            // recipientMaxHp(tgt.id) − tgt.currentHp. The different max-HP sources mirror the
-            // existing victimMaxHpFor split (stats.hp for the player dummy, recipientMaxHp for
-            // real player actors) — they are intentional, not an oversight.
-            declineFor: (tgt) => Math.max(0, recipientMaxHp(tgt.id) - tgt.currentHp),
             enemyTypeArg: undefined,
             // Opposing side from the ENEMY's view = the player team, so `enemyBuffNames` here is the
             // UNION of PLAYER self-buff names (fed to the enemy's own `enemy-buff` gates). A bare
@@ -2545,7 +2533,6 @@ export function runCombat(input: CombatEngineInput): {
                 enemyType: tb.enemyTypeArg,
                 bus,
                 round: r,
-                enemyHpDecline: tb.declineFor(tgt),
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
@@ -3027,8 +3014,9 @@ export function runCombat(input: CombatEngineInput): {
                     // uniformly. For the legacy (non-positional) path tgt === enemy, whose
                     // stats.defence/stats.hp and DoT/bomb containers ARE the legacy module vars
                     // (see ~line 1297) — so deriving every binding from `tgt` is byte-identical.
-                    // Per-target HP decline is a later phase, so enemyHpDecline stays its own
-                    // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
+                    // HP decline is no longer passed in (PR6b): runPlayerTurn derives it from the
+                    // struck victim's currentHp (max − currentHp), so the dummy-sink and real-victim
+                    // cases both read `tgt` uniformly — no separate decline ternary here.
                     const { tgt } = selectTurnTarget(actor);
                     const turn = runPlayerTurn(buildTurnArgs(actor, tgt));
 
@@ -3099,8 +3087,9 @@ export function runCombat(input: CombatEngineInput): {
                     // now lands per-victim via applyPositionalDamage above, so it must NOT also be
                     // folded into cumulativeDamage here (that would double-count it). Skip the
                     // direct/secondary/conditional credits; KEEP detonation (bombs are a separate
-                    // mechanic, out of scope). The existing `enemyHpDecline: selected ? 0 : ...`
-                    // already zeroes the legacy single-sink decline for the positional path.
+                    // mechanic, out of scope). The single-sink decline that used to be zeroed for
+                    // the positional path is now derived from the victim's own currentHp inside
+                    // runPlayerTurn (PR6b), so no separate decline suppression is needed here.
                     if (!positional) {
                         d.secondary += turn.secondaryDamage;
                         d.conditional += turn.conditionalDamage;
@@ -3191,8 +3180,9 @@ export function runCombat(input: CombatEngineInput): {
                     // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
                     // the firing-hit damage already landed per-victim via applyPositionalDamage, so
                     // skip the direct/secondary/conditional credit; KEEP detonation (bombs are out
-                    // of scope). The team's `enemyHpDecline: selected ? 0 : ...` already zeroed the
-                    // legacy single-sink decline for the positional path.
+                    // of scope). The single-sink decline that used to be zeroed for the positional
+                    // path is now derived from the victim's own currentHp inside runPlayerTurn
+                    // (PR6b), so no separate decline suppression is needed here.
                     const td = dmg(actor.id);
                     if (!teamPositional) {
                         td.secondary += teamTurn.secondaryDamage;

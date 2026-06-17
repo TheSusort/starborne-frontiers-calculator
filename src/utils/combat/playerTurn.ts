@@ -210,10 +210,6 @@ export interface PlayerTurnArgs {
     bus: CombatEventBus;
     // Per-call round state.
     round: number;
-    /** Enemy HP decline so far (focus + team cumulative) — drives this turn's entering-round
-     *  enemyHpPct (the value hp-threshold gates and the HP% column react to). Renamed from
-     *  `cumulativeDamage` (Task 4): it now includes team damage, not just the focus actor's. */
-    enemyHpDecline: number;
     /** Grant `amount` charges to EVERY player actor (Task 5 ally-charge routing). Supplied by
      *  the engine, which loops all player actors (incl. this caster) bumping
      *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
@@ -653,7 +649,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         bus,
         round: r,
-        enemyHpDecline,
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
@@ -715,8 +710,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
-    // Enemy HP% entering this round, derived from enemy HP decline so far (focus + team).
-    // Floors at 0 once decline exceeds the pool (the sim keeps hitting the "dead" dummy).
+    // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
+    // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
+    // its max, so decline = how much HP the victim has lost). For the DPS dummy sink this equals
+    // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracks it post-round);
+    // for a real positional victim it now reflects that victim's actual HP.
+    // LOAD-BEARING TIMING: in DPS the dummy's currentHp updates POST-round (engine.ts ~3772),
+    // not per-hit, so this derived value equals the entering-round scalar the old param carried.
+    const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
     const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
     const firingSkill = selectFiringSkill(shipSkills, action);

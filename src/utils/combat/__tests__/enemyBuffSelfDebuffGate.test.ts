@@ -121,7 +121,6 @@ function makeArgs(
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
         ...names,
     };
 }
