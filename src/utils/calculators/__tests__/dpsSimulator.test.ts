@@ -2999,52 +2999,31 @@ describe('simulateDPS', () => {
             expect(runA.rounds[1].directDamage).toBe(runB.rounds[1].directDamage);
         });
 
-        it('a slower team actor (speed 80) records resisted enemy debuffs in the SAME round row', () => {
+        it('a slower team actor (speed 80) applies its timed enemy debuff every round (own-landing, no resist)', () => {
             // Slower team actor: speed 80 < attacker 100 > enemy 50.
             // Turn order each round: attacker(100) → team(80) → enemy(50).
-            // The team applies a timed 2-turn inflicted enemy debuff at 50% landing:
-            //   hacking 150, enemySecurity 100 → landing chance 50%.
+            // The team applies a timed 2-turn inflicted enemy debuff.
             //
-            // No DoTs, no recurring enemy debuffs — the ONLY draws to the debuffLandingGate
-            // are the team's per-round application draws. Back-loaded accumulator at rate 0.5:
-            //   draw sequence: [resist, land, resist, land, resist, ...]
+            // A.3 migration (landing flip): a buff-only team actor now WALKS via a synthesized
+            // empty-kit bundle, so its debuff lands by its OWN hacking (synthesized 200) vs the
+            // enemy's security base (100) → landing 1.0 every round. It no longer borrows the
+            // focus attacker's threaded debuffLandingChance (hacking 150 → the old 50% draw
+            // sequence). So there are NO resists; the debuff lands on every team turn.
             //
             // Per-round visibility trace (slower team acts AFTER the attacker's snapshot):
             //
             //  Round 1 (r1):
             //    Attacker snapshot → enemyMap empty → debuff absent from active.
-            //    Team fires → draw#1 → RESIST. attackerHasActed=true → pushed into live
-            //    resistedEnemyDebuffs row. Enemy post-turn → nothing to decrement.
-            //    → rounds[0].resistedEnemyDebuffs: contains debuff
-            //    → rounds[0].activeEnemyDebuffs:   does NOT contain debuff
+            //    Team fires → LAND → upserted into enemyMap (turnsRemaining 2).
+            //    → rounds[0].activeEnemyDebuffs:   does NOT contain debuff (upserted post-snapshot)
+            //    → rounds[0].resistedEnemyDebuffs: empty (landed)
             //
-            //  Round 2 (r2):
-            //    Attacker snapshot → enemyMap still empty → debuff absent from active.
-            //    Team fires → draw#2 → LAND → upserted into enemyMap (turnsRemaining 2).
-            //    Enemy post-turn → decrements 2 → 1 (debuff remains).
-            //    → rounds[1].activeEnemyDebuffs:   does NOT contain debuff (upserted post-snapshot)
-            //    → rounds[1].resistedEnemyDebuffs: does NOT contain debuff (landed)
-            //
-            //  Round 3 (r3):
-            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
-            //    Team fires → draw#3 → RESIST → pushed into live resistedEnemyDebuffs.
-            //    Enemy post-turn → decrements 1 → 0 → expired (removed from map).
-            //    → rounds[2].activeEnemyDebuffs:   CONTAINS debuff (was in map at snapshot time)
-            //    → rounds[2].resistedEnemyDebuffs: contains debuff (slower-team resist, same round)
-            //
-            //  Round 4 (r4):
-            //    Attacker snapshot → enemyMap empty (debuff expired at end of r3).
-            //    Team fires → draw#4 → LAND → upserted (turnsRemaining 2).
-            //    Enemy post-turn → decrements 2 → 1.
-            //    → rounds[3].activeEnemyDebuffs:   does NOT contain debuff
-            //    → rounds[3].resistedEnemyDebuffs: does NOT contain debuff (landed)
-            //
-            //  Round 5 (r5):
-            //    Attacker snapshot → enemyMap has debuff at turnsRemaining 1 → VISIBLE.
-            //    Team fires → draw#5 → RESIST → pushed into live resistedEnemyDebuffs.
-            //    Enemy post-turn → decrements 1 → 0 → expired.
-            //    → rounds[4].activeEnemyDebuffs:   CONTAINS debuff
-            //    → rounds[4].resistedEnemyDebuffs: contains debuff
+            //  Round 2+ (r2..r5):
+            //    Attacker snapshot → enemyMap has the debuff (persisted from the prior team
+            //    application / re-applied each team turn) → VISIBLE.
+            //    Team fires → LAND → re-upserted (turnsRemaining 2). Enemy post-turn decrements.
+            //    → rounds[i].activeEnemyDebuffs:   CONTAINS debuff
+            //    → rounds[i].resistedEnemyDebuffs: empty (landed)
 
             const timedEnemyDebuff: SelectedGameBuff = {
                 id: 'td1',
@@ -3079,26 +3058,16 @@ describe('simulateDPS', () => {
             const hasResisted = (i: number) =>
                 result.rounds[i].resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Crack');
 
-            // Round 1: resist; debuff not active (upsert skipped), resist recorded same round.
+            // Round 1: land; debuff not visible this round (upserted after the attacker snapshot).
             expect(hasActive(0)).toBe(false);
-            expect(hasResisted(0)).toBe(true);
+            expect(hasResisted(0)).toBe(false);
 
-            // Round 2: land; debuff not visible this round (upserted after snapshot).
-            expect(hasActive(1)).toBe(false);
-            expect(hasResisted(1)).toBe(false);
-
-            // Round 3: resist re-application; debuff STILL active (persists from r2 land),
-            // AND resisted re-application recorded in the same round row.
-            expect(hasActive(2)).toBe(true);
-            expect(hasResisted(2)).toBe(true);
-
-            // Round 4: land; debuff not visible (re-upserted after snapshot, old window expired).
-            expect(hasActive(3)).toBe(false);
-            expect(hasResisted(3)).toBe(false);
-
-            // Round 5: resist re-application; debuff still active (from r4 land), resist recorded.
-            expect(hasActive(4)).toBe(true);
-            expect(hasResisted(4)).toBe(true);
+            // Rounds 2-5: debuff persists/re-applied each team turn → visible at snapshot,
+            // and never resisted (own-landing 1.0).
+            for (const i of [1, 2, 3, 4]) {
+                expect(hasActive(i)).toBe(true);
+                expect(hasResisted(i)).toBe(false);
+            }
         });
     });
 

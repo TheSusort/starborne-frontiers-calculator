@@ -48,6 +48,7 @@ import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { synthesizeResisted } from './shared';
+import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import {
     HealingRuntimeCtx,
     PlayerActorRuntime,
@@ -1086,7 +1087,6 @@ export function runCombat(input: CombatEngineInput): {
         numRounds,
         selfBuffs,
         enemyDebuffs,
-        teamActors = [],
         debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
@@ -1105,6 +1105,12 @@ export function runCombat(input: CombatEngineInput): {
         enemySpeed,
         bus: externalBus,
     } = input;
+
+    // A.3 migration: every team actor walks. Synthesize an empty-kit walk for any buff-only actor so the
+    // legacy non-walked-team branch is unreachable (and deleted in Task 4). Single const → every downstream
+    // teamActors read (teamCombatActors, teamRuntimeById, teamSources, lookups, hp/defence defaults) sees the
+    // normalized roster unchanged.
+    const teamActors = normalizeTeamActorsToWalked(input.teamActors ?? []);
 
     // Internal bus — always created (Phase 3). Reactive listeners attach here. When an
     // external bus is provided it is a pure WRITE-ONLY tap: each emit fans out to the

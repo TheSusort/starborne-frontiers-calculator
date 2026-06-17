@@ -495,8 +495,11 @@ describe('walked team actors (Task 4)', () => {
         );
     });
 
-    // 10. Legacy parity: a team actor WITHOUT shipSkills → teamDamage undefined.
-    it('a legacy team actor (no shipSkills) reports teamDamage undefined every round', () => {
+    // 10. A.3 migration: a team actor WITHOUT shipSkills now WALKS via a synthesized empty-kit
+    // bundle (the legacy non-walked-team branch is gone). The empty kit deals no damage, so every
+    // round reports teamDamage: 0 (Delta 2 — was undefined pre-migration) and the summary's
+    // teamTotalDamage stays undefined (no actual team damage was credited).
+    it('a buff-only team actor (no shipSkills) reports teamDamage 0 every round, no team total', () => {
         const legacyBuff: SelectedGameBuff = {
             id: 'lb1',
             buffName: 'Legacy Up',
@@ -515,7 +518,7 @@ describe('walked team actors (Task 4)', () => {
             enemyDebuffs: [],
         };
         const withLegacy = simulateDPS(baseInput({ teamActors: [legacyTeam], rounds: 4 }));
-        expect(withLegacy.rounds.every((r) => r.teamDamage === undefined)).toBe(true);
+        expect(withLegacy.rounds.every((r) => r.teamDamage === 0)).toBe(true);
         expect(withLegacy.summary.teamTotalDamage).toBeUndefined();
     });
 });
