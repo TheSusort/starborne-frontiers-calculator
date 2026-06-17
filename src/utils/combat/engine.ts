@@ -2483,6 +2483,28 @@ export function runCombat(input: CombatEngineInput): {
         const turnBindings = (side: Side): TurnBindings =>
             side === 'player' ? playerTurnBindings : enemyTurnBindings;
 
+        // Unified positional target selection (bySide unification PR6a). Reproduces the
+        // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
+        // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
+        const selectTurnTarget = (a: CombatActor): { tgt: CombatActor; selectedReal: boolean } => {
+            const tb = turnBindings(a.side);
+            const target = parsedTargetFor(a);
+            const selected =
+                isPositional(a.position, tb.opposingRoster) && target
+                    ? resolvePositionalTarget(
+                          a.position!,
+                          target,
+                          tb.opposingRoster,
+                          statusLookupFor(tb.opposingRoster),
+                          {
+                              ignoresForcedTargeting: a.ignoresForcedTargeting,
+                              provokedBy: provokerOf(statusEngine, a.id),
+                          }
+                      )
+                    : null;
+            return { tgt: selected ?? tb.legacyVictim, selectedReal: selected != null };
+        };
+
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -2939,24 +2961,11 @@ export function runCombat(input: CombatEngineInput): {
                     // (`actor`) carries a board position AND the positioned enemy roster
                     // (`enemyAttackerActors`) has positioned actors, resolve the focus's parsed
                     // target (`input.target`) to a single living enemy and bind THIS turn to it.
-                    // When `selectedEnemy` is null — not positional, OR positional but no living
+                    // When the selection is null — not positional, OR positional but no living
                     // positioned enemy target — we diverge NOTHING from the legacy dummy `enemy`
                     // binding (keeps every existing path byte-identical; the null-target sub-case
                     // is treated as a no-op fallthrough to legacy). No existing test passes
                     // positions, so this branch never fires for them.
-                    const selectedEnemy =
-                        isPositional(actor.position, enemyAttackerActors) && target
-                            ? resolvePositionalTarget(
-                                  actor.position!,
-                                  target,
-                                  enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors),
-                                  {
-                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
-                                      provokedBy: provokerOf(statusEngine, actor.id),
-                                  }
-                              )
-                            : null;
                     // Positional target (phase 2): the selected enemy actor, else the dummy sink.
                     // Both are full CombatActors, so all per-target bindings derive from `tgt`
                     // uniformly. For the legacy (non-positional) path tgt === enemy, whose
@@ -2964,7 +2973,7 @@ export function runCombat(input: CombatEngineInput): {
                     // (see ~line 1297) — so deriving every binding from `tgt` is byte-identical.
                     // Per-target HP decline is a later phase, so enemyHpDecline stays its own
                     // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
-                    const tgt = selectedEnemy ?? enemy;
+                    const { tgt, selectedReal } = selectTurnTarget(actor);
                     const tb = turnBindings(actor.side);
                     const turn = runPlayerTurn({
                         runtime: runtimeFor(actor),
@@ -2979,7 +2988,7 @@ export function runCombat(input: CombatEngineInput): {
                         enemyType: tb.enemyTypeArg,
                         bus,
                         round: r,
-                        enemyHpDecline: tb.declineFor(tgt, selectedEnemy != null),
+                        enemyHpDecline: tb.declineFor(tgt, selectedReal),
                         grantAllyCharges: bySide(actor.side).grantAllyCharges,
                         // Healing mode only — the SHARED ctx (undefined in DPS mode keeps the heal
                         // block inert, goldens byte-identical).
@@ -3116,24 +3125,11 @@ export function runCombat(input: CombatEngineInput): {
                     // legacy dummy `enemy` binding. No existing test threads a team target →
                     // this branch never fires for them (goldens byte-identical).
                     const teamTarget = parsedTargetFor(actor);
-                    const selectedTeamEnemy =
-                        isPositional(actor.position, enemyAttackerActors) && teamTarget
-                            ? resolvePositionalTarget(
-                                  actor.position!,
-                                  teamTarget,
-                                  enemyAttackerActors,
-                                  statusLookupFor(enemyAttackerActors),
-                                  {
-                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
-                                      provokedBy: provokerOf(statusEngine, actor.id),
-                                  }
-                              )
-                            : null;
                     // Same `tgt` consolidation as the focus turn: both branches are full
                     // CombatActors, so every per-target binding derives from `tgt` uniformly.
                     // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                     // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
-                    const tgt = selectedTeamEnemy ?? enemy;
+                    const { tgt, selectedReal } = selectTurnTarget(actor);
                     const tb = turnBindings(actor.side);
                     const teamTurn = runPlayerTurn({
                         runtime: runtimeFor(actor),
@@ -3148,7 +3144,7 @@ export function runCombat(input: CombatEngineInput): {
                         enemyType: tb.enemyTypeArg,
                         bus,
                         round: r,
-                        enemyHpDecline: tb.declineFor(tgt, selectedTeamEnemy != null),
+                        enemyHpDecline: tb.declineFor(tgt, selectedReal),
                         grantAllyCharges: bySide(actor.side).grantAllyCharges,
                         // Healing mode only — walked team turns heal/shield through the same ctx.
                         healing: healingCtx,
@@ -3391,31 +3387,18 @@ export function runCombat(input: CombatEngineInput): {
                     // enemy's view is the PLAYER TEAM (`allPlayerActors` = focus + walked team), the
                     // acting position is THIS enemy's board position (`actor.position`), and its
                     // parsed target rides on `enemyTargetById` (keyed by enemy actor id). When
-                    // `selectedPlayer` is null — not positional, no parsed target, or no living
+                    // the selection is null — not positional, no parsed target, or no living
                     // positioned player — we diverge NOTHING from the legacy `healTarget` victim
                     // binding: the enemy's whole turn (defence/hp/decline lookup, the runPlayerTurn
                     // bind, AND the applyIncomingToTarget intake) reads `tgt === healTarget!`, so
                     // every existing path stays byte-identical. No existing test threads an enemy
                     // target → this branch never fires for them.
                     const enemyTarget = parsedTargetFor(actor);
-                    const selectedPlayer =
-                        isPositional(actor.position, allPlayerActors) && enemyTarget
-                            ? resolvePositionalTarget(
-                                  actor.position!,
-                                  enemyTarget,
-                                  allPlayerActors,
-                                  statusLookupFor(allPlayerActors),
-                                  {
-                                      ignoresForcedTargeting: actor.ignoresForcedTargeting,
-                                      provokedBy: provokerOf(statusEngine, actor.id),
-                                  }
-                              )
-                            : null;
                     // The enemy's victim THIS turn: the positionally-selected player actor, else the
                     // legacy heal target. A full CombatActor in both cases, so every per-victim
                     // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
                     // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
-                    const tgt = selectedPlayer ?? healTarget!;
+                    const { tgt } = selectTurnTarget(actor);
                     const tb = turnBindings(actor.side);
                     const targetDead = tgt.currentHp <= 0;
                     // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
