@@ -1,5 +1,5 @@
 /**
- * PR6a characterization test — the collapsed `runPlayerTurn(buildTurnArgs(actor, …))` path.
+ * PR6a + PR6b characterization tests — the collapsed `runPlayerTurn(buildTurnArgs(actor, …))` path.
  *
  * PR6a merged THREE near-duplicate runPlayerTurn call sites (focus / walked-team / enemy)
  * into one builder, with the per-side divergence living in `turnBindings(side)`. This test
@@ -14,6 +14,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
+import { createActor } from '../state';
+import { createStatusEngine } from '../statusEngine';
+import { createEventBus } from '../events';
+import { makeRateGate } from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
 let idc = 0;
@@ -202,5 +207,145 @@ describe('PR6a — collapsed runPlayerTurn path resolves per-side bindings', () 
         // NO CROSS-SIDE LEAK: the player's outgoing damage rows are byte-identical whether or not
         // the enemy buffed itself — the enemy self-buff never reached a player store.
         expect(playerOutgoing(withBuff)).toEqual(playerOutgoing(noBuff));
+    });
+});
+
+// ---------------------------------------------------------------------------
+// PR6b helpers — direct runPlayerTurn invocation
+// ---------------------------------------------------------------------------
+
+const PR6B_MAX_HP = 10_000_000;
+
+/** Minimal player runtime (attack-only, no crits, no debuffs). */
+function makePr6bRuntime(): PlayerActorRuntime {
+    const actor = createActor({
+        id: 'pr6b-attacker',
+        side: 'player',
+        kind: 'attacker',
+        stats: {
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            defence: 0,
+            hp: 10000,
+            speed: 100,
+        },
+        chargeCount: 0,
+        startCharged: false,
+    });
+
+    const noGate: PlayerActorRuntime['activeCritGate'] = () => false;
+
+    const skills: ShipSkills = {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'pr6b-dmg',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    };
+
+    return {
+        actor,
+        focus: true,
+        castSkills: skills,
+        reactiveAbilities: [],
+        timedSelfBySlot: [],
+        timedEnemyBySlot: [],
+        hasChargedSkill: false,
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 10000,
+        healModifier: 0,
+        debuffLandingChance: 1,
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        affinityDisadvantage: false,
+        activeCritGate: noGate,
+        chargedCritGate: noGate,
+        activeHealCritGate: noGate,
+        chargedHealCritGate: noGate,
+        debuffLandingGate: makeRateGate(),
+        extendChanceGate: makeRateGate(),
+        landsTimedEnemyApplication: () => true,
+        selfBuffLookup: new Map(),
+        enemyDebuffLookup: new Map(),
+    };
+}
+
+/** Build a PlayerTurnArgs with the given enemy actor (its currentHp controls the derivation). */
+function makePr6bArgs(runtime: PlayerActorRuntime, enemyCurrentHp: number): PlayerTurnArgs {
+    const enemy = createActor({
+        id: 'pr6b-enemy',
+        side: 'enemy',
+        kind: 'enemy',
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            defence: 0,
+            hp: PR6B_MAX_HP,
+            speed: 50,
+        },
+    });
+    // Override currentHp AFTER construction to simulate pre-existing HP loss.
+    enemy.currentHp = enemyCurrentHp;
+
+    const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    eng.beginRound(1);
+
+    return {
+        runtime,
+        enemy,
+        statusEngine: eng,
+        corrosionEntries: [],
+        infernoEntries: [],
+        pendingBombs: [],
+        pendingAccumulators: [],
+        enemyDefense: 0,
+        enemyHp: PR6B_MAX_HP,
+        enemyType: undefined,
+        bus: createEventBus(),
+        round: 1,
+        targetId: undefined,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// PR6b — enemyHpPct is derived from the victim's live currentHp, not a passed scalar
+// ---------------------------------------------------------------------------
+
+describe('PR6b — enemyHpPct derived from victim currentHp', () => {
+    it('victim at FULL HP → enemyHpPct === 100', () => {
+        // currentHp === maxHp: no decline → pct = 100 * (1 - 0/maxHp) = 100.
+        const runtime = makePr6bRuntime();
+        const result = runPlayerTurn(makePr6bArgs(runtime, PR6B_MAX_HP));
+        expect(result.enemyHpPct).toBe(100);
+    });
+
+    it('victim at HALF HP → enemyHpPct === 50', () => {
+        // currentHp = maxHp/2: decline = 5_000_000 → pct = 100 * (1 - 0.5) = 50.
+        // The arg object carries NO enemyHpDecline field (param removed in PR6b);
+        // the derivation reads enemy.currentHp directly inside runPlayerTurn.
+        const runtime = makePr6bRuntime();
+        const result = runPlayerTurn(makePr6bArgs(runtime, PR6B_MAX_HP / 2));
+        expect(result.enemyHpPct).toBe(50);
     });
 });
