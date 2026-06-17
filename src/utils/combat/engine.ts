@@ -47,7 +47,6 @@ import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { CombatEventBus, createEventBus } from './events';
-import { synthesizeResisted } from './shared';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import {
     HealingRuntimeCtx,
@@ -3260,85 +3259,6 @@ export function runCombat(input: CombatEngineInput): {
                     }
 
                     processExtraActionGrants(actor, teamTurn.extraActionGrants);
-                } else if (actor.kind === 'team') {
-                    // No healTargetBuffs capture here: the heal target is always a WALKED actor
-                    // (HealingCalculatorPage builds it with shipSkills+stats, so it takes the
-                    // walked-team branch above), never this legacy branch. Revisit if heal-target
-                    // actor construction ever changes.
-                    // ====================================================================
-                    // TEAM TURN — a real speed-ordered ally. It deals no damage; its sole
-                    // job is to notify the status engine that ITS source fired this round so
-                    // its timed buffs (keyed by this actor's id) upsert onto the maps. preTurn
-                    // mirrors the attacker's charge cadence on the actor's OWN fields; bonus
-                    // charges do not apply (team actors have no charge abilities). A FASTER
-                    // team actor runs before the attacker's snapshot() → its buffs are visible
-                    // this round; a SLOWER one upserts after → visible from the next round.
-                    // ====================================================================
-                    const teamHasCharged = actor.chargeCount > 0;
-                    let teamAction: 'active' | 'charged';
-                    if (teamHasCharged && actor.charges >= actor.chargeCount) {
-                        teamAction = 'charged';
-                    } else {
-                        teamAction = 'active';
-                    }
-                    advanceChargeCadence(actor, teamHasCharged);
-
-                    bus.emit({
-                        type: 'skill-fired',
-                        actorId: actor.id,
-                        round: r,
-                        slot: teamAction,
-                    });
-
-                    // A LEGACY (non-walked) team actor does not run runPlayerTurn, so it never
-                    // sets the status engine's per-turn landing hook (A2 Task 4). Restore the
-                    // attacker's closure here so its scheduled timed enemy debuffs draw the
-                    // attacker's landing chance — exactly the pre-Task-4 behaviour (the engine-
-                    // setup hook was the attacker's closure), independent of whichever actor's
-                    // turn last swapped the hook.
-                    statusEngine.setLandsTimedEnemyApplication((buff) =>
-                        landsTimedEnemyApplication(buff.application)
-                    );
-                    const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
-                        actor.id,
-                        teamAction === 'charged' ? 'charge' : 'active',
-                        r
-                    );
-                    // Emit debuff-applied ONCE per landed timed enemy application (discrete-
-                    // infliction event — Phase 3 retiming). sourceId = this team actor's id.
-                    for (const buffName of appliedEnemy) {
-                        bus.emit({
-                            type: 'debuff-applied',
-                            sourceId: actor.id,
-                            targetId: enemy.id,
-                            round: r,
-                            buffName,
-                        });
-                    }
-                    // Synthesize + record this team turn's resisted timed enemy applications
-                    // (mirror the attacker's resisted-synthesis). A FASTER team actor (before
-                    // any attacker turn) stages into pendingResisted, drained into the next
-                    // attacker turn's resisted head. A SLOWER team actor (after an attacker
-                    // turn) appends directly to the LAST attacker turn's resisted list — same
-                    // observable order as the old attackerHasActed split.
-                    const teamResisted = synthesizeResisted(resistedEnemy, enemyDebuffLookup, (n) =>
-                        bus.emit({
-                            type: 'debuff-resisted',
-                            targetId: enemy.id,
-                            round: r,
-                            buffName: n,
-                        })
-                    );
-                    if (teamResisted.length > 0) {
-                        const lastTurn = focusTurns[focusTurns.length - 1];
-                        if (lastTurn) {
-                            // Slower team turn: append to the last attacker turn's resisted list.
-                            lastTurn.resistedEnemyDebuffs.push(...teamResisted);
-                        } else {
-                            // Faster team turn: no attacker turn yet this round; stage here.
-                            pendingResisted.push(...teamResisted);
-                        }
-                    }
                 } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
                     // ====================================================================
                     // ENEMY TURN — ticks the DoT containers it carries, per-entry attributed
