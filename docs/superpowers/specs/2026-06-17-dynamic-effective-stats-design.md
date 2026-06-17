@@ -122,10 +122,9 @@ written **alongside, with no reader** → trivially byte-identical, the PR5a pat
 - `audit:skills` 0/141, lint + tsc clean every PR. Subagent-driven; per-task spec + quality +
   final holistic review. Standard campaign workflow (see epic roadmap §Workflow).
 
-## 7. Open questions (resolve during planning)
-- Does affinity apply to the **resist** side (security) too, or only the attacker's hacking? The
-  image specifies hacking; security's affinity treatment needs confirmation (default: affinity
-  affects the attacker's hacking only, per the image).
+## 7. Resolved decisions
+- **Affinity applies to the attacker's hacking only** (±25%), not the defender's security
+  (user-ratified 2026-06-17). Matches the affinity image wording and `dpsSimulator`.
 - (Shield-pen split ordering vs Barrier/Cheat-Death intercepts is sub-project H's concern, not A's.)
 
 ## 8. References
