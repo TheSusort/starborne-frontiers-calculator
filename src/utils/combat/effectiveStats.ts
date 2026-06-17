@@ -1,5 +1,8 @@
+import { Ability } from '../../types/abilities';
 import { SelectedGameBuff } from '../../types/calculator';
-import { toSimBuffs } from '../calculators/dpsBuffHelpers';
+import { modifierTotalsFromAbilities } from '../abilities/applyAbilities';
+import type { ConditionContext } from '../abilities/evaluateConditions';
+import { toSimBuffs, toDotAndPenModifiers } from '../calculators/dpsBuffHelpers';
 import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
 import { calculateBuffTotals, payloadToSelectedBuff } from './playerTurn';
@@ -76,5 +79,78 @@ export function effectiveStatsOf(
         speed: s.speed * (1 + t.speedBuff / 100),
         hacking: s.hacking ?? 0,
         security: s.security ?? 0,
+    };
+}
+
+export interface EffectiveDamageStats {
+    attack: number;
+    defence: number;
+    /** crit + critBuffTotal, UNCAPPED. The consumer applies the affinity cap (cappedCrit). */
+    crit: number;
+    critDamage: number;
+    /** hp * (1 + hpBuff/100). Folded here (damage mode) — distinct from status-mode hp pass-through. */
+    hp: number;
+    /** base + base pen-buff + modifier pen + ability-DoT pen (the 4-source pipeline). */
+    effectivePen: number;
+    /** toDotAndPenModifiers(abilitySelfEffects, []).dotDamageModifier — self Out. DoT, for dotMult. */
+    selfDotDamageModifier: number;
+    /** Full summed buff totals (layers 1+2+3+4) — exposes outgoingDamage/heal channels for the turn loop. */
+    totals: ReturnType<typeof calculateBuffTotals>;
+}
+
+/**
+ * Damage-mode effective stats: folds the four layers the damage path uses, given resolved
+ * ingredients (the turn loop owns gating/application and side effects — see the A1b plan).
+ *   layer 1 = scheduledTotals (resolveSelfBuffTotals output)
+ *   layers 2+3 = abilitySelfEffects (timed + gated active ability statuses, as SelectedGameBuff[])
+ *   layer 4 = modifierAbilities gated by modifierCtx
+ * Reproduces the inline fold in playerTurn.ts (runPlayerTurn) exactly.
+ */
+export function effectiveDamageStatsOf(args: {
+    base: {
+        attack: number;
+        defence: number;
+        crit: number;
+        critDamage: number;
+        hp: number;
+        defensePenetration: number;
+        defensePenetrationBuff: number;
+    };
+    scheduledTotals: ReturnType<typeof calculateBuffTotals>;
+    abilitySelfEffects: SelectedGameBuff[];
+    modifierAbilities: Ability[];
+    modifierCtx: ConditionContext;
+}): EffectiveDamageStats {
+    const { base, scheduledTotals, abilitySelfEffects, modifierAbilities, modifierCtx } = args;
+    const ability = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
+    const mod = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
+    const dotPen = toDotAndPenModifiers(abilitySelfEffects, []);
+
+    const totals: ReturnType<typeof calculateBuffTotals> = {
+        attackBuff: scheduledTotals.attackBuff + ability.attackBuff + mod.attack,
+        critBuff: scheduledTotals.critBuff + ability.critBuff + mod.crit,
+        critDamageBuff: scheduledTotals.critDamageBuff + ability.critDamageBuff + mod.critDamage,
+        outgoingDamageBuff:
+            scheduledTotals.outgoingDamageBuff + ability.outgoingDamageBuff + mod.outgoingDamage,
+        defenceBuff: scheduledTotals.defenceBuff + ability.defenceBuff + mod.defence,
+        hpBuff: scheduledTotals.hpBuff + ability.hpBuff + mod.hp,
+        outgoingHealBuff: scheduledTotals.outgoingHealBuff + ability.outgoingHealBuff,
+        incomingHealBuff: scheduledTotals.incomingHealBuff + ability.incomingHealBuff,
+        speedBuff: scheduledTotals.speedBuff + ability.speedBuff,
+    };
+
+    return {
+        attack: base.attack * (1 + totals.attackBuff / 100),
+        defence: base.defence * (1 + totals.defenceBuff / 100),
+        crit: base.crit + totals.critBuff,
+        critDamage: base.critDamage + totals.critDamageBuff,
+        hp: base.hp * (1 + totals.hpBuff / 100),
+        effectivePen:
+            base.defensePenetration +
+            base.defensePenetrationBuff +
+            mod.defensePenetration +
+            dotPen.defensePenetrationBuff,
+        selfDotDamageModifier: dotPen.dotDamageModifier,
+        totals,
     };
 }
