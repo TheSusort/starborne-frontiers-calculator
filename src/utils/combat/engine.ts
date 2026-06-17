@@ -2420,6 +2420,26 @@ export function runCombat(input: CombatEngineInput): {
             });
         };
 
+        // ── Unified per-actor turn resolvers (bySide unification PR6a) ──────────────
+        // Resolve the per-actor runtime / parsed target / parsed pattern uniformly so the
+        // three runPlayerTurn sites stop hard-coding their own lookups. Each reproduces the
+        // exact value its site used before — byte-identical.
+        const runtimeFor = (a: CombatActor): PlayerActorRuntime => {
+            if (a.side === 'enemy') return enemyPlayerRuntimeByActorId.get(a.id)!;
+            if (a.kind === 'attacker') return attackerRuntime;
+            return teamRuntimeById.get(a.id)!;
+        };
+        const parsedTargetFor = (a: CombatActor): ParsedTarget | undefined => {
+            if (a.side === 'enemy') return enemyTargetById.get(a.id);
+            if (a.kind === 'attacker') return input.target;
+            return teamTargetById.get(a.id);
+        };
+        const parsedPatternFor = (a: CombatActor): ParsedPattern | undefined => {
+            if (a.side === 'enemy') return enemyPatternById.get(a.id);
+            if (a.kind === 'attacker') return input.pattern;
+            return teamPatternById.get(a.id);
+        };
+
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -2869,6 +2889,8 @@ export function runCombat(input: CombatEngineInput): {
                     // The attacker's per-actor config/gates/stats are bundled in
                     // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                     // ====================================================================
+                    const target = parsedTargetFor(actor);
+                    const pattern = parsedPatternFor(actor);
                     const attackerMaxHp = baseHpFor(actor.id);
                     // Positional target selection (Task C1, GATED). When the focus attacker
                     // (`actor`) carries a board position AND the positioned enemy roster
@@ -2880,10 +2902,10 @@ export function runCombat(input: CombatEngineInput): {
                     // is treated as a no-op fallthrough to legacy). No existing test passes
                     // positions, so this branch never fires for them.
                     const selectedEnemy =
-                        isPositional(actor.position, enemyAttackerActors) && input.target
+                        isPositional(actor.position, enemyAttackerActors) && target
                             ? resolvePositionalTarget(
                                   actor.position!,
-                                  input.target,
+                                  target,
                                   enemyAttackerActors,
                                   statusLookupFor(enemyAttackerActors),
                                   {
@@ -2901,7 +2923,7 @@ export function runCombat(input: CombatEngineInput): {
                     // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
                     const tgt = selectedEnemy ?? enemy;
                     const turn = runPlayerTurn({
-                        runtime: attackerRuntime,
+                        runtime: runtimeFor(actor),
                         enemy: tgt,
                         statusEngine,
                         corrosionEntries: tgt.corrosionEntries,
@@ -2972,8 +2994,8 @@ export function runCombat(input: CombatEngineInput): {
                     // this: the per-victim apply is the ONLY damage path here.)
                     const positional =
                         isPositional(actor.position, enemyAttackerActors) &&
-                        input.target != null &&
-                        input.pattern != null &&
+                        target != null &&
+                        pattern != null &&
                         turn.positionalScalars != null;
                     if (positional) {
                         // Opposing roster = enemyAttackerActors; player→enemy victim wrapper.
@@ -2981,8 +3003,8 @@ export function runCombat(input: CombatEngineInput): {
                         drivePositionalApply({
                             scalars: turn.positionalScalars!,
                             hitCrits: turn.hitCrits,
-                            pattern: input.pattern!,
-                            target: input.target!,
+                            pattern: pattern,
+                            target: target,
                             actingPosition: actor.position!,
                             ignoresForcedTargeting: actor.ignoresForcedTargeting,
                             actingId: actor.id,
@@ -3049,7 +3071,7 @@ export function runCombat(input: CombatEngineInput): {
                     // parsed target, or no living positioned enemy — we diverge NOTHING from the
                     // legacy dummy `enemy` binding. No existing test threads a team target →
                     // this branch never fires for them (goldens byte-identical).
-                    const teamTarget = teamTargetById.get(actor.id);
+                    const teamTarget = parsedTargetFor(actor);
                     const selectedTeamEnemy =
                         isPositional(actor.position, enemyAttackerActors) && teamTarget
                             ? resolvePositionalTarget(
@@ -3069,7 +3091,7 @@ export function runCombat(input: CombatEngineInput): {
                     // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
                     const tgt = selectedTeamEnemy ?? enemy;
                     const teamTurn = runPlayerTurn({
-                        runtime: teamRuntimeById.get(actor.id)!,
+                        runtime: runtimeFor(actor),
                         enemy: tgt,
                         statusEngine,
                         corrosionEntries: tgt.corrosionEntries,
@@ -3110,7 +3132,7 @@ export function runCombat(input: CombatEngineInput): {
                     // it there is no apply to perform (the positionalSelection C2 test sets
                     // position+target only, never a pattern, so it keeps the legacy single-sink
                     // credit and never enters this branch).
-                    const teamPattern = teamPatternById.get(actor.id);
+                    const teamPattern = parsedPatternFor(actor);
                     const teamPositional =
                         isPositional(actor.position, enemyAttackerActors) &&
                         teamTarget != null &&
@@ -3320,7 +3342,7 @@ export function runCombat(input: CombatEngineInput): {
                     // advance the cadence manually here, mirroring runPlayerTurn's preTurn step
                     // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
                     // ====================================================================
-                    const enemyRuntime = enemyPlayerRuntimeByActorId.get(actor.id)!;
+                    const enemyRuntime = runtimeFor(actor);
                     // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
                     // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
                     // enemy's view is the PLAYER TEAM (`allPlayerActors` = focus + walked team), the
@@ -3332,7 +3354,7 @@ export function runCombat(input: CombatEngineInput): {
                     // bind, AND the applyIncomingToTarget intake) reads `tgt === healTarget!`, so
                     // every existing path stays byte-identical. No existing test threads an enemy
                     // target → this branch never fires for them.
-                    const enemyTarget = enemyTargetById.get(actor.id);
+                    const enemyTarget = parsedTargetFor(actor);
                     const selectedPlayer =
                         isPositional(actor.position, allPlayerActors) && enemyTarget
                             ? resolvePositionalTarget(
@@ -3356,7 +3378,7 @@ export function runCombat(input: CombatEngineInput): {
                     // positional apply (footprint expansion). An enemy with a target but NO pattern
                     // stays on the legacy single-apply path (same `pattern != null` guard as the
                     // focus/team sites). Undefined for every current fixture → enemyPositional false.
-                    const enemyPattern = enemyPatternById.get(actor.id);
+                    const enemyPattern = parsedPatternFor(actor);
                     let damage = 0;
                     // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                     // scoped inside the else block below; this flag carries its roundCrit out.
