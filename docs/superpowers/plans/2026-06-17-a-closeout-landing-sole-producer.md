@@ -25,7 +25,8 @@ missing attacker `hacking → 200` and defender `security → 100`, reproducing 
 base-less/neutral actors. `playerTurn.ts:699-721` gates it behind
 `liveLandingComputable = actor.stats.hacking !== undefined && enemy.stats.security !== undefined`,
 falling back to a static `debuffLandingChance` scalar. In production that gate is ALWAYS true (every
-actor has bases), so the scalar is never read — it is dead weight that only 7 test fixtures rely on.
+actor has bases), so the scalar is never read — it is dead weight that only test fixtures rely on (8 behavioral
+conversions across 5 files + 2 assert-on-the-field sites + inert plumbing; see the inventory below).
 
 **Fixture inventory — DO NOT trust a literal grep alone.** A plain `grep "debuffLandingChance: [0-9.]"`
 undercounts: several files thread the non-default chance through a HELPER PARAMETER, so the behavioral
@@ -170,7 +171,7 @@ compile and stay byte-identical.
 - [ ] **Step 6: Commit.**
   ```bash
   git add -A
-  git commit -m "refactor(combat): A-closeout — live landing is sole producer (collapse ternary, retire closure fallbacks); convert 7 fixtures to stat-based (byte-identical)"
+  git commit -m "refactor(combat): A-closeout — live landing is sole producer (collapse ternary, retire closure fallbacks); convert 8 behavioral fixtures to stat-based (byte-identical)"
   ```
 
 ---
@@ -188,7 +189,7 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - Modify: `src/utils/calculators/dpsSimulator.ts` — static formula (~:243-246) + `runCombat` arg (~:278);
   `deriveTeamEngineActors` `teamLandingChance` (~:187) + the `walk.debuffLandingChance` it sets.
 - Modify: `src/utils/calculators/battleSimulator.ts` — `landingChance()` (~:593-600) + the three
-  threading sites (~:631 focus, ~:656 enemy-attacker, ~:687 walked/focusLanding). tsc-guided; confirm all.
+  threading sites (~:631 player-team walk, ~:656 enemy-attacker, ~:687 focus runCombat arg). tsc-guided; confirm all.
 - Modify: `src/utils/calculators/healingEngineAdapter.ts` — compute (~:177) + threading (~:221/:238).
 - Modify: `src/utils/combat/teamActorWalk.ts` — drop `debuffLandingChance: 1` from the synthesized walk.
 - Modify: ~40 test files — delete every `debuffLandingChance: 1` line (and the `debuffLandingChance?` from
