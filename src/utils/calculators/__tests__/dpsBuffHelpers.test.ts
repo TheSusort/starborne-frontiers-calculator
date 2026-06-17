@@ -6,6 +6,7 @@ import {
     toEnemyDotModifier,
 } from '../dpsBuffHelpers';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { calculateBuffTotals } from '../../combat/buffTotals';
 
 const makeBuff = (
     overrides: Partial<SelectedGameBuff['parsedEffects']>,
@@ -130,5 +131,86 @@ describe('toEnemyDotModifier', () => {
 
     it('ignores non-dot enemy effects', () => {
         expect(toEnemyDotModifier([makeBuff({ defense: -30, incomingDamage: 20 })])).toBe(0);
+    });
+});
+
+// A2: hacking/security buff-fold pipeline
+describe('toSimBuffs — hacking/security channels (A2)', () => {
+    it('maps hacking effect to stat: hacking entry', () => {
+        const result = toSimBuffs([makeBuff({ hacking: 40 })]);
+        expect(result).toEqual([{ id: 'b1-hack', stat: 'hacking', value: 40 }]);
+    });
+
+    it('maps security effect to stat: security entry', () => {
+        const result = toSimBuffs([makeBuff({ security: 20 })]);
+        expect(result).toEqual([{ id: 'b1-sec', stat: 'security', value: 20 }]);
+    });
+
+    it('multiplies hacking by stacks', () => {
+        const result = toSimBuffs([makeBuff({ hacking: 30 }, 3)]);
+        expect(result).toEqual([{ id: 'b1-hack', stat: 'hacking', value: 90 }]);
+    });
+
+    it('multiplies security by stacks', () => {
+        const result = toSimBuffs([makeBuff({ security: 10 }, 2)]);
+        expect(result).toEqual([{ id: 'b1-sec', stat: 'security', value: 20 }]);
+    });
+
+    it('emits both hacking and security from a single buff', () => {
+        const result = toSimBuffs([makeBuff({ hacking: 40, security: 20 })]);
+        expect(result).toHaveLength(2);
+        expect(result.find((b) => b.stat === 'hacking')).toEqual({
+            id: 'b1-hack',
+            stat: 'hacking',
+            value: 40,
+        });
+        expect(result.find((b) => b.stat === 'security')).toEqual({
+            id: 'b1-sec',
+            stat: 'security',
+            value: 20,
+        });
+    });
+
+    it('omits hacking entry when hacking is undefined', () => {
+        const result = toSimBuffs([makeBuff({ attack: 10 })]);
+        expect(result.every((b) => b.stat !== 'hacking')).toBe(true);
+    });
+
+    it('omits security entry when security is undefined', () => {
+        const result = toSimBuffs([makeBuff({ attack: 10 })]);
+        expect(result.every((b) => b.stat !== 'security')).toBe(true);
+    });
+});
+
+describe('calculateBuffTotals — hacking/security channels (A2)', () => {
+    it('sums hacking buffs', () => {
+        const result = calculateBuffTotals([
+            { id: 'a', stat: 'hacking', value: 40 },
+            { id: 'b', stat: 'hacking', value: 30 },
+        ]);
+        expect(result.hackingBuff).toBe(70);
+    });
+
+    it('sums security buffs', () => {
+        const result = calculateBuffTotals([
+            { id: 'a', stat: 'security', value: 20 },
+            { id: 'b', stat: 'security', value: 15 },
+        ]);
+        expect(result.securityBuff).toBe(35);
+    });
+
+    it('returns hackingBuff: 0 and securityBuff: 0 when no matching buffs', () => {
+        const result = calculateBuffTotals([{ id: 'a', stat: 'attack', value: 25 }]);
+        expect(result.hackingBuff).toBe(0);
+        expect(result.securityBuff).toBe(0);
+    });
+
+    it('hackingBuff and securityBuff are independent channels', () => {
+        const result = calculateBuffTotals([
+            { id: 'a', stat: 'hacking', value: 40 },
+            { id: 'b', stat: 'security', value: 20 },
+        ]);
+        expect(result.hackingBuff).toBe(40);
+        expect(result.securityBuff).toBe(20);
     });
 });

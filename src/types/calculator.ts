@@ -69,7 +69,9 @@ export interface Buff {
         | 'outgoingHeal'
         | 'incomingHeal'
         | 'hotPct'
-        | 'speed';
+        | 'speed'
+        | 'hacking'
+        | 'security';
     value: number;
 }
 
@@ -113,6 +115,7 @@ export interface ParsedBuffEffects {
     speed?: number; // additive percentage modifier on speed (+30 = +30%)
 
     // Flat stats (not percentages)
+    hacking?: number; // flat additive on hacking stat
     security?: number; // flat additive on security stat
 }
 

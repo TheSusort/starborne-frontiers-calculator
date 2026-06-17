@@ -41,8 +41,8 @@ export interface EffectiveStats {
      *  in-fight HP changes track via currentHp, not the base stat. */
     hp: number;
     speed: number;
-    hacking: number; // base pass-through in A1a; buff-fold wired in A2
-    security: number; // base pass-through in A1a; A2
+    hacking: number; // base + hackingBuff (flat-additive); fold wired in A2
+    security: number; // base + securityBuff (flat-additive); fold wired in A2
 }
 
 /**
@@ -79,6 +79,8 @@ export function foldActorBuffTotals(
         outgoingHealBuff: scheduled.outgoingHealBuff + timed.outgoingHealBuff,
         incomingHealBuff: scheduled.incomingHealBuff + timed.incomingHealBuff,
         speedBuff: scheduled.speedBuff + timed.speedBuff,
+        hackingBuff: scheduled.hackingBuff + timed.hackingBuff,
+        securityBuff: scheduled.securityBuff + timed.securityBuff,
     };
 }
 
@@ -97,8 +99,8 @@ export function effectiveStatsOf(
         defensePenetration: s.defensePenetration,
         hp: s.hp,
         speed: s.speed * (1 + t.speedBuff / 100),
-        hacking: s.hacking ?? 0,
-        security: s.security ?? 0,
+        hacking: (s.hacking ?? 0) + t.hackingBuff,
+        security: (s.security ?? 0) + t.securityBuff,
     };
 }
 
@@ -157,6 +159,8 @@ export function effectiveDamageStatsOf(args: {
         outgoingHealBuff: scheduledTotals.outgoingHealBuff + ability.outgoingHealBuff,
         incomingHealBuff: scheduledTotals.incomingHealBuff + ability.incomingHealBuff,
         speedBuff: scheduledTotals.speedBuff + ability.speedBuff,
+        hackingBuff: scheduledTotals.hackingBuff + ability.hackingBuff,
+        securityBuff: scheduledTotals.securityBuff + ability.securityBuff,
     };
 
     return {

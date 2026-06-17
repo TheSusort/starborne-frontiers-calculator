@@ -257,6 +257,69 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
         expect(eff.crit).toBe(35); // 10 + 25 additive
         expect(eff.critDamage).toBe(150); // 50 + 100 additive
     });
+
+    // A2: hacking/security buff-fold tests
+    it('folds a hacking buff flat-additively onto base hacking', () => {
+        const { statusEngine, selfBuffLookup, actor } = buildHarness({
+            base: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 50,
+                hacking: 200,
+                security: 100,
+            },
+            selfBuffs: [{ stat: 'hacking', value: 40 }],
+        });
+        const eff = effectiveStatsOf(statusEngine, selfBuffLookup, actor);
+        expect(eff.hacking).toBe(240); // 200 + 40 flat
+        expect(eff.security).toBe(100); // unchanged
+    });
+
+    it('folds a security buff flat-additively onto base security', () => {
+        const { statusEngine, selfBuffLookup, actor } = buildHarness({
+            base: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 50,
+                hacking: 200,
+                security: 100,
+            },
+            selfBuffs: [{ stat: 'security', value: 20 }],
+        });
+        const eff = effectiveStatsOf(statusEngine, selfBuffLookup, actor);
+        expect(eff.hacking).toBe(200); // unchanged
+        expect(eff.security).toBe(120); // 100 + 20 flat
+    });
+
+    it('folds hacking + security buffs together (undefined base treated as 0)', () => {
+        const { statusEngine, selfBuffLookup, actor } = buildHarness({
+            base: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 50,
+                // hacking/security intentionally absent → undefined → treated as 0
+            },
+            selfBuffs: [
+                { stat: 'hacking', value: 40 },
+                { stat: 'security', value: 20 },
+            ],
+        });
+        const eff = effectiveStatsOf(statusEngine, selfBuffLookup, actor);
+        expect(eff.hacking).toBe(40); // 0 + 40
+        expect(eff.security).toBe(20); // 0 + 20
+    });
 });
 
 // ---------------------------------------------------------------------------

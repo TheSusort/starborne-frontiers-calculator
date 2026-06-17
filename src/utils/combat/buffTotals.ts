@@ -36,6 +36,12 @@ export function calculateBuffTotals(buffs: Buff[]) {
         .filter((b) => b.stat === 'incomingHeal')
         .reduce((sum, b) => sum + b.value, 0);
     const speedBuff = buffs.filter((b) => b.stat === 'speed').reduce((sum, b) => sum + b.value, 0);
+    const hackingBuff = buffs
+        .filter((b) => b.stat === 'hacking')
+        .reduce((sum, b) => sum + b.value, 0);
+    const securityBuff = buffs
+        .filter((b) => b.stat === 'security')
+        .reduce((sum, b) => sum + b.value, 0);
     return {
         attackBuff,
         critBuff,
@@ -46,6 +52,8 @@ export function calculateBuffTotals(buffs: Buff[]) {
         outgoingHealBuff,
         incomingHealBuff,
         speedBuff,
+        hackingBuff,
+        securityBuff,
     };
 }
 
