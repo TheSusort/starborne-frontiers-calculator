@@ -11,8 +11,12 @@ export interface EffectiveStats {
      *  affinity context the snapshot doesn't carry). */
     crit: number;
     critDamage: number;
+    /** Base only — defensePenetration BUFFS fold via toDotAndPenModifiers, NOT through
+     *  foldActorBuffTotals, so a consumer must add the pen-buff term separately. */
     defensePenetration: number;
-    hp: number; // pure pass-through (no in-fight HP buffs); never folded
+    /** Base max HP. hpBuff IS summed in foldActorBuffTotals but deliberately dropped here —
+     *  in-fight HP changes track via currentHp, not the base stat. */
+    hp: number;
     speed: number;
     hacking: number; // base pass-through in A1a; buff-fold wired in A2
     security: number; // base pass-through in A1a; A2
@@ -41,6 +45,7 @@ export function foldActorBuffTotals(
         .map((s) => payloadToSelectedBuff(s.payload));
     const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
     const timed = calculateBuffTotals(toSimBuffs(timedEffects));
+    // Field-by-field sum is intentional: explicit enumeration preserves type-safety over a generic key reduce.
     return {
         attackBuff: scheduled.attackBuff + timed.attackBuff,
         critBuff: scheduled.critBuff + timed.critBuff,

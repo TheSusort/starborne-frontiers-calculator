@@ -134,7 +134,7 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
         expect(eff.security).toBe(0);
     });
 
-    it('foldActorBuffTotals.speedBuff equals legacy foldSpeedBuffPct', () => {
+    it('foldActorBuffTotals folds speedBuff to the summed buff percentage', () => {
         const { statusEngine, selfBuffLookup, actor } = buildHarness({
             base: {
                 attack: 1000,
@@ -147,9 +147,9 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
             },
             selfBuffs: [{ stat: 'speed', value: 30 }],
         });
-        expect(foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id).speedBuff).toBe(
-            foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id)
-        );
+        expect(foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id).speedBuff).toBe(30);
+        // foldSpeedBuffPct delegates to foldActorBuffTotals, so parity still holds
+        expect(foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id)).toBe(30);
     });
 
     it('folds timed ability statuses (attack + speed) via timedAbilityStatuses path', () => {
