@@ -3047,8 +3047,9 @@ export function runCombat(input: CombatEngineInput): {
                         pattern != null &&
                         turn.positionalScalars != null;
                     if (positional) {
-                        // Opposing roster = enemyAttackerActors; player→enemy victim wrapper.
-                        // pattern/target are non-null via the `positional` gate above.
+                        // Opposing roster + victim wrapper come from the per-side bindings
+                        // (player→enemy here). pattern/target are non-null via the `positional` gate.
+                        const tb = turnBindings(actor.side);
                         drivePositionalApply({
                             scalars: turn.positionalScalars!,
                             hitCrits: turn.hitCrits,
@@ -3057,8 +3058,8 @@ export function runCombat(input: CombatEngineInput): {
                             actingPosition: actor.position!,
                             ignoresForcedTargeting: actor.ignoresForcedTargeting,
                             actingId: actor.id,
-                            opposingLiving: enemyAttackerActors,
-                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                            opposingLiving: tb.opposingRoster,
+                            applyToVictim: tb.applyToVictim,
                         });
                     }
 
@@ -3146,6 +3147,7 @@ export function runCombat(input: CombatEngineInput): {
                     if (teamPositional) {
                         // Same direction as the focus site (player→enemy); keyed to THIS team
                         // actor's position / parsed target / parsed pattern. Non-null via the gate.
+                        const tb = turnBindings(actor.side);
                         drivePositionalApply({
                             scalars: teamTurn.positionalScalars!,
                             hitCrits: teamTurn.hitCrits,
@@ -3154,8 +3156,8 @@ export function runCombat(input: CombatEngineInput): {
                             actingPosition: actor.position!,
                             ignoresForcedTargeting: actor.ignoresForcedTargeting,
                             actingId: actor.id,
-                            opposingLiving: enemyAttackerActors,
-                            applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
+                            opposingLiving: tb.opposingRoster,
+                            applyToVictim: tb.applyToVictim,
                         });
                     }
 
@@ -3514,6 +3516,19 @@ export function runCombat(input: CombatEngineInput): {
                         let hpDamage = 0;
                         let barriered = false;
                         if (enemyPositional) {
+                            // Opposing roster + victim wrapper from the per-side bindings
+                            // (enemy→player here). PLAYER-side wrapper: each player victim takes
+                            // real incoming damage. Every victim's OWN currentHp/shield is mutated
+                            // and recordDestroyed fires for it (its targetHpPct/death derive from the
+                            // victim itself — applyVictimDamage reads recipientMaxHp(victim.id)). Since
+                            // PR5b the playerSink keys intake by victim.id, so each covered victim's
+                            // AoE share lands in ITS OWN per-actor bucket — the heal target's row reads
+                            // only intakeFor(healTarget.id) and is no longer inflated by other victims.
+                            // SURFACING those other per-actor buckets as result rows is the deferred
+                            // Phase-5 symmetric-accounting surface (the result still exposes a single
+                            // heal-target row today). Inert here regardless (no production caller
+                            // threads enemy position+pattern).
+                            const tb = turnBindings(actor.side);
                             drivePositionalApply({
                                 scalars: enemyScalars!,
                                 hitCrits: enemyHitCrits,
@@ -3522,20 +3537,8 @@ export function runCombat(input: CombatEngineInput): {
                                 actingPosition: actor.position!,
                                 ignoresForcedTargeting: actor.ignoresForcedTargeting,
                                 actingId: actor.id,
-                                opposingLiving: allPlayerActors,
-                                // PLAYER-side wrapper: each player victim takes real incoming damage.
-                                // Every victim's OWN currentHp/shield is mutated and recordDestroyed
-                                // fires for it (its targetHpPct/death derive from the victim itself —
-                                // applyVictimDamage reads recipientMaxHp(victim.id)). Since PR5b the
-                                // playerSink keys intake by victim.id, so each covered victim's AoE
-                                // share lands in ITS OWN per-actor bucket — the heal target's row reads
-                                // only intakeFor(healTarget.id) and is no longer inflated by other
-                                // victims. SURFACING those other per-actor buckets as result rows is the
-                                // deferred Phase-5 symmetric-accounting surface (the result still exposes
-                                // a single heal-target row today). Inert here regardless (no production
-                                // caller threads enemy position+pattern).
-                                applyToVictim: (victim, dmgToVictim) =>
-                                    applyIncomingToTarget(dmgToVictim, victim),
+                                opposingLiving: tb.opposingRoster,
+                                applyToVictim: tb.applyToVictim,
                             });
                         } else {
                             ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
