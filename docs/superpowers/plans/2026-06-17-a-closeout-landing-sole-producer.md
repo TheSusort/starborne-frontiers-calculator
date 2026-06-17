@@ -27,16 +27,36 @@ base-less/neutral actors. `playerTurn.ts:699-721` gates it behind
 falling back to a static `debuffLandingChance` scalar. In production that gate is ALWAYS true (every
 actor has bases), so the scalar is never read — it is dead weight that only 7 test fixtures rely on.
 
-**The 7 non-default fixtures** (confirmed by `grep -rhn "debuffLandingChance:" … | grep -oE "debuffLandingChance: [0-9.]+" | sort | uniq -c` → `6×0`, `1×0.5`, `84×1`):
-- `triggers.test.ts` — 3× `0` (≈:295 focus `baseInput`, :933 enemy-attacker, :1419 enemy-attacker) + 1× `0.5` (≈:1060).
-- `resistedEnemyDotsRoundEffects.test.ts` — 1× `0` (enemy-attacker).
-- `enemyDebuffLandingChance.test.ts` — 1× `0` (enemy-attacker).
-- `resistedEnemyDebuffsRoundEffects.test.ts` — 1× `0` (enemy-attacker).
+**Fixture inventory — DO NOT trust a literal grep alone.** A plain `grep "debuffLandingChance: [0-9.]"`
+undercounts: several files thread the non-default chance through a HELPER PARAMETER, so the behavioral
+`0`/`0.5` never appears as a literal (and some literal `: 0` hits are `it()` test-NAME strings, not
+values). Classify EVERY `debuffLandingChance` reference in tests into one of three buckets and handle
+accordingly:
 
-**Conversion rule:** `debuffLandingChance: 0` → set the applying actor's `stats.hacking: 0` (→ effective
-hacking 0 → `clamp(0 − security)/100 = 0` regardless of target security). `debuffLandingChance: 0.5` →
-`hacking: 150` with the target at the default security 100 (→ 0.5). The `84× debuffLandingChance: 1` are
-byte-identical to the live default (200 vs 100 → 1.0) and just get deleted.
+- **(A) Inert default** — `debuffLandingChance: 1` literal (≈84, many in per-file `baseInput`/`mkInput`
+  helpers). Byte-identical to the live default (200 vs 100 → 1.0). **Just delete the line** (Task 2).
+- **(B) Behavioral non-default** — a `0` or `0.5` chance that drives an assertion, whether a literal OR
+  threaded through a helper param. **Convert to stat bases** (Task 1). Known sites:
+  - `triggers.test.ts` — literals: ≈:295 (focus `baseInput`, `0`), :933 (enemy, `0`), :1419 (enemy, `0`),
+    :1060 (`0.5`).
+  - `resistedEnemyDotsRoundEffects.test.ts` — helper `dotEnemy(dlc)` / `runWithEnemy(0)` (≈:55/:87/:104).
+  - `resistedEnemyDebuffsRoundEffects.test.ts` — helper `debuffEnemy(dlc)` / `runWithEnemy(0)` (≈:55/:89/:106).
+  - `enemyDebuffLandingChance.test.ts` — helper `dotEnemy(dlc)` / `countDotApplied(0,…)` (≈:59/:92/:115).
+  - `enemyBuffSelfDebuffGate.test.ts` — helper `provokeEnemy(dlc)` / `provokeEnemy(0)` (≈:515-521/:566).
+  - `dynamicLanding.test.ts` — test-local input/runtime types carry `debuffLandingChance?` (≈:77/:134,
+    :206/:225); these feed `PlayerActorRuntime`/input directly (the field Task 2 deletes).
+- **(C) Asserts on the deleted computation** — `healingEngineAdapter.test.ts:905-1021` reads
+  `cap.enemyAttackers[0].debuffLandingChance` (8 assertions, ≈:947/:961/:975/:989/:990/:1004/:1020/:1021).
+  These test the adapter PRODUCING the scalar we delete — they **cannot** be byte-identical. **Delete the
+  describe-block** (the landing behavior it covered is now tested live by `dynamicLanding.test.ts` + the
+  engine landing tests). Only if the block asserts something NOT otherwise covered, rewrite it minimally
+  to assert via stat bases / observable landing outcome instead of the removed field. (Handled in Task 2.)
+
+**Conversion rule (bucket B):** `0` → set the APPLYING actor's `stats.hacking: 0` (→ effective hacking 0
+→ `clamp(0 − security)/100 = 0` regardless of target security). `0.5` → `hacking: 150` with the target at
+default security 100 (→ 0.5). For helper-based fixtures, the cleanest conversion is to give the helper a
+`hacking` parameter instead of `debuffLandingChance` (so `runWithEnemy`/`provokeEnemy`/`dotEnemy` build the
+enemy with `stats.hacking` and the existing `it()` assertions are untouched).
 
 ---
 
@@ -62,14 +82,21 @@ compile and stay byte-identical.
 - Modify: `src/utils/combat/playerTurn.ts` (`liveLandingComputable` ternary ~:699-721)
 - Modify: `src/utils/combat/engine.ts` (closures ~:532 enemy, ~:1319 focus, ~:1451 walked)
 - Modify: `src/utils/combat/triggers.ts` (~:932 DoT read)
-- Modify the 7 fixtures: `triggers.test.ts`, `resistedEnemyDotsRoundEffects.test.ts`,
-  `enemyDebuffLandingChance.test.ts`, `resistedEnemyDebuffsRoundEffects.test.ts`
+- Modify the bucket-(B) fixtures (Background): `triggers.test.ts`, `resistedEnemyDotsRoundEffects.test.ts`,
+  `enemyDebuffLandingChance.test.ts`, `resistedEnemyDebuffsRoundEffects.test.ts`,
+  `enemyBuffSelfDebuffGate.test.ts`, `dynamicLanding.test.ts`
 
-- [ ] **Step 1: Confirm the fixture count BEFORE touching anything.** Run:
+- [ ] **Step 1: Classify EVERY test `debuffLandingChance` reference BEFORE touching anything.** Run:
   ```
-  grep -rhn "debuffLandingChance:" src/utils/combat/__tests__ src/utils/calculators/__tests__ | grep -oE "debuffLandingChance: [0-9.]+" | sort | uniq -c
+  grep -rn "debuffLandingChance" src/utils/combat/__tests__ src/utils/calculators/__tests__
   ```
-  Expected: `6` × `0`, `1` × `0.5`, `84` × `1`. **If the non-default count (`0`/`0.5`) is NOT 7 total, STOP and report** — the spec capped this at 7.
+  Bucket each hit per the Background: (A) inert `: 1` literal, (B) behavioral non-default (literal OR
+  helper-threaded `0`/`0.5`), (C) asserts on the deleted field (`cap.enemyAttackers[…].debuffLandingChance`).
+  Confirm bucket (B) matches the Background's known sites (triggers ×4, resistedEnemyDots, resistedEnemyDebuffs,
+  enemyDebuffLandingChance, enemyBuffSelfDebuffGate, dynamicLanding) and bucket (C) is only
+  `healingEngineAdapter.test.ts:905-1021`. **If you find a bucket-(B) or (C) site NOT in this list, STOP and
+  report the fuller inventory before converting** (the spec flagged enumeration as the main risk). In THIS
+  task convert only bucket (B); bucket (A) deletions and the bucket (C) block are Task 2.
 
 - [ ] **Step 2: Collapse the ternary in `playerTurn.ts`.** Replace the `liveLandingComputable` block
   (~:699-721) so the live recompute is unconditional and the runtime field always set:
@@ -104,23 +131,30 @@ compile and stay byte-identical.
   > defensive neutral default to avoid `undefined`/NaN if ever read before the owner's first turn. It is
   > NOT the scalar.
 
-- [ ] **Step 4: Convert the 7 non-default fixtures.** For EACH, replace the `debuffLandingChance: N`
-  line with stat bases on the APPLYING actor that reproduce chance N, and confirm the test still passes
-  with its EXISTING assertions:
-  - `: 0` → add/set `hacking: 0` on that actor's stats (focus actor: its `stats.hacking`; enemy attacker:
-    its `stats.hacking`). Effective hacking 0 → landing 0 regardless of target security.
-  - `: 0.5` → `hacking: 150` (target keeps default security 100 → 0.5).
-  Locate the exact stat object per fixture by reading each test (focus fixtures set stats via `baseInput`;
-  enemy-attacker fixtures set stats on the `enemyAttackers[]` entry). Remove the now-redundant
-  `debuffLandingChance` line from each converted fixture. Run each file:
-  `npx vitest run triggers resistedEnemyDotsRoundEffects enemyDebuffLandingChance resistedEnemyDebuffsRoundEffects`
+- [ ] **Step 4: Convert the bucket-(B) fixtures to stat bases.** For EACH, replace the chance with
+  `stats.hacking` on the APPLYING actor reproducing the same chance, keeping EXISTING assertions:
+  - `0` → `hacking: 0` (effective hacking 0 → `clamp(0 − security ≥ 0) = 0` regardless of target security).
+  - `0.5` → `hacking: 150` (target keeps default security 100 → 0.5).
+  Per-file:
+  - **triggers.test.ts** (literals): set `hacking` on the focus `baseInput` (:295 case) / on the
+    `enemyAttackers[]` entry (:933, :1419, :1060) and remove each `debuffLandingChance` line.
+  - **resistedEnemyDots / resistedEnemyDebuffs / enemyDebuffLandingChance** (helper-based): change the
+    helper (`dotEnemy`/`debuffEnemy`) to take a `hacking` param and set `stats.hacking` on the enemy instead
+    of `debuffLandingChance`; update call sites (`runWithEnemy(0)` → pass hacking 0; `(1)` → omit/default).
+  - **enemyBuffSelfDebuffGate.test.ts**: same — `provokeEnemy(dlc)` → `provokeEnemy(hacking)`; `provokeEnemy(0)`
+    → enemy hacking 0; the `(1)`/`(undefined)` cases → default (omit).
+  - **dynamicLanding.test.ts**: this file already exercises the LIVE path via hacking/security. Remove the
+    test-local `debuffLandingChance?` fields (≈:77/:206) and the two assignment sites (≈:134/:225); for any
+    assertion that depended on the scalar (not on hacking/security), set the actor's `hacking` to reproduce
+    the chance. Verify every assertion still holds.
+  Run: `npx vitest run triggers resistedEnemyDotsRoundEffects enemyDebuffLandingChance resistedEnemyDebuffsRoundEffects enemyBuffSelfDebuffGate dynamicLanding`
   → all PASS with unchanged assertions.
 
-  > If giving an enemy attacker `hacking: 0` does not reproduce landing 0 (e.g. the test's target lacks a
-  > security base AND the affinity is non-neutral), re-confirm via the formula and adjust — but `hacking: 0`
-  > forces effective hacking 0 → `clamp(0 − security ≥ 0) = 0`, so this should always yield 0. If a fixture
-  > resists differently than expected, inspect the actual result and pin the real behavior; do NOT weaken
-  > the assertion.
+  > `hacking: 0` forces effective hacking 0 → landing 0 in all affinities. If a fixture resists differently
+  > than expected, inspect the actual result and pin the REAL behavior; do NOT weaken the assertion. Leave
+  > the `debuffLandingChance` INPUT FIELDS in place for now (Task 2 deletes them) — converting here means
+  > adding `hacking` and removing the per-fixture `debuffLandingChance`, so these files end Task 1 with no
+  > `debuffLandingChance` references.
 
 - [ ] **Step 5: Verify production parity.** `npx vitest run` → all green. `git status --porcelain | grep '\.snap'`
   → EMPTY (zero snapshot churn — production byte-identical). `npx tsc --noEmit` clean. `npm run lint` → 0.
@@ -157,20 +191,29 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - [ ] **Step 1: Remove the production field declarations + dead computations** listed above. After each
   removal, expect tsc to flag downstream readers — follow the errors.
 
-- [ ] **Step 2: Run tsc and delete every flagged usage.** `npx tsc --noEmit` → it will list each remaining
-  `debuffLandingChance` reference (production threading + the 84 test lines + any test-local
-  `debuffLandingChance: number` in input-builder types/helpers). Delete each. Re-run until tsc is clean.
+- [ ] **Step 2: Handle the bucket-(C) block FIRST — `healingEngineAdapter.test.ts:905-1021`.** This
+  describe-block asserts `cap.enemyAttackers[0].debuffLandingChance` (the adapter producing the scalar we
+  delete). It tests removed behavior and cannot be made byte-identical. **Delete the describe-block.** The
+  landing behavior it covered is now tested live (`dynamicLanding.test.ts` + engine landing tests). If on
+  reading you find it asserts adapter behavior NOT covered elsewhere, instead rewrite those assertions to
+  check the adapter threads `hacking`/`enemySecurity` bases (so the engine computes landing live) — but
+  default to deletion. Run `npx vitest run healingEngineAdapter` → green.
+
+- [ ] **Step 3: Run tsc and delete every remaining flagged usage.** `npx tsc --noEmit` → it lists each
+  remaining `debuffLandingChance` reference: the 84 inert `: 1` test lines + any test-local
+  `debuffLandingChance: number` in input-builder types/helpers (e.g. the `dynamicLanding` locals already
+  handled in Task 1; verify none remain). Delete each. Re-run until tsc is clean.
 
   > The 84 `debuffLandingChance: 1` test lines are byte-identical to delete (live default = 1.0). Many sit
   > in per-file `baseInput`/`mkInput` helpers — deleting from the helper covers many tests at once. Do NOT
   > change any assertion; only delete the inert input line.
 
-- [ ] **Step 3: Verify byte-identity.** `npx vitest run` → all green, SAME snapshots as end of Task 1
+- [ ] **Step 4: Verify byte-identity.** `npx vitest run` → all green, SAME snapshots as end of Task 1
   (`git status --porcelain | grep '\.snap'` → EMPTY). `npx tsc --noEmit` clean. `npm run lint` → 0.
 
   > If a snapshot moves or a test fails, a deletion changed behavior — STOP and report.
 
-- [ ] **Step 4: Commit.**
+- [ ] **Step 5: Commit.**
   ```bash
   git add -A
   git commit -m "refactor(combat): A-closeout — delete dead static debuffLandingChance (fields, runtime, computations) + inert :1 test lines"
