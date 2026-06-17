@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `liveDebuffLandingChance` the sole producer of debuff-landing chance — remove the `liveLandingComputable` ternary and delete the now-dead static `debuffLandingChance` scalar in all three forms (focus / enemy-attacker / walked-team), converting the 7 non-default test fixtures to stat-based landing. Closes sub-project A.
+**Goal:** Make `liveDebuffLandingChance` the sole producer of debuff-landing chance — remove the `liveLandingComputable` ternary and delete the now-dead static `debuffLandingChance` scalar in all three forms (focus / enemy-attacker / walked-team), converting the 8 behavioral non-default test fixtures (across 5 files) to stat-based landing. Closes sub-project A.
 
-**Architecture:** The live stat-based path is already self-sufficient (A.2-partial: `liveDebuffLandingChance` defaults missing hacking→200 / security→100). Production already always uses it (every actor has bases), so the static scalar is dead weight. We remove the ternary + closure fallbacks (behavior commit, 7 fixtures converted), then delete the scalar fields + dead computations (tsc-guided mechanical), then unify the triggers read (A.1).
+**Architecture:** The live stat-based path is already self-sufficient (A.2-partial: `liveDebuffLandingChance` defaults missing hacking→200 / security→100). Production already always uses it (every actor has bases), so the static scalar is dead weight. We remove the ternary + closure fallbacks (behavior commit, 8 fixtures converted), then delete the scalar fields + dead computations (tsc-guided mechanical), then unify the triggers read (A.1).
 
 **Tech Stack:** TypeScript, Vitest. Combat engine in `src/utils/combat/`.
 
 **Spec:** `docs/superpowers/specs/2026-06-17-a-closeout-landing-sole-producer-design.md`. Epic: `docs/superpowers/specs/2026-06-17-combat-realism-epic-roadmap.md`.
 
-**Gate:** **Production BYTE-IDENTICAL** — `battleSimulator`, `twoTeamBattle`, `dpsGoldenParity`, healing goldens must NOT move (`git status --porcelain | grep '\.snap'` empty after every task). The only changes are the 7 non-default fixtures' INPUTS (same assertions) and the 84 inert `debuffLandingChance: 1` line deletions. **Never blind `vitest -u`** — if any `.snap` moves, STOP and report.
+**Gate:** **Production BYTE-IDENTICAL** — `battleSimulator`, `twoTeamBattle`, `dpsGoldenParity`, healing goldens must NOT move (`git status --porcelain | grep '\.snap'` empty after every task). The only changes are the 8 behavioral fixtures' INPUTS (same assertions), the 2 bucket-C assertion deletions, and the 84 inert `debuffLandingChance: 1` line deletions. **Never blind `vitest -u`** — if any `.snap` moves, STOP and report.
 
 **Workflow:** Main checkout, branch `feat/combat-sim-phase5-pr2` (no fresh worktree — esbuild crash). `gh auth switch --hostname github.com --user TheSusort` only for PR ops. Docs gitignored → `git add -f` + `--no-verify`.
 
@@ -45,12 +45,15 @@ accordingly:
   - `enemyBuffSelfDebuffGate.test.ts` — helper `provokeEnemy(dlc)` / `provokeEnemy(0)` (≈:515-521/:566).
   - `dynamicLanding.test.ts` — test-local input/runtime types carry `debuffLandingChance?` (≈:77/:134,
     :206/:225); these feed `PlayerActorRuntime`/input directly (the field Task 2 deletes).
-- **(C) Asserts on the deleted computation** — `healingEngineAdapter.test.ts:905-1021` reads
-  `cap.enemyAttackers[0].debuffLandingChance` (8 assertions, ≈:947/:961/:975/:989/:990/:1004/:1020/:1021).
-  These test the adapter PRODUCING the scalar we delete — they **cannot** be byte-identical. **Delete the
-  describe-block** (the landing behavior it covered is now tested live by `dynamicLanding.test.ts` + the
-  engine landing tests). Only if the block asserts something NOT otherwise covered, rewrite it minimally
-  to assert via stat bases / observable landing outcome instead of the removed field. (Handled in Task 2.)
+- **(C) Asserts on the deleted field** — two sites that unit-test code producing the scalar we delete;
+  they **cannot** be byte-identical. (Both handled in Task 2.)
+  - `healingEngineAdapter.test.ts:905-1023` — a describe-block reading `cap.enemyAttackers[0].debuffLandingChance`
+    (8 assertions, ≈:947/:961/:975/:989/:990/:1004/:1020/:1021). **Delete the whole describe-block** (its
+    landing coverage now lives in `dynamicLanding.test.ts` + engine landing tests). Only if it asserts
+    something NOT otherwise covered, rewrite minimally to assert via stat bases / observable outcome.
+  - `teamActorWalk.test.ts:23` — `expect(w.debuffLandingChance).toBe(1)` inside the `synthesizeBuffOnlyWalk`
+    describe-block (added in the A.3 migration). It asserts the synthesized field Task 2 removes from
+    `teamActorWalk.ts:32`. **Delete just that one assertion line**; the rest of the describe-block stays.
 
 **Conversion rule (bucket B):** `0` → set the APPLYING actor's `stats.hacking: 0` (→ effective hacking 0
 → `clamp(0 − security)/100 = 0` regardless of target security). `0.5` → `hacking: 150` with the target at
@@ -67,12 +70,13 @@ enemy with `stats.hacking` and the existing `it()` assertions are untouched).
   A.1 accessor), `dpsSimulator.ts` (static formula + `deriveTeamEngineActors` teamLandingChance),
   `battleSimulator.ts` (`landingChance` + threading), `healingEngineAdapter.ts` (:177/:221/:238),
   `teamActorWalk.ts` (drop the synthesized `debuffLandingChance`).
-- **Modify (tests):** the 7 non-default fixtures (convert) + ~40 files with `debuffLandingChance: 1`
+- **Modify (tests):** the 8 behavioral non-default fixtures (convert) + 2 bucket-C assertion sites
+  (`healingEngineAdapter.test.ts`, `teamActorWalk.test.ts`) + ~40 files with `debuffLandingChance: 1`
   (delete the line; tsc surfaces each once the fields are gone).
 
 ---
 
-## Task 1: Collapse the ternary + retire closure fallbacks + convert the 7 fixtures (BEHAVIOR commit)
+## Task 1: Collapse the ternary + retire closure fallbacks + convert the 8 behavioral fixtures (BEHAVIOR commit)
 
 This is the only behavior-sensitive task. After it, `runtime.liveDebuffLandingChance` is always set and
 no closure reads the scalar. The scalar FIELDS remain (Task 2 deletes them), so the 84 `:1` tests still
@@ -91,12 +95,14 @@ compile and stay byte-identical.
   grep -rn "debuffLandingChance" src/utils/combat/__tests__ src/utils/calculators/__tests__
   ```
   Bucket each hit per the Background: (A) inert `: 1` literal, (B) behavioral non-default (literal OR
-  helper-threaded `0`/`0.5`), (C) asserts on the deleted field (`cap.enemyAttackers[…].debuffLandingChance`).
-  Confirm bucket (B) matches the Background's known sites (triggers ×4, resistedEnemyDots, resistedEnemyDebuffs,
-  enemyDebuffLandingChance, enemyBuffSelfDebuffGate, dynamicLanding) and bucket (C) is only
-  `healingEngineAdapter.test.ts:905-1021`. **If you find a bucket-(B) or (C) site NOT in this list, STOP and
-  report the fuller inventory before converting** (the spec flagged enumeration as the main risk). In THIS
-  task convert only bucket (B); bucket (A) deletions and the bucket (C) block are Task 2.
+  helper-threaded `0`/`0.5`), (C) asserts on the deleted field. Confirm:
+  - bucket (B) = **8 behavioral conversions across 5 files** (triggers ×4 [:295/:933/:1419 `0`, :1060 `0.5`],
+    resistedEnemyDots ×1, resistedEnemyDebuffs ×1, enemyDebuffLandingChance ×1, enemyBuffSelfDebuffGate ×1),
+    PLUS `dynamicLanding.test.ts` test-local plumbing (inert — no behavioral value, just remove the field);
+  - bucket (C) = exactly `healingEngineAdapter.test.ts:905-1023` AND `teamActorWalk.test.ts:23`.
+  **If you find a bucket-(B) or (C) site NOT in this list, STOP and report the fuller inventory before
+  converting** (the spec flagged enumeration as the main risk). In THIS task convert only bucket (B);
+  bucket (A) deletions and the bucket (C) sites are Task 2.
 
 - [ ] **Step 2: Collapse the ternary in `playerTurn.ts`.** Replace the `liveLandingComputable` block
   (~:699-721) so the live recompute is unconditional and the runtime field always set:
@@ -181,8 +187,8 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - Modify: `src/utils/combat/playerTurn.ts` — the `debuffLandingChance` param/field (~:156/:630).
 - Modify: `src/utils/calculators/dpsSimulator.ts` — static formula (~:243-246) + `runCombat` arg (~:278);
   `deriveTeamEngineActors` `teamLandingChance` (~:187) + the `walk.debuffLandingChance` it sets.
-- Modify: `src/utils/calculators/battleSimulator.ts` — `landingChance()` (~:593-600) + the `:656`
-  enemy-attacker threading (+ any focus/walked threading of the scalar).
+- Modify: `src/utils/calculators/battleSimulator.ts` — `landingChance()` (~:593-600) + the three
+  threading sites (~:631 focus, ~:656 enemy-attacker, ~:687 walked/focusLanding). tsc-guided; confirm all.
 - Modify: `src/utils/calculators/healingEngineAdapter.ts` — compute (~:177) + threading (~:221/:238).
 - Modify: `src/utils/combat/teamActorWalk.ts` — drop `debuffLandingChance: 1` from the synthesized walk.
 - Modify: ~40 test files — delete every `debuffLandingChance: 1` line (and the `debuffLandingChance?` from
@@ -191,13 +197,15 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - [ ] **Step 1: Remove the production field declarations + dead computations** listed above. After each
   removal, expect tsc to flag downstream readers — follow the errors.
 
-- [ ] **Step 2: Handle the bucket-(C) block FIRST — `healingEngineAdapter.test.ts:905-1021`.** This
-  describe-block asserts `cap.enemyAttackers[0].debuffLandingChance` (the adapter producing the scalar we
-  delete). It tests removed behavior and cannot be made byte-identical. **Delete the describe-block.** The
-  landing behavior it covered is now tested live (`dynamicLanding.test.ts` + engine landing tests). If on
-  reading you find it asserts adapter behavior NOT covered elsewhere, instead rewrite those assertions to
-  check the adapter threads `hacking`/`enemySecurity` bases (so the engine computes landing live) — but
-  default to deletion. Run `npx vitest run healingEngineAdapter` → green.
+- [ ] **Step 2: Handle the bucket-(C) sites FIRST** (they assert on the field, not inert deletions):
+  - `healingEngineAdapter.test.ts:905-1023` — describe-block asserting `cap.enemyAttackers[0].debuffLandingChance`
+    (the adapter producing the deleted scalar). **Delete the describe-block.** The landing behavior is now
+    tested live (`dynamicLanding.test.ts` + engine landing tests). If on reading it asserts adapter behavior
+    NOT covered elsewhere, instead rewrite to check the adapter threads `hacking`/`enemySecurity` bases — but
+    default to deletion.
+  - `teamActorWalk.test.ts:23` — `expect(w.debuffLandingChance).toBe(1)`. **Delete that single assertion
+    line** (keep the rest of the `synthesizeBuffOnlyWalk` describe-block).
+  Run `npx vitest run healingEngineAdapter teamActorWalk` → green.
 
 - [ ] **Step 3: Run tsc and delete every remaining flagged usage.** `npx tsc --noEmit` → it lists each
   remaining `debuffLandingChance` reference: the 84 inert `: 1` test lines + any test-local
@@ -255,7 +263,7 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - [ ] **Step 3:** `npx tsc --noEmit` → clean.
 - [ ] **Step 4:** `npm run audit:skills` → 0 findings / 141 ships.
 - [ ] **Step 5:** Confirm ZERO combat `.snap` moved across the WHOLE closeout
-  (`git diff <base>..HEAD --stat -- '*.snap'` empty) — only the 7 fixtures' inputs and the 84 inert
+  (`git diff <base>..HEAD --stat -- '*.snap'` empty) — only the 8 fixtures' inputs, 2 bucket-C deletions, and the 84 inert
   deletions changed in tests.
 - [ ] **Step 6:** `grep -rn "debuffLandingChance" src/` → only incidental/comment references remain, no
   live scalar field or fallback. `git status` clean.
@@ -267,6 +275,6 @@ Pure mechanical removal — the scalar is now unread. tsc lists every remaining 
 - The static `debuffLandingChance` scalar is deleted in all three forms + the dead computations
   (dpsSimulator / deriveTeamEngineActors / battleSimulator / healingEngineAdapter / teamActorWalk).
 - `triggers.ts` reads the live chance through one accessor (A.1).
-- Production byte-identical (zero `.snap` movement); only the 7 non-default fixtures converted
+- Production byte-identical (zero `.snap` movement); only the 8 behavioral non-default fixtures converted
   (assertions unchanged) and the 84 inert `: 1` lines removed.
 - Suite + lint + tsc + audit:skills clean. **Sub-project A CLOSED.** Next: sub-project B (Stasis).

@@ -94,16 +94,23 @@ duplicated direct field read. Byte-identical.
   removed). `1` equals the live default (hacking 200 vs security 100 → 1.0), so removing the line
   leaves the base-less actor landing at 1.0 identically. Byte-identical. Many live in per-file
   `baseInput` helpers, so one edit covers many tests.
-- **7 × non-default** (6×`0`, 1×`0.5`) — convert to stat-based landing reproducing the exact chance,
-  each with its assertion (lands/resists/dot/event counts) confirmed unchanged:
-  - `0` → live landing 0: actor `stats.hacking` low / target `security` high so
-    `clamp(hacking − security, 0, 100)/100 = 0` (e.g. hacking 0, or hacking 100 vs security 200).
-    Sites: `enemyDebuffLandingChance`, `enemyBuffSelfDebuffGate`, `resistedEnemyDebuffsRoundEffects`,
-    `resistedEnemyDotsRoundEffects`, and the focus fixtures in `dpsSimulator`/`triggers`.
-  - `0.5` → hacking 150 vs security 100 → 0.5. (This single `0.5` fixture lives in `triggers.test.ts`,
-    which also carries `0` fixtures.)
-  The plan enumerates all 7 with file:line + exact stat substitution. **If more than 7 non-default
-  fixtures surface during execution, STOP and surface the fuller list before converting.**
+- **Behavioral non-default** — convert to stat-based landing reproducing the exact chance, each with its
+  assertion (lands/resists/dot/event counts) confirmed unchanged. NOTE: a literal grep UNDERCOUNTS — most
+  enemy fixtures thread the chance through a HELPER param (`runWithEnemy`/`dotEnemy`/`debuffEnemy`/
+  `provokeEnemy`), so the value is not a literal. The true set is **8 conversions across 5 files**:
+  `triggers.test.ts` (×4: three `0`, one `0.5`), `resistedEnemyDotsRoundEffects`, `resistedEnemyDebuffsRoundEffects`,
+  `enemyDebuffLandingChance`, `enemyBuffSelfDebuffGate` (each ×1 `0`). Plus `dynamicLanding.test.ts` carries
+  test-local `debuffLandingChance?` plumbing (inert — remove the field, no value conversion).
+  (The earlier "dpsSimulator fixture" is stale — A.3 removed the focus-borrow there.)
+  - `0` → `stats.hacking: 0` on the applying actor (effective hacking 0 → `clamp(0 − security)/100 = 0`).
+  - `0.5` → `hacking: 150` vs default security 100 → 0.5 (the single `0.5` is in `triggers.test.ts`).
+  For helper-based fixtures, give the helper a `hacking` param instead of `debuffLandingChance`.
+- **Asserts-on-deleted-field (bucket C)** — two sites unit-test code producing the scalar:
+  `healingEngineAdapter.test.ts` (a describe-block reading `cap.enemyAttackers[0].debuffLandingChance`) and
+  `teamActorWalk.test.ts` (`expect(w.debuffLandingChance).toBe(1)`). These cannot be byte-identical — delete
+  the healing describe-block (landing now covered live) and the one teamActorWalk assertion line.
+  The plan enumerates all sites with file:line + exact substitution. **If a behavioral or bucket-C site
+  surfaces outside this list during execution, STOP and surface the fuller inventory before converting.**
 
 ## 7. Sequencing, gate, testing
 
