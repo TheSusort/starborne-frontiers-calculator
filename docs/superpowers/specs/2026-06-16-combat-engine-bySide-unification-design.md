@@ -144,6 +144,33 @@ large-but-byte-identical refactor with a byte-identical-RISKY behavior-adjacent 
   *post-round* — so reading `currentHp` yields the same value the scalar carried. Each per-turn
   site's timing MUST be audited individually before flipping.)
 
+  **PR6b fork resolved (2026-06-17, user-ratified): full collapse, verify empirically.** The
+  audit found the §4.1 byte-identity proof above covers only TWO of the player site's three
+  cases. Recap of all three under the unified `max(0, victimMaxHpFor(tgt) − tgt.currentHp)`:
+  - *Enemy side* — already `max(0, recipientMaxHp(tgt.id) − tgt.currentHp)`. Identical; no change.
+  - *Player dummy sink* (`selectedReal=false`, `tgt=enemy`) — `enemy.currentHp` is set post-round
+    to `max(0, enemyHp − cumulative)`, so `max(0, enemyHp − currentHp) = min(enemyHp, cumulative)`;
+    the `cumulative > pool` case floors to the same 0% the raw scalar did (the sole consumer,
+    `enemyHpPct`, floors at 0). Byte-identical.
+  - *Player real positional target* (`selectedReal=true`, team-vs-team only — `enemyAttackerActors`
+    non-empty) — old code FORCES `enemyHpDecline = 0` (enemyHpPct always 100%). But
+    `applyOutgoingToEnemy → applyVictimDamage` (engine.ts:2243) decrements the real target's
+    `currentHp`, so from round 2 the unified formula is NON-zero → enemyHpPct reflects the real
+    target's actual HP. This is a latent **improvement**, NOT covered by the proof above, and in
+    pure DPS mode it never fires (`enemyAttackerActors` is empty → `selectedReal` always false).
+
+  **Decision:** implement the full collapse literally — remove `enemyHpDecline` from
+  `PlayerTurnArgs` (the "interface change") and derive `max(0, enemyHp − enemy.currentHp)` inside
+  `runPlayerTurn` from the `enemy` (tgt) actor; drop `declineFor` AND `selectedReal` (its only
+  consumer). Then VERIFY EMPIRICALLY: full suite + zero `.snap` movement. Green ⇒ byte-identical in
+  practice and the real-target path is now correctly currentHp-driven (latent, currently
+  unexercised). Any movement ⇒ that IS the real-target divergence; fall back to preserving the
+  player-side `selectedReal ? 0` guard (kills the scalar read but keeps the branch) and defer the
+  real-target HP% refinement to PR7 (per-victim accounting), where reading real targets' HP is the
+  natural unified behavior. Also: the dead-focus synth row (engine.ts:2601) and 7 unit-test call
+  sites that pass `enemyHpDecline: 0` must move with the param removal (test fixtures verified
+  full-HP so the derived value stays 0).
+
 Both children re-derive their golden expectation from parent row 6: **byte-identical**.
 
 **PR6a approach (chosen = "fold per-side turn bindings into `SideContext`; one call + explicit
