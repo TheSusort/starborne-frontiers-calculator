@@ -7,6 +7,26 @@ import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
 import { calculateBuffTotals, payloadToSelectedBuff } from './buffTotals';
 
+// ---------------------------------------------------------------------------
+// This module exposes TWO effective-stat accessors with deliberately different
+// fold semantics — pick by consumer:
+//
+//   • effectiveStatsOf  (STATUS mode) — folds TWO layers (scheduled self-buffs +
+//     timed ability statuses) straight from the StatusEngine. Used by the
+//     speed/turn-order path. `hp` is base pass-through; `crit` is left UNCAPPED
+//     (the consumer applies the affinity cap).
+//
+//   • effectiveDamageStatsOf  (DAMAGE mode) — folds FOUR layers (the two above +
+//     gated active auras + the firing-skill modifier channel) given RESOLVED
+//     ingredients, because aura-gating/timed-application has side effects that
+//     must stay in the turn loop (it cannot re-resolve them here). `hp` IS folded
+//     (hp * (1 + hpBuff/100)); `crit` is still UNCAPPED (consumer caps it).
+//
+// Both share the arithmetic in calculateBuffTotals (buffTotals.ts). See the A1b
+// plan's "Design decisions" for the full rationale. (A2 extends this module with
+// the hacking/security fold pipeline.)
+// ---------------------------------------------------------------------------
+
 export interface EffectiveStats {
     attack: number;
     defence: number;
