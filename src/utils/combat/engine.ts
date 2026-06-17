@@ -2461,8 +2461,11 @@ export function runCombat(input: CombatEngineInput): {
             legacyVictim: enemy,
             victimDefenceFor: (tgt) => tgt.stats.defence,
             victimMaxHpFor: (tgt) => tgt.stats.hp,
-            declineFor: (_tgt, selectedReal) =>
-                selectedReal ? 0 : cumulativeDamage + cumulativeTeamDamage,
+            // PR6b: scalar decline read killed — the dummy sink's currentHp already tracks
+            // cumulativeDamage+cumulativeTeamDamage (post-round sink update, ~3771). The
+            // selectedReal guard stays until Task 3 confirms the real-target collapse empirically.
+            declineFor: (tgt, selectedReal) =>
+                selectedReal ? 0 : Math.max(0, tgt.stats.hp - tgt.currentHp),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             healEventOnly: false,
@@ -2598,7 +2601,9 @@ export function runCombat(input: CombatEngineInput): {
             // A destroyed heal target shows no buffs this round.
             healTargetBuffs = [];
             if (actor.id === focusActorId) {
-                const enemyHpDecline = cumulativeDamage + cumulativeTeamDamage;
+                // PR6b: read the dummy sink's live currentHp instead of the scalar (identical
+                // value — the sink update at ~3771 keeps enemy.currentHp == enemyHp - cumulative).
+                const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
                 const enemyHpPct =
                     enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
                 const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
