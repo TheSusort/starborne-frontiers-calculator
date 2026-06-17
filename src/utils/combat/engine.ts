@@ -12,7 +12,7 @@ import {
     damageInputsFromSkill,
 } from '../abilities/applyAbilities';
 import { conditionsMet } from '../abilities/evaluateConditions';
-import { toSimBuffs } from '../calculators/dpsBuffHelpers';
+import { foldActorBuffTotals } from './effectiveStats';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -49,8 +49,6 @@ import {
     PlayerRoundCtx,
     PlayerTurnResult,
     runPlayerTurn,
-    calculateBuffTotals,
-    payloadToSelectedBuff,
 } from './playerTurn';
 import {
     Intent,
@@ -92,23 +90,7 @@ export function foldSpeedBuffPct(
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
     actorId: string
 ): number {
-    const scheduledSelfBuffs = statusEngine.snapshot(actorId).activeSelfBuffs.flatMap((ab) => {
-        const bufs = selfBuffLookup.get(ab.buffName) ?? [];
-        // Accumulating buff: override static stacks with per-round count; skip when 0.
-        return ab.stacks !== undefined
-            ? ab.stacks > 0
-                ? bufs.map((b) => ({ ...b, stacks: ab.stacks! }))
-                : []
-            : bufs;
-    });
-    const scheduledSpeedBuff = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs)).speedBuff;
-
-    const timedEffects = statusEngine
-        .timedAbilityStatuses('self', actorId)
-        .map((s) => payloadToSelectedBuff(s.payload));
-    const timedSpeedBuff = calculateBuffTotals(toSimBuffs(timedEffects)).speedBuff;
-
-    return scheduledSpeedBuff + timedSpeedBuff;
+    return foldActorBuffTotals(statusEngine, selfBuffLookup, actorId).speedBuff;
 }
 
 // Classify ONE actor's cast buff/debuff abilities into timed/aura/accumulating statuses
