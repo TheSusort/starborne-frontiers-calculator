@@ -125,6 +125,79 @@ this 7-slice may expand if PR4/PR5/PR7 need sub-splitting during planning. **Whe
 sub-split, each child plan must re-derive its golden expectation from this parent row** so the
 byte-identical-vs-audited-churn boundary isn't lost in slicing.
 
+### 4.1 PR6 sub-split & PR6a design (added 2026-06-17; user-ratified)
+
+PR5 (5a–5d) shipped. **PR6 is sub-split into two leaf-first PRs** because row 6 entangles a
+large-but-byte-identical refactor with a byte-identical-RISKY behavior-adjacent change:
+
+- **PR6a — Collapse the 3 `runPlayerTurn` call sites.** Byte-identical. `enemyHpDecline` is
+  **preserved exactly** behind a per-side `declineFor(tgt, selectedReal)` closure (focus/team:
+  `selectedReal ? 0 : cumulativeDamage + cumulativeTeamDamage`; enemy: `max(0, maxHp − currentHp)`).
+  The scalar stays alive.
+- **PR6b — Kill the `enemyHpDecline` scalar.** Gates read `tgt.currentHp` uniformly;
+  `declineFor` collapses to one `max(0, victimMaxHpFor(tgt) − tgt.currentHp)`. Requires a
+  `runPlayerTurn` interface change; multi-site; byte-identical-RISKY. (This is the
+  "enemyHpDecline → currentHp gate-read unification" the campaign notes flagged — it belongs
+  WITH PR6, not a redundant standalone PR5e. The byte-identity rests on: the per-turn scalar
+  `cumulativeDamage + cumulativeTeamDamage` equals `enemyHp − enemy.currentHp` at round start,
+  because both `cumulativeDamage`/`cumulativeTeamDamage` and the dummy's `currentHp` update
+  *post-round* — so reading `currentHp` yields the same value the scalar carried. Each per-turn
+  site's timing MUST be audited individually before flipping.)
+
+Both children re-derive their golden expectation from parent row 6: **byte-identical**.
+
+**PR6a approach (chosen = "fold per-side turn bindings into `SideContext`; one call + explicit
+per-kind tails").** Rejected alternatives: (2) merge focus+team only — 3→2, doesn't meet the
+"one call" goal nor finish the mirror; (3) full unification incl. tails via per-side
+credit/record strategy objects — over-abstracts the bookkeeping tails, obscures byte-identity,
+more review burden than 6a warrants.
+
+The three `runPlayerTurn` sites (focus, walked-team, enemy) diverge along the axes below. Each
+new `SideContext` field / resolver **reproduces the exact current per-site value** → byte-identical,
+no `vitest -u`.
+
+| Binding | Player (focus + team) | Enemy | Lands in |
+|---|---|---|---|
+| `runtime` | `attackerRuntime` / `teamRuntimeById.get(id)` | `enemyPlayerRuntimeByActorId.get(id)` | `runtimeFor(actor)` resolver |
+| opposing roster (selection + apply) | `enemyAttackerActors` | `allPlayerActors` | `SideContext.opposingRoster` |
+| legacy fallback victim | `enemy` (dummy sink) | `healTarget!` | `SideContext.legacyVictim` |
+| `enemyDefense` | `tgt.stats.defence` | `lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id)` | `SideContext.victimDefenceFor(tgt)` |
+| `enemyHp` | `tgt.stats.hp` | `recipientMaxHp(tgt.id)` | `SideContext.victimMaxHpFor(tgt)` |
+| `enemyHpDecline` | `selectedReal ? 0 : cumulative…` | `max(0, victimMaxHpFor(tgt) − tgt.currentHp)` | `SideContext.declineFor(tgt, selectedReal)` *(preserved; PR6b kills it)* |
+| `enemyType` | `enemyType` | `undefined` | `SideContext.enemyTypeArg` |
+| `enemyBuffNames` | `playerEnemyBuffNames()` | `enemyEnemyBuffNames()` | `SideContext.enemyBuffNamesUnion()` |
+| `healEventOnly` | absent (falsy) | `true` | `SideContext.healEventOnly` |
+| `targetId` | omitted | `tgt.id` | side-conditional in arg-builder |
+| `grantAllyCharges` | `bySide('player')` | `bySide('enemy')` | *already in `SideContext`* |
+| positional apply direction | `applyOutgoingToEnemy(dmg, victim)` | enemy→player intake wrapper | `SideContext.applyToVictim` |
+| `selfHpPct` maxHp denom | `baseHpFor(actor.id)` | `enemyRuntime.hp` | `runtimeFor` — **verify `baseHpFor(id) === runtime.hp`** for player actors; if not equal, keep per-side denom |
+| `selfDebuffNames`, `targetHpPct`, `healing`, DoT/bomb/accumulator containers (from `tgt`) | identical | identical | shared / uniform |
+| parsed target / pattern | `input.target` / `input.pattern` | `teamTargetById`/`enemyTargetById`, `teamPatternById`/`enemyPatternById` | `parsedTargetFor(actor)` / `parsedPatternFor(actor)` |
+
+**Collapsed flow per acting actor:** (enemy-only) dead-target cadence guard `→` shared
+positional selection via `bySide(side).opposingRoster` `→` **one** `runPlayerTurn(buildTurnArgs(
+actor, bySide(side)))` `→` shared positional apply via `bySide(side).applyToVictim` `→`
+**per-kind tail** + the uniform `lastTurnCtxByActor.set(actor.id, turn.turnCtx)` (all three sites
+do this today) + `healTargetBuffs` capture.
+
+**Tails PR6a deliberately keeps explicit, and their unification home** (recorded so the boundary
+isn't lost in slicing):
+
+1. **Damage-credit duality** — player `creditDamage(id, channel)` into a damage *row*
+   (`focusTurns` / team map) vs enemy `applyIncomingToTarget` *intake* into the tank — and the
+   **asymmetric result surface** → **PR7 (Phase-5 per-victim accounting)**. PR7 gives every actor
+   both an outgoing row *and* incoming buckets, so "credit" becomes one per-victim apply
+   regardless of side. This is the largest remaining tail and is PR7's explicit purpose.
+2. **Enemy-only dead-target cadence guard** ("don't attack a corpse; keep banking charges") →
+   folds into **PR7's** positional death-fallback retargeting.
+3. **Direction-specific event emissions** — player→enemy `ability-performed` vs enemy→player
+   `attacked` — are **genuinely directional, NOT mirror duplication**. They stay distinct by
+   design (merge only if PR7 makes it free). Do not chase a false symmetry here.
+
+So the remaining-unification chain is **PR6a (collapse the call) → PR6b (kill the decline scalar)
+→ PR7 (per-victim accounting unifies credit + result surface + death-fallback)**. After PR7 the
+only side-specific code is the directional emissions, by design.
+
 ## 5. Safety, testing, workflow
 
 **Per-PR gate.** Byte-identical DPS + healing goldens is the expectation. Audited churn is
