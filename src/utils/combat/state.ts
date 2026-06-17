@@ -84,6 +84,10 @@ export interface ActorStats {
     defence: number;
     hp: number;
     speed: number;
+    /** Live debuff-landing stat. Optional — undefined treated as 0. Buff-fold + dynamic landing land in A2. */
+    hacking?: number;
+    /** Live debuff-resist stat. Optional — undefined treated as 0. A2. */
+    security?: number;
 }
 
 /**

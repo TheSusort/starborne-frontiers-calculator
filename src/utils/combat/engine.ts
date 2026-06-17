@@ -1186,6 +1186,8 @@ export function runCombat(input: CombatEngineInput): {
                       defence: t.walk.stats.defence,
                       hp: t.walk.stats.hp,
                       speed: t.speed,
+                      hacking: t.walk.stats.hacking,
+                      // walk bundle has no `security` field today → leave undefined (a later PR plumbs the input)
                   }
                 : {
                       attack: 0,
