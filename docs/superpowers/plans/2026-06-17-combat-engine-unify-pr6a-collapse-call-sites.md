@@ -166,7 +166,12 @@ interface TurnBindings {
     enemyTypeArg: EnemyBaseClass | undefined;
     enemyBuffNamesUnion: () => string[];
     healEventOnly: boolean;
-    applyToVictim: (victim: CombatActor, damage: number) => ReturnType<typeof applyVictimDamage>;
+    // Matches drivePositionalApply's `applyToVictim` param type exactly (engine.ts ~2391:
+    // `(victim, damage) => void`). The closures below DO return applyVictimDamage's
+    // `{shieldBefore,hpDamage,barriered}`, which is assignable to `=> void` — but the positional
+    // driver ignores the return, and the only consumer that reads it (the non-positional enemy
+    // intake tail, engine.ts ~3599) stays inline and is NOT routed through this binding.
+    applyToVictim: (victim: CombatActor, damage: number) => void;
 }
 const playerTurnBindings: TurnBindings = {
     opposingRoster: enemyAttackerActors,
@@ -276,7 +281,7 @@ const selectTurnTarget = (a: CombatActor): { tgt: CombatActor; selectedReal: boo
 
 - [ ] **Step 2: Replace the three selection blocks**
 
-- focus: replace the `selectedEnemy`/`tgt` computation with `const { tgt, selectedReal } = selectTurnTarget(actor);` and update `declineFor(tgt, selectedReal)`. Delete the old `selectedEnemy` local; the positional gate ~2973 uses `selectedEnemy` only via the `tgt`/scalars path — re-derive from `selectedReal`/`tgt` (the gate keys off `isPositional + pattern + positionalScalars`, not `selectedEnemy`).
+- focus: replace the `selectedEnemy`/`tgt` computation with `const { tgt, selectedReal } = selectTurnTarget(actor);`. The ONLY consumer of the selection flag is `enemyHpDecline` → pass `selectedReal` there. The positional gate (engine.ts ~2973) keys off `isPositional(actor.position, enemyAttackerActors) && target != null && pattern != null && turn.positionalScalars != null` — it does NOT reference `selectedEnemy` at all (VERIFIED in plan review), so deleting `selectedEnemy` needs no gate substitution.
 - team: same with `selectedTeamEnemy` → `selectedReal`.
 - enemy: replace `selectedPlayer`/`tgt`; `targetDead = tgt.currentHp <= 0` stays.
 
@@ -301,12 +306,11 @@ git commit -m "refactor(combat): PR6a Task 4 — unified selectTurnTarget(actor)
 
 **What:** The capstone step. Unify `selfHpPct` (verify the maxHp denom), then extract a single `buildTurnArgs` producing the full `runPlayerTurn` argument object for any side, and replace all three call expressions with `runPlayerTurn(buildTurnArgs(...))`. Tails stay per-kind.
 
-- [ ] **Step 1: Verify the `selfHpPct` maxHp denominator**
+- [ ] **Step 1: Unify the `selfHpPct` maxHp denominator**
 
-Player sites use `baseHpFor(actor.id)`; enemy uses `enemyRuntime.hp` (= `runtimeFor(actor).hp`). Confirm whether `baseHpFor(id) === runtimeFor(id).hp` for player actors:
-Run: add a temporary `console.assert(baseHpFor(actor.id) === runtimeFor(actor).hp)` in each player branch, run a healing test that exercises focus+team, observe no assert fire; then remove. (Or reason from construction: `baseHpById` vs `runtime.hp` source.)
-- If EQUAL: unify the denom to `runtimeFor(actor).hp` for all sides.
-- If NOT EQUAL: keep the denom per-side — add `selfHpMaxHpFor: (a) => number` to `TurnBindings` (player → `baseHpFor(a.id)`, enemy → `runtimeFor(a).hp`). Either way the resolved value is byte-identical.
+Player sites use `baseHpFor(actor.id)`; enemy uses `enemyRuntime.hp` (= `runtimeFor(actor).hp`). These are **provably equal by construction** (VERIFIED in plan review): `baseHpById` maps `attacker.id → hp` and `t.id → t.walk.stats.hp` (engine.ts ~1618-1620), while `attackerRuntime.hp = hp` (~1341) and team `runtime.hp = w.stats.hp` (~1423) — same source. So unify the denom to `runtimeFor(actor).hp` for all sides (byte-identical). No temp-assert needed.
+
+> If, contrary to the above, a value ever diverges, fall back to a per-side `selfHpMaxHpFor: (a) => number` field on `TurnBindings` — but the equality holds, so the single denom is correct.
 
 - [ ] **Step 2: Add `buildTurnArgs`**
 
@@ -316,7 +320,7 @@ Beside the other resolvers, add a builder that returns the full arg object. It t
 const buildTurnArgs = (a: CombatActor, tgt: CombatActor, selectedReal: boolean) => {
     const tb = turnBindings(a.side);
     const rt = runtimeFor(a);
-    const maxHp = /* Step 1 result */;
+    const maxHp = rt.hp; // unified denom (Step 1: baseHpFor(id) === runtimeFor(id).hp)
     return {
         runtime: rt,
         enemy: tgt,
@@ -381,7 +385,7 @@ For each site's positional-apply block (focus ~2981, team ~3122, enemy ~after 35
 - `opposingLiving: enemyAttackerActors,` (player) / `allPlayerActors` (enemy) → `opposingLiving: turnBindings(actor.side).opposingRoster,`
 - `applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),` (player) / the enemy wrapper → `applyToVictim: turnBindings(actor.side).applyToVictim,`
 
-> Confirm the `applyToVictim` signature in `drivePositionalApply` is `(victim, damage) => …` matching `TurnBindings.applyToVictim`. If `drivePositionalApply` calls it as `(victim, damage)`, the binding matches; if `(damage, victim)`, adjust the `TurnBindings` closure arg order to match the DRIVER, and keep the non-positional `tb.applyToVictim` call sites consistent. **Pin the arg order from the actual `drivePositionalApply` definition (~2380).**
+> `drivePositionalApply`'s `applyToVictim` param is `(victim: CombatActor, damage: number) => void` (engine.ts ~2391 — VERIFIED in plan review), which matches `TurnBindings.applyToVictim` exactly. No arg-order adjustment is needed. Do NOT route the non-positional enemy intake (`applyIncomingToTarget(damage, tgt)`, engine.ts ~3599, whose `{shieldBefore,hpDamage,barriered}` return is destructured) through `tb.applyToVictim` — that is a tail and stays inline.
 
 - [ ] **Step 2: Suite + snapshot + gates**
 
