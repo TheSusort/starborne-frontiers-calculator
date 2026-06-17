@@ -44,14 +44,15 @@ snapshot, and routed to every consumer.
   - **hacking / security** → debuff landing & resist shift mid-fight; **add affinity's ±25%
     on hacking** to the roll, and enforce the affinity-disadvantage "non-hacking effects not
     applied" rule.
-  - **shieldPenetration** → new consumer: the shield-drain **split** (deal `(1−pen)` to shield,
-    `pen` straight to HP, shield overflow continues to HP). Static stat, but newly consumed.
   - confirm **speed → turn order** reads the unified snapshot.
+- **shieldPenetration** is included in the snapshot so the shield system (**H**) can read it, but
+  the shield-drain **split** consumer itself lives in H (it belongs with shield absorb), not A.
 
 **Out of scope (other sub-projects):**
 - Pre-fight base modifiers — squad leaders, Lionheart-style passives (**F**).
-- Shield *sources* — gear-set shield skills, overheal→shield implant (**D**); A only consumes a
-  shield pool that already exists.
+- The **shield system** — per-actor shield grant, sim surfacing, and the shield-pen split (**H**);
+  shield *sources* (gear-set, overheal→shield implant) (**D**). A only exposes the
+  `shieldPenetration` stat in the snapshot for H to read.
 - HP is **not** in-fight-dynamic (no HP buffs); max HP stays fixed once combat starts.
 - hpRegen has no combat consumer today → not wired in A (revisit if a consumer is added).
 - damageReduction is already consumed; A folds it into the snapshot but adds no new behavior
@@ -81,7 +82,7 @@ effectiveStatsOf(actor): EffectiveStats
 | PR | Scope | Golden gate |
 |----|-------|-------------|
 | **A1** | Add hacking/security to `ActorStats`; extend `calculateBuffTotals` to fold them; build `effectiveStatsOf` + `EffectiveStats`; **migrate all existing consumers** (damage scalars, defence modifier, speed/turn-order, HP%/decline) to read it. No new dynamic behavior. | **Byte-identical** — reproduces today's piecemeal values exactly (hacking/security folded but not yet consumed). |
-| **A2** | **Light up the newly-dynamic stats:** dynamic debuff landing/resist from effective hacking/security; add affinity ±25% to the hacking roll + enforce the disadvantage "non-hacking effects not applied" rule; wire the shield-penetration drain split; sweep any remaining stat that should be dynamic. | **Audited churn** — landing/resist shift only when a hacking/security buff is active or affinity is non-neutral on a hacking effect; shield-pen split changes only when shield-pen > 0 and a shield is present. Synthetic goldens that use none of these stay byte-identical; every moved snapshot explained. |
+| **A2** | **Light up the newly-dynamic stats:** dynamic debuff landing/resist from effective hacking/security; add affinity ±25% to the hacking roll + enforce the disadvantage "non-hacking effects not applied" rule; sweep any remaining stat that should be dynamic. (Shield-pen *split* is sub-project H.) | **Audited churn** — landing/resist shift only when a hacking/security buff is active or affinity is non-neutral on a hacking effect. Synthetic goldens that use none of these stay byte-identical; every moved snapshot explained. |
 
 A1 may sub-split if the consumer migration is large (e.g. A1a accessor + fold written alongside
 with no reader = byte-identical à la PR5a, then A1b flip consumers).
@@ -98,7 +99,7 @@ with no reader = byte-identical à la PR5a, then A1b flip consumers).
 | hp | not in-fight-dynamic (no HP buffs); max fixed | snapshot holds base; no fold |
 | **hacking** | **static** (landing computed once, affinity omitted) | **A2: fold + dynamic landing + affinity ±25%** |
 | **security** | **static** | **A2: fold + dynamic resist** |
-| **shieldPenetration** | **no consumer** | **A2: shield-drain split** |
+| **shieldPenetration** | no consumer | include in snapshot; split consumer is **H** |
 | healModifier | folded/consumed (healing) | confirm it reads snapshot |
 | damageReduction | consumed | fold; add dynamic path only if audit finds a gap |
 | hpRegen / shield | no combat consumer / excluded | not in A |
@@ -121,8 +122,7 @@ with no reader = byte-identical à la PR5a, then A1b flip consumers).
 - Does affinity apply to the **resist** side (security) too, or only the attacker's hacking? The
   image specifies hacking; security's affinity treatment needs confirmation (default: affinity
   affects the attacker's hacking only, per the image).
-- Exact ordering of the shield-pen split vs Barrier full-immunity and Cheat-Death intercepts in
-  `applyIncomingToTarget` (Barrier blocks all; shield-pen split applies to the non-blocked path).
+- (Shield-pen split ordering vs Barrier/Cheat-Death intercepts is sub-project H's concern, not A's.)
 
 ## 8. References
 - Epic: `2026-06-17-combat-realism-epic-roadmap.md`.

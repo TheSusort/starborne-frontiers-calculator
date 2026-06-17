@@ -32,6 +32,7 @@ the gaps now are *which mechanics it simulates*, not *how it routes sides*.
 | **E** | Per-victim AoE accounting (old PR7) | Symmetric incoming surface, per-victim modifier sourcing, per-victim leech, death-fallback. |
 | **F** | Pre-fight stat modifiers | Squad leaders + pre-fight passives (Lionheart) establish combat-entry base stats. |
 | **G** | Damage-reaction mechanics | Reflect (new) + counterattack condition/AoE refinements. |
+| **H** | Shield system | Per-actor shield grant (beyond heal-target) + surface shield gains/pool in the sim + shield-pen 80/20 split + max-shield=maxHP. Sources extend via D. |
 
 ### Dependency notes
 - **A is the backbone.** A's `effectiveStatsOf` = **pre-fight base (F) + in-fight deltas (A)**;
@@ -78,12 +79,17 @@ the gaps now are *which mechanics it simulates*, not *how it routes sides*.
 - Cleanse removes X **debuffs including DoTs**, sorted by time-applied **newest first**.
 - Purge mirrors for **buffs**. Both respect the Unremovable/persistent-stacking set.
 
-### Shield + shield penetration (A consumer + D sources)
-- Shield penetration is a passive, usually 20% (effectively a static per-ship stat).
+### Shield + shield penetration (H system; A exposes the stat; D sources)
+- Shield penetration is a passive, usually 20% (effectively a static per-ship stat). A includes
+  it in the effective-stats snapshot; **H consumes it** in the absorb path.
 - **Split:** an attacker with 20% shield-pen deals **80% to shield** (overflow to HP once the
   shield is gone) **+ 20% straight to HP**, bypassing the shield.
 - **Max shield = max HP.** Sources: own skills, allies' skills, gear-set shield skills, and an
   implant converting a portion of overheal into shield (sources → D).
+- **Half-built today:** `CombatActor.shieldPool` exists and per-victim shield *absorb* works in
+  the positional path; shield *grant* only routes to the heal-target (healing mode) and the
+  battle sim hardcodes `shieldsAbsorbed: 0`. H generalizes grant to any actor, surfaces shields
+  in the sim, and adds the shield-pen split.
 
 ### Damage reactions (G)
 - **Reflect** (unmodeled): % of incoming direct damage dealt back to the attacker; sources =
