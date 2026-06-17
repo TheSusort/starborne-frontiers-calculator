@@ -1661,7 +1661,7 @@ export function runCombat(input: CombatEngineInput): {
     // Enemy ids are never queried as recipients.
     const baseHpById = new Map<string, number>([
         [attacker.id, hp],
-        ...teamActors.map((t) => [t.id, t.walk ? t.walk.stats.hp : 1] as const),
+        ...teamActors.map((t) => [t.id, t.walk!.stats.hp] as const),
     ]);
     const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
 
@@ -1741,7 +1741,7 @@ export function runCombat(input: CombatEngineInput): {
     // legacy team → 0. After the target's first turn the live ctx.effectiveDefence is preferred.
     const baseDefenceById = new Map<string, number>([
         [attacker.id, defence],
-        ...teamActors.map((t) => [t.id, t.walk ? t.walk.stats.defence : 0] as const),
+        ...teamActors.map((t) => [t.id, t.walk!.stats.defence] as const),
     ]);
     const baseDefenceFor = (id: string): number => baseDefenceById.get(id) ?? 0;
 
