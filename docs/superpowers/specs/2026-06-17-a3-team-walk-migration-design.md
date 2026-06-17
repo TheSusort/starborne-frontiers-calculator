@@ -35,10 +35,10 @@ the public buff-only `TeamActorInput` API intact for callers. This is a **behavi
 ### Production reality (audited)
 **No production code path produces buff-only team actors.** Both consumer pages always pass
 `shipSkills` + `stats`:
-- `DPSCalculatorPage.tsx:160` — `shipSkills: t.shipSkills, stats: t.stats`.
-- `HealingCalculatorPage.tsx:381` — same, and ship-less heal targets synthesize an empty kit via
-  `buildDefaultShipSkills()` (`:420`).
-- `battleSimulator.ts:616` — always builds a full `walk` bundle.
+- `src/pages/calculators/DPSCalculatorPage.tsx` (~`:169`) — `shipSkills: t.shipSkills, stats: t.stats`.
+- `src/pages/calculators/HealingCalculatorPage.tsx` (~`:390`) — same, and ship-less heal targets
+  synthesize an empty kit via `buildDefaultShipSkills()` (~`:420`).
+- `src/utils/calculators/battleSimulator.ts` (~`:628`) — always builds a full `walk` bundle.
 
 The buff-only path is therefore a **test-only + documented escape-hatch** surface
 (`TeamActorInput.shipSkills?`/`stats?` are optional with a "legacy scheduled-list source" doc).
@@ -64,7 +64,9 @@ pass-through unchanged — the engine normalizes whatever it receives.
 
 **Mechanism:** at `runCombat` entry, map `teamActors` → for each without `.walk`, attach a
 synthesized walk (below). Everything downstream (`teamRuntimeById` builder `:1410`, the walked
-dispatch branch `:3157`) then sees a uniform walked roster.
+dispatch branch `:3157`) then sees a uniform walked roster. **Placement note:** `teamActors` is
+destructured from `input` with a `= []` default (`engine.ts:1089`); the normalization must run
+on/after that destructure (or on `input.teamActors`) so it precedes the `teamRuntimeById` builder.
 
 ## 4. The synthesized walk bundle
 
