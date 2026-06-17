@@ -73,9 +73,11 @@ effectiveStatsOf(actor): EffectiveStats
 - `EffectiveStats` carries every stat in the canonical list the engine consumes. `hp` is a
   **pure pass-through** value (base max HP) — there is no in-fight HP fold path; its presence in
   the snapshot must not be read as implying one.
-- `calculateBuffTotals` is extended to fold **hacking** and **security** (stat keys already exist
-  in `StatName`); flat-vs-percentage handling follows the existing convention
-  (`PERCENTAGE_ONLY_STATS`; hacking/security are flexible).
+- The **hacking/security buff-fold pipeline** (`ParsedBuffEffects.hacking` — currently absent —
+  + `Buff.stat` union + `toSimBuffs` branches + `calculateBuffTotals` + parser emission of
+  Hacking/Security Up/Down) is wired in **A2**, where it is consumed by the landing roll. There
+  is no consumer before A2, and it requires parser work, so it does not belong in A1's
+  accessor PR. In A1, `effectiveStatsOf` carries hacking/security as **base pass-through**.
 - All existing consumers are migrated to read `effectiveStatsOf` so there is **one** source of
   truth. The migration reproduces today's values exactly.
 
@@ -83,8 +85,8 @@ effectiveStatsOf(actor): EffectiveStats
 
 | PR | Scope | Golden gate |
 |----|-------|-------------|
-| **A1** | Add hacking/security to `ActorStats`; extend `calculateBuffTotals` to fold them; build `effectiveStatsOf` + `EffectiveStats`; **migrate all existing consumers** (damage scalars, defence modifier, speed/turn-order, HP%/decline) to read it. No new dynamic behavior. | **Byte-identical** — reproduces today's piecemeal values exactly (hacking/security folded but not yet consumed). |
-| **A2** | **Light up the newly-dynamic stats:** dynamic debuff landing/resist from effective hacking/security; add affinity ±25% to the hacking roll + enforce the disadvantage "non-hacking effects not applied" rule; sweep any remaining stat that should be dynamic. (Shield-pen *split* is sub-project H.) | **Audited churn** — landing/resist shift only when a hacking/security buff is active or affinity is non-neutral on a hacking effect. Synthetic goldens that use none of these stay byte-identical; every moved snapshot explained. |
+| **A1** | Add hacking/security to `ActorStats` (base pass-through); build `effectiveStatsOf` + `EffectiveStats`; **migrate all existing consumers** (damage scalars, defence modifier, speed/turn-order, HP%/decline) to read it. No new dynamic behavior; hacking/security are pass-through (no fold yet). | **Byte-identical** — reproduces today's piecemeal values exactly. |
+| **A2** | **Light up the newly-dynamic stats:** wire the hacking/security buff-fold pipeline (`ParsedBuffEffects.hacking`, `Buff.stat`, `toSimBuffs`, `calculateBuffTotals`, parser emission); dynamic debuff landing/resist from effective hacking/security; add affinity ±25% to the hacking roll + enforce the disadvantage "non-hacking effects not applied" rule; sweep any remaining stat that should be dynamic. (Shield-pen *split* is sub-project H.) | **Audited churn** — landing/resist shift only when a hacking/security buff is active or affinity is non-neutral on a hacking effect. Synthetic goldens that use none of these stay byte-identical; every moved snapshot explained. |
 
 **A1 sub-split decision is made up-front during planning**, based on the consumer count the §5
 exhaustive sweep surfaces: if migration touches many sites, split into A1a (accessor + fold
