@@ -220,10 +220,58 @@ After this task every team actor walks → the legacy branch is unreachable (del
 where the audited golden churn happens.
 
 **Files:**
+- Create: `src/utils/combat/__tests__/buffOnlyTeamWalk.integration.test.ts` (equivalence guard)
 - Modify: `src/utils/combat/engine.ts` — import + apply the normalizer right after the input destructure
   (`~:1107`), BEFORE the `teamRuntimeById` builder (`~:1410`) and any other `teamActors` read.
 
-- [ ] **Step 1: Apply the normalizer.** Add the import near the other `./` engine-module imports at the top
+- [ ] **Step 1: Write the equivalence/integration guard FIRST (it passes today via the legacy branch).**
+  This is the spec's stated primary risk (§9: an empty kit through `runPlayerTurn`). Written before wiring,
+  it pins the observable behavior so it must survive both the wiring (Step 2) and the legacy-branch deletion
+  (Task 4). Drive `runCombat` directly with a buff-only team actor that has BOTH an active-sourced and a
+  charge-sourced enemy debuff, and assert both land via the event bus. Mirror the `engine.events.test.ts`
+  harness (collect `bus` events). Example shape:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus } from '../events'; // match engine.events.test.ts's bus import/pattern
+// ...reuse the same baseInput / buff(...) helpers the existing combat tests use...
+
+it('buff-only team actor applies BOTH its active- and charge-sourced enemy debuffs over rounds', () => {
+    const events: any[] = [];
+    const bus = createEventBus();
+    bus.on?.((e) => events.push(e)); // adapt to the actual bus API used in engine.events.test.ts
+    runCombat({
+        ...baseInput({ numRounds: 4 }),
+        bus,
+        teamActors: [
+            {
+                id: 'support-1',
+                speed: 140,
+                chargeCount: 2,
+                startCharged: true,
+                selfBuffs: [],
+                enemyDebuffs: [
+                    buff({ id: 'tdA', buffName: 'Team Defense Down', parsedEffects: { defense: -15 }, skillSource: 'charge', skillDuration: 2 }),
+                    buff({ id: 'tdB', buffName: 'Team Attack Down', parsedEffects: { attack: -10 }, skillSource: 'active', skillDuration: 2 }),
+                ],
+            },
+        ],
+    });
+    const applied = events.filter((e) => e.type === 'debuff-applied' && e.sourceId === 'support-1').map((e) => e.buffName);
+    expect(applied).toContain('Team Defense Down'); // charge-sourced → fired on charged turn
+    expect(applied).toContain('Team Attack Down');  // active-sourced → fired on active turn
+});
+```
+
+> Adapt the imports/helpers to the EXACT patterns in `engine.events.test.ts` (bus construction, `baseInput`,
+> `buff`). The point is the two assertions: both manual debuff sources apply for a buff-only actor.
+
+- [ ] **Step 2: Run the guard — expect PASS today.** `npx vitest run buffOnlyTeamWalk` → PASS (legacy branch
+  still routes it). If it FAILS, the assertion doesn't match current behavior — fix the test to reflect
+  reality before proceeding (do NOT change engine code yet).
+
+- [ ] **Step 3: Apply the normalizer.** Add the import near the other `./` engine-module imports at the top
   of `engine.ts`:
 
 ```typescript
@@ -246,7 +294,11 @@ const teamActors = normalizeTeamActorsToWalked(input.teamActors ?? []);
 > 1353, 1411, 1659, 1739, 1915, 1936`) need no edit. Verify after the edit that `teamActors` is no longer in
 > the destructure (no duplicate-binding tsc error).
 
-- [ ] **Step 2: Run the targeted suites and AUDIT.** Run each and inspect every diff:
+- [ ] **Step 4: Re-run the equivalence guard — it must STILL pass.** `npx vitest run buffOnlyTeamWalk` →
+  PASS (now via the synthesized walk instead of the legacy branch). This is the direct proof the empty kit
+  survives `runPlayerTurn`. If it fails, the synthesis is wrong — STOP and fix Task 2 before touching goldens.
+
+- [ ] **Step 5: Run the targeted suites and AUDIT.** Run each and inspect every diff:
 
 ```
 npx vitest run dpsGoldenParity engine.events triggers dpsSimulator
@@ -259,14 +311,14 @@ For EACH moved snapshot, confirm it matches one of the spec's deltas:
   - **Delta 3 (events):** an added zero-damage turn event for a buff-only actor.
   If a diff matches a delta, it is acceptable. **If any diff does NOT match deltas 1-3, STOP and report.**
 
-- [ ] **Step 3: Run the FULL suite and audit the rest.** `npx vitest run`. Audit any further combat `.snap`
+- [ ] **Step 6: Run the FULL suite and audit the rest.** `npx vitest run`. Audit any further combat `.snap`
   movement against deltas 1-3 (same rule). `npx tsc --noEmit` clean; `npm run lint` → 0.
 
-- [ ] **Step 4: Accept goldens (only after audit).** For snapshots confirmed to match deltas 1-3, update them:
+- [ ] **Step 7: Accept goldens (only after audit).** For snapshots confirmed to match deltas 1-3, update them:
   `npx vitest run -u <specific-file>` for the audited files ONLY (never a blanket `-u`). Re-run `npx vitest run`
   → green.
 
-- [ ] **Step 5: Commit (record the audit in the message).**
+- [ ] **Step 8: Commit (record the audit in the message).**
 
 ```bash
 git add -A
@@ -320,9 +372,8 @@ git commit -m "refactor(combat): A.3 — delete dead legacy non-walked-team bran
   - `t.walk ? t.walk.stats.hp : 1` → `t.walk!.stats.hp` (or refactor to a non-optional read if the type
     permits — check whether `walk?` can be narrowed; keep minimal).
   - `t.walk ? t.walk.stats.defence : 0` → `t.walk!.stats.defence`.
-  Confirm no other `t.walk ?`/`!t.walk` guard depends on the optional (e.g. the `:1412` `if (!t.walk) return;`
-  in the runtime builder — it is now always-true-skip-false; leave it, it's harmless and type-safe, OR remove
-  if tsc/lint stay clean — minimal change preferred).
+  **Leave** the `:1412` `if (!t.walk) return;` guard in the runtime builder as-is — it is now a never-taken
+  early return but is harmless, type-safe, and removing it is needless churn. Do not touch it.
 
 - [ ] **Step 2: Remove dead symbols ONLY if tsc proves them unused.** Run `npx tsc --noEmit`. If it flags an
   import/local now unused (e.g. something only the deleted branch referenced), remove it — but FIRST grep to
