@@ -2449,7 +2449,7 @@ export function runCombat(input: CombatEngineInput): {
             legacyVictim: CombatActor;
             victimDefenceFor: (tgt: CombatActor) => number;
             victimMaxHpFor: (tgt: CombatActor) => number;
-            declineFor: (tgt: CombatActor, selectedReal: boolean) => number;
+            declineFor: (tgt: CombatActor) => number;
             enemyTypeArg: EnemyBaseClass | undefined;
             enemyBuffNamesUnion: () => string[];
             healEventOnly: boolean;
@@ -2461,11 +2461,12 @@ export function runCombat(input: CombatEngineInput): {
             legacyVictim: enemy,
             victimDefenceFor: (tgt) => tgt.stats.defence,
             victimMaxHpFor: (tgt) => tgt.stats.hp,
-            // PR6b: scalar decline read killed — the dummy sink's currentHp already tracks
-            // cumulativeDamage+cumulativeTeamDamage (post-round sink update, ~3771). The
-            // selectedReal guard stays until Task 3 confirms the real-target collapse empirically.
-            declineFor: (tgt, selectedReal) =>
-                selectedReal ? 0 : Math.max(0, tgt.stats.hp - tgt.currentHp),
+            // PR6b: decline unified to the victim's live HP loss — for the DPS dummy this equals
+            // the old cumulative scalar (sink update ~3771); for a real positional victim it now
+            // reflects that victim's actual HP. The two bindings DELIBERATELY keep different
+            // max-HP sources (tgt.stats.hp here vs recipientMaxHp(tgt.id) on the enemy binding) —
+            // that mirrors the existing victimMaxHpFor split, not an oversight.
+            declineFor: (tgt) => Math.max(0, tgt.stats.hp - tgt.currentHp),
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             healEventOnly: false,
@@ -2477,10 +2478,11 @@ export function runCombat(input: CombatEngineInput): {
             victimDefenceFor: (tgt) =>
                 lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id),
             victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
-            // Unlike the focus/team sites (which force 0 for a selected enemy SINK), the enemy
-            // turn's victim is a REAL player actor with live HP, so its decline derives from
-            // `tgt.currentHp` for BOTH the legacy and positional paths. Do NOT convert this to a
-            // `selected ? 0 : …` ternary like the player sites (protects the future PR6b author).
+            // PR6b has now unified BOTH sides to the same currentHp-derived shape: the player
+            // binding uses tgt.stats.hp − tgt.currentHp; this enemy binding uses
+            // recipientMaxHp(tgt.id) − tgt.currentHp. The different max-HP sources mirror the
+            // existing victimMaxHpFor split (stats.hp for the player dummy, recipientMaxHp for
+            // real player actors) — they are intentional, not an oversight.
             declineFor: (tgt) => Math.max(0, recipientMaxHp(tgt.id) - tgt.currentHp),
             enemyTypeArg: undefined,
             // Opposing side from the ENEMY's view = the player team, so `enemyBuffNames` here is the
@@ -2500,7 +2502,7 @@ export function runCombat(input: CombatEngineInput): {
         // Unified positional target selection (bySide unification PR6a). Reproduces the
         // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
         // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
-        const selectTurnTarget = (a: CombatActor): { tgt: CombatActor; selectedReal: boolean } => {
+        const selectTurnTarget = (a: CombatActor): { tgt: CombatActor } => {
             const tb = turnBindings(a.side);
             const target = parsedTargetFor(a);
             const selected =
@@ -2516,7 +2518,7 @@ export function runCombat(input: CombatEngineInput): {
                           }
                       )
                     : null;
-            return { tgt: selected ?? tb.legacyVictim, selectedReal: selected != null };
+            return { tgt: selected ?? tb.legacyVictim };
         };
 
         // Unified runPlayerTurn argument builder (bySide unification PR6a). Produces the
@@ -2525,7 +2527,7 @@ export function runCombat(input: CombatEngineInput): {
         // ONLY for the enemy side (player sites omit both → byte-identical). The selfHpPct
         // denom is unified to runtimeFor(actor).hp (proven equal to baseHpFor(id) by
         // construction). The per-kind bookkeeping TAILS after each call stay inline.
-        const buildTurnArgs = (a: CombatActor, tgt: CombatActor, selectedReal: boolean) => {
+        const buildTurnArgs = (a: CombatActor, tgt: CombatActor) => {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
@@ -2543,7 +2545,7 @@ export function runCombat(input: CombatEngineInput): {
                 enemyType: tb.enemyTypeArg,
                 bus,
                 round: r,
-                enemyHpDecline: tb.declineFor(tgt, selectedReal),
+                enemyHpDecline: tb.declineFor(tgt),
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
@@ -3027,8 +3029,8 @@ export function runCombat(input: CombatEngineInput): {
                     // (see ~line 1297) — so deriving every binding from `tgt` is byte-identical.
                     // Per-target HP decline is a later phase, so enemyHpDecline stays its own
                     // ternary (it is not an actor field): legacy = cumulative sum, selected = 0.
-                    const { tgt, selectedReal } = selectTurnTarget(actor);
-                    const turn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
+                    const { tgt } = selectTurnTarget(actor);
+                    const turn = runPlayerTurn(buildTurnArgs(actor, tgt));
 
                     // Drain any team-turn resisted entries staged BEFORE this attacker turn
                     // (faster team actors) into the HEAD of this turn's resisted list — same
@@ -3145,8 +3147,8 @@ export function runCombat(input: CombatEngineInput): {
                     // CombatActors, so every per-target binding derives from `tgt` uniformly.
                     // Legacy path tgt === enemy, whose stats/containers ARE the legacy module
                     // vars (enemyDefense/enemyHp/corrosionEntries/…) → byte-identical.
-                    const { tgt, selectedReal } = selectTurnTarget(actor);
-                    const teamTurn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
+                    const { tgt } = selectTurnTarget(actor);
+                    const teamTurn = runPlayerTurn(buildTurnArgs(actor, tgt));
 
                     // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
                     // team actor's own position / parsed target (teamTargetById) / parsed pattern
@@ -3386,7 +3388,7 @@ export function runCombat(input: CombatEngineInput): {
                     // legacy heal target. A full CombatActor in both cases, so every per-victim
                     // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
                     // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
-                    const { tgt, selectedReal } = selectTurnTarget(actor);
+                    const { tgt } = selectTurnTarget(actor);
                     const targetDead = tgt.currentHp <= 0;
                     // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
                     // positional apply (footprint expansion). An enemy with a target but NO pattern
@@ -3418,7 +3420,7 @@ export function runCombat(input: CombatEngineInput): {
                         // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                         // produced no ctx either; this actor has no live DoTs to attribute).
                     } else {
-                        const enemyTurn = runPlayerTurn(buildTurnArgs(actor, tgt, selectedReal));
+                        const enemyTurn = runPlayerTurn(buildTurnArgs(actor, tgt));
                         // Total damage the enemy dealt to the bound target this turn. secondary/
                         // conditional are display sub-buckets ALREADY inside directDamage (do NOT
                         // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
