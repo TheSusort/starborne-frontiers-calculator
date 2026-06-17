@@ -12,7 +12,7 @@ import {
     damageInputsFromSkill,
 } from '../abilities/applyAbilities';
 import { conditionsMet } from '../abilities/evaluateConditions';
-import { foldActorBuffTotals } from './effectiveStats';
+import { foldActorBuffTotals, effectiveStatsOf } from './effectiveStats';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -1464,10 +1464,8 @@ export function runCombat(input: CombatEngineInput): {
     // Both fold through toSimBuffs → calculateBuffTotals, taking only .speedBuff. snapshot(id)
     // and timedAbilityStatuses('self', id) are keyed by owner id, so this is correct for any
     // actor regardless of side. Effective speed is UNCAPPED (magnitude only orders turns).
-    const effectiveSpeedOf = (actor: CombatActor): number => {
-        const speedBuffPct = foldSpeedBuffPct(statusEngine, selfBuffLookup, actor.id);
-        return actor.stats.speed * (1 + speedBuffPct / 100);
-    };
+    const effectiveSpeedOf = (actor: CombatActor): number =>
+        effectiveStatsOf(statusEngine, selfBuffLookup, actor).speed;
 
     // All mutable state declared fresh on every call
     let cumulativeDamage = 0;
