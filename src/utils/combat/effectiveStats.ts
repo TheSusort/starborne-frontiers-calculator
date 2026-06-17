@@ -109,12 +109,19 @@ export function effectiveStatsOf(
  * from current effective stats (A2 Task 4). Mirrors the dpsSimulator setup formula exactly,
  * but live + with the affinity modifier applied IN the engine:
  *
- *   effHacking = effectiveStatsOf(attacker).hacking * (1 + affinityDamageModifier / 100)
- *   effSec     = effectiveStatsOf(defender).security        // NO affinity on security
+ *   effHacking = (hacking + hackingBuff) * (1 + affinityDamageModifier / 100)
+ *   effSec     = security + securityBuff        // NO affinity on security
  *   chance     = clamp(effHacking - effSec, 0, 100) / 100
  *
- * Affinity is applied ONCE here (the raw base+buff hacking comes from effectiveStatsOf), so
- * callers must pass the RAW affinityDamageModifier, never a pre-baked landing scalar.
+ * This is the SINGLE landing-chance producer (A-sweep A.2): self-sufficient for base-less
+ * actors. A missing hacking base defaults to 200 and a missing security base to 100 — the
+ * values the old static formula (dpsSimulator) baked — so no caller needs a base-presence
+ * ternary. The fold is reproduced directly via foldActorBuffTotals (NOT effectiveStatsOf,
+ * which coerces a missing base to 0 for ALL its readers); for a base-PRESENT actor this is
+ * byte-identical to the prior effectiveStatsOf-based implementation (base + hackingBuff).
+ *
+ * Affinity is applied ONCE here, so callers must pass the RAW affinityDamageModifier, never a
+ * pre-baked landing scalar.
  */
 export function liveDebuffLandingChance(
     statusEngine: StatusEngine,
@@ -123,10 +130,12 @@ export function liveDebuffLandingChance(
     defender: CombatActor,
     affinityDamageModifier: number
 ): number {
-    const effHacking =
-        effectiveStatsOf(statusEngine, selfBuffLookup, attacker).hacking *
-        (1 + affinityDamageModifier / 100);
-    const effSec = effectiveStatsOf(statusEngine, selfBuffLookup, defender).security;
+    const atk = foldActorBuffTotals(statusEngine, selfBuffLookup, attacker.id);
+    const def = foldActorBuffTotals(statusEngine, selfBuffLookup, defender.id);
+    const baseHacking = attacker.stats.hacking ?? 200;
+    const baseSecurity = defender.stats.security ?? 100;
+    const effHacking = (baseHacking + atk.hackingBuff) * (1 + affinityDamageModifier / 100);
+    const effSec = baseSecurity + def.securityBuff;
     return Math.min(100, Math.max(0, effHacking - effSec)) / 100;
 }
 

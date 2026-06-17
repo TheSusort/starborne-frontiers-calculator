@@ -592,4 +592,85 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
             expect(live).toBe(staticFormula(hacking, security, affMod));
         });
     }
+
+    // A.2: base-LESS actors are self-sufficient — liveDebuffLandingChance defaults a missing
+    // hacking base to 200 and a missing security base to 100 INSIDE the function (the values
+    // the old static formula baked), so it is the single landing-chance producer with no need
+    // for a base-presence ternary at the caller.
+    const buildBaselessPair = () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        const mkActor = (id: string): CombatActor => ({
+            id,
+            side: id === 'attacker' ? 'player' : 'enemy',
+            kind: id === 'attacker' ? 'attacker' : 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 100,
+                // hacking/security intentionally absent → 200/100 defaults inside the fn
+            },
+            currentHp: 1,
+            shieldPool: 0,
+            turnMeter: 0,
+            charges: 0,
+            chargeCount: 0,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            pendingAccumulators: [],
+        });
+        return { eng, attacker: mkActor('attacker'), defender: mkActor('enemy') };
+    };
+
+    it('base-less attacker + base-less defender (neutral, no buffs) → clamp(200-100)/100 = 1.0', () => {
+        const { eng, attacker, defender } = buildBaselessPair();
+        const live = liveDebuffLandingChance(eng, new Map(), attacker, defender, 0);
+        expect(live).toBe(1.0);
+    });
+
+    it('base-less attacker with self Hacking Down −120 → clamp((200−120)−100)/100 = 0', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // A self "Hacking Down" −120 timed status folds via foldActorBuffTotals onto the
+        // 200 default → effHacking 80; defender's 100 default → clamp(80-100,0,100)/100 = 0.
+        const hackingDown = timedStatus('Hacking Down', { hacking: -120 });
+        eng.registerAbilityStatuses([hackingDown], 'attacker');
+        eng.applyTimedAbilityStatus(1, hackingDown, 'attacker');
+        const mkActor = (id: string): CombatActor => ({
+            id,
+            side: id === 'attacker' ? 'player' : 'enemy',
+            kind: id === 'attacker' ? 'attacker' : 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 100,
+            },
+            currentHp: 1,
+            shieldPool: 0,
+            turnMeter: 0,
+            charges: 0,
+            chargeCount: 0,
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            pendingAccumulators: [],
+        });
+        const live = liveDebuffLandingChance(
+            eng,
+            new Map(),
+            mkActor('attacker'),
+            mkActor('enemy'),
+            0
+        );
+        expect(live).toBe(0);
+    });
 });
