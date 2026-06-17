@@ -118,6 +118,11 @@ export interface StatusEngine {
         slot: 'active' | 'charge',
         round: number
     ): { resistedEnemy: string[]; appliedEnemy: string[] };
+    /** Swap the TIMED-enemy landing hook used by `sourceFired` (A2 Task 4). The engine resets
+     *  this per turn to the ACTING actor's live landing closure (live hacking-vs-target-security
+     *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
+     *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
+    setLandsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
     /** The round's active lists (was step()'s return). Pure read.
      *  `ownerId` selects which player-side carrier's maps to read; defaults to
      *  'attacker' so all pre-Task-2 call sites remain unchanged. Always-active
@@ -302,7 +307,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const teamSources = input.teamSources ?? [];
     // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
     // tests simple. The engine supplies the real hacking/affinity decision.
-    const landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
+    // Mutable so the engine can swap it per turn to the ACTING actor's live landing closure
+    // (A2 Task 4). Default: every timed enemy application lands (no gate).
+    let landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
+    const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
+        landsTimedEnemyApplication = fn;
+    };
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
@@ -1065,6 +1075,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     return {
         beginRound,
         sourceFired,
+        setLandsTimedEnemyApplication,
         snapshot,
         decrementPlayer,
         decrementEnemy,

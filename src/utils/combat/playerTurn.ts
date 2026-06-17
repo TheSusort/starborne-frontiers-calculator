@@ -37,7 +37,7 @@ import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
-import { effectiveDamageStatsOf } from './effectiveStats';
+import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
 // historical public API (engine.ts + tests import these from playerTurn). Keeping the
 // definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
@@ -154,6 +154,13 @@ export interface PlayerActorRuntime {
     healModifier: number;
     // Per-actor adapter-derived rates
     debuffLandingChance: number;
+    /** LIVE per-target debuff-landing chance (0..1) for THIS actor, set at turn start by
+     *  runPlayerTurn from current effective hacking-vs-target-security + affinity (A2 Task 4).
+     *  Read by the REACTIVE (triggers.ts) landing path via the runtime's landing closure /
+     *  debuffLandingGate so an owner's reactive inflictions draw against the live chance too.
+     *  Undefined until the actor's first turn (or when its hacking/security base is absent) →
+     *  callers fall back to the static `debuffLandingChance`. */
+    liveDebuffLandingChance?: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
     affinityDamageModifier: number;
@@ -611,7 +618,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         chargedHealCritGate,
         debuffLandingGate,
         extendChanceGate,
-        landsTimedEnemyApplication,
         healModifier,
         castSkills: shipSkills,
         hasChargedSkill,
@@ -679,6 +685,46 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const emitDebuffApplied = (sourceId: string, buffName: string) =>
         bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
 
+    // LIVE per-target debuff-landing chance (A2 Task 4). Recomputed each turn from the acting
+    // actor's effective hacking (× this actor's affinity) vs the TURN TARGET's effective
+    // security — the source of truth, demoting the threaded static `debuffLandingChance` scalar
+    // to a fallback. The acting actor's `selfBuffLookup` folds scheduled self-buffs; timed
+    // ability statuses (the hacking/security buffs that move landing) fold lookup-free from the
+    // status engine. Cached once per turn here — every landing consumer below reads this value.
+    // Recompute live ONLY when BOTH the acting actor's hacking base AND the target's security
+    // base are present — then the formula has real inputs and reproduces the static scalar
+    // exactly for a no-buff/neutral fixture (T2 plumbed the SAME `?? 200`/`?? 100` defaults the
+    // static path baked). If either base is absent (truly-legacy actor configs), keep the
+    // threaded scalar — the static path's defaults are the source of truth there.
+    const liveLandingComputable =
+        actor.stats.hacking !== undefined && enemy.stats.security !== undefined;
+    const liveLandingChance = liveLandingComputable
+        ? liveDebuffLandingChance(
+              statusEngine,
+              selfBuffLookup,
+              actor,
+              enemy,
+              affinityDamageModifier
+          )
+        : debuffLandingChance; // fallback: no hacking/security base → use the threaded scalar
+    // Turn-local landing decision: 'apply' (affinity) lands unless at an affinity disadvantage
+    // (UNCHANGED rule); 'inflict' (and unmarked) draws the runtime's deterministic gate against
+    // the LIVE chance. Replaces the runtime's pre-baked `landsTimedEnemyApplication` so every
+    // 'inflict' draw — the playerTurn timed loop, the status-engine sourceFired hook, and the
+    // reactive (triggers.ts) path — uses the live value uniformly.
+    const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
+        application === 'apply' ? !affinityDisadvantage : debuffLandingGate(liveLandingChance);
+    // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
+    // the OWNER's landing gate via owner.landsTimedEnemyApplication / owner.debuffLandingGate(
+    // owner.liveDebuffLandingChance ?? owner.debuffLandingChance) — uses the same live value.
+    // Only when computable here (else leave undefined → reactive path keeps the static scalar).
+    runtime.liveDebuffLandingChance = liveLandingComputable ? liveLandingChance : undefined;
+    // Point the status engine's sourceFired landing hook at THIS actor's live closure for the
+    // duration of this turn (it is invoked synchronously inside sourceFired below).
+    statusEngine.setLandsTimedEnemyApplication((buff) =>
+        landsTimedEnemyApplicationLive(buff.application)
+    );
+
     // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
     // buffs key off the actual cadence, not a predicted schedule), then we read
@@ -728,7 +774,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let roundDebuffLandedValue: boolean | undefined;
     const roundDebuffLanded = (): boolean => {
         if (roundDebuffLandedValue === undefined) {
-            roundDebuffLandedValue = debuffLandingGate(debuffLandingChance);
+            roundDebuffLandedValue = debuffLandingGate(liveLandingChance);
         }
         return roundDebuffLandedValue;
     };
@@ -833,7 +879,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
-        if (landsTimedEnemyApplication(status.payload.application)) {
+        if (landsTimedEnemyApplicationLive(status.payload.application)) {
             statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
             // Discrete infliction event — emit ONCE at this application site.
             emitDebuffApplied(actor.id, status.payload.buffName);

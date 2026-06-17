@@ -422,6 +422,8 @@ interface DerivedCombatStats {
     critDamage: number;
     defensePenetration: number;
     hacking: number;
+    /** Debuff-resist stat. Defaults to baseStats.security ?? 100 (the OLD landing-formula default). */
+    security: number;
     defence: number;
     hp: number;
     /** Turn-order speed. Defaults to baseStats.speed ?? 100. */
@@ -443,6 +445,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         critDamage: o.critDamage ?? b.critDamage ?? 0,
         defensePenetration: o.defensePenetration ?? b.defensePenetration ?? 0,
         hacking: o.hacking ?? b.hacking ?? 200,
+        security: o.security ?? b.security ?? 100,
         defence: o.defence ?? b.defence ?? 0,
         hp: o.hp ?? b.hp ?? 0,
         speed: o.speed ?? b.speed ?? 100,
@@ -455,7 +458,15 @@ function toWalkStats(
     stats: DerivedCombatStats
 ): Pick<
     DerivedCombatStats,
-    'attack' | 'crit' | 'critDamage' | 'defensePenetration' | 'hacking' | 'defence' | 'hp' | 'speed'
+    | 'attack'
+    | 'crit'
+    | 'critDamage'
+    | 'defensePenetration'
+    | 'hacking'
+    | 'security'
+    | 'defence'
+    | 'hp'
+    | 'speed'
 > {
     return {
         attack: stats.attack,
@@ -463,6 +474,7 @@ function toWalkStats(
         critDamage: stats.critDamage,
         defensePenetration: stats.defensePenetration,
         hacking: stats.hacking,
+        security: stats.security,
         defence: stats.defence,
         hp: stats.hp,
         speed: stats.speed,
@@ -473,7 +485,10 @@ function toWalkStats(
  *  future stat addition can't be missed at one of the call sites. */
 function toEnemyStats(
     stats: DerivedCombatStats
-): Pick<DerivedCombatStats, 'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp'> {
+): Pick<
+    DerivedCombatStats,
+    'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp' | 'hacking' | 'security'
+> {
     return {
         attack: stats.attack,
         crit: stats.crit,
@@ -481,6 +496,10 @@ function toEnemyStats(
         speed: stats.speed,
         defence: stats.defence,
         hp: stats.hp,
+        // Base hacking/security (A2 Task 4): the enemy attacker folds ITS hacking when attacking
+        // and ITS security when targeted, so the engine's live landing recompute has real inputs.
+        hacking: stats.hacking,
+        security: stats.security,
     };
 }
 
@@ -677,6 +696,13 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         defence: focus.stats.defence,
         hp: focus.stats.hp,
         speed: focus.stats.speed,
+        // Base hacking/security (A2 Task 4) so the engine's live landing recompute has real
+        // inputs for the focus actor and the vestigial dummy enemy. The dummy carries the
+        // representative enemy security, so when the focus falls back to it (non-positional) the
+        // live recompute reproduces `focusLanding` exactly (focus hacking × affinity vs enemyRep
+        // security — the same formula `focusLanding` baked).
+        hacking: focus.stats.hacking,
+        enemySecurity: enemyRepSecurity,
         position: focus.position,
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,

@@ -926,8 +926,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
-        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
-        if (!owner.debuffLandingGate(owner.debuffLandingChance)) return;
+        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Prefers the
+        // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn) over the threaded
+        // scalar.
+        if (!owner.debuffLandingGate(owner.liveDebuffLandingChance ?? owner.debuffLandingChance))
+            return;
         // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
         // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
         // the owner's last-turn effective attack + affinity.

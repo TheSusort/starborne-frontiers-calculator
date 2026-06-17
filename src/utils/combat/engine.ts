@@ -487,12 +487,11 @@ export function buildEnemyPlayerActorRuntime(
     const enemyChargedHealCritGate = makeRateGate();
     const enemyDebuffLandingGate = makeRateGate();
     const enemyExtendChanceGate = makeRateGate();
-    const landsTimedEnemyApplicationFn = (application?: 'inflict' | 'apply'): boolean =>
-        application === 'apply'
-            ? !affinityDisadvantage
-            : enemyDebuffLandingGate(e.debuffLandingChance ?? 1); // fresh timed inflictions draw against this enemy's hacking-vs-security landing chance (default 1 — 100% — when absent)
-
-    return {
+    // The landing closure reads the runtime's LIVE per-target landing chance (A2 Task 4 — set
+    // each turn by runPlayerTurn) and falls back to the threaded scalar. It references `runtime`
+    // (defined in the same const initializer); the arrow BODY runs only at turn time, well after
+    // construction, so the self-reference is safe.
+    const runtime: PlayerActorRuntime = {
         actor,
         focus: false,
         castSkills,
@@ -526,10 +525,16 @@ export function buildEnemyPlayerActorRuntime(
         chargedHealCritGate: enemyChargedHealCritGate,
         debuffLandingGate: enemyDebuffLandingGate,
         extendChanceGate: enemyExtendChanceGate,
-        landsTimedEnemyApplication: landsTimedEnemyApplicationFn,
+        landsTimedEnemyApplication: (application?: 'inflict' | 'apply'): boolean =>
+            application === 'apply'
+                ? !affinityDisadvantage
+                : enemyDebuffLandingGate(
+                      runtime.liveDebuffLandingChance ?? e.debuffLandingChance ?? 1
+                  ), // fresh timed inflictions draw against this enemy's LIVE (else threaded) hacking-vs-security landing chance (default 1 — 100% — when absent)
         selfBuffLookup: new Map(),
         enemyDebuffLookup,
     };
+    return runtime;
 }
 
 function totalStacks(entries: ActiveDoTStack[]): number {
@@ -1300,8 +1305,13 @@ export function runCombat(input: CombatEngineInput): {
     // 'inflict' (and unmarked) → draws the hacking-vs-security landing gate. Threaded
     // into the status engine for scheduled timed enemy upserts (sourceFired) and reused
     // by the engine for ability-sourced timed enemy applications below.
+    // Reads the attacker runtime's LIVE per-target landing chance (A2 Task 4 — set each turn by
+    // runPlayerTurn), falling back to the threaded scalar. Only invoked at turn time (after
+    // attackerRuntime is defined below), so the forward reference is safe.
     const landsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
-        application === 'apply' ? !affinityDisadvantage : debuffLandingGate(debuffLandingChance);
+        application === 'apply'
+            ? !affinityDisadvantage
+            : debuffLandingGate(attackerRuntime.liveDebuffLandingChance ?? debuffLandingChance);
 
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
@@ -1427,10 +1437,13 @@ export function runCombat(input: CombatEngineInput): {
         const teamChargedHealCritGate = makeRateGate();
         const teamDebuffLandingGate = makeRateGate();
         const teamExtendChanceGate = makeRateGate();
+        // Reads this team actor's runtime LIVE per-target landing chance (A2 Task 4 — set each
+        // turn by runPlayerTurn), falling back to the threaded scalar. Invoked only at turn time
+        // (after `runtime` below is defined), so the forward reference is safe.
         const teamLandsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
             application === 'apply'
                 ? !teamAffinityDisadvantage
-                : teamDebuffLandingGate(w.debuffLandingChance);
+                : teamDebuffLandingGate(runtime.liveDebuffLandingChance ?? w.debuffLandingChance);
         const runtime: PlayerActorRuntime = {
             actor: teamActor,
             focus: teamActor.id === focusActorId, // always false today (focus = attacker)
@@ -3271,6 +3284,15 @@ export function runCombat(input: CombatEngineInput): {
                         slot: teamAction,
                     });
 
+                    // A LEGACY (non-walked) team actor does not run runPlayerTurn, so it never
+                    // sets the status engine's per-turn landing hook (A2 Task 4). Restore the
+                    // attacker's closure here so its scheduled timed enemy debuffs draw the
+                    // attacker's landing chance — exactly the pre-Task-4 behaviour (the engine-
+                    // setup hook was the attacker's closure), independent of whichever actor's
+                    // turn last swapped the hook.
+                    statusEngine.setLandsTimedEnemyApplication((buff) =>
+                        landsTimedEnemyApplication(buff.application)
+                    );
                     const { resistedEnemy, appliedEnemy } = statusEngine.sourceFired(
                         actor.id,
                         teamAction === 'charged' ? 'charge' : 'active',

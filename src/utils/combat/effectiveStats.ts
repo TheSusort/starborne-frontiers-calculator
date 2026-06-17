@@ -104,6 +104,32 @@ export function effectiveStatsOf(
     };
 }
 
+/**
+ * Live debuff-LANDING chance (0..1) for one acting actor against one target, recomputed
+ * from current effective stats (A2 Task 4). Mirrors the dpsSimulator setup formula exactly,
+ * but live + with the affinity modifier applied IN the engine:
+ *
+ *   effHacking = effectiveStatsOf(attacker).hacking * (1 + affinityDamageModifier / 100)
+ *   effSec     = effectiveStatsOf(defender).security        // NO affinity on security
+ *   chance     = clamp(effHacking - effSec, 0, 100) / 100
+ *
+ * Affinity is applied ONCE here (the raw base+buff hacking comes from effectiveStatsOf), so
+ * callers must pass the RAW affinityDamageModifier, never a pre-baked landing scalar.
+ */
+export function liveDebuffLandingChance(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    attacker: CombatActor,
+    defender: CombatActor,
+    affinityDamageModifier: number
+): number {
+    const effHacking =
+        effectiveStatsOf(statusEngine, selfBuffLookup, attacker).hacking *
+        (1 + affinityDamageModifier / 100);
+    const effSec = effectiveStatsOf(statusEngine, selfBuffLookup, defender).security;
+    return Math.min(100, Math.max(0, effHacking - effSec)) / 100;
+}
+
 export interface EffectiveDamageStats {
     attack: number;
     defence: number;
