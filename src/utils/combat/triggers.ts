@@ -929,7 +929,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Reads the
         // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn); `?? 1` is a neutral
         // guard (the owner applied this DoT on its own turn → the field is set).
-        if (!owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1)) return;
+        const liveLanding = owner.liveDebuffLandingChance ?? 1;
+        if (!owner.debuffLandingGate(liveLanding)) return;
         // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
         // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
         // the owner's last-turn effective attack + affinity.
