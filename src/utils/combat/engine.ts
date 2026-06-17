@@ -2474,10 +2474,21 @@ export function runCombat(input: CombatEngineInput): {
             victimDefenceFor: (tgt) =>
                 lastTurnCtxByActor.get(tgt.id)?.effectiveDefence ?? baseDefenceFor(tgt.id),
             victimMaxHpFor: (tgt) => recipientMaxHp(tgt.id),
+            // Unlike the focus/team sites (which force 0 for a selected enemy SINK), the enemy
+            // turn's victim is a REAL player actor with live HP, so its decline derives from
+            // `tgt.currentHp` for BOTH the legacy and positional paths. Do NOT convert this to a
+            // `selected ? 0 : …` ternary like the player sites (protects the future PR6b author).
             declineFor: (tgt) => Math.max(0, recipientMaxHp(tgt.id) - tgt.currentHp),
             enemyTypeArg: undefined,
+            // Opposing side from the ENEMY's view = the player team, so `enemyBuffNames` here is the
+            // UNION of PLAYER self-buff names (fed to the enemy's own `enemy-buff` gates). A bare
+            // enemy has no such gate → inert today; computed for the full-kit enemy.
             enemyBuffNamesUnion: enemyEnemyBuffNames,
             healEventOnly: true,
+            // An enemy supporter running runPlayerTurn grants charges to its OWN (enemy) team via
+            // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
+            // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
+            // player actor (applyIncomingToTarget), not as a player damage row.
             applyToVictim: (victim, damage) => applyIncomingToTarget(damage, victim),
         };
         const turnBindings = (side: Side): TurnBindings =>
@@ -2534,6 +2545,10 @@ export function runCombat(input: CombatEngineInput): {
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
                 selfHpPct: maxHp > 0 ? (100 * Math.max(0, a.currentHp)) / maxHp : 100,
+                // targetHpPct reports the HEAL TARGET's HP% (healTargetHpPctNow()), NOT the struck
+                // `tgt`'s — even on the enemy positional path where `tgt` may be a different player
+                // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
+                // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
