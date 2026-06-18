@@ -43,6 +43,7 @@ import {
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
+    parseDoesntBreakStasis,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
@@ -1495,5 +1496,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }
-    return { slots };
+
+    // §4.5 Akula exception: check ALL skill rows for the don't-break-Stasis clause and
+    // fold the result onto the ShipSkills object. Only the refit-active passive applies in
+    // game, but getShipSkillRows already resolves that — scan only the rows that were used
+    // for ability building (the same rows iterated above, now re-queried via getShipSkillRows).
+    const doesntBreakStasis = getShipSkillRows(ship).some((row) =>
+        parseDoesntBreakStasis(row.text)
+    );
+
+    return { slots, ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}) };
 }

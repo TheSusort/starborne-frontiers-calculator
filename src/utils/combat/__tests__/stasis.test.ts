@@ -2081,3 +2081,221 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(stdEnemyFired.some((e) => e.round === 2)).toBe(true);
     });
 });
+
+// ── B3 Task 3 — Akula don't-break ────────────────────────────────────────────────────────
+
+/**
+ * B3 Task 3 — §4.5 Akula exception: an attacker with doesntBreakStasis:true does NOT
+ * break Stasis with its direct hits.
+ *
+ * Two tests: activation (doesntBreakStasis:true → no break) + control (flag absent → break fires).
+ * Both use identical fixtures; the ONLY difference is whether doesntBreakStasis is set.
+ */
+describe("B3 Task 3 — Akula don't-break", () => {
+    it('(activation) attacker with doesntBreakStasis:true hits stasised victim → Stasis NOT broken (victim stays stasised full duration)', () => {
+        idc = 0;
+        /**
+         * Setup:
+         *   - stasis-bot (speed=300, hp=1): fires stasisInflictAttack(3) at focus in round 1.
+         *     Killer kills stasis-bot in round 1.
+         *   - killer (speed=200, attack=10000): kills stasis-bot round 1.
+         *   - akula-enemy (speed=150, doesntBreakStasis:true): fires basicAttack at front
+         *     every round. Its hits land on the stasised focus but must NOT break Stasis.
+         *   - focus (speed=100, basicAttack): receives Stasis(3) in round 1.
+         *   - numRounds:4.
+         *
+         * Without break-exclusion: Stasis would be broken in round 1's skip and focus would
+         * fire in round 2 (same as test (i)/(iv)). With doesntBreakStasis=true: no break-mark
+         * fires, so focus remains stasised for all 3 rounds (skips rounds 1, 2, 3; fires round 4).
+         *
+         * Assert: focus does NOT fire in rounds 1–3 and DOES fire in round 4.
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                // stasis-bot: applies Stasis(3) to focus in round 1, then killed
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                // akula-enemy: has doesntBreakStasis — its direct hits must NOT break Stasis
+                {
+                    id: 'akula-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150, // acts after stasis-bot(300) and killer(200), before focus(100)
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                    doesntBreakStasis: true,
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // With doesntBreakStasis the akula-enemy's hits do NOT break Stasis.
+        // Focus must stay stasised all 3 rounds (Stasis(3) → 3 skips) and fire only in round 4.
+        expect(focusFiredRounds).not.toContain(1);
+        expect(focusFiredRounds).not.toContain(2);
+        expect(focusFiredRounds).not.toContain(3);
+        expect(focusFiredRounds).toContain(4);
+
+        // Non-vacuous: akula-enemy DID fire each round (its turns ran — no break-hook called)
+        for (let r = 1; r <= 4; r++) {
+            expect(
+                abilityPerformed.some((e) => e.actorId === 'akula-enemy' && e.round === r)
+            ).toBe(true);
+        }
+    });
+
+    it('(control) same fixture WITHOUT doesntBreakStasis → Stasis IS broken, focus fires round 2', () => {
+        idc = 0;
+        /**
+         * Identical to the activation test above EXCEPT doesntBreakStasis is NOT set on
+         * akula-enemy. Without the flag the breaker behaves like any other attacker and
+         * breaks Stasis on the first direct hit (round 1 skip → focus fires round 2).
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                // Same stats as akula-enemy but NO doesntBreakStasis flag → breaks Stasis normally.
+                {
+                    id: 'normal-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150,
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                    // doesntBreakStasis: NOT set — the ONLY difference from the activation test
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Without the flag: normal-enemy breaks Stasis → focus fires in round 2 (not 4).
+        expect(focusFiredRounds).not.toContain(1); // still stasised round 1 (break pending)
+        const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
+        expect(firstFiredRound).toBe(2); // break frees focus → fires round 2
+    });
+});

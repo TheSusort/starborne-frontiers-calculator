@@ -3170,8 +3170,9 @@ export function runCombat(input: CombatEngineInput): {
                         // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                         // only when the victim was stasised at hit time. The actual statusEngine
                         // removal happens AFTER drainIntents/drainEnemyIntents (below).
-                        // Task 3 TODO: add Akula doesntBreakStasis check here.
-                        const tgtWasStasised = isStasised(tgt.id);
+                        // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
+                        // victim is never recorded → no break-mark, no stasisBreakPending entry.
+                        const tgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);
                         // §4.5: `stasisHitVictims` collects ids of victims stasised at hit time.
                         // Resolved AFTER runPlayerTurn returns (when inflictedEnemyDebuffs is available)
                         // to compute the re-apply check, then stored in `stasisBreakPending` for the
@@ -3374,8 +3375,9 @@ export function runCombat(input: CombatEngineInput): {
                         const { tgt } = selectTurnTarget(actor);
                         const teamPattern = parsedPatternFor(actor);
                         // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
-                        // Task 3 TODO: add Akula doesntBreakStasis check here.
-                        const teamTgtWasStasised = isStasised(tgt.id);
+                        // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
+                        // the victim is never recorded → no break-mark, no stasisBreakPending.
+                        const teamTgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);
                         const teamTurnStasisHitVictims = new Set<string>();
                         const teamTurn = runPlayerTurn({
                             ...buildTurnArgs(actor, tgt),
@@ -3607,8 +3609,9 @@ export function runCombat(input: CombatEngineInput): {
                         // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
                         // focus/team sites). Captured BEFORE runPlayerTurn so Stasis re-applied
                         // by the same attack's debuff ability is not inadvertently broken.
-                        // Task 3 TODO: add Akula doesntBreakStasis check here.
-                        const enemyTgtWasStasised = isStasised(tgt.id);
+                        // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
+                        // the victim is never recorded → no break-mark, no stasisBreakPending.
+                        const enemyTgtWasStasised = !actor.doesntBreakStasis && isStasised(tgt.id);
                         const enemyTurnStasisHitVictims = new Set<string>();
                         const enemyBreakHook = enemyTgtWasStasised
                             ? (targetId: string) => {

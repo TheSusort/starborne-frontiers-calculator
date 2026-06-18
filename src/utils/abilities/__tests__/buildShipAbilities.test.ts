@@ -2731,3 +2731,36 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
         expect(charges.some((c) => c.trigger === 'on-cast')).toBe(false);
     });
 });
+
+// ── §4.5 Akula exception: doesntBreakStasis ───────────────────────────────────────────────
+
+describe('buildShipAbilities doesntBreakStasis', () => {
+    it("Akula: doesntBreakStasis=true (curly-apostrophe don't break Stasis in passive)", () => {
+        // Akula's refit-active passive text uses curly apostrophe + "don't break Stasis".
+        const s = ship({
+            firstPassiveSkillText:
+                "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBe(true);
+    });
+
+    it('Tygr: doesntBreakStasis=true (bare "do not break Stasis" in passive)', () => {
+        // Tygr's refit-active passive text uses "do not break Stasis".
+        const s = ship({
+            firstPassiveSkillText:
+                "This Unit's attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.",
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBe(true);
+    });
+
+    it('unrelated ship: doesntBreakStasis is absent (falsy) when no don-break clause', () => {
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit deals 180% damage and inflicts Corrosion for 2 turns.',
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBeFalsy();
+    });
+});

@@ -278,4 +278,8 @@ export interface Skill {
 
 export interface ShipSkills {
     slots: Skill[];
+    /** True when the ship's passive text declares its attacks don't break Stasis
+     *  (Akula / Tygr). Threaded onto CombatActor.doesntBreakStasis by the engine adapter
+     *  and gated at the break-mark site (§4.5 Akula exception). */
+    doesntBreakStasis?: boolean;
 }
