@@ -2403,68 +2403,25 @@ export function runCombat(input: CombatEngineInput): {
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
         // injected into `runPlayerTurn` (playerTurn.ts), which calls it AFTER the scheduled
         // debuffs (sourceFired) but BEFORE the ability timed-debuff loop. This ordering ensures:
-        //  - A pre-existing Stasis IS broken when the hit lands.
+        //  - A pre-existing Stasis IS broken when the hit lands (victim was stasised at mark time).
         //  - A Stasis RE-APPLIED by the SAME attack's debuff ability (e.g. stasisInflictAttack)
-        //    is NOT broken — it fires after the hook and persists for the rest of the round.
+        //    is NOT broken — detected via the turn's inflictedEnemyDebuffs at resolution time.
         //  - DoT ticks NEVER call this (they never enter runPlayerTurn's break hook path).
-        // `makeBreakHook` returns a closure bound to the caller-captured `wasStasised` snapshot.
-        // If the target was NOT stasised before the turn fired, the hook is undefined (no-op).
-        // Side-symmetric: keyed by targetId, works for both player and enemy victims.
-        // (Task 3 adds the Akula doesntBreakStasis exception via allActorsById — see TODO comment
-        // inside the returned closure.)
         //
-        // DEFERRED-BREAK: the hook does NOT immediately remove Stasis. Instead it marks the
-        // victim in `pendingStasisBreak`. The stasis-gate skip path consumes the flag and removes
-        // Stasis there — so the victim still skips their current round but acts next round.
-        // This preserves the DRAIN-TIME invariant: `isStasised` returns true for the on-attacked
-        // reactive's drainQueue check (Counter Shield suppression — test iii), because the actual
-        // statusEngine removal only happens inside the skip block, after drainIntents ran for
-        // the attacker's turn.
+        // DEFERRED-BREAK DESIGN: the hook does NOT immediately remove Stasis. Instead it marks
+        // the victim id into a per-turn `stasisHitVictims` Set. Removal happens RIGHT AFTER the
+        // attacker's own `drainIntents`/`drainEnemyIntents` in the same turn-loop iteration.
+        // This satisfies two invariants:
+        //  (i)  The on-attacked reactive's drainQueue check (Counter Shield suppression — test iii)
+        //       sees `isStasised(victim) = true` because drainIntents runs BEFORE the removal.
+        //  (ii) The victim is freed BEFORE its own next turn, so it acts in the next round.
         //
-        // CASTERID-INVALIDATION: we record the attacking actor's id alongside the pending break.
-        // When consuming the break in the skip path, we compare the current Stasis entry's casterId
-        // against the stored attackerId. If the same attacker ALSO re-applied Stasis in their
-        // debuff loop (e.g. stasisInflictAttack), the casterId matches → break is INVALIDATED
-        // (do not remove Stasis, just discard the pending break). This prevents focus's own
-        // stasisInflictAttack from inadvertently breaking the Stasis it just freshly applied.
-        /**
-         * Deferred-break accumulator. Maps victimId → the attackerActorId that triggered the
-         * break. The break is consumed (Stasis removed) in the victim's stasis-gate skip path,
-         * UNLESS the attacker's own debuff loop re-applied Stasis (casterId match → invalidate).
-         */
-        const pendingStasisBreak = new Map<string, string>();
-        const makeBreakHook = (
-            wasStasised: boolean,
-            attackerId: string
-        ): ((targetId: string) => void) | undefined => {
-            if (!wasStasised) return undefined;
-            return (targetId: string): void => {
-                // Task 3: if (allActorsById.get(actor.id)?.doesntBreakStasis) return;
-                // Mark victim for deferred removal, recording which attacker triggered the break.
-                pendingStasisBreak.set(targetId, attackerId);
-            };
-        };
-        /**
-         * Consume a pending stasis break for `actorId`, if present. The break is consumed only
-         * when the attacker that triggered it did NOT also re-apply Stasis via their own debuff
-         * loop (casterId invalidation). Side-symmetric — call from any stasis-gate skip path.
-         */
-        const consumePendingStasisBreak = (actorId: string): void => {
-            const breakingAttackerId = pendingStasisBreak.get(actorId);
-            if (breakingAttackerId === undefined) return;
-            pendingStasisBreak.delete(actorId);
-            // Check whether the current Stasis was re-applied by the same attacker
-            // (stasisInflictAttack pattern: direct hit → break hook + Stasis debuff in same turn).
-            // If casterId matches the breaking attacker, the re-application wins → do NOT remove.
-            const currentStasis = statusEngine
-                .timedAbilityStatuses('enemy', undefined, actorId)
-                .find((s) => isStasis(s.active.buffName));
-            if (currentStasis?.casterId === breakingAttackerId) {
-                // Same attacker re-applied Stasis → break invalidated, Stasis persists.
-                return;
-            }
-            for (const name of STASIS_BUFFS) statusEngine.removeTimedEnemyStatus(actorId, name);
-        };
+        // RE-APPLY CHECK: at resolution time, if the SAME turn's `inflictedEnemyDebuffs` contain
+        // a Stasis name for the target, the re-application wins → skip the break for that victim.
+        // This is LOCAL to the same turn (no cross-turn casterId state needed), making the check
+        // immune to the "same attacker later fires pure-damage hits" bug.
+        //
+        // (Task 3 adds the Akula doesntBreakStasis exception — placeholder left below.)
 
         // Per-victim enemy-debuff-derived modifiers (B1/PR7b). Reads the victim's OWN per-actor
         // enemy-debuff store — BOTH channels: scheduled (__enemy__ global) + ability (per-victim
@@ -3008,6 +2965,22 @@ export function runCombat(input: CombatEngineInput): {
         drainIntents();
         drainEnemyIntents();
 
+        // §4.5 Stasis-break pending map (B3 Task 2). Reset fresh each round (new Map here).
+        // Keys: victimIds whose Stasis should be removed when their skip branch runs.
+        // Values: always true (present = break approved; absent = no break queued).
+        // An entry is added by the ATTACKER's turn block AFTER runPlayerTurn returns:
+        //   - the onHitBreakStasis hook fires DURING runPlayerTurn, marks a local Set;
+        //   - AFTER the turn, if the victim was stasised at hit time AND the turn did NOT
+        //     re-inflict Stasis (inflictedEnemyDebuffs check), the victim id is stored here.
+        // Consumed inside each actor's own skip branch (focus / team / real-enemy): if the
+        // victim id is present, remove Stasis after the turn-skip logic. This ensures the
+        // victim STILL skips its current-round turn (invariant preserved), and is freed for
+        // its next turn (Stasis gone). The same-round drain guard (drainIntents / drainEnemyIntents)
+        // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
+        // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
+        // NO casterId lookup: the per-turn inflictedEnemyDebuffs signal is sufficient and correct
+        // regardless of which attacker fires on later turns (fixes the casterId-identity bug).
+        const stasisBreakPending = new Map<string, true>();
         inTurnLoop = true;
         try {
             let selectionGuard = 0;
@@ -3179,12 +3152,35 @@ export function runCombat(input: CombatEngineInput): {
                         // struck victim's currentHp (max − currentHp), so the dummy-sink and real-victim
                         // cases both read `tgt` uniformly — no separate decline ternary here.
                         const { tgt } = selectTurnTarget(actor);
-                        // §4.5: inject break hook into runPlayerTurn. Captured BEFORE the turn
-                        // fires so a Stasis re-applied by the same attack's debuff ability survives.
+                        // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
+                        // only when the victim was stasised at hit time. The actual statusEngine
+                        // removal happens AFTER drainIntents/drainEnemyIntents (below).
+                        // Task 3 TODO: add Akula doesntBreakStasis check here.
+                        const tgtWasStasised = isStasised(tgt.id);
+                        // §4.5: `stasisHitVictims` collects ids of victims stasised at hit time.
+                        // Resolved AFTER runPlayerTurn returns (when inflictedEnemyDebuffs is available)
+                        // to compute the re-apply check, then stored in `stasisBreakPending` for the
+                        // victim's skip branch to consume.
+                        const turnStasisHitVictims = new Set<string>();
                         const turn = runPlayerTurn({
                             ...buildTurnArgs(actor, tgt),
-                            onHitBreakStasis: makeBreakHook(isStasised(tgt.id), actor.id),
+                            onHitBreakStasis: tgtWasStasised
+                                ? (targetId: string) => {
+                                      turnStasisHitVictims.add(targetId);
+                                  }
+                                : undefined,
                         });
+                        if (turnStasisHitVictims.size > 0) {
+                            const reInflictedStasis = turn.inflictedEnemyDebuffs.some((ab) =>
+                                isStasis(ab.buffName)
+                            );
+                            if (!reInflictedStasis) {
+                                for (const victimId of turnStasisHitVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
+                            }
+                            // else: same-turn re-apply wins → break discarded, no pending mark.
+                        }
 
                         // Drain any team-turn resisted entries staged BEFORE this attacker turn
                         // (faster team actors) into the HEAD of this turn's resisted list — same
@@ -3284,16 +3280,17 @@ export function runCombat(input: CombatEngineInput): {
                     } else {
                         // Stasised focus/attacker turn: skip the action body.
                         // §4.3 STASIS GATE (B2 Task 3).
-                        // §4.5 Deferred break: consume any pending stasis break so this actor
-                        // acts on their NEXT scheduled turn. The break was set by a direct hit
-                        // earlier this round (via makeBreakHook/onHitBreakStasis); consuming it
-                        // here preserves the current-round skip (actor still misses this turn).
-                        //
-                        // INVALIDATION: if the attacker that triggered the break ALSO re-applied
-                        // Stasis in the same turn (stasisInflictAttack pattern), the re-applied
-                        // Stasis has the same casterId as the breakingAttackerId. In that case we
-                        // discard the pending break WITHOUT removing Stasis (the re-application wins).
-                        consumePendingStasisBreak(actor.id);
+                        // §4.5 Deferred break: consume any pending Stasis break so this actor
+                        // acts on their NEXT scheduled turn. The break was pre-approved by a
+                        // direct hit in an earlier turn this round (stored in stasisBreakPending
+                        // after verifying the attacker did NOT re-inflict Stasis that same turn).
+                        // Consuming here (in the skip body) ensures the CURRENT skip still runs —
+                        // the victim misses this turn, then is free from the next round onward.
+                        if (stasisBreakPending.has(actor.id)) {
+                            stasisBreakPending.delete(actor.id);
+                            for (const name of STASIS_BUFFS)
+                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                        }
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
                         // was stasised — it did not act, but the round must still assemble).
@@ -3362,10 +3359,27 @@ export function runCombat(input: CombatEngineInput): {
                         const { tgt } = selectTurnTarget(actor);
                         const teamPattern = parsedPatternFor(actor);
                         // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
+                        // Task 3 TODO: add Akula doesntBreakStasis check here.
+                        const teamTgtWasStasised = isStasised(tgt.id);
+                        const teamTurnStasisHitVictims = new Set<string>();
                         const teamTurn = runPlayerTurn({
                             ...buildTurnArgs(actor, tgt),
-                            onHitBreakStasis: makeBreakHook(isStasised(tgt.id), actor.id),
+                            onHitBreakStasis: teamTgtWasStasised
+                                ? (targetId: string) => {
+                                      teamTurnStasisHitVictims.add(targetId);
+                                  }
+                                : undefined,
                         });
+                        if (teamTurnStasisHitVictims.size > 0) {
+                            const reInflictedStasis = teamTurn.inflictedEnemyDebuffs.some((ab) =>
+                                isStasis(ab.buffName)
+                            );
+                            if (!reInflictedStasis) {
+                                for (const victimId of teamTurnStasisHitVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
+                            }
+                        }
 
                         // Positional APPLY (Task 8b, GATED) — mirror of the focus site, keyed to THIS
                         // team actor's own position / parsed target (teamTargetById) / parsed pattern
@@ -3445,8 +3459,12 @@ export function runCombat(input: CombatEngineInput): {
 
                         processExtraActionGrants(actor, teamTurn.extraActionGrants);
                     } else {
-                        // §4.5 Deferred break: consume any pending stasis break (walked-team skip).
-                        consumePendingStasisBreak(actor.id);
+                        // §4.5 Deferred break: consume any pending Stasis break (team skip).
+                        if (stasisBreakPending.has(actor.id)) {
+                            stasisBreakPending.delete(actor.id);
+                            for (const name of STASIS_BUFFS)
+                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                        }
                     } // end stasis gate (walked-team branch)
                 } else if (actor.kind === 'enemy' && actor.id === enemy.id) {
                     // ====================================================================
@@ -3574,7 +3592,14 @@ export function runCombat(input: CombatEngineInput): {
                         // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
                         // focus/team sites). Captured BEFORE runPlayerTurn so Stasis re-applied
                         // by the same attack's debuff ability is not inadvertently broken.
-                        const enemyBreakHook = makeBreakHook(isStasised(tgt.id), actor.id);
+                        // Task 3 TODO: add Akula doesntBreakStasis check here.
+                        const enemyTgtWasStasised = isStasised(tgt.id);
+                        const enemyTurnStasisHitVictims = new Set<string>();
+                        const enemyBreakHook = enemyTgtWasStasised
+                            ? (targetId: string) => {
+                                  enemyTurnStasisHitVictims.add(targetId);
+                              }
+                            : undefined;
                         if (targetDead) {
                             // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                             // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
@@ -3589,6 +3614,17 @@ export function runCombat(input: CombatEngineInput): {
                                 ...buildTurnArgs(actor, tgt),
                                 onHitBreakStasis: enemyBreakHook,
                             });
+                            // §4.5: resolve Stasis break for player victims hit by this enemy.
+                            if (enemyTurnStasisHitVictims.size > 0) {
+                                const reInflictedStasis = enemyTurn.inflictedEnemyDebuffs.some(
+                                    (ab) => isStasis(ab.buffName)
+                                );
+                                if (!reInflictedStasis) {
+                                    for (const victimId of enemyTurnStasisHitVictims) {
+                                        stasisBreakPending.set(victimId, true);
+                                    }
+                                }
+                            }
                             // Total damage the enemy dealt to the bound target this turn. secondary/
                             // conditional are display sub-buckets ALREADY inside directDamage (do NOT
                             // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
@@ -3834,8 +3870,12 @@ export function runCombat(input: CombatEngineInput): {
                             }
                         }
                     } else {
-                        // §4.5 Deferred break: consume any pending stasis break (real-enemy skip).
-                        consumePendingStasisBreak(actor.id);
+                        // §4.5 Deferred break: consume any pending Stasis break (real-enemy skip).
+                        if (stasisBreakPending.has(actor.id)) {
+                            stasisBreakPending.delete(actor.id);
+                            for (const name of STASIS_BUFFS)
+                                statusEngine.removeTimedEnemyStatus(actor.id, name);
+                        }
                     } // end stasis gate (real-enemy branch)
                 }
 

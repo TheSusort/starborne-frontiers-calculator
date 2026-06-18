@@ -1433,11 +1433,13 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Focus was stasised round 1 (stasis-bot applied Stasis(3), acts BEFORE focus).
         expect(focusFiredRounds).not.toContain(1);
 
-        // After breaker hits in round 2 (speed 150 > focus 100, acts before focus),
-        // Stasis should be broken → focus acts in round 2 or 3 (not waiting until round 4).
-        // At minimum: focus fires in some round <= 3.
+        // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
+        // Round 1: stasis-bot applies Stasis(3), killer kills stasis-bot, breaker hits stasised
+        // focus → break marked. Focus skip branch: consumes break → Stasis removed (but skip runs).
+        // Round 2: focus NOT stasised → fires in EXACTLY round 2 (not 3 or 4).
+        // Pinned to round 2 — "≤3" would pass under a one-round-late regression.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBeLessThanOrEqual(3);
+        expect(firstFiredRound).toBe(2);
 
         // Post-run: Stasis should be gone (broken in round 2).
         expect(capturedIsStasised).toBeDefined();
@@ -1761,10 +1763,12 @@ describe('B3 Task 2 — direct-damage break', () => {
 
         // Focus was stasised in round 1
         expect(focusFiredRounds).not.toContain(1);
-        // The breaker (a DIFFERENT attacker from the original applier) breaks Stasis in round 2
-        // → focus acts in round 2 or 3 (not round 4).
+        // The breaker (a DIFFERENT attacker from the original applier) breaks Stasis in round 2.
+        // Turn order: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
+        // Round 1: break marked in focus's skip. Round 2: focus fires.
+        // Pinned to exactly round 2 — "≤3" would pass under a one-round-late regression.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBeLessThanOrEqual(3);
+        expect(firstFiredRound).toBe(2);
     });
 
     // (v) break regardless of minimal damage
@@ -1857,10 +1861,12 @@ describe('B3 Task 2 — direct-damage break', () => {
 
         // Stasis applied in round 1 (speed 300 > 200 > 100).
         expect(focusFiredRounds).not.toContain(1);
-        // tiny-attacker lands direct hit in round 2 → breaks Stasis.
-        // focus fires in round 2 or 3.
+        // Turn order: stasis-bot(300) → killer(200) → tiny-attacker(150) → focus(100).
+        // Round 1: tiny-attacker hits stasised focus → break marked in focus's skip.
+        // Round 2: focus NOT stasised → fires in EXACTLY round 2.
+        // Pinned to round 2 — "≤3" would pass under a one-round-late regression.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBeLessThanOrEqual(3);
+        expect(firstFiredRound).toBe(2);
 
         // Confirm attack was minimal but still connected (non-vacuous: the attacked event fired)
         const attacked = events.filter(
@@ -1923,5 +1929,155 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Post-round-2: enemy-front was hit (breaking round-1 Stasis) then re-stasised by
         // the same attack's debuff ability. Still stasised at end.
         expect(capturedIsStasised!('enemy-front')).toBe(true);
+    });
+
+    // (vii) REGRESSION: same attacker applies Stasis(5) then fires pure-damage hits → breaks
+    it('(vii) REGRESSION: the attacker that applied Stasis breaks it with a later pure-damage hit', () => {
+        idc = 0;
+        /**
+         * Proves the casterId-identity bug is FIXED.
+         *
+         * Setup (healing mode):
+         *   - focus ('attacker', speed=50, attack=0): stands as a victim; carries basicAttack.
+         *   - std-enemy ('std-enemy', speed=300, hp=12000, chargeCount=1, startCharged=false):
+         *     active skill = stasisInflictAttack(5); charged skill = basicAttack (pure damage).
+         *     Round 1: NOT charged → fires active (stasisInflictAttack(5)) → Stasis(5) on focus.
+         *     Round 2: charges >= chargeCount → fires charged (basicAttack) → pure damage, NO Stasis.
+         *     casterId of the Stasis entry = 'std-enemy'.
+         *     In the old code (casterId-identity bug): breakingAttackerId = 'std-enemy',
+         *       currentStasis.casterId = 'std-enemy' → MATCH → break INVALIDATED (never fires).
+         *     In the new code: inflictedEnemyDebuffs for the charged turn = [] → break FIRES.
+         *   - killer ('killer', speed=200, attack=10000): hits std-enemy for ~10000 each round
+         *     (std-enemy defence=0). hp=12000 → survives R1 hit (2000 HP left), dies from R2 hit.
+         *     Killing std-enemy after round 2 prevents it from re-applying Stasis in round 3+.
+         *   - numRounds: 3.
+         *
+         * Turn order each round: std-enemy(300) → killer(200) → focus(50).
+         *
+         * Round 1:
+         *   std-enemy fires active → Stasis(5) on focus.
+         *   killer fires → std-enemy takes 10000 damage (survives at 2000 HP).
+         *   focus: STASISED → skip (no action).
+         * Round 2:
+         *   std-enemy fires charged (basicAttack) → pure hit on stasised focus → break marked.
+         *   killer fires → std-enemy takes 10000 damage → killed (2000 − 10000 < 0).
+         *   focus: STASISED → skip → consumes break → Stasis removed.
+         * Round 3:
+         *   std-enemy dead. killer fires. focus NOT stasised → acts.
+         *
+         * Assert: focus fires in round 3 (no earlier, because rounds 1-2 stasised/skip).
+         * No-break baseline: Stasis(5) would keep focus stasised through round 5 (5 skips before expiry).
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 50, // SLOWER than all enemies → enemies act first
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('back'), // focus targets back (no real enemy there) — placeholder
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                {
+                    id: 'std-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 12000, // survives killer R1 hit (~10000 dmg, 2000 HP left); dies from killer R2 hit
+                        speed: 300, // FASTEST → applies Stasis before any player acts
+                        security: 0,
+                        hacking: 200, // ensures Stasis landing chance = 1.0
+                    },
+                    chargeCount: 1, // active round 1 (stasisInflict); charged round 2 (basicAttack)
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'), // targets the front player (focus at M4)
+                    pattern: basePattern(),
+                    shipSkills: {
+                        slots: [
+                            // Active slot: stasisInflictAttack(5) — fires in round 1
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100 },
+                                    }),
+                                    ab({
+                                        type: 'debuff',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'debuff',
+                                            buffName: 'Stasis',
+                                            application: 'inflict',
+                                            duration: 5,
+                                            stacks: 1,
+                                            isStackable: false,
+                                            parsedEffects: {},
+                                        },
+                                    }),
+                                ],
+                            },
+                            // Charged slot: pure damage (no Stasis) — fires in round 2
+                            {
+                                slot: 'charged',
+                                abilities: [
+                                    ab({
+                                        type: 'damage',
+                                        target: 'enemy',
+                                        config: { type: 'damage', multiplier: 100 },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Round 1: std-enemy fires active (stasisInflictAttack(5)) → focus stasised. Focus skips.
+        // Round 2: std-enemy fires charged (basicAttack) → pure hit on stasised focus.
+        //          Old casterId bug: break INVALIDATED (casterId = 'std-enemy' = breakingAttackerId).
+        //          Fix: inflictedEnemyDebuffs = [] → break FIRES → focus skip consumes break.
+        // Round 3: focus NOT stasised → fires.
+        expect(focusFiredRounds).not.toContain(1); // stasised round 1
+        expect(focusFiredRounds).not.toContain(2); // skip still runs in round 2 (break consumed there)
+        expect(focusFiredRounds).toContain(3); // freed by break → acts in round 3
+
+        // Non-vacuous: confirm std-enemy fired the charged (basicAttack) skill in round 2
+        // (proves the pure-damage hit actually ran — break was not vacuously absent).
+        const stdEnemyFired = abilityPerformed.filter((e) => e.actorId === 'std-enemy');
+        expect(stdEnemyFired.some((e) => e.round === 1)).toBe(true);
+        expect(stdEnemyFired.some((e) => e.round === 2)).toBe(true);
     });
 });
