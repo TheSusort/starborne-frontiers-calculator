@@ -204,7 +204,8 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
         let capturedIsStasised: ((actorId: string) => boolean) | undefined;
 
         // Enemy fires `front` (anchors the focus 'attacker') with damage + Stasis inflict.
-        // Enemy hacking:200, player actors security:0 (default) → landing chance 1.0.
+        // Enemy hacking:200, player actors security defaults to 100 in the formula →
+        // landing chance = clamp((200 - 100) / 100) = 1.0 (always lands).
         // duration:2, numRounds:2 → Stasis is active at assert time.
         runCombat({
             attack: 0,
