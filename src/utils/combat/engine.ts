@@ -2416,16 +2416,11 @@ export function runCombat(input: CombatEngineInput): {
         //  - `opposingLiving` — focus/team → enemyAttackerActors; enemy → allPlayerActors,
         //  - `applyToVictim` — focus/team → applyOutgoingToEnemy; enemy → applyIncomingToTarget,
         //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
-        // `defenseProfileOf` is identical across all three sites in PR1 (defenceModifierPct 0 —
-        // per-victim defense-debuff sourcing is the documented Phase-5 refinement) so it lives here.
-        // NOTE: that Phase-5 refinement is TWO directions, not one — the eventual per-victim
-        // defense-debuff SOURCE differs BY DIRECTION: the focus/team sites read the ENEMY victim's
-        // defense debuffs, while the enemy site reads the PLAYER victim's defense debuffs (sourced
-        // from a different place). So this single zero-stub eventually splits into two lookups.
-        // SAME Phase-5 caveat applies to victimHitDamage's incoming/outgoing damage modifiers:
-        // they're carried as attacker-fixed scalars here, but in the aggregate they derive from the
-        // BOUND victim's debuffs — so a covered (non-anchor) victim's incoming/outgoing modifiers are
-        // an approximation today (exact for the anchor). Per-victim re-sourcing covers these too.
+        // `defenseProfileOf` is identical across all three sites (B1/PR7b: wired to
+        // victimEnemyModifiers — reads the victim's OWN per-actor enemy-debuff store, both
+        // channels: scheduled (__enemy__ global) + ability (per-victim payload). Direction-
+        // agnostic: victimEnemyModifiers(v.id) works for ENEMY victims (focus/team site) and
+        // PLAYER victims (enemy site) alike — both store their debuffs keyed by their own id.
         // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
         // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
         const drivePositionalApply = (args: {
@@ -2453,11 +2448,21 @@ export function runCombat(input: CombatEngineInput): {
                     ignoresForcedTargeting: args.ignoresForcedTargeting,
                     provokedBy: provokerOf(statusEngine, args.actingId),
                 },
-                defenseProfileOf: (v) => ({
-                    defence: v.stats.defence,
-                    defenceModifierPct: 0,
-                    affinity: v.affinity ?? 'antimatter',
-                }),
+                defenseProfileOf: (v) => {
+                    const m = victimEnemyModifiers(v.id);
+                    return {
+                        defence: v.stats.defence,
+                        // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
+                        // Direction-agnostic — v.id keys the victim's own enemy-debuff store
+                        // regardless of side.
+                        defenceModifierPct: m.enemyDefenseModifier,
+                        // B1/PR7b: per-victim incoming-damage debuff; overrides the
+                        // attacker-fixed scalar in victimHitDamage. Attacker-sourced scalars
+                        // (outgoing buff, pen) stay attacker-fixed.
+                        incomingDamageModifierPct: m.incomingDamageModifier,
+                        affinity: v.affinity ?? 'antimatter',
+                    };
+                },
                 applyToVictim: args.applyToVictim,
                 // Pure ACCUMULATOR (not a bus emit): record per-victim damage into the
                 // per-round map so the RoundData row can expose perTargetDamage. Identical

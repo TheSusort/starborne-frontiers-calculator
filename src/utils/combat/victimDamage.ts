@@ -56,6 +56,8 @@ export interface VictimDefenseProfile {
     /** enemyDefenseModifier — percent. */
     defenceModifierPct: number;
     affinity: AffinityName;
+    /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar — B1/PR7b */
+    incomingDamageModifierPct?: number;
 }
 
 /**
@@ -88,10 +90,15 @@ export function victimHitDamage(
     ).damageModifier;
     const affinityMult = 1 + affinityDamageModifier / 100;
 
+    // Prefer the per-victim incoming-damage debuff when present; fall back to the
+    // attacker-fixed scalar (B1/PR7b). Keeps every existing caller byte-identical
+    // (callers that do not set incomingDamageModifierPct on the profile are unchanged).
+    const incoming = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
+
     const nonCritFactor =
         (1 - damageReduction / 100) *
         (1 + s.outgoingDamageBuffPct / 100) *
-        (1 + s.incomingDamageModifierPct / 100) *
+        (1 + incoming / 100) *
         affinityMult;
 
     const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
