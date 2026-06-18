@@ -4,7 +4,10 @@
 **Epic:** `2026-06-17-combat-realism-epic-roadmap.md` (sub-project B)
 **Predecessor:** sub-project A (dynamic effective-stats backbone) — CLOSED. B rides A's
 `effectiveStatsOf` / `liveDebuffLandingChance` machinery for landing.
-**Status:** Design — user-approved 2026-06-18; pending spec review.
+**Status:** Design — user-approved 2026-06-18; **revised 2026-06-18** after a code trace
+(see §3.1) found the infliction pipeline mostly already exists and that correct victim routing
+requires pulling sub-project **E's PR7b (per-victim modifier sourcing)** forward as B's foundation.
+Re-running spec review after the revision.
 
 > Line numbers are 2026-06-18 snapshots. Re-locate by symbol name, not offset.
 
@@ -33,10 +36,14 @@ and is broken early by direct damage (with an Akula-style "don't break" attacker
 
 ## 3. Decided scope (user-ratified 2026-06-18)
 
-- **Full infliction pipeline, one cohesive sub-project** (not effect-only-first): parse target +
-  duration → route through the **`inflict` hacking-vs-security landing roll** → create a synthetic
-  timed Stasis debuff on the resolved victim → turn-skip + tick + reactive suppression +
-  direct-damage break + Akula don't-break flag.
+- **Full infliction pipeline, one cohesive sub-project** (not effect-only-first): land a real timed
+  Stasis debuff on the resolved victim via the existing `inflict` landing roll → turn-skip + tick +
+  reactive suppression + direct-damage break + Akula don't-break flag.
+- **Per-victim foundation pulled forward (§3.1):** to land Stasis on the *specific* victim, B
+  front-loads **E's PR7b — per-victim debuff modifier sourcing** as **B1**: general player→enemy
+  `targetId` routing **and** the matching reader moves, so other debuffs' effects don't drop.
+  Boundary: PR7b only — E's PR7a (symmetric incoming surface), PR7c (per-victim leech), PR7d
+  (death-fallback + accounting unification) stay deferred.
 - **Breaking hit stays suppressed:** at the instant a breaking direct hit lands, the victim is still
   stasised, so its `on-attacked` reaction is suppressed for *that* hit. Stasis clears *after* damage
   is applied; subsequent hits react normally. No mid-apply re-entrancy.
@@ -46,9 +53,42 @@ and is broken early by direct damage (with an Akula-style "don't break" attacker
   on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round self-buffs
   (Chakara). One rule: owner-is-stasised → intent dropped.
 
-**Out of scope:** full per-victim AoE accounting for a multi-target Stasis (sub-project E); Overload
+**Out of scope:** AoE multi-target Stasis accounting and the rest of E (PR7a/c/d); Overload
 (mis-grouped as control — it's a resource, separate work); provoke/concentrate-fire forced-targeting
 (already shipped / separate). HP semantics unchanged.
+
+## 3.1 What the code trace found (2026-06-18) — reshapes B
+
+A trace of the `debuff` pipeline (parser → `buildShipAbilities` → `playerTurn` → engine →
+`statusEngine`) found that **most of the infliction pipeline already exists and already runs for
+Stasis**:
+
+- "inflicts Stasis for N turns" **already** parses into a `debuff` ability: `Stasis` is in the
+  `BUFFS` catalog as `{name:'Stasis', type:'debuff'}` (`src/constants/buffs.ts:202`); not
+  DoT-prefixed, so `buildSkillBuffAutoFill` routes it into `enemyDebuffs` → a
+  `{type:'debuff', buffName:'Stasis', application:'inflict', duration:N}` ability. The duration
+  "for N turns" is **already parsed** (`DURATION_RE`) and stamped onto the ability.
+- It already rides the `inflict` landing roll (`landsTimedEnemyApplicationLive('inflict')` →
+  `liveDebuffLandingChance`), already captures resists into `resistedDebuffs`, already applies via
+  `statusEngine.applyTimedAbilityStatus` and decrements via `decrementEnemy(actorId)`.
+- The `control` ability (emit-only, for Defiant's `on-stasis-applied`) and the `debuff` ability
+  **already coexist** from the same clause — `controlAbilitiesFromSkill` partitions on
+  `type==='control'` and never touches the debuff. So **no parser/ability-config change is needed**;
+  the earlier §4.2 "add `duration` to the control config" plan is unnecessary.
+- `isStasised(id)` falls out of the existing `ownerDebuffNamesFor(statusEngine, id)` helper for free
+  (it already reads a given actor's active debuff names, including timed-only statuses).
+
+**The one real infliction gap is victim routing.** `engine.ts:2552` threads `targetId` to the
+status engine **only when `a.side === 'enemy'`**. So a *player* attacking an enemy lands the Stasis
+debuff on the shared `__enemy__` sentinel store, not the specific enemy victim's per-actor store —
+`isStasised(enemyVictimId)` would read empty. Threading `targetId` for player→enemy fixes this, but
+the **readers** of enemy-debuff stat-modifiers still read `__enemy__`
+(`playerTurn.ts:733` `snapshot(actor.id)`) and the positional victim defense profile is **hardcoded
+`defenceModifierPct: 0`** (`engine.ts:2432`). So threading the *writes* without moving the *readers*
+would silently **drop** scheduled enemy-debuff effects (Defense Down, etc.). Moving the readers
+per-victim **is** E's PR7b. Hence B1 below. (Stasis itself carries **empty `parsedEffects`** — no
+stat modifier — so Stasis alone never depends on the reader move; the reader move exists to keep
+*every other* player-applied debuff correct once routing goes general.)
 
 ## 4. Architecture
 
@@ -62,22 +102,18 @@ A small engine helper `isStasised(actorId): boolean` reads the victim's **debuff
 as a **timed debuff in the victim's per-actor debuff store** (`decrementEnemy(actorId)`), so it
 decrements on the **victim's own Post-Turn** → skips exactly N turns regardless of applier speed.
 
-### 4.2 Infliction (applier → victim)
-- **Parser:** extend the control-inflict path so it carries **duration** (parsed from skill text;
-  default **1 turn** when unspecified) and target. `Ability.target` already exists; the gap is a
-  `duration` field on the `control` ability config (`abilities.ts` ~242-245, today `{type, effect}`
-  only) — other configs already carry `duration`, so this just adds it to the control variant.
-- **Landing:** the Stasis application rides the existing **`inflict`** timed-application path,
-  gated by `liveDebuffLandingChance` (attacker live hacking vs defender live security, affinity
-  ±25% on hacking — all from sub-project A). A resisted Stasis surfaces via the existing
-  `resistedDebuffs` channel, like any other resisted timed debuff.
-- **`control-applied` still fires unconditionally on cast** — independent of landing — to keep
-  Defiant's `on-stasis-applied` reaction **byte-identical**. (Defiant reacts to the act of casting,
-  not to a successful land.)
-- On a successful land, a timed Stasis debuff is created in the victim's debuff store.
-- **AoE/multi-target:** Stasis applies to the resolved target(s) using the engine's existing
-  status-application targeting. Full per-victim AoE accounting (uniform status across covered cells)
-  stays in sub-project E; B does not build new multi-target accounting.
+### 4.2 Infliction (applier → victim) — already mostly built
+Per §3.1, the parse → debuff-ability → landing-roll → `applyTimedAbilityStatus` → `decrementEnemy`
+pipeline already exists and already runs for Stasis. **No parser or ability-config change is
+needed.** The only new infliction wiring is the **victim routing** (B1 / §4.6): once `targetId` is
+threaded for player→enemy, the existing pipeline lands the Stasis debuff on the resolved victim's
+per-actor store with no further change. Properties that already hold and must be preserved:
+- **Landing** rides the existing **`inflict`** path (live hacking-vs-security, affinity ±25% on
+  hacking — sub-project A); resisted Stasis already surfaces via `resistedDebuffs`.
+- **`control-applied` still fires unconditionally on cast** (Defiant's `on-stasis-applied` reaction
+  stays **byte-identical** — it reacts to casting, not to a successful land).
+- **AoE/multi-target:** Stasis applies to the resolved target(s) via the existing status-application
+  targeting. Multi-target AoE accounting stays in sub-project E (PR7a/c/d); B does not build it.
 
 ### 4.3 Turn-skip + tick (the one deviation from `handleDeadTargetSkip`)
 `handleDeadTargetSkip` (`engine.ts` ~2613) skips the **entire** turn body (a dead unit ticks
@@ -120,6 +156,32 @@ property, threaded from ship data through to the break hook. Akula's text
 second ship (`ships.ts` ~2529/2531, "do not break stasis") shares the phrasing — the regex
 generalizes to both, which is correct.
 
+### 4.6 Per-victim debuff modifier sourcing (B1 — E's PR7b, pulled forward)
+The foundation that makes a debuff land on the *specific* victim and still be *read* there. Two
+halves that MUST move together:
+
+- **Routing (writes):** thread `targetId` for the player→enemy direction in `buildTurnArgs`
+  (`engine.ts` ~2552, today `...(a.side === 'enemy' ? { targetId: tgt.id } : {})`). General — all
+  player-applied debuffs route to the resolved victim's per-actor store. **Guarded** so the DPS
+  dummy / `__enemy__` sentinel path is unchanged when the target is not a real positioned actor
+  (preserves DPS/healing byte-identical goldens).
+- **Reading (reads):** move the enemy-debuff-modifier readers from `__enemy__` to the bound victim:
+  - `playerTurn.ts:733` `statusEngine.snapshot(actor.id)` → `snapshot(actor.id, targetId)` so the
+    *scheduled* enemy-debuff half of `roundEnemyDebuffs` reads the victim's store (the ability half
+    already takes `targetId`). Falls back to `__enemy__` when `targetId` is absent (dummy path).
+  - `engine.ts:2432` `defenseProfileOf` `defenceModifierPct: 0` → a per-victim lookup of the
+    victim's enemy-debuff snapshot (`toEnemyModifiers`) for `defenceModifierPct`, plus the matching
+    per-victim **incoming-damage** modifier in `victimHitDamage`'s scalars
+    (`engine.ts:2395-2404` documents this as the deferred Phase-5/PR7b refinement).
+- **Scope guard:** attacker-sourced modifiers (own outgoing-damage buff, defense penetration) stay
+  attacker-sourced — only the *victim-debuff-derived* modifiers (defence + incoming-damage) move
+  per-victim. PR7a (symmetric incoming surface), PR7c (per-victim leech), PR7d (death-fallback +
+  accounting unification) stay deferred.
+- **Golden gate:** DPS + healing goldens byte-identical (dummy/`__enemy__` guard); two-team-sim
+  goldens (`twoTeamBattle`, `dpsSimulator` multi-actor) audited line-by-line — player-applied
+  debuffs now sit on per-victim stores; effects must be preserved (not dropped), so any movement is
+  explained, never `vitest -u`'d.
+
 ## 5. Data flow (one round)
 
 1. Applier's turn: fires a Stasis-inflicting skill → `control-applied` emits (Defiant reaction
@@ -150,21 +212,32 @@ lint (max-warnings 0) + tsc clean every PR.
 
 ## 7. PR split (refined in writing-plans)
 
-- **B1** — status model (`stasisBuffs.ts` + `isStasised`) + infliction (parse target/duration,
-  route through the inflict landing roll, create the timed debuff on the victim) + turn-skip + tick.
-  Stasis lands and skips turns; does not yet break early or suppress reactions.
-- **B2** — reactive suppression (drain-time filter) + direct-damage break (both apply sites) +
-  Akula don't-break parser/flag.
+- **B1 — Per-victim debuff modifier sourcing (E's PR7b, pulled forward) (§4.6).** General
+  player→enemy `targetId` routing + the matching reader moves (snapshot key + `defenseProfileOf` +
+  per-victim incoming-damage modifier). No Stasis behavior yet. DPS/healing byte-identical;
+  two-team-sim goldens audited. This is the foundation the rest of B rides.
+- **B2 — Stasis status model + action-skip + tick.** `stasisBuffs.ts` (`STASIS_BUFFS` + `isStasis`)
+  + `isStasised(actorId)` (via `ownerDebuffNamesFor`, now per-victim thanks to B1) + the action-only
+  turn-skip that still ticks DoTs and decrements (§4.3). Stasis lands (already) and skips turns; does
+  not yet break early or suppress reactions.
+- **B3 — Stasis reactive suppression + direct-damage break + Akula don't-break.** Drain-time intent
+  filter (§4.4) + side-symmetric break hook (§4.5) + `parseDoesntBreakStasis` flag.
 
 Each PR: subagent-driven, per-task spec+quality + final holistic (opus) review, byte-identical
-goldens as the gate.
+goldens as the gate (audited two-team-sim churn only where B1 legitimately moves a debuff per-victim,
+explained line-by-line).
 
 ## 8. Open items for the plan (not blockers)
 
+- **B1 guard condition** — the exact test for "real positioned actor vs DPS dummy / `__enemy__`" at
+  the `targetId`-threading site (`isDummyEnemy` / presence in the positioned roster). Confirm in the
+  B1 plan against `buildTurnArgs` and `selectTurnTarget`.
+- **B1 reader completeness** — confirm the full set of victim-debuff-derived modifiers to move
+  per-victim (defence + incoming-damage are the known two from `engine.ts:2395-2404`); verify no
+  other reader silently reads `__enemy__` for a victim-debuff effect.
 - Exact Stasis buff-name string(s) for `STASIS_BUFFS` — derive from `docs/ship-skills.csv` /
   `ships.ts` (is it bare `Stasis`, or `Stasis I/II`? and does the numeral encode duration vs target
-  count?). Confirm against corpus during B1 planning.
-- Whether duration is encoded in the buff name (e.g. `Stasis II`) or always 1 turn in the corpus —
-  drives the parser duration extraction in §4.2.
+  count?). Confirm against corpus during B2 planning. (Duration "for N turns" is already parsed; this
+  is only about which name strings count as Stasis.)
 - Placement of the action-skip gate: shared `handleStasisSkip` helper vs per-kind in-body guard —
-  decide in the plan against the three turn-body shapes.
+  decide in the B2 plan against the three turn-body shapes.
