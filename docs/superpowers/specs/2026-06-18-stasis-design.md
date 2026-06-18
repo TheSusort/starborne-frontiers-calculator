@@ -236,8 +236,19 @@ lint (max-warnings 0) + tsc clean every PR.
   turns; does not yet break early or suppress reactions. Production byte-identical. NOTE: re-inflicting
   Stasis each round REFRESHES it (`familyApplicationWins` when newDuration>remaining) → perpetual
   stasis while an applier keeps casting — correct game behavior.
-- **B3 — Stasis reactive suppression + direct-damage break + Akula don't-break.** Drain-time intent
-  filter (§4.4) + side-symmetric break hook (§4.5) + `parseDoesntBreakStasis` flag.
+- **B3 — Stasis reactive suppression + direct-damage break + Akula don't-break. ✅ SHIPPED.**
+  (1) Reactive suppression = a single `if (isStasised(intent.ownerId)) continue;` at the top of the
+  shared `drainQueue` per-intent loop — covers both sides + all reactive types incl. Chakara
+  start-of-round. (2) Direct-damage break: a per-turn `onHitBreakStasis` mark on a DIRECT firing hit
+  (positional + non-positional; DoT/detonation excluded) → after the breaking attacker's post-turn
+  drain (so the breaking hit's on-attacked stays suppressed), remove the victim's Stasis via
+  `removeTimedEnemyStatus` UNLESS this same turn RE-INFLICTED Stasis (checked via the turn's
+  `inflictedEnemyDebuffs` — replaced an earlier buggy casterId-identity check). Any landed direct
+  attack breaks regardless of shield/Barrier absorb. (3) Akula: `parseDoesntBreakStasis` (matches
+  "don't/doesn't/does not/do not break stasis" only) → `doesntBreakStasis` threaded onto `CombatActor`
+  (mirrors `ignoresForcedTargeting`); the break-mark is gated `!actor.doesntBreakStasis`. KNOWN GAP
+  (deferred): per-victim AoE attribution of `inflictedEnemyDebuffs` (single-target only today;
+  `onHitBreakStasis` fires for one target/turn — fine until AoE-stasis-break is wired).
 
 Each PR: subagent-driven, per-task spec+quality + final holistic (opus) review, byte-identical
 goldens as the gate (audited two-team-sim churn only where B1 legitimately moves a debuff per-victim,
