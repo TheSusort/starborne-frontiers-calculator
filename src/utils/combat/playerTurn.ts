@@ -41,8 +41,13 @@ import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStat
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
 // historical public API (engine.ts + tests import these from playerTurn). Keeping the
 // definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
-import { calculateBuffTotals, payloadToSelectedBuff } from './buffTotals';
-export { calculateBuffTotals, payloadToSelectedBuff };
+import {
+    calculateBuffTotals,
+    expandBuffEntry,
+    expandEnemyDebuffs,
+    payloadToSelectedBuff,
+} from './buffTotals';
+export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -259,27 +264,8 @@ export interface PlayerTurnArgs {
 // Module-private helpers used EXCLUSIVELY by the player turn.
 // ---------------------------------------------------------------------------
 
-// Expand an active buff/debuff into its underlying SelectedGameBuff effects.
-// Accumulating buffs override their static stacks with the per-round count and
-// drop out entirely when at zero stacks; non-accumulating ones pass through.
-function expandBuffs(ab: ActiveBuff, bufs: SelectedGameBuff[]): SelectedGameBuff[] {
-    if (ab.stacks !== undefined) {
-        return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
-    }
-    return bufs;
-}
-
-/** Expand a victim's active enemy-debuff snapshot into SelectedGameBuff effects via the
- *  enemy-debuff lookup (applies the per-round stack override; drops zero-stack and unknown
- *  names). Shared by the engine's per-victim defense/incoming-damage sourcing (B1). */
-export function expandEnemyDebuffs(
-    activeEnemyDebuffs: ActiveBuff[],
-    enemyDebuffLookup: Map<string, SelectedGameBuff[]>
-): SelectedGameBuff[] {
-    return activeEnemyDebuffs.flatMap((ab) =>
-        expandBuffs(ab, enemyDebuffLookup.get(ab.buffName) ?? [])
-    );
-}
+// expandBuffs: now lives in buffTotals.ts as expandBuffEntry (imported above as expandBuffEntry).
+// expandEnemyDebuffs: now lives in buffTotals.ts (imported + re-exported above).
 
 // Per-round self-buff totals from the status engine's active list. Expands each
 // active buff back into its SelectedGameBuff effects (stack override included) and
@@ -292,7 +278,7 @@ function resolveSelfBuffTotals(args: {
 }): ReturnType<typeof calculateBuffTotals> {
     const roundSelfBuffs = args.activeSelfBuffs.flatMap((ab) =>
         // Accumulating buff: override static stacks with per-round count; skip when 0
-        expandBuffs(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
+        expandBuffEntry(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
     );
     return calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 }
@@ -336,7 +322,7 @@ function resolveEnemyDebuffs(args: {
             return [];
         }
         landedEnemyDebuffs.push(ab);
-        return expandBuffs(ab, bufs);
+        return expandBuffEntry(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs };
 }
@@ -355,7 +341,7 @@ function foldTimedEnemyDebuffs(args: {
     const roundEnemyDebuffs = args.timedEnemyDebuffs.flatMap((ab) => {
         const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
         landedEnemyDebuffs.push(ab);
-        return expandBuffs(ab, bufs);
+        return expandBuffEntry(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
@@ -1491,7 +1477,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
             // SelectedGameBuff carries the effective stacks already.
             for (const ab of entry.activeSelfBuffs) {
-                for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
                     const hotPct = b.parsedEffects?.hotPct;
                     if (!hotPct) continue;
                     tickHot(undefined, hotPct, b.stacks ?? 1);

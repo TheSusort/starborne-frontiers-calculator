@@ -1,10 +1,11 @@
 import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { EnemyBaseClass, ParsedBuffEffects } from '../../types/calculator';
+import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
+import { expandEnemyDebuffs, payloadToSelectedBuff } from './buffTotals';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -689,6 +690,35 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
         names.add(s.active.buffName);
     }
     return [...names];
+}
+
+// Sentinel used by statusEngine for the default (non-per-victim) enemy-debuff store.
+// Matches statusEngine.ts's internal DEFAULT_ENEMY_TARGET (verified: hard-coded '__enemy__').
+const DEFAULT_ENEMY_TARGET = '__enemy__';
+
+/** Returns the full per-victim enemy-debuff SET as SelectedGameBuff effects, folding BOTH
+ *  channels:
+ *  - scheduled (__enemy__ global auras/manual — upsertBuff is hardcoded to '__enemy__')
+ *  - ability (payload, per-victim — timed + aura/accum keyed by targetId)
+ *  Mirrors ownerDebuffNamesFor's three-source read so modifier-read and name-read stay in
+ *  lockstep. Import-cycle safe: expandEnemyDebuffs + payloadToSelectedBuff come from
+ *  ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts). */
+export function victimEnemyBuffs(
+    statusEngine: StatusEngine,
+    targetId: string,
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>
+): SelectedGameBuff[] {
+    const scheduled = expandEnemyDebuffs(
+        statusEngine.snapshot(undefined, DEFAULT_ENEMY_TARGET).activeEnemyDebuffs,
+        enemyDebuffLookup
+    );
+    const timed = statusEngine
+        .timedAbilityStatuses('enemy', undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    const active = statusEngine
+        .activeAbilityStatuses('enemy', () => NEUTRAL_NAMES_CTX, undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    return [...scheduled, ...timed, ...active];
 }
 
 /** The id of the actor that applied an active 'Provoke' debuff to `actorId`, or undefined

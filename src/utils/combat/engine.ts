@@ -54,7 +54,6 @@ import {
     PlayerActorRuntime,
     PlayerRoundCtx,
     PlayerTurnResult,
-    expandEnemyDebuffs,
     runPlayerTurn,
 } from './playerTurn';
 import {
@@ -68,6 +67,7 @@ import {
     provokerOf,
     registerReactiveListeners,
     selfBuffNamesForOwners,
+    victimEnemyBuffs,
 } from './triggers';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
@@ -2394,18 +2394,14 @@ export function runCombat(input: CombatEngineInput): {
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
 
         // Per-victim enemy-debuff-derived modifiers (B1/PR7b). Reads the victim's OWN per-actor
-        // enemy-debuff store (keyed by victim.id — direction-agnostic), expands names → effects via
-        // the global enemyDebuffLookup, folds to the two victim-debuff-derived modifiers. Attacker-
-        // sourced modifiers (outgoing buff, pen) stay attacker-sourced and are NOT read here.
+        // enemy-debuff store — BOTH channels: scheduled (__enemy__ global) + ability (per-victim
+        // payload timed+aura). Delegates to victimEnemyBuffs (triggers.ts) which mirrors
+        // ownerDebuffNamesFor's three-source read, ensuring modifier-read and name-read stay in
+        // lockstep. Attacker-sourced modifiers (outgoing buff, pen) stay attacker-sourced.
         const victimEnemyModifiers = (
             victimId: string
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } =>
-            toEnemyModifiers(
-                expandEnemyDebuffs(
-                    statusEngine.snapshot(undefined, victimId).activeEnemyDebuffs,
-                    enemyDebuffLookup
-                )
-            );
+            toEnemyModifiers(victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup));
         // TEST-ONLY: hand the reader out once so unit tests can assert per-victim debuff reads
         // before B1 Task 3 wires it into a damage path. Inert in production (never set).
         input.__testTapVictimEnemyModifiers?.(victimEnemyModifiers);
@@ -2577,7 +2573,14 @@ export function runCombat(input: CombatEngineInput): {
             return {
                 runtime: rt,
                 enemy: tgt,
-                ...(a.side === 'enemy' ? { targetId: tgt.id } : {}),
+                // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
+                // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
+                // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
+                // automatically). GUARDED for the player side: when selectTurnTarget fell back to the
+                // dummy `enemy` sink (tgt.id === enemy.id), leave targetId unset so the __enemy__ path
+                // (DPS/healing) is byte-identical. Scheduled channel stays global __enemy__ (upsertBuff
+                // hardcoded). Enemy side unchanged (victim always a real actor).
+                ...(a.side === 'enemy' || tgt.id !== enemy.id ? { targetId: tgt.id } : {}),
                 statusEngine,
                 corrosionEntries: tgt.corrosionEntries,
                 infernoEntries: tgt.infernoEntries,

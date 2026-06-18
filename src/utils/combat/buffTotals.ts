@@ -1,5 +1,5 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
-import type { AbilityStatusPayload } from './statusEngine';
+import type { AbilityStatusPayload, ActiveBuff } from './statusEngine';
 
 // ---------------------------------------------------------------------------
 // Leaf helpers shared by the player turn (playerTurn.ts) and the effective-stat
@@ -55,6 +55,29 @@ export function calculateBuffTotals(buffs: Buff[]) {
         hackingBuff,
         securityBuff,
     };
+}
+
+// Expand an active buff/debuff into its underlying SelectedGameBuff effects.
+// Accumulating buffs override their static stacks with the per-round count and
+// drop out entirely when at zero stacks; non-accumulating ones pass through.
+export function expandBuffEntry(ab: ActiveBuff, bufs: SelectedGameBuff[]): SelectedGameBuff[] {
+    if (ab.stacks !== undefined) {
+        return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
+    }
+    return bufs;
+}
+
+/** Expand a victim's active enemy-debuff snapshot into SelectedGameBuff effects via the
+ *  enemy-debuff lookup (applies the per-round stack override; drops zero-stack and unknown
+ *  names). Shared by the engine's per-victim defense/incoming-damage sourcing (B1) and
+ *  victimEnemyBuffs (triggers.ts). */
+export function expandEnemyDebuffs(
+    activeEnemyDebuffs: ActiveBuff[],
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>
+): SelectedGameBuff[] {
+    return activeEnemyDebuffs.flatMap((ab) =>
+        expandBuffEntry(ab, enemyDebuffLookup.get(ab.buffName) ?? [])
+    );
 }
 
 // Mirror toSimBuffs/toEnemyModifiers semantics for an ability-status payload: wrap it as
