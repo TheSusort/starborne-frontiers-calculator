@@ -36,7 +36,7 @@ The engine comment at `engine.ts:2397-2400` worried the per-victim defense looku
 
 ## Guard condition for write-routing (spec §8 resolved)
 
-The dummy enemy is `actor.id === enemy.id` (`isDummyEnemy`, `engine.ts:2947`). `selectTurnTarget` returns `selected ?? tb.legacyVictim`; for the player side `tb.legacyVictim === enemy` (`engine.ts:2488`). So the guard "real positioned actor vs dummy" at the `buildTurnArgs` site is simply **`tgt.id !== enemy.id`**. The enemy side already threads `targetId` unconditionally (its victim is always a real player actor).
+The `isDummyEnemy` flag (`engine.ts:2947`) is `actor.kind === 'enemy' && actor.id === enemy.id`, but the B1 guard does NOT reuse it — it keys off the resolved *target*, not the acting actor. `selectTurnTarget` returns `selected ?? tb.legacyVictim`; for the player side `tb.legacyVictim === enemy` (`engine.ts:2488`). So the guard "real positioned actor vs dummy" at the `buildTurnArgs` site is simply **`tgt.id !== enemy.id`** (independent of `isDummyEnemy`). The enemy side already threads `targetId` unconditionally (its victim is always a real player actor).
 
 ---
 
@@ -122,7 +122,7 @@ Build + test the per-victim reader BEFORE wiring it into damage, so Task 4 is a 
 
 **Files:** Modify `src/utils/combat/engine.ts` (+ `CombatEngineInput` tap field); Create `src/utils/combat/__tests__/victimEnemyModifiers.test.ts`.
 
-- [ ] **Step 1: Write the failing test** — mirror `twoTeamBattle.test.ts` builders. A 1-attacker vs 2-enemy positioned `runCombat` where the focus attacker carries a scheduled `enemyDebuffs` Defense-Down (`parsedEffects.defense: -30`) on `enemy-front` only. Expose the engine-internal reader through a test tap (mirror `input.__testTapApplyOutgoingToEnemy?.(...)` at `engine.ts:2383`): assert the tapped fn returns `{ enemyDefenseModifier: -30, incomingDamageModifier: 0 }` for `enemy-front` and `{ 0, 0 }` for `enemy-back`.
+- [ ] **Step 1: Write the failing test** — mirror `twoTeamBattle.test.ts` builders. A 1-attacker vs 2-enemy positioned `runCombat` where the focus attacker carries a scheduled `enemyDebuffs` Defense-Down (`parsedEffects.defense: -30`) on `enemy-front` only. Expose the engine-internal reader through a test tap (mirror `input.__testTapApplyOutgoingToEnemy?.(...)` at `engine.ts:2383`): assert the tapped fn returns `{ enemyDefenseModifier: -30, incomingDamageModifier: 0 }` for `enemy-front` and `{ 0, 0 }` for `enemy-back`. (NOTE: the helper's `snapshot(undefined, victimId)` passes `ownerId=undefined` → defaults to `'attacker'`; this is irrelevant for the enemy-debuff read, which keys solely off `enemyTargetId` — add a test comment so a future reader doesn't think `ownerId` is load-bearing.)
 - [ ] **Step 2: Run test, verify it fails** — `npx vitest run victimEnemyModifiers` → FAIL (tap/field absent).
 - [ ] **Step 3: Minimal implementation** in `engine.ts`, inside `runCombat`'s round-loop scope near `drivePositionalApply` (both `statusEngine` and `enemyDebuffLookup` in scope):
 
