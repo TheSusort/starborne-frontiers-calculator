@@ -230,10 +230,12 @@ lint (max-warnings 0) + tsc clean every PR.
   player→enemy `targetId` routing + the matching reader moves (snapshot key + `defenseProfileOf` +
   per-victim incoming-damage modifier). No Stasis behavior yet. DPS/healing byte-identical;
   two-team-sim goldens audited. This is the foundation the rest of B rides.
-- **B2 — Stasis status model + action-skip + tick.** `stasisBuffs.ts` (`STASIS_BUFFS` + `isStasis`)
-  + `isStasised(actorId)` (via `ownerDebuffNamesFor`, now per-victim thanks to B1) + the action-only
-  turn-skip that still ticks DoTs and decrements (§4.3). Stasis lands (already) and skips turns; does
-  not yet break early or suppress reactions.
+- **B2 — Stasis status model + action-skip + tick. ✅ SHIPPED.** `stasisBuffs.ts` (`STASIS_BUFFS` +
+  `isStasis`) + `isStasised(actorId)` (via `ownerDebuffNamesFor`, per-victim thanks to B1) + the
+  action-only turn-skip that still ticks DoTs and decrements (§4.3). Stasis lands (already) and skips
+  turns; does not yet break early or suppress reactions. Production byte-identical. NOTE: re-inflicting
+  Stasis each round REFRESHES it (`familyApplicationWins` when newDuration>remaining) → perpetual
+  stasis while an applier keeps casting — correct game behavior.
 - **B3 — Stasis reactive suppression + direct-damage break + Akula don't-break.** Drain-time intent
   filter (§4.4) + side-symmetric break hook (§4.5) + `parseDoesntBreakStasis` flag.
 
@@ -254,9 +256,18 @@ explained line-by-line).
   no other reader silently reads `__enemy__` for a victim-debuff effect in the positional damage
   path: only `defenseProfileOf` + `victimHitDamage` incoming are per-victim, both now wired
   (B1 Task 4).
-- Exact Stasis buff-name string(s) for `STASIS_BUFFS` — derive from `docs/ship-skills.csv` /
-  `ships.ts` (is it bare `Stasis`, or `Stasis I/II`? and does the numeral encode duration vs target
-  count?). Confirm against corpus during B2 planning. (Duration "for N turns" is already parsed; this
-  is only about which name strings count as Stasis.)
-- Placement of the action-skip gate: shared `handleStasisSkip` helper vs per-kind in-body guard —
-  decide in the B2 plan against the three turn-body shapes.
+- **`STASIS_BUFFS` contents** — RESOLVED (B2). `STASIS_BUFFS = {'Stasis'}`: `buffs.ts` has exactly
+  one `{name:'Stasis',type:'debuff'}` entry (no `Stasis I/II`), and every `docs/ship-skills.csv`
+  occurrence is the bare `<unit-skill>Stasis</unit-skill>` token with duration encoded as "for N
+  turns" (already parsed by `DURATION_RE`, NOT in the name). `src/utils/combat/stasisBuffs.ts`.
+- **Action-skip gate placement** — RESOLVED (B2). Per-kind in-body `!isStasised(actor.id)` guard
+  around the action body of the three action branches (attacker / walked-team / real-enemy), NOT a
+  shared `handleStasisSkip` helper — the three branch bodies have incompatible shapes (attacker needs
+  focus-turn synthesis, team routes its own credit, enemy resolves a victim) and the DoT-tick
+  prologue + Post-Turn decrement must stay OUTSIDE the gate (a helper that `continue`d the loop would
+  wrongly skip the decrement — the §4.3 anti-pattern). The attacker branch's `else` synthesizes a
+  focus-turn (verbatim from `handleDeadTargetSkip`) when `actor.id === focusActorId`, else the
+  round-end `produced no focus actor turn` throw fires. The dummy-enemy branch is ungated. A stasised
+  enemy banks NO charge (the `advanceChargeCadence` path is inside the gated body). B2 deliberately
+  leaves `drainIntents`/`drainEnemyIntents` running (no reactive suppression) and does NOT break
+  Stasis on damage — both B3.
