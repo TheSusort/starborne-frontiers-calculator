@@ -930,7 +930,8 @@ export interface CombatEngineInput {
      *  victim id to assert per-actor debuff reads (before B1 Task 3 wires it into any damage
      *  path). Never set by production code; inert when absent. The closure is per-round-identical
      *  in behaviour (only the live status-engine state changes), so capturing it once is sufficient
-     *  for a single-round test. */
+     *  for a single-round test. NOTE: the tap reads LIVE statusEngine state at call time, which
+     *  is fine for single-round tests (the state is fully settled after runCombat returns). */
     __testTapVictimEnemyModifiers?: (
         fn: (victimId: string) => { enemyDefenseModifier: number; incomingDamageModifier: number }
     ) => void;
@@ -2398,6 +2399,8 @@ export function runCombat(input: CombatEngineInput): {
         // payload timed+aura). Delegates to victimEnemyBuffs (triggers.ts) which mirrors
         // ownerDebuffNamesFor's three-source read, ensuring modifier-read and name-read stay in
         // lockstep. Attacker-sourced modifiers (outgoing buff, pen) stay attacker-sourced.
+        // NOTE: the aura/accumulating ability channel is an approximation (NEUTRAL ctx, no re-roll)
+        // — see the victimEnemyBuffs jsdoc (finding I1) for details and acceptance rationale.
         const victimEnemyModifiers = (
             victimId: string
         ): { enemyDefenseModifier: number; incomingDamageModifier: number } =>

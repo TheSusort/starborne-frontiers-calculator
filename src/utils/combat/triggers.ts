@@ -704,7 +704,20 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
  *  write there) — NOT per-victim like ownerDebuffNamesFor's snapshot(undefined, targetId). The two
  *  ability sources ARE per-victim (keyed by targetId). If upsertBuff ever becomes per-victim aware,
  *  revisit the scheduled key here. Import-cycle safe: expandEnemyDebuffs + payloadToSelectedBuff
- *  come from ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts). */
+ *  come from ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts).
+ *
+ *  APPROXIMATION NOTE (finding I1): the aura/accumulating branch — `activeAbilityStatuses('enemy',
+ *  () => NEUTRAL_NAMES_CTX, ...)` — deliberately mirrors `ownerDebuffNamesFor`'s names read: it
+ *  applies a NEUTRAL gating ctx (full HP, no debuffs, default context) and NO per-round landing
+ *  re-roll. This differs from the aggregate `roundEnemyDebuffs` fold in `playerTurn.ts` (~925-963),
+ *  which applies a per-round re-roll (`isApply ? !affinityDisadvantage : roundDebuffLanded()`,
+ *  dropping resisted entries) and uses the real gating context. Consequently, for aura/accumulating
+ *  enemy debuffs that carry stat effects (`defense`/`incomingDamage`), the per-victim modifier
+ *  returned here is an APPROXIMATION that may diverge from what the aggregate would produce.
+ *  This is an accepted approximation: it is internally consistent with the names reader (which
+ *  B2/B3 Stasis relies on), and Stasis — the primary aura/accum enemy debuff in the current
+ *  model — carries empty parsedEffects so no modifier divergence occurs in practice. The timed
+ *  ability channel is NOT approximated (landing is gated at application time, before this read). */
 export function victimEnemyBuffs(
     statusEngine: StatusEngine,
     targetId: string,
