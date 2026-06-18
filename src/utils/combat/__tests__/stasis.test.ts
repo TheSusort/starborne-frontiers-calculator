@@ -1002,7 +1002,7 @@ describe('B3 Task 1 — reactive suppression: (a) on-attacked self-buff suppress
 // ── (b) start-of-round self-buff (Chakara-shaped) suppressed while enemy stasised ────────
 
 describe('B3 Task 1 — reactive suppression: (b) start-of-round self-buff suppressed while enemy is stasised', () => {
-    it('a stasised enemy does NOT receive its start-of-round Attack Up — incoming damage stays at the base level', () => {
+    it('a stasised enemy does NOT receive its start-of-round Attack Up in stasised rounds (fires round 1 pre-stasis, suppressed rounds 2-3)', () => {
         idc = 0;
         /**
          * Setup (healing mode — required for positioned enemy roster):
@@ -1117,14 +1117,17 @@ describe('B3 Task 1 — reactive suppression: (b) start-of-round self-buff suppr
                 e.buffName === 'Attack Up'
         );
 
-        // At most 1 application (round 1 only — before stasis was applied that round).
-        // This is the KEY assertion for (b): the buff must NOT have been applied in rounds 2–3.
+        // NON-VACUITY ANCHOR: the start-of-round Attack Up MUST fire in round 1 (stasis is
+        // applied mid-round, AFTER round-started fires that round), proving the reactive is
+        // actually registered and reachable — so the rounds 2–3 absence is genuine suppression,
+        // not a never-firing reactive.
+        expect(attackUpForChakara.some((e) => e.round === 1)).toBe(true);
+        // Any application is ONLY round 1 (pre-stasis).
         const applyRounds = attackUpForChakara.map((e) => e.round);
         for (const round of applyRounds) {
-            expect(round).toBe(1); // only round 1 is allowed (pre-stasis)
+            expect(round).toBe(1);
         }
-        // Non-vacuous: if there are applications, they are exactly round 1.
-        // Also assert rounds 2 and 3 have NO buff-applied for 'Attack Up' on chakara-enemy.
+        // SUPPRESSION: rounds 2 and 3 (fully stasised) have NO Attack Up applied.
         expect(attackUpForChakara.some((e) => e.round === 2)).toBe(false);
         expect(attackUpForChakara.some((e) => e.round === 3)).toBe(false);
     });
