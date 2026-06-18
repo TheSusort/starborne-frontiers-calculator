@@ -269,6 +269,18 @@ function expandBuffs(ab: ActiveBuff, bufs: SelectedGameBuff[]): SelectedGameBuff
     return bufs;
 }
 
+/** Expand a victim's active enemy-debuff snapshot into SelectedGameBuff effects via the
+ *  enemy-debuff lookup (applies the per-round stack override; drops zero-stack and unknown
+ *  names). Shared by the engine's per-victim defense/incoming-damage sourcing (B1). */
+export function expandEnemyDebuffs(
+    activeEnemyDebuffs: ActiveBuff[],
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>
+): SelectedGameBuff[] {
+    return activeEnemyDebuffs.flatMap((ab) =>
+        expandBuffs(ab, enemyDebuffLookup.get(ab.buffName) ?? [])
+    );
+}
+
 // Per-round self-buff totals from the status engine's active list. Expands each
 // active buff back into its SelectedGameBuff effects (stack override included) and
 // folds them into the six tracked totals. The later active-passive modifier
