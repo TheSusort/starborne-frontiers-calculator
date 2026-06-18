@@ -11,6 +11,7 @@ import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
+import { toEnemyModifiers } from '../calculators/dpsBuffHelpers';
 import {
     type ExtraActionGrant,
     selectFiringSkill,
@@ -53,6 +54,7 @@ import {
     PlayerActorRuntime,
     PlayerRoundCtx,
     PlayerTurnResult,
+    expandEnemyDebuffs,
     runPlayerTurn,
 } from './playerTurn';
 import {
@@ -923,6 +925,15 @@ export interface CombatEngineInput {
      *  in the callback, not after runCombat returns. Base stats (hacking, security, etc.) are
      *  never mutated, so existing base-stat assertions are safe to read post-run. */
     __testTapActors?: (actors: CombatActor[]) => void;
+    /** TEST-ONLY tap (B1 Task 2): receives the per-victim enemy-debuff-derived modifier reader
+     *  once it is built in the round loop. Unit tests capture the closure and call it with a
+     *  victim id to assert per-actor debuff reads (before B1 Task 3 wires it into any damage
+     *  path). Never set by production code; inert when absent. The closure is per-round-identical
+     *  in behaviour (only the live status-engine state changes), so capturing it once is sufficient
+     *  for a single-round test. */
+    __testTapVictimEnemyModifiers?: (
+        fn: (victimId: string) => { enemyDefenseModifier: number; incomingDamageModifier: number }
+    ) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -2381,6 +2392,23 @@ export function runCombat(input: CombatEngineInput): {
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
         // first round it is built is sufficient. Inert in production (the field is never set).
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
+
+        // Per-victim enemy-debuff-derived modifiers (B1/PR7b). Reads the victim's OWN per-actor
+        // enemy-debuff store (keyed by victim.id — direction-agnostic), expands names → effects via
+        // the global enemyDebuffLookup, folds to the two victim-debuff-derived modifiers. Attacker-
+        // sourced modifiers (outgoing buff, pen) stay attacker-sourced and are NOT read here.
+        const victimEnemyModifiers = (
+            victimId: string
+        ): { enemyDefenseModifier: number; incomingDamageModifier: number } =>
+            toEnemyModifiers(
+                expandEnemyDebuffs(
+                    statusEngine.snapshot(undefined, victimId).activeEnemyDebuffs,
+                    enemyDebuffLookup
+                )
+            );
+        // TEST-ONLY: hand the reader out once so unit tests can assert per-victim debuff reads
+        // before B1 Task 3 wires it into a damage path. Inert in production (never set).
+        input.__testTapVictimEnemyModifiers?.(victimEnemyModifiers);
 
         // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
         // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
