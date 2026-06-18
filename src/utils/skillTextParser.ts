@@ -1333,6 +1333,22 @@ export function parseNoCrit(text: string | null | undefined): boolean {
     return false;
 }
 
+// MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break stasis" ONLY. NOT "affected by
+// stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or "inflicts Stasis".
+// Input is normalised (curly/smart apostrophes → ASCII \x27) before matching so both game-data
+// forms are detected with a simple ASCII-only regex.
+const DOESNT_BREAK_STASIS_RE = /\b(?:do(?:es)?n\x27?t|does not|do not)\s+break\s+stasis\b/i;
+/** True iff this skill text declares the unit’s attacks don’t break Stasis (Akula + Tygr).
+ *  Boolean only — each ship’s other clauses (extra-action, +damage-vs-stasised) are parsed
+ *  elsewhere, untouched. */
+export function parseDoesntBreakStasis(text: string | null | undefined): boolean {
+    if (!text) return false;
+    // Normalise U+2018 (left) / U+2019 (right) single quotation marks to ASCII apostrophe
+    // before testing so the simple \x27 in the regex matches both curly and straight forms.
+    const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
+    return DOESNT_BREAK_STASIS_RE.test(normalised);
+}
+
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
 export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
     return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
@@ -1504,10 +1520,6 @@ export interface ExtraActionParse {
      *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
      *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
     trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
-    /** "end of round" extra action (e.g. Harvester): the engine drains it AFTER all
-     *  normal-pool actions for the round, regardless of speed-rank — not re-picked by
-     *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned. */
-    endOfRound: boolean;
 }
 
 /**
@@ -1576,7 +1588,6 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     return {
         oncePerRound: /once per round/i.test(clause),
         conditions,
-        endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
     };
 }

@@ -31,6 +31,7 @@ import {
     parseHealNoCrit,
     statusEffectCondition,
     detectIgnoresForcedTargeting,
+    parseDoesntBreakStasis,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1943,8 +1944,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
-            // Nuqtu's grant is an "End Of Round Action" → drains after the speed pool.
-            endOfRound: true,
             conditions: [
                 {
                     subject: 'enemy-buff',
@@ -1962,7 +1961,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
-            endOfRound: false,
             conditions: [
                 {
                     subject: 'self-debuff',
@@ -1980,7 +1978,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
-            endOfRound: false,
             conditions: [
                 {
                     subject: 'hp-threshold',
@@ -1999,7 +1996,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
-            endOfRound: false,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2011,7 +2007,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
-            endOfRound: false,
             conditions: [
                 {
                     subject: 'enemy-debuff',
@@ -2029,8 +2024,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
-            // Sokol's "extra end of round action" → drains after the speed pool.
-            endOfRound: true,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2042,8 +2035,6 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
-            // Harvester's "1 extra end of round action" → drains after the speed pool.
-            endOfRound: true,
             conditions: [],
             trigger: 'on-ally-destroyed',
         });
@@ -2066,24 +2057,7 @@ describe('parseExtraAction', () => {
         const r = parseExtraAction(
             'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
         );
-        expect(r).toEqual({ oncePerRound: true, endOfRound: false, conditions: [] });
-    });
-
-    it('end-of-round flag: "1 extra end of round action" → endOfRound true (Task 4)', () => {
-        const r = parseExtraAction('This Unit gains 1 extra end of round action.');
-        expect(r).toEqual({ oncePerRound: false, endOfRound: true, conditions: [] });
-    });
-
-    it('end-of-round flag: Liberator-style "1 extra action" → endOfRound false (Task 4)', () => {
-        const r = parseExtraAction(
-            'When an enemy dies, once per round, this unit gains 1 extra action.'
-        );
-        expect(r).toEqual({
-            oncePerRound: true,
-            endOfRound: false,
-            conditions: [],
-            trigger: 'on-enemy-destroyed',
-        });
+        expect(r).toEqual({ oncePerRound: true, conditions: [] });
     });
 });
 
@@ -3259,5 +3233,56 @@ describe('detectIgnoresForcedTargeting', () => {
                 'This Unit deals 130% damage, ignoring Taunt and Provoke.'
             )
         ).toBe(true);
+    });
+});
+
+describe('parseDoesntBreakStasis', () => {
+    it('detects Akula curly-apostrophe "don\'t break Stasis"', () => {
+        // Akula passive text (refit-active form): curly apostrophe
+        expect(
+            parseDoesntBreakStasis(
+                'This Unit’s attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target’s current HP percentage; the higher the percentage, the more the damage.'
+            )
+        ).toBe(true);
+    });
+
+    it('detects bare "do not break Stasis" (Tygr — regression guard)', () => {
+        expect(
+            parseDoesntBreakStasis(
+                'This Unit’s attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.'
+            )
+        ).toBe(true);
+    });
+
+    it('detects straight-apostrophe "don\'t break Stasis"', () => {
+        expect(parseDoesntBreakStasis("This Unit's attacks don't break Stasis.")).toBe(true);
+    });
+
+    it('returns false for "affected by Stasis" (parseExtraAction owns that)', () => {
+        expect(
+            parseDoesntBreakStasis(
+                'After dealing damage to an enemy affected by Stasis, once per round, give one extra action.'
+            )
+        ).toBe(false);
+    });
+
+    it('returns false for "damage to enemies under Stasis"', () => {
+        expect(parseDoesntBreakStasis('deal 20% more damage to enemies under Stasis')).toBe(false);
+    });
+
+    it('returns false for "inflicts Stasis for 2 turns"', () => {
+        expect(parseDoesntBreakStasis('inflicts Stasis for 2 turns')).toBe(false);
+    });
+
+    it('returns false for empty string', () => {
+        expect(parseDoesntBreakStasis('')).toBe(false);
+    });
+
+    it('returns false for null', () => {
+        expect(parseDoesntBreakStasis(null)).toBe(false);
+    });
+
+    it('returns false for undefined', () => {
+        expect(parseDoesntBreakStasis(undefined)).toBe(false);
     });
 });
