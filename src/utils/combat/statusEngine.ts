@@ -152,6 +152,11 @@ export interface StatusEngine {
      *  Calling on an unknown id (lazy-empty maps) is a safe no-op. Pure: mutates only this
      *  engine's own stores. */
     clearRemovable(id: string): void;
+    /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store.
+     *  Targeted — unlike clearRemovable's broad sweep, deletes ONLY the named family, preserving
+     *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    removeTimedEnemyStatus(targetId: string, buffName: string): void;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -881,6 +886,17 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sweep(enemyMaps.get(id));
     };
 
+    /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store (the
+     *  channel applyTimedAbilityStatus writes, keyed by familyKey). Targeted — unlike
+     *  clearRemovable's broad sweep, deletes ONLY the named family, preserving co-applied
+     *  debuffs on the same victim. Used by the engine's §4.5 direct-damage Stasis break.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    const removeTimedEnemyStatus = (targetId: string, buffName: string): void => {
+        const map = enemyMaps.get(targetId);
+        if (!map) return;
+        map.delete(deriveFamilyKey(buffName).familyKey);
+    };
+
     // --- Ability-status API (Task 6) ---
 
     const registerAbilityStatuses = (
@@ -1087,6 +1103,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         decrementPlayer,
         decrementEnemy,
         clearRemovable,
+        removeTimedEnemyStatus,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,
