@@ -126,6 +126,10 @@ export interface CombatActor {
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. */
     ignoresForcedTargeting?: boolean;
+    /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
+     *  site in engine.ts (§4.5 Akula exception) — if true, the victim is never recorded into
+     *  turnStasisHitVictims and stasisBreakPending is never set. */
+    doesntBreakStasis?: boolean;
     /** RAW affinity of this actor (positional plumbing — set at construction, not yet consumed
      *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
      *  for per-victim affinity re-resolution (Task 8b/9). Absent → treated as neutral downstream. */
@@ -139,6 +143,7 @@ export function createActor(
         startCharged?: boolean;
         position?: Position;
         ignoresForcedTargeting?: boolean;
+        doesntBreakStasis?: boolean;
         affinity?: AffinityName;
         indestructible?: boolean;
     }
@@ -159,6 +164,7 @@ export function createActor(
         pendingAccumulators: [],
         position: partial.position,
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
+        doesntBreakStasis: partial.doesntBreakStasis,
         affinity: partial.affinity,
         indestructible: partial.indestructible,
     };

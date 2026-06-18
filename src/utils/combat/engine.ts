@@ -372,6 +372,9 @@ export interface EnemyActorInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
+     *  site (§4.5 Akula exception). Optional — undefined treated as false. */
+    doesntBreakStasis?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
@@ -468,6 +471,7 @@ export function buildEnemyPlayerActorRuntime(
         startCharged: e.startCharged,
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
+        doesntBreakStasis: e.doesntBreakStasis,
         affinity: e.affinity,
     });
 
@@ -782,6 +786,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
+     *  site (§4.5 Akula exception). Optional — undefined treated as false. */
+    doesntBreakStasis?: boolean;
     /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
      *  positional target selection AND the Task 8b positional apply at the team damage site. */
     target?: ParsedTarget;
@@ -878,6 +885,9 @@ export interface CombatEngineInput {
         position?: Position;
         /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
         ignoresForcedTargeting?: boolean;
+        /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
+         *  site (§4.5 Akula exception). Optional — undefined treated as false. */
+        doesntBreakStasis?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
         /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
@@ -893,6 +903,9 @@ export interface CombatEngineInput {
     position?: Position;
     /** Attacker ignores Taunt/Provoke (positional plumbing — not yet populated by a production caller). */
     ignoresForcedTargeting?: boolean;
+    /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
+     *  site (§4.5 Akula exception). Optional — undefined treated as false. */
+    doesntBreakStasis?: boolean;
     /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
      *  target selection AND the Task 8b positional apply at the focus damage site. */
     target?: ParsedTarget;
@@ -1163,6 +1176,7 @@ export function runCombat(input: CombatEngineInput): {
         startCharged,
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
+        doesntBreakStasis: input.doesntBreakStasis,
         affinity: input.affinity,
     });
     const enemy = createActor({
@@ -1236,6 +1250,7 @@ export function runCombat(input: CombatEngineInput): {
             startCharged: t.startCharged,
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
+            doesntBreakStasis: t.doesntBreakStasis,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
