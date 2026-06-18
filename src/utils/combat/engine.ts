@@ -47,6 +47,7 @@ import { applyPositionalDamage } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
+import { isStasis } from './stasisBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import {
@@ -935,6 +936,10 @@ export interface CombatEngineInput {
     __testTapVictimEnemyModifiers?: (
         fn: (victimId: string) => { enemyDefenseModifier: number; incomingDamageModifier: number }
     ) => void;
+    /** TEST TAP (inert in production): exposes the engine-local isStasised(actorId) reader so a
+     *  test can assert per-victim Stasis detection for both directions. Mirrors
+     *  __testTapVictimEnemyModifiers. Never set by production callers. */
+    __testTapIsStasised?: (fn: (actorId: string) => boolean) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -1650,6 +1655,7 @@ export function runCombat(input: CombatEngineInput): {
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
+    const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; legacy team → its combat-actor hp (1).
@@ -2408,6 +2414,7 @@ export function runCombat(input: CombatEngineInput): {
         // TEST-ONLY: hand the reader out once so unit tests can assert per-victim debuff reads
         // before B1 Task 3 wires it into a damage path. Inert in production (never set).
         input.__testTapVictimEnemyModifiers?.(victimEnemyModifiers);
+        input.__testTapIsStasised?.(isStasised);
 
         // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
         // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
