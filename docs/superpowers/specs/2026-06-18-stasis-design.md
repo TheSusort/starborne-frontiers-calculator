@@ -64,7 +64,9 @@ decrements on the **victim's own Post-Turn** → skips exactly N turns regardles
 
 ### 4.2 Infliction (applier → victim)
 - **Parser:** extend the control-inflict path so it carries **duration** (parsed from skill text;
-  default **1 turn** when unspecified) and the target, instead of only feeding the emit-only event.
+  default **1 turn** when unspecified) and target. `Ability.target` already exists; the gap is a
+  `duration` field on the `control` ability config (`abilities.ts` ~242-245, today `{type, effect}`
+  only) — other configs already carry `duration`, so this just adds it to the control variant.
 - **Landing:** the Stasis application rides the existing **`inflict`** timed-application path,
   gated by `liveDebuffLandingChance` (attacker live hacking vs defender live security, affinity
   ±25% on hacking — all from sub-project A). A resisted Stasis surfaces via the existing
@@ -114,7 +116,9 @@ already suppressed (the victim was still stasised when the intent was filtered a
 **Akula don't-break flag:** new parser `parseDoesntBreakStasis` (regex on
 `/\b(?:don't|does not|doesn't)\s+break\s+stasis\b/i`) → a `doesntBreakStasis?: boolean` attacker
 property, threaded from ship data through to the break hook. Akula's text
-("This unit's attacks don't break Stasis...", `ships.ts`) exists but is unparsed today.
+("This unit's attacks don't break Stasis...", `ships.ts` ~47/49) exists but is unparsed today; a
+second ship (`ships.ts` ~2529/2531, "do not break stasis") shares the phrasing — the regex
+generalizes to both, which is correct.
 
 ## 5. Data flow (one round)
 
