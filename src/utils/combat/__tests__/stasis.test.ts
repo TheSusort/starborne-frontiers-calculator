@@ -66,45 +66,6 @@ const stasisInflictAttack = (turns: number): ShipSkills['slots'][number] => ({
 });
 
 /**
- * An active skill that applies a corrosion DoT (tier 5, 3 stacks, duration 5).
- * Used to land a DoT on the heal target so we can verify it still ticks on a stasised turn.
- */
-const _corrosionDoTSkill = (): ShipSkills['slots'][number] => ({
-    slot: 'active',
-    abilities: [
-        ab({
-            type: 'dot',
-            target: 'enemy',
-            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 3, duration: 5 },
-        }),
-    ],
-});
-
-/**
- * An active skill that inflicts a timed Defense Down debuff (duration: turns).
- * Used for test (iv) — a second timed debuff that must expire on schedule even
- * while the actor is stasised.
- */
-const _defenseDownInflict = (turns: number): ShipSkills['slots'][number] => ({
-    slot: 'active',
-    abilities: [
-        ab({
-            type: 'debuff',
-            target: 'enemy',
-            config: {
-                type: 'debuff',
-                buffName: 'Defense Down',
-                application: 'inflict',
-                duration: turns,
-                stacks: 1,
-                isStackable: false,
-                parsedEffects: { defense: -10 },
-            },
-        }),
-    ],
-});
-
-/**
  * A combined damage + Stasis + Defense Down active skill.
  * Used in test (iv) to apply two timed statuses simultaneously to the same target.
  */
