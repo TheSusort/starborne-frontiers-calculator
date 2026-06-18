@@ -97,6 +97,12 @@ export const SEO_CONFIG = {
             'Browse all buffs, debuffs, and effects in Starborne Frontiers. Search and filter through 155+ game effects.',
         keywords: 'starborne, frontiers, buffs, debuffs, effects, status effects, abilities',
     },
+    squadLeaders: {
+        title: 'Squad Leaders - Starborne Frontiers Calculator',
+        description:
+            'Browse squad leaders for every faction in Starborne Frontiers and the bonuses each grants across its three upgrade steps.',
+        keywords: 'starborne, frontiers, squad leaders, faction bonuses, fleet buffs, database',
+    },
     documentation: {
         title: 'Documentation',
         description:
