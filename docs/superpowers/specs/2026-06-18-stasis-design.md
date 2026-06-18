@@ -243,12 +243,17 @@ explained line-by-line).
 
 ## 8. Open items for the plan (not blockers)
 
-- **B1 guard condition** — the exact test for "real positioned actor vs DPS dummy / `__enemy__`" at
-  the `targetId`-threading site (`isDummyEnemy` / presence in the positioned roster). Confirm in the
-  B1 plan against `buildTurnArgs` and `selectTurnTarget`.
-- **B1 reader completeness** — confirm the full set of victim-debuff-derived modifiers to move
-  per-victim (defence + incoming-damage are the known two from `engine.ts:2395-2404`); verify no
-  other reader silently reads `__enemy__` for a victim-debuff effect.
+- **B1 guard condition** — RESOLVED. Guard is `tgt.id !== '__enemy__'` (real positioned victim vs
+  DPS dummy): `buildTurnArgs` passes `tgt.id` only when a non-dummy enemy is resolved;
+  `selectTurnTarget` returns the DPS sentinel `'__enemy__'` for single-target DPS runs, which the
+  guard skips. Confirmed against Task 2/3 implementation.
+- **B1 reader completeness** — RESOLVED. Reader set = per-victim defence + incoming-damage,
+  sourced via `victimEnemyBuffs` reading BOTH channels (scheduled `__enemy__` global auras + ability
+  per-victim timed/aura). The `playerTurn.ts` scheduled snapshot reader was NOT moved (scheduled
+  stays global `__enemy__` — `upsertBuff` is hardcoded there; correct for auras/manual). Confirmed
+  no other reader silently reads `__enemy__` for a victim-debuff effect in the positional damage
+  path: only `defenseProfileOf` + `victimHitDamage` incoming are per-victim, both now wired
+  (B1 Task 4).
 - Exact Stasis buff-name string(s) for `STASIS_BUFFS` — derive from `docs/ship-skills.csv` /
   `ships.ts` (is it bare `Stasis`, or `Stasis I/II`? and does the numeral encode duration vs target
   count?). Confirm against corpus during B2 planning. (Duration "for N turns" is already parsed; this
