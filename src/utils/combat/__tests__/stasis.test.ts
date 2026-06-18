@@ -808,3 +808,507 @@ describe('B2 Task 3 — Stasis turn-skip: (vi) player stasised by enemy — roun
         );
     });
 });
+
+// ── B3 — reactive suppression while stasised ─────────────────────────────────────────────
+
+/**
+ * B3 Task 1 — drain-time reactive suppression (total lockout).
+ *
+ * While a unit is stasised, every queued reactive intent whose ownerId matches the
+ * stasised actor is dropped at drainQueue's per-intent loop.  This covers both sides
+ * (player intentQueue + enemy enemyIntentQueue) and all reactive trigger types
+ * (on-attacked, start-of-round, on-crit, on-ally-attacked, on-enemy-destroyed).
+ *
+ * Four invariants proved:
+ *   (a) on-attacked buff reactive on the PLAYER (focus) is suppressed while stasised.
+ *   (b) start-of-round self-buff reactive on an ENEMY is suppressed while stasised.
+ *   (c) INCOMING effects (DoT ticks, damage) on the stasised actor are UNTOUCHED.
+ *   (d) Without stasis the same on-attacked reactive fires normally (symmetry check).
+ */
+
+// Skill helpers for B3 tests ─────────────────────────────────────────────────────────────
+
+/**
+ * A passive `on-attacked` self-buff slot: 'Counter Shield' (+10% attack, duration 99).
+ * The focus carries this; when hit while NOT stasised it fires buff-applied 'Counter Shield'.
+ * While stasised the intent's ownerId === 'attacker' → dropped by the drain guard.
+ */
+const onAttackedSelfBuffSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Counter Shield',
+                stacks: 1,
+                parsedEffects: { attack: 10 },
+                isStackable: false,
+                duration: 99,
+            },
+        }),
+    ],
+});
+
+/**
+ * A passive `start-of-round` self Attack Up slot (Chakara-shaped): +100% attack, duration 99.
+ * Folds into the enemy's outgoing damage the same round it fires.
+ * While stasised the intent's ownerId === enemy id → dropped by the drain guard.
+ */
+const startOfRoundAttackUpSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'start-of-round',
+            config: {
+                type: 'buff',
+                buffName: 'Attack Up',
+                parsedEffects: { attack: 100 },
+                stacks: 1,
+                isStackable: false,
+                duration: 99,
+            },
+        }),
+    ],
+});
+
+// ── (a) on-attacked counter suppressed while stasised ────────────────────────────────────
+
+describe('B3 Task 1 — reactive suppression: (a) on-attacked self-buff suppressed while focus is stasised', () => {
+    it('a stasised focus does NOT receive its on-attacked buff when the enemy strikes it', () => {
+        idc = 0;
+        /**
+         * Setup (healing mode — required for positioned enemy roster):
+         *   - Focus ('attacker') at POS_FOCUS carries onAttackedSelfBuffSlot.
+         *     Speed 50 — SLOWER than the enemies so the enemy acts FIRST each round.
+         *   - stasis-enemy (id='stasis-enemy', speed=200): fires stasisInflictAttack(4) at 'front'
+         *     player (= focus at M4) in round 1. Stasis(4) keeps focus stasised for rounds 1–4.
+         *   - attack-enemy  (id='attack-enemy', speed=100): a bare flat-card attacker that hits
+         *     the focus every round (speed 100 > focus speed 50, acts before focus).
+         *   - numRounds: 4.
+         *
+         * Round ordering each round: stasis-enemy(200) → attack-enemy(100) → focus(50)
+         *
+         * Round 1:
+         *   stasis-enemy applies Stasis(4) to focus.
+         *   attack-enemy attacks focus → focus is stasised → `attacked` event fires → listener
+         *   enqueues intent(ownerId='attacker') → drain guard: isStasised('attacker')=true → DROP.
+         *   No 'Counter Shield' buff-applied in round 1.
+         *   focus's own turn: stasised → skip.
+         *
+         * Rounds 2–4: stasis-enemy is NOT dead but does not re-apply (Stasis(4) stays active
+         *   since it was applied once in round 1 and decrements each round: 4→3→2→1→0).
+         *   attack-enemy attacks focus every round → intent dropped → no Counter Shield.
+         *
+         * Assert: zero 'buff-applied' events for 'Counter Shield' on actorId='attacker' across
+         *   all 4 rounds (the listener fires, the intent enqueues, but drain discards it).
+         *
+         * For the stasis-enemy to keep Stasis alive: duration 4, decrements once per skip of
+         * the focus.  Rounds 1–4 the focus is stasised and never fires Counter Shield.
+         */
+        const bus = createEventBus();
+        const buffApplied: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e as CombatEvent));
+
+        runCombat({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [onAttackedSelfBuffSlot()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0, // focus cannot inflict anything
+            speed: 50, // SLOWER than all enemies → enemies always act before focus
+            healTargetId: 'attacker',
+            position: POS_FOCUS, // M4 = front-most player
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            bus,
+            enemyAttackers: [
+                // stasis-enemy: applies Stasis(4) to the front player (focus).
+                {
+                    id: 'stasis-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 200, // fastest — acts first
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(4)] },
+                } as EnemyAttacker,
+                // attack-enemy: bare attacker that triggers the on-attacked listener each round.
+                {
+                    id: 'attack-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 100, // acts after stasis-enemy, before focus
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // The on-attacked intent was enqueued each round (the enemy hit the focus), but the
+        // drain guard must have dropped every one (focus stasised rounds 1–4).
+        // → Zero 'Counter Shield' buff-applied events for the focus.
+        const counterShield = buffApplied.filter(
+            (e): e is Extract<CombatEvent, { type: 'buff-applied' }> =>
+                e.type === 'buff-applied' &&
+                e.actorId === 'attacker' &&
+                e.buffName === 'Counter Shield'
+        );
+        expect(counterShield).toHaveLength(0);
+    });
+});
+
+// ── (b) start-of-round self-buff (Chakara-shaped) suppressed while enemy stasised ────────
+
+describe('B3 Task 1 — reactive suppression: (b) start-of-round self-buff suppressed while enemy is stasised', () => {
+    it('a stasised enemy does NOT receive its start-of-round Attack Up — incoming damage stays at the base level', () => {
+        idc = 0;
+        /**
+         * Setup (healing mode — required for positioned enemy roster):
+         *   - Focus ('attacker') at POS_FOCUS (speed=200, attack=0): fires stasisInflictAttack(3)
+         *     at 'front' each round.  Focus is the FASTEST → acts before the chakara-enemy.
+         *   - chakara-enemy (id='chakara-enemy', speed=50) at POS_ENEMY_FRONT:
+         *     carries basicAttack + startOfRoundAttackUpSlot.
+         *     The `start-of-round` buff fires at the round-head (before any turns).
+         *   - numRounds: 3.
+         *
+         * Timeline:
+         *   Round 1:
+         *     round-started → chakara-enemy's start-of-round intent enqueued (NOT yet stasised).
+         *     drain: isStasised('chakara-enemy') = false → buff APPLIES (Attack Up folds in).
+         *     focus (speed 200) acts first: fires stasisInflictAttack(3) → Stasis(3) lands on chakara-enemy.
+         *     chakara-enemy (speed 50): stasised → SKIP. (Action does not fire.)
+         *
+         *   Round 2:
+         *     round-started → chakara-enemy's start-of-round intent enqueued. chakara-enemy IS stasised.
+         *     drain: isStasised('chakara-enemy') = true → DROP intent → Attack Up does NOT fold in.
+         *     focus acts: re-applies Stasis(3) (overwrites remaining 2 with fresh 3).
+         *     chakara-enemy: stasised → SKIP.
+         *
+         *   Round 3: same as round 2.
+         *
+         * Control (no stasis applied): focus fires basicAttack (no stasis inflict).
+         *   Round 1: round-started → buff applied. chakara-enemy hits with Attack Up active (harder).
+         *   Rounds 2–3: same.
+         *
+         * Assert: total incoming damage in the stasised run is LESS THAN OR EQUAL to the control.
+         * In rounds 2–3 the stasised enemy's Attack Up is suppressed → its per-round damage is 5000
+         * (base attack, no buff).  In the control run the Attack Up stacks are active every round.
+         *
+         * We run the stasised case with hacking:200 + stasisInflictAttack(3); we run the control
+         * case with the focus firing basicAttack (no status, attack:0 on focus → same damage output
+         * for the enemy comparison: the enemy's incoming damage should be base × rounds for both,
+         * but in the stasised case rounds 2–3 miss the buff while the control keeps it).
+         *
+         * Concretely: control round 2 incoming > stasis round 2 incoming, since only the control
+         * enemy still has the Attack Up buff (from round 1, duration 99, still active).
+         * (In the stasis scenario the enemy doesn't even act, so incoming damage for rounds 2–3
+         * is 0; in the control the un-stasised enemy fires every round with the buff.)
+         *
+         * Simplest non-vacuous assertion: in the stasised run the chakara-enemy fires NO damage
+         * in rounds 2–3 (it is stasised / action-skipped), while in the control run it DOES fire.
+         * Both facts are already tested by B2 Task 3 (i).  What is NEW here: in the stasised
+         * scenario we additionally assert that the start-of-round buff is NOT applied (no
+         * buff-applied event for 'Attack Up' on chakara-enemy while it is stasised).
+         */
+        const bus = createEventBus();
+        const buffApplied: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e as CombatEvent));
+
+        runCombat({
+            attack: 0, // focus deals no damage; only stasis inflict matters
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [stasisInflictAttack(3)] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 200, // ensures stasis landing chance = 1.0
+            speed: 200, // focus is FASTEST → acts before the chakara-enemy
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'), // targets the front enemy = chakara-enemy
+            pattern: basePattern(),
+            bus,
+            enemyAttackers: [
+                {
+                    id: 'chakara-enemy',
+                    stats: {
+                        attack: 5000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 50, // SLOWER than focus → stasis is applied before this enemy acts
+                        security: 0, // hacking:200 vs security:0 → landing chance 1.0
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack(), startOfRoundAttackUpSlot()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // Round 1: chakara-enemy was NOT stasised yet when round-started fired → Attack Up applied.
+        // Round 2+: stasised → intent dropped → Attack Up NOT applied.
+        // Assert: 'Attack Up' buff-applied for 'chakara-enemy' fires ONLY in round 1 (not rounds 2–3).
+        const attackUpForChakara = buffApplied.filter(
+            (e): e is Extract<CombatEvent, { type: 'buff-applied' }> =>
+                e.type === 'buff-applied' &&
+                e.actorId === 'chakara-enemy' &&
+                e.buffName === 'Attack Up'
+        );
+
+        // At most 1 application (round 1 only — before stasis was applied that round).
+        // This is the KEY assertion for (b): the buff must NOT have been applied in rounds 2–3.
+        const applyRounds = attackUpForChakara.map((e) => e.round);
+        for (const round of applyRounds) {
+            expect(round).toBe(1); // only round 1 is allowed (pre-stasis)
+        }
+        // Non-vacuous: if there are applications, they are exactly round 1.
+        // Also assert rounds 2 and 3 have NO buff-applied for 'Attack Up' on chakara-enemy.
+        expect(attackUpForChakara.some((e) => e.round === 2)).toBe(false);
+        expect(attackUpForChakara.some((e) => e.round === 3)).toBe(false);
+    });
+});
+
+// ── (c) incoming effects UNTOUCHED while stasised ────────────────────────────────────────
+
+describe('B3 Task 1 — reactive suppression: (c) incoming DoT damage still ticks on a stasised actor', () => {
+    it('a DoT applied by an enemy still ticks on the stasised focus — incoming effects are not suppressed', () => {
+        idc = 0;
+        /**
+         * This is the B2 Task 3 (ii) invariant restated as a B3 assertion:
+         * only the stasised actor's OWN outgoing intents are suppressed.
+         * Incoming DoT ticks (tickDoTs at turn-start) are completely unaffected.
+         *
+         * Setup mirrors test (ii) above: dot-stasis-enemy applies Corrosion + Stasis(2) in round 1.
+         * Rounds 1–2: focus stasised; dot-ticked events must still appear for 'attacker'.
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 50, // focus slower → enemy acts first
+            healTargetId: 'attacker',
+            enemyAttackers: [
+                {
+                    id: 'dot-stasis-enemy',
+                    stats: {
+                        attack: 1000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 120,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'dot',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'dot',
+                                            dotType: 'corrosion',
+                                            tier: 5,
+                                            stacks: 3,
+                                            duration: 10,
+                                        },
+                                    }),
+                                    ab({
+                                        type: 'debuff',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'debuff',
+                                            buffName: 'Stasis',
+                                            application: 'inflict',
+                                            duration: 2,
+                                            stacks: 1,
+                                            isStackable: false,
+                                            parsedEffects: {},
+                                        },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const dotTicked = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'dot-ticked' }> => e.type === 'dot-ticked'
+        );
+
+        // Focus is stasised in rounds 1–2 (enemy acts first in round 1 and applies both DoT and
+        // Stasis, then focus's turn is skipped in rounds 1–2 but DoT ticks at turn-start).
+        // Incoming DoT must still fire for 'attacker' in rounds 1 AND 2.
+        const dotRoundsForFocus = dotTicked
+            .filter((e) => e.targetId === 'attacker')
+            .map((e) => e.round);
+        expect(dotRoundsForFocus).toContain(1);
+        expect(dotRoundsForFocus).toContain(2);
+    });
+});
+
+// ── (d) non-stasised actor — on-attacked reactive fires normally ──────────────────────────
+
+describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-attacked reactive fires normally', () => {
+    it('without stasis the on-attacked buff IS applied each time the enemy attacks the focus', () => {
+        idc = 0;
+        /**
+         * Control for test (a): identical setup but WITHOUT stasis.
+         * The attack-enemy attacks the focus every round; the focus carries onAttackedSelfBuffSlot.
+         * No stasis is ever applied → isStasised('attacker') = false → drain lets the intent through.
+         * Assert: 'Counter Shield' buff-applied fires for 'attacker' in every round.
+         */
+        const bus = createEventBus();
+        const buffApplied: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e as CombatEvent));
+
+        runCombat({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [onAttackedSelfBuffSlot()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 50,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            bus,
+            enemyAttackers: [
+                // A bare flat-card enemy: attacks the focus every round (no stasis, no DoT).
+                {
+                    id: 'attack-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 100, // faster than focus (speed 50) → acts first
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // Without stasis: the on-attacked intent's ownerId='attacker' → isStasised=false → executes.
+        // The 'Counter Shield' buff must be applied at least once (every round the enemy attacks).
+        const counterShield = buffApplied.filter(
+            (e): e is Extract<CombatEvent, { type: 'buff-applied' }> =>
+                e.type === 'buff-applied' &&
+                e.actorId === 'attacker' &&
+                e.buffName === 'Counter Shield'
+        );
+        expect(counterShield.length).toBeGreaterThan(0);
+    });
+});

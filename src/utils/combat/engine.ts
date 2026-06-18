@@ -2786,6 +2786,15 @@ export function runCombat(input: CombatEngineInput): {
                 // Snapshot this generation's batch; new enqueues during execution run next pass.
                 const batch = queue.splice(0, queue.length);
                 for (const intent of batch) {
+                    // §4.4 STASIS reactive suppression (B3): a stasised unit's reactives are FULLY locked out.
+                    // Drop every queued intent whose OWNER is currently stasised — on-attacked, on-ally-attacked,
+                    // on-crit, on-enemy-destroyed, AND start-of-round self-buffs (Chakara via round-started) all
+                    // carry intent.ownerId, so this ONE filter covers every reactive type for BOTH sides
+                    // (drainIntents and drainEnemyIntents share this drainQueue). Filtered at the DRAIN, before
+                    // executeIntent. Listeners only ENQUEUE (pure), so dropping an intent leaves NO partial state.
+                    // Incoming effects (damage/heals/ally buffs/DoT ticks) are UNTOUCHED — only the stasised
+                    // unit's OWN outgoing intents drop.
+                    if (isStasised(intent.ownerId)) continue;
                     executeIntent(intent, {
                         round: r,
                         enemy,
