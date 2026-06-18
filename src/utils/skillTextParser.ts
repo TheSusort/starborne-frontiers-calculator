@@ -1520,6 +1520,10 @@ export interface ExtraActionParse {
      *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
      *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
     trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
+    /** "end of round" extra action (e.g. Harvester): the engine drains it AFTER all
+     *  normal-pool actions for the round, regardless of speed-rank — not re-picked by
+     *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned. */
+    endOfRound: boolean;
 }
 
 /**
@@ -1588,6 +1592,7 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     return {
         oncePerRound: /once per round/i.test(clause),
         conditions,
+        endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
     };
 }
