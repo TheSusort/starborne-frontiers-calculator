@@ -91,8 +91,8 @@ export function victimHitDamage(
     const affinityMult = 1 + affinityDamageModifier / 100;
 
     // Prefer the per-victim incoming-damage debuff when present; fall back to the
-    // attacker-fixed scalar (B1/PR7b). Keeps every existing caller byte-identical
-    // (callers that do not set incomingDamageModifierPct on the profile are unchanged).
+    // attacker-fixed scalar (B1/PR7b). The engine-wired path always passes an explicit
+    // value; the `??` fallback serves direct-call callers (e.g. positionalApply unit tests).
     const incoming = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
 
     const nonCritFactor =

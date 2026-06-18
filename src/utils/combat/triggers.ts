@@ -12,6 +12,7 @@ import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
 import {
     ActiveBuff,
     AbilityStatusPayload,
+    DEFAULT_ENEMY_TARGET,
     RegisteredAbilityStatus,
     StatusEngine,
 } from './statusEngine';
@@ -692,9 +693,7 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
-// Sentinel used by statusEngine for the default (non-per-victim) enemy-debuff store.
-// Matches statusEngine.ts's internal DEFAULT_ENEMY_TARGET (verified: hard-coded '__enemy__').
-const DEFAULT_ENEMY_TARGET = '__enemy__';
+// DEFAULT_ENEMY_TARGET is imported from statusEngine.ts — single source of truth.
 
 /** Returns the full per-victim enemy-debuff SET as SelectedGameBuff effects, folding BOTH
  *  channels:

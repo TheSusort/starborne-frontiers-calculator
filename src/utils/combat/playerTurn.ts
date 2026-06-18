@@ -264,8 +264,7 @@ export interface PlayerTurnArgs {
 // Module-private helpers used EXCLUSIVELY by the player turn.
 // ---------------------------------------------------------------------------
 
-// expandBuffs: now lives in buffTotals.ts as expandBuffEntry (imported above as expandBuffEntry).
-// expandEnemyDebuffs: now lives in buffTotals.ts (imported + re-exported above).
+// expandBuffs/expandEnemyDebuffs moved to buffTotals.ts (re-exported from lines 41-50 above).
 
 // Per-round self-buff totals from the status engine's active list. Expands each
 // active buff back into its SelectedGameBuff effects (stack override included) and

@@ -240,6 +240,8 @@ describe('B1 Task 4 — per-victim defense + incoming-damage debuff in positiona
         // EXACT values pinned from victimHitDamage — both defense-down AND incoming-damage
         // modifiers must be sourced per-victim for these to match.
         expect(ptd['enemy-front']).toBeCloseTo(EXPECTED_FRONT, 10);
+        // enemy-back passes both pre- and post-fix (it has no debuffs); guards LEAK
+        // PREVENTION — front's defense-down/incoming-damage debuffs must not bleed onto back.
         expect(ptd['enemy-back']).toBeCloseTo(EXPECTED_BACK, 10);
 
         // Relative ordering: front has lower effective defense AND incoming boost → more damage

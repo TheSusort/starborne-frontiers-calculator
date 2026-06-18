@@ -302,6 +302,13 @@ interface TimedSourceSets {
  * `decrementEnemy` run in each owner's Post Turn. It predicts nothing — cadences
  * are reported, not computed (the old computeChargeSchedule path is retired).
  */
+
+/** Sentinel enemy-target id used for the default (non-per-victim) scheduled-debuff store.
+ *  Callers that do not supply an explicit enemyTargetId resolve to this value — byte-identical
+ *  to the old singular enemyMap path. Exported so triggers.ts can reference the same constant
+ *  instead of duplicating the string literal. */
+export const DEFAULT_ENEMY_TARGET = '__enemy__';
+
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
     const teamSources = input.teamSources ?? [];
@@ -352,8 +359,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     // DEFAULT_ENEMY_TARGET: the pre-Task-1 singular enemy target id. Callers that do not
     // supply an enemyTargetId resolve to this constant → byte-identical to the old singular
-    // enemyMap/accumEnemyMap/auraEnemy path.
-    const DEFAULT_ENEMY_TARGET = '__enemy__';
+    // enemyMap/accumEnemyMap/auraEnemy path. Declared at module level (exported); used here
+    // as a closure-visible reference with no re-declaration needed.
 
     // Per-owner player-side accumulating maps. `accumSelfMaps` is keyed by ownerId → (buffName →
     // AccumulatingState), lazy-created on first write (mirroring selfMaps/persistentSelfMaps).
