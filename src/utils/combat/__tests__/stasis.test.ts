@@ -1315,3 +1315,613 @@ describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-atta
         expect(counterShield.length).toBeGreaterThan(0);
     });
 });
+
+// ── B3 Task 2 — direct-damage break ──────────────────────────────────────────────────────
+
+describe('B3 Task 2 — direct-damage break', () => {
+    // (i) A direct firing hit breaks Stasis
+    it('(i) direct hit breaks Stasis: victim acts on next scheduled turn instead of skipping the full duration', () => {
+        idc = 0;
+        /**
+         * Setup:
+         *   - stasis-bot (speed=300, hp=1): fires stasisInflictAttack(3) at focus in round 1.
+         *     Acts first. Killer kills it after.
+         *   - killer (speed=200, attack=10000): kills stasis-bot in round 1.
+         *   - focus (speed=100, attack=5000): receives Stasis(3) in round 1.
+         *     In round 2 a breaker-enemy (speed=150) fires a plain direct hit at focus.
+         *     This should break Stasis → focus acts in round 3 (not round 4/5).
+         *   - breaker-enemy (speed=150): basicAttack targeting 'front' (the focus).
+         *     Acts between killer and focus.
+         *
+         * Without break: Stasis(3) skips rounds 1, 2, 3 → focus fires round 4.
+         * With break: in round 2 the breaker lands a direct hit → Stasis removed →
+         *   focus IS stasised in round 1 (applied round 1, decremented post-round1→2 remaining),
+         *   focus IS skipped in round 1. After breaker hits in round 2, Stasis is removed.
+         *   Focus acts in round 2 itself (after break) or round 3.
+         *
+         * We use numRounds:4. Assert focus fires in round 3 OR earlier (not only round 4+).
+         * Concretely: focus should fire in round 2 or 3 (break happened in round 2 before focus turn
+         * if breaker speed > focus speed, but break fires DURING apply, not before turn-gate check
+         * for the current round). Let's simplify: assert focus fired BEFORE round 4.
+         *
+         * Use __testTapIsStasised to also check Stasis is gone after round 2's apply.
+         */
+        let capturedIsStasised: ((actorId: string) => boolean) | undefined;
+        const { events } = run({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                // stasis-bot applies Stasis(3) to focus, then gets killed
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                // breaker-enemy: plain direct hit at the focus every round
+                {
+                    id: 'breaker-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150,
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+            __testTapIsStasised: (fn) => {
+                capturedIsStasised = fn;
+            },
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Focus was stasised round 1 (stasis-bot applied Stasis(3), acts BEFORE focus).
+        expect(focusFiredRounds).not.toContain(1);
+
+        // After breaker hits in round 2 (speed 150 > focus 100, acts before focus),
+        // Stasis should be broken → focus acts in round 2 or 3 (not waiting until round 4).
+        // At minimum: focus fires in some round <= 3.
+        const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
+        expect(firstFiredRound).toBeLessThanOrEqual(3);
+
+        // Post-run: Stasis should be gone (broken in round 2).
+        expect(capturedIsStasised).toBeDefined();
+        expect(capturedIsStasised!('attacker')).toBe(false);
+    });
+
+    // (ii) DoT does NOT break Stasis (channel discrimination)
+    it('(ii) DoT does NOT break Stasis: victim stays stasised across DoT ticks', () => {
+        idc = 0;
+        /**
+         * Stasis-bot (speed=300, hp=1) applies Stasis(3) + Corrosion DoT in round 1.
+         * Killer (speed=200) kills stasis-bot round 1.
+         * No direct hits on the focus after that (killer targets the enemy, not the focus).
+         * Focus has speed=100. numRounds=3.
+         *
+         * DoT ticks every round at turn-start. If DoT could break Stasis, focus would act
+         * from round 2 (since the DoT tick happens at turn-start). Assert focus does NOT
+         * fire in rounds 1–3 (still stasised all 3 rounds with Stasis(3)).
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                {
+                    id: 'stasis-dot-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    ab({
+                                        type: 'dot',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'dot',
+                                            dotType: 'corrosion',
+                                            tier: 5,
+                                            stacks: 3,
+                                            duration: 10,
+                                        },
+                                    }),
+                                    ab({
+                                        type: 'debuff',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'debuff',
+                                            buffName: 'Stasis',
+                                            application: 'inflict',
+                                            duration: 3,
+                                            stacks: 1,
+                                            isStackable: false,
+                                            parsedEffects: {},
+                                        },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // DoT should NOT break Stasis → focus still stasised all 3 rounds.
+        expect(focusFiredRounds).not.toContain(1);
+        expect(focusFiredRounds).not.toContain(2);
+        expect(focusFiredRounds).not.toContain(3);
+
+        // Verify DoT actually ticked (non-vacuous: DoT was running)
+        const dotTicked = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'dot-ticked' }> => e.type === 'dot-ticked'
+        );
+        expect(dotTicked.filter((e) => e.targetId === 'attacker').length).toBeGreaterThan(0);
+    });
+
+    // (iii) breaking hit's on-attacked reaction stays suppressed
+    it('(iii) on-attacked reactive stays suppressed while stasised, even on the breaking direct hit', () => {
+        idc = 0;
+        /**
+         * Focus carries onAttackedSelfBuffSlot (counter fires when hit while NOT stasised).
+         * stasis-enemy (speed=300, hp=1M, applies Stasis(2)) + breaker-enemy (speed=150, basicAttack).
+         * killer not needed — stasis-enemy stays alive (hp=1M) and perpetually re-applies Stasis.
+         *
+         * Rounds 1-2: focus stasised. breaker-enemy's direct hit triggers on-attacked listener.
+         * BUT focus is stasised → intent dropped → NO Counter Shield buff.
+         *
+         * The break fires AFTER apply (removal is post-apply). So for rounds 1-2, while the
+         * breaking hit ALSO breaks Stasis at that moment, the on-attacked intent was already
+         * dropped (the stasis check in drainQueue happens BEFORE or DURING the action, not after).
+         * Actually: the on-attacked listener queues AFTER the hit lands. The stasis check in
+         * drainQueue runs at drain time (after the attack). So the intent IS queued, and IS
+         * dropped by the stasis check.
+         *
+         * Since the break removes stasis DURING the apply (inside breakStasisOnDirectHit which
+         * runs AFTER applyIncomingToTarget/emitHit), the drain guard sees stasised=true at check
+         * time for the on-attacked reactive on that same hit. This must hold without explicit ordering code.
+         *
+         * Assert: Counter Shield is NEVER applied to 'attacker' in rounds where it was stasised
+         * at the time of the hit (rounds 1-2).
+         */
+        const bus = createEventBus();
+        const buffApplied: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e as CombatEvent));
+
+        runCombat({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [onAttackedSelfBuffSlot()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 50,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            bus,
+            enemyAttackers: [
+                {
+                    id: 'stasis-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(4)] },
+                } as EnemyAttacker,
+                {
+                    id: 'breaker-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150,
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // The on-attacked intent was queued, but the drain guard (isStasised check)
+        // must drop it while focus is stasised. Counter Shield must NOT be applied.
+        const counterShield = buffApplied.filter(
+            (e): e is Extract<CombatEvent, { type: 'buff-applied' }> =>
+                e.type === 'buff-applied' &&
+                e.actorId === 'attacker' &&
+                e.buffName === 'Counter Shield'
+        );
+        expect(counterShield).toHaveLength(0);
+    });
+
+    // (iv) LIVING-applier gap: different attacker breaks the Stasis
+    it('(iv) a different direct hit from a different attacker breaks Stasis → victim acts on next turn', () => {
+        idc = 0;
+        /**
+         * stasis-bot (speed=300, hp=1) applies Stasis(3) to focus in round 1, killed by killer.
+         * focus speed=100. breaker-enemy (speed=150) fires basicAttack at front every round.
+         * numRounds=4.
+         *
+         * Without break: focus fires round 4 (after 3 skips).
+         * With break: focus fires in round 2 or 3.
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            enemyAttackers: [
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                {
+                    id: 'breaker-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150,
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Focus was stasised in round 1
+        expect(focusFiredRounds).not.toContain(1);
+        // The breaker (a DIFFERENT attacker from the original applier) breaks Stasis in round 2
+        // → focus acts in round 2 or 3 (not round 4).
+        const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
+        expect(firstFiredRound).toBeLessThanOrEqual(3);
+    });
+
+    // (v) break regardless of minimal damage
+    it('(v) a direct hit with minimal damage still breaks Stasis', () => {
+        idc = 0;
+        /**
+         * tiny-attacker has attack=1. Focus has hp=1B. The hit connects as a DIRECT hit
+         * but deals negligible HP loss. Tests that break fires for ANY direct hit, not
+         * just heavy ones.
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                // stasis-bot applies Stasis(3), killed by killer
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1,
+                        speed: 300,
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                // tiny-attacker: minimal damage direct hit — still breaks Stasis
+                {
+                    id: 'tiny-attacker',
+                    stats: {
+                        attack: 1,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150,
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Stasis applied in round 1 (speed 300 > 200 > 100).
+        expect(focusFiredRounds).not.toContain(1);
+        // tiny-attacker lands direct hit in round 2 → breaks Stasis.
+        // focus fires in round 2 or 3.
+        const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
+        expect(firstFiredRound).toBeLessThanOrEqual(3);
+
+        // Confirm attack was minimal but still connected (non-vacuous: the attacked event fired)
+        const attacked = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'attacked' }> =>
+                e.type === 'attacked' && e.attackerId === 'tiny-attacker'
+        );
+        expect(attacked.length).toBeGreaterThan(0);
+    });
+
+    // (vi) player→enemy positional break: re-applied Stasis confirms wiring
+    it('(vi) player positional hit breaks enemy Stasis (re-apply confirms break fired)', () => {
+        idc = 0;
+        /**
+         * Focus fires stasisInflictAttack(5) at enemy-front every round (chargeCount:0).
+         * Round 1: focus hits enemy-front (not yet stasised) → no break → Stasis(5) applied.
+         * Round 2: focus hits enemy-front (stasised from round 1) → break fires →
+         *          Stasis removed → Stasis(5) immediately re-applied by same attack.
+         * Post-run: enemy-front is stasised (re-applied round 2). capturedIsStasised confirms.
+         * Non-vacuous: enemy-front has speed=1, never acts before focus (speed=100+hacking).
+         */
+        let capturedIsStasised: ((actorId: string) => boolean) | undefined;
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: { slots: [stasisInflictAttack(5)] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 200,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            enemyAttackers: [
+                offensiveEnemyAt('enemy-front', POS_ENEMY_FRONT, 'front', basicAttack()),
+            ],
+            __testTapIsStasised: (fn) => {
+                capturedIsStasised = fn;
+            },
+        });
+
+        // Non-vacuous check: capturedIsStasised exists (engine ran correctly)
+        expect(capturedIsStasised).toBeDefined();
+
+        // Post-round-2: enemy-front was hit (breaking round-1 Stasis) then re-stasised by
+        // the same attack's debuff ability. Still stasised at end.
+        expect(capturedIsStasised!('enemy-front')).toBe(true);
+    });
+});

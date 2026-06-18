@@ -258,6 +258,13 @@ export interface PlayerTurnArgs {
      *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
+    /** §4.5 Stasis direct-damage break hook (B3 Task 2). When supplied, fires AFTER scheduled
+     *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
+     *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
+     *  Receives the resolved enemy target id (`targetId`). The engine supplies this for DIRECT-
+     *  channel apply boundaries (non-positional and positional via emitHit override); absent for
+     *  DPS/standalone callers → inert (byte-identical). */
+    onHitBreakStasis?: (targetId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -599,6 +606,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg = [],
         selfDebuffNames: selfDebuffNamesArg = [],
         healEventOnly = false,
+        onHitBreakStasis,
     } = args;
 
     const {
@@ -843,6 +851,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
+
+    // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
+    // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
+    // debuff abilities is not inadvertently removed. The engine supplies `onHitBreakStasis` only
+    // for direct-channel apply boundaries (non-positional and positional emitHit paths); DPS/
+    // standalone callers leave it absent → no-op. Receives the resolved target id so the break
+    // can key the statusEngine's per-actor enemy store correctly (side-symmetric: same key
+    // regardless of whether the actor is a player or enemy).
+    // Only fire when targetId is defined (the engine always supplies it for direct-channel
+    // break-eligible turns; DPS/standalone callers without a real targetId are inert).
+    if (targetId !== undefined) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
     // Each application that passes its condition gate draws the landing decision
