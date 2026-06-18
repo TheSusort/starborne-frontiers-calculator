@@ -55,7 +55,7 @@ If ANY golden moves, the gate leaked — fix the gate, NEVER `vitest -u`.
 
 ### Second don't-break ship's OTHER clauses stay OUT of scope (CONFIRMED)
 - ships.ts:2529/2531: `"...do not break Stasis and deal 20% more damage to enemies under Stasis or Disable."` + `"...After dealing damage to an enemy affected by stasis once per round, this unit is granted one extra action."`
-- The "extra action after damaging a stasised enemy" is ALREADY parsed by `parseExtraAction`; the "+20% damage vs stasised" is a separate unparsed concern. The new regex `/\b(?:don'?t|does not|doesn'?t)\s+break\s+stasis\b/i` matches ONLY "do/don't/does not break stasis" — NOT "affected by stasis", "extra action", or "deal 20% more damage". Parser test asserts the negatives explicitly.
+- The "extra action after damaging a stasised enemy" is ALREADY parsed by `parseExtraAction`; the "+20% damage vs stasised" is a separate unparsed concern. The new regex (Task 3a) matches "don't"/"doesn't"/"does not"/bare "do not" + "break stasis" ONLY — NOT "affected by stasis", "extra action", or "deal 20% more damage". Parser test asserts the negatives explicitly.
 
 ---
 
@@ -65,7 +65,7 @@ If ANY golden moves, the gate leaked — fix the gate, NEVER `vitest -u`.
 - [ ] Confirm B2 shipped: `grep -n "const isStasised" src/utils/combat/engine.ts`; `grep -c "it(" src/utils/combat/__tests__/stasis.test.ts` (expect 6).
 - [ ] Confirm drain site: `grep -n "const drainQueue\|for (const intent of batch)\|executeIntent(intent" src/utils/combat/engine.ts`.
 - [ ] Confirm apply boundary: `grep -n "applyToVictim: (victim, damage)\|emitHit:\|applyIncomingToTarget(damage, tgt)" src/utils/combat/engine.ts`.
-- [ ] Confirm NO existing fixture lands Stasis: `grep -rn "buffName: 'Stasis'\|inflicts Stasis\|'Stasis'" src/utils/combat/__tests__/ src/utils/calculators/__tests__/` — only stasis/isStasised/stasisBuffs tests match.
+- [ ] Confirm NO existing fixture lands a TIMED Stasis DEBUFF: `grep -rn "buffName: 'Stasis'\|inflicts Stasis\|'Stasis'" src/utils/combat/__tests__/ src/utils/calculators/__tests__/`. EXPECTED matches beyond the B2 stasis/isStasised/stasisBuffs tests: `healing.test.ts`, `engine.events.test.ts`, and `healingGoldenParity.test.ts` (+ its `.snap`) — these are the Defiant **emit-only `{type:'control', effect:'stasis'}`** fixtures (`playerTurn.ts` only `bus.emit`s `control-applied`, never writes a debuff store), so `isStasised(victimId)` stays false and the golden invariant holds. Do NOT be alarmed by a 'Stasis' match in a golden file — verify it's the control-ability path (no landed timed debuff), not an `inflict` debuff.
 - [ ] No commit. If red at baseline, STOP.
 
 ---
@@ -174,11 +174,14 @@ breakStasisOnDirectHit(tgt, actor.id);
 **Files:** `src/utils/skillTextParser.ts` (+ its test `src/utils/__tests__/skillTextParser.test.ts`); `src/utils/combat/state.ts`; `src/utils/combat/engine.ts`; `src/types/abilities.ts` + `src/utils/abilities/buildShipAbilities.ts` (+ its test) + the input-building adapter; extend `stasis.test.ts`.
 
 ### Task 3a — parser
-- [ ] **Failing test** (`skillTextParser.test.ts`, `describe('parseDoesntBreakStasis', …)`, mirror `parseNoCrit`): matches Akula `"...attacks don't break Stasis..."` → true; matches the second ship `"...do not break Stasis and deal 20% more damage..."` → true; **negatives:** `"...affected by Stasis ... extra action"` → false, `"deal 20% more damage to enemies under Stasis"` → false, `"inflicts Stasis for 2 turns"` → false, ``/null/undefined → false.
+- [ ] **Failing test** (`skillTextParser.test.ts`, `describe('parseDoesntBreakStasis', …)`, mirror `parseNoCrit`): matches Akula `"...attacks don't break Stasis..."` → true; matches the second ship's BARE "do not" form `"...do not break Stasis and deal 20% more damage..."` → true (REGRESSION GUARD — the naive alternation missed bare "do not"); also a curly-apostrophe form → true; **negatives:** `"...affected by Stasis ... extra action"` → false, `"deal 20% more damage to enemies under Stasis"` → false, `"inflicts Stasis for 2 turns"` → false, ``/null/undefined → false.
 - [ ] **Run, verify FAIL.**
 - [ ] **Implement** near `parseNoCrit`:
 ```ts
-const DOESNT_BREAK_STASIS_RE = /\b(?:don['’]?t|does not|doesn['’]?t)\s+break\s+stasis\b/i;
+// MATCHES: "don't", "doesn't", "does not", AND bare "do not" (the second ship uses "do not
+// break Stasis" — a bare-"do not" form the naive alternation misses). Verified against both
+// ships + all negatives.
+const DOESNT_BREAK_STASIS_RE = /\b(?:do(?:es)?n['’]?t|does not|do not)\s+break\s+stasis\b/i;
 /** True iff this skill text declares the unit's attacks don't break Stasis (Akula + the second
  *  don't-break ship). Boolean only — the second ship's other clauses (extra-action,
  *  +damage-vs-stasised) are parsed elsewhere and untouched here. */
@@ -192,7 +195,7 @@ export function parseDoesntBreakStasis(text: string | null | undefined): boolean
 
 ### Task 3b — thread `doesntBreakStasis` onto `CombatActor`
 - [ ] `src/utils/combat/state.ts`: add `doesntBreakStasis?: boolean` to `CombatActor` (after `ignoresForcedTargeting`), to the `createActor` partial, and `doesntBreakStasis: partial.doesntBreakStasis,` to the returned object (mirror `ignoresForcedTargeting` at both spots).
-- [ ] `src/utils/combat/engine.ts`: add `doesntBreakStasis?: boolean` to the THREE engine-input interfaces (relocate each by its `ignoresForcedTargeting?: boolean;`); at the THREE `createActor` sites add `doesntBreakStasis: <source>,` next to `ignoresForcedTargeting`: focus `input.doesntBreakStasis`, team `t.doesntBreakStasis`, enemy `e.doesntBreakStasis`.
+- [ ] `src/utils/combat/engine.ts`: add `doesntBreakStasis?: boolean` to EVERY spot that declares `ignoresForcedTargeting?: boolean` — there are **FOUR**, not three: `EnemyActorInput` (~374), the INLINE `CombatEngineInput.enemyAttackers[]` member (~880, which `runCombat` iterates directly — tsc assignability requires it on BOTH the standalone interface AND the inline member), `TeamActorEngineInput` (~784), and `CombatEngineInput` top-level (~895). Then at the THREE `createActor` SOURCE-READ sites add `doesntBreakStasis: <source>,` next to `ignoresForcedTargeting`: focus `input.doesntBreakStasis` (~1165), team `t.doesntBreakStasis` (~1238), enemy `e.doesntBreakStasis` (~470). (Relocate each by its `ignoresForcedTargeting` line; `grep -n "ignoresForcedTargeting" src/utils/combat/engine.ts` to enumerate all spots first.)
 - [ ] Pure additions (optional, undefined for existing inputs) → byte-identical. Full gate. Commit — `B3 Task 3b: thread doesntBreakStasis from engine inputs onto CombatActor`.
 
 ### Task 3c — activate the exception + production wiring + tests
