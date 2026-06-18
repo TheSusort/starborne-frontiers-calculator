@@ -1931,6 +1931,168 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(capturedIsStasised!('enemy-front')).toBe(true);
     });
 
+    // (viii) full-absorb (Barrier) direct hit still breaks Stasis — spec §3/§4.5 coverage
+    it('(viii) direct hit fully absorbed by Barrier (0 HP loss) still breaks Stasis: victim acts in round 2, not round 4', () => {
+        idc = 0;
+        /**
+         * Spec §3: "ANY landed direct attack breaks Stasis, regardless of shield/Barrier absorb
+         * (about the attack connecting, not HP loss)." This test proves the strongest form:
+         * when a Barrier grants FULL damage immunity, a direct hit deals ZERO HP loss yet
+         * Stasis STILL breaks.
+         *
+         * Setup (healing mode — `healTargetId:'attacker'` — so round-level HP snapshots are
+         * available to confirm the Barrier fully absorbed):
+         *   - focus ('attacker', speed=100, hp=10000, attack=0):
+         *     selfBuffs: [barrierBuff()] → carries a persistent Barrier (full damage immunity).
+         *   - stasis-bot (speed=300, hp=1): fires stasisInflictAttack(3) at focus in round 1.
+         *   - killer (speed=200, attack=10000): kills stasis-bot in round 1.
+         *   - breaker-enemy (speed=150, attack=3000): fires basicAttack at focus every round.
+         *     Its hits are fully absorbed by Barrier (0 HP loss) but still "connect" as direct attacks.
+         *   - numRounds:4.
+         *
+         * Turn order each round: stasis-bot(300) → killer(200) → breaker-enemy(150) → focus(100).
+         *
+         * Round 1:
+         *   stasis-bot fires Stasis(3) on focus.
+         *   killer kills stasis-bot (hp=1, attack=10000).
+         *   breaker-enemy fires basicAttack on stasised focus.
+         *     → Barrier fully absorbs 3000 → 0 HP loss (barrierAbsorbed=3000, HP unchanged).
+         *     → Direct hit "connected" → break mark set on focus.
+         *   focus stasised → skip. Break mark consumed → Stasis removed.
+         *   Post-turn: Stasis would have decremented, but it was removed by the break.
+         *
+         * Round 2: stasis-bot dead. focus NOT stasised → fires in EXACTLY round 2.
+         *
+         * No-break baseline (without the breaker-enemy): Stasis(3) keeps focus stasised in
+         * rounds 1, 2, 3 → focus fires in round 4. Contrast: with the break, it fires in round 2.
+         *
+         * Two assertions prove both halves of spec §3:
+         *   (A) 0 HP loss: result.healing!.rounds[1].targetHpPctStart ≈ 100% (round-2 start
+         *       is a POST-hit snapshot of round 1; unchanged HP proves full absorption).
+         *       Also: rounds[0].barrierAbsorbed === 3000 (absorbed exactly the attack).
+         *   (B) Stasis STILL breaks: focus fires in EXACTLY round 2 (not 3 or 4).
+         *       Pinned — a loose "≤3" would pass under a one-round-late regression.
+         */
+        const { events, result } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [
+                {
+                    id: 'barrier',
+                    buffName: 'Barrier',
+                    stacks: 1,
+                    isStackable: false,
+                    parsedEffects: {},
+                },
+            ],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 10_000, // intentionally small so Barrier absorption is clearly visible
+            hacking: 0,
+            speed: 100,
+            healTargetId: 'attacker',
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
+            enemyAttackers: [
+                // stasis-bot: applies Stasis(3) to focus in round 1, then killed by killer.
+                // attack:0 so its damage ability deals 0 HP to the focus — isolates barrierAbsorbed
+                // to the breaker-enemy hit only (3000), making the absorption assertion exact.
+                {
+                    id: 'stasis-bot',
+                    stats: {
+                        attack: 0, // zero attack → damage ability in stasisInflictAttack deals 0 HP
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1, // killed by killer (attack=10000) in round 1
+                        speed: 300, // fastest → applies Stasis before any player acts
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [stasisInflictAttack(3)] },
+                } as EnemyAttacker,
+                // breaker-enemy: fires a direct 3000-damage hit at the stasised focus each round.
+                // Barrier fully absorbs the hit (0 HP loss), but the direct attack still "connects"
+                // and must break Stasis (spec §3).
+                {
+                    id: 'breaker-enemy',
+                    stats: {
+                        attack: 3000, // without Barrier this would drain 30% of focus hp=10000 → proves full absorb
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 150, // acts after stasis-bot(300) and killer(200), before focus(100)
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // ── (A) Barrier fully absorbed: 0 HP loss ──────────────────────────────────────────
+        const rounds = result.healing!.rounds;
+
+        // Round 1's breaker-enemy 3000 attack was FULLY absorbed by Barrier (0 HP drain).
+        expect(rounds[0].barrierAbsorbed).toBe(3000);
+
+        // POST-hit signal: round 2 starts at 100% HP (3000 attack drained NOTHING from focus's HP).
+        // If Barrier had NOT been active, focus hp=10000 - 3000 = 7000 → round 2 start = 70%.
+        // 100% confirms full absorption (distinguishes from partial or no absorption).
+        expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
+
+        // ── (B) Stasis STILL breaks despite 0 HP loss ─────────────────────────────────────
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // Focus was stasised in round 1 (stasis-bot applied Stasis before focus acted).
+        expect(focusFiredRounds).not.toContain(1);
+
+        // The breaking hit (round 1, breaker-enemy speed=150 > focus speed=100) marks a break
+        // on the focus's skip. Focus skip consumes the break → Stasis removed.
+        // Round 2: focus NOT stasised → fires in EXACTLY round 2.
+        // Pinned to round 2 — a loose "≤3" would pass under a one-round-late regression.
+        const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
+        expect(firstFiredRound).toBe(2);
+
+        // NON-VACUITY: without a breaking hit, Stasis(3) would keep focus locked in rounds 1–3
+        // and fire only in round 4. The focus fires in round 2 here — 2 rounds earlier than the
+        // no-break baseline. This early fire is only possible if the Barrier-absorbed direct hit
+        // still broke Stasis despite delivering 0 HP loss (spec §3 case).
+    });
+
     // (vii) REGRESSION: same attacker applies Stasis(5) then fires pure-damage hits → breaks
     it('(vii) REGRESSION: the attacker that applied Stasis breaks it with a later pure-damage hit', () => {
         idc = 0;
@@ -2200,9 +2362,9 @@ describe("B3 Task 3 — Akula don't-break", () => {
 
         // Non-vacuous: akula-enemy DID fire each round (its turns ran — no break-hook called)
         for (let r = 1; r <= 4; r++) {
-            expect(
-                abilityPerformed.some((e) => e.actorId === 'akula-enemy' && e.round === r)
-            ).toBe(true);
+            expect(abilityPerformed.some((e) => e.actorId === 'akula-enemy' && e.round === r)).toBe(
+                true
+            );
         }
     });
 
