@@ -27,12 +27,33 @@ Per-victim damage-taken surface = `RoundData.perTargetDamage`, populated by `dri
 
 The engine comment at `engine.ts:2397-2400` worried the per-victim defense lookup "splits into two lookups by direction." **Refuted by the store model:** enemy-applied debuffs (the `enemyDebuffs`/`inflict` path) all land in the status engine's enemy-side per-target store **keyed by the victim's id, not by side** (`statusEngine.ts:758, 773-774, 789-800`; `ownerDebuffNamesFor` at `triggers.ts:674-682` already reads any `targetId`). The ability enemy-debuff half already routes by `targetId` (`playerTurn.ts:872, 927-932`); only the **scheduled** half (`snapshot(actor.id)` at 733) and the positional `defenseProfileOf` still read `__enemy__`. Once write-routing is general and the read keys on `victim.id`, a single uniform `defenseProfileOf(v) = toEnemyModifiers(<debuffs on v.id>)` is correct for all three sites (focus→enemy, team→enemy, enemy→player). No per-direction branch.
 
+## TWO-CHANNEL DEBUFF MODEL — CORRECTED 2026-06-18 (mid-execution finding)
+
+A code trace during Task 2 revealed enemy debuffs live in **two channels** with different keys and read paths. The original plan conflated them; this corrects Tasks 3-4.
+
+| Channel | Writer | Key | `payload`? | What flows through | Read by |
+|---|---|---|---|---|---|
+| **Ability** | `applyTimedAbilityStatus` (`statusEngine.ts:917-977`) | `enemyTargetId` arg (**per-victim**) | yes | **skill-parsed `{type:'debuff'}` debuffs** (Defense Down, Vulnerability, etc. — the dominant player-applied case) + ability auras/accum | `timedAbilityStatuses('enemy',_,id)` + `activeAbilityStatuses('enemy',_,_,id)` |
+| **Scheduled** | `upsertBuff` (`statusEngine.ts:589-608`) | **`__enemy__` hardcoded** | no | manual-config debuffs, always/aura-source enemy debuffs (`alwaysEnemy`), scheduled accum/persistent | `snapshot(_,id).activeEnemyDebuffs` |
+
+**Critical facts (cited):**
+- `snapshot().activeEnemyDebuffs` **excludes payload entries** — `.filter((s) => !s.payload)` (`statusEngine.ts:794`). So it reads ONLY the scheduled channel.
+- A player skill that "applies Defense Down for N turns" is a `{type:'debuff'}` ability → `timedEnemyBySlot` loop → `statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId)` (`playerTurn.ts:884`) = the **ability/payload/per-victim channel**, keyed by `targetId`.
+- The aggregate `roundEnemyDebuffs` (`playerTurn.ts`) already reads BOTH channels: scheduled via `snapshot(actor.id)` (→`__enemy__`, line ~745) + ability via `timedAbilityStatuses/activeAbilityStatuses('enemy', actor.id, targetId)` (~939) → `toEnemyModifiers(union)` (~978). It is **discarded for positional hits** (positional path wins, aggregate credit suppressed) — so its modifiers never reach positional damage.
+- `ownerDebuffNamesFor` (`triggers.ts:674-692`) reads ALL THREE sources (snapshot + timed + active ability statuses), all keyed to one `targetId` — the template for a complete per-victim read.
+
+**Two corrections to the original plan:**
+1. **`victimEnemyModifiers` must read BOTH channels** — scheduled (`snapshot(undefined, '__enemy__')` for global auras/manual, applied to every victim, matching the aggregate's `__enemy__` default) + ability (`timedAbilityStatuses`/`activeAbilityStatuses` for `victimId`, converted via `payloadToSelectedBuff`) — folded together through `toEnemyModifiers`. Snapshot-only (Task 2's version) misses the per-victim skill debuffs.
+2. **DROP the snapshot-reader move (old Task 3 "Edit B").** Scheduled debuffs are written to `__enemy__` (upsertBuff hardcoded), so moving `snapshot(actor.id)` → `snapshot(actor.id, targetId)` would read EMPTY per-victim and DROP scheduled effects. Threading `targetId` (Edit A) ALONE moves the ability channel per-victim (its write AND its aggregate-read both key off `targetId`); the scheduled channel stays global `__enemy__`, which is correct (auras/manual apply to the engaged target as before). Edit B is unnecessary and harmful.
+
 ## Key helpers
 
 - `toEnemyModifiers(selected: SelectedGameBuff[]): { enemyDefenseModifier; incomingDamageModifier }` — `dpsBuffHelpers.ts:71-85` (sums `parsedEffects.defense*stacks` and `parsedEffects.incomingDamage*stacks`).
 - `statusEngine.snapshot(ownerId?, enemyTargetId?)` — `statusEngine.ts:133-136, 697-803`; `enemyTargetId` selects the per-target enemy-debuff store, defaults to `DEFAULT_ENEMY_TARGET = '__enemy__'` (`statusEngine.ts:356`). Returns `ActiveBuff[]` (not `SelectedGameBuff[]`).
 - `enemyDebuffLookup: Map<string, SelectedGameBuff[]>` — built `engine.ts:1342-1346`, in scope at `drivePositionalApply`.
-- `expandBuffs(ab, bufs)` — `playerTurn.ts:265-270`, module-private; applies the per-round stack override. Need an exported `(ActiveBuff[], lookup) → SelectedGameBuff[]` wrapper.
+- `expandBuffs(ab, bufs)` — `playerTurn.ts:265-270`, module-private; applies the per-round stack override. Exported wrapper `expandEnemyDebuffs` shipped in Task 1.
+- `timedAbilityStatuses('enemy', ownerId?, enemyTargetId?)` + `activeAbilityStatuses('enemy', resolveCtx, ownerId?, enemyTargetId?)` — `statusEngine.ts:1030-1073` / `979-1027`; the per-victim ability/payload reads (keyed by `enemyTargetId`). Each returned entry carries `.active.payload` (the ability config with `parsedEffects`).
+- `payloadToSelectedBuff` — converts an ability-status payload to a `SelectedGameBuff` (extracted to `buffTotals.ts`, re-exported from `playerTurn.ts`; confirm import path during impl). Use to turn ability-channel payloads into the `SelectedGameBuff[]` that `toEnemyModifiers` folds. Mirror how `playerTurn.ts` builds `abilityEnemyEffects` (~952-969) so the helper's fold matches the aggregate exactly.
 
 ## Guard condition for write-routing (spec §8 resolved)
 
@@ -116,9 +137,11 @@ export function expandEnemyDebuffs(
 
 ---
 
-## Task 2 — Add engine-local `victimEnemyModifiers(victimId)` reader (unwired)
+## Task 2 — Add engine-local `victimEnemyModifiers(victimId)` reader (unwired) — DONE (PARTIAL)
 
-Build + test the per-victim reader BEFORE wiring it into damage, so Task 4 is a pure substitution. Defined-but-unused this task → goldens byte-identical.
+**STATUS: committed (`e3be23ef`) but PARTIAL** — the shipped helper reads ONLY the scheduled channel (`snapshot(undefined, victimId).activeEnemyDebuffs`), which the Task-2 trace revealed misses the ability/payload channel where player-applied skill debuffs live (see "TWO-CHANNEL DEBUFF MODEL" above). Task 3 COMPLETES the helper to read both channels and updates its test. The shipped helper is unwired (consumed only by its test tap) so the partial version is harmless until Task 3.
+
+Build + test the per-victim reader BEFORE wiring it into damage. Defined-but-unused → goldens byte-identical.
 
 **Files:** Modify `src/utils/combat/engine.ts` (+ `CombatEngineInput` tap field); Create `src/utils/combat/__tests__/victimEnemyModifiers.test.ts`.
 
@@ -152,52 +175,73 @@ const victimEnemyModifiers = (
 
 ---
 
-## Task 3 — Thread `targetId` for player→enemy (writes) + move the scheduled reader (reads) — LOCKSTEP
+## Task 3 — Complete `victimEnemyModifiers` (both channels) + thread `targetId` for player→enemy (Edit A)
 
-**This is the lockstep task: writes route per-victim AND the scheduled reader follows in ONE commit.** Splitting them creates a state where a scheduled debuff is written to `victim.id` but read from `__enemy__` → effect drops → goldens break mid-plan. Threading the reader without the writes is a no-op (per-victim store empty).
+Two coupled changes that ship together: (1) COMPLETE the helper so it reads the ability channel (where player skill debuffs live), and (2) thread `targetId` so player-applied ability debuffs actually ROUTE to the victim's per-actor store. Together a player skill Defense Down lands on, and is read from, the specific victim. **Edit B (snapshot-reader move) is DROPPED** — see the two-channel model: it would empty the scheduled channel per-victim.
 
-**Files:** Modify `src/utils/combat/engine.ts:2552` and `src/utils/combat/playerTurn.ts:733`; Create `src/utils/combat/__tests__/perVictimDebuffRouting.test.ts`.
+**Files:** Modify `src/utils/combat/engine.ts` (`victimEnemyModifiers` + `buildTurnArgs:2552`); Modify `src/utils/combat/__tests__/victimEnemyModifiers.test.ts` (extend) and Create `src/utils/combat/__tests__/perVictimDebuffRouting.test.ts`.
 
-- [ ] **Step 1: Write the failing test** — mirror `twoTeamBattle.test.ts`. 1-attacker vs 2-enemy positioned `runCombat`; focus applies a scheduled `enemyDebuffs` entry with `parsedEffects.incomingDamage: +50` onto `enemy-front` only; attacker pattern hits both `enemy-front` and `enemy-back` (column/AoE). Assert `perTargetDamage['enemy-front']` reflects the +50% incoming multiplier (debuff lands on + is read from front's store). For Task 3 (anchor=front via the scheduled scalar), assert the FRONT value exactly; defer the precise covered-`enemy-back` exclusion assertion to Task 4 (covered-victim incoming-damage becomes exact there). State this scoping in a test comment.
-- [ ] **Step 2: Run test, verify it fails** — `npx vitest run perVictimDebuffRouting` → FAIL. Confirm it fails for the right reason (debuff on/read-from `__enemy__`, not the front's store).
-- [ ] **Step 3: Minimal implementation — two coupled edits:**
-
-  Edit A — `engine.ts:2552` in `buildTurnArgs`. Replace `...(a.side === 'enemy' ? { targetId: tgt.id } : {}),` with:
+- [ ] **Step 1a: Complete the helper.** Rewrite `victimEnemyModifiers(victimId)` to read BOTH channels and fold their union, mirroring `playerTurn.ts`'s `abilityEnemyEffects` construction (~952-969) and `ownerDebuffNamesFor`:
 
 ```ts
-// B1/PR7b: thread targetId for BOTH directions so player-applied debuffs route to the
-// resolved victim's per-actor store. GUARDED for the player side: when selectTurnTarget
-// fell back to the dummy `enemy` sink (tgt.id === enemy.id), leave targetId unset so the
-// __enemy__ sentinel path (DPS / healing) is byte-identical. The enemy side is unchanged
-// (its victim is always a real player actor).
+const victimEnemyModifiers = (
+    victimId: string
+): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
+    // Scheduled channel (global auras / manual config) — keyed __enemy__, applied to every
+    // victim (matches the aggregate's snapshot(actor.id) → __enemy__ default).
+    const scheduled = expandEnemyDebuffs(
+        statusEngine.snapshot(undefined, DEFAULT_ENEMY_TARGET).activeEnemyDebuffs,
+        enemyDebuffLookup
+    );
+    // Ability channel (skill-parsed {type:'debuff'} debuffs) — per-victim, payload entries
+    // excluded from the snapshot, read via the timed/active ability-status APIs and converted
+    // to SelectedGameBuff via payloadToSelectedBuff. Mirror playerTurn's abilityEnemyEffects.
+    const ability = [
+        ...statusEngine.timedAbilityStatuses('enemy', undefined, victimId),
+        ...statusEngine.activeAbilityStatuses('enemy', () => NEUTRAL_NAMES_CTX, undefined, victimId),
+    ].map((s) => payloadToSelectedBuff(s.active /* or s.payload — match the API */));
+    return toEnemyModifiers([...scheduled, ...ability]);
+};
+```
+
+  Confirm the exact shapes during impl: the `activeAbilityStatuses` ctx arg (reuse the neutral ctx `ownerDebuffNamesFor` passes), and how `payloadToSelectedBuff` is imported (from `playerTurn`/`buffTotals`). Match `playerTurn`'s `abilityEnemyEffects` fold so the helper's modifiers EQUAL the aggregate's for the same victim. Import `DEFAULT_ENEMY_TARGET` (or reuse the in-scope sentinel).
+
+- [ ] **Step 1b: Update the Task-2 test** (`victimEnemyModifiers.test.ts`) — keep the scheduled-channel case, and ADD an ability-channel case: a player skill applies a Defense Down (`parsedEffects.defense: -30`) to the FRONT enemy (with `targetId` threaded by Edit A so it routes there); assert `victimEnemyModifiers('front-id')` returns `-30` and `victimEnemyModifiers('back-id')` returns `0`. This proves the helper reads the per-victim ability channel.
+
+- [ ] **Step 2: Write the routing failing test** (`perVictimDebuffRouting.test.ts`) — mirror `twoTeamBattle.test.ts`. 1-attacker vs 2-enemy positioned `runCombat`; focus applies an **ability** `enemyDebuffs` Defense-Down (`parsedEffects.defense: -50`) onto `enemy-front` only; via the test tap assert `victimEnemyModifiers('enemy-front')` = `-50` and `victimEnemyModifiers('enemy-back')` = `0` (debuff routed to front's store, not leaked to back or stuck on `__enemy__`). (Damage-number assertions belong to Task 4; here assert the per-victim READ via the tap.)
+
+- [ ] **Step 3: Run both tests, verify they fail** — `npx vitest run victimEnemyModifiers perVictimDebuffRouting`. Confirm they fail for the right reason (before Edit A the debuff sits on `__enemy__`; before the helper completion the ability channel is unread).
+
+- [ ] **Step 4: Edit A — thread `targetId` for player→enemy.** `engine.ts:2552` in `buildTurnArgs`, replace `...(a.side === 'enemy' ? { targetId: tgt.id } : {}),` with:
+
+```ts
+// B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route to the
+// resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId; the aggregate
+// ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows automatically). GUARDED
+// for the player side: when selectTurnTarget fell back to the dummy `enemy` sink
+// (tgt.id === enemy.id), leave targetId unset so the __enemy__ path (DPS/healing) is byte-
+// identical. The scheduled channel stays global __enemy__ (upsertBuff hardcoded — correct for
+// auras). The enemy side is unchanged (its victim is always a real player actor).
 ...(a.side === 'enemy' || tgt.id !== enemy.id ? { targetId: tgt.id } : {}),
 ```
 
-  Edit B — `playerTurn.ts:733`. Replace `const entry = statusEngine.snapshot(actor.id);` with:
+  **Do NOT touch `playerTurn.ts:733`** (the dropped Edit B). The scheduled `snapshot(actor.id)` stays `__enemy__`.
 
-```ts
-// B1/PR7b: the SCHEDULED enemy-debuff half of this snapshot must read the bound victim's
-// per-actor store (the ability half already threads targetId). Falls back to the __enemy__
-// sentinel when targetId is absent (DPS/healing dummy path) → byte-identical. ownerId =
-// actor.id still selects the same self-buff store, so only the enemy-debuff half re-keys.
-const entry = statusEngine.snapshot(actor.id, targetId);
-```
+- [ ] **Step 5: Run the tests, verify they pass** — `npx vitest run victimEnemyModifiers perVictimDebuffRouting` → PASS.
 
-  (Confirm `targetId` is in scope in `runPlayerTurn` at line 733 — it is a `PlayerTurnArgs` field threaded by `buildTurnArgs`; when unset it is `undefined` → `snapshot` defaults `enemyTargetId` to `DEFAULT_ENEMY_TARGET`.)
-
-- [ ] **Step 4: Run test, verify it passes** — `npx vitest run perVictimDebuffRouting` → PASS.
-- [ ] **Step 5: Full gate — AUDITED CHURN expected.**
-  - DPS goldens byte-identical (DPS passes no positions → `tgt === enemy` → `targetId` unset → `__enemy__` reader).
+- [ ] **Step 6: Full gate — AUDITED CHURN expected.**
+  - DPS goldens byte-identical (no positions → `tgt === enemy` → `targetId` unset → `__enemy__` write+read).
   - Healing goldens byte-identical (same guard).
-  - **Two-team-sim goldens (`twoTeamBattle.test.ts`, `dpsSimulator` multi-actor, `positionalDamage.integration.test.ts`):** existing fixtures use `defence: 0` and no incoming-damage debuffs → `incomingDamageModifier` is `0` regardless of store → **expected byte-identical**. If any fixture applies a scheduled enemy debuff across multiple enemies, its numbers move (debuff no longer leaks to non-victims) — **audit every moved value line-by-line**, confirm "debuff correctly stopped leaking to a non-targeted enemy", explain in the commit body. **Never `vitest -u`.**
+  - **Two-team-sim goldens (`twoTeamBattle`, `dpsSimulator` multi-actor, `positionalDamage.integration`):** single-enemy fixtures byte-identical (one victim store ≡ the old `__enemy__` re-key, consistent write+read). Multi-enemy fixtures with player-applied ability debuffs: numbers may move because the ability debuff no longer pools on the shared `__enemy__` (the aggregate `roundEnemyDebuffs` ability-half now reads per-victim → `positionalScalars.incomingDamageModifier` reflects the anchor victim's own store). **Audit each moved value line-by-line** ("debuff stopped leaking across enemies"), explain in the commit. **Never `vitest -u`.**
   - `npm run lint && npx tsc --noEmit && npm run audit:skills`.
-- [ ] **Step 6: Commit** — `B1 Task 3: route player→enemy targetId per-victim + move scheduled reader (lockstep)`. List audited golden movements with the leak-stopped explanation, or state "no golden movement (no multi-enemy debuff fixture)".
+
+- [ ] **Step 7: Commit** — `B1 Task 3: complete victimEnemyModifiers (both channels) + thread player→enemy targetId`. List audited golden movements or state none.
 
 ---
 
 ## Task 4 — Per-victim defense + incoming-damage in the positional apply
 
-Consume `victimEnemyModifiers` (Task 2) inside `drivePositionalApply` so per-victim damage carries the victim's OWN defense debuff and incoming-damage debuff — replacing hardcoded `defenceModifierPct: 0` (`engine.ts:2434`) and the attacker-fixed `scalars.incomingDamageModifierPct`.
+Consume the now-complete `victimEnemyModifiers` (both channels, from Task 3) inside `drivePositionalApply` so per-victim damage carries the victim's OWN defense debuff and incoming-damage debuff — replacing hardcoded `defenceModifierPct: 0` (`engine.ts:2434`) and the attacker-fixed `scalars.incomingDamageModifierPct`. (This is the task that makes the per-victim sourcing actually reach the positional damage number — Task 3's helper+routing were unwired into damage.)
 
 **Files:** Modify `src/utils/combat/engine.ts:2432-2436`, `src/utils/combat/victimDamage.ts` (`VictimDefenseProfile` + `victimHitDamage`); Create `src/utils/combat/__tests__/perVictimDefenseDebuff.test.ts`.
 
@@ -249,17 +293,17 @@ defenseProfileOf: (v) => {
 
 ---
 
-## Sequencing rationale (writes/reads move together)
+## Sequencing rationale
 
-- **Tasks 1, 2** — pure additions (helper + unwired reader) → zero golden movement, land first.
-- **Task 3** — write-routing AND scheduled-reader move in ONE commit (the lockstep invariant). No state where a scheduled debuff is written per-victim but read from `__enemy__`.
-- **Task 4** — consumes the per-victim reader in the positional apply (defense + incoming-damage). The aggregate path's `enemyDefenseModifier`/`incomingDamageModifier` already moved correctly in Task 3 (scheduled reader keys on `targetId`); Task 4 extends the same sourcing to covered victims.
+- **Tasks 1, 2** — pure additions (expand helper + partial unwired reader) → zero golden movement.
+- **Task 3** — completes the helper to read BOTH channels + threads `targetId` (Edit A) so player ability debuffs route per-victim. The ability channel's write (`applyTimedAbilityStatus`) and aggregate-read (`timedAbilityStatuses(...,targetId)`) BOTH key off `targetId`, so they move together — no drop. The scheduled channel stays global `__enemy__` (Edit B dropped). Helper still unwired into the positional damage path.
+- **Task 4** — wires the complete helper into the positional apply (`defenseProfileOf` + `victimHitDamage` override). This is where per-victim sourcing reaches the damage number.
 - The `??` fallback in `victimHitDamage` keeps every non-B1 caller byte-identical.
 
 ## Audited-churn summary
 
-- **DPS single-enemy goldens, healing goldens:** MUST stay byte-identical. If any move, the dummy guard leaked — fix the guard, do NOT `-u`.
-- **Two-team-sim goldens (`twoTeamBattle`, `dpsSimulator` multi-actor, `positionalDamage.integration`):** expected byte-identical UNLESS a fixture applies a defense/incoming-damage debuff across multiple positioned enemies. Where they move, the movement is exactly "a debuff stopped leaking to a non-targeted victim" / "a targeted victim now reflects its own defense+incoming debuff" — audit line-by-line and explain in the commit. Never `-u`.
+- **DPS goldens, healing goldens:** MUST stay byte-identical across ALL tasks (no positions → `tgt === enemy` → `targetId` unset → `__enemy__` write+read). If any move, the dummy guard leaked — fix the guard, do NOT `-u`.
+- **Two-team-sim goldens (`twoTeamBattle`, `dpsSimulator` multi-actor, `positionalDamage.integration`):** Tasks 1-2 byte-identical. Task 3 (targetId threading) and Task 4 (positional per-victim sourcing) may move MULTI-enemy fixtures that apply player ability debuffs — the debuff stops pooling on the shared `__enemy__` and each victim reflects its own defense+incoming debuff. Single-enemy fixtures stay byte-identical (one victim store ≡ old `__enemy__` re-key). Audit each moved value line-by-line and explain in the commit. Never `-u`.
 
 ## Critical files
 

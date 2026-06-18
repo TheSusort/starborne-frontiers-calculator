@@ -160,19 +160,33 @@ generalizes to both, which is correct.
 The foundation that makes a debuff land on the *specific* victim and still be *read* there. Two
 halves that MUST move together:
 
+> **CORRECTED 2026-06-18 (mid-execution):** a code trace found enemy debuffs live in TWO channels —
+> an **ability/payload channel** (skill-applied `{type:'debuff'}` debuffs via `applyTimedAbilityStatus`,
+> keyed per-victim by `targetId`, EXCLUDED from `snapshot().activeEnemyDebuffs`) and a **scheduled
+> channel** (`upsertBuff`, hardcoded `__enemy__`, read via `snapshot`). Player-applied modifier debuffs
+> use the ABILITY channel. This reshapes the reads/writes below. See the plan's "TWO-CHANNEL DEBUFF
+> MODEL" section.
+
 - **Routing (writes):** thread `targetId` for the player→enemy direction in `buildTurnArgs`
-  (`engine.ts` ~2552, today `...(a.side === 'enemy' ? { targetId: tgt.id } : {})`). General — all
-  player-applied debuffs route to the resolved victim's per-actor store. **Guarded** so the DPS
-  dummy / `__enemy__` sentinel path is unchanged when the target is not a real positioned actor
-  (preserves DPS/healing byte-identical goldens).
-- **Reading (reads):** move the enemy-debuff-modifier readers from `__enemy__` to the bound victim:
-  - `playerTurn.ts:733` `statusEngine.snapshot(actor.id)` → `snapshot(actor.id, targetId)` so the
-    *scheduled* enemy-debuff half of `roundEnemyDebuffs` reads the victim's store (the ability half
-    already takes `targetId`). Falls back to `__enemy__` when `targetId` is absent (dummy path).
-  - `engine.ts:2432` `defenseProfileOf` `defenceModifierPct: 0` → a per-victim lookup of the
-    victim's enemy-debuff snapshot (`toEnemyModifiers`) for `defenceModifierPct`, plus the matching
-    per-victim **incoming-damage** modifier in `victimHitDamage`'s scalars
-    (`engine.ts:2395-2404` documents this as the deferred Phase-5/PR7b refinement).
+  (`engine.ts` ~2552, today `...(a.side === 'enemy' ? { targetId: tgt.id } : {})`), guarded by
+  `tgt.id !== enemy.id` (real positioned victim vs DPS dummy). This moves the **ability channel**
+  per-victim: `applyTimedAbilityStatus` keys its write off `targetId` AND the aggregate ability-read
+  `timedAbilityStatuses('enemy', actor.id, targetId)` follows — both move together, no drop. The
+  scheduled channel stays global `__enemy__` (upsertBuff hardcoded — correct for auras/manual).
+  Preserves DPS/healing byte-identical (dummy guard).
+- **Reading (reads):** the per-victim damage path needs a reader that folds BOTH channels for a
+  victim id:
+  - new engine `victimEnemyModifiers(victimId)` = `toEnemyModifiers` over [ scheduled =
+    `expandEnemyDebuffs(snapshot(undefined, '__enemy__').activeEnemyDebuffs)` (global auras applied to
+    every victim) ⊕ ability = `timedAbilityStatuses`/`activeAbilityStatuses('enemy', _, victimId)`
+    converted via `payloadToSelectedBuff` ]. Mirrors how `playerTurn` builds `roundEnemyDebuffs` and
+    how `ownerDebuffNamesFor` reads all sources.
+  - `engine.ts:2432` `defenseProfileOf` `defenceModifierPct: 0` → `victimEnemyModifiers(v.id)` for
+    `defenceModifierPct` + a per-victim `incomingDamageModifierPct` override in `victimHitDamage`'s
+    scalars (`engine.ts:2395-2404` documents this as the deferred PR7b refinement).
+  - **NOT** moved: the `playerTurn.ts:733` `snapshot(actor.id)` scheduled reader stays `__enemy__`
+    (moving it per-victim would empty the scheduled channel → drop auras; the ability half already
+    moves via `targetId`).
 - **Scope guard:** attacker-sourced modifiers (own outgoing-damage buff, defense penetration) stay
   attacker-sourced — only the *victim-debuff-derived* modifiers (defence + incoming-damage) move
   per-victim. PR7a (symmetric incoming surface), PR7c (per-victim leech), PR7d (death-fallback +
