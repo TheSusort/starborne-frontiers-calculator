@@ -700,9 +700,12 @@ const DEFAULT_ENEMY_TARGET = '__enemy__';
  *  channels:
  *  - scheduled (__enemy__ global auras/manual — upsertBuff is hardcoded to '__enemy__')
  *  - ability (payload, per-victim — timed + aura/accum keyed by targetId)
- *  Mirrors ownerDebuffNamesFor's three-source read so modifier-read and name-read stay in
- *  lockstep. Import-cycle safe: expandEnemyDebuffs + payloadToSelectedBuff come from
- *  ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts). */
+ *  Reads the same three sources as ownerDebuffNamesFor, with ONE deliberate difference: the
+ *  scheduled source is keyed to the GLOBAL '__enemy__' store (because upsertBuff is hardcoded to
+ *  write there) — NOT per-victim like ownerDebuffNamesFor's snapshot(undefined, targetId). The two
+ *  ability sources ARE per-victim (keyed by targetId). If upsertBuff ever becomes per-victim aware,
+ *  revisit the scheduled key here. Import-cycle safe: expandEnemyDebuffs + payloadToSelectedBuff
+ *  come from ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts). */
 export function victimEnemyBuffs(
     statusEngine: StatusEngine,
     targetId: string,
