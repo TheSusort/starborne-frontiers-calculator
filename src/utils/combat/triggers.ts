@@ -88,8 +88,10 @@ export interface Intent {
      *  branch routes the application to THIS enemy's per-target store.
      *  `damagedAllyId`: the DAMAGED ally's actor id (on-ally-attacked) — the heal and
      *  buff branches route an 'ally'-target payload to exactly this recipient
-     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default. */
-    eventCtx?: { counterTargetId?: string; damagedAllyId?: string };
+     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default.
+     *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
+     *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
+    eventCtx?: { counterTargetId?: string; damagedAllyId?: string; fromPurgeEvent?: boolean };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
@@ -381,6 +383,30 @@ export function registerReactiveListeners(args: {
                         // call: enemy side. For the enemy call: player side.
                         // One enqueue per cast.
                         if (isOpposing(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-purged':
+                    bus.on('purge-performed', (e) => {
+                        // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
+                        // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
+                        // re-purges the SAME victim (not ctx.enemyId — victim-routing).
+                        // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
+                        if (e.casterId === ownerId)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId, fromPurgeEvent: true },
+                            });
+                    });
+                    break;
+                case 'on-ally-purged':
+                    bus.on('purge-performed', (e) => {
+                        // Victim-scoped: a buff was purged from MY ally (Salvation). Route the
+                        // heal to that ally via damagedAllyId; fromPurgeEvent guards any chained purge.
+                        if (isSameSideAlly(e.targetId, ownerId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId, fromPurgeEvent: true },
+                            });
                     });
                     break;
                 case 'on-cheat-death-activated':
@@ -1178,5 +1204,25 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         return;
     }
 
-    // Any other type (purge/control/...) → not-simulated follow-up; skip.
+    if (cfg.type === 'purge') {
+        // Reactive purge (C2b): remove buffs from the victim. Target = the routed
+        // attacker/killer (counterTargetId — set by on-attacked/on-destroyed in C2b-2,
+        // and by on-enemy-purged for Sefuba's chain victim-routing) else the turn's
+        // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
+        // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
+        const targetId = intent.eventCtx?.counterTargetId ?? ctx.enemyId;
+        const removed = ctx.statusEngine.purge(targetId, cfg.count);
+        if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+            ctx.bus.emit({
+                type: 'purge-performed',
+                casterId: intent.ownerId,
+                targetId,
+                count: removed,
+                round: ctx.round,
+            });
+        }
+        return;
+    }
+
+    // Any other type (control/...) → not-simulated follow-up; skip.
 }
