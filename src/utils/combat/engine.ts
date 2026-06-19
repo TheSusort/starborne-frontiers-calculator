@@ -4004,13 +4004,12 @@ export function runCombat(input: CombatEngineInput): {
                             //    victim would be double-hit: once by the AoE loop, once by the single
                             //    apply). enemyPattern is non-null via the enemyPositional gate.
                             //
-                            // DEFERRED (Phase-5, documented in Step C): on the positional path the per-
-                            // victim shield/HP outcomes are not surfaced, so shieldBefore/hpDamage/barriered
-                            // fall back to neutral defaults — the heal-target damage-taken HEAL/SHIELD leech
-                            // (takenLeeches) is NOT re-derived from the anchor victim's AoE hit. Inert today
-                            // (no fixture runs a "when damaged" reactive in healing mode), so the legacy
-                            // single-target leech path stays byte-identical; per-victim leech symmetry is the
-                            // Phase-5 follow-up. The non-positional path keeps the exact legacy leech values.
+                            // These aggregate locals feed ONLY the non-positional damage-taken leech
+                            // block below; on the positional path they stay at neutral defaults. Per-victim
+                            // taken leech on the positional path is now handled by procTakenLeechesPerVictim
+                            // (E2 T5), which reads each player victim's OWN {shieldBefore,hpDamage,barriered}
+                            // outcome via the onVictimResolved hook — not these heal-target aggregates. The
+                            // non-positional path keeps the exact legacy single-target leech values.
                             let shieldBefore = 0;
                             let hpDamage = 0;
                             let barriered = false;
@@ -4070,8 +4069,9 @@ export function runCombat(input: CombatEngineInput): {
                             // positional selection (Task C3) the enemy's HP/shield drain re-routes to the
                             // selected player (`tgt`, above), but these damage-taken HEAL/SHIELD leech
                             // procs still credit the heal target's accounting. Inert unless a player runs
-                            // a "when damaged, heal/shield" reactive (takenLeeches non-empty) — no current
-                            // fixture does — so the legacy path stays byte-identical. Retargeting the
+                            // a "when damaged, heal/shield" reactive (the heal target's takenLeechesByOwner
+                            // slice non-empty) — no current fixture does — so the legacy path stays
+                            // byte-identical. Retargeting the
                             // single-target healing accounting to an arbitrary victim is out of scope for
                             // Phase 2 (incoming-damage routing).
                             // Barrier carve-out (decision #7): an attack FULLY BLOCKED by Barrier deals no
