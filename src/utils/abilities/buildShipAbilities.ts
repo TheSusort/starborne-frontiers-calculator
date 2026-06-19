@@ -1054,6 +1054,13 @@ function abilitiesFromText(
     // charged "purges 1 buff for every 50% crit power" → fires count 1, single anchor). Purge-
     // condition + scaling + AoE detection is deferred to C2b/E.
     //
+    // NAYRA is the OVER-removal (dangerous) direction: its "if the target was repaired this round,
+    // purge all buffs" emits count:'all' UNCONDITIONALLY — stripping EVERY enemy buff on every
+    // charged cast even when the in-game condition is false (game removes NONE). Conditional-purge
+    // gating MUST land in C2b BEFORE any Nayra-bearing fixture is added; until then a Nayra fixture
+    // would mis-model wholesale buff removal. (Amartya count-scaling under-counts to 1, and
+    // Lodolite's passive-voice "is Purged" form is non-emit — both SAFE under/non-emit directions.)
+    //
     // C2a under-approximation: the passive-voice "is Purged of all buffs" form (Lodolite charged)
     // is NOT matched by PURGE_RE and therefore not emitted here — deferred to C2b.
     if (slot === 'active' || slot === 'charged') {
