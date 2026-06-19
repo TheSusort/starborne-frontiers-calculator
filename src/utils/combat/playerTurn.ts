@@ -1375,6 +1375,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
+    // On-cast purge (C2a): remove buffs from the acting actor's target. Keyed off targetId
+    // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
+    // healEventOnly gate). gatedSkill holds the fired slot's abilities. DPS mode (dummy target,
+    // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
+    if (targetId !== undefined) {
+        for (const ab of gatedSkill?.abilities ?? []) {
+            if (ab.config.type === 'purge' && ab.trigger === 'on-cast') {
+                // 'all-enemies' purges only the single targetId in C2a (single-anchor;
+                // multi-victim AoE → sub-project E). No purge-performed event (deferred to C2b).
+                statusEngine.purge(targetId, ab.config.count);
+            }
+        }
+    }
+
     // ====================================================================
     // HEALING MODE — heal/shield/cleanse consumption against the live heal
     // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode

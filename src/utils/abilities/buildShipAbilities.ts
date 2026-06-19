@@ -50,6 +50,7 @@ import {
     isAccumulateDetonateEffect,
     parseHealAbilities,
     parseCleanse,
+    parsePurge,
     parseHealNoCrit,
     parseSkillEffects,
     classifyEnemyEffect,
@@ -1039,6 +1040,29 @@ function abilitiesFromText(
             },
             pos: cleansePos >= 0 ? cleansePos : MAX_POS,
         });
+    }
+
+    // Emit purge ONLY from active/charged slots. Every reactive/conditional purge in the corpus
+    // lives in a passive (Faust/Iridium/Cobalt-p2/Rhodium/Sefuba-p1-p2/Salvation/Lodolite-p1), so
+    // this slot gate excludes them all WITHOUT needing purge-trigger detection (deferred to C2b),
+    // and eliminates Sefuba-p2's "purges 1 more buff" double-emit. Purge is enemy-only (no
+    // support-flip), so it does NOT use flipBareSupportTarget.
+    if (slot === 'active' || slot === 'charged') {
+        for (const p of parsePurge(text)) {
+            const purgePos = text.search(/purge/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'purge',
+                    target: p.target, // 'enemy' | 'all-enemies'
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'purge', count: p.count },
+                    autoFilled: true,
+                },
+                pos: purgePos >= 0 ? purgePos : MAX_POS,
+            });
+        }
     }
 
     const charge = parseChargeGain(text);

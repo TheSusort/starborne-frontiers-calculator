@@ -953,6 +953,11 @@ export interface CombatEngineInput {
      *  test can assert per-victim Stasis detection for both directions. Mirrors
      *  __testTapVictimEnemyModifiers. Never set by production callers. */
     __testTapIsStasised?: (fn: (actorId: string) => boolean) => void;
+    /** TEST-ONLY tap (C2a Task 3): receives the live `statusEngine` once it is built so a test can
+     *  read an actor's settled self-buff / debuff state AFTER `runCombat` returns (e.g. to assert a
+     *  cast-path purge removed an enemy's self-buffs). Never set by production code; inert when
+     *  absent. The engine reference is LIVE — read it after the run when state is fully settled. */
+    __testTapStatusEngine?: (engine: StatusEngine) => void;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -1347,6 +1352,10 @@ export function runCombat(input: CombatEngineInput): {
         })),
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
     });
+
+    // TEST-ONLY: expose the live status engine so a test can read settled self/enemy state after
+    // the run (e.g. cast-path purge removal). Inert in production (field never set).
+    input.__testTapStatusEngine?.(statusEngine);
 
     // Register the attacker's own buff/debuff abilities for in-loop application with live
     // condition gating. These flow from ShipSkills directly — the page no longer feeds the
