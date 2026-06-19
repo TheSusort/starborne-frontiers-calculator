@@ -23,6 +23,9 @@ export interface ConditionContext {
      *  actor — single-ship DPS, drain default — is trivially slowest). Populated live by the
      *  engine via buildDrainContext. */
     isLowestSpeedAlly?: boolean;
+    /** True when the acting attacker's target was repaired (HP healed) earlier this
+     *  round. Live-derived by the engine; defaults false (DPS / un-repaired). */
+    targetRepairedThisRound?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -70,6 +73,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return 100 - ctx.enemyHpPct;
         case 'lowest-speed-ally':
             return ctx.isLowestSpeedAlly ? 1 : 0;
+        case 'target-repaired-this-round':
+            return ctx.targetRepairedThisRound ? 1 : 0;
         default:
             return 0;
     }

@@ -34,6 +34,8 @@ export function buildRoundContext(state: {
      *  DPS assumption: a single attacker is trivially the slowest). Populated live by the
      *  engine drain context (Phase 4c PR 6). */
     isLowestSpeedAlly?: boolean;
+    /** The acting attacker's target was repaired this round. Default false. */
+    targetRepairedThisRound?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -54,6 +56,7 @@ export function buildRoundContext(state: {
         targetHpPct: state.targetHpPct ?? 100,
         enemyHpPct: state.enemyHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
+        targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

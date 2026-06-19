@@ -129,7 +129,13 @@ export type ConditionSubject =
     // (ties → all tied qualify). Used by Chakara's start-of-round self-buffs.
     // Evaluated from ConditionContext.isLowestSpeedAlly; defaults true (lone-actor
     // DPS assumption: a single attacker is trivially the slowest).
-    | 'lowest-speed-ally';
+    | 'lowest-speed-ally'
+    // Binary gate: the acting attacker's TARGET was repaired (HP healed) earlier this
+    // round. Live-derived by the engine (ConditionContext.targetRepairedThisRound);
+    // defaults false (DPS mode / un-repaired target). Nayra's charged purge + Stasis/
+    // Exposed inflicts. derivable:true — a derivable:false condition would always be met
+    // (evaluateConditions.ts:30), defeating the gate.
+    | 'target-repaired-this-round';
 
 export interface Condition {
     subject: ConditionSubject;
