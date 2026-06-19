@@ -273,6 +273,12 @@ export interface PlayerTurnArgs {
      *  channel apply boundaries (non-positional and positional via emitHit override); absent for
      *  DPS/standalone callers → inert (byte-identical). */
     onHitBreakStasis?: (targetId: string) => void;
+    /**
+     * E3 (AoE purge): the firing skill's footprint victim ids, supplied by the engine in
+     * positional mode. The on-cast purge fans an 'all-enemies' purge over these instead of the
+     * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
+     */
+    aoeVictimIds?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -616,6 +622,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg = [],
         healEventOnly = false,
         onHitBreakStasis,
+        aoeVictimIds,
     } = args;
 
     const {
@@ -1401,20 +1408,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 ab.trigger === 'on-cast' &&
                 conditionsMet(ab.conditions, ctx)
             ) {
-                // 'all-enemies' purges only the single targetId in C2a (single-anchor;
-                // multi-victim AoE → sub-project E).
-                const removed = statusEngine.purge(targetId, ab.config.count);
-                // Emit purge-performed (C2b-1) — on-cast purges are never depth-guarded,
-                // so they ALWAYS emit (when something was removed), triggering Sefuba/
-                // Salvation. Suppressed at 0 removed (honest metric; mirrors cleanse-performed).
-                if (removed > 0) {
-                    bus.emit({
-                        type: 'purge-performed',
-                        casterId: actor.id,
-                        targetId,
-                        count: removed,
-                        round: r,
-                    });
+                // E3: an 'all-enemies' purge fans out to EVERY footprint victim (aoeVictimIds,
+                // supplied by the engine in positional mode). Single-'enemy' purges — and any
+                // caller without a footprint (non-positional) — stay on the single anchor
+                // `targetId`. Each victim emits its own purge-performed (Salvation/Sefuba are
+                // victim-scoped). (Amartya's per-victim COUNT scaling is E4; this ships at the
+                // parsed count.)
+                const recipients =
+                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                for (const vid of recipients) {
+                    const removed = statusEngine.purge(vid, ab.config.count);
+                    if (removed > 0) {
+                        bus.emit({
+                            type: 'purge-performed',
+                            casterId: actor.id,
+                            targetId: vid,
+                            count: removed,
+                            round: r,
+                        });
+                    }
                 }
             }
         }
