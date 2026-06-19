@@ -28,6 +28,7 @@ import {
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
+    parsePurge,
     parseHealNoCrit,
     statusEffectCondition,
     detectIgnoresForcedTargeting,
@@ -3168,6 +3169,46 @@ describe('parseCleanse', () => {
         expect(parseCleanse('cleanses all debuffs from all allies')).toEqual([
             { count: 'all', target: 'all-allies', explicitTarget: true },
         ]);
+    });
+});
+
+describe('parsePurge', () => {
+    it('parses single-count purge from enemy', () => {
+        expect(parsePurge('This Unit purges 1 buff from the enemy.')).toEqual([
+            { count: 1, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('parses "purges all" buffs from the enemy', () => {
+        expect(parsePurge('purges all buffs from the enemy')).toEqual([
+            { count: 'all', target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('parses "purges 1 buff from all enemies" (Amartya)', () => {
+        expect(
+            parsePurge('purges 1 buff from all enemies for every 50% crit power')
+        ).toEqual([{ count: 1, target: 'all-enemies', explicitTarget: true }]);
+    });
+    it('parses "purges a buff from an enemy" (Sefuba p2 / Lodolite p3)', () => {
+        expect(parsePurge('purges a buff from an enemy')).toEqual([
+            { count: 1, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('does not parse cleanse as purge', () => {
+        expect(parsePurge('This Unit cleanses 1 debuff.')).toEqual([]);
+    });
+    it('does not match passive-voice "is Purged of all buffs" (deferred to C2b)', () => {
+        expect(parsePurge('is Purged of all buffs')).toEqual([]);
+    });
+    it('context-free double-match on Sefuba p2 reactive text (EXPECTED — slot-gate in Task 3 excludes passives)', () => {
+        // parsePurge is context-free: both "purges an enemy buff" and "purges 1 more buff"
+        // match. Task 3 gates emission to active/charged slots only, so Sefuba's passive text
+        // is never emitted. This assertion pins the known double-match as deliberate.
+        const result = parsePurge(
+            'when this unit purges an enemy buff, it repairs itself for 12% and purges 1 more buff from the enemy'
+        );
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
+        expect(result[1]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
     });
 });
 

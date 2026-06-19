@@ -1991,8 +1991,57 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
     return results;
 }
 
+// "purges N" / "purges a/an" — active-verb only; naturally excludes "is Purged of all buffs"
+// (no "purges" token). Must NOT match "cleanses".
+const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;
+
 // "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
 const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
+
+/**
+ * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
+ * Target from the sentence: "all enemies" → all-enemies, else "enemy".
+ * explicitTarget is always true (purge has no support-flip, kept for shape parity with parseCleanse).
+ * Does NOT match "cleanses". Passive-voice "is Purged of all buffs" has no "purges" token and is
+ * excluded naturally — handled in C2b. Reference data: docs/ship-skills.csv.
+ *
+ * NOTE: parsePurge is context-free. Reactive/conditional purge text in passives (Sefuba p2,
+ * Faust, Iridium, etc.) will produce matches here. The active/charged slot-gate in
+ * buildShipAbilities (Task 3) is what prevents those from being emitted as abilities.
+ */
+export function parsePurge(
+    text: string | null | undefined
+): { count: number | 'all'; target: 'enemy' | 'all-enemies'; explicitTarget: boolean }[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: {
+        count: number | 'all';
+        target: 'enemy' | 'all-enemies';
+        explicitTarget: boolean;
+    }[] = [];
+    PURGE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PURGE_RE.exec(plain)) !== null) {
+        // Group 1 is the count token (digit/all). Undefined when "a"/"an" matched instead.
+        const raw = m[1]?.toLowerCase();
+        let count: number | 'all';
+        if (raw === undefined) {
+            // "purges a buff" / "purges an enemy buff" — article matched, count is 1
+            count = 1;
+        } else if (raw === 'all') {
+            count = 'all';
+        } else {
+            count = parseInt(raw, 10);
+            if (!count || isNaN(count)) continue;
+        }
+        const sentence = sentenceAround(plain, m.index).toLowerCase();
+        const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
+            ? 'all-enemies'
+            : 'enemy';
+        results.push({ count, target, explicitTarget: true });
+    }
+    return results;
+}
 
 /**
  * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
