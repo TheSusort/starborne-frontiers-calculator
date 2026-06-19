@@ -9,6 +9,7 @@ import {
     IntentExecContext,
     ReactiveAbility,
     LIVE_TRIGGERS,
+    partitionReactiveAbilities,
 } from '../triggers';
 import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import type { ShipTypeName } from '../../../constants/shipTypes';
@@ -3186,5 +3187,62 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
         });
         expect(events.filter((e) => e.type === 'attacked').length).toBe(3);
         expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// C2b-1 — purge partition guard.
+// An `on-cast` purge ability MUST stay in castSkills (the on-cast path
+// handles it). An `on-enemy-purged` purge ability MUST route to
+// reactiveAbilities (so the bus listener is registered and Sefuba's
+// chain fires). This guard ensures a future edit to REACTIVE_ABILITY_TYPES
+// cannot silently regress both paths at once.
+// ----------------------------------------------------------------------
+describe('C2b-1: purge partition guard (on-cast stays cast, on-enemy-purged goes reactive)', () => {
+    const purgeOnCast = (): Ability => ({
+        id: 'poc1',
+        type: 'purge',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'purge', count: 1 },
+    });
+
+    const purgeOnEnemyPurged = (): Ability => ({
+        id: 'pop1',
+        type: 'purge',
+        target: 'enemy',
+        trigger: 'on-enemy-purged',
+        conditions: [],
+        config: { type: 'purge', count: 1 },
+    });
+
+    const skills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [purgeOnCast()],
+            },
+            {
+                slot: 'passive',
+                abilities: [purgeOnEnemyPurged()],
+            },
+        ],
+    });
+
+    it('on-cast purge stays in castSkills (NOT classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(castIds).toContain('poc1');
+        expect(reactiveIds).not.toContain('poc1');
+    });
+
+    it('on-enemy-purged purge routes to reactiveAbilities (IS classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(reactiveIds).toContain('pop1');
+        expect(castIds).not.toContain('pop1');
     });
 });

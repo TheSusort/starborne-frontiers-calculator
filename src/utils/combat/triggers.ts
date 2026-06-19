@@ -51,7 +51,8 @@ export type ReactiveAbilityType =
     | 'shield'
     | 'cleanse'
     | 'extra-action'
-    | 'damage';
+    | 'damage'
+    | 'purge'; // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -64,6 +65,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'cleanse',
     'extra-action',
     'damage',
+    'purge', // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
