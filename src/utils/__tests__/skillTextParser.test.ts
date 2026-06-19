@@ -30,6 +30,7 @@ import {
     detectEndOfRoundPurgeTrigger,
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
+    detectRepairedThisRoundCondition,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -3193,9 +3194,9 @@ describe('parsePurge', () => {
         ]);
     });
     it('parses "purges 1 buff from all enemies" (Amartya)', () => {
-        expect(
-            parsePurge('purges 1 buff from all enemies for every 50% crit power')
-        ).toEqual([{ count: 1, target: 'all-enemies', explicitTarget: true }]);
+        expect(parsePurge('purges 1 buff from all enemies for every 50% crit power')).toEqual([
+            { count: 1, target: 'all-enemies', explicitTarget: true },
+        ]);
     });
     it('parses "purges a buff from an enemy" (Sefuba p2 / Lodolite p3)', () => {
         expect(parsePurge('purges a buff from an enemy')).toEqual([
@@ -3527,5 +3528,37 @@ describe('detectMostBuffsTarget', () => {
 
     it('returns false for negative anchor', () => {
         expect(detectMostBuffsTarget(RHODIUM_P1_RAW, -1)).toBe(false);
+    });
+});
+
+describe('target-repaired-this-round (Nayra)', () => {
+    const activeText =
+        'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.<br />If the target was repaired this round, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
+    const chargedText =
+        'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
+
+    it('gates Stasis (active) on target-repaired-this-round', () => {
+        expect(detectGrantConditions(activeText, 'Stasis')).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
+    });
+    it('gates Exposed (charged) on target-repaired-this-round', () => {
+        expect(detectGrantConditions(chargedText, 'Exposed')).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
+    });
+    it('does NOT gate first-sentence debuffs (no repaired phrase in their clause)', () => {
+        expect(detectGrantConditions(activeText, 'Defense Down II')).toEqual([]);
+        expect(detectGrantConditions(chargedText, 'Attack Down II')).toEqual([]);
+    });
+    it('detects the condition position-scoped at the purge anchor', () => {
+        const purgePos = chargedText.search(/purge/i);
+        expect(detectRepairedThisRoundCondition(chargedText, purgePos)).toEqual({
+            subject: 'target-repaired-this-round',
+            derivable: true,
+        });
+        expect(
+            detectRepairedThisRoundCondition(activeText, activeText.search(/purge/i))
+        ).toBeUndefined();
     });
 });

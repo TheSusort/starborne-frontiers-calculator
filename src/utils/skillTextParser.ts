@@ -579,6 +579,12 @@ export function detectGrantConditions(
         return [{ subject: 'ally-critically-repaired', derivable: false }];
     }
 
+    // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
+    // derivable:false condition would always be met — evaluateConditions.ts:30).
+    if (REPAIRED_THIS_ROUND_RE.test(low)) {
+        return [{ subject: 'target-repaired-this-round', derivable: true }];
+    }
+
     // 0. Recurring grant: "gains X each/every turn|round" stacks unconditionally — a one-time gate
     // in the same sentence (e.g. Shashou's "Stealth after damaging a Debuffer … and gains Blast
     // each turn") applies to the other buff, not this one. Scope to this buff's own segment.
@@ -1035,7 +1041,8 @@ export function detectEnemyPurgedTrigger(
 
 // "When a buff is purged from an ally" — Salvation p3.
 // Loose [^.;]* gaps cross <unit-aid> tags around "buff" and "purged". Verified against RAW CSV.
-const ALLY_PURGED_RE = /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i;
+const ALLY_PURGED_RE =
+    /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i;
 
 // "purges N more buff" — Sefuba p2 chain-purge count extractor.
 // Capture group 1 = digit string or 'a'/'an' (→ count 1). Crosses <unit-aid> tags.
@@ -1089,9 +1096,32 @@ export function detectKilledByDirectDamageTrigger(
     return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
 }
 
+// "repaired this round" — Nayra's charged purge + its Stasis/Exposed inflicts. The
+// gate word ("if"/"when") is already verified by detectGrantConditions' conditional
+// guard / by rawSentenceAround's sentence scoping, so the phrase alone is enough.
+// Corpus-unique to Nayra (verified: 1 row). No <unit-…> tags intervene in the phrase.
+const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
+
 // "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
 // Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
 const MOST_BUFFS_RE = /\benemy\b[^.;]*\bwith\s+the\s+most\b[^.;]*\bbuffs?\b/i;
+
+/**
+ * Returns a target-repaired-this-round Condition when `anchorPos` falls inside the
+ * sentence carrying "repaired this round" (Nayra's charged purge); else undefined.
+ * Position-scoped on RAW text (mirrors detectMostBuffsTarget). The purge ability has
+ * no buffName, so detectGrantConditions cannot drive it — this is its condition source.
+ */
+export function detectRepairedThisRoundCondition(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && REPAIRED_THIS_ROUND_RE.test(sentence)
+        ? { subject: 'target-repaired-this-round', derivable: true }
+        : undefined;
+}
 
 /**
  * Returns true when `anchorPos` falls inside the sentence carrying the
@@ -1099,10 +1129,7 @@ const MOST_BUFFS_RE = /\benemy\b[^.;]*\bwith\s+the\s+most\b[^.;]*\bbuffs?\b/i;
  * Position-scoped on the RAW text (mirrors phrasePosTrigger's sentence-scoping).
  * Reference data: docs/ship-skills.csv (Rhodium).
  */
-export function detectMostBuffsTarget(
-    text: string | null | undefined,
-    anchorPos: number
-): boolean {
+export function detectMostBuffsTarget(text: string | null | undefined, anchorPos: number): boolean {
     if (!text) return false;
     const sentence = rawSentenceAround(text, anchorPos);
     return sentence !== undefined && MOST_BUFFS_RE.test(sentence);

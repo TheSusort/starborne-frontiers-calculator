@@ -2949,7 +2949,7 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
         it('Cobalt active: emits exactly ONE purge with trigger on-cast (active slot unaffected)', () => {
             const cobalt = ship({
                 activeSkillText:
-                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit\'s max HP.',
+                    "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.",
                 chargeSkillCharge: 3,
             });
             const active = slot(buildShipAbilities(cobalt).slots, 'active')!;
@@ -3090,6 +3090,30 @@ describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2
             if (purge.config.type === 'purge') {
                 expect(purge.config.count).toBe(3);
             }
+        });
+    });
+
+    describe('Nayra charged: purge all buffs gated on target-repaired-this-round', () => {
+        const nayraChargedText =
+            'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
+        const nayra = () =>
+            ship({
+                chargeSkillText: nayraChargedText,
+                chargeSkillCharge: 4,
+            });
+
+        it('emits exactly ONE purge ability from the charged slot with trigger on-cast, count all, and target-repaired-this-round condition', () => {
+            const charged = slot(buildShipAbilities(nayra()).slots, 'charged')!;
+            const purges = charged.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-cast');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe('all');
+            }
+            expect(purge.conditions).toEqual([
+                { subject: 'target-repaired-this-round', derivable: true },
+            ]);
         });
     });
 

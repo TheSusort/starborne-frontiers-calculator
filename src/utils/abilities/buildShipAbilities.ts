@@ -46,6 +46,7 @@ import {
     detectEndOfRoundPurgeTrigger,
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
+    detectRepairedThisRoundCondition,
     PURGE_MORE_RE,
     parseControlInflict,
     detectAllyCritTrigger,
@@ -1062,21 +1063,15 @@ function abilitiesFromText(
     // stays on PURGE_MORE_RE below; Zeolite's "when dealing damage to a Defender" stays
     // deferred). Purge is enemy-only (no support-flip).
     //
-    // C2a over/under-approximation: active/charged purges that carry a CONDITION or SCALING are
-    // emitted with conditions:[] at nominal count and fire unconditionally (e.g. Nayra charged
-    // "if the target was repaired this round, purge all buffs" → fires every charged cast; Amartya
-    // charged "purges 1 buff for every 50% crit power" → fires count 1, single anchor). Purge-
-    // condition + scaling + AoE detection is deferred to C2b/E.
+    // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
+    // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
+    // detectRepairedThisRoundCondition below). The engine cast path evaluates this condition;
+    // Task 3 populates targetRepairedThisRound on ConditionContext. Until then the condition
+    // always evaluates false, keeping production byte-identical (no Nayra fixture in any golden).
     //
-    // NAYRA is the OVER-removal (dangerous) direction: its "if the target was repaired this round,
-    // purge all buffs" emits count:'all' UNCONDITIONALLY — stripping EVERY enemy buff on every
-    // charged cast even when the in-game condition is false (game removes NONE). Conditional-purge
-    // gating MUST land in C2b BEFORE any Nayra-bearing fixture is added; until then a Nayra fixture
-    // would mis-model wholesale buff removal. (Amartya count-scaling under-counts to 1, and
-    // Lodolite's passive-voice "is Purged" form is non-emit — both SAFE under/non-emit directions.)
-    //
-    // C2a under-approximation: the passive-voice "is Purged of all buffs" form (Lodolite charged)
-    // is NOT matched by PURGE_RE and therefore not emitted here — deferred to C2b.
+    // C2a under-approximation (still open): the passive-voice "is Purged of all buffs" form
+    // (Lodolite charged) is NOT matched by PURGE_RE and therefore not emitted here — deferred.
+    // Amartya count-scaling under-counts to 1 — SAFE under direction.
     for (const p of parsePurge(text)) {
         const purgePos = text.search(/purge/i);
         const passiveTrigger: AbilityTrigger | undefined =
@@ -1094,13 +1089,14 @@ function abilitiesFromText(
         const target: AbilityTarget = detectMostBuffsTarget(text, purgePos)
             ? 'enemy-most-buffs'
             : p.target;
+        const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
         out.push({
             ability: {
                 id: nextId(),
                 type: 'purge',
                 target,
                 trigger,
-                conditions: [],
+                conditions: repairedCond ? [repairedCond] : [],
                 config: { type: 'purge', count: p.count },
                 autoFilled: true,
             },
