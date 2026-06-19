@@ -241,6 +241,9 @@ export interface PlayerTurnArgs {
      *  as if the target is full HP → a "below N" gate fails → grant inert in DPS (correct).
      *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
     targetHpPct?: number;
+    /** The acting attacker's STRUCK target was repaired (HP-healed) this round (C2b-3). Default
+     *  false. Threaded into the round contexts to gate target-repaired-this-round conditions. */
+    targetRepairedThisRound?: boolean;
     /** Enemy-side debuff target key (Task 6). Passed as the `enemyTargetId` arg to the three
      *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
      *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
@@ -602,6 +605,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
+        targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
         selfDebuffNames: selfDebuffNamesArg = [],
@@ -848,6 +852,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -994,6 +999,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1061,6 +1067,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1140,6 +1147,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1381,7 +1389,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
-            if (ab.config.type === 'purge' && ab.trigger === 'on-cast') {
+            if (
+                ab.config.type === 'purge' &&
+                ab.trigger === 'on-cast' &&
+                conditionsMet(ab.conditions, ctx)
+            ) {
                 // 'all-enemies' purges only the single targetId in C2a (single-anchor;
                 // multi-victim AoE → sub-project E).
                 const removed = statusEngine.purge(targetId, ab.config.count);

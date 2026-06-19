@@ -1892,6 +1892,10 @@ export function runCombat(input: CombatEngineInput): {
         endOfRound: boolean;
     }[] = [];
 
+    // Per-round set of actor ids that received a positive HP repair this round (C2b-3).
+    // Cleared at each round top; read in buildTurnArgs for the target-repaired gate.
+    const repairedThisRound = new Set<string>();
+
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
@@ -1918,6 +1922,7 @@ export function runCombat(input: CombatEngineInput): {
                   // overheal = raw (the whole heal is wasted, which is correct in that state).
                   const consumed = Math.max(0, Math.min(raw, targetMaxHp - healTarget.currentHp));
                   healTarget.currentHp += consumed;
+                  if (consumed > 0) repairedThisRound.add(healTarget.id);
                   return { consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw) => {
@@ -2127,6 +2132,9 @@ export function runCombat(input: CombatEngineInput): {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
         statusEngine.beginRound(r);
+        // Clear the per-round repaired set HERE (not at the round-started emit) so start-of-round
+        // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
+        repairedThisRound.clear();
 
         // Forced-targeting/stealth lookup for a roster (phase 3). Reads the status engine
         // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
@@ -2693,6 +2701,10 @@ export function runCombat(input: CombatEngineInput): {
                 // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
                 // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
+                // C2b-3: was the STRUCK victim (tgt) repaired this round? Per-actor-correct
+                // (unlike targetHpPct, which always reports the heal target). DPS dummy / un-
+                // repaired enemy → false → byte-identical (the purge block guards on targetId).
+                targetRepairedThisRound: repairedThisRound.has(tgt.id),
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
             };
