@@ -304,6 +304,12 @@ type errors (B3 lesson).
 
 ## 10. Grounding (verified file refs, 2026-06-19)
 
+*Path note:* bare `statusEngine.ts`/`triggers.ts`/`playerTurn.ts`/`engine.ts`/`events.ts`/`state.ts` are
+under `src/utils/combat/`; `skillTextParser.ts` under `src/utils/`; `evaluateConditions.ts` +
+`buildShipAbilities.ts` under `src/utils/abilities/`; `abilities.ts` under `src/types/`; `simCoverage.ts`
+under `src/components/skills/`.
+
+
 - `purge()` wrapper + `removeNewestFirst(actorId,'buffs',count)` exist (C2a/C1, `statusEngine.ts`).
 - On-cast purge fire site: `playerTurn.ts ~:1378` (C2a, after `gatedSkill` ~:1149, side-symmetric off
   `targetId`).
