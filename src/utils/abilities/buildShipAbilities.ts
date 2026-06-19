@@ -1047,6 +1047,15 @@ function abilitiesFromText(
     // this slot gate excludes them all WITHOUT needing purge-trigger detection (deferred to C2b),
     // and eliminates Sefuba-p2's "purges 1 more buff" double-emit. Purge is enemy-only (no
     // support-flip), so it does NOT use flipBareSupportTarget.
+    //
+    // C2a over/under-approximation: active/charged purges that carry a CONDITION or SCALING are
+    // emitted with conditions:[] at nominal count and fire unconditionally (e.g. Nayra charged
+    // "if the target was repaired this round, purge all buffs" → fires every charged cast; Amartya
+    // charged "purges 1 buff for every 50% crit power" → fires count 1, single anchor). Purge-
+    // condition + scaling + AoE detection is deferred to C2b/E.
+    //
+    // C2a under-approximation: the passive-voice "is Purged of all buffs" form (Lodolite charged)
+    // is NOT matched by PURGE_RE and therefore not emitted here — deferred to C2b.
     if (slot === 'active' || slot === 'charged') {
         for (const p of parsePurge(text)) {
             const purgePos = text.search(/purge/i);

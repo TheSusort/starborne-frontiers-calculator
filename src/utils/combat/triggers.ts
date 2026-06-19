@@ -1066,6 +1066,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
+        // C2b: reactive purge will add a 3rd copy of this resolver — extract a shared reactiveRecipients(intent, ctx) helper then.
         const recipients =
             intent.ability.target === 'ally'
                 ? [intent.eventCtx?.damagedAllyId ?? healing.targetId]
