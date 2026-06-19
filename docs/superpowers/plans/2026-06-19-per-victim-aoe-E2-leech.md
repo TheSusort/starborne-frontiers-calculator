@@ -23,15 +23,17 @@ The risky part is the pool-closure parametrization (Task 1): it touches code eve
 ## File Structure
 
 - **Modify:** `src/utils/combat/engine.ts`
-  - Task 1: parametrize `applyHealToTarget`/`grantShieldToTarget` by `victim: CombatActor = healTarget` (`:1914-1938`); add an id→actor resolver if one isn't already in scope.
-  - Task 3: per-victim standing-leech proc on the positional firing-hit hook (`drivePositionalApply` per-victim callback `~:2574`; standing-leech data `~2027`/`procStandingLeeches` `~2088`).
-  - Task 4: expand `takenLeeches` registration (`~2061`) to a `Map<ownerId, TakenLeech[]>` over all player runtimes (mirror `standingLeeches` `~2029`).
-  - Task 5: per-victim taken-leech proc on the positional enemy branch (`~3852-3876`), reading each victim's outcome.
-- **Modify:** `src/utils/combat/positionalApply.ts` — surface `applyToVictim`'s return `{shieldBefore,hpDamage,barriered}` to the per-victim hook (Task 2; `~:90`,`:132-134`).
+  - Task 1: parametrize `applyHealToTarget`/`grantShieldToTarget` by `victim: CombatActor = healTarget` (`:1914-1938`). Resolver already exists: `allActorsById` (`engine.ts:1667`, both sides) and `runtimesById.get(id)?.actor` — **no new mechanism**.
+  - Task 2: add an optional per-call `onVictimResolved?(victim, damage, outcome, didCrit)` callback arg to `drivePositionalApply` (`~:2525-2581`) and surface `applyToVictim`'s return into it. `drivePositionalApply` is ONE shared helper used by all three sites (focus `~:3329`, team `~:3508`, enemy `~:3866`), so per-direction leech is supplied per-call, NOT branched inside the shared inline `emitHit`.
+  - Task 3: focus + team call sites pass a STANDING-leech callback (player→enemy); a NEW positional-only standing-leech proc (reuses the fold, own-pool apply) — `procStandingLeeches` (`~:2088`) is NOT modified. Standing-leech data `~:2027`.
+  - Task 4: expand `takenLeeches` registration (`~:2061`) to a `Map<ownerId, TakenLeech[]>` over all player runtimes (mirror `standingLeeches` `~:2029`).
+  - Task 5: enemy call site passes a TAKEN-leech callback (enemy→player) reading each victim's outcome.
+- **Modify:** `src/utils/combat/playerTurn.ts` — `HealingRuntimeCtx` interface (`~:81-101`) carries the `applyHealToTarget`/`grantShieldToTarget` signatures; widen them with the optional `victim` param (Task 1). ~8 test files implement `HealingRuntimeCtx` doubles (triggers.test.ts, enemyActions.test.ts, salvationDeadRecipient.test.ts, …) — an OPTIONAL param keeps them compiling untouched.
+- **Modify:** `src/utils/combat/positionalApply.ts` — change `applyToVictim`'s typed return from `void` so its `{shieldBefore,hpDamage,barriered}` reaches the new `onVictimResolved` callback (Task 2; `~:90`,`:132-134`).
 - **Create (test):** `src/utils/combat/__tests__/perVictimLeech.test.ts` — positional standing + taken leech, covered-cell 50%, Barrier/`requiresHpDamage` per victim, own-pool application.
 - **Modify (changelog):** `src/constants/changelog.ts` — E2 is user-facing (leech now works in the battle sim).
 
-No type changes beyond the closure signatures and `takenLeeches` becoming a map.
+No type changes beyond the closure signatures, the `onVictimResolved` callback, and `takenLeeches` becoming a map.
 
 ---
 
@@ -39,13 +41,13 @@ No type changes beyond the closure signatures and `takenLeeches` becoming a map.
 
 **Files:** Modify `src/utils/combat/engine.ts:1914-1938`
 
-- [ ] **Step 1: Write the characterization test (must already PASS — proves the refactor is byte-identical)**
+- [ ] **Step 1: No RED test — this is a byte-identical refactor**
 
-Add to `perActorIncoming.test.ts` or a small new test: a non-positional healing run with a cast heal, asserting the heal target's HP/heal totals are unchanged. (This is a guard, not RED. If there's already healing coverage that exercises `applyHealToTarget`, note it and skip adding a redundant one — `leech.test.ts` + `healingGoldenParity` already cover it.)
+`leech.test.ts` + `healingGoldenParity` already exercise `applyHealToTarget`/`grantShieldToTarget` thoroughly and serve as the guard. Skip adding a redundant characterization test; the byte-identical check in Step 3 is the gate.
 
 - [ ] **Step 2: Parametrize the closures**
 
-Change `applyHealToTarget` and `grantShieldToTarget` to accept an optional `victim: CombatActor = healTarget` (or `victimId` + a resolver — pick whichever matches the surrounding code; `recipientMaxHp` already resolves by id). Inside, replace every `healTarget.currentHp`/`healTarget.shieldPool`/`recipientMaxHp(healTarget.id)`/`repairedThisRound.add(healTarget.id)` with the `victim` equivalent. Keep the default = `healTarget` so all existing call sites are unchanged. Example shape:
+Change `applyHealToTarget` and `grantShieldToTarget` (`engine.ts:1914-1938`) to accept an optional `victim: CombatActor = healTarget`. Inside, replace every `healTarget.currentHp`/`healTarget.shieldPool`/`recipientMaxHp(healTarget.id)`/`repairedThisRound.add(healTarget.id)` with the `victim` equivalent. Keep the default = `healTarget` so all existing call sites (verified: playerTurn.ts:1520/1596/1614, triggers.ts:1166/1172, engine.ts:2113/2119/3942/3951 — all pass a single arg) are unchanged. **Also widen the matching signatures in the `HealingRuntimeCtx` interface in `playerTurn.ts:~81-101`** (the optional param keeps the ~8 test-double implementers compiling untouched). Example shape:
 
 ```typescript
 applyHealToTarget: (raw, victim = healTarget) => {
@@ -74,27 +76,29 @@ Expected: all green, **zero `.snap` movement** (the default param means every cu
 
 Run: `npm run lint && npx tsc --noEmit`
 ```bash
-git add src/utils/combat/engine.ts && git commit --no-verify -m "refactor(combat): E2 T1 — parametrize heal/shield pool closures by victim (byte-identical)"
+git add src/utils/combat/engine.ts src/utils/combat/playerTurn.ts && git commit --no-verify -m "refactor(combat): E2 T1 — parametrize heal/shield pool closures by victim (byte-identical)"
 ```
 
 ---
 
-## Task 2: Surface the per-victim damage outcome on the positional apply path (byte-identical)
+## Task 2: Add a per-call `onVictimResolved` callback to `drivePositionalApply` (byte-identical)
 
-**Files:** Modify `src/utils/combat/positionalApply.ts` (`~:90`, `:132-134`), `src/utils/combat/engine.ts` (`drivePositionalApply` `~:2536`, `emitHit` `~:2574`)
+**Files:** Modify `src/utils/combat/positionalApply.ts` (`~:90`, `:132-134`), `src/utils/combat/engine.ts` (`drivePositionalApply` `~:2525-2581`)
 
-- [ ] **Step 1: Capture `applyToVictim`'s return**
+This is the SHARED hook that Tasks 3 and 5 supply per-direction leech logic to. It is intentionally a guard-only (no-RED) plumbing step — additive and unread until Tasks 3/5 wire callbacks, consistent with the E1 precedent.
 
-`applyToVictim` (= `applyIncomingToTarget`/`applyOutgoingToEnemy`) returns `{shieldBefore, hpDamage, barriered}` but `applyPositionalDamage` drops it (`positionalApply.ts:133`). Widen the per-victim hook so the engine's `emitHit`/per-victim callback receives that outcome alongside `(victim, damage, didCrit)`. Either change `applyToVictim`'s declared return type from `void` and pass it into `emitHit`, or have `emitHit` take an extra `outcome` arg. Keep it OPTIONAL/additive so no behavior changes.
+- [ ] **Step 1: Capture `applyToVictim`'s return and expose it via an optional callback**
+
+`applyToVictim` (= `applyIncomingToTarget`/`applyOutgoingToEnemy`) returns `{shieldBefore, hpDamage, barriered}` but `applyPositionalDamage` drops it (`positionalApply.ts:133`, typed `void` at `:90`). (a) Change `applyToVictim`'s declared return type so the outcome flows back. (b) Add an OPTIONAL param to `drivePositionalApply` — `onVictimResolved?(victim: CombatActor, damage: number, outcome: {shieldBefore;hpDamage;barriered}, didCrit: boolean)` — invoked per footprint victim after the hit resolves. `drivePositionalApply` is ONE helper shared by all three call sites (focus `~:3329`, team `~:3508`, enemy `~:3866`); since standing (player→enemy) and taken (enemy→player) leech need opposite logic, each call site supplies its own callback (Tasks 3/5) rather than branching inside the shared inline `emitHit`. No site supplies it in this task → fully inert.
 
 - [ ] **Step 2: Verify byte-identical**
 
 Run: `npx vitest run positionalDamage twoTeamBattle perActorIncoming && npx vitest run` then `git diff --stat -- '*.snap'`
-Expected: green, zero `.snap` movement (new data, unread).
+Expected: green, zero `.snap` movement (new optional callback, unsupplied).
 
 - [ ] **Step 3: lint + tsc + commit**
 ```bash
-git add src/utils/combat/positionalApply.ts src/utils/combat/engine.ts && git commit --no-verify -m "feat(combat): E2 T2 — surface per-victim damage outcome on positional apply (unread)"
+git add src/utils/combat/positionalApply.ts src/utils/combat/engine.ts && git commit --no-verify -m "feat(combat): E2 T2 — add per-victim onVictimResolved hook to drivePositionalApply (inert)"
 ```
 
 ---
@@ -111,7 +115,7 @@ Run: `npx vitest run perVictimLeech -t "standing"` → Expected: FAIL.
 
 - [ ] **Step 2: Implement the per-victim standing-leech proc**
 
-In the positional per-victim hook (where each footprint victim's damage is known), proc the ACTING attacker's standing leeches off THAT victim's dealt damage, applying to the leeching owner's own pool. Reuse the existing fold (`procStandingLeeches`) but route the pool application through the Task-1 parametrized closures so a `self`/owner recipient heals its OWN pool (resolve recipient id → actor). Do NOT write the cumulative `dmg()` accumulator (no double-count); leave the `if (!positional)` aggregate suppression and the non-positional `procStandingLeeches` apply behavior intact. Honor `scope` (detonation-scoped leeches do not fire on the per-victim `direct` channel — the existing `e.scope` guard handles this). Decide and document the heal-crit-gate cadence: per-victim procs draw the owner's `activeHealCritGate` once per victim (state it in a comment; the new test pins the resulting numbers).
+Wire an `onVictimResolved` callback at the focus + team call sites (player→enemy). In it, proc the ACTING attacker's standing leeches off THAT victim's dealt damage. **Write a NEW positional-only proc — do NOT modify `procStandingLeeches`** (its `rid === healTarget.id` pool-gating is load-bearing for the non-positional all-allies case, leech.test.ts:355-404, where teammates are credited but NOT pool-applied — changing it would alter non-positional behavior). The new proc may reuse the FOLD math (pct, healModifier, heal-crit draw) but does its OWN pool application: for each recipient id (`self` → the attacker/owner; `ally`/`all-allies` → resolve), look up the actor via **`runtimesById.get(rid)?.actor`** (the focus is keyed `'attacker'`, not its real id — use `runtimesById`, not `allActorsById`, for recipient resolution) and call the Task-1 parametrized `applyHealToTarget(raw, actor)` / `grantShieldToTarget(raw, actor)`. Do NOT write the cumulative `dmg()` accumulator (no double-count); leave the `if (!positional)` aggregate suppression AND `procStandingLeeches` itself untouched. Honor `scope` (detonation-scoped leeches don't fire on the per-victim `direct` channel). Document the heal-crit-gate cadence: per-victim procs draw the owner's `activeHealCritGate` once per victim (comment it; the new test pins the numbers).
 
 Run: `npx vitest run perVictimLeech -t "standing"` → Expected: PASS.
 
@@ -157,7 +161,7 @@ Run: `npx vitest run perVictimLeech -t "taken"` → Expected: FAIL.
 
 - [ ] **Step 2: Implement per-victim taken leech**
 
-In the positional enemy branch, for each player victim hit (with its per-hit `{shieldBefore, hpDamage, barriered}` from Task 2), proc that victim's own taken-leeches (`takenLeechesByOwner.get(victim.id)`) off the damage it took, applying to the victim's OWN pool via the Task-1 closures. The Barrier carve-out (`!barriered`) and `requiresHpDamage` (`shieldBefore > 0 && hpDamage > 0`) must be evaluated **per victim**. Leave the `!enemyPositional` non-positional block fully intact (it stays the path for non-positional fixtures). The positional branch's per-victim leech is the new behavior.
+Wire an `onVictimResolved` callback at the enemy call site (enemy→player). For each player victim hit (with its per-hit `{shieldBefore, hpDamage, barriered}` from Task 2's callback), proc that victim's own taken-leeches (`takenLeechesByOwner.get(victim.id)`) off the damage it took, applying to the victim's OWN pool via the Task-1 closures (`applyHealToTarget(raw, victim)` / `grantShieldToTarget(raw, victim)`). The Barrier carve-out (skip if `barriered`) and `requiresHpDamage` (`shieldBefore > 0 && hpDamage > 0`) are evaluated **per victim** — matching the non-positional block's semantics (`engine.ts:3925`/`3929`). Leave the `!enemyPositional` non-positional block fully intact (it stays the path for non-positional fixtures). The positional branch's per-victim leech is the new behavior.
 
 Run: `npx vitest run perVictimLeech -t "taken"` → Expected: PASS.
 
