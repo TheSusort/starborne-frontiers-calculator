@@ -157,6 +157,10 @@ export interface StatusEngine {
      *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     removeTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
+     *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
+     *  the number actually removed. Unknown id → no-op (returns 0). */
+    cleanse(actorId: string, count: number | 'all'): number;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -262,6 +266,10 @@ interface BuffState {
      *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
      *  identity) and for timed statuses whose registered status omitted casterId. */
     casterId?: string;
+    /** Monotonic application order, newest = largest. Stamped at every write/refresh (both
+     *  the initial create and any family-rule refresh that re-sets the same key). Drives
+     *  cleanse/purge newest-applied-first removal ordering. */
+    appliedSeq: number;
 }
 
 interface AccumulatingState {
@@ -276,6 +284,10 @@ interface AccumulatingState {
     /** The caster of an ability-sourced accumulating status — its gate evaluates against the
      *  caster's ctx (Task 5). Undefined for scheduled accum entries (no conditions → no gate). */
     casterId?: string;
+    /** Application order, stamped at the 0→positive stack transition (when the status first
+     *  becomes active). Undefined while seeded-but-inert (stacks === 0). Drives cleanse/purge
+     *  newest-applied-first removal ordering for accumulating statuses. */
+    appliedSeq?: number;
 }
 
 /** Persistent stacking status state (game-verified 2026-06-05). These statuses land ONCE at
@@ -555,6 +567,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     let lastRound = 0;
 
+    // Monotonic application sequence for newest-first cleanse/purge ordering.
+    // Incremented at every BuffState write (create + refresh) and at the 0→positive
+    // stack transition for AccumulatingState entries.
+    let appliedSeqCounter = 0;
+    const nextAppliedSeq = (): number => ++appliedSeqCounter;
+
     // beginRound: advance the round counter (strictly sequential) and apply the
     // per-round accumulating increment. Per-round stacks tick once at round top,
     // independent of any source firing. Called before any turns — preserving the
@@ -573,10 +591,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
                 if (state.trigger !== 'per-round') continue;
+                const before = state.stacks;
                 state.stacks =
                     state.maxStacks !== undefined
                         ? Math.min(state.stacks + state.rate, state.maxStacks)
                         : state.stacks + state.rate;
+                // Stamp appliedSeq at the 0→positive transition (first time the status
+                // becomes active). Later stack gains do not re-stamp — the first-active
+                // order is what cleanse/purge needs for newest-first ordering.
+                if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
             }
         };
         // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
@@ -616,6 +639,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             buffName: buff.buffName,
             turnsRemaining: buff.skillDuration,
             tier,
+            appliedSeq: nextAppliedSeq(),
         });
     };
 
@@ -652,10 +676,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                         (state.trigger === 'per-active' && slot === 'active') ||
                         (state.trigger === 'per-charge' && slot === 'charge');
                     if (fires) {
+                        const before = state.stacks;
                         state.stacks =
                             state.maxStacks !== undefined
                                 ? Math.min(state.stacks + state.rate, state.maxStacks)
                                 : state.stacks + state.rate;
+                        // Stamp appliedSeq at the 0→positive transition — identical rule to
+                        // incrementPerRound. Later stack gains do not re-stamp.
+                        if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
                     }
                 }
             };
@@ -897,6 +925,63 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         map.delete(deriveFamilyKey(buffName).familyKey);
     };
 
+    /** Remove up to `count` removable statuses for `actorId` on the chosen side, NEWEST-APPLIED
+     *  FIRST (highest `appliedSeq` removed first).
+     *
+     *  Side mapping:
+     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores (cleanse).
+     *  - `'buffs'`   → the actor's player-side self stores (purge, wired in C2).
+     *
+     *  Skips:
+     *  - entries whose `buffName` is in `UNREMOVABLE_STATUSES`.
+     *  - timed entries with `turnsRemaining === 'permanent'` (belt-and-braces guard; in
+     *    practice 'permanent'-sentinel entries live in the separate persistent maps, not here).
+     *  - accumulating entries that are still inert (`stacks <= 0` or `appliedSeq` not yet stamped).
+     *
+     *  NOT gathered (unremovable by construction):
+     *  - persistent-stacking maps (`persistentSelfMaps` / `persistentEnemyMaps`) — never visited.
+     *
+     *  NOT in these maps (re-derive each round, no stored entry to remove):
+     *  - always-active / aura statuses.
+     *
+     *  `count === 'all'` removes every removable candidate.
+     *  Unknown actor id → lazy-empty maps → no-op (returns 0).
+     *  Returns the number of statuses actually removed. */
+    const removeNewestFirst = (
+        actorId: string,
+        side: 'debuffs' | 'buffs',
+        count: number | 'all'
+    ): number => {
+        const timedMap = side === 'debuffs' ? enemyMaps.get(actorId) : selfMaps.get(actorId);
+        const accumMap =
+            side === 'debuffs' ? accumEnemyMaps.get(actorId) : accumSelfMaps.get(actorId);
+        const candidates: { seq: number; remove: () => void }[] = [];
+        if (timedMap) {
+            for (const [key, s] of timedMap) {
+                if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+                candidates.push({ seq: s.appliedSeq, remove: () => timedMap.delete(key) });
+            }
+        }
+        if (accumMap) {
+            for (const [key, s] of accumMap) {
+                if (s.stacks <= 0 || s.appliedSeq === undefined) continue;
+                // Accumulating statuses never expire by time → name-gate only.
+                if (isUnremovable(s.buffName, 0)) continue;
+                candidates.push({ seq: s.appliedSeq, remove: () => accumMap.delete(key) });
+            }
+        }
+        candidates.sort((a, b) => b.seq - a.seq);
+        const limit = count === 'all' ? candidates.length : Math.min(count, candidates.length);
+        for (let i = 0; i < limit; i++) candidates[i].remove();
+        return limit;
+    };
+
+    /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
+     *  first (see removeNewestFirst). `'all'` removes every removable debuff. Returns the number
+     *  actually removed. Unknown id → no-op (returns 0). */
+    const cleanse = (actorId: string, count: number | 'all'): number =>
+        removeNewestFirst(actorId, 'debuffs', count);
+
     // --- Ability-status API (Task 6) ---
 
     const registerAbilityStatuses = (
@@ -996,6 +1081,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             tier,
             payload: status.payload,
             casterId: status.casterId,
+            appliedSeq: nextAppliedSeq(),
         });
     };
 
@@ -1104,6 +1190,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,
+        cleanse,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,
