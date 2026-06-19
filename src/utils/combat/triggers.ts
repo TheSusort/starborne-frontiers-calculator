@@ -794,6 +794,24 @@ function payloadFromConfig(cfg: {
 }
 
 /**
+ * Resolve the recipient id list for a reactive heal/cleanse/purge intent.
+ * 'ally'-target: prefers eventCtx.damagedAllyId (the ally that was hit), falls
+ * back to fallbackTargetId (the heal target). 'all-allies': fans out to every
+ * same-side id (ctx.playerIds). Anything else (self, enemy, …): the owner only.
+ */
+export function reactiveRecipients(
+    intent: Intent,
+    ctx: IntentExecContext,
+    fallbackTargetId: string
+): string[] {
+    return intent.ability.target === 'ally'
+        ? [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
+        : intent.ability.target === 'all-allies'
+          ? ctx.playerIds
+          : [intent.ownerId];
+}
+
+/**
  * Execute one drained follow-up intent against the engine context. Dispatches on
  * the ability's config type (the ONLY state mutator in the trigger machinery):
  *  - charge → cap-bumped attacker charges (no-op when chargeCount === 0).
@@ -1066,13 +1084,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
-        // C2b: reactive purge will add a 3rd copy of this resolver — extract a shared reactiveRecipients(intent, ctx) helper then.
-        const recipients =
-            intent.ability.target === 'ally'
-                ? [intent.eventCtx?.damagedAllyId ?? healing.targetId]
-                : intent.ability.target === 'all-allies'
-                  ? ctx.playerIds
-                  : [intent.ownerId];
+        const recipients = reactiveRecipients(intent, ctx, healing.targetId);
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1123,12 +1135,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reactive heal branch's recipient resolution: an 'ally'-target cleanse prefers the
         // eventCtx.damagedAllyId (an ally-damage reaction cleanses THAT ally) over the heal target;
         // 'all-allies' fans out to every same-side id; self → the owner.
-        const recipients =
-            intent.ability.target === 'ally'
-                ? [intent.eventCtx?.damagedAllyId ?? ctx.healing.targetId]
-                : intent.ability.target === 'all-allies'
-                  ? ctx.playerIds
-                  : [intent.ownerId];
+        const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);
         let removed = 0;
         for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, cfg.count);
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
