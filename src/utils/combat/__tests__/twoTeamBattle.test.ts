@@ -1098,3 +1098,32 @@ describe('Two-team battle — per-target debuff landing resolves against the ACT
         expect(landed).toBe(3);
     });
 });
+
+describe('E1 — symmetric incoming surface: player→enemy hits record per-victim intake', () => {
+    it('an enemy struck by a player attack gets a perActorIncoming bucket with incoming > 0 (non-vacuous)', () => {
+        idc = 0;
+        // Players immortal so the battle runs; enemies tanky enough to survive and keep being hit.
+        const { result } = run(
+            battle({
+                playerHp: 1_000_000_000,
+                enemyHp: 1_000_000_000,
+                playerAttack: 5000,
+                enemyAttack: 5000,
+            })
+        );
+
+        const rounds = result.healing!.rounds;
+
+        // At least one enemy victim has an intake bucket with positive incoming.
+        const enemyBucketRounds = rounds.filter((rd) =>
+            [...ENEMY_IDS].some((id) => (rd.perActorIncoming.get(id)?.incoming ?? 0) > 0)
+        );
+        expect(enemyBucketRounds.length).toBeGreaterThan(0);
+
+        // The player side is still tracked too (symmetry — enemy→player intake unaffected).
+        const playerBucketRounds = rounds.filter((rd) =>
+            [...PLAYER_IDS].some((id) => rd.perActorIncoming.has(id))
+        );
+        expect(playerBucketRounds.length).toBeGreaterThan(0);
+    });
+});
