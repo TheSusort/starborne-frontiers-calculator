@@ -90,26 +90,32 @@ cleanse reactors (`on-enemy-cleansed`) are caster-scoped, but `on-ally-purged` (
 
 ### 4.3 Reactive purge executor
 
-Replace the not-simulated skip at `triggers.ts:1158` with a `cfg.type === 'purge'` branch:
+Replace the not-simulated skip at `triggers.ts ~:1174` (the `// Any other type (purge/control/...) →
+skip` tail, NOT `:1158` which is mid-`damage`-branch) with a `cfg.type === 'purge'` branch:
 
 - Resolve the target: `eventCtx.counterTargetId` if present (Iridium/Faust route the attacker/killer
-  here, reusing the existing counter-infliction routing convention — `triggers.ts:936-939`); else the
+  here, reusing the existing counter-infliction routing convention — `triggers.ts ~:939-948`); else the
   turn's enemy (`ctx.enemyId`); the `enemy-most-buffs` axis (Rhodium) resolves via §5.3.
-- `ctx.purge(targetId, cfg.count)` — a new engine delegate on `IntentExecContext`, mirroring
-  `ctx.cleanse` / `creditReactiveDamage` / `grantExtraAction`, supplied where `statusEngine` is in scope.
-  Returns the removed count.
-- Emit `purge-performed` (§4.2) unless `intent.fromPurgeEvent`.
+- **`ctx.statusEngine.purge(targetId, cfg.count)` — called DIRECTLY** (returns the removed count). There
+  is **no** `ctx.cleanse` delegate to mirror: the reactive cleanse branch already calls
+  `ctx.statusEngine.cleanse(rid, count)` directly (`triggers.ts ~:1133`), because `statusEngine` is in
+  `IntentExecContext` scope. Do NOT add a redundant `ctx.purge` delegate. (`grantExtraAction` IS a real
+  delegate, but cleanse/purge are not — don't conflate them.)
+- Emit `purge-performed` (§4.2) unless `intent.eventCtx.fromPurgeEvent` (the depth-guard carrier — §4.2,
+  alongside `counterTargetId`/`damagedAllyId`).
 
 ### 4.4 The two new triggers
 
-Add `on-enemy-purged` and `on-ally-purged` to the `AbilityTrigger` union and `LIVE_TRIGGERS`
-(`abilities.ts`). Register in `registerReactiveTrigger` (`triggers.ts ~:360`, the `bus.on` switch):
+Add `on-enemy-purged` and `on-ally-purged` to the `AbilityTrigger` union (`src/types/abilities.ts:32-58`)
+and `LIVE_TRIGGERS` (`:68-87`). Register in `registerReactiveTrigger` (the `bus.on` switch,
+`triggers.ts ~:229-409`):
 
 - **`on-enemy-purged`** — `bus.on('purge-performed', e => { if (e.casterId === ownerId) enqueue(intent with fromPurgeEvent) })`.
   Self-scoped on the caster (THIS unit did the purging). Sefuba.
-- **`on-ally-purged`** — `bus.on('purge-performed', e => { if (sameSide(e.targetId) && e.targetId !== ownerId) enqueue({...intent, eventCtx:{ damagedAllyId: e.targetId }, fromPurgeEvent}) })`.
-  Victim-scoped (a buff was purged from MY ally). `sameSide` = `!isOpposing` (the inverse of the existing
-  opposing-scope helper). Salvation.
+- **`on-ally-purged`** — `bus.on('purge-performed', e => { if (isSameSideAlly(e.targetId, ownerId)) enqueue({...intent, eventCtx:{ damagedAllyId: e.targetId, fromPurgeEvent: true }}) })`.
+  Victim-scoped (a buff was purged from MY ally). **Reuse the existing `isSameSideAlly(actorId, ownerId)`
+  helper (`triggers.ts:213-214` = `!isOpposing(actorId) && actorId !== ownerId`) verbatim** — it is
+  exactly the desired scope; no new helper. Salvation.
 
 Both reactions are HEAL abilities (Sefuba self-heal, Salvation ally-heal) plus, for Sefuba p2, a PURGE
 ability. The heals ride the existing reactive heal branch (`triggers.ts:1064`); the purge rides §4.3.
@@ -154,24 +160,44 @@ emitted as a reaction with `on-enemy-purged`, NOT here — §4.4).
   (`triggers.ts:312`), and §4.3 resolves the purge target from `counterTargetId`. No new machinery.
 - **Faust** — passive `on-destroyed` (self-scoped) → `{type:'purge', count:2|3, trigger:'on-destroyed'}`,
   gated by *killed by direct damage*, targeting the killer.
-  - `ship-destroyed` is `{actorId, round}` today (`events.ts:143`) — add `killerId?: string` and
-    `byDirectDamage?: boolean`. The engine sets both at the destruction emit site (the killer = the
-    attacker of the lethal direct hit; DoT/detonation kills set `byDirectDamage:false`, mirroring B3's
-    direct-vs-DoT channel discrimination).
+  - **The killer is NOT known at the destruction emit site today — this is materially more plumbing than
+    "the engine just sets it."** `ship-destroyed` is emitted by the shared helper `recordDestroyed(actor,
+    round, bus)` (`state.ts:177-181`), which has **no killer and no cause parameter**. Its callers don't
+    thread the attacker: the direct-damage path `engine.ts ~:2360` is inside `applyVictimDamage`/
+    `applyIncomingToTarget` whose signature `(damage, victim, sink)` never receives the attacker id (the
+    acting enemy IS in closure scope at the per-attack caller `engine.ts ~:2603` but is not threaded into
+    the intake closure); the DoT-tick batch path `engine.ts ~:3129` aggregates multiple DoT appliers with
+    **no single killer**.
+  - **Required work (concrete C2b-2 item):** add `killerId?: string` + `byDirectDamage?: boolean` to the
+    `ship-destroyed` event AND to `recordDestroyed`'s signature; thread the lethal attacker id + a
+    direct-vs-DoT flag through `applyVictimDamage` → `recordDestroyed` across all callers. The direct path
+    sets `killerId=<attacker>, byDirectDamage=true`; the DoT-batch path sets `byDirectDamage=false` with
+    NO killer (the `byDirectDamage:false` branch never reads killer). This is distinct from B3's channel
+    discrimination (B3 discriminates *credited damage channels*, a different code path from the
+    destruction emit). **Because this threading is the heaviest single item in C2b-2, sequence Faust LAST
+    within C2b-2** (Iridium + Rhodium first), or consider splitting Faust into its own task.
   - The `on-destroyed` listener routes `eventCtx.counterTargetId = e.killerId` and only enqueues when
     `e.byDirectDamage`. (Faust's own `on-destroyed` heal/buff reactions are unaffected — they don't read
-    the new fields.)
+    the new fields; the added event fields are optional.)
 
 ### 5.3 Rhodium — end-of-round + most-buffs
 
 - **`round-ended` event** (`events.ts`) `{ round }`, mirroring `round-started` (`:31`). Emit it at the
-  END of the round loop in `engine.ts` (the symmetric bookend of the `round-started` emit at `:2987`),
-  after all turns + post-round decrements, before the round increments.
-- **`end-of-round` trigger** (`abilities.ts` union + `LIVE_TRIGGERS`), registered
+  TAIL of the round loop in `engine.ts` (the loop closes ~`:4178`; `round-started` is at the loop top
+  `:2987`, AFTER `beginRound`). **Pin the exact order (ordering hazard):** the round tail already runs a
+  post-round enemy-death `recordDestroyed` + `drainIntents()` (`engine.ts ~:4061-4063`) and the
+  `roundData.push` / healing-mode push (`~:4066-4177`). Emit `round-ended` **AFTER the post-round death
+  drain** so a Rhodium `end-of-round` purge sees post-death state, and order it relative to extra-action
+  grants. Drain the `round-ended` intents at that point (an explicit `drainIntents()` after the emit, as
+  `round-started` does at `:2988`). Confirm at plan time the exact statement the emit precedes.
+- **`end-of-round` trigger** (`src/types/abilities.ts` union + `LIVE_TRIGGERS`), registered
   `bus.on('round-ended', () => enqueue(intent))` (global, like `start-of-round`).
-- **`enemy-most-buffs` target axis** — a new `AbilityTarget` value. §4.3 resolves it by scanning opposing
-  actors and picking the one with the highest removable-buff count (`selfMaps`/`accumSelfMaps` size,
-  ties → deterministic by actor-id order for goldens). New engine helper `enemyWithMostBuffs(ownerId)`.
+- **`enemy-most-buffs` target axis** — a genuinely new `AbilityTarget` token (today
+  `'self'|'ally'|'all-allies'|'enemy'|'all-enemies'`, `src/types/abilities.ts:24`). Adding it forces
+  every exhaustive `AbilityTarget` switch/consumer to handle it (tsc will flag; plan note). §4.3 resolves
+  it by scanning opposing actors and picking the one with the highest removable-buff count
+  (`selfMaps`/`accumSelfMaps` size, ties → deterministic by actor-id order for goldens). New engine
+  helper `enemyWithMostBuffs(ownerId)`.
 - **Parser** — "at the end of the round, … purges N buffs from the enemy with the most buffs" → emit
   `{type:'purge', count:N, trigger:'end-of-round', target:'enemy-most-buffs'}`.
 
@@ -188,41 +214,52 @@ purge" stays deferred regardless — §7.)
 
 ### 6.1 New `ConditionSubject`
 
-Add `'target-repaired-this-round'` to the `ConditionSubject` union (`abilities.ts`). Binary gate.
+Add `'target-repaired-this-round'` to the `ConditionSubject` union (`src/types/abilities.ts:89-118`).
+Binary gate.
 
 ### 6.2 Engine tracking
 
-Track a per-actor "repaired this round" flag. Set it true when a repair LANDS on an actor (the heal
-application sites — `applyHealToTarget` / `grantShieldToTarget` and the reactive heal credit, wherever a
-positive heal reaches a specific actor id). Clear all flags at the round boundary (the `round-started` /
-round-loop top). "Target" = the acting actor's resolved opposing target (`targetId`), so the gate reads
-"was *my target* repaired this round" — matches the skill text. Threaded into `ConditionContext` as
-`targetRepairedThisRound?: boolean` (defaults false in DPS mode — a dummy enemy is never repaired →
-byte-identical).
+Track a per-actor "repaired this round" flag, set true when a positive repair reaches a specific actor
+id. **There are (at least) TWO distinct heal-application site families — both must set the flag or a
+Nayra gate silently under-fires:** (1) the **cast-path** heal block in `playerTurn.ts` (the healing-mode
+block, `applyHealToTarget` / `grantShieldToTarget`), and (2) the **reactive** heal branch in
+`triggers.ts ~:1104/:1110`. Enumerate both at plan time. Clear all flags at the round boundary (at/just
+before the `round-started` emit, `engine.ts:2987`). "Target" = the acting actor's resolved opposing
+target (`targetId`), so the gate reads "was *my target* repaired this round" — matches the skill text.
+Threaded into `ConditionContext` as `targetRepairedThisRound?: boolean`, mirroring the established
+healing-mode-only `targetHpPct?` / `hpSubject:'target'` precedent (`evaluateConditions.ts:20`, `:87-93`).
+Defaults false in DPS mode — a dummy enemy is never repaired → byte-identical.
 
 ### 6.3 Parser + gate
 
-- Parser: detect "if the target was repaired this round" (and the equivalent phrasings) → a
-  `{ subject: 'target-repaired-this-round', derivable: false }` condition attached to the abilities in
-  that sentence (mirrors the existing condition-clause scoping).
+- Parser: detect "if the target was repaired this round" (and equivalent phrasings) → a
+  `{ subject: 'target-repaired-this-round', derivable: false }` condition. **Hook it into the
+  `Ability`-shape condition layer (`detectGrantConditions`, tested at `skillTextParser.test.ts:1724/1736`),
+  NOT the flat `parseSkillEffects` layer** (the existing line-618 test asserts the flat shape, which has
+  no `conditions` field — that test is evidence the phrase is currently dropped, but it is NOT where the
+  new condition attaches). Pin a new `detectGrantConditions`-layer test for the gated shape.
 - `evaluateConditions.ts`: evaluate the subject against `ctx.targetRepairedThisRound`.
-- The C2a on-cast purge fire (`playerTurn.ts ~:1378`) currently fires unconditionally; gate it with
-  `conditionsMet(ab.conditions, ctx)` so Nayra's `count:'all'` purge fires ONLY when the target was
-  repaired this round. This removes the dangerous over-removal.
+- The C2a on-cast purge fire (`playerTurn.ts:1382-1390`) currently fires unconditionally; gate it with
+  `conditionsMet(ab.conditions, ctx)` (the `ConditionContext ctx` is in scope there via `buildRoundContext`,
+  `playerTurn.ts ~:1131`) so Nayra's `count:'all'` purge fires ONLY when the target was repaired this
+  round. This removes the dangerous over-removal.
 
 ### 6.4 Churn note (the parser change ripples)
 
-Detecting "if the target was repaired this round" attaches the new condition to **every** ability in
-Nayra's sentences — including Nayra's *active* Stasis-inflict and Defense-Down debuffs ("If the target
-was repaired this round, inflict Stasis"), which currently fire unconditionally (verified by an existing
-parser test asserting the bare-inflict result with no gate). This is MORE correct, but it changes those
-abilities' shape (now carry a condition). **Audit:** no Nayra fixture exists yet (per the C2a flag), so
-production goldens should be byte-identical; the only churn is the parser unit test that asserts the
-now-gated shape — update it deliberately, and confirm the engine still folds those debuffs in DPS mode
-(where `targetRepairedThisRound` defaults false → would now NOT fire). **Open at plan time:** confirm DPS
-goldens for any non-Nayra ship that happens to contain "repaired this round" phrasing don't shift; if the
-default-false gate would suppress an effect that previously folded, that is a real behavior change to
-audit, not a free refactor.
+Detecting "if the target was repaired this round" in the `Ability` layer attaches the new condition to
+the abilities in Nayra's sentences — including Nayra's *active* Stasis-inflict and Crit-Rate-Down debuffs
+("If the target was repaired this round, inflict Stasis") and the charged Exposed-inflict, which currently
+fire unconditionally. This is MORE correct, but it changes those abilities' shape (now carry a condition).
+The CSV ground truth (`docs/ship-skills.csv:97`): active "…If the target was repaired this round, inflict
+Stasis for 1 turn"; charged "…If the target was repaired this round, inflict Exposed for 1 turn **and
+purge all buffs from the enemy**." So the condition correctly scopes the same-sentence Stasis/Exposed
+debuffs AND the purge. **Audit:** no Nayra fixture exists yet (per the C2a flag), so production goldens
+should be byte-identical; the churn lands in the `detectGrantConditions`-layer parser test (the flat
+`parseSkillEffects` line-618 test carries no `conditions` field and need not change). **Open at plan
+time:** the default-false gate now suppresses these inflicts in DPS mode (where `targetRepairedThisRound`
+defaults false). Confirm no non-Nayra ship containing "repaired this round" phrasing has a DPS golden that
+shifts; if the default-false gate would suppress an effect that previously folded unconditionally, that is
+a real behavior change to audit, not a free refactor.
 
 ## 7. Out of scope / deferred
 
@@ -270,13 +307,17 @@ type errors (B3 lesson).
 - `purge()` wrapper + `removeNewestFirst(actorId,'buffs',count)` exist (C2a/C1, `statusEngine.ts`).
 - On-cast purge fire site: `playerTurn.ts ~:1378` (C2a, after `gatedSkill` ~:1149, side-symmetric off
   `targetId`).
-- Reactive executor skip to replace: `triggers.ts:1158`. Reactive heal branch (recipient resolver):
-  `:1064`. Reactive cleanse branch: `:1122`. `reactiveRecipients` breadcrumb: `~:1069`.
-- Trigger registration switch: `triggers.ts ~:360`. `counterTargetId` capture (on-attacked): `:312`;
-  counter-infliction routing: `:936-939`. `isOpposing` helper in scope.
-- `cleanse-performed` event: `events.ts:107`; `ship-destroyed`: `:143`; `round-started`: `:31`.
-- `round-started` emit: `engine.ts:2987`. `AbilityTrigger` union + `LIVE_TRIGGERS`: `abilities.ts:43-90`.
-  `ConditionSubject` union: `abilities.ts:89`. `ConditionContext`: `evaluateConditions.ts:4`.
+- Reactive executor skip to replace: `triggers.ts ~:1174` (the `// Any other type → skip` tail; `:1158`
+  is mid-`damage`-branch). Reactive heal branch (recipient resolver): `~:1070`. Reactive cleanse branch:
+  `~:1119-1133` (direct `ctx.statusEngine.cleanse`). `reactiveRecipients` breadcrumb: `:1069` (exact).
+- Trigger registration switch cases: `triggers.ts ~:229-409`. `counterTargetId` capture (on-attacked):
+  `:312`; counter-infliction landing: `~:939-948`. `isOpposing` + `isSameSideAlly` (`:213-214`) in scope.
+- `cleanse-performed` event (no `targetId`): `events.ts:107`; `ship-destroyed` `{actorId, round}`: `:143`
+  (emitted via `recordDestroyed`, `state.ts:177-181`); `round-started`: `:31`.
+- `round-started` emit: `engine.ts:2987`; round loop closes `~:4178`; post-round death drain `~:4061-4063`.
+  `AbilityTrigger` union + `LIVE_TRIGGERS`: `src/types/abilities.ts:32-58` / `:68-87`. `AbilityTarget`:
+  `:24`. `ConditionSubject`: `:89-118`. `ConditionContext` (`targetHpPct`/`hpSubject:'target'` precedent):
+  `evaluateConditions.ts:4`, `:20`, `:87-93`.
 - Purge emit block (C2a, slot-gated): `buildShipAbilities.ts ~:1045`. Cleanse trigger detection
-  (`detectCritRepairTrigger`): `buildShipAbilities.ts:1027`.
-- `NOT_SIMULATED_TYPES` (purge already removed by C2a): `simCoverage.ts:16`.
+  (`detectCritRepairTrigger`): `buildShipAbilities.ts:1027`. Nayra CSV: `docs/ship-skills.csv:97`.
+- `NOT_SIMULATED_TYPES = new Set(['control'])`: `simCoverage.ts:17` (purge already removed by C2a).
