@@ -151,8 +151,12 @@ export type CombatEvent =
      *     enemy HP% changes between rounds. The integer-vs-exact asymmetry is intended. */
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     /** Emitted once per actor when its HP first reaches 0. `actorId` may be any
-     *  participating actor: 'attacker', a team actor id, or 'enemy'. */
-    | { type: 'ship-destroyed'; actorId: string; round: number }
+     *  participating actor: 'attacker', a team actor id, or 'enemy'. `killerId`/
+     *  `byDirectDamage` (C2b-2 Faust): the lethal attacker and whether the kill was a
+     *  DIRECT hit (vs a DoT-tick batch, which has no single killer → byDirectDamage:false,
+     *  killerId undefined). Optional — only Faust's on-destroyed purge reads them; all other
+     *  listeners ignore them (backward-compatible). */
+    | { type: 'ship-destroyed'; actorId: string; round: number; killerId?: string; byDirectDamage?: boolean }
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | { type: 'cheat-death-activated'; actorId: string; round: number }

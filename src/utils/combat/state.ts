@@ -174,10 +174,16 @@ export function createActor(
  *  and emit a single `ship-destroyed` for it. Idempotent — repeat calls are no-ops, so
  *  the "set once" guard doubles as the single-emit guard. Callers floor `currentHp` to 0
  *  themselves; this helper only owns the destroyed-round bookkeeping + the emission. */
-export function recordDestroyed(actor: CombatActor, round: number, bus: CombatEventBus): void {
+export function recordDestroyed(
+    actor: CombatActor,
+    round: number,
+    bus: CombatEventBus,
+    killerId?: string,
+    byDirectDamage?: boolean
+): void {
     if (actor.destroyedRound !== undefined) return;
     actor.destroyedRound = round;
-    bus.emit({ type: 'ship-destroyed', actorId: actor.id, round });
+    bus.emit({ type: 'ship-destroyed', actorId: actor.id, round, killerId, byDirectDamage });
 }
 
 /** Turn meter an actor must reach to act (docs/combat-system.md section 1). */

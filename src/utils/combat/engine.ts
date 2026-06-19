@@ -2115,6 +2115,14 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
+    // C2b-2 T5: the id of the actor whose turn is CURRENTLY executing. Set once at the top of
+    // each actor's turn (after the dead-actor skips, before any damage is applied), so the
+    // DIRECT-damage wrappers can stamp the lethal attacker onto ship-destroyed (Faust reads it
+    // in Task 6). NOT used by the DoT-tick batch path (no single killer → byDirectDamage:false).
+    // Engine-scope (declared once) but rewritten every turn; the applyVictimDamage closures are
+    // rebuilt per round and capture it by reference.
+    let actingActorId: string | undefined;
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -2268,7 +2276,12 @@ export function runCombat(input: CombatEngineInput): {
         const applyVictimDamage = (
             damage: number,
             victim: CombatActor,
-            sink: DamageAccountingSink
+            sink: DamageAccountingSink,
+            // C2b-2 T5: optional kill attribution stamped onto ship-destroyed. Direct-damage
+            // wrappers pass { killerId: actingActorId, byDirectDamage: true }; the DoT-tick batch
+            // passes { byDirectDamage: false } (no single killer). No consumer reads these yet
+            // (Faust, Task 6), so production stays byte-identical.
+            cause?: { killerId?: string; byDirectDamage?: boolean }
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
             sink.addIncoming(damage, victim.id);
             // Capture the pre-drain HP + the target's current effective max HP for the
@@ -2359,7 +2372,7 @@ export function runCombat(input: CombatEngineInput): {
                     // destroyedRound field). The healing result reads the destroyed round back
                     // off the heal target's runtime `destroyedRound` field at the result site —
                     // no side-specific scalar write is needed here.
-                    recordDestroyed(victim, r, bus);
+                    recordDestroyed(victim, r, bus, cause?.killerId, cause?.byDirectDamage);
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -2399,9 +2412,16 @@ export function runCombat(input: CombatEngineInput): {
         };
         const applyIncomingToTarget = (
             damage: number,
-            victim: CombatActor = healTarget!
+            victim: CombatActor = healTarget!,
+            // C2b-2 T5: defaults to the DIRECT-damage attribution (the acting actor landed this
+            // hit). The DoT-tick batch caller overrides with { byDirectDamage: false } — a DoT
+            // batch is an aggregate of multiple appliers with NO single killer.
+            cause: { killerId?: string; byDirectDamage?: boolean } = {
+                killerId: actingActorId,
+                byDirectDamage: true,
+            }
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
-            applyVictimDamage(damage, victim, playerSink);
+            applyVictimDamage(damage, victim, playerSink, cause);
         // Player→enemy intake (Phase 4 PR1, Task 3) — the symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim still runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path (enemies
@@ -2420,7 +2440,11 @@ export function runCombat(input: CombatEngineInput): {
             damage: number,
             enemyVictim: CombatActor
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
-            applyVictimDamage(damage, enemyVictim, enemySink);
+            // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
+            applyVictimDamage(damage, enemyVictim, enemySink, {
+                killerId: actingActorId,
+                byDirectDamage: true,
+            });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
         // first round it is built is sufficient. Inert in production (the field is never set).
@@ -3098,6 +3122,15 @@ export function runCombat(input: CombatEngineInput): {
                     continue;
                 }
 
+                // C2b-2 T5: stamp the acting actor as the prospective lethal attacker BEFORE its
+                // damage is applied. Every DIRECT-damage path this turn (focus/team→enemy via
+                // applyOutgoingToEnemy, enemy→player via applyIncomingToTarget, positional apply,
+                // the non-positional firing hit) routes through the wrappers that read this, so a
+                // kill they cause is attributed here. The DoT-tick batch (heal-target turn-start)
+                // is the one intake that runs in this same turn yet passes byDirectDamage:false,
+                // so it never uses this value as a killer.
+                actingActorId = actor.id;
+
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
 
                 // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
@@ -3148,7 +3181,11 @@ export function runCombat(input: CombatEngineInput): {
                         },
                     });
                     if (tankDotDamage > 0) {
-                        applyIncomingToTarget(tankDotDamage);
+                        // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
+                        // single killer → byDirectDamage:false, killerId undefined (overrides the
+                        // wrapper's direct-damage default). A defaulted true would wrongly tag a
+                        // DoT kill as a direct hit (Faust, Task 6, distinguishes them).
+                        applyIncomingToTarget(tankDotDamage, healTarget, { byDirectDamage: false });
                     }
                     // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
                     // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through

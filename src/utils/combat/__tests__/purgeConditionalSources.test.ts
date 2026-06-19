@@ -639,3 +639,127 @@ describe('C2b-2 T4 Integration: Rhodium end-of-round most-buffs purge', () => {
         expect(eorPurge!.targetId).toBe('enemy-a');
     });
 });
+
+// =============================================================================
+// C2b-2 Task 5: ship-destroyed carries killerId + byDirectDamage.
+//
+// The destruction path now threads the lethal attacker id + a direct-vs-DoT cause
+// flag onto ship-destroyed (Faust, Task 6, reads them). The fields are OPTIONAL with
+// NO production consumer yet, so production is byte-identical — but a mis-set flag is
+// invisible to the goldens (no consumer compares them), so these tests assert the two
+// paths directly:
+//   - DIRECT kill (enemy basic attack lands the lethal hit on the heal target) →
+//     killerId = the acting attacker, byDirectDamage: true.
+//   - DoT-tick kill (corrosion ticks at the tank's turn-start, no single killer) →
+//     byDirectDamage: false, killerId undefined.
+//
+// Reuses a focus-IS-heal-target healing harness (focus does nothing; the only intake
+// is the enemy). `actingActorId` is stamped at the top of the acting actor's turn, so
+// the enemy's hit attributes the kill to the enemy; the DoT batch (which runs at the
+// TANK's turn-start, where actingActorId == the tank) explicitly passes
+// byDirectDamage:false so the tank is NOT recorded as its own killer.
+// =============================================================================
+
+describe('C2b-2 T5: ship-destroyed killerId + byDirectDamage', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    /** A manual flat enemy: one synthesized basic attack, no skills. */
+    const manualEnemy = (
+        id: string,
+        attack: number,
+        speed = 50,
+        extra: Partial<EnemyAttacker> = {}
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, speed },
+        chargeCount: 0,
+        startCharged: false,
+        ...extra,
+    });
+
+    /** Focus IS the heal target; it does nothing damaging so the only HP-intake is
+     *  the enemy attack / DoT tick. defence 0 → intake = raw damage. */
+    const T5_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 10_000_000,
+        numRounds: 2,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 10_000,
+        healTargetId: 'attacker',
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        ...overrides,
+    });
+
+    /** Tap every ship-destroyed event (full object, so killerId/byDirectDamage are kept). */
+    const collectDestroyed = (input: CombatEngineInput) => {
+        const bus = createEventBus();
+        const destroyed: Extract<CombatEvent, { type: 'ship-destroyed' }>[] = [];
+        bus.on('ship-destroyed', (e) => destroyed.push(e));
+        runCombat({ ...input, bus });
+        return destroyed;
+    };
+
+    it('DIRECT kill: enemy basic attack stamps killerId=<attacker> and byDirectDamage:true', () => {
+        idc = 0;
+        // attack 20_000 > tank hp 10_000, defence 0 → the round-1 hit is lethal.
+        const destroyed = collectDestroyed(
+            T5_BASE({
+                hp: 10_000,
+                numRounds: 1,
+                enemyAttackers: [manualEnemy('killer-enemy', 20_000, 200)],
+            })
+        );
+
+        const tankDeath = destroyed.find((e) => e.actorId === 'attacker');
+        expect(tankDeath).toBeDefined();
+        expect(tankDeath!.byDirectDamage).toBe(true);
+        expect(tankDeath!.killerId).toBe('killer-enemy');
+    });
+
+    it('DoT-tick kill: corrosion tick stamps byDirectDamage:false and killerId undefined', () => {
+        idc = 0;
+        // Enemy applies corrosion (tier 7, 20 stacks) in round 1; it ticks at the tank's
+        // turn-start in round 2. Per-tick corrosion = stacks * (tier/100) * tankMaxHp =
+        // 20 * 0.07 * hp = 1.4 * hp → a SINGLE tick is lethal. The enemy's basic attack is
+        // 0, so the ONLY incoming damage is the DoT tick (the direct path never lands a hit).
+        const corrosionDot = ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'corrosion', tier: 7, stacks: 20, duration: 5 },
+        });
+        const dotEnemy = manualEnemy('dot-enemy', 0, 200, {
+            shipSkills: { slots: [{ slot: 'active', abilities: [corrosionDot] }] },
+        });
+
+        const destroyed = collectDestroyed(
+            T5_BASE({
+                hp: 1000,
+                numRounds: 3,
+                enemyAttackers: [dotEnemy],
+            })
+        );
+
+        const tankDeath = destroyed.find((e) => e.actorId === 'attacker');
+        expect(tankDeath).toBeDefined();
+        // Killed by the DoT-tick batch → not a direct hit, no single killer.
+        expect(tankDeath!.byDirectDamage).toBe(false);
+        expect(tankDeath!.killerId).toBeUndefined();
+    });
+});
