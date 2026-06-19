@@ -125,6 +125,39 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
         expect(focusCleanseEvents[0].count).toBe(1);
     });
 
+    it('removes a fresh debuff each round and accumulates the ACTUAL removed count across ≥2 rounds', () => {
+        // Multi-round variant: enemy (speed 200) applies one fresh removable debuff every
+        // round BEFORE the healer (speed 100) acts. The healer cleanses it each round.
+        // After N rounds the total cleanseCount must equal N (one real removal per round),
+        // and a cleanse-performed event must have fired each round.
+        const NUM_ROUNDS = 3;
+        const events: CleansePerformed[] = [];
+        const bus = createEventBus();
+        bus.on('cleanse-performed', (e) => events.push(e));
+
+        const result = runCombat(
+            BASE({
+                numRounds: NUM_ROUNDS,
+                healTargetId: 'attacker',
+                bus,
+                shipSkills: cleanseSkills(2),
+                enemyAttackers: [debuffEnemy(1)],
+            })
+        );
+
+        // Total cleanseCount across all rounds must equal NUM_ROUNDS (one per round).
+        const totalCleanse = (result.healing?.rounds ?? []).reduce(
+            (sum, rd) => sum + (rd.perActor.get('attacker')?.cleanseCount ?? 0),
+            0
+        );
+        expect(totalCleanse).toBe(NUM_ROUNDS);
+
+        // One cleanse-performed per round, each carrying count === 1.
+        const focusEvents = events.filter((e) => e.casterId === 'attacker');
+        expect(focusEvents.length).toBe(NUM_ROUNDS);
+        focusEvents.forEach((e) => expect(e.count).toBe(1));
+    });
+
     it('cleanse with nothing removable credits 0 and emits no cleanse-performed', () => {
         const events: CleansePerformed[] = [];
         const bus = createEventBus();

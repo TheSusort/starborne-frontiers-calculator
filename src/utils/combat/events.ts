@@ -98,11 +98,12 @@ export type CombatEvent =
           critHits?: number;
       }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
-     *  configured number of debuffs cleansed. Emitted on the cast path for ANY actor
-     *  (player or enemy); enemy-side emission carries NO numeric effect (Phase 4c PR 4 —
-     *  cast-fires-regardless: emitted on every qualifying cast, with no check that a
-     *  debuff actually existed to cleanse). The `on-enemy-cleansed` listener filters
-     *  `isOpposing(casterId)`. */
+     *  number of debuffs actually removed (player-side) or the nominal cfg.count
+     *  (enemy-side, event-only path). Asymmetry: player-side performs REAL removal
+     *  and suppresses the event when 0 debuffs were removed; enemy-side fires on
+     *  every qualifying cast regardless of whether a debuff existed (removal is
+     *  deferred — reactors such as Arum/Grif fire on the cast, not the removal).
+     *  The `on-enemy-cleansed` listener filters by `isOpposing(casterId)`. */
     | { type: 'cleanse-performed'; casterId: string; count: number; round: number }
     | {
           type: 'dot-ticked';
