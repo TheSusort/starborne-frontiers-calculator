@@ -92,6 +92,14 @@ outcome (shield-before, hp-damage, barriered, absorb amounts) is captured from t
 bare number). Mirrors the player sink. Because `applyOutgoingToEnemy` only runs on the positional
 path, existing non-positional fixtures add no enemy keys → byte-identical (see §3).
 
+> **E1 SHIPPED** (2026-06-19, commit `caad6805`). The `enemySink` hooks now write incoming /
+> shield-absorbed / barrier-absorbed into the shared `perActorIncoming` map keyed by the enemy
+> victim's id, mirroring `playerSink`. Production byte-identical: **zero `.snap` movement**, full
+> suite green (2665 tests), lint 0 / tsc clean / audit 0/141. The only test change was converting
+> `applyOutgoingToEnemy.test.ts` behavior #6 from a (now-false) "enemy sink is a no-op" assertion to
+> a positive per-victim-intake assertion. The enemy intake surface is live but **unread until E2**
+> (per-victim leech).
+
 **E2 — per-victim leech.**
 - *Standing leech* (heal/shield off damage **dealt**): today `procStandingLeeches` (`engine.ts:2086`)
   fires once at the credit point off the **aggregate** `amount` (~`engine.ts:2200`). E2 moves this to a
