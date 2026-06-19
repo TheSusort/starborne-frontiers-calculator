@@ -251,6 +251,30 @@ describe('statusEngine.cleanse (newest-first removal)', () => {
         expect(eng.cleanse('nobody', 3)).toBe(0);
     });
 
+    it('Barrier Recharging and Damage to Dot are unremovable; ordinary debuffs alongside them are still removed', () => {
+        // Barrier Recharging and Damage to Dot are confirmed in-game "Unremovable" debuffs
+        // (added to UNREMOVABLE_STATUSES 2026-06-19). They must survive cleanse('all') while
+        // any co-applied removable debuff is stripped.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, mkTimed('Barrier Recharging'), 'attacker', 'v1');
+        eng.applyTimedAbilityStatus(1, mkTimed('Damage to Dot'), 'attacker', 'v1');
+        eng.applyTimedAbilityStatus(1, mkTimed('Attack Down'), 'attacker', 'v1');
+
+        const removed = eng.cleanse('v1', 'all');
+        // Only Attack Down is removable → removed count is 1.
+        expect(removed).toBe(1);
+
+        const names = eng
+            .timedAbilityStatuses('enemy', 'attacker', 'v1')
+            .map((s) => s.payload.buffName);
+        // Both unremovable debuffs must still be present.
+        expect(names).toContain('Barrier Recharging');
+        expect(names).toContain('Damage to Dot');
+        // The ordinary debuff must be gone.
+        expect(names).not.toContain('Attack Down');
+    });
+
     // NOTE: 'permanent'-duration timed entries (turnsRemaining === 'permanent') are skipped
     // by isUnremovable. At the unit level these entries never reach the per-actor timed maps
     // (persistent-stacking statuses go to separate persistent maps; the only other path to a

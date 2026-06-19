@@ -12,4 +12,7 @@ export const UNREMOVABLE_STATUSES: ReadonlySet<string> = new Set<string>([
     'Acidic Decay',
     // Marked "Unremovable" in its in-game description — survives cleanse/purge/Cheat Death.
     'Magnetized Shielding',
+    // Confirmed in-game "Unremovable" debuffs from the game UI (2026-06-19).
+    'Barrier Recharging',
+    'Damage to Dot',
 ]);
