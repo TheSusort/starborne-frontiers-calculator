@@ -1016,6 +1016,45 @@ export function detectEnemyCleanseTrigger(
     return phrasePosTrigger(text, ENEMY_CLEANSE_RE, anchorPos, 'on-enemy-cleansed');
 }
 
+// "When this Unit purges (a buff / an enemy buff) … [from] an enemy" — Sefuba p1 + p2.
+// Loose [^.;]* gaps cross <unit-aid>/<unit-damage> tags. Verified against RAW CSV strings.
+const ENEMY_PURGED_RE = /\bwhen\s+this\s+unit\b[^.;]*\bpurges?\b[^.;]*\benem/i;
+
+/**
+ * Returns 'on-enemy-purged' when `anchorPos` falls inside the sentence carrying the
+ * "when this Unit purges … enemy" phrase (Sefuba p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEnemyCleanseTrigger).
+ * Reference data: docs/ship-skills.csv (Sefuba).
+ */
+export function detectEnemyPurgedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_PURGED_RE, anchorPos, 'on-enemy-purged');
+}
+
+// "When a buff is purged from an ally" — Salvation p3.
+// Loose [^.;]* gaps cross <unit-aid> tags around "buff" and "purged". Verified against RAW CSV.
+const ALLY_PURGED_RE = /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i;
+
+// "purges N more buff" — Sefuba p2 chain-purge count extractor.
+// Capture group 1 = digit string or 'a'/'an' (→ count 1). Crosses <unit-aid> tags.
+// Verified: matches 'purges 1</unit-aid> more buff' with group 1 = '1'; no match on p1.
+export const PURGE_MORE_RE = /\bpurges?\s+(\d+|an?)\s*(?:<\/?[^>]*>)?\s*more\b/i;
+
+/**
+ * Returns 'on-ally-purged' when `anchorPos` falls inside the sentence carrying the
+ * "when a buff is purged from an ally" phrase (Salvation p3); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectDestroyedTrigger).
+ * Reference data: docs/ship-skills.csv (Salvation).
+ */
+export function detectAllyPurgedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_PURGED_RE, anchorPos, 'on-ally-purged');
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
@@ -1707,7 +1746,11 @@ function sentenceBoundsAround(
 const HEAL_DISQUALIFY_RE = new RegExp(
     '\\brevives?\\b|\\bcheat death\\b(?!\\s+activates)|when an enemy uses|' +
         `when\\b(?!${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC})[^.;]*\\bis\\s+destroyed\\b|` +
-        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b|when\\b[^.;]*\\bis\\s+purged\\b|when\\b[^.;]*\\bis\\s+cleansed\\b',
+        // C2b-1 T5: exempt "when a buff is purged from an ally" (Salvation 5% ally-heal is now
+        // live via on-ally-purged). Both the specific form ("when a buff is purged") and the
+        // general "is purged" form carry a lookahead to allow through the ally-recipient shape.
+        // detectAllyPurgedTrigger stamps the correct trigger. Other purge shapes stay disqualified.
+        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b(?![^.;]*\\bfrom\\s+an?\\s+ally\\b)|when\\b[^.;]*\\bis\\s+purged\\b(?![^.;]*\\bfrom\\s+an?\\s+ally\\b)|when\\b[^.;]*\\bis\\s+cleansed\\b',
     'i'
 );
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech

@@ -40,6 +40,9 @@ import {
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
     detectEnemyCleanseTrigger,
+    detectEnemyPurgedTrigger,
+    detectAllyPurgedTrigger,
+    PURGE_MORE_RE,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
@@ -948,6 +951,12 @@ function abilitiesFromText(
               // position-scoped). The parser only emits this all-allies heal when that shape is
               // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
               detectDestroyedTrigger(text, healPos) ??
+              // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
+              // sentence rides the on-enemy-purged reactive trigger (position-scoped).
+              detectEnemyPurgedTrigger(text, healPos) ??
+              // Salvation p3: a repair anchored in the "when a buff is purged from an ally"
+              // sentence rides the on-ally-purged reactive trigger (position-scoped).
+              detectAllyPurgedTrigger(text, healPos) ??
               (h.kind === 'shield'
                   ? (detectDebuffInflictedTrigger(text, healPos) ??
                     // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -1078,6 +1087,34 @@ function abilitiesFromText(
                 },
                 pos: purgePos >= 0 ? purgePos : MAX_POS,
             });
+        }
+    }
+
+    // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
+    // Emitted OUTSIDE the active/charged gate so passive-slot Sefuba p2 is reached. The slot
+    // gate above already excludes Sefuba from the generic parsePurge emit, so there is no
+    // double-emit risk. Count: PURGE_MORE_RE capture group 1 (digit or 'a'/'an' → 1).
+    {
+        const purgeMoreMatch = PURGE_MORE_RE.exec(text);
+        if (purgeMoreMatch) {
+            const purgeMorePos = purgeMoreMatch.index;
+            if (detectEnemyPurgedTrigger(text, purgeMorePos)) {
+                const rawCount = purgeMoreMatch[1].toLowerCase();
+                const count: number | 'all' =
+                    rawCount === 'all' ? 'all' : /^\d+$/.test(rawCount) ? parseInt(rawCount, 10) : 1;
+                out.push({
+                    ability: {
+                        id: nextId(),
+                        type: 'purge',
+                        target: 'enemy',
+                        trigger: 'on-enemy-purged',
+                        conditions: [],
+                        config: { type: 'purge', count },
+                        autoFilled: true,
+                    },
+                    pos: purgeMorePos,
+                });
+            }
         }
     }
 

@@ -2174,8 +2174,9 @@ describe('buildShipAbilities', () => {
     // Phase 4b Task 9: Salvation's on-destroyed ally-heal. The refit-active (R4 / 3rd) passive
     // "When this Unit is destroyed it repairs 80% of its max HP to all allies" parses as a heal
     // ability stamped with trigger 'on-destroyed' so it fires only on death (via the Task-5
-    // listener), NOT every round. The conjoined "when a buff is purged … repairs that ally 5%"
-    // on-buff-purged heal is NOT modeled this phase and must stay disqualified (not emitted).
+    // listener), NOT every round.
+    // C2b-1 T5 update: the conjoined "when a buff is purged … repairs that ally 5%"
+    // on-ally-purged heal is NOW modeled (on-ally-purged is a live trigger). Both heals emit.
     describe('Salvation 3rd passive: on-destroyed ally-heal (Task 9)', () => {
         const salvation = () =>
             ship({
@@ -2183,27 +2184,28 @@ describe('buildShipAbilities', () => {
                     "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
             });
 
-        it('emits an all-allies 80%-max-HP repair on trigger on-destroyed', () => {
+        it('emits the all-allies 80%-max-HP repair on trigger on-destroyed', () => {
             const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
-            const heals = passive.abilities.filter((a) => a.type === 'heal');
-            // Only the on-destroyed 80% heal is emitted — the 5% on-buff-purged heal stays
-            // disqualified (its trigger is not live this phase).
-            expect(heals).toHaveLength(1);
-            const heal = heals[0];
-            expect(heal.target).toBe('all-allies');
-            expect(heal.trigger).toBe('on-destroyed');
-            if (heal.config.type === 'heal') {
-                expect(heal.config.pct).toBe(80);
-                expect(heal.config.basis).toBe('hp');
+            const heal = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 80
+            );
+            expect(heal).toBeDefined();
+            expect(heal!.target).toBe('all-allies');
+            expect(heal!.trigger).toBe('on-destroyed');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.basis).toBe('hp');
             }
         });
 
-        it('does NOT emit the on-buff-purged 5% repair (trigger not live this phase)', () => {
+        it('emits the ally 5%-max-HP repair on trigger on-ally-purged (C2b-1 T5)', () => {
+            // on-ally-purged is now a live trigger — the 5% heal emits alongside the 80% heal.
             const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
             const fivePct = passive.abilities.find(
                 (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
             );
-            expect(fivePct).toBeUndefined();
+            expect(fivePct).toBeDefined();
+            expect(fivePct!.trigger).toBe('on-ally-purged');
+            expect(fivePct!.target).toBe('ally');
         });
     });
 
@@ -2762,5 +2764,99 @@ describe('buildShipAbilities doesntBreakStasis', () => {
         });
         const result = buildShipAbilities(s);
         expect(result.doesntBreakStasis).toBeFalsy();
+    });
+});
+
+// C2b-1 T5: Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
+// RAW strings from docs/ship-skills.csv.
+describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers (T5)', () => {
+    describe('Sefuba p1: on-enemy-purged self-heal, no chain purge', () => {
+        const sefubaP1 = () =>
+            ship({
+                firstPassiveSkillText:
+                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+            });
+
+        it('emits a self heal with trigger on-enemy-purged', () => {
+            const passive = slot(buildShipAbilities(sefubaP1()).slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeDefined();
+            expect(heal!.trigger).toBe('on-enemy-purged');
+            expect(heal!.target).toBe('self');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.pct).toBe(8);
+            }
+        });
+
+        it('does NOT emit a chain purge ability', () => {
+            const passive = slot(buildShipAbilities(sefubaP1()).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+    });
+
+    describe('Sefuba p2: on-enemy-purged self-heal + chain purge (count 1)', () => {
+        // secondPassiveSkillText maps to the refit-active passive → slot 'passive'
+        const sefubaP2 = () =>
+            ship({
+                secondPassiveSkillText:
+                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+            });
+
+        it('emits a self heal with trigger on-enemy-purged', () => {
+            const passive = slot(buildShipAbilities(sefubaP2()).slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeDefined();
+            expect(heal!.trigger).toBe('on-enemy-purged');
+            expect(heal!.target).toBe('self');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.pct).toBe(12);
+            }
+        });
+
+        it('emits exactly ONE chain purge with trigger on-enemy-purged and count 1', () => {
+            const passive = slot(buildShipAbilities(sefubaP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-enemy-purged');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(1);
+            }
+        });
+    });
+
+    describe('Salvation p3: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
+        const salvation = () =>
+            ship({
+                thirdPassiveSkillText:
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+            });
+
+        it('emits the 5% ally heal with trigger on-ally-purged', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const fivePct = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
+            );
+            expect(fivePct).toBeDefined();
+            expect(fivePct!.trigger).toBe('on-ally-purged');
+            expect(fivePct!.target).toBe('ally');
+        });
+
+        it('still emits the 80% all-allies heal with trigger on-destroyed', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const eightyPct = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 80
+            );
+            expect(eightyPct).toBeDefined();
+            expect(eightyPct!.trigger).toBe('on-destroyed');
+            expect(eightyPct!.target).toBe('all-allies');
+        });
+
+        it('emits exactly 2 heal abilities (80% on-destroyed + 5% on-ally-purged), no purge', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'heal')).toHaveLength(2);
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
     });
 });

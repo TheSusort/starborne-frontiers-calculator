@@ -25,6 +25,8 @@ import {
     detectAllyCritTrigger,
     detectDestroyedTrigger,
     detectEnemyCleanseTrigger,
+    detectEnemyPurgedTrigger,
+    detectAllyPurgedTrigger,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -1565,7 +1567,7 @@ describe('detectDestroyedTrigger', () => {
         expect(detectDestroyedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
     });
 
-    it('does NOT stamp the on-purged 5% repair (a different, still-disqualified reactive)', () => {
+    it('does NOT stamp on-destroyed for the on-ally-purged 5% repair (anchor is in a different sentence)', () => {
         const text =
             "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP.";
         expect(detectDestroyedTrigger(text, text.indexOf('that ally for 5%'))).toBeUndefined();
@@ -2411,13 +2413,17 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         ]);
     });
 
-    it('Salvation R2 passive: the on-destroyed 80% all-allies heal IS extracted; the on-purged 5% stays disqualified', () => {
+    it('Salvation R2 passive: both the 80% all-allies heal AND the 5% ally heal are extracted (C2b-1 T5: on-ally-purged is now live)', () => {
+        // The "when a buff is purged from an ally" clause is now exempt from HEAL_DISQUALIFY_RE
+        // (negative lookahead exempts the ally-recipient form). Both heals emit; buildShipAbilities
+        // stamps the 5% with on-ally-purged and the 80% with on-destroyed.
         expect(
             parseHealAbilities(
                 "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP."
             )
         ).toEqual([
             { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'ally', explicitTarget: true },
         ]);
     });
 
@@ -3356,5 +3362,74 @@ describe('parseDoesntBreakStasis', () => {
 
     it('returns false for undefined', () => {
         expect(parseDoesntBreakStasis(undefined)).toBe(false);
+    });
+});
+
+// C2b-1 T5: on-enemy-purged and on-ally-purged heal trigger detectors.
+// All three RAW strings below are taken verbatim from docs/ship-skills.csv.
+// Regexes must match THROUGH <unit-aid>/<unit-damage> tags (loose [^.;]* gaps).
+const SEFUBA_P1_RAW =
+    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.';
+const SEFUBA_P2_RAW =
+    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.';
+const SALVATION_P3_RAW =
+    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
+
+describe('detectEnemyPurgedTrigger', () => {
+    it('returns on-enemy-purged for Sefuba p1 (anchor inside the purge sentence)', () => {
+        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBe('on-enemy-purged');
+    });
+
+    it('returns on-enemy-purged for Sefuba p2 (anchor inside the purge sentence)', () => {
+        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        expect(detectEnemyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBe('on-enemy-purged');
+    });
+
+    it('returns undefined for Salvation p3 (no "this unit purges … enemy" phrasing)', () => {
+        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
+        expect(detectEnemyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    });
+
+    it('is position-scoped: returns undefined when anchor is in a different sentence', () => {
+        // Fabricated two-sentence text; anchor is in the non-purge first sentence.
+        const text =
+            'This Unit repairs 10% Max HP. When this Unit purges a buff from an enemy, it repairs itself for 8% Max HP.';
+        expect(detectEnemyPurgedTrigger(text, text.indexOf('10%'))).toBeUndefined();
+        expect(detectEnemyPurgedTrigger(text, text.search(/repairs itself/i))).toBe(
+            'on-enemy-purged'
+        );
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+describe('detectAllyPurgedTrigger', () => {
+    it('returns on-ally-purged for Salvation p3 (anchor inside the ally-purge sentence)', () => {
+        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBe('on-ally-purged');
+    });
+
+    it('returns undefined for Sefuba p1 (no "buff is purged from an ally" phrasing)', () => {
+        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        expect(detectAllyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for Sefuba p2 (no "buff is purged from an ally" phrasing)', () => {
+        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        expect(detectAllyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBeUndefined();
+    });
+
+    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p3 is not stamped', () => {
+        // The on-destroyed sentence is before the <br /><br /> — its "repairs 80%" anchor
+        // must NOT get on-ally-purged.
+        const pos = SALVATION_P3_RAW.search(/repairs 80%/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, -1)).toBeUndefined();
     });
 });
