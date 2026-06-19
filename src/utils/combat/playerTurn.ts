@@ -1383,8 +1383,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (ab.config.type === 'purge' && ab.trigger === 'on-cast') {
                 // 'all-enemies' purges only the single targetId in C2a (single-anchor;
-                // multi-victim AoE → sub-project E). No purge-performed event (deferred to C2b).
-                statusEngine.purge(targetId, ab.config.count);
+                // multi-victim AoE → sub-project E).
+                const removed = statusEngine.purge(targetId, ab.config.count);
+                // Emit purge-performed (C2b-1) — on-cast purges are never depth-guarded,
+                // so they ALWAYS emit (when something was removed), triggering Sefuba/
+                // Salvation. Suppressed at 0 removed (honest metric; mirrors cleanse-performed).
+                if (removed > 0) {
+                    bus.emit({
+                        type: 'purge-performed',
+                        casterId: actor.id,
+                        targetId,
+                        count: removed,
+                        round: r,
+                    });
+                }
             }
         }
     }
