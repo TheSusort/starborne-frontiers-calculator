@@ -1985,6 +1985,72 @@ describe('death-trigger live listeners (Task 5)', () => {
         it('enqueues nothing when an enemy is destroyed', () => {
             expect(emitDestroyed('on-destroyed', 'enemy')).toHaveLength(0);
         });
+
+        // C2b-2 T6: the on-destroyed gate is ABILITY-SCOPED. A PURGE reaction (Faust)
+        // fires only on a DIRECT-damage kill and routes counterTargetId = killerId; a
+        // non-purge reaction (buff/heal — Salvation's self-destruct heal) stays
+        // unconditional and fires on ANY death, regardless of byDirectDamage.
+        describe('C2b-2 T6 purge gate (Faust) vs non-purge (Salvation) exemption', () => {
+            const purgeDeathAbility = (): Ability => ({
+                id: 'd-purge',
+                type: 'purge',
+                target: 'enemy',
+                trigger: 'on-destroyed',
+                conditions: [],
+                config: { type: 'purge', count: 2 },
+            });
+
+            // Emit a ship-destroyed with explicit cause fields and collect intents for
+            // the given reactive ability.
+            function emitDestroyedCause(
+                ability: Ability,
+                cause: { byDirectDamage?: boolean; killerId?: string }
+            ): Intent[] {
+                const bus = createEventBus();
+                const intents: Intent[] = [];
+                const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+                registerReactiveListeners({
+                    bus,
+                    perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+                    enqueue: (i) => intents.push(i),
+                    isOpposing: (id) => id === 'enemy',
+                });
+                bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1, ...cause });
+                return intents;
+            }
+
+            it('PURGE: fires on a DIRECT kill and routes counterTargetId = killerId', () => {
+                const intents = emitDestroyedCause(purgeDeathAbility(), {
+                    byDirectDamage: true,
+                    killerId: 'enemy',
+                });
+                expect(intents).toHaveLength(1);
+                expect(intents[0].ability.config.type).toBe('purge');
+                expect(intents[0].eventCtx?.counterTargetId).toBe('enemy');
+            });
+
+            it('PURGE: does NOT fire on a non-direct (DoT) kill (byDirectDamage:false)', () => {
+                expect(
+                    emitDestroyedCause(purgeDeathAbility(), { byDirectDamage: false })
+                ).toHaveLength(0);
+            });
+
+            it('PURGE: does NOT fire when byDirectDamage is absent', () => {
+                expect(emitDestroyedCause(purgeDeathAbility(), {})).toHaveLength(0);
+            });
+
+            it('NON-PURGE (Salvation-style buff/heal): fires on a DoT kill (gate exempt)', () => {
+                const intents = emitDestroyedCause(deathAbility('on-destroyed'), {
+                    byDirectDamage: false,
+                });
+                expect(intents).toHaveLength(1);
+                expect(intents[0].ability.trigger).toBe('on-destroyed');
+            });
+
+            it('NON-PURGE: fires when cause fields are absent (unchanged from Task 5)', () => {
+                expect(emitDestroyedCause(deathAbility('on-destroyed'), {})).toHaveLength(1);
+            });
+        });
     });
 
     describe('on-ally-destroyed (another player actor dies)', () => {

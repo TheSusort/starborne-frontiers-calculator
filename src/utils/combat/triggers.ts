@@ -356,9 +356,20 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Self-scoped: fires when THIS OWNER itself is destroyed (mirrors
-                        // on-crit's own-id scoping). One enqueue per destruction event.
-                        if (e.actorId === ownerId) enqueue(intent);
+                        // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
+                        // Faust's PURGE only fires when killed by DIRECT damage and targets the
+                        // killer (counterTargetId = e.killerId); Salvation's self-destruct HEAL (and
+                        // any other on-destroyed reaction) fires on ANY death, unchanged.
+                        if (e.actorId !== ownerId) return;
+                        if (ra.ability.config.type === 'purge') {
+                            if (!e.byDirectDamage) return;
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.killerId },
+                            });
+                        } else {
+                            enqueue(intent);
+                        }
                     });
                     break;
                 case 'on-ally-destroyed':

@@ -3042,3 +3042,74 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// C2b-2 T6: Faust on-destroyed killed-by-direct-damage purge build tests.
+// RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2 T6)', () => {
+    // Faust p1 RAW: "This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by
+    // direct Damage."
+    const faustP1 = () =>
+        ship({
+            firstPassiveSkillText:
+                'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.',
+        });
+
+    // Faust p2 RAW (refit-active 2nd passive): purges 3.
+    const faustP2 = () =>
+        ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.',
+        });
+
+    describe('Faust p1: on-destroyed purge with target enemy, count 2', () => {
+        it('emits exactly ONE purge ability with trigger on-destroyed, target enemy, count 2', () => {
+            const passive = slot(buildShipAbilities(faustP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-destroyed');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Faust p2: on-destroyed purge, count 3', () => {
+        it('emits a purge with trigger on-destroyed, target enemy, count 3', () => {
+            const passive = slot(buildShipAbilities(faustP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-destroyed');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(3);
+            }
+        });
+    });
+
+    describe('Salvation regression: on-destroyed HEAL still emitted as heal (not purge)', () => {
+        it('Salvation p3 still emits an 80% all-allies heal on trigger on-destroyed', () => {
+            const salvation = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+            });
+            const passive = slot(buildShipAbilities(salvation).slots, 'passive')!;
+            const heal = passive.abilities.find(
+                (a) => a.type === 'heal' && a.trigger === 'on-destroyed'
+            );
+            expect(heal).toBeDefined();
+            // No purge ability emitted from Salvation's passives (the "is purged from an ally"
+            // phrasing is a heal trigger, not a purge action).
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(0);
+        });
+    });
+});

@@ -44,6 +44,7 @@ import {
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
     detectEndOfRoundPurgeTrigger,
+    detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
     PURGE_MORE_RE,
     parseControlInflict,
@@ -1083,7 +1084,8 @@ function abilitiesFromText(
             // on-ally-attacked branch — no corpus ally-purge exists.)
             detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
                 ? ('on-attacked' as const)
-                : detectEndOfRoundPurgeTrigger(text, purgePos); // Rhodium
+                : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
+                  detectKilledByDirectDamageTrigger(text, purgePos)); // Faust
         const trigger: AbilityTrigger | undefined =
             slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted

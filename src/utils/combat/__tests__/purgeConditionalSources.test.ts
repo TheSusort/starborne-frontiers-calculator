@@ -763,3 +763,229 @@ describe('C2b-2 T5: ship-destroyed killerId + byDirectDamage', () => {
         expect(tankDeath!.killerId).toBeUndefined();
     });
 });
+
+// =============================================================================
+// C2b-2 Task 6: Faust on-destroyed killer-targeted purge (killed-by-direct-damage).
+//
+// Faust's passive purges N buffs from its KILLER, but ONLY when killed by DIRECT
+// damage. The on-destroyed listener is ability-scoped: a PURGE reaction gates on
+// e.byDirectDamage and routes counterTargetId = e.killerId; non-purge on-destroyed
+// reactions (Salvation's self-destruct heal) stay unconditional.
+//
+// Layout (player Faust is 'attacker'; a buffed enemy lands the lethal hit):
+//   - DIRECT kill: the buffed enemy (≥2 self-buffs) one-shots Faust with a direct
+//     attack → Faust's on-destroyed purge fires → 2 buffs removed FROM THE KILLER,
+//     purge-performed emitted targeting the killer.
+//   - DoT kill: Faust dies to a corrosion tick (no single killer, byDirectDamage:false)
+//     → the gate suppresses the purge → killer keeps all its buffs, no purge-performed.
+// =============================================================================
+
+describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () => {
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    // Faust's purge passive (p1): on-destroyed, target enemy, count 2.
+    const faustSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+                ],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'purge',
+                        target: 'enemy',
+                        trigger: 'on-destroyed',
+                        config: { type: 'purge', count: 2 },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    // Buffed enemy: speed 200 (acts first, applies TWO self-buffs), then its basic
+    // attack (synthesized from `attack` stat) lands the lethal DIRECT hit on Faust.
+    const buffedKiller = (extra: Partial<EnemyAttacker> = {}): EnemyAttacker => ({
+        id: 'killer-enemy',
+        stats: { attack: 1_000_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4' as Position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Attack Up',
+                                parsedEffects: { attack: 10 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
+                                type: 'buff',
+                                buffName: 'Speed Up',
+                                parsedEffects: { speed: 10 },
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+                    ],
+                },
+            ],
+        },
+        ...extra,
+    });
+
+    const FAUST_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: faustSkills(),
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 10_000, // Faust dies to the killer's 1_000_000 attack
+        healTargetId: 'attacker',
+        speed: 100, // slower than the killer (200) → killer acts + buffs + kills first
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        enemyAttackers: [buffedKiller()],
+        ...overrides,
+    });
+
+    it('DIRECT kill: Faust purges 2 buffs FROM THE KILLER and emits purge-performed targeting it', () => {
+        idc = 0;
+        let engine: StatusEngine | undefined;
+        const purgeEvents: Extract<CombatEvent, { type: 'purge-performed' }>[] = [];
+        const bus = createEventBus();
+        bus.on('purge-performed', (e) => purgeEvents.push(e));
+        runCombat({
+            ...FAUST_BASE(),
+            bus,
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
+        });
+
+        // Killer applied Attack Up + Speed Up (2 buffs), then killed Faust with a DIRECT
+        // hit → Faust's on-destroyed purge removed BOTH from the killer.
+        const remaining = engine!
+            .timedAbilityStatuses('self', 'killer-enemy')
+            .map((b) => b.active.buffName);
+        expect(remaining).toHaveLength(0);
+
+        // Exactly one purge-performed, routed to the killer, count 2.
+        expect(purgeEvents).toHaveLength(1);
+        expect(purgeEvents[0].targetId).toBe('killer-enemy');
+        expect(purgeEvents[0].count).toBe(2);
+    });
+
+    it('DoT kill: Faust dies to a corrosion tick → NO purge fires, killer keeps its buffs', () => {
+        idc = 0;
+        // Corrosion (tier 7, 20 stacks) ticks at Faust's turn-start: 20 * 0.07 * maxHp = 1.4*hp
+        // → lethal on a single tick. The killer's basic attack is 0 so the ONLY lethal intake is
+        // the DoT (byDirectDamage:false, no single killer). The DoT enemy still applies its 2
+        // self-buffs so we can assert they SURVIVE (the gate suppressed the purge).
+        const corrosionDot = ab({
+            type: 'dot',
+            target: 'enemy',
+            config: { type: 'dot', dotType: 'corrosion', tier: 7, stacks: 20, duration: 5 },
+        });
+        const dotEnemy = buffedKiller({
+            id: 'dot-enemy',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Attack Up',
+                                    parsedEffects: { attack: 10 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 99,
+                                },
+                            }),
+                            ab({
+                                type: 'buff',
+                                target: 'self',
+                                config: {
+                                    type: 'buff',
+                                    buffName: 'Speed Up',
+                                    parsedEffects: { speed: 10 },
+                                    stacks: 1,
+                                    isStackable: false,
+                                    duration: 99,
+                                },
+                            }),
+                            corrosionDot,
+                        ],
+                    },
+                ],
+            },
+        });
+
+        idc = 0;
+        let engine: StatusEngine | undefined;
+        const purgeEvents: Extract<CombatEvent, { type: 'purge-performed' }>[] = [];
+        const bus = createEventBus();
+        bus.on('purge-performed', (e) => purgeEvents.push(e));
+        runCombat({
+            ...FAUST_BASE({ hp: 1000, numRounds: 3, enemyAttackers: [dotEnemy] }),
+            bus,
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
+        });
+
+        // The gate suppressed the purge: killer keeps BOTH self-buffs, no purge-performed.
+        const remaining = engine!
+            .timedAbilityStatuses('self', 'dot-enemy')
+            .map((b) => b.active.buffName)
+            .sort();
+        expect(remaining).toEqual(['Attack Up', 'Speed Up']);
+        expect(purgeEvents).toHaveLength(0);
+    });
+});
+
+// NOTE: the Salvation on-destroyed HEAL regression (the gate must NOT suppress non-purge
+// reactions on a DoT death) is asserted at the listener level in triggers.test.ts
+// ('death-trigger live listeners' → on-destroyed gate), where the enqueue is directly
+// observable. In a single-ship integration harness Salvation's all-allies heal has no
+// LIVING recipient once Salvation itself dies (dead recipients are filtered out, so no
+// heal-performed is emitted), which would make the integration probe ambiguous.

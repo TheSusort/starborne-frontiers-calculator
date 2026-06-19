@@ -1072,6 +1072,23 @@ export function detectEndOfRoundPurgeTrigger(
     return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
 }
 
+// "… when killed by direct Damage" — Faust on-destroyed purge (killer-targeted, direct-only).
+// Crosses tags; "direct" guards against a future DoT-kill phrasing.
+const KILLED_BY_DIRECT_RE = /\bwhen\s+killed\s+by\s+direct\b[^.;]*\bdamage\b/i;
+
+/**
+ * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
+ * "when killed by direct Damage" phrase (Faust p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEndOfRoundPurgeTrigger).
+ * Reference data: docs/ship-skills.csv (Faust).
+ */
+export function detectKilledByDirectDamageTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
+}
+
 // "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
 // Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
 const MOST_BUFFS_RE = /\benemy\b[^.;]*\bwith\s+the\s+most\b[^.;]*\bbuffs?\b/i;

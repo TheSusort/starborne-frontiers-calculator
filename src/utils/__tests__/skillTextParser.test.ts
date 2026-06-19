@@ -28,6 +28,7 @@ import {
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
     detectEndOfRoundPurgeTrigger,
+    detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
     parseExtraAction,
     parseHealAbilities,
@@ -3467,6 +3468,39 @@ describe('detectEndOfRoundPurgeTrigger', () => {
 
     it('returns undefined for negative anchor', () => {
         expect(detectEndOfRoundPurgeTrigger(RHODIUM_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+// C2b-2 T6: detectKilledByDirectDamageTrigger (Faust)
+// RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
+const FAUST_P1_RAW =
+    'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.';
+const FAUST_P2_RAW =
+    'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+
+describe('detectKilledByDirectDamageTrigger', () => {
+    it('returns on-destroyed for Faust p1 (anchor inside the purge sentence)', () => {
+        const pos = FAUST_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(FAUST_P1_RAW, pos)).toBe('on-destroyed');
+    });
+
+    it('returns on-destroyed for Faust p2 (anchor inside the purge sentence)', () => {
+        const pos = FAUST_P2_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(FAUST_P2_RAW, pos)).toBe('on-destroyed');
+    });
+
+    it('returns undefined for Iridium p1 (no "killed by direct damage" phrase)', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for Rhodium p1 (no "killed by direct damage" phrase)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(RHODIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectKilledByDirectDamageTrigger(FAUST_P1_RAW, -1)).toBeUndefined();
     });
 });
 
