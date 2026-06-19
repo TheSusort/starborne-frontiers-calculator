@@ -12,9 +12,12 @@ real:
 
 - **AoE damage** is already per-victim. `positionalApply.ts` (`footprintVictims` +
   `applyPositionalDamage`) re-resolves the anchor and re-expands the footprint **per hit** against the
-  live opposing roster, and calls `victimHitDamage` for each victim with its own `roleScale` (origin
-  1.0, covered 0.5). `victimHitDamage` (`victimDamage.ts:71-107`) re-solves per-victim defence,
-  affinity, and the incoming-damage debuff override from the victim's own store.
+  live opposing roster, and computes each victim's damage with its own `roleScale` (origin 1.0,
+  covered 0.5). The per-victim **damage number** comes from `victimHitDamage`
+  (`victimDamage.ts:71-107`), which re-solves per-victim defence, affinity, and the incoming-damage
+  debuff override from the victim's own store. The full damage **outcome**
+  (`{shieldBefore, hpDamage, barriered, shieldAbsorbed, barrierAbsorbed}`) is produced one level up by
+  the engine wrappers `applyVictimDamage` / `applyOutgoingToEnemy` (`engine.ts`, returns ~`:2402`).
 - **Death / retargeting** is already per-victim on the positional path. `resolvePositionalTarget`
   filters to living actors (`currentHp > 0`) and re-resolves per hit; a whiff (all targets dead) skips
   the hit. `recordDestroyed` (`state.ts:173-187`) is idempotent.
@@ -33,11 +36,11 @@ What **remains** in E splits into two largely-independent threads:
 
 | # | Mechanic | Current state | File:line |
 |---|----------|---------------|-----------|
-| 4 | Incoming surface | **Asymmetric.** enemy→player buckets per-actor into `perActorIncoming`; player→enemy uses a **no-op `enemySink`** (all three accounting hooks discard). | `engine.ts:2410-2455`, `2433-2439` |
-| 2 | Leech | **Aggregate / single-anchor.** Standing leech procs off aggregate damage at the credit point; taken-leech is **gated out of the positional path** (`!enemyPositional`) because it needs the symmetric surface. | `engine.ts:2014-2044`, `3809-3946` (gate `3913`) |
-| 5 | AoE purge/cleanse | **Single-anchor.** On-cast purge removes only the selected `targetId`; "all-enemies" collapses to one victim. | `playerTurn.ts:1002-1015` (comment `:1012`) |
+| 4 | Incoming surface | **Asymmetric.** enemy→player buckets per-actor into `perActorIncoming`; player→enemy uses a **no-op `enemySink`** (all three accounting hooks discard). | `engine.ts:2410-2455` (no-op object `2442-2446`) |
+| 2 | Leech | **Aggregate / single-anchor.** Standing leech procs off aggregate damage: `procStandingLeeches` (`engine.ts:2086`) fired at the single damage-credit point (~`:2200`) off the aggregate `amount`. Taken-leech is **gated out of the positional path** (`!enemyPositional`) because it needs the symmetric surface. | `engine.ts:2086`/`~2200`, `3902-3946` (gate `3913-3918`) |
+| 5 | AoE purge/cleanse | **Single-anchor (on-cast purge + reactive purge).** On-cast purge removes only the selected `targetId`; "all-enemies" collapses to one victim. Cleanse already loops recipients; purge does not. | on-cast purge `playerTurn.ts:1392-1401` (comment `:1399-1400`); reactive purge `triggers.ts:1243` |
 | 7 | Amartya | **Single-anchor, count 1.** "purges 1 buff from all enemies for every 50% crit power" fires single-victim, no crit-power scaling. | spec `2026-06-19-purge-ecosystem-c2b-design.md §7` |
-| 6 | Per-victim repair | **Per-victim-capable but single-`healTarget`-limited.** `repairedThisRound` is a per-actor Set; only the heal target is ever healed in current modes, so player-Nayra-vs-enemy never fires. | `engine.ts:1895-1897`, `1912-1927` |
+| 6 | Per-victim repair | **Per-victim-capable but single-`healTarget`-limited.** `repairedThisRound` is a per-actor Set (`engine.ts:1897`, written `:1925`); only the heal target is ever healed in current modes, so player-Nayra-vs-enemy never fires. | `engine.ts:1897`, `1912-1927` |
 
 (Items 1 = AoE damage and 3 = death/retargeting are already per-victim — see §1 — so they are NOT
 work in E.)
@@ -52,13 +55,20 @@ The keystone is E1: make the incoming/intake surface **direction-agnostic**.
   currently no-ops, become **real writes** into that map.
 - The positional apply path already computes per-victim damage; E1 captures the **full per-victim
   outcome** (`{shieldBefore, hpDamage, barriered, shieldAbsorbed, barrierAbsorbed}`) for enemy victims
-  too, instead of discarding it.
+  too (via `applyVictimDamage` / `applyOutgoingToEnemy`), instead of discarding it.
 
-**Why this is byte-identical to existing goldens:** today's goldens assert *player-side* accounting
-and `perTargetDamage` (damage **dealt**, already per-victim). The enemy-victim intake buckets are a
-**new, currently-unread surface** — purely additive. Nothing existing reads them, so DPS / healing /
-two-team-sim goldens stay byte-identical. (Enemy surfacing in the simulator UI is **out of scope** —
-see §5 decision; it waits for the shield system, sub-project H.)
+**Why this is byte-identical to existing goldens — the precise invariant.** The `perActorIncoming`
+map (`engine.ts:2220`) is NOT unread — it is exported wholesale every healing round
+(`row.perActorIncoming`, `engine.ts:4218`) and `perActorIncoming.test.ts` explicitly asserts there is
+no `'enemy'` key. So the real invariant is narrower: E1's new writes flow through
+`applyOutgoingToEnemy` (`engine.ts:2447`), which is **only invoked on the positional apply path**
+(`drivePositionalApply`, wired ~`engine.ts:2619`). **Every existing golden/fixture uses
+non-positional / manual enemies**, so `applyOutgoingToEnemy` is never called and no enemy key is ever
+added → the populated keys don't change → byte-identical. The planner must protect THIS invariant (no
+new enemy keys in existing non-positional fixtures), not "nothing reads the map." A future
+positional-healing-mode fixture would legitimately add an enemy key — that is **audited churn, not a
+regression**. (Enemy surfacing in the simulator UI is **out of scope** — see §5; it waits for the
+shield system, sub-project H.)
 
 ## 4. Decomposition (sequential PRs)
 
@@ -75,23 +85,31 @@ wanted sooner). Each PR gets its own plan and ships under the established gate.
 
 ### Per-PR mechanics
 
-**E1 — symmetric incoming surface.** One `perActorIncoming`-style map for all actors. `enemySink`
-hooks write into it keyed by the enemy victim's id. `victimHitDamage` / the positional apply callback
-returns/records the full outcome (shield-before, hp-damage, barriered, absorb amounts) for enemy
-victims, mirroring the player sink. No consumer reads the new enemy buckets yet → additive.
+**E1 — symmetric incoming surface.** One `perActorIncoming`-style map for all actors. The `enemySink`
+hooks (no-op object `engine.ts:2442-2446`) write into it keyed by the enemy victim's id. The full
+outcome (shield-before, hp-damage, barriered, absorb amounts) is captured from the engine wrapper
+`applyOutgoingToEnemy` (`engine.ts:2447`, returns ~`:2402`) — NOT `victimHitDamage` (which returns a
+bare number). Mirrors the player sink. Because `applyOutgoingToEnemy` only runs on the positional
+path, existing non-positional fixtures add no enemy keys → byte-identical (see §3).
 
 **E2 — per-victim leech.**
-- *Standing leech* (heal/shield off damage **dealt**): sums over footprint victims; covered cells
-  contribute their reduced (50%) damage, since leech is computed off **real damage dealt**.
+- *Standing leech* (heal/shield off damage **dealt**): today `procStandingLeeches` (`engine.ts:2086`)
+  fires once at the credit point off the **aggregate** `amount` (~`engine.ts:2200`). E2 moves this to a
+  per-victim sum over footprint victims; covered cells contribute their reduced (50%) damage, since
+  leech is computed off **real damage dealt**.
 - *Taken leech* (reactive heal/shield off damage **taken**): each player victim procs its **own**
   reactive off the damage **it** took. Un-gates the `!enemyPositional` blocks (`engine.ts:3913`,
   `3902-3912`).
 - Reads E1's per-victim outcome surface (the shield/hp split each victim needs to leech from).
 
-**E3 — AoE purge/cleanse.** Replace the single-`targetId` removal at `playerTurn.ts:1011` with a loop
-over the footprint victims for "all-enemies"-style targets. The footprint resolver already enumerates
-victims per hit; E3 routes `statusEngine.purge` / `cleanse` to each. Reactive purge/cleanse follow the
-same per-victim routing where an AoE reaction applies.
+**E3 — AoE purge/cleanse.** Replace the single-`targetId` removal with a loop over the footprint
+victims for "all-enemies"-style targets. There are **two single-anchor purge sites** to fix (cleanse
+already loops recipients): the **on-cast purge** at `playerTurn.ts:1392-1401` (the literal
+`"single-anchor; multi-victim AoE → sub-project E"` comment is `:1399-1400`), and the **reactive
+purge** at `triggers.ts:1243` (single `targetId`). The footprint resolver already enumerates victims
+per hit; E3 routes `statusEngine.purge` to each. For reference, the already-looping sites are on-cast
+cleanse (`playerTurn.ts:1624`) and reactive cleanse (`triggers.ts:1190`); end-of-round reactive purge
+(Rhodium) lives at `engine.ts:4136` and should be checked for the same per-victim treatment.
 
 **E4 — Amartya.** `count = floor(casterCritDamage / 50)` (crit power = the `critDamage` stat),
 computed from the caster's **live** crit power at cast time, applied to **every** footprint victim.
