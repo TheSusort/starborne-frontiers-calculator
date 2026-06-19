@@ -1099,9 +1099,10 @@ function abilitiesFromText(
         if (purgeMoreMatch) {
             const purgeMorePos = purgeMoreMatch.index;
             if (detectEnemyPurgedTrigger(text, purgeMorePos)) {
-                const rawCount = purgeMoreMatch[1].toLowerCase();
-                const count: number | 'all' =
-                    rawCount === 'all' ? 'all' : /^\d+$/.test(rawCount) ? parseInt(rawCount, 10) : 1;
+                // PURGE_MORE_RE group 1 is (\d+|a|an) — never 'all' — so a digit → its value,
+                // 'a'/'an' → 1. (Type stays number|'all' to match the purge config shape.)
+                const rawCount = purgeMoreMatch[1];
+                const count: number | 'all' = /^\d+$/.test(rawCount) ? parseInt(rawCount, 10) : 1;
                 out.push({
                     ability: {
                         id: nextId(),
