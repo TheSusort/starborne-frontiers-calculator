@@ -20,6 +20,19 @@ export interface FootprintHit {
     roleScale: number;
 }
 
+/**
+ * The per-hit damage resolution outcome surfaced by the engine's victim-apply wrappers
+ * (`applyIncomingToTarget` / `applyOutgoingToEnemy`, E1 — symmetric incoming surface):
+ * the victim's shield pool BEFORE the hit, the HP damage that actually landed after
+ * shield/Barrier absorption, and whether a Barrier fully absorbed the hit. E2 plumbs this
+ * through `applyPositionalDamage` so per-direction leech can read it per footprint victim.
+ */
+export interface VictimDamageOutcome {
+    shieldBefore: number;
+    hpDamage: number;
+    barriered: boolean;
+}
+
 /** Per-cell damage scale keyed off the resolved CellRole. */
 const roleScaleFor = (role: CellRole): number => (role === 'origin' ? 1.0 : 0.5);
 
@@ -86,9 +99,24 @@ export function applyPositionalDamage(args: {
     statusOf?: (id: string) => ActorTargetingStatus | undefined;
     acting?: { ignoresForcedTargeting?: boolean; provokedBy?: string };
     defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
-    /** Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy). */
-    applyToVictim: (victim: CombatActor, damage: number) => void;
+    /**
+     * Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy)
+     * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
+     */
+    applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
     emitHit?: (victim: CombatActor, damage: number, didCrit: boolean) => void;
+    /**
+     * OPTIONAL per-victim hook (E2 — per-victim leech). Invoked once per footprint victim AFTER
+     * the hit resolves, with the resolved {@link VictimDamageOutcome}. Direction-specific leech
+     * logic is supplied per call site (standing vs taken) rather than branched inline. Unsupplied
+     * → fully inert.
+     */
+    onVictimResolved?: (
+        victim: CombatActor,
+        damage: number,
+        outcome: VictimDamageOutcome,
+        didCrit: boolean
+    ) => void;
 }): void {
     const {
         hitCrits,
@@ -102,6 +130,7 @@ export function applyPositionalDamage(args: {
         defenseProfileOf,
         applyToVictim,
         emitHit,
+        onVictimResolved,
     } = args;
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
@@ -130,8 +159,9 @@ export function applyPositionalDamage(args: {
             opposingLiving
         )) {
             const dmg = victimHitDamage(scalars, defenseProfileOf(victim), didCrit, roleScale);
-            applyToVictim(victim, dmg);
+            const outcome = applyToVictim(victim, dmg);
             emitHit?.(victim, dmg, didCrit);
+            onVictimResolved?.(victim, dmg, outcome, didCrit);
         }
     }
 }

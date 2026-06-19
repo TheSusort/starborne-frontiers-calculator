@@ -43,7 +43,7 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
-import { applyPositionalDamage } from './positionalApply';
+import { applyPositionalDamage, type VictimDamageOutcome } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
@@ -2533,7 +2533,18 @@ export function runCombat(input: CombatEngineInput): {
             ignoresForcedTargeting?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
-            applyToVictim: (victim: CombatActor, damage: number) => void;
+            applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
+            // E2 (per-victim leech): OPTIONAL per-direction hook. drivePositionalApply is ONE
+            // helper shared by all three sites (focus / team / enemy); since standing (player→
+            // enemy) and taken (enemy→player) leech need opposite logic, each site supplies its
+            // own callback (Tasks 3/5) rather than branching inside the shared inline path.
+            // Unsupplied by every current caller → fully inert.
+            onVictimResolved?: (
+                victim: CombatActor,
+                damage: number,
+                outcome: VictimDamageOutcome,
+                didCrit: boolean
+            ) => void;
         }): void => {
             applyPositionalDamage({
                 hitCrits: args.hitCrits ?? [],
@@ -2577,6 +2588,8 @@ export function runCombat(input: CombatEngineInput): {
                         (roundPerTargetDamage.get(victim.id) ?? 0) + damage
                     );
                 },
+                // E2: forward the per-direction leech hook (unsupplied by all current callers).
+                onVictimResolved: args.onVictimResolved,
             });
         };
 
@@ -2613,8 +2626,10 @@ export function runCombat(input: CombatEngineInput): {
             enemyTypeArg: EnemyBaseClass | undefined;
             enemyBuffNamesUnion: () => string[];
             healEventOnly: boolean;
-            // Matches drivePositionalApply's applyToVictim param type exactly: (victim, damage) => void.
-            applyToVictim: (victim: CombatActor, damage: number) => void;
+            // Matches drivePositionalApply's applyToVictim param type exactly. E2: returns the
+            // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
+            // applyIncomingToTarget, which already surface it from E1).
+            applyToVictim: (victim: CombatActor, damage: number) => VictimDamageOutcome;
         }
         const playerTurnBindings: TurnBindings = {
             opposingRoster: enemyAttackerActors,
