@@ -1055,6 +1055,42 @@ export function detectAllyPurgedTrigger(
     return phrasePosTrigger(text, ALLY_PURGED_RE, anchorPos, 'on-ally-purged');
 }
 
+// "at the end of the round, … purges …" — Rhodium end-of-round purge. Position-scoped.
+// Verified against RAW CSV: 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs …'
+const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+the\s+round\b/i;
+
+/**
+ * Returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the
+ * "at the end of the round" phrase (Rhodium p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEnemyPurgedTrigger).
+ * Reference data: docs/ship-skills.csv (Rhodium).
+ */
+export function detectEndOfRoundPurgeTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
+}
+
+// "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
+// Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
+const MOST_BUFFS_RE = /\benemy\b[^.;]*\bwith\s+the\s+most\b[^.;]*\bbuffs?\b/i;
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the
+ * "enemy with the most buffs" phrase (Rhodium p1 / p2); otherwise false.
+ * Position-scoped on the RAW text (mirrors phrasePosTrigger's sentence-scoping).
+ * Reference data: docs/ship-skills.csv (Rhodium).
+ */
+export function detectMostBuffsTarget(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && MOST_BUFFS_RE.test(sentence);
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.

@@ -27,6 +27,8 @@ import {
     detectEnemyCleanseTrigger,
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
+    detectEndOfRoundPurgeTrigger,
+    detectMostBuffsTarget,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
@@ -3431,5 +3433,65 @@ describe('detectAllyPurgedTrigger', () => {
 
     it('returns undefined for negative anchor', () => {
         expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, -1)).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2b-2 T4: detectEndOfRoundPurgeTrigger + detectMostBuffsTarget (Rhodium)
+// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Regexes must match THROUGH <unit-aid> tags (loose [^.;]* gaps).
+// ---------------------------------------------------------------------------
+const RHODIUM_P1_RAW =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.';
+const RHODIUM_P2_RAW =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
+// Iridium p1 — plain "from the enemy", no "end of the round".
+const IRIDIUM_P1_RAW =
+    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.';
+
+describe('detectEndOfRoundPurgeTrigger', () => {
+    it('returns end-of-round for Rhodium p1 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P1_RAW, pos)).toBe('end-of-round');
+    });
+
+    it('returns end-of-round for Rhodium p2 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P2_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P2_RAW, pos)).toBe('end-of-round');
+    });
+
+    it('returns undefined for Iridium p1 (no "at the end of the round" phrase)', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+describe('detectMostBuffsTarget', () => {
+    it('returns true for Rhodium p1 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(RHODIUM_P1_RAW, pos)).toBe(true);
+    });
+
+    it('returns true for Rhodium p2 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P2_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(RHODIUM_P2_RAW, pos)).toBe(true);
+    });
+
+    it('returns false for Iridium p1 (plain "from the enemy", no "most buffs")', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(IRIDIUM_P1_RAW, pos)).toBe(false);
+    });
+
+    it('returns false for null / undefined text', () => {
+        expect(detectMostBuffsTarget(null, 0)).toBe(false);
+        expect(detectMostBuffsTarget(undefined, 0)).toBe(false);
+    });
+
+    it('returns false for negative anchor', () => {
+        expect(detectMostBuffsTarget(RHODIUM_P1_RAW, -1)).toBe(false);
     });
 });

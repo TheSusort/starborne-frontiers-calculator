@@ -43,6 +43,8 @@ import {
     detectEnemyCleanseTrigger,
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
+    detectEndOfRoundPurgeTrigger,
+    detectMostBuffsTarget,
     PURGE_MORE_RE,
     parseControlInflict,
     detectAllyCritTrigger,
@@ -1076,21 +1078,25 @@ function abilitiesFromText(
     // is NOT matched by PURGE_RE and therefore not emitted here — deferred to C2b.
     for (const p of parsePurge(text)) {
         const purgePos = text.search(/purge/i);
+        const passiveTrigger: AbilityTrigger | undefined =
+            // Iridium: self-subject "when directly damaged" → on-attacked. (Ignore the
+            // on-ally-attacked branch — no corpus ally-purge exists.)
+            detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
+                ? ('on-attacked' as const)
+                : detectEndOfRoundPurgeTrigger(text, purgePos); // Rhodium
         const trigger: AbilityTrigger | undefined =
-            slot === 'active' || slot === 'charged'
-                ? 'on-cast'
-                : // PASSIVE: detect a reactive purge trigger at the purge anchor.
-                  // Iridium: self-subject "when directly damaged" → on-attacked. (Ignore the
-                  // on-ally-attacked branch — no corpus ally-purge exists.)
-                  detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
-                  ? ('on-attacked' as const)
-                  : undefined;
+            slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
         if (!trigger) continue; // passive purge with no recognized trigger → not emitted
+        // Most-buffs target override: applies regardless of slot (future-proofs active/charged
+        // most-buffs purges; harmless for current corpus where only Rhodium passive carries it).
+        const target: AbilityTarget = detectMostBuffsTarget(text, purgePos)
+            ? 'enemy-most-buffs'
+            : p.target;
         out.push({
             ability: {
                 id: nextId(),
                 type: 'purge',
-                target: p.target, // 'enemy' | 'all-enemies'
+                target,
                 trigger,
                 conditions: [],
                 config: { type: 'purge', count: p.count },

@@ -2973,3 +2973,72 @@ describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// C2b-2 T4: Rhodium end-of-round + enemy-most-buffs purge build tests.
+// RAW strings from docs/ship-skills.csv (Rhodium row).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4)', () => {
+    // Rhodium p1 RAW: "At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs
+    // from the enemy with the most buffs."
+    const rhodiumP1 = () =>
+        ship({
+            firstPassiveSkillText:
+                'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.',
+        });
+
+    // Rhodium p2 RAW: same purge phrase + "deals <unit-damage>80% damage</unit-damage> that
+    // cannot critically hit."
+    const rhodiumP2 = () =>
+        ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.',
+        });
+
+    describe('Rhodium p1: end-of-round purge with target enemy-most-buffs', () => {
+        it('emits exactly ONE purge ability with trigger end-of-round, target enemy-most-buffs, count 2', () => {
+            const passive = slot(buildShipAbilities(rhodiumP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('end-of-round');
+            expect(purge.target).toBe('enemy-most-buffs');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Rhodium p2: purge ability present with correct shape (also has 80%-no-crit damage)', () => {
+        it('contains a purge with trigger end-of-round, target enemy-most-buffs, count 2', () => {
+            const passive = slot(buildShipAbilities(rhodiumP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges.length).toBeGreaterThanOrEqual(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('end-of-round');
+            expect(purge.target).toBe('enemy-most-buffs');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Iridium p1 regression: on-attacked + target:enemy UNCHANGED', () => {
+        it('Iridium p1 still emits trigger on-attacked, target enemy (not end-of-round / most-buffs)', () => {
+            const iridiumP1 = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(iridiumP1).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-attacked');
+            expect(purges[0].target).toBe('enemy');
+            if (purges[0].config.type === 'purge') {
+                expect(purges[0].config.count).toBe(1);
+            }
+        });
+    });
+});
