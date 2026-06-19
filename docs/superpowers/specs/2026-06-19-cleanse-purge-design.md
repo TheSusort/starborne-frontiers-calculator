@@ -52,6 +52,10 @@ Sub-project C makes both real: cleanse removes debuffs from allies; purge remove
 
 ## 3. Store topology (grounding)
 
+*File-path note:* bare `statusEngine.ts` / `triggers.ts` / `playerTurn.ts` / `engine.ts` citations are
+under `src/utils/combat/`; `skillTextParser.ts` is under `src/utils/`; `buildShipAbilities.ts` under
+`src/utils/abilities/`; `abilities.ts` under `src/types/`; `simCoverage.ts` under `src/components/skills/`.
+
 The status engine is direction-agnostic by actor id (`statusEngine.ts`):
 
 - `selfMaps.get(id)` → `Map<familyKey, BuffState>` = the **buffs** actor `id` carries (the purge target).
@@ -142,9 +146,17 @@ can't silently make it removable.
 2. Expand `UNREMOVABLE_STATUSES` (debuffs): add `Barrier Recharging`, `Damage to Dot`.
 3. **Parse `"all"`.** `CLEANSE_RE = /\bcleanses?\s+(\d+)/gi` (`skillTextParser.ts:1995`) only captures a
    digit, so "cleanses all debuffs" is dropped today. Extend to `/\bcleanses?\s+(\d+|all)\b/gi` and widen
-   `count` to `number | 'all'` through `parseCleanse` → `buildShipAbilities` (`:1024-1040`) → the
-   `{type:'cleanse', count}` config (`abilities.ts:241`, today `count: number`). The `'all'` value flows
-   into `removeNewestFirst`. (Without this, §2.1's "all removes everything" is unreachable for cleanse.)
+   `count` to `number | 'all'` through `parseCleanse` (`skillTextParser.ts:2002`) →
+   `buildShipAbilities` (`buildShipAbilities.ts:1024-1042`) → the `{type:'cleanse', count}` config
+   (`abilities.ts:241`, today `count: number`). The `'all'` value flows into `removeNewestFirst`.
+   (Without this, §2.1's "all removes everything" is unreachable for cleanse.)
+   **Metric sites must NOT consume the widened `count` directly** — `cfg.count` feeds three numeric sites
+   (`ctx.healing.credit(..., 'cleanseCount', cfg.count)` at `triggers.ts:1119`; `cleansePerformedCount +=
+   cfg.count` at `playerTurn.ts:1580`; the cast-path `credit` at `playerTurn.ts:1581`), and `credit`/
+   `cleansePerformedCount` are `number` (`playerTurn.ts:83`, `state.ts:29`). Switch all three to credit the
+   **actual removed count returned by `removeNewestFirst`** (it returns the number deleted), not
+   `cfg.count`. This both avoids the `number | 'all'` TS error and makes the metric honest (a "cleanse all"
+   that removes 2 credits 2).
 4. **Reactive path** — new engine delegate on the intent-exec context (mirroring `creditReactiveDamage` /
    `grantExtraAction`, supplied at `engine.ts` ~`:2852`/`:2891` where `statusEngine` is in scope):
    `ctx.cleanse?(actorId, count)`. Replace the reactive cleanse branch (`triggers.ts:1117`): resolve
@@ -155,8 +167,8 @@ can't silently make it removable.
    `cfg.type === 'cleanse'` arm): resolve recipients via the existing `recipientsFor(ability.target)`
    (`playerTurn.ts:1399`) and call `statusEngine.cleanse(rid, count)` directly (statusEngine is already in
    scope here — no delegate needed; consistent with how the cast path calls other statusEngine methods).
-6. **Keep** the existing `cleanseCount` healing-mode credit (UI metric) at both sites — real removal is
-   additive to it.
+6. **Keep** the existing `cleanseCount` healing-mode credit (UI metric) at both sites, but sourced from
+   `removeNewestFirst`'s return value rather than `cfg.count` (see step 3) — real removal is additive to it.
 7. The `cleanse-performed` event already fires; `on-enemy-cleansed` reactors (Arum/Grif/Larkspur) keep working.
 
 ## 6. C2 — Purge (buff removal, mirror)
