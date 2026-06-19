@@ -966,12 +966,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             for (const [key, s] of accumMap) {
                 if (s.stacks <= 0 || s.appliedSeq === undefined) continue;
                 // Accumulating statuses never expire by time → name-gate only.
+                // (accum entries have no duration; 0 is an inert placeholder — only the name gate applies)
                 if (isUnremovable(s.buffName, 0)) continue;
                 candidates.push({ seq: s.appliedSeq, remove: () => accumMap.delete(key) });
             }
         }
         candidates.sort((a, b) => b.seq - a.seq);
-        const limit = count === 'all' ? candidates.length : Math.min(count, candidates.length);
+        const limit =
+            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
         for (let i = 0; i < limit; i++) candidates[i].remove();
         return limit;
     };
