@@ -161,6 +161,9 @@ export interface StatusEngine {
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
      *  the number actually removed. Unknown id → no-op (returns 0). */
     cleanse(actorId: string, count: number | 'all'): number;
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
+     *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
+    purge(actorId: string, count: number | 'all'): number;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -984,6 +987,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const cleanse = (actorId: string, count: number | 'all'): number =>
         removeNewestFirst(actorId, 'debuffs', count);
 
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
+     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
+     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
+    const purge = (actorId: string, count: number | 'all'): number =>
+        removeNewestFirst(actorId, 'buffs', count);
+
     // --- Ability-status API (Task 6) ---
 
     const registerAbilityStatuses = (
@@ -1193,6 +1202,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         clearRemovable,
         removeTimedEnemyStatus,
         cleanse,
+        purge,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,
