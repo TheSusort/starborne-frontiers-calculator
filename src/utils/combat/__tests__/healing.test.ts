@@ -1733,12 +1733,48 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
         expect(focusHeal(result, 'shield')).toBe(4000);
     });
 
-    it('reactive cleanse credits the cleanseCount bucket', () => {
+    it('reactive cleanse credits the cleanseCount bucket (ACTUAL removed count, C1 T4)', () => {
         idCounter = 0;
+        // C1 T4: the reactive cleanse now performs REAL removal and credits the ACTUAL count
+        // removed (was the nominal cfg.count × rounds pre-T4). A FASTER enemy applies a removable
+        // debuff to the focus (= heal target) each round; the start-of-round reactive cleanse on
+        // the focus removes it. Timeline (start-of-round fires at the TOP of each round, before the
+        // enemy's turn): R1 cleanse → nothing yet (0), enemy applies; R2 cleanse → removes R1's (1),
+        // re-apply; R3 cleanse → removes R2's (1). → 2 actual removals over 3 rounds.
         const result = runCombat(
             BASE({
                 numRounds: 3,
                 healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'enemy1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 200 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'debuff',
+                                            target: 'enemy', // heal target is this enemy's enemy
+                                            config: {
+                                                type: 'debuff',
+                                                buffName: 'Attack Down',
+                                                parsedEffects: { attack: -30 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                application: 'apply',
+                                                duration: 5,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
                 shipSkills: {
                     slots: [
                         {
@@ -1756,7 +1792,7 @@ describe('healing — Task 9: reactive executor (heal/shield/cleanse)', () => {
                 },
             })
         );
-        expect(focusHeal(result, 'cleanseCount')).toBe(6); // 2 × 3 rounds
+        expect(focusHeal(result, 'cleanseCount')).toBe(2); // 2 actual removals over 3 rounds
     });
 
     it('healing mode off: reactive heal silently skips (no healing field, no crash)', () => {
@@ -1832,11 +1868,17 @@ describe('healing — Task 9: reactive trigger integration', () => {
         },
     });
 
-    it('on-ally-critically-repaired: focus crit-heals an ally each round → reactive cleanse fires once per cast (crit 100)', () => {
+    it('on-ally-critically-repaired: focus crit-heals an ally each round → reactive cleanse fires once per cast and REMOVES a debuff (crit 100)', () => {
         idCounter = 0;
         // Focus heals the bombarded target (an ally) every turn with crit 100 → its heal crits,
         // and the recipient is the target (non-self when healTargetId !== focus). The passive
-        // reactive cleanse on the focus fires once per qualifying own crit-repair.
+        // reactive cleanse fires once per qualifying own crit-repair. C1 T4: the reactive cleanse
+        // now performs REAL removal, so to keep the "fires once per cast → 3" intent we give it a
+        // debuff to remove every round. The cleanse targets 'ally' (the heal target t1, the
+        // bombarded ally), and a FASTER enemy (speed 300) applies a removable debuff to t1 BEFORE
+        // the focus (speed 200) acts each round. Per-round: enemy debuffs t1 → focus crit-repairs
+        // t1 → on-ally-critically-repaired fires → ally-target cleanse removes the debuff from t1
+        // (1 actual removal). → 3 actual removals over 3 rounds (= 1 per qualifying crit-repair).
         const result = runCombat(
             BASE({
                 numRounds: 3,
@@ -1844,7 +1886,37 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 crit: 100,
                 critDamage: 0,
                 speed: 200,
-                healTargetId: 't1', // a non-self ally is the heal target
+                healTargetId: 't1', // a non-self ally is the heal target (and the cleanse recipient)
+                enemyAttackers: [
+                    {
+                        id: 'enemy1',
+                        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 300 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'debuff',
+                                            target: 'enemy', // heal target (t1) is this enemy's enemy
+                                            config: {
+                                                type: 'debuff',
+                                                buffName: 'Attack Down',
+                                                parsedEffects: { attack: -30 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                application: 'apply',
+                                                duration: 5,
+                                            },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
                 teamActors: [
                     {
                         id: 't1',
@@ -1890,7 +1962,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                             abilities: [
                                 ab({
                                     type: 'cleanse',
-                                    target: 'self',
+                                    target: 'ally', // cleanse the repaired ally (the heal target t1)
                                     trigger: 'on-ally-critically-repaired',
                                     config: { type: 'cleanse', count: 1 },
                                 }),
@@ -1900,7 +1972,8 @@ describe('healing — Task 9: reactive trigger integration', () => {
                 },
             })
         );
-        // The focus crit-repairs the ally target each of 3 rounds → 1 reactive cleanse per cast.
+        // The focus crit-repairs the ally target each of 3 rounds → 1 reactive cleanse per cast,
+        // each removing the enemy-applied debuff from t1 (1 actual removal/round) → 3 over 3 rounds.
         expect(focusHeal(result, 'cleanseCount')).toBe(3);
     });
 
