@@ -1,22 +1,25 @@
 /**
  * Tests for the engine's player→enemy victim-intake wrapper (`applyOutgoingToEnemy` in
- * `engine.ts`). This is the second thin wrapper over the shared `applyVictimDamage` core
- * (Task 2), carrying an ENEMY-SIDE sink whose accounting hooks are no-ops for PR 1 (the
- * tank-incoming round accumulators must NOT move when a player attacks an enemy) and which
- * omits `onHealTargetDestroyed`. The wrapper still runs the FULL HP/shield/Barrier/
- * Cheat-Death/recordDestroyed path on the enemy victim, so enemies actually take damage and
- * can die.
+ * `engine.ts`). This is the second thin wrapper over the shared `applyVictimDamage` core,
+ * carrying an ENEMY-SIDE sink. As of E1 (symmetric incoming surface) that sink RECORDS each
+ * enemy victim's intake (incoming / shield-absorbed / barrier-absorbed) into the same per-actor
+ * `perActorIncoming` map the player-side sink uses, keyed by the ENEMY victim's id (ids are
+ * globally unique across sides). The wrapper still runs the FULL HP/shield/Barrier/Cheat-Death/
+ * recordDestroyed path on the enemy victim, so enemies actually take damage and can die, and it
+ * still omits `onHealTargetDestroyed` (the enemy victim is never the heal target).
  *
- * REACHABILITY: there is NO production call site for `applyOutgoingToEnemy` yet — Task 8 wires
- * it into the player→enemy damage sites. So it cannot be exercised through normal `runCombat`
- * flow today. To test the REAL closure (not a mock), `runCombat` accepts a narrow test-only tap
+ * The round-level SCALARS (`incomingDamage`/`shieldAbsorbed`/`barrierAbsorbed` on RoundData)
+ * read ONLY the heal target's own bucket (engine.ts:4210), so an enemy victim's intake never
+ * moves those scalars — it lives solely in that victim's own per-actor bucket. E2 (per-victim
+ * leech) reads this surface.
+ *
+ * The wrapper's only production call site is the positional apply path (drivePositionalApply);
+ * to test the REAL closure (not a mock), `runCombat` also accepts a narrow test-only tap
  * `__testTapApplyOutgoingToEnemy` that hands the genuine closure out once on the first round it
  * is built. Each test runs a healing-mode `runCombat` (the cheapest way to spin up the engine's
  * statusEngine/bus/recordDestroyed/recipientMaxHp context the closure captures), captures the
  * real wrapper through the tap, then invokes it against a hand-built enemy `CombatActor` victim
- * and observes the genuine mutations/emissions. The enemy-side accounting is verified to be a
- * no-op by checking the tank-incoming round accumulators (incomingDamage/shieldAbsorbed/
- * barrierAbsorbed) are untouched by the wrapper's calls.
+ * and observes the genuine mutations/emissions.
  *
  * Behaviors verified against a hand-built enemy victim:
  *   1. plain HP damage (shield 0) — currentHp drops by exactly the damage;
@@ -24,21 +27,15 @@
  *   3. enemy carrying Barrier → full block, HP unchanged, barriered:true;
  *   4. lethal damage, no Cheat Death → currentHp 0 + ship-destroyed emitted once;
  *   5. lethal damage on an enemy Cheat-Death carrier → survives at 1 HP;
- *   6. enemy-side sink is a no-op: invoking the wrapper DURING the run does not bump the tank's
- *      round-incoming accumulators (incomingDamage/shieldAbsorbed/barrierAbsorbed) that are
- *      snapshotted into the round result AFTER the wrapper runs.
+ *   6. enemy-side sink records per-victim intake: invoking the wrapper MID-RUN populates each
+ *      enemy victim's OWN per-actor bucket (incoming / shieldAbsorbed / barrierAbsorbed), while
+ *      the heal target's round scalars stay 0 (they read only the heal target's bucket).
  *
- * NON-VACUITY (behaviour #6): the round accumulators (roundIncomingDamage/…) are CLOSURE
- * variables reset at the top of each round and folded into `rounds[r]` only at post-round
- * assembly. Invoking the wrapper post-`runCombat` (as the other 5 behaviours do) can never move
- * those already-finalized numbers, so a post-run assertion on them would be VACUOUS — it would
- * pass even if the enemy sink bumped the accumulators. To make #6 genuinely catch a regression we
- * invoke the captured wrapper MID-RUN (inside the test tap, after the accumulators are reset to 0
- * for the round but before they are snapshotted). The same closure variables back both the
- * enemy-side sink (no-op) and the player-side sink (which DOES bump them), so if the enemy sink
- * ever started crediting incoming/shield/barrier, the bump would land in `rounds[0]` and the
- * assertion below would FAIL. Proven by inverting the sink locally (addIncoming → += amount) which
- * flips rounds[0].incomingDamage to non-zero and reds the test.
+ * NON-VACUITY (behaviour #6): the per-actor buckets are CLOSURE state reset/snapshotted per
+ * round. The wrapper is invoked MID-RUN (inside the test tap, after the buckets are reset for
+ * the round but before they are snapshotted into the round result), so the recorded intake
+ * surfaces in `result.healing.rounds[0].perActorIncoming`. If the enemy sink ever stopped
+ * recording, those buckets would be absent/zero and the assertions would FAIL.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -226,11 +223,11 @@ describe('applyOutgoingToEnemy (player→enemy per-victim damage apply wrapper)'
         expect(destroyed.filter((d) => d.actorId === 'cdEnemy')).toHaveLength(0);
     });
 
-    it('enemy-side sink is a no-op: invoking the wrapper MID-RUN does not bump the round accumulators', () => {
+    it('enemy-side sink records per-victim intake: mid-run wrapper calls populate each enemy victim bucket', () => {
         // Drive several enemy-victim intakes through the REAL wrapper DURING the round (inside the
-        // tap), so the accumulators are still live and will be snapshotted afterwards. A shield
+        // tap), so the per-actor buckets are still live and get snapshotted afterwards. A shield
         // hit (overflow), a Barrier full block, and a plain HP hit each exercise a different sink
-        // hook (addShieldAbsorbed / addBarrierAbsorbed / addIncoming) — all no-ops here.
+        // hook (addShieldAbsorbed / addBarrierAbsorbed / addIncoming).
         const { result } = captureWrapper(
             { enemyAttackers: [enemyAttacker('barrierEnemy', selfBuffSkills('Barrier'))] },
             (fn) => {
@@ -242,12 +239,21 @@ describe('applyOutgoingToEnemy (player→enemy per-victim damage apply wrapper)'
             }
         );
         const rounds = result.healing!.rounds;
-        // No enemy attacked the TANK this round, so the tank-incoming buckets start at 0. The
-        // mid-run wrapper calls above route through the enemy-side no-op sink, so the buckets must
-        // STILL read 0 in the finalized round — if the enemy sink ever credited these, the bumps
-        // would have landed here (the player-side sink, sharing these same closure vars, would).
+        // E1: the enemy-side sink now records each victim's intake into its OWN per-actor bucket
+        // (keyed by the enemy victim id), exactly like the player sink. `addIncoming` carries the
+        // TOTAL damage; shield/barrier absorbs are tracked separately.
+        const shieldBucket = rounds[0].perActorIncoming.get('e1');
+        expect(shieldBucket?.incoming).toBe(3000);
+        expect(shieldBucket?.shieldAbsorbed).toBe(1000);
+        expect(shieldBucket?.barrierAbsorbed ?? 0).toBe(0);
+        const barrierBucket = rounds[0].perActorIncoming.get('barrierEnemy');
+        expect(barrierBucket?.incoming).toBe(4000);
+        expect(barrierBucket?.barrierAbsorbed).toBe(4000);
+        expect(barrierBucket?.shieldAbsorbed ?? 0).toBe(0);
+        const hpBucket = rounds[0].perActorIncoming.get('e2');
+        expect(hpBucket?.incoming).toBe(2000);
+        // The heal target's own scalar totals stay 0 — the tank was never attacked this round; the
+        // scalars read ONLY the heal target's bucket (engine.ts:4210), not the enemy victims'.
         expect(rounds[0].incomingDamage).toBe(0);
-        expect(rounds[0].shieldAbsorbed).toBe(0);
-        expect(rounds[0].barrierAbsorbed).toBe(0);
     });
 });
