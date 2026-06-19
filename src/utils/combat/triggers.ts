@@ -155,6 +155,7 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
  *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
+ *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round; C2b-2)
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
@@ -290,6 +291,11 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'start-of-round':
                     bus.on('round-started', () => enqueue(intent));
+                    break;
+                case 'end-of-round':
+                    // Global, like start-of-round: every round-ended enqueues this owner's intent
+                    // (Rhodium's end-of-round purge). Gating handled in the executor.
+                    bus.on('round-ended', () => enqueue(intent));
                     break;
                 case 'on-bomb-detonated':
                     bus.on('bomb-detonated', () => enqueue(intent));

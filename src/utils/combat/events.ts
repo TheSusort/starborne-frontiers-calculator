@@ -29,6 +29,10 @@ import { DoTType } from '../../types/calculator';
  */
 export type CombatEvent =
     | { type: 'round-started'; round: number }
+    | /** Fires once per round at the round TAIL, AFTER all turns + the post-round death drain.
+     *  Mirror of `round-started`. Drains the end-of-round reactive queue (Rhodium's
+     *  end-of-round purge). Carries only the round number. */
+    { type: 'round-ended'; round: number }
     | { type: 'turn-started'; actorId: string; round: number }
     | { type: 'turn-ended'; actorId: string; round: number }
     | {

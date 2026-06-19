@@ -182,3 +182,88 @@ describe('C2b-2 T1 Integration: Iridium on-attacked reactive purge', () => {
         expect(purgeEvents[0].count).toBe(1);
     });
 });
+
+// =============================================================================
+// C2b-2 Task 2: round-ended event fires once per round, at the round tail.
+// =============================================================================
+
+describe('C2b-2 T2: round-ended event fires once per round', () => {
+    // Reuse the buffingEnemyFast + iridiumSkills harness above (3-round run).
+    const iridiumSkillsSimple = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'eorad1',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    });
+
+    const parsedTargetLocal = (selection: ParsedTarget['selection']): ParsedTarget => ({
+        raw: selection,
+        side: 'enemy',
+        selection,
+    });
+
+    const BASE_EOR = (): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: iridiumSkillsSimple(),
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 3,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        healTargetId: 'attacker',
+        speed: 100,
+        position: 'M4',
+        target: parsedTargetLocal('front'),
+        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+    });
+
+    it('round-ended fires exactly once per round with ascending round numbers', () => {
+        const roundEndedEvents: Extract<CombatEvent, { type: 'round-ended' }>[] = [];
+        const bus = createEventBus();
+        bus.on('round-ended', (e) => roundEndedEvents.push(e));
+        runCombat({ ...BASE_EOR(), bus });
+
+        // Exactly one event per round.
+        expect(roundEndedEvents).toHaveLength(3);
+        // Round numbers are sequential and ascending.
+        expect(roundEndedEvents.map((e) => e.round)).toEqual([1, 2, 3]);
+    });
+
+    it('round-ended fires AFTER all turn-ended events for that round', () => {
+        const eventOrder: string[] = [];
+        const bus = createEventBus();
+        bus.on('turn-ended', (e) => eventOrder.push(`turn-ended:${e.round}`));
+        bus.on('round-ended', (e) => eventOrder.push(`round-ended:${e.round}`));
+        runCombat({ ...BASE_EOR(), numRounds: 1, bus });
+
+        // round-ended must appear after all turn-ended events for round 1.
+        const roundEndedIdx = eventOrder.lastIndexOf('round-ended:1');
+        const lastTurnEndedIdx = eventOrder.lastIndexOf('turn-ended:1');
+        expect(roundEndedIdx).toBeGreaterThan(-1);
+        expect(roundEndedIdx).toBeGreaterThan(lastTurnEndedIdx);
+    });
+});

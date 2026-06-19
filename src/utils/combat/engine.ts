@@ -4062,6 +4062,13 @@ export function runCombat(input: CombatEngineInput): {
             drainEnemyIntents();
         }
 
+        // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,
+        // after the post-round death drain so the purge sees post-death state, before roundData
+        // assembly. Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
+        bus.emit({ type: 'round-ended', round: r });
+        drainIntents();
+        drainEnemyIntents();
+
         // Report stacks after expiry (state going into next round)
         roundData.push({
             round: r,

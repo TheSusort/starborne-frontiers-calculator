@@ -32,6 +32,7 @@ export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enem
 export type AbilityTrigger =
     | 'on-cast'
     | 'start-of-round'
+    | 'end-of-round' // Rhodium end-of-round purge — C2b-2
     | 'on-crit'
     | 'on-debuff-inflicted'
     | 'on-ally-debuff-inflicted'
@@ -70,6 +71,7 @@ export type AbilityTrigger =
  */
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
+    'end-of-round', // Rhodium end-of-round purge — C2b-2
     'on-crit',
     'on-debuff-inflicted',
     'on-ally-debuff-inflicted',
