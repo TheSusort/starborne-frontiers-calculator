@@ -3093,30 +3093,6 @@ describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2
         });
     });
 
-    describe('Nayra charged: purge all buffs gated on target-repaired-this-round', () => {
-        const nayraChargedText =
-            'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
-        const nayra = () =>
-            ship({
-                chargeSkillText: nayraChargedText,
-                chargeSkillCharge: 4,
-            });
-
-        it('emits exactly ONE purge ability from the charged slot with trigger on-cast, count all, and target-repaired-this-round condition', () => {
-            const charged = slot(buildShipAbilities(nayra()).slots, 'charged')!;
-            const purges = charged.abilities.filter((a) => a.type === 'purge');
-            expect(purges).toHaveLength(1);
-            const purge = purges[0];
-            expect(purge.trigger).toBe('on-cast');
-            if (purge.config.type === 'purge') {
-                expect(purge.config.count).toBe('all');
-            }
-            expect(purge.conditions).toEqual([
-                { subject: 'target-repaired-this-round', derivable: true },
-            ]);
-        });
-    });
-
     describe('Salvation regression: on-destroyed HEAL still emitted as heal (not purge)', () => {
         it('Salvation p3 still emits an 80% all-allies heal on trigger on-destroyed', () => {
             const salvation = ship({
@@ -3135,5 +3111,31 @@ describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2
             const purges = passive.abilities.filter((a) => a.type === 'purge');
             expect(purges).toHaveLength(0);
         });
+    });
+});
+
+// C2b-3: Nayra target-repaired-this-round purge condition build tests.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Nayra target-repaired-this-round purge (C2b-3)', () => {
+    const nayraChargedText =
+        'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
+    const nayra = () =>
+        ship({
+            chargeSkillText: nayraChargedText,
+            chargeSkillCharge: 4,
+        });
+
+    it('emits exactly ONE purge ability from the charged slot with trigger on-cast, count all, and target-repaired-this-round condition', () => {
+        const charged = slot(buildShipAbilities(nayra()).slots, 'charged')!;
+        const purges = charged.abilities.filter((a) => a.type === 'purge');
+        expect(purges).toHaveLength(1);
+        const purge = purges[0];
+        expect(purge.trigger).toBe('on-cast');
+        if (purge.config.type === 'purge') {
+            expect(purge.config.count).toBe('all');
+        }
+        expect(purge.conditions).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
     });
 });

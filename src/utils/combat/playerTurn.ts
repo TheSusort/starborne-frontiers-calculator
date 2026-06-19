@@ -1383,10 +1383,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
-    // On-cast purge (C2a): remove buffs from the acting actor's target. Keyed off targetId
+    // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
     // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
     // healEventOnly gate). gatedSkill holds the fired slot's abilities. DPS mode (dummy target,
     // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
+    // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
+    // condition) so conditional purges only fire when their precondition holds.
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
