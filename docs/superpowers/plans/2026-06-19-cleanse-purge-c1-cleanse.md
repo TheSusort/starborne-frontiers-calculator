@@ -74,9 +74,13 @@ import { createStatusEngine } from '../statusEngine';
 
 const mkTimed = (buffName: string, duration = 3) => ({
     kind: 'timed' as const,
+    side: 'enemy' as const,
+    sourceSlot: 'active' as const,
+    conditions: [],
     duration,
     payload: { buffName, stacks: 1, parsedEffects: {} },
-    // casterId optional; conditions omitted
+    // (confirm the exact RegisteredAbilityStatus timed shape against statusEngine.test.ts:~397
+    //  before writing — set every required field rather than relying on the `as any` cast.)
 });
 
 describe('statusEngine.cleanse (newest-first removal)', () => {
@@ -443,6 +447,8 @@ and in `parseCleanse`, change the return type's `count` to `number | 'all'`, and
 (update the `results` array element type to `count: number | 'all'`.)
 
 `buildShipAbilities.ts:1024-1042`: `config: { type: 'cleanse', count: c.count }` already passes through — `c.count` is now `number | 'all'`; no change beyond tsc following the widened type.
+
+**Other count consumer — the editor (no code change needed, tsc-safe):** `src/components/skills/AbilityCard.tsx:670` binds `value={config.count}` on an `<Input type="number">`. `Input.value` accepts `string | number`, so `number | 'all'` is assignable → **tsc stays green**. Functionally a `'all'` count renders blank in that number input and can't be hand-edited back to `'all'` — ACCEPTABLE for C1 because cleanse abilities are `autoFilled` (parser-emitted), not hand-authored. Do NOT widen the editor input in C1; just note this. (A future editor affordance for `'all'` is out of scope.)
 
 - [ ] **Step 4: Fix the Task-3 `else` branch for `'all'`**
 
