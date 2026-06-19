@@ -354,8 +354,13 @@ describe('healing mode — heal consumption + heal-performed', () => {
         expect(focusHeal(result, 'shield')).toBe(2500);
     });
 
-    // ── Test 7: cleanse count ────────────────────────────────────────────────
-    it('cleanse credits count per cast', () => {
+    // ── Test 7: cleanse credits the ACTUAL removed count ─────────────────────
+    // C1 T3: cleanse now performs REAL removal (newest-first), so the metric reflects the
+    // ACTUAL number removed, not the nominal cfg.count. With no debuffs on the recipient
+    // there is nothing to remove → cleanseCount 0 (was the nominal 2 × 3 = 6 before T3).
+    // Real-removal coverage (debuff present, removed, count credited) lives in
+    // cleanseCastPath.test.ts.
+    it('cleanse credits 0 when nothing is removable (honest count)', () => {
         idCounter = 0;
         const result = runCombat(
             BASE({
@@ -366,7 +371,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
                 ]),
             })
         );
-        expect(focusHeal(result, 'cleanseCount')).toBe(6); // 2 × 3 rounds
+        expect(focusHeal(result, 'cleanseCount')).toBe(0);
     });
 
     // ── Test 8: all-allies summing ───────────────────────────────────────────

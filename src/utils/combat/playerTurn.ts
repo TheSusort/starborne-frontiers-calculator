@@ -1575,10 +1575,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                 }
             } else if (cfg.type === 'cleanse') {
-                // Accumulate for the cleanse-performed emit in BOTH modes; only credit the
-                // player bucket OUTSIDE event-only mode (the enemy must not pollute the map).
-                cleansePerformedCount += cfg.count;
-                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', cfg.count);
+                // Real removal is player-side only (recipientsFor returns player ids; enemy-side
+                // actors run event-only and side-correct enemy routing is deferred). The metric
+                // and the cleanse-performed event reflect the ACTUAL number removed.
+                if (!healEventOnly) {
+                    let removed = 0;
+                    for (const rid of recipientsFor(ability.target)) {
+                        removed += statusEngine.cleanse(rid, cfg.count);
+                    }
+                    cleansePerformedCount += removed;
+                    healing.credit(actor.id, 'cleanseCount', removed);
+                } else {
+                    // Enemy-side event-only: no removal yet — preserve the cleanse-performed
+                    // cadence so on-enemy-cleansed reactors (Arum/Grif) stay unaffected.
+                    cleansePerformedCount += cfg.count;
+                }
             }
         }
 

@@ -418,9 +418,25 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
 
     it('normal mode (healEventOnly false) DOES credit and emit cleanse-performed', () => {
         // Sanity / symmetry: the player path credits buckets AND now emits cleanse-performed.
+        // C1 T3: cleanse now performs REAL removal, so the recipient ('tank' — the ally cleanse
+        // routes to healing.targetId) must carry removable debuffs for the cleanse to remove
+        // (and credit) anything. Seed two removable debuffs so the cleanse-2 removes 2,
+        // preserving the count===2 assertion.
         const events: CombatEvent[] = [];
         const spy = makeHealingSpy();
         const args = makeArgs(makeRuntime(healCleanseSkills()), spy.healing, false);
+        const mkDebuff = (buffName: string) => ({
+            kind: 'timed' as const,
+            side: 'enemy' as const,
+            sourceSlot: 'active' as const,
+            conditions: [],
+            duration: 5,
+            casterId: 'foe',
+            payload: { buffName, stacks: 1, parsedEffects: {} },
+        });
+        // The ally cleanse routes to healing.targetId ('tank') → seed its enemy store.
+        args.statusEngine.applyTimedAbilityStatus(1, mkDebuff('Attack Down'), 'foe', 'tank');
+        args.statusEngine.applyTimedAbilityStatus(1, mkDebuff('Defense Down'), 'foe', 'tank');
         args.bus.on('cleanse-performed', (e) => events.push(e));
 
         runPlayerTurn(args);
@@ -428,9 +444,10 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         const cleanse = events.find((e) => e.type === 'cleanse-performed');
         expect(cleanse).toBeDefined();
         expect(cleanse!.casterId).toBe('enemy1');
+        // Real removal: both seeded debuffs removed → count is the ACTUAL removed total (2).
         expect(cleanse!.count).toBe(2);
-        // Player path credited cleanseCount + directHeal (mutations DID run).
-        expect(spy.credits.some((c) => c.bucket === 'cleanseCount')).toBe(true);
+        // Player path credited cleanseCount (actual removed) + directHeal (mutations DID run).
+        expect(spy.credits.some((c) => c.bucket === 'cleanseCount' && c.amount === 2)).toBe(true);
         expect(spy.credits.some((c) => c.bucket === 'directHeal')).toBe(true);
     });
 });
