@@ -929,7 +929,7 @@ export interface CombatEngineInput {
         fn: (
             damage: number,
             enemyVictim: CombatActor
-        ) => { shieldBefore: number; hpDamage: number; barriered: boolean }
+        ) => VictimDamageOutcome
     ) => void;
     /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
      *  are constructed, so unit tests can assert the plumbed base hacking/security on each actor
@@ -2122,6 +2122,82 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
+    // E2 Task 3: PER-VICTIM standing-leech proc for the POSITIONAL apply path.
+    //
+    // The non-positional `procStandingLeeches` above rides the aggregate `creditDamage(...
+    // 'direct' ...)` write — but that write is SUPPRESSED for the positional case (the firing-hit
+    // damage lands per-victim via applyPositionalDamage, so crediting it again would double-count).
+    // So on the positional path NO standing leech fired before E2. This proc restores it by
+    // running once per FOOTPRINT VICTIM (wired via drivePositionalApply's `onVictimResolved`),
+    // leeching off THAT victim's already-role-scaled dealt damage — so origin victims contribute
+    // full damage and covered victims contribute half automatically (the caller passes the
+    // per-victim `damage`).
+    //
+    // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
+    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor) /
+    // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
+    // leech can repair the right ally, not just the heal target. procStandingLeeches is left
+    // UNTOUCHED (its `rid === healTarget.id` pool-gating is load-bearing for the non-positional
+    // all-allies case, leech.test.ts:355-404).
+    //
+    // RECIPIENT RESOLUTION: via `runtimesById` (NOT allActorsById) — the focus attacker is keyed
+    // 'attacker', not its real id. `self` → the acting owner; `ally` → the heal target; `all-allies`
+    // → every player id. A recipient with no resolvable runtime actor is credited but not
+    // pool-applied (mirrors procStandingLeeches's effect for the all-allies non-target case).
+    //
+    // HEAL-CRIT-GATE CADENCE: this fires once per victim, so a heal-kind leech draws the owner's
+    // `activeHealCritGate` ONCE PER VICTIM (an N-victim AoE makes N draws, in footprint order).
+    // The perVictimLeech test pins the exact numbers.
+    //
+    // NO `dmg()`/cumulative accumulator write here (the per-victim apply already landed the HP
+    // damage; the aggregate direct credit stays suppressed) → no double-count. Honors `scope`:
+    // a detonation-scoped leech is skipped on the per-victim `direct` channel.
+    const procStandingLeechesPerVictim = (sourceId: string, amount: number): void => {
+        if (!healingCtx || amount <= 0) return;
+        const entries = standingLeeches.get(sourceId);
+        if (!entries) return;
+        const owner = runtimesById.get(sourceId);
+        if (!owner) return;
+        for (const e of entries) {
+            // Per-victim damage rides the `direct` channel only; detonation-scoped leeches
+            // never fire here (bombs credit through the aggregate detonation path instead).
+            if (e.scope === 'detonation') continue;
+            let raw = amount * (e.pct / 100);
+            if (e.kind === 'heal') {
+                raw *= 1 + owner.healModifier / 100;
+                // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
+                if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
+                    raw *= 1 + owner.critDamage / 100;
+                }
+            }
+            const recipients =
+                e.target === 'ally'
+                    ? [healTarget!.id]
+                    : e.target === 'all-allies'
+                      ? healingCtx.playerIds
+                      : [sourceId];
+            for (const rid of recipients) {
+                // Resolve the recipient's live actor for the pool application (Task-1 closures
+                // take an explicit victim). runtimesById, not allActorsById: the focus is 'attacker'.
+                const recipientActor = runtimesById.get(rid)?.actor;
+                if (e.kind === 'heal') {
+                    healingCtx.credit(sourceId, 'directHeal', raw);
+                    if (recipientActor) {
+                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                            raw,
+                            recipientActor
+                        );
+                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
+                        healingCtx.credit(sourceId, 'overheal', overheal);
+                    }
+                } else {
+                    healingCtx.credit(sourceId, 'shield', raw);
+                    if (recipientActor) healingCtx.grantShieldToTarget(raw, recipientActor);
+                }
+            }
+        }
+    };
+
     // C2b-2 T5: the id of the actor whose turn is CURRENTLY executing. Set once at the top of
     // each actor's turn (after the dead-actor skips, before any damage is applied), so the
     // DIRECT-damage wrappers can stamp the lethal attacker onto ship-destroyed (Faust reads it
@@ -2292,7 +2368,7 @@ export function runCombat(input: CombatEngineInput): {
             // passes { byDirectDamage: false } (no single killer). No consumer reads these yet
             // (Faust, Task 6), so production stays byte-identical.
             cause?: { killerId?: string; byDirectDamage?: boolean }
-        ): { shieldBefore: number; hpDamage: number; barriered: boolean } => {
+        ): VictimDamageOutcome => {
             sink.addIncoming(damage, victim.id);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
@@ -2430,8 +2506,7 @@ export function runCombat(input: CombatEngineInput): {
                 killerId: actingActorId,
                 byDirectDamage: true,
             }
-        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
-            applyVictimDamage(damage, victim, playerSink, cause);
+        ): VictimDamageOutcome => applyVictimDamage(damage, victim, playerSink, cause);
         // Player→enemy intake (E1 — symmetric incoming surface). The symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path AND now records
@@ -2455,7 +2530,7 @@ export function runCombat(input: CombatEngineInput): {
         const applyOutgoingToEnemy = (
             damage: number,
             enemyVictim: CombatActor
-        ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
+        ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
             applyVictimDamage(damage, enemyVictim, enemySink, {
                 killerId: actingActorId,
@@ -3351,6 +3426,12 @@ export function runCombat(input: CombatEngineInput): {
                                 actingId: actor.id,
                                 opposingLiving: tb.opposingRoster,
                                 applyToVictim: tb.applyToVictim,
+                                // E2 Task 3: per-victim standing leech (player→enemy). The ACTING
+                                // attacker's standing leeches proc off EACH footprint victim's
+                                // role-scaled dealt damage (origin full, covered half) → restoring
+                                // the leech the positional credit-suppression had silenced.
+                                onVictimResolved: (_victim, damage) =>
+                                    procStandingLeechesPerVictim(actor.id, damage),
                             });
                         }
 
@@ -3530,6 +3611,11 @@ export function runCombat(input: CombatEngineInput): {
                                 actingId: actor.id,
                                 opposingLiving: tb.opposingRoster,
                                 applyToVictim: tb.applyToVictim,
+                                // E2 Task 3: per-victim standing leech (player→enemy), keyed to
+                                // THIS walked team actor as the acting attacker. Same per-victim
+                                // proc as the focus site.
+                                onVictimResolved: (_victim, damage) =>
+                                    procStandingLeechesPerVictim(actor.id, damage),
                             });
                         }
 
