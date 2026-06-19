@@ -105,6 +105,14 @@ export type CombatEvent =
      *  deferred — reactors such as Arum/Grif fire on the cast, not the removal).
      *  The `on-enemy-cleansed` listener filters by `isOpposing(casterId)`. */
     | { type: 'cleanse-performed'; casterId: string; count: number; round: number }
+    /** A purge resolved. `casterId` = the purging actor; `targetId` = the VICTIM whose
+     *  buffs were removed (REQUIRED — `on-ally-purged` is victim-scoped, unlike the
+     *  caster-scoped `on-enemy-cleansed`); `count` = the number actually removed.
+     *  Suppressed when 0 removed and when the triggering intent carried
+     *  `eventCtx.fromPurgeEvent` (depth-1 chain guard — a purge triggered by a purge
+     *  does not re-emit). `on-enemy-purged` filters `casterId === ownerId`;
+     *  `on-ally-purged` filters `isSameSideAlly(targetId, ownerId)`. */
+    | { type: 'purge-performed'; casterId: string; targetId: string; count: number; round: number }
     | {
           type: 'dot-ticked';
           targetId: string;

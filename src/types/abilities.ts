@@ -55,7 +55,10 @@ export type AbilityTrigger =
     // debuff (cleanse-performed). Player reactions: Zosimos charge gain on enemy
     // repair; Arum/Yarrow/Larkspur/Grif reactions on enemy cleanse. Phase 4c PR 4.
     | 'on-enemy-repaired'
-    | 'on-enemy-cleansed';
+    | 'on-enemy-cleansed'
+    // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
+    | 'on-enemy-purged'
+    | 'on-ally-purged';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -84,6 +87,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-hp-threshold-crossed',
     'on-enemy-repaired',
     'on-enemy-cleansed',
+    // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
+    'on-enemy-purged',
+    'on-ally-purged',
 ]);
 
 export type ConditionSubject =
