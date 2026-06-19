@@ -2201,6 +2201,65 @@ export function runCombat(input: CombatEngineInput): {
         }
     };
 
+    // E2 Task 5: PER-VICTIM damage-TAKEN leech proc for the POSITIONAL enemy branch
+    // (enemy→player). The non-positional consumption block (~:4025) credits ONLY the heal
+    // target off the aggregate `damage`, gated by `!enemyPositional` — so on the positional
+    // path NO taken leech fired before E2 (each player victim took only its OWN per-victim AoE
+    // share, and the heal-target-only single-row credit would have been wrong). This proc
+    // restores it by running once per FOOTPRINT VICTIM (wired via drivePositionalApply's
+    // `onVictimResolved` at the enemy site), procing THAT victim's OWN taken-leeches
+    // (takenLeechesByOwner.get(victim.id)) off the per-victim `damage` it took, applying to the
+    // victim's OWN pool via the Task-1 closures.
+    //
+    // SEMANTICS — mirror the non-positional block (~:4025-4060) PER VICTIM:
+    //   - Barrier carve-out: skip entirely if the victim was `barriered` (its hit was fully
+    //     blocked — no damage taken, nothing to leech). Per victim via `outcome.barriered`.
+    //   - requiresHpDamage (Quixilver): only fire an entry with requiresHpDamage when the hit
+    //     dealt HP damage PAST shield — per victim via `outcome.shieldBefore > 0 &&
+    //     outcome.hpDamage > 0`.
+    //   - The leech is off `damage` (the FULL per-victim damage taken — already covered-cell
+    //     reduced), NOT the HP portion — matching the non-positional `damage * (e.pct/100)`.
+    //   - Same heal/shield fold (pct → raw, healModifier, heal-crit gate/noCrit) and the same
+    //     directHeal/effectiveHeal/overheal vs shield bucket split, credited to the victim.
+    //
+    // HEAL-CRIT-GATE CADENCE: this fires once per victim, so a heal-kind leech draws the
+    // victim's `activeHealCritGate` ONCE PER VICTIM (matching procStandingLeechesPerVictim).
+    const procTakenLeechesPerVictim = (
+        victim: CombatActor,
+        damage: number,
+        outcome: VictimDamageOutcome
+    ): void => {
+        if (!healingCtx || damage <= 0) return;
+        // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
+        if (outcome.barriered) return;
+        const entries = takenLeechesByOwner.get(victim.id);
+        if (!entries) return;
+        const rt = runtimesById.get(victim.id);
+        for (const e of entries) {
+            // requiresHpDamage gate (per victim): shield present at hit start AND HP damage dealt.
+            if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
+                continue;
+            }
+            let raw = damage * (e.pct / 100);
+            if (e.kind === 'heal' && rt) {
+                raw *= 1 + rt.healModifier / 100;
+                // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
+                if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
+                    raw *= 1 + rt.critDamage / 100;
+                }
+            }
+            if (e.kind === 'heal') {
+                healingCtx.credit(victim.id, 'directHeal', raw);
+                const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim);
+                healingCtx.credit(victim.id, 'effectiveHeal', consumed);
+                healingCtx.credit(victim.id, 'overheal', overheal);
+            } else {
+                healingCtx.credit(victim.id, 'shield', raw);
+                healingCtx.grantShieldToTarget(raw, victim);
+            }
+        }
+    };
+
     // C2b-2 T5: the id of the actor whose turn is CURRENTLY executing. Set once at the top of
     // each actor's turn (after the dead-actor skips, before any damage is applied), so the
     // DIRECT-damage wrappers can stamp the lethal attacker onto ship-destroyed (Faust reads it
@@ -3917,12 +3976,14 @@ export function runCombat(input: CombatEngineInput): {
                             processExtraActionGrants(actor, enemyTurn.extraActionGrants);
                         }
                         if (damage > 0) {
-                            // Phase-5 per-victim accounting TODOs (see detailed notes below): (1)
-                            // takenLeeches gated to non-positional — per-victim leech needs the symmetric
-                            // heal surface; (2) since PR5b playerSink.addIncoming keys each victim's AoE
-                            // share into ITS OWN per-actor bucket (the heal-target row is no longer
-                            // inflated) — surfacing those other per-actor buckets as result rows is the
-                            // still-deferred symmetric-accounting surface.
+                            // Phase-5 per-victim accounting notes (see detailed notes below): (1) the
+                            // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
+                            // procTakenLeechesPerVictim at the enemy site); the non-positional block below
+                            // stays gated to `!enemyPositional` and heal-target-only; (2) since PR5b
+                            // playerSink.addIncoming keys each victim's AoE share into ITS OWN per-actor
+                            // bucket (the heal-target row is no longer inflated) — surfacing those other
+                            // per-actor buckets as result rows is the still-deferred symmetric-accounting
+                            // surface.
                             //
                             // Shield-first drain → HP → ship-destroyed → the victim's per-actor bucket. The
                             // shieldBefore/hpDamage are captured for the punch-through gate (Quixilver) below.
@@ -3977,6 +4038,13 @@ export function runCombat(input: CombatEngineInput): {
                                     actingId: actor.id,
                                     opposingLiving: tb.opposingRoster,
                                     applyToVictim: tb.applyToVictim,
+                                    // E2 Task 5: per-victim taken leech (enemy→player). Each
+                                    // player victim procs its OWN damage-taken heal/shield leech
+                                    // off the damage IT took, with the per-victim Barrier /
+                                    // requiresHpDamage gates — mirroring the non-positional block
+                                    // below, per victim.
+                                    onVictimResolved: (victim, dmg, outcome) =>
+                                        procTakenLeechesPerVictim(victim, dmg, outcome),
                                 });
                             } else {
                                 ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
@@ -4011,17 +4079,17 @@ export function runCombat(input: CombatEngineInput): {
                             // nothing to leech from. (Distinct from a shield absorb, where the convention
                             // still leeches off the full attack: a shield takes the hit, Barrier nullifies it.)
                             //
-                            // POSITIONAL DEFERRAL (Task 9, Step C — Phase-5 follow-up): this damage-taken
-                            // leech is single-target heal-target infrastructure (takenLeeches is collected
-                            // ONLY for the heal target; the healing-accounting model has one row, the heal
-                            // target's). On the positional path the heal target took only its OWN per-victim
-                            // AoE share (origin full / covered half), and shieldBefore/hpDamage are not
-                            // surfaced per victim — crediting off the aggregate `damage` here would be wrong.
-                            // So the leech is gated to the NON-positional path: the legacy heal-target leech
-                            // stays byte-identical, and full per-victim leech symmetry (every player victim
-                            // procing its OWN damage-taken reactive off the damage IT took) is the documented
-                            // Phase-5 follow-up. Inert today either way (no fixture runs a damage-taken
-                            // reactive in healing mode → takenLeeches is empty).
+                            // POSITIONAL SPLIT (E2 T4/T5): taken-leeches are now collected PER OWNER
+                            // (takenLeechesByOwner, keyed by each owner's id), but the NON-positional
+                            // consumption HERE reads only the heal target's slice — the legacy single-row
+                            // healing-accounting model lands every enemy attack on the heal target, so its
+                            // values stay byte-identical. The POSITIONAL path no longer defers: each player
+                            // victim procs its OWN taken-leech off the damage IT took via
+                            // procTakenLeechesPerVictim (wired at the enemy drivePositionalApply site, with
+                            // the per-victim Barrier carve-out + requiresHpDamage gate). This block is
+                            // gated to `!enemyPositional` so the two paths never double-count. Inert on the
+                            // non-positional path unless a player runs a damage-taken reactive in healing
+                            // mode (no current fixture does → the heal target's slice is empty).
                             const healTargetTakenLeeches =
                                 takenLeechesByOwner.get(healTarget!.id) ?? [];
                             if (

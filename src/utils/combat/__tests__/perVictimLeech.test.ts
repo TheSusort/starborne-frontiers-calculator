@@ -24,6 +24,7 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -179,5 +180,266 @@ describe('E2 T3 — per-victim standing leech on the positional path', () => {
             })
         );
         expect(sumHeal(result, 'directHeal')).toBe(0);
+    });
+});
+
+/**
+ * E2 Task 5 — PER-VICTIM TAKEN leech on the positional ENEMY branch (enemy→player).
+ *
+ * Before E2 the damage-taken HEAL/SHIELD leech was gated to the NON-positional path: on the
+ * positional path the enemy's firing hit lands per-victim via drivePositionalApply, but the
+ * leech block only credited the single heal target off the aggregate `damage` (gated out by
+ * `!enemyPositional`). So a player victim's "when damaged, heal/shield" reactive never fired
+ * when the enemy used a positional AoE.
+ *
+ * E2 wires an `onVictimResolved` callback at the ENEMY positional site that procs EACH player
+ * victim's OWN taken-leeches (takenLeechesByOwner.get(victim.id)) off the per-victim
+ * `{shieldBefore, hpDamage, barriered}` outcome, applying to the victim's OWN pool via the
+ * Task-1 closures. The Barrier carve-out and requiresHpDamage gate are evaluated PER VICTIM,
+ * mirroring the non-positional block.
+ *
+ * Harness: a positioned, OFFENSIVE enemy at M1 firing `front` with a Line-Range-1 AoE. The
+ * front-most player (focus 'attacker' at M4) is the origin victim (full damage); the M3 team
+ * player ('player-team') is the covered victim (half damage). ONE player carries a passive
+ * damage-taken heal leech; the other does not. Crit 0 / healModifier 0 keeps every value an
+ * exact integer.
+ */
+describe('E2 T5 — per-victim taken leech on the positional enemy branch', () => {
+    // A passive-slot damage-taken HEAL leech (taken-leech). `target` is 'self' → the victim
+    // heals its OWN pool off the damage IT took.
+    const takenHeal = (pct: number, extra: { requiresHpDamage?: boolean; noCrit?: boolean } = {}): Ability =>
+        ab({
+            type: 'heal',
+            target: 'self',
+            config: { type: 'heal', pct, basis: 'damage-taken', ...extra },
+        });
+
+    // A no-payload, always-active Barrier self-buff (full damage immunity). A victim carrying
+    // this fully BLOCKS the incoming hit → no damage taken → the per-victim Barrier carve-out
+    // skips its taken leech. Same shape barrier.test.ts uses.
+    const barrierBuff = () => ({
+        id: 'pvl-barrier',
+        buffName: 'Barrier',
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: {},
+    });
+
+    // A walked team player at a board position. Optional shipSkills slots (else a bare basic
+    // attack so it has a damage skill / position is meaningful). HP huge so it never dies.
+    const playerAt = (
+        id: string,
+        position: Position,
+        slots: ShipSkills['slots'] = [basicAttack()],
+        hp = 1_000_000,
+        selfBuffs: TeamActor['selfBuffs'] = []
+    ): TeamActor => ({
+        id,
+        speed: 1, // order is irrelevant: the enemy AoE lands on a fixed footprint regardless.
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs,
+        enemyDebuffs: [],
+        position,
+        target: parsedTarget('front'),
+        pattern: lineRange1Pattern(),
+        walk: {
+            shipSkills: { slots },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+            healModifier: 0,
+        },
+    });
+
+    // An OFFENSIVE enemy at M1 firing a Line-Range-1 AoE at `front`. Anchored at the front-most
+    // player (focus at M4) it covers the M3 player — origin full, covered half.
+    const offensiveEnemyAt = (id: string, position: Position, attack: number, hp = 1_000_000_000): EnemyAttacker =>
+        ({
+            id,
+            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 10 },
+            chargeCount: 0,
+            startCharged: false,
+            position,
+            target: parsedTarget('front'),
+            pattern: lineRange1Pattern(),
+            shipSkills: { slots: [basicAttack()] },
+        }) as EnemyAttacker;
+
+    // 1v(focus+team): the enemy AoE hits BOTH players. The focus ('attacker', M4) is the origin
+    // victim (full damage); the M3 team player is the covered victim (half). HP huge so nobody
+    // dies; the focus has a HP deficit so its own taken leech (when present) has room to consume.
+    const TAKEN_BASE = (overrides: {
+        focusSlots?: ShipSkills['slots'];
+        teamSlots?: ShipSkills['slots'];
+        enemyAttack?: number;
+        focusHp?: number;
+        teamSelfBuffs?: TeamActor['selfBuffs'];
+        focusSelfBuffs?: CombatEngineInput['selfBuffs'];
+    } = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: overrides.focusSlots ?? [basicAttack()] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: overrides.focusSelfBuffs ?? [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: overrides.focusHp ?? 1_000_000,
+        healModifier: 0,
+        healTargetId: 'attacker',
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: lineRange1Pattern(),
+        teamActors: [
+            playerAt('player-team', 'M3', overrides.teamSlots, 1_000_000, overrides.teamSelfBuffs),
+        ],
+        enemyAttackers: [offensiveEnemyAt('enemy-atk', 'M1', overrides.enemyAttack ?? 5000)],
+    });
+
+    it('taken leech: the COVERED victim heals its OWN pool off the half damage it took; the origin victim does not', () => {
+        idc = 0;
+        // Enemy attack 5000 → origin (focus M4) takes 5000, covered (team M3) takes 2500.
+        // Only the covered team player carries a 20% damage-taken heal leech.
+        // covered directHeal = 2500 × 0.20 = 500; origin gets no leech → 0.
+        const result = runCombat(
+            TAKEN_BASE({
+                teamSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20)] }],
+            })
+        );
+        expect(sumHeal(result, 'directHeal', 'player-team')).toBeCloseTo(500, 6);
+        expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0);
+        // The leech consumed against the deficit the SAME attack created (2500 taken) → all 500
+        // effective, zero overheal. Proves the leech applied to the victim's OWN pool.
+        expect(sumHeal(result, 'effectiveHeal', 'player-team')).toBeCloseTo(500, 6);
+        expect(sumHeal(result, 'overheal', 'player-team')).toBe(0);
+    });
+
+    it('taken leech: the ORIGIN victim heals its OWN pool off the FULL damage it took', () => {
+        idc = 0;
+        // The focus (origin, full 5000) carries the 20% damage-taken heal leech.
+        // origin directHeal = 5000 × 0.20 = 1000; covered (no leech) → 0.
+        const result = runCombat(
+            TAKEN_BASE({
+                focusSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20)] }],
+            })
+        );
+        expect(sumHeal(result, 'directHeal', 'attacker')).toBeCloseTo(1000, 6);
+        expect(sumHeal(result, 'directHeal', 'player-team')).toBe(0);
+    });
+
+    it('taken leech: a victim under a full Barrier reads 0 (per-victim Barrier carve-out)', () => {
+        idc = 0;
+        // The ORIGIN focus carries an always-active Barrier → the enemy's origin hit is FULLY
+        // BLOCKED (barriered, no damage taken) → its taken leech is skipped entirely. The covered
+        // team player (no Barrier) still leeches off its half damage (2500 → 500) — proving the
+        // Barrier carve-out is evaluated PER VICTIM, not globally.
+        const result = runCombat(
+            TAKEN_BASE({
+                focusSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20)] }],
+                focusSelfBuffs: [barrierBuff()],
+                teamSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20)] }],
+            })
+        );
+        // Barriered origin → 0 leech; covered (2500 taken) → 500.
+        expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0);
+        expect(sumHeal(result, 'directHeal', 'player-team')).toBeCloseTo(500, 6);
+    });
+
+    it('taken leech requiresHpDamage: fires only when the hit deals HP damage past shield', () => {
+        idc = 0;
+        // No shield anywhere → the attack hits HP directly, but shieldBefore is 0, so a
+        // requiresHpDamage (Quixilver-style) gate FAILS (needs shieldBefore > 0 AND hpDamage > 0).
+        // Both victims carry the gated leech → neither fires.
+        const noShield = runCombat(
+            TAKEN_BASE({
+                focusSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] }],
+                teamSlots: [basicAttack(), { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] }],
+            })
+        );
+        expect(sumHeal(noShield, 'directHeal', 'attacker')).toBe(0);
+        expect(sumHeal(noShield, 'directHeal', 'player-team')).toBe(0);
+
+        idc = 0;
+        // Now the origin focus seeds a pre-existing Barrier-free SHIELD (HP-basis) on its own
+        // turn (before the enemy at speed 10): 10% of 1,000,000 = 100,000. The enemy's 5000 hit
+        // is FULLY absorbed by the shield (shieldBefore 100000, hpDamage 0) → the gate still
+        // fails (no HP damage). So even WITH shield, a fully-absorbed hit does not fire the gate.
+        const fullyAbsorbed = runCombat(
+            TAKEN_BASE({
+                focusSlots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                config: { type: 'shield', pct: 10, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                    { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] },
+                ],
+            })
+        );
+        expect(sumHeal(fullyAbsorbed, 'directHeal', 'attacker')).toBe(0);
+
+        idc = 0;
+        // Finally: a SMALL shield (1% of 1,000,000 = 10,000) that the 50,000 hit punches
+        // through — shieldBefore 10000 > 0 AND hpDamage 40000 > 0 → the gate PASSES. The leech
+        // fires off the FULL damage taken (50,000), not the HP portion: 50000 × 0.20 = 10000.
+        const punchThrough = runCombat(
+            TAKEN_BASE({
+                enemyAttack: 50_000,
+                focusHp: 1_000_000,
+                focusSlots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                            ab({
+                                type: 'shield',
+                                target: 'self',
+                                config: { type: 'shield', pct: 1, basis: 'hp' },
+                            }),
+                        ],
+                    },
+                    { slot: 'passive', abilities: [takenHeal(20, { requiresHpDamage: true })] },
+                ],
+            })
+        );
+        expect(sumHeal(punchThrough, 'directHeal', 'attacker')).toBeCloseTo(10000, 6);
     });
 });
