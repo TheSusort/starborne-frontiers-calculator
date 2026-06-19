@@ -87,7 +87,7 @@ The recipient resolver is duplicated in the reactive heal branch (`~:1070`) and 
 - [ ] **Step 2: Implement + export** `reactiveRecipients(intent, ctx, fallbackTargetId)` in `triggers.ts` near the executor:
 ```typescript
 export function reactiveRecipients(
-    intent: ReactiveIntent,
+    intent: Intent,
     ctx: IntentExecContext,
     fallbackTargetId: string
 ): string[] {
@@ -98,7 +98,7 @@ export function reactiveRecipients(
           : [intent.ownerId];
 }
 ```
-(Confirm the exact intent type name — `ReactiveIntent` or similar — from the executor signature.)
+(The intent type is `Intent` — `triggers.ts:81`, used by `executeIntent(intent: Intent, ...)` at `:828`. There is NO `ReactiveIntent`.)
 - [ ] **Step 3: Replace both call sites.** Heal branch (`~:1070`): `const recipients = reactiveRecipients(intent, ctx, healing.targetId);`. Cleanse branch (`~:1126`): `const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);`. Keep the surrounding comments. Verify NO behavior change (same expressions).
 - [ ] **Step 4:** `npx vitest run` (full) → green, **ZERO snapshot movement** (pure refactor). `npx tsc --noEmit`, `npm run lint`, `npm run audit:skills`.
 - [ ] **Step 5: Commit.**
@@ -144,16 +144,20 @@ This wires the consuming side (executor + listeners). No ship emits these trigge
         return;
     }
 ```
-(`ctx.bus: CombatEventBus` exists on `IntentExecContext` — `triggers.ts:6` — and `ctx.bus.emit(...)` is already used in the executor at `~:915/945/961/1014`. No structural change needed.)
+(`ctx.bus: CombatEventBus` exists on `IntentExecContext` — declared `triggers.ts:432` (interface at `:427`) — and `ctx.bus.emit(...)` is already used in the executor at `~:915/945/961/1014`. No structural change needed.)
 - [ ] **Step 4: Register the two triggers** in `registerReactiveTrigger` (the `bus.on` switch, after the `on-enemy-cleansed` case `~:378`):
 ```typescript
                 case 'on-enemy-purged':
                     bus.on('purge-performed', (e) => {
                         // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
-                        // Enqueue with fromPurgeEvent so the reaction's own purge (Sefuba's
-                        // "purge 1 more") does NOT re-emit → depth-1 guard.
+                        // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
+                        // re-purges the SAME victim (not ctx.enemyId — victim-routing, spec §4.1).
+                        // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
                         if (e.casterId === ownerId)
-                            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, fromPurgeEvent: true } });
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId, fromPurgeEvent: true },
+                            });
                     });
                     break;
                 case 'on-ally-purged':
@@ -210,11 +214,11 @@ The C2a on-cast purge (`playerTurn.ts:1382-1390`) discards the removed count. Ca
 ```
 Update the C2a comment that said "No purge-performed event (deferred to C2b)".
 - [ ] **Step 3:** Run the test → PASS.
-- [ ] **Step 4: AUDITED gate.** `npx vitest run`. DPS byte-identical (dummy has no buffs → removed 0 → no emit). Two-team/healing goldens: a NEW `purge-performed` event appears in the event log of any fixture where a purge removed a real buff — audit each (the event is additive; confirm no reactor exists in those fixtures yet, so only the event-log line changes, not downstream damage). Justify each delta; never blind `-u`. `npx tsc --noEmit`, `npm run lint`, `npm run audit:skills`.
-- [ ] **Step 5: Commit** with the per-fixture justification in the body.
+- [ ] **Step 4: Byte-identical gate (expected).** `npx vitest run`. DPS byte-identical (dummy has no buffs → removed 0 → no emit). Two-team/healing also expected byte-identical: nothing consumes `purge-performed` yet (no reactor wired until T5; `battleSimulator.ts:275` switches on `e.type` with no `purge-performed` case; `healingGoldenParity` snapshots results, not the raw event stream). So the emit sinks into nothing snapshotted. If ANY snapshot moves, STOP and investigate (an unexpected consumer). `npx tsc --noEmit`, `npm run lint`, `npm run audit:skills`.
+- [ ] **Step 5: Commit.**
 ```bash
-git add src/utils/combat/playerTurn.ts <test/snap files>
-git commit --no-verify -m "C2b-1 T4: emit purge-performed from on-cast purge; audited event-log churn"
+git add src/utils/combat/playerTurn.ts <test files>
+git commit --no-verify -m "C2b-1 T4: emit purge-performed from on-cast purge (byte-identical — no consumer yet)"
 ```
 
 ---
@@ -229,12 +233,12 @@ git commit --no-verify -m "C2b-1 T4: emit purge-performed from on-cast purge; au
   - Negative: neither matches a sentence with no purge-trigger phrase.
   - A "purges N more" detector returns count 1 for Sefuba p2 ("purges 1 more buff") and nothing for Sefuba p1 / Salvation.
   Run → FAIL.
-- [ ] **Step 2: Implement the detectors.** Add position-scoped detectors mirroring `detectDestroyedTrigger` (study it — it uses `phrasePosTrigger(text, RE, anchorPos, trigger)`). Regexes (case-insensitive):
-  - `ENEMY_PURGED_RE = /\bwhen\s+this\s+unit\s+purges?\b[^.]*\benem/i` (Sefuba "when this Unit purges an enemy buff").
-  - `ALLY_PURGED_RE = /\bwhen\s+a?\s*buff\s+is\s+purged\s+from\s+an?\s+ally/i` (Salvation passive voice).
-  Confirm against the exact CSV text (`docs/ship-skills.csv` — Sefuba, Salvation). Adjust to match tag-stripped text (`buildShipAbilities` passes `text` with `<unit-aid>` tags — check whether detectors run on tagged or stripped text by how `detectDestroyedTrigger` is called).
+- [ ] **Step 2: Implement the detectors.** Add position-scoped detectors mirroring `detectDestroyedTrigger` (study it — `skillTextParser.ts:993`; it uses `phrasePosTrigger(text, RE, anchorPos, trigger)`, which tests RE against `rawSentenceAround(...)` of the **RAW text WITH `<unit-aid>` tags intact** — `:1024-1052`). **CRITICAL: the CSV embeds tags mid-phrase**, so the regexes MUST use loose `[^.;]*` gaps between tokens (exactly like `detectDestroyedTrigger`), NOT `\s+` (which can't cross a `<unit-aid>` tag). The literal CSV (`docs/ship-skills.csv`): Salvation p3 = `When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally`; Sefuba p1 = `When this Unit <unit-aid>purges a buff</unit-aid> from an enemy`; Sefuba p2 = `When this Unit <unit-aid>purges an enemy buff</unit-aid>, … and <unit-aid>purges 1</unit-aid> more buff`. Regexes (case-insensitive), verified to match the RAW strings:
+  - `ENEMY_PURGED_RE = /\bwhen\s+this\s+unit\b[^.;]*\bpurges?\b[^.;]*\benem/i` (Sefuba p1+p2).
+  - `ALLY_PURGED_RE = /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i` (Salvation).
+  **Step 1's failing tests MUST assert against the RAW tagged CSV strings** (not stripped) so this defect is caught. Cross-check each regex with `console.log(RE.test(RAW))` if unsure.
 - [ ] **Step 3: Wire heal triggers.** In `buildShipAbilities.ts` heal `reactiveTrigger` chain (`:937-958`), add `detectEnemyPurgedTrigger(text, healPos)` and `detectAllyPurgedTrigger(text, healPos)` to the `??` chain (after `detectDestroyedTrigger`). Order: ally-purged and enemy-purged are mutually exclusive by phrase, so order among them is irrelevant; place after the existing detectors.
-- [ ] **Step 4: Emit the Sefuba chain purge.** In the purge emit region (`buildShipAbilities.ts ~:1045`), ADD a separate emit (outside the `slot==='active'||'charged'` gate) for the chain reaction: if `detectEnemyPurgedTrigger(text, purgePos)` is truthy AND a "purges N more" match exists, push a `{type:'purge', target:'enemy', trigger:'on-enemy-purged', count:<N>, conditions:[], autoFilled:true}` ability. Do NOT also emit it from the generic active/charged block (Sefuba p1/p2 are passives → already excluded there). Pin: Sefuba p2 → exactly ONE on-enemy-purged purge (count 1) + one on-enemy-purged self-heal; Sefuba p1 → one on-enemy-purged self-heal, ZERO purge.
+- [ ] **Step 4: Emit the Sefuba chain purge.** In the purge emit region (`buildShipAbilities.ts ~:1066`), ADD a separate emit **outside** the `slot==='active'||'charged'` gate for the chain reaction. Use a dedicated "purges N more" matcher that ALSO tolerates mid-phrase tags: `PURGE_MORE_RE = /\bpurges?\s+(\d+|an?|all)\b[^.;]*\bmore\b/i` (matches Sefuba p2's `<unit-aid>purges 1</unit-aid> more buff` — capture group 1 = count, `a`/`an`→1). If `detectEnemyPurgedTrigger(text, purgeMorePos)` is truthy AND `PURGE_MORE_RE` matches, push `{type:'purge', target:'enemy', trigger:'on-enemy-purged', count:<N>, conditions:[], autoFilled:true}`. Compute its own `purgeMorePos = text.search(PURGE_MORE_RE)` (the existing `purgePos` is scoped INSIDE the active/charged block — `:1068` — so it's out of scope here). Do NOT also emit from the generic active/charged block (Sefuba p1/p2 are passives → already excluded). Pin: Sefuba p2 → exactly ONE on-enemy-purged purge (count 1) + one on-enemy-purged self-heal; Sefuba p1 → one on-enemy-purged self-heal, ZERO purge.
 - [ ] **Step 5:** Run parser + buildShipAbilities tests → PASS. Add/confirm an `auditSkills`-style assertion that Sefuba/Salvation produce the expected abilities (or pin via a buildShipAbilities snapshot if that's the house pattern).
 - [ ] **Step 6: AUDITED gate.** `npx vitest run`. Churn: any existing Sefuba/Salvation fixture's built abilities now carry the new triggers (the heals were previously `on-cast` → now reactive; the chain purge is new). Audit the ability-shape deltas. If a Salvation/Sefuba healing/two-team golden exists, its heals now fire reactively (different timing) → audit. `npx tsc --noEmit`, `npm run lint`, `npm run audit:skills` (0/141).
 - [ ] **Step 7: Commit.**
