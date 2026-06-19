@@ -74,9 +74,12 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
         // Build the board from the encounter's formation. Skip cells whose ship the user no
         // longer owns (getShipById undefined) so we never place a missing ship.
         const board: BoardState = {};
-        for (const { shipId, position } of encounter.formation) {
-            const ship = getShipById(shipId);
-            if (ship) board[position] = ship;
+        for (const item of encounter.formation ?? []) {
+            // Formation comes from the encounter store (DB trust boundary); skip any
+            // malformed entry rather than trusting its shape.
+            if (!item?.shipId || !item?.position) continue;
+            const ship = getShipById(item.shipId);
+            if (ship) board[item.position] = ship;
         }
         onLoadEncounter(board);
     };

@@ -139,6 +139,11 @@ const SimulatorPage: React.FC = () => {
             <PageLayout
                 title="Combat Simulator"
                 description="Place your team and an enemy team on the boards, then run a full battle simulation using geared stats."
+                actionNode={
+                    <span className="text-xs font-semibold uppercase tracking-wide px-2 py-0.5 rounded border border-amber-500/40 text-amber-400 bg-amber-500/10">
+                        Experimental
+                    </span>
+                }
             >
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

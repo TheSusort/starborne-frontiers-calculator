@@ -219,6 +219,7 @@ const run = (input: CombatEngineInput) => {
     const ALL_TYPES: CombatEvent['type'][] = [
         'ability-performed',
         'attacked',
+        'turn-started',
         'hp-changed',
         'ship-destroyed',
         'heal-performed',
