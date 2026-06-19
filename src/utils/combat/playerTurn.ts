@@ -1401,6 +1401,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
+    // E3: 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of just targetId.
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (

@@ -146,6 +146,20 @@ per hit; E3 routes `statusEngine.purge` to each. For reference, the already-loop
 cleanse (`playerTurn.ts:1624`) and reactive cleanse (`triggers.ts:1190`); end-of-round reactive purge
 (Rhodium) lives at `engine.ts:4136` and should be checked for the same per-victim treatment.
 
+> **E3 SHIPPED** (2026-06-19, commits `7f64a2d8`→`9f88fa9c`). On-cast purges whose ability
+> target is `'all-enemies'` now fan over the firing skill's footprint: `buildTurnArgs` computes
+> the footprint victim ids via `footprintVictims(pattern, anchor, opposingRoster)` when positional
+> (`tgt.position != null` discriminator) and threads them as `aoeVictimIds` into all three
+> `runPlayerTurn` sites; the on-cast purge loop routes `ab.target === 'all-enemies' && aoeVictimIds
+> ? aoeVictimIds : [targetId]`, emitting `purge-performed` per victim. Single-`'enemy'` purges,
+> cleanse (already loops all-allies), and the reactive + end-of-round purges (single-target by
+> design — counter-attacker / killer / most-buffs; footprint unreachable at drain) are unchanged.
+> Production byte-identical: **zero `.snap` movement** (no `'all-enemies'`-purge fixture exists —
+> the only one, Amartya, has no golden). New `aoePurge.test.ts` (5 tests: AoE-both / single-anchor
+> control / per-victim count independence / enemy-side side-symmetry + its non-purge control).
+> **Amartya's `count = floor(critDamage/50)` scaling stays deferred to E4** (this ships at the
+> parsed count 1).
+
 **E4 — Amartya.** `count = floor(casterCritDamage / 50)` (crit power = the `critDamage` stat),
 computed from the caster's **live** crit power at cast time, applied to **every** footprint victim.
 Builds on E3's multi-victim loop. Removes the C2a single-anchor count-1 under-approximation flag.
