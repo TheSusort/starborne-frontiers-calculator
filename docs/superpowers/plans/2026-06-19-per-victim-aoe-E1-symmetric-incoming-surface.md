@@ -17,14 +17,17 @@
 - The adapter (`healingEngineAdapter.ts`) and `battleSimulator.ts` do **not** surface `perActorIncoming` into their result types — so no `.snap` golden serializes it. DPS/healing snapshot goldens cannot move.
 - `twoTeamBattle.test.ts` IS positional and WILL now populate enemy intake buckets, but it does **not** assert on `perActorIncoming` (it reads `perTargetDamage` = damage *dealt*, unchanged) → its assertions stay green.
 
-**Conclusion: E1 is FULLY byte-identical (zero `.snap` movement, every existing test green).** The new enemy intake buckets are observable only through the NEW test added in Task 1. If ANY existing golden or test moves, STOP — the invariant leaked; investigate, do not `vitest -u`.
+**One intentional test change (NOT golden churn):** `applyOutgoingToEnemy.test.ts` exists specifically to assert the enemy-side sink is a **no-op** (file header + behavior #6, `:229-252`). E1 makes that contract FALSE. The test currently stays green only by luck — its assertion reads the round *scalar* `rounds[0].incomingDamage`, which is sourced ONLY from the heal target's bucket (`engine.ts:4210`), not the enemy victims' buckets — so it is now **vacuous and misleading**. Task 2 deliberately CONVERTS this test into a positive per-victim-intake assertion (reading the enemy victims' own buckets) and rewrites the now-false header. This is an intentional test update, distinct from golden churn: **production code and all `.snap` files stay byte-identical.**
+
+**Conclusion: E1 is production byte-identical (zero `.snap` movement; every existing test green except the deliberate `applyOutgoingToEnemy.test.ts` rewrite).** The new enemy intake buckets are observable through the Task 1 integration test and the converted Task 2 unit test. If any `.snap` moves or any OTHER test changes, STOP — the invariant leaked; investigate, do not `vitest -u`.
 
 ---
 
 ## File Structure
 
 - **Modify:** `src/utils/combat/engine.ts` — replace the three no-op `enemySink` hooks (`:2442-2446`) with the `playerSink` bodies; update the stale `enemySink` comment (`:2433-2441`).
-- **Modify (test):** `src/utils/combat/__tests__/twoTeamBattle.test.ts` — add one `describe` block reusing the file's existing `battle()` / `run()` / `ENEMY_IDS` harness to prove the enemy victim now gets a per-actor intake bucket.
+- **Modify (test):** `src/utils/combat/__tests__/twoTeamBattle.test.ts` — add one `describe` block reusing the file's existing `battle()` / `run()` / `ENEMY_IDS` harness to prove the enemy victim now gets a per-actor intake bucket (integration-level).
+- **Modify (test):** `src/utils/combat/__tests__/applyOutgoingToEnemy.test.ts` — convert behavior #6 (`:229-252`) from "enemy sink is a no-op" into "enemy sink records per-victim intake" (unit-level, exact amounts via the `__testTapApplyOutgoingToEnemy` seam), and rewrite the now-false header (`:1-42`).
 
 No new files. No type changes (the `ActorIntake` type and `perActorIncoming` map already exist; `enemySink` already conforms to `DamageAccountingSink`).
 
@@ -125,10 +128,57 @@ Replace the comment block (`:2433-2441`) and the no-op object (`:2442-2446`) wit
 Run: `npx vitest run twoTeamBattle -t "symmetric incoming surface"`
 Expected: PASS — enemy victims now get `intakeFor(enemyId)` buckets with `incoming > 0`.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Convert the now-false no-op test in `applyOutgoingToEnemy.test.ts`**
+
+This test's behavior #6 asserts the enemy sink is a no-op — now false. Replace the `it('enemy-side sink is a no-op: ...')` block (`:229-252`) with a positive per-victim-intake assertion. Note the exact sink semantics from `applyVictimDamage` (`engine.ts:2294`): `addIncoming` gets the **total** `damage`; `addShieldAbsorbed` gets `min(shield, damage)`; a Barrier carrier gets `addBarrierAbsorbed(damage)` and returns early (no shield/HP). So for the three mid-run hits: `e1` (3000 dmg vs 1000 shield) → incoming 3000, shieldAbsorbed 1000; `barrierEnemy` (4000, Barrier) → incoming 4000, barrierAbsorbed 4000; `e2` (2000 plain) → incoming 2000.
+
+```typescript
+    it('enemy-side sink records per-victim intake: mid-run wrapper calls populate each enemy victim bucket', () => {
+        // Drive several enemy-victim intakes through the REAL wrapper DURING the round (inside the
+        // tap), so the per-actor buckets are still live and get snapshotted afterwards. A shield
+        // hit (overflow), a Barrier full block, and a plain HP hit each exercise a different sink
+        // hook (addShieldAbsorbed / addBarrierAbsorbed / addIncoming).
+        const { result } = captureWrapper(
+            { enemyAttackers: [enemyAttacker('barrierEnemy', selfBuffSkills('Barrier'))] },
+            (fn) => {
+                const shielded = enemyVictim('e1', 10_000);
+                shielded.shieldPool = 1000; // 3000 dmg → 1000 absorbed by shield, 2000 overflow to HP
+                fn(3000, shielded);
+                fn(4000, enemyVictim('barrierEnemy', 10_000)); // fully Barrier-blocked
+                fn(2000, enemyVictim('e2', 10_000)); // plain HP hit
+            }
+        );
+        const rounds = result.healing!.rounds;
+        // E1: the enemy-side sink now records each victim's intake into its OWN per-actor bucket
+        // (keyed by the enemy victim id), exactly like the player sink. `addIncoming` carries the
+        // TOTAL damage; shield/barrier absorbs are tracked separately.
+        const shieldBucket = rounds[0].perActorIncoming.get('e1');
+        expect(shieldBucket?.incoming).toBe(3000);
+        expect(shieldBucket?.shieldAbsorbed).toBe(1000);
+        expect(shieldBucket?.barrierAbsorbed ?? 0).toBe(0);
+        const barrierBucket = rounds[0].perActorIncoming.get('barrierEnemy');
+        expect(barrierBucket?.incoming).toBe(4000);
+        expect(barrierBucket?.barrierAbsorbed).toBe(4000);
+        expect(barrierBucket?.shieldAbsorbed ?? 0).toBe(0);
+        const hpBucket = rounds[0].perActorIncoming.get('e2');
+        expect(hpBucket?.incoming).toBe(2000);
+        // The heal target's own scalar totals stay 0 — the tank was never attacked this round; the
+        // scalars read ONLY the heal target's bucket (engine.ts:4210), not the enemy victims'.
+        expect(rounds[0].incomingDamage).toBe(0);
+    });
+```
+
+Also rewrite the file header (`:1-42`) so it no longer claims the enemy sink is a no-op: state that the enemy sink now records per-victim intake into `perActorIncoming` (keyed by the enemy victim id), and that the round *scalars* still read only the heal target's bucket. Remove the stale "no-ops for PR 1" / "REACHABILITY: no production call site" framing (the positional path now calls it) and the now-false non-vacuity paragraph about inverting the sink.
+
+- [ ] **Step 4: Run the converted test**
+
+Run: `npx vitest run applyOutgoingToEnemy`
+Expected: PASS — all 6 behaviors green, behavior #6 now asserting real per-victim enemy buckets.
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/combat/engine.ts
+git add src/utils/combat/engine.ts src/utils/combat/__tests__/applyOutgoingToEnemy.test.ts
 git commit --no-verify -m "feat(combat): E1 — symmetric incoming surface (enemy victims record intake)"
 ```
 
@@ -157,7 +207,7 @@ Expected: all tests green; **no `.snap` file modified** (the load-bearing invari
 - [ ] **Step 4: Lint + typecheck + skill audit**
 
 Run: `npm run lint && npx tsc --noEmit && npm run audit:skills`
-Expected: lint 0 warnings, tsc clean, audit 0 findings / 141 ships.
+Expected: lint 0 warnings, tsc clean, `audit:skills` green (0 findings — the ship count it reports should be unchanged from baseline; don't treat a specific count as a hard expectation).
 
 (No commit — verification only. If anything fails, fix under the same task before proceeding.)
 
