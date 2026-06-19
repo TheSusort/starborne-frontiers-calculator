@@ -2860,3 +2860,116 @@ describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal trigger
         });
     });
 });
+
+// C2b-2 T1: Iridium passive-slot purge emit (on-attacked trigger from "when directly damaged").
+// RAW strings from docs/ship-skills.csv.
+describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
+    // Iridium p1: "When directly damaged, This Unit purges 1 buff from the enemy ..."
+    // → exactly ONE purge ability with trigger:'on-attacked', count:1
+    describe('Iridium p1: on-attacked purge count 1', () => {
+        const iridiumP1 = () =>
+            ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+
+        it('emits exactly ONE purge ability with trigger on-attacked and count 1', () => {
+            const passive = slot(buildShipAbilities(iridiumP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-attacked');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(1);
+            }
+        });
+    });
+
+    // Iridium p2: "... When directly damaged, This Unit purges 2 buffs from the enemy ..."
+    // → exactly ONE purge ability with trigger:'on-attacked', count:2
+    describe('Iridium p2: on-attacked purge count 2', () => {
+        const iridiumP2 = () =>
+            ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
+            });
+
+        it('emits exactly ONE purge ability with trigger on-attacked and count 2', () => {
+            const passive = slot(buildShipAbilities(iridiumP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-attacked');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    // Negative regressions: Sefuba, Zeolite, Cobalt must NOT be affected.
+    describe('negative regressions: Sefuba / Zeolite / Cobalt', () => {
+        it('Sefuba p1: passive emits ZERO purge abilities (only on-enemy-purged heal, no generic-loop purge)', () => {
+            const sefubaP1 = ship({
+                firstPassiveSkillText:
+                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+            });
+            const passive = slot(buildShipAbilities(sefubaP1).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+
+        it('Sefuba p2: passive emits exactly ONE purge (chain, on-enemy-purged via PURGE_MORE_RE — NOT a generic-loop purge)', () => {
+            const sefubaP2 = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+            });
+            const passive = slot(buildShipAbilities(sefubaP2).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
+        });
+
+        it('Zeolite p1: passive emits ZERO purge abilities ("when dealing damage to a Defender" has no detected damage-reaction trigger)', () => {
+            const zeoliteP1 = ship({
+                firstPassiveSkillText:
+                    'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+            });
+            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive');
+            // Either no passive slot at all, or if a slot exists it has no purge abilities.
+            if (passive) {
+                expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+            }
+        });
+
+        it('Cobalt active: emits exactly ONE purge with trigger on-cast (active slot unaffected)', () => {
+            const cobalt = ship({
+                activeSkillText:
+                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit\'s max HP.',
+                chargeSkillCharge: 3,
+            });
+            const active = slot(buildShipAbilities(cobalt).slots, 'active')!;
+            const purges = active.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-cast');
+        });
+
+        it('Cobalt charged: emits exactly ONE purge with trigger on-cast (charged slot unaffected)', () => {
+            const cobalt = ship({
+                activeSkillText:
+                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>.',
+                chargeSkillText:
+                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>230% damage</unit-damage>. If this Unit is at full HP, it deals additional <unit-damage>damage equal to 30%</unit-damage> of its max HP.',
+                chargeSkillCharge: 3,
+            });
+            const charged = slot(buildShipAbilities(cobalt).slots, 'charged')!;
+            const purges = charged.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-cast');
+        });
+    });
+});

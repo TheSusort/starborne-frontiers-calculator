@@ -13,6 +13,7 @@ import {
     SkillSlot,
     Condition,
     AbilityTarget,
+    AbilityTrigger,
     ModifierChannel,
     ScalingRule,
 } from '../../types/abilities';
@@ -1051,11 +1052,12 @@ function abilitiesFromText(
         });
     }
 
-    // Emit purge ONLY from active/charged slots. Every reactive/conditional purge in the corpus
-    // lives in a passive (Faust/Iridium/Cobalt-p2/Rhodium/Sefuba-p1-p2/Salvation/Lodolite-p1), so
-    // this slot gate excludes them all WITHOUT needing purge-trigger detection (deferred to C2b),
-    // and eliminates Sefuba-p2's "purges 1 more buff" double-emit. Purge is enemy-only (no
-    // support-flip), so it does NOT use flipBareSupportTarget.
+    // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
+    // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
+    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors are added
+    // in later tasks. A passive purge with NO detected trigger is NOT emitted (Sefuba's chain
+    // stays on PURGE_MORE_RE below; Zeolite's "when dealing damage to a Defender" stays
+    // deferred). Purge is enemy-only (no support-flip).
     //
     // C2a over/under-approximation: active/charged purges that carry a CONDITION or SCALING are
     // emitted with conditions:[] at nominal count and fire unconditionally (e.g. Nayra charged
@@ -1072,22 +1074,30 @@ function abilitiesFromText(
     //
     // C2a under-approximation: the passive-voice "is Purged of all buffs" form (Lodolite charged)
     // is NOT matched by PURGE_RE and therefore not emitted here — deferred to C2b.
-    if (slot === 'active' || slot === 'charged') {
-        for (const p of parsePurge(text)) {
-            const purgePos = text.search(/purge/i);
-            out.push({
-                ability: {
-                    id: nextId(),
-                    type: 'purge',
-                    target: p.target, // 'enemy' | 'all-enemies'
-                    trigger: 'on-cast',
-                    conditions: [],
-                    config: { type: 'purge', count: p.count },
-                    autoFilled: true,
-                },
-                pos: purgePos >= 0 ? purgePos : MAX_POS,
-            });
-        }
+    for (const p of parsePurge(text)) {
+        const purgePos = text.search(/purge/i);
+        const trigger: AbilityTrigger | undefined =
+            slot === 'active' || slot === 'charged'
+                ? 'on-cast'
+                : // PASSIVE: detect a reactive purge trigger at the purge anchor.
+                  // Iridium: self-subject "when directly damaged" → on-attacked. (Ignore the
+                  // on-ally-attacked branch — no corpus ally-purge exists.)
+                  detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
+                  ? ('on-attacked' as const)
+                  : undefined;
+        if (!trigger) continue; // passive purge with no recognized trigger → not emitted
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'purge',
+                target: p.target, // 'enemy' | 'all-enemies'
+                trigger,
+                conditions: [],
+                config: { type: 'purge', count: p.count },
+                autoFilled: true,
+            },
+            pos: purgePos >= 0 ? purgePos : MAX_POS,
+        });
     }
 
     // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
