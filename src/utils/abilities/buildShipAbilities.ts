@@ -1109,8 +1109,9 @@ function abilitiesFromText(
     }
 
     // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
-    // Emitted OUTSIDE the active/charged gate so passive-slot Sefuba p2 is reached. The slot
-    // gate above already excludes Sefuba from the generic parsePurge emit, so there is no
+    // Emitted here, separately from the generic loop above. Sefuba's passive sentences carry no
+    // recognized purge trigger (on-attacked/end-of-round/killed-by-direct), so the generic loop's
+    // trigger-detection `continue` skips both of Sefuba p2's parsePurge matches — there is no
     // double-emit risk. Count: PURGE_MORE_RE capture group 1 (digit or 'a'/'an' → 1).
     {
         const purgeMoreMatch = PURGE_MORE_RE.exec(text);
