@@ -8,8 +8,10 @@
  *   - damage TAKEN per victim   = perRoundPerTarget[round][victimId]
  *   - heals = heal-performed { casterId, targets[], amount }
  *   - death = ship-destroyed { actorId }
- *   - buffs = buff-applied / buff-expired / debuff-applied
+ *   - buffs = buff-applied / buff-expired / debuff-applied / dot-applied
  *   - hpPct = maxHp - cumulative(damageTaken) over rounds <= r
+ *   - per-round LOG is chronological (emission order) + attacker-centric damage
+ *     (ability-performed: actorId=attacker, targetId, amount), with turn delimiters
  */
 import { describe, it, expect } from 'vitest';
 import { assembleBattleResult } from '../battleSimulator';
@@ -264,8 +266,8 @@ describe('assembleBattleResult — buff tracking', () => {
     });
 });
 
-describe('assembleBattleResult — per-round event log', () => {
-    it('logs damage, heal, death lines (not attacked)', () => {
+describe('assembleBattleResult — per-round event log (chronological + attacker-centric)', () => {
+    it('logs attacker-centric damage from ability-performed (actorId=attacker, targetId, amount)', () => {
         const events: CombatEvent[] = [
             {
                 type: 'ability-performed',
@@ -276,14 +278,129 @@ describe('assembleBattleResult — per-round event log', () => {
                 damage: 5000,
             },
             { type: 'attacked', attackerId: 'enemy-front', targetId: 'attacker', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        const log = result.rounds[0].events;
+        // Attacker-centric damage from ability-performed.
+        expect(log).toContainEqual({
+            round: 1,
+            kind: 'damage',
+            actorId: 'attacker',
+            targetId: 'enemy-front',
+            amount: 5000,
+        });
+        // `attacked` is NOT logged.
+        expect(log.some((e) => (e as { kind: string }).kind === 'attacked')).toBe(false);
+    });
+
+    it('keeps damage lines targeting the dummy "enemy" (attacker-centric, dummy target accepted)', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'ability-performed',
+                actorId: 'attacker',
+                targetId: 'enemy',
+                round: 1,
+                abilityType: 'damage',
+                damage: 4321,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'damage',
+            actorId: 'attacker',
+            targetId: 'enemy',
+            amount: 4321,
+        });
+    });
+
+    it("emits log lines in chronological (emission) order — turn-started before that turn's damage", () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+            {
+                type: 'ability-performed',
+                actorId: 'attacker',
+                targetId: 'enemy-front',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+            },
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+            {
+                type: 'ability-performed',
+                actorId: 'enemy-front',
+                targetId: 'attacker',
+                round: 1,
+                abilityType: 'damage',
+                damage: 2000,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        const log = result.rounds[0].events;
+        expect(log).toEqual([
+            { round: 1, kind: 'turn', actorId: 'attacker' },
+            {
+                round: 1,
+                kind: 'damage',
+                actorId: 'attacker',
+                targetId: 'enemy-front',
+                amount: 1000,
+            },
+            { round: 1, kind: 'turn', actorId: 'enemy-front' },
+            {
+                round: 1,
+                kind: 'damage',
+                actorId: 'enemy-front',
+                targetId: 'attacker',
+                amount: 2000,
+            },
+        ]);
+    });
+
+    it('emits a turn delimiter per roster turn-started and skips the dummy "enemy"', () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+            { type: 'turn-started', actorId: 'enemy', round: 1 },
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        const turns = result.rounds[0].events.filter((e) => e.kind === 'turn');
+        // Dummy 'enemy' filtered; roster ids kept in emission order.
+        expect(turns).toEqual([
+            { round: 1, kind: 'turn', actorId: 'attacker' },
+            { round: 1, kind: 'turn', actorId: 'enemy-front' },
+        ]);
+    });
+
+    it('logs heal lines (caster + per-target even-split amount)', () => {
+        const events: CombatEvent[] = [
             {
                 type: 'heal-performed',
                 casterId: 'attacker',
-                targets: ['attacker'],
+                targets: ['attacker', 'player-team'],
                 round: 1,
                 amount: 1000,
             },
-            { type: 'ship-destroyed', actorId: 'enemy-front', round: 1 },
         ];
         const result = assembleBattleResult({
             events,
@@ -294,21 +411,152 @@ describe('assembleBattleResult — per-round event log', () => {
         const log = result.rounds[0].events;
         expect(log).toContainEqual({
             round: 1,
-            kind: 'damage',
+            kind: 'heal',
             actorId: 'attacker',
-            targetId: 'enemy-front',
-            amount: 5000,
+            targetId: 'attacker',
+            amount: 500,
         });
         expect(log).toContainEqual({
             round: 1,
             kind: 'heal',
             actorId: 'attacker',
-            targetId: 'attacker',
-            amount: 1000,
+            targetId: 'player-team',
+            amount: 500,
         });
-        expect(log).toContainEqual({ round: 1, kind: 'death', actorId: 'enemy-front' });
-        // `attacked` is NOT logged (no amount)
-        expect(log.some((e) => (e as { kind: string }).kind === 'attacked')).toBe(false);
+    });
+
+    it('logs buff lines with the buff carrier as actorId and buffName as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'buff-applied',
+                actorId: 'player-team',
+                round: 1,
+                buffName: 'Attack Up',
+                duration: 2,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'buff',
+            actorId: 'player-team',
+            label: 'Attack Up',
+        });
+    });
+
+    it('logs debuff lines with the victim (targetId) as actorId and buffName as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'debuff-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-front',
+                round: 1,
+                buffName: 'Def Down',
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'debuff',
+            actorId: 'enemy-front',
+            label: 'Def Down',
+        });
+    });
+
+    it('logs dot lines with the victim (targetId) as actorId and dotType as label', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'dot-applied',
+                sourceId: 'attacker',
+                targetId: 'enemy-back',
+                round: 1,
+                dotType: 'corrosion',
+                stacks: 3,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'dot',
+            actorId: 'enemy-back',
+            label: 'corrosion',
+        });
+    });
+
+    it('logs death lines with the destroyed actor as actorId', () => {
+        const events: CombatEvent[] = [
+            { type: 'ship-destroyed', actorId: 'enemy-front', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].events).toContainEqual({
+            round: 1,
+            kind: 'death',
+            actorId: 'enemy-front',
+        });
+    });
+});
+
+describe('assembleBattleResult — per-round turn order', () => {
+    it('collects distinct acting roster actorIds per round in emission order', () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+            // duplicate in the same round is collapsed (distinct)
+            { type: 'turn-started', actorId: 'enemy-front', round: 1 },
+            { type: 'turn-started', actorId: 'player-team', round: 1 },
+            // round 2 has its own ordering
+            { type: 'turn-started', actorId: 'attacker', round: 2 },
+            { type: 'turn-started', actorId: 'enemy-back', round: 2 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 2,
+        });
+        expect(result.rounds.find((r) => r.round === 1)!.turnOrder).toEqual([
+            'enemy-front',
+            'attacker',
+            'player-team',
+        ]);
+        expect(result.rounds.find((r) => r.round === 2)!.turnOrder).toEqual([
+            'attacker',
+            'enemy-back',
+        ]);
+    });
+
+    it('filters out turn-started for ids not on the roster (the dummy "enemy")', () => {
+        const events: CombatEvent[] = [
+            { type: 'turn-started', actorId: 'enemy', round: 1 },
+            { type: 'turn-started', actorId: 'attacker', round: 1 },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(result.rounds[0].turnOrder).toEqual(['attacker']);
     });
 });
 

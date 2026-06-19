@@ -177,15 +177,11 @@ export interface ActiveDoTState {
  */
 export function deriveTeamEngineActors(
     teamActors: TeamActorInput[] | undefined,
-    enemySecurity: number,
     enemyAffinity: AffinityName | undefined
 ): TeamActorEngineInput[] | undefined {
     return teamActors?.map((t) => {
         if (!t.shipSkills || !t.stats) return t;
         const aff = computeAffinityModifiers(t.affinity, enemyAffinity);
-        const teamEffectiveHacking = t.stats.hacking * (1 + aff.damageModifier / 100);
-        const teamLandingChance =
-            Math.min(100, Math.max(0, teamEffectiveHacking - enemySecurity)) / 100;
         const teamCharged = selectFiringSkill(t.shipSkills, 'charged');
         const teamHasChargedSkill = t.chargeCount >= 1 && (teamCharged?.abilities.length ?? 0) > 0;
         return {
@@ -194,7 +190,6 @@ export function deriveTeamEngineActors(
                 shipSkills: t.shipSkills,
                 stats: t.stats,
                 healModifier: t.stats.healModifier ?? 0,
-                debuffLandingChance: teamLandingChance,
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
@@ -239,11 +234,8 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     } = input;
     const { affinityDamageModifier = 0, affinityCritCap = 100, affinityCritPenalty = 0 } = input;
 
-    // Compute debuff landing chance (affinity modifier applies multiplicatively to hacking)
     const hacking = input.hacking ?? 200;
     const enemySecurity = input.enemySecurity ?? 100;
-    const effectiveHacking = hacking * (1 + affinityDamageModifier / 100);
-    const debuffLandingChance = Math.min(100, Math.max(0, effectiveHacking - enemySecurity)) / 100;
 
     // Self-side constants (not subject to rolls)
     const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
@@ -260,7 +252,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
     // Per-walked-team-actor derivation (Task 4), extracted into a shared helper so the
     // healing adapter reuses byte-identical walk logic (goldens prove the extraction is
     // behaviour-preserving).
-    const engineTeamActors = deriveTeamEngineActors(teamActors, enemySecurity, input.enemyAffinity);
+    const engineTeamActors = deriveTeamEngineActors(teamActors, input.enemyAffinity);
     const hasWalkedTeam = !!engineTeamActors?.some((t) => t.walk);
 
     const { rounds, rawTotals } = runCombat({
@@ -275,7 +267,6 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         numRounds,
         selfBuffs,
         enemyDebuffs,
-        debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
         hasChargedSkill,
@@ -288,6 +279,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         affinity: input.affinity,
         defence,
         hp,
+        // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
+        // this boundary, threaded onto the attacker/dummy actor bases. No production reader yet (A2 Task 4).
+        hacking,
+        enemySecurity,
         allyChargePerRound,
         enemyType,
         speed,

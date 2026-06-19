@@ -484,10 +484,14 @@ describe('AbilityCard', () => {
             );
         });
 
-        it('purge ability renders Count field AND the not-simulated note', () => {
+        it('purge ability renders Count field and does NOT show not-simulated note', () => {
+            // C2a: purge is now simulated (on-cast purge removes enemy buffs), so it was removed
+            // from NOT_SIMULATED_TYPES — the not-simulated note must no longer render.
             render(<AbilityCard ability={purgeAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
             expect(screen.getByLabelText('Count')).toBeInTheDocument();
-            expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
+            expect(
+                screen.queryByText(/not simulated in the calculators yet/i)
+            ).not.toBeInTheDocument();
         });
 
         it('purge ability propagates count change via onChange', () => {

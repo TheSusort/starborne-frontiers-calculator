@@ -221,6 +221,8 @@ export function gateFiringAbilities(
 export interface ExtraActionGrant {
     abilityId: string;
     oncePerRound: boolean;
+    /** "end of round" grant (Harvester): drains after the normal speed pool. */
+    endOfRound: boolean;
 }
 
 /** `extra-action` abilities on the skill that fire on cast. Conditions are already
@@ -233,7 +235,11 @@ export function extraActionsFromSkill(skill: Skill | undefined): ExtraActionGran
     for (const ability of skill.abilities) {
         if (ability.config.type !== 'extra-action') continue;
         if (ability.trigger !== 'on-cast') continue;
-        out.push({ abilityId: ability.id, oncePerRound: ability.config.oncePerRound });
+        out.push({
+            abilityId: ability.id,
+            oncePerRound: ability.config.oncePerRound,
+            endOfRound: ability.config.endOfRound ?? false,
+        });
     }
     return out;
 }

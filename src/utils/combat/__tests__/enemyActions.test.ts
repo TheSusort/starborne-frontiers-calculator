@@ -54,7 +54,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                 },
             ],
             enqueue: (i) => enqueued.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({
             type: 'heal-performed',
@@ -87,7 +87,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
                 },
             ],
             enqueue: (i) => enqueued.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'cleanse-performed', casterId: 'enemy', count: 1, round: 1 });
         bus.emit({ type: 'cleanse-performed', casterId: 'ally', count: 1, round: 1 });
@@ -143,7 +143,6 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             attack: 800,
             landsTimedEnemyApplication: () => true,
             debuffLandingGate: (_rate: number) => true,
-            debuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
     // defence/maxHp/heal fields are sentinels not read by the damage branch.
@@ -305,7 +304,6 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             defence: 0,
             hp: 10000,
             healModifier: 0,
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -358,7 +356,6 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             enemyType: undefined,
             bus: createEventBus(),
             round: 1,
-            enemyHpDecline: 0,
             healing,
             healEventOnly,
         };
@@ -421,9 +418,25 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
 
     it('normal mode (healEventOnly false) DOES credit and emit cleanse-performed', () => {
         // Sanity / symmetry: the player path credits buckets AND now emits cleanse-performed.
+        // C1 T3: cleanse now performs REAL removal, so the recipient ('tank' — the ally cleanse
+        // routes to healing.targetId) must carry removable debuffs for the cleanse to remove
+        // (and credit) anything. Seed two removable debuffs so the cleanse-2 removes 2,
+        // preserving the count===2 assertion.
         const events: CombatEvent[] = [];
         const spy = makeHealingSpy();
         const args = makeArgs(makeRuntime(healCleanseSkills()), spy.healing, false);
+        const mkDebuff = (buffName: string) => ({
+            kind: 'timed' as const,
+            side: 'enemy' as const,
+            sourceSlot: 'active' as const,
+            conditions: [],
+            duration: 5,
+            casterId: 'foe',
+            payload: { buffName, stacks: 1, parsedEffects: {} },
+        });
+        // The ally cleanse routes to healing.targetId ('tank') → seed its enemy store.
+        args.statusEngine.applyTimedAbilityStatus(1, mkDebuff('Attack Down'), 'foe', 'tank');
+        args.statusEngine.applyTimedAbilityStatus(1, mkDebuff('Defense Down'), 'foe', 'tank');
         args.bus.on('cleanse-performed', (e) => events.push(e));
 
         runPlayerTurn(args);
@@ -431,9 +444,10 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         const cleanse = events.find((e) => e.type === 'cleanse-performed');
         expect(cleanse).toBeDefined();
         expect(cleanse!.casterId).toBe('enemy1');
+        // Real removal: both seeded debuffs removed → count is the ACTUAL removed total (2).
         expect(cleanse!.count).toBe(2);
-        // Player path credited cleanseCount + directHeal (mutations DID run).
-        expect(spy.credits.some((c) => c.bucket === 'cleanseCount')).toBe(true);
+        // Player path credited cleanseCount (actual removed) + directHeal (mutations DID run).
+        expect(spy.credits.some((c) => c.bucket === 'cleanseCount' && c.amount === 2)).toBe(true);
         expect(spy.credits.some((c) => c.bucket === 'directHeal')).toBe(true);
     });
 });
@@ -527,7 +541,6 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             defence: 0,
             hp: 10000,
             healModifier: 0,
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -584,7 +597,6 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             enemyType: undefined,
             bus: createEventBus(),
             round: 1,
-            enemyHpDecline: 0,
             healing,
             healEventOnly,
         };
@@ -655,7 +667,6 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,

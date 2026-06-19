@@ -25,12 +25,20 @@ import {
     detectAllyCritTrigger,
     detectDestroyedTrigger,
     detectEnemyCleanseTrigger,
+    detectEnemyPurgedTrigger,
+    detectAllyPurgedTrigger,
+    detectEndOfRoundPurgeTrigger,
+    detectKilledByDirectDamageTrigger,
+    detectMostBuffsTarget,
+    detectRepairedThisRoundCondition,
     parseExtraAction,
     parseHealAbilities,
     parseCleanse,
+    parsePurge,
     parseHealNoCrit,
     statusEffectCondition,
     detectIgnoresForcedTargeting,
+    parseDoesntBreakStasis,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1563,7 +1571,7 @@ describe('detectDestroyedTrigger', () => {
         expect(detectDestroyedTrigger(text, text.indexOf('repairs'))).toBeUndefined();
     });
 
-    it('does NOT stamp the on-purged 5% repair (a different, still-disqualified reactive)', () => {
+    it('does NOT stamp on-destroyed for the on-ally-purged 5% repair (anchor is in a different sentence)', () => {
         const text =
             "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP.";
         expect(detectDestroyedTrigger(text, text.indexOf('that ally for 5%'))).toBeUndefined();
@@ -1943,6 +1951,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            // Nuqtu's grant is an "End Of Round Action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [
                 {
                     subject: 'enemy-buff',
@@ -1960,6 +1970,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'self-debuff',
@@ -1977,6 +1988,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'hp-threshold',
@@ -1995,6 +2007,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            endOfRound: false,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2006,6 +2019,7 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            endOfRound: false,
             conditions: [
                 {
                     subject: 'enemy-debuff',
@@ -2023,6 +2037,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: true,
+            // Sokol's "extra end of round action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [],
             trigger: 'on-enemy-destroyed',
         });
@@ -2034,6 +2050,8 @@ describe('parseExtraAction', () => {
         );
         expect(r).toEqual({
             oncePerRound: false,
+            // Harvester's "1 extra end of round action" → drains after the speed pool.
+            endOfRound: true,
             conditions: [],
             trigger: 'on-ally-destroyed',
         });
@@ -2056,7 +2074,24 @@ describe('parseExtraAction', () => {
         const r = parseExtraAction(
             'This Unit gains <unit-skill>Out. Damage Up I</unit-skill> for 1 turn and once per round, this unit gains 1 extra action.'
         );
-        expect(r).toEqual({ oncePerRound: true, conditions: [] });
+        expect(r).toEqual({ oncePerRound: true, endOfRound: false, conditions: [] });
+    });
+
+    it('end-of-round flag: "1 extra end of round action" → endOfRound true (Task 4)', () => {
+        const r = parseExtraAction('This Unit gains 1 extra end of round action.');
+        expect(r).toEqual({ oncePerRound: false, endOfRound: true, conditions: [] });
+    });
+
+    it('end-of-round flag: Liberator-style "1 extra action" → endOfRound false (Task 4)', () => {
+        const r = parseExtraAction(
+            'When an enemy dies, once per round, this unit gains 1 extra action.'
+        );
+        expect(r).toEqual({
+            oncePerRound: true,
+            endOfRound: false,
+            conditions: [],
+            trigger: 'on-enemy-destroyed',
+        });
     });
 });
 
@@ -2382,13 +2417,17 @@ describe('parseHealAbilities — unmodeled reactive triggers are NOT emitted', (
         ]);
     });
 
-    it('Salvation R2 passive: the on-destroyed 80% all-allies heal IS extracted; the on-purged 5% stays disqualified', () => {
+    it('Salvation R2 passive: both the 80% all-allies heal AND the 5% ally heal are extracted (C2b-1 T5: on-ally-purged is now live)', () => {
+        // The "when a buff is purged from an ally" clause is now exempt from HEAL_DISQUALIFY_RE
+        // (negative lookahead exempts the ally-recipient form). Both heals emit; buildShipAbilities
+        // stamps the 5% with on-ally-purged and the 80% with on-destroyed.
         expect(
             parseHealAbilities(
                 "When this Unit is destroyed it repairs 80% of its max HP to all allies. When a buff is purged from an ally, this Unit repairs that ally for 5% of this Unit's max HP."
             )
         ).toEqual([
             { kind: 'heal', pct: 80, basis: 'hp', target: 'all-allies', explicitTarget: true },
+            { kind: 'heal', pct: 5, basis: 'hp', target: 'ally', explicitTarget: true },
         ]);
     });
 
@@ -3136,6 +3175,51 @@ describe('parseCleanse', () => {
     it('does not parse purge as cleanse', () => {
         expect(parseCleanse('<unit-aid>purges 1</unit-aid> buff from the enemy')).toEqual([]);
     });
+    it('parses "cleanse all" debuffs from all allies', () => {
+        expect(parseCleanse('cleanses all debuffs from all allies')).toEqual([
+            { count: 'all', target: 'all-allies', explicitTarget: true },
+        ]);
+    });
+});
+
+describe('parsePurge', () => {
+    it('parses single-count purge from enemy', () => {
+        expect(parsePurge('This Unit purges 1 buff from the enemy.')).toEqual([
+            { count: 1, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('parses "purges all" buffs from the enemy', () => {
+        expect(parsePurge('purges all buffs from the enemy')).toEqual([
+            { count: 'all', target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('parses "purges 1 buff from all enemies" (Amartya)', () => {
+        expect(parsePurge('purges 1 buff from all enemies for every 50% crit power')).toEqual([
+            { count: 1, target: 'all-enemies', explicitTarget: true },
+        ]);
+    });
+    it('parses "purges a buff from an enemy" (Sefuba p2 / Lodolite p3)', () => {
+        expect(parsePurge('purges a buff from an enemy')).toEqual([
+            { count: 1, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+    it('does not parse cleanse as purge', () => {
+        expect(parsePurge('This Unit cleanses 1 debuff.')).toEqual([]);
+    });
+    it('does not match passive-voice "is Purged of all buffs" (deferred to C2b)', () => {
+        expect(parsePurge('is Purged of all buffs')).toEqual([]);
+    });
+    it('context-free double-match on Sefuba p2 reactive text (EXPECTED — slot-gate in Task 3 excludes passives)', () => {
+        // parsePurge is context-free: both "purges an enemy buff" and "purges 1 more buff"
+        // match. Task 3 gates emission to active/charged slots only, so Sefuba's passive text
+        // is never emitted. This assertion pins the known double-match as deliberate.
+        const result = parsePurge(
+            'when this unit purges an enemy buff, it repairs itself for 12% and purges 1 more buff from the enemy'
+        );
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
+        expect(result[1]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
+    });
 });
 
 describe('parseHealNoCrit', () => {
@@ -3177,9 +3261,7 @@ describe('detectIgnoresForcedTargeting', () => {
 
     it('returns true for "ignoring Taunt and Provoke" without tags (Anjian)', () => {
         expect(
-            detectIgnoresForcedTargeting(
-                'This Unit deals 130% damage, ignoring Taunt and Provoke.'
-            )
+            detectIgnoresForcedTargeting('This Unit deals 130% damage, ignoring Taunt and Provoke.')
         ).toBe(true);
     });
 
@@ -3234,5 +3316,249 @@ describe('detectIgnoresForcedTargeting', () => {
                 'This Unit deals 130% damage, ignoring Taunt and Provoke.'
             )
         ).toBe(true);
+    });
+});
+
+describe('parseDoesntBreakStasis', () => {
+    it('detects Akula curly-apostrophe "don\'t break Stasis"', () => {
+        expect(
+            parseDoesntBreakStasis(
+                'This Unit’s attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target’s current HP percentage; the higher the percentage, the more the damage.'
+            )
+        ).toBe(true);
+    });
+
+    it('detects bare "do not break Stasis" (Tygr — regression guard)', () => {
+        expect(
+            parseDoesntBreakStasis(
+                'This Unit’s attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.'
+            )
+        ).toBe(true);
+    });
+
+    it('detects straight-apostrophe "don\'t break Stasis"', () => {
+        expect(parseDoesntBreakStasis("This Unit's attacks don't break Stasis.")).toBe(true);
+    });
+
+    it('returns false for "affected by Stasis" (parseExtraAction owns that)', () => {
+        expect(
+            parseDoesntBreakStasis(
+                'After dealing damage to an enemy affected by Stasis, once per round, give one extra action.'
+            )
+        ).toBe(false);
+    });
+
+    it('returns false for "damage to enemies under Stasis"', () => {
+        expect(parseDoesntBreakStasis('deal 20% more damage to enemies under Stasis')).toBe(false);
+    });
+
+    it('returns false for "inflicts Stasis for 2 turns"', () => {
+        expect(parseDoesntBreakStasis('inflicts Stasis for 2 turns')).toBe(false);
+    });
+
+    it('returns false for empty string', () => {
+        expect(parseDoesntBreakStasis('')).toBe(false);
+    });
+
+    it('returns false for null', () => {
+        expect(parseDoesntBreakStasis(null)).toBe(false);
+    });
+
+    it('returns false for undefined', () => {
+        expect(parseDoesntBreakStasis(undefined)).toBe(false);
+    });
+});
+
+// C2b-1 T5: on-enemy-purged and on-ally-purged heal trigger detectors.
+// All three RAW strings below are taken verbatim from docs/ship-skills.csv.
+// Regexes must match THROUGH <unit-aid>/<unit-damage> tags (loose [^.;]* gaps).
+const SEFUBA_P1_RAW =
+    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.';
+const SEFUBA_P2_RAW =
+    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.';
+const SALVATION_P3_RAW =
+    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.";
+
+describe('detectEnemyPurgedTrigger', () => {
+    it('returns on-enemy-purged for Sefuba p1 (anchor inside the purge sentence)', () => {
+        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBe('on-enemy-purged');
+    });
+
+    it('returns on-enemy-purged for Sefuba p2 (anchor inside the purge sentence)', () => {
+        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        expect(detectEnemyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBe('on-enemy-purged');
+    });
+
+    it('returns undefined for Salvation p3 (no "this unit purges … enemy" phrasing)', () => {
+        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
+        expect(detectEnemyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    });
+
+    it('is position-scoped: returns undefined when anchor is in a different sentence', () => {
+        // Fabricated two-sentence text; anchor is in the non-purge first sentence.
+        const text =
+            'This Unit repairs 10% Max HP. When this Unit purges a buff from an enemy, it repairs itself for 8% Max HP.';
+        expect(detectEnemyPurgedTrigger(text, text.indexOf('10%'))).toBeUndefined();
+        expect(detectEnemyPurgedTrigger(text, text.search(/repairs itself/i))).toBe(
+            'on-enemy-purged'
+        );
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectEnemyPurgedTrigger(SEFUBA_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+describe('detectAllyPurgedTrigger', () => {
+    it('returns on-ally-purged for Salvation p3 (anchor inside the ally-purge sentence)', () => {
+        const pos = SALVATION_P3_RAW.search(/repairs that ally/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBe('on-ally-purged');
+    });
+
+    it('returns undefined for Sefuba p1 (no "buff is purged from an ally" phrasing)', () => {
+        const pos = SEFUBA_P1_RAW.search(/repairs itself/i);
+        expect(detectAllyPurgedTrigger(SEFUBA_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for Sefuba p2 (no "buff is purged from an ally" phrasing)', () => {
+        const pos = SEFUBA_P2_RAW.search(/repairs itself/i);
+        expect(detectAllyPurgedTrigger(SEFUBA_P2_RAW, pos)).toBeUndefined();
+    });
+
+    it('is position-scoped: an anchor in the on-destroyed sentence of Salvation p3 is not stamped', () => {
+        // The on-destroyed sentence is before the <br /><br /> — its "repairs 80%" anchor
+        // must NOT get on-ally-purged.
+        const pos = SALVATION_P3_RAW.search(/repairs 80%/i);
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectAllyPurgedTrigger(SALVATION_P3_RAW, -1)).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2b-2 T4: detectEndOfRoundPurgeTrigger + detectMostBuffsTarget (Rhodium)
+// RAW strings from docs/ship-skills.csv (Rhodium row).
+// Regexes must match THROUGH <unit-aid> tags (loose [^.;]* gaps).
+// ---------------------------------------------------------------------------
+const RHODIUM_P1_RAW =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.';
+const RHODIUM_P2_RAW =
+    'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.';
+// Iridium p1 — plain "from the enemy", no "end of the round".
+const IRIDIUM_P1_RAW =
+    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.';
+
+describe('detectEndOfRoundPurgeTrigger', () => {
+    it('returns end-of-round for Rhodium p1 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P1_RAW, pos)).toBe('end-of-round');
+    });
+
+    it('returns end-of-round for Rhodium p2 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P2_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P2_RAW, pos)).toBe('end-of-round');
+    });
+
+    it('returns undefined for Iridium p1 (no "at the end of the round" phrase)', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectEndOfRoundPurgeTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectEndOfRoundPurgeTrigger(RHODIUM_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+// C2b-2 T6: detectKilledByDirectDamageTrigger (Faust)
+// RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
+const FAUST_P1_RAW =
+    'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.';
+const FAUST_P2_RAW =
+    'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.';
+
+describe('detectKilledByDirectDamageTrigger', () => {
+    it('returns on-destroyed for Faust p1 (anchor inside the purge sentence)', () => {
+        const pos = FAUST_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(FAUST_P1_RAW, pos)).toBe('on-destroyed');
+    });
+
+    it('returns on-destroyed for Faust p2 (anchor inside the purge sentence)', () => {
+        const pos = FAUST_P2_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(FAUST_P2_RAW, pos)).toBe('on-destroyed');
+    });
+
+    it('returns undefined for Iridium p1 (no "killed by direct damage" phrase)', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(IRIDIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for Rhodium p1 (no "killed by direct damage" phrase)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectKilledByDirectDamageTrigger(RHODIUM_P1_RAW, pos)).toBeUndefined();
+    });
+
+    it('returns undefined for negative anchor', () => {
+        expect(detectKilledByDirectDamageTrigger(FAUST_P1_RAW, -1)).toBeUndefined();
+    });
+});
+
+describe('detectMostBuffsTarget', () => {
+    it('returns true for Rhodium p1 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P1_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(RHODIUM_P1_RAW, pos)).toBe(true);
+    });
+
+    it('returns true for Rhodium p2 (anchor inside the purge sentence)', () => {
+        const pos = RHODIUM_P2_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(RHODIUM_P2_RAW, pos)).toBe(true);
+    });
+
+    it('returns false for Iridium p1 (plain "from the enemy", no "most buffs")', () => {
+        const pos = IRIDIUM_P1_RAW.search(/purge/i);
+        expect(detectMostBuffsTarget(IRIDIUM_P1_RAW, pos)).toBe(false);
+    });
+
+    it('returns false for null / undefined text', () => {
+        expect(detectMostBuffsTarget(null, 0)).toBe(false);
+        expect(detectMostBuffsTarget(undefined, 0)).toBe(false);
+    });
+
+    it('returns false for negative anchor', () => {
+        expect(detectMostBuffsTarget(RHODIUM_P1_RAW, -1)).toBe(false);
+    });
+});
+
+describe('target-repaired-this-round (Nayra)', () => {
+    const activeText =
+        'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.<br />If the target was repaired this round, inflict <unit-skill>Stasis</unit-skill> for 1 turn.';
+    const chargedText =
+        'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
+
+    it('gates Stasis (active) on target-repaired-this-round', () => {
+        expect(detectGrantConditions(activeText, 'Stasis')).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
+    });
+    it('gates Exposed (charged) on target-repaired-this-round', () => {
+        expect(detectGrantConditions(chargedText, 'Exposed')).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
+    });
+    it('does NOT gate first-sentence debuffs (no repaired phrase in their clause)', () => {
+        expect(detectGrantConditions(activeText, 'Defense Down II')).toEqual([]);
+        expect(detectGrantConditions(chargedText, 'Attack Down II')).toEqual([]);
+    });
+    it('detects the condition position-scoped at the purge anchor', () => {
+        const purgePos = chargedText.search(/purge/i);
+        expect(detectRepairedThisRoundCondition(chargedText, purgePos)).toEqual({
+            subject: 'target-repaired-this-round',
+            derivable: true,
+        });
+        expect(
+            detectRepairedThisRoundCondition(activeText, activeText.search(/purge/i))
+        ).toBeUndefined();
     });
 });

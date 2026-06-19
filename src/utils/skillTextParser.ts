@@ -579,6 +579,12 @@ export function detectGrantConditions(
         return [{ subject: 'ally-critically-repaired', derivable: false }];
     }
 
+    // target-repaired-this-round (Nayra). Live-derived gate; derivable:true (a
+    // derivable:false condition would always be met — evaluateConditions.ts:30).
+    if (REPAIRED_THIS_ROUND_RE.test(low)) {
+        return [{ subject: 'target-repaired-this-round', derivable: true }];
+    }
+
     // 0. Recurring grant: "gains X each/every turn|round" stacks unconditionally — a one-time gate
     // in the same sentence (e.g. Shashou's "Stealth after damaging a Debuffer … and gains Blast
     // each turn") applies to the other buff, not this one. Scope to this buff's own segment.
@@ -1016,6 +1022,119 @@ export function detectEnemyCleanseTrigger(
     return phrasePosTrigger(text, ENEMY_CLEANSE_RE, anchorPos, 'on-enemy-cleansed');
 }
 
+// "When this Unit purges (a buff / an enemy buff) … [from] an enemy" — Sefuba p1 + p2.
+// Loose [^.;]* gaps cross <unit-aid>/<unit-damage> tags. Verified against RAW CSV strings.
+const ENEMY_PURGED_RE = /\bwhen\s+this\s+unit\b[^.;]*\bpurges?\b[^.;]*\benem/i;
+
+/**
+ * Returns 'on-enemy-purged' when `anchorPos` falls inside the sentence carrying the
+ * "when this Unit purges … enemy" phrase (Sefuba p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEnemyCleanseTrigger).
+ * Reference data: docs/ship-skills.csv (Sefuba).
+ */
+export function detectEnemyPurgedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_PURGED_RE, anchorPos, 'on-enemy-purged');
+}
+
+// "When a buff is purged from an ally" — Salvation p3.
+// Loose [^.;]* gaps cross <unit-aid> tags around "buff" and "purged". Verified against RAW CSV.
+const ALLY_PURGED_RE =
+    /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i;
+
+// "purges N more buff" — Sefuba p2 chain-purge count extractor.
+// Capture group 1 = digit string or 'a'/'an' (→ count 1). Crosses <unit-aid> tags.
+// Verified: matches 'purges 1</unit-aid> more buff' with group 1 = '1'; no match on p1.
+export const PURGE_MORE_RE = /\bpurges?\s+(\d+|an?)\s*(?:<\/?[^>]*>)?\s*more\b/i;
+
+/**
+ * Returns 'on-ally-purged' when `anchorPos` falls inside the sentence carrying the
+ * "when a buff is purged from an ally" phrase (Salvation p3); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectDestroyedTrigger).
+ * Reference data: docs/ship-skills.csv (Salvation).
+ */
+export function detectAllyPurgedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_PURGED_RE, anchorPos, 'on-ally-purged');
+}
+
+// "at the end of the round, … purges …" — Rhodium end-of-round purge. Position-scoped.
+// Verified against RAW CSV: 'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs …'
+const END_OF_ROUND_RE = /\bat\s+the\s+end\s+of\s+the\s+round\b/i;
+
+/**
+ * Returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the
+ * "at the end of the round" phrase (Rhodium p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEnemyPurgedTrigger).
+ * Reference data: docs/ship-skills.csv (Rhodium).
+ */
+export function detectEndOfRoundPurgeTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
+}
+
+// "… when killed by direct Damage" — Faust on-destroyed purge (killer-targeted, direct-only).
+// Crosses tags; "direct" guards against a future DoT-kill phrasing.
+const KILLED_BY_DIRECT_RE = /\bwhen\s+killed\s+by\s+direct\b[^.;]*\bdamage\b/i;
+
+/**
+ * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
+ * "when killed by direct Damage" phrase (Faust p1 / p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectEndOfRoundPurgeTrigger).
+ * Reference data: docs/ship-skills.csv (Faust).
+ */
+export function detectKilledByDirectDamageTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
+}
+
+// "repaired this round" — Nayra's charged purge + its Stasis/Exposed inflicts. The
+// gate word ("if"/"when") is already verified by detectGrantConditions' conditional
+// guard / by rawSentenceAround's sentence scoping, so the phrase alone is enough.
+// Corpus-unique to Nayra (verified: 1 row). No <unit-…> tags intervene in the phrase.
+const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
+
+// "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
+// Verified against RAW CSV: '… buffs from the enemy with the most buffs.'
+const MOST_BUFFS_RE = /\benemy\b[^.;]*\bwith\s+the\s+most\b[^.;]*\bbuffs?\b/i;
+
+/**
+ * Returns a target-repaired-this-round Condition when `anchorPos` falls inside the
+ * sentence carrying "repaired this round" (Nayra's charged purge); else undefined.
+ * Position-scoped on RAW text (mirrors detectMostBuffsTarget). The purge ability has
+ * no buffName, so detectGrantConditions cannot drive it — this is its condition source.
+ */
+export function detectRepairedThisRoundCondition(
+    text: string | null | undefined,
+    anchorPos: number
+): Condition | undefined {
+    if (!text) return undefined;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && REPAIRED_THIS_ROUND_RE.test(sentence)
+        ? { subject: 'target-repaired-this-round', derivable: true }
+        : undefined;
+}
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the
+ * "enemy with the most buffs" phrase (Rhodium p1 / p2); otherwise false.
+ * Position-scoped on the RAW text (mirrors phrasePosTrigger's sentence-scoping).
+ * Reference data: docs/ship-skills.csv (Rhodium).
+ */
+export function detectMostBuffsTarget(text: string | null | undefined, anchorPos: number): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && MOST_BUFFS_RE.test(sentence);
+}
+
 // Shared: find the sentence (on RAW text, boundary = '.'/';' followed by whitespace/end — decimals
 // and abbreviation periods are NOT split, mirroring sentenceBoundsAround) carrying `phrase`; if
 // `anchorPos` falls within that sentence's [start,end) bounds, return `trigger`, else undefined.
@@ -1333,6 +1452,22 @@ export function parseNoCrit(text: string | null | undefined): boolean {
     return false;
 }
 
+// MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break stasis" ONLY. NOT "affected by
+// stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or "inflicts Stasis".
+// Input is normalised (curly/smart apostrophes → ASCII \x27) before matching so both game-data
+// forms are detected with a simple ASCII-only regex.
+const DOESNT_BREAK_STASIS_RE = /\b(?:do(?:es)?n\x27?t|does not|do not)\s+break\s+stasis\b/i;
+/** True iff this skill text declares the unit’s attacks don’t break Stasis (Akula + Tygr).
+ *  Boolean only — each ship’s other clauses (extra-action, +damage-vs-stasised) are parsed
+ *  elsewhere, untouched. */
+export function parseDoesntBreakStasis(text: string | null | undefined): boolean {
+    if (!text) return false;
+    // Normalise U+2018 (left) / U+2019 (right) single quotation marks to ASCII apostrophe
+    // before testing so the simple \x27 in the regex matches both curly and straight forms.
+    const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
+    return DOESNT_BREAK_STASIS_RE.test(normalised);
+}
+
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
 export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
     return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
@@ -1504,6 +1639,10 @@ export interface ExtraActionParse {
      *  (Sokol/Liberator on-kill) or on-ally-destroyed (Harvester). Absent for the default
      *  on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) — the builder defaults those to on-cast. */
     trigger?: Extract<AbilityTrigger, 'on-enemy-destroyed' | 'on-ally-destroyed'>;
+    /** "end of round" extra action (e.g. Harvester): the engine drains it AFTER all
+     *  normal-pool actions for the round, regardless of speed-rank — not re-picked by
+     *  speed. Default extra actions ("1 extra action", Liberator) stay speed-positioned. */
+    endOfRound: boolean;
 }
 
 /**
@@ -1572,6 +1711,7 @@ export function parseExtraAction(text: string | null | undefined): ExtraActionPa
     return {
         oncePerRound: /once per round/i.test(clause),
         conditions,
+        endOfRound: /end\s+of\s+round/i.test(clause),
         ...(trigger ? { trigger } : {}),
     };
 }
@@ -1686,7 +1826,11 @@ function sentenceBoundsAround(
 const HEAL_DISQUALIFY_RE = new RegExp(
     '\\brevives?\\b|\\bcheat death\\b(?!\\s+activates)|when an enemy uses|' +
         `when\\b(?!${SELF_DESTROYED_ALL_ALLIES_TAIL_SRC})[^.;]*\\bis\\s+destroyed\\b|` +
-        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b|when\\b[^.;]*\\bis\\s+purged\\b|when\\b[^.;]*\\bis\\s+cleansed\\b',
+        // C2b-1 T5: exempt "when a buff is purged from an ally" (Salvation 5% ally-heal is now
+        // live via on-ally-purged). Both the specific form ("when a buff is purged") and the
+        // general "is purged" form carry a lookahead to allow through the ally-recipient shape.
+        // detectAllyPurgedTrigger stamps the correct trigger. Other purge shapes stay disqualified.
+        'when\\s+destroyed\\b|upon\\s+being\\s+destroyed\\b|\\bon\\s+death\\b|when\\s+it\\s+destroys\\b|when\\s+a\\s+buff\\s+is\\s+purged\\b(?![^.;]*\\bfrom\\s+an?\\s+ally\\b)|when\\b[^.;]*\\bis\\s+purged\\b(?![^.;]*\\bfrom\\s+an?\\s+ally\\b)|when\\b[^.;]*\\bis\\s+cleansed\\b',
     'i'
 );
 // Damage-reaction reactive triggers — only disqualifying when the heal is NOT a damage leech
@@ -1970,8 +2114,57 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
     return results;
 }
 
+// "purges N" / "purges a/an" — active-verb only; naturally excludes "is Purged of all buffs"
+// (no "purges" token). Must NOT match "cleanses".
+const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;
+
 // "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
-const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
+const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
+
+/**
+ * Parses purge grants ("purges N buffs from <recipient>"). Purge is enemy-targeting only.
+ * Target from the sentence: "all enemies" → all-enemies, else "enemy".
+ * explicitTarget is always true (purge has no support-flip, kept for shape parity with parseCleanse).
+ * Does NOT match "cleanses". Passive-voice "is Purged of all buffs" has no "purges" token and is
+ * excluded naturally — handled in C2b. Reference data: docs/ship-skills.csv.
+ *
+ * NOTE: parsePurge is context-free. Reactive/conditional purge text in passives (Sefuba p2,
+ * Faust, Iridium, etc.) will produce matches here. The active/charged slot-gate in
+ * buildShipAbilities (Task 3) is what prevents those from being emitted as abilities.
+ */
+export function parsePurge(
+    text: string | null | undefined
+): { count: number | 'all'; target: 'enemy' | 'all-enemies'; explicitTarget: boolean }[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: {
+        count: number | 'all';
+        target: 'enemy' | 'all-enemies';
+        explicitTarget: boolean;
+    }[] = [];
+    PURGE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PURGE_RE.exec(plain)) !== null) {
+        // Group 1 is the count token (digit/all). Undefined when "a"/"an" matched instead.
+        const raw = m[1]?.toLowerCase();
+        let count: number | 'all';
+        if (raw === undefined) {
+            // "purges a buff" / "purges an enemy buff" — article matched, count is 1
+            count = 1;
+        } else if (raw === 'all') {
+            count = 'all';
+        } else {
+            count = parseInt(raw, 10);
+            if (!count || isNaN(count)) continue;
+        }
+        const sentence = sentenceAround(plain, m.index).toLowerCase();
+        const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
+            ? 'all-enemies'
+            : 'enemy';
+        results.push({ count, target, explicitTarget: true });
+    }
+    return results;
+}
 
 /**
  * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
@@ -1980,19 +2173,20 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
  */
 export function parseCleanse(
     text: string | null | undefined
-): { count: number; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
+): { count: number | 'all'; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const results: {
-        count: number;
+        count: number | 'all';
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CLEANSE_RE.exec(plain)) !== null) {
-        const count = parseInt(m[1], 10);
-        if (!count || isNaN(count)) continue;
+        const raw = m[1].toLowerCase();
+        const count: number | 'all' = raw === 'all' ? 'all' : parseInt(raw, 10);
+        if (count !== 'all' && (!count || isNaN(count))) continue;
         const sentence = sentenceAround(plain, m.index).toLowerCase();
         // explicitTarget mirrors parseHealAbilities: true when a recipient phrase was matched,
         // false when target defaulted to 'self' with no named recipient (the bare-cleanse case

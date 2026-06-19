@@ -29,6 +29,10 @@ import { DoTType } from '../../types/calculator';
  */
 export type CombatEvent =
     | { type: 'round-started'; round: number }
+    | /** Fires once per round at the round TAIL, AFTER all turns + the post-round death drain.
+     *  Mirror of `round-started`. Drains the end-of-round reactive queue (Rhodium's
+     *  end-of-round purge). Carries only the round number. */
+    { type: 'round-ended'; round: number }
     | { type: 'turn-started'; actorId: string; round: number }
     | { type: 'turn-ended'; actorId: string; round: number }
     | {
@@ -98,12 +102,21 @@ export type CombatEvent =
           critHits?: number;
       }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
-     *  configured number of debuffs cleansed. Emitted on the cast path for ANY actor
-     *  (player or enemy); enemy-side emission carries NO numeric effect (Phase 4c PR 4 —
-     *  cast-fires-regardless: emitted on every qualifying cast, with no check that a
-     *  debuff actually existed to cleanse). The `on-enemy-cleansed` listener filters
-     *  `isEnemySide(casterId)`. */
+     *  number of debuffs actually removed (player-side) or the nominal cfg.count
+     *  (enemy-side, event-only path). Asymmetry: player-side performs REAL removal
+     *  and suppresses the event when 0 debuffs were removed; enemy-side fires on
+     *  every qualifying cast regardless of whether a debuff existed (removal is
+     *  deferred — reactors such as Arum/Grif fire on the cast, not the removal).
+     *  The `on-enemy-cleansed` listener filters by `isOpposing(casterId)`. */
     | { type: 'cleanse-performed'; casterId: string; count: number; round: number }
+    /** A purge resolved. `casterId` = the purging actor; `targetId` = the VICTIM whose
+     *  buffs were removed (REQUIRED — `on-ally-purged` is victim-scoped, unlike the
+     *  caster-scoped `on-enemy-cleansed`); `count` = the number actually removed.
+     *  Suppressed when 0 removed and when the triggering intent carried
+     *  `eventCtx.fromPurgeEvent` (depth-1 chain guard — a purge triggered by a purge
+     *  does not re-emit). `on-enemy-purged` filters `casterId === ownerId`;
+     *  `on-ally-purged` filters `isSameSideAlly(targetId, ownerId)`. */
+    | { type: 'purge-performed'; casterId: string; targetId: string; count: number; round: number }
     | {
           type: 'dot-ticked';
           targetId: string;
@@ -138,8 +151,12 @@ export type CombatEvent =
      *     enemy HP% changes between rounds. The integer-vs-exact asymmetry is intended. */
     | { type: 'hp-changed'; targetId: string; round: number; oldPct: number; newPct: number }
     /** Emitted once per actor when its HP first reaches 0. `actorId` may be any
-     *  participating actor: 'attacker', a team actor id, or 'enemy'. */
-    | { type: 'ship-destroyed'; actorId: string; round: number }
+     *  participating actor: 'attacker', a team actor id, or 'enemy'. `killerId`/
+     *  `byDirectDamage` (C2b-2 Faust): the lethal attacker and whether the kill was a
+     *  DIRECT hit (vs a DoT-tick batch, which has no single killer → byDirectDamage:false,
+     *  killerId undefined). Optional — only Faust's on-destroyed purge reads them; all other
+     *  listeners ignore them (backward-compatible). */
+    | { type: 'ship-destroyed'; actorId: string; round: number; killerId?: string; byDirectDamage?: boolean }
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | { type: 'cheat-death-activated'; actorId: string; round: number }

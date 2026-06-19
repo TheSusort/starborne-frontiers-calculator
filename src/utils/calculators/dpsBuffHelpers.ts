@@ -50,6 +50,20 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'hotPct',
                 value: parsedEffects.hotPct * stacks,
             });
+        if (parsedEffects.speed !== undefined)
+            entries.push({ id: `${s.id}-spd`, stat: 'speed', value: parsedEffects.speed * stacks });
+        if (parsedEffects.hacking !== undefined)
+            entries.push({
+                id: `${s.id}-hack`,
+                stat: 'hacking',
+                value: parsedEffects.hacking * stacks,
+            });
+        if (parsedEffects.security !== undefined)
+            entries.push({
+                id: `${s.id}-sec`,
+                stat: 'security',
+                value: parsedEffects.security * stacks,
+            });
         return entries;
     });
 }

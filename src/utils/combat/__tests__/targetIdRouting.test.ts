@@ -80,7 +80,6 @@ function makeRuntime(
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
@@ -144,7 +143,6 @@ function makeArgs(
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
         targetId,
     };
 }

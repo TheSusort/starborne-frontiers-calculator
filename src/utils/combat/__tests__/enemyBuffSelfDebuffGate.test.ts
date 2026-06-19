@@ -69,7 +69,6 @@ function makeRuntime(skills: ShipSkills, attackStat = 10000): PlayerActorRuntime
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
@@ -121,7 +120,6 @@ function makeArgs(
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
         ...names,
     };
 }
@@ -242,7 +240,6 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -512,14 +509,21 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
     });
 
     /** Enemy attacker that lands a 99-turn Provoke (TIMED inflict) on its target, with a
-     *  configurable per-enemy debuffLandingChance. attack 1, speed 1 → acts after the focus. */
-    const provokeEnemy = (debuffLandingChance?: number): EnemyAttacker =>
+     *  configurable `stats.hacking` driving the live landing roll (vs the target's default
+     *  security 100). attack 1, speed 1 → acts after the focus. `hacking` omitted → defaults
+     *  to 200 → 100% landing. */
+    const provokeEnemy = (hacking?: number): EnemyAttacker =>
         ({
             id: 'e1',
-            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                speed: 1,
+                ...(hacking !== undefined ? { hacking } : {}),
+            },
             chargeCount: 0,
             startCharged: false,
-            ...(debuffLandingChance !== undefined ? { debuffLandingChance } : {}),
             shipSkills: {
                 slots: [
                     {
@@ -562,7 +566,7 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
             })
         );
 
-    it('debuffLandingChance 0 → TIMED Provoke NEVER lands → gated grant never fires', () => {
+    it('hacking 0 → landing 0 → TIMED Provoke NEVER lands → gated grant never fires', () => {
         idCounter = 0;
         const result = runWith(provokeEnemy(0));
         // Provoke resisted every round → tank never Provoked → +100% attack grant never fires.
@@ -570,14 +574,14 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
         expect(result.rounds[1].directDamage).toBe(10000);
     });
 
-    it('debuffLandingChance 1 → TIMED Provoke ALWAYS lands → gated grant fires round 2', () => {
+    it('hacking 200 → landing 1 → TIMED Provoke ALWAYS lands → gated grant fires round 2', () => {
         idCounter = 0;
-        const result = runWith(provokeEnemy(1));
+        const result = runWith(provokeEnemy(200));
         expect(result.rounds[0].directDamage).toBe(10000);
         expect(result.rounds[1].directDamage).toBe(20000);
     });
 
-    it('omitted debuffLandingChance → defaults to 100% (byte-identical to Task 6)', () => {
+    it('omitted hacking → defaults to 200 → 100% landing (byte-identical to Task 6)', () => {
         idCounter = 0;
         const result = runWith(provokeEnemy(undefined));
         expect(result.rounds[0].directDamage).toBe(10000);

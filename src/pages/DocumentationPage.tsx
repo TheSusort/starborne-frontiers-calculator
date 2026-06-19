@@ -214,6 +214,16 @@ const DocumentationPage: React.FC = () => {
                                 </a>
                             </li>
                             <li className="[counter-increment:index]">
+                                <a
+                                    href="#combat-simulator"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Combat Simulator
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
                                 <a href="#themes" className="text-primary hover:text-primary-light">
                                     <span className="before:content-[counter(index)'.'] before:mr-2">
                                         Themes & Appearance
@@ -2326,7 +2336,16 @@ const DocumentationPage: React.FC = () => {
                                         attacker&apos;s stats panel. Debuffs that land now persist
                                         their full duration without re-rolling each round. Charged
                                         skills without direct damage (pure utility) still fire on
-                                        their normal cadence and apply their effects.
+                                        their normal cadence and apply their effects. Speed Up buffs
+                                        make a ship act earlier in the round and Speed Down buffs
+                                        push it later — the turn order updates mid-round as speed
+                                        changes take effect, so a buff that fires on one ship&apos;s
+                                        turn is already reflected in the order for ships that have
+                                        not yet acted. Ships with conditional extra actions re-enter
+                                        the turn queue at their current Speed, including any live
+                                        Speed buffs or debuffs. End-of-round extra actions (such as
+                                        Harvester&apos;s on-ally-destroyed passive) drain after
+                                        every other ship has acted, regardless of Speed.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
@@ -2906,6 +2925,75 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Access simulation quickly via the &quot;Simulator&quot;
                                         option in ship dropdown menus
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Combat Simulator Section */}
+                    <section
+                        id="combat-simulator"
+                        className="space-y-4 [counter-increment:section]"
+                    >
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Combat Simulator
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Round-by-Round Battles</h3>
+                            <p className="text-theme-text mb-4">
+                                The Combat Simulator pits two squads against each other on the hex
+                                board and plays out the whole fight, round by round. Both sides are
+                                ships from your own fleet, simulated with their fully geared stats —
+                                so you can stage matchups and watch exactly how they unfold.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Setting Up</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Place ships on the two placement boards — your team on one,
+                                        an enemy team on the other
+                                    </li>
+                                    <li>
+                                        Click a cell to select it, then pick a ship from your fleet
+                                        to fill it; click a placed ship to remove it
+                                    </li>
+                                    <li>
+                                        Each placed ship fights with its real geared, refit, and
+                                        engineering-resolved stats
+                                    </li>
+                                    <li>
+                                        Run the simulation once you have at least one ship on each
+                                        team
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Watching the Battle
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        The outcome (which team wins, and the round it ended) is
+                                        shown at the top
+                                    </li>
+                                    <li>
+                                        Step through the battle round by round — First, Previous,
+                                        Next, Last, the slider, or auto-play
+                                    </li>
+                                    <li>
+                                        Each round, the boards show every ship&apos;s current HP,
+                                        damage dealt, and healing, with destroyed ships marked
+                                    </li>
+                                    <li>
+                                        Pin a ship to open a per-round detail card with its full
+                                        breakdown for that round
+                                    </li>
+                                    <li>
+                                        The event log lists the turn-by-turn actions — attacks,
+                                        heals, and effects — for the selected round
                                     </li>
                                 </ul>
                             </div>

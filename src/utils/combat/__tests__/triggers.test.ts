@@ -9,6 +9,7 @@ import {
     IntentExecContext,
     ReactiveAbility,
     LIVE_TRIGGERS,
+    partitionReactiveAbilities,
 } from '../triggers';
 import { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
 import type { ShipTypeName } from '../../../constants/shipTypes';
@@ -38,7 +39,6 @@ const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInpu
     numRounds: 8,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1, // 100% landing
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: true,
@@ -292,7 +292,7 @@ describe('Phase 3 reactive triggers', () => {
             ],
         };
         const { result } = collectEvents(
-            baseInput({ shipSkills: skills, numRounds: 8, debuffLandingChance: 0 })
+            baseInput({ shipSkills: skills, numRounds: 8, hacking: 0 }) // hacking 0 → landing 0
         );
         const actions = result.rounds.map((r) => r.action);
         expect(actions).toEqual([
@@ -930,7 +930,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // trigger fires every round
-                debuffLandingChance: 0, // 0% landing → always resisted
+                hacking: 0, // hacking 0 → 0% landing → always resisted
                 numRounds: 4,
             })
         );
@@ -1057,7 +1057,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // every round crits → an application is attempted each round
-                debuffLandingChance: 0.5,
+                hacking: 150, // hacking 150 vs default security 100 → 0.5 landing
                 numRounds: 10,
             })
         );
@@ -1416,7 +1416,7 @@ describe('Phase 3 reactive triggers', () => {
                 hasChargedSkill: false,
                 chargeCount: 0,
                 crit: 100, // trigger fires every round
-                debuffLandingChance: 0, // always resisted
+                hacking: 0, // hacking 0 → always resisted
                 numRounds: 3,
             })
         );
@@ -1466,7 +1466,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner,
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit(event);
         return intents;
@@ -1535,7 +1535,7 @@ describe('on-attacked live trigger (Task 4)', () => {
             bus,
             perOwner: [{ ownerId: 't', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         // Before any event: no intents enqueued
         expect(intents).toHaveLength(0);
@@ -1745,7 +1745,7 @@ describe('on-attacked live trigger (Task 4)', () => {
 // actor takes a direct hit. Unit-level harness mirroring the on-attacked
 // crit-filter tests: bare bus + registerReactiveListeners + manual emits.
 // Owner is 'graphite' (the reacting ship); 'tank' is another player actor;
-// 'enemy' and 'ea1' are enemy-side per the isEnemySide predicate.
+// 'enemy' and 'ea1' are enemy-side per the isOpposing predicate.
 // ----------------------------------------------------------------------
 describe('on-ally-attacked listener', () => {
     // Build a minimal on-ally-attacked reactive ability (Graphite/Cultivator shape).
@@ -1778,7 +1778,7 @@ describe('on-ally-attacked listener', () => {
             bus,
             perOwner: [{ ownerId: 'graphite', reactiveAbilities }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy' || id === 'ea1',
+            isOpposing: (id) => id === 'enemy' || id === 'ea1',
             roleOf,
         });
         for (const e of events) bus.emit(e);
@@ -1934,7 +1934,7 @@ describe('on-ally-attacked listener', () => {
 // Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
 // on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
 // createEventBus directly. Owner is always 'A' (a player actor); 'B' is
-// another player actor; 'enemy' is enemy-side per the isEnemySide predicate.
+// another player actor; 'enemy' is enemy-side per the isOpposing predicate.
 // ----------------------------------------------------------------------
 describe('death-trigger live listeners (Task 5)', () => {
     // Build a minimal reactive ability carrying the given death trigger.
@@ -1964,7 +1964,7 @@ describe('death-trigger live listeners (Task 5)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'ship-destroyed', actorId: destroyedActorId, round: 1 });
         return intents;
@@ -1984,6 +1984,72 @@ describe('death-trigger live listeners (Task 5)', () => {
 
         it('enqueues nothing when an enemy is destroyed', () => {
             expect(emitDestroyed('on-destroyed', 'enemy')).toHaveLength(0);
+        });
+
+        // C2b-2 T6: the on-destroyed gate is ABILITY-SCOPED. A PURGE reaction (Faust)
+        // fires only on a DIRECT-damage kill and routes counterTargetId = killerId; a
+        // non-purge reaction (buff/heal — Salvation's self-destruct heal) stays
+        // unconditional and fires on ANY death, regardless of byDirectDamage.
+        describe('C2b-2 T6 purge gate (Faust) vs non-purge (Salvation) exemption', () => {
+            const purgeDeathAbility = (): Ability => ({
+                id: 'd-purge',
+                type: 'purge',
+                target: 'enemy',
+                trigger: 'on-destroyed',
+                conditions: [],
+                config: { type: 'purge', count: 2 },
+            });
+
+            // Emit a ship-destroyed with explicit cause fields and collect intents for
+            // the given reactive ability.
+            function emitDestroyedCause(
+                ability: Ability,
+                cause: { byDirectDamage?: boolean; killerId?: string }
+            ): Intent[] {
+                const bus = createEventBus();
+                const intents: Intent[] = [];
+                const ra: ReactiveAbility = { ability, sourceSlot: 'passive' };
+                registerReactiveListeners({
+                    bus,
+                    perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+                    enqueue: (i) => intents.push(i),
+                    isOpposing: (id) => id === 'enemy',
+                });
+                bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1, ...cause });
+                return intents;
+            }
+
+            it('PURGE: fires on a DIRECT kill and routes counterTargetId = killerId', () => {
+                const intents = emitDestroyedCause(purgeDeathAbility(), {
+                    byDirectDamage: true,
+                    killerId: 'enemy',
+                });
+                expect(intents).toHaveLength(1);
+                expect(intents[0].ability.config.type).toBe('purge');
+                expect(intents[0].eventCtx?.counterTargetId).toBe('enemy');
+            });
+
+            it('PURGE: does NOT fire on a non-direct (DoT) kill (byDirectDamage:false)', () => {
+                expect(
+                    emitDestroyedCause(purgeDeathAbility(), { byDirectDamage: false })
+                ).toHaveLength(0);
+            });
+
+            it('PURGE: does NOT fire when byDirectDamage is absent', () => {
+                expect(emitDestroyedCause(purgeDeathAbility(), {})).toHaveLength(0);
+            });
+
+            it('NON-PURGE (Salvation-style buff/heal): fires on a DoT kill (gate exempt)', () => {
+                const intents = emitDestroyedCause(deathAbility('on-destroyed'), {
+                    byDirectDamage: false,
+                });
+                expect(intents).toHaveLength(1);
+                expect(intents[0].ability.trigger).toBe('on-destroyed');
+            });
+
+            it('NON-PURGE: fires when cause fields are absent (unchanged from Task 5)', () => {
+                expect(emitDestroyedCause(deathAbility('on-destroyed'), {})).toHaveLength(1);
+            });
         });
     });
 
@@ -2032,7 +2098,7 @@ describe('death-trigger live listeners (Task 5)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         expect(intents).toHaveLength(0);
         bus.emit({ type: 'ship-destroyed', actorId: 'A', round: 1 });
@@ -2066,7 +2132,7 @@ describe('on-cheat-death-activated live listener (Task 8)', () => {
             bus,
             perOwner: [{ ownerId, reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         bus.emit({ type: 'cheat-death-activated', actorId: activatedActorId, round: 1 });
         return intents;
@@ -2091,7 +2157,7 @@ describe('on-cheat-death-activated live listener (Task 8)', () => {
             bus,
             perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
             enqueue: (i) => intents.push(i),
-            isEnemySide: (id) => id === 'enemy',
+            isOpposing: (id) => id === 'enemy',
         });
         expect(intents).toHaveLength(0);
         bus.emit({ type: 'cheat-death-activated', actorId: 'B', round: 1 });
@@ -2520,7 +2586,6 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
             actor: { id: 'attacker' } as CombatActor,
             landsTimedEnemyApplication: () => true,
             debuffLandingGate: (_rate: number) => true,
-            debuffLandingChance: 1,
         }) as unknown as PlayerActorRuntime;
 
     const makeDebuffIntent = (counterTargetId?: string): Intent => ({
@@ -2761,7 +2826,6 @@ describe('Phase 4c Task 6: debuff-resisted always targets ctx.enemy.id (Task 5 c
                         // landsTimedEnemyApplication returns false → resist path
                         landsTimedEnemyApplication: () => false,
                         debuffLandingGate: (_rate: number) => false,
-                        debuffLandingChance: 1,
                     } as unknown as PlayerActorRuntime,
                 ],
             ]),
@@ -2989,11 +3053,10 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
-                hacking: 0,
+                hacking: 200, // vs enemy default security 100 → landing 1 (was masked by the old gate when enemy had no security; debuffLandingChance: 1 below kept it 100%)
                 defence: 0,
                 hp,
             },
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             affinityDamageModifier: 0,
@@ -3190,5 +3253,62 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
         });
         expect(events.filter((e) => e.type === 'attacked').length).toBe(3);
         expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
+    });
+});
+
+// ----------------------------------------------------------------------
+// C2b-1 — purge partition guard.
+// An `on-cast` purge ability MUST stay in castSkills (the on-cast path
+// handles it). An `on-enemy-purged` purge ability MUST route to
+// reactiveAbilities (so the bus listener is registered and Sefuba's
+// chain fires). This guard ensures a future edit to REACTIVE_ABILITY_TYPES
+// cannot silently regress both paths at once.
+// ----------------------------------------------------------------------
+describe('C2b-1: purge partition guard (on-cast stays cast, on-enemy-purged goes reactive)', () => {
+    const purgeOnCast = (): Ability => ({
+        id: 'poc1',
+        type: 'purge',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'purge', count: 1 },
+    });
+
+    const purgeOnEnemyPurged = (): Ability => ({
+        id: 'pop1',
+        type: 'purge',
+        target: 'enemy',
+        trigger: 'on-enemy-purged',
+        conditions: [],
+        config: { type: 'purge', count: 1 },
+    });
+
+    const skills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [purgeOnCast()],
+            },
+            {
+                slot: 'passive',
+                abilities: [purgeOnEnemyPurged()],
+            },
+        ],
+    });
+
+    it('on-cast purge stays in castSkills (NOT classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(castIds).toContain('poc1');
+        expect(reactiveIds).not.toContain('poc1');
+    });
+
+    it('on-enemy-purged purge routes to reactiveAbilities (IS classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(reactiveIds).toContain('pop1');
+        expect(castIds).not.toContain('pop1');
     });
 });

@@ -1,16 +1,18 @@
 import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { EnemyBaseClass, ParsedBuffEffects } from '../../types/calculator';
+import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
+import { expandEnemyDebuffs, payloadToSelectedBuff } from './buffTotals';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
 import {
     ActiveBuff,
     AbilityStatusPayload,
+    DEFAULT_ENEMY_TARGET,
     RegisteredAbilityStatus,
     StatusEngine,
 } from './statusEngine';
@@ -49,7 +51,8 @@ export type ReactiveAbilityType =
     | 'shield'
     | 'cleanse'
     | 'extra-action'
-    | 'damage';
+    | 'damage'
+    | 'purge'; // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -62,6 +65,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'cleanse',
     'extra-action',
     'damage',
+    'purge', // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -72,7 +76,7 @@ export interface ReactiveAbility {
 }
 
 /** A queued follow-up execution. Listeners push these; the engine drains them.
- *  `ownerId` (Task 6) is the player actor whose reactive ability fired — the executor
+ *  `ownerId` (Task 6) is the actor (either side) whose reactive ability fired — the executor
  *  routes charge/buff/debuff/dot follow-ups against THIS owner's runtime (its charges,
  *  its landing gates, its sourceId, its last-turn ctx for bombs). For an attacker-only
  *  run every Intent carries ownerId 'attacker' → identical routing to pre-Task-6. */
@@ -86,8 +90,10 @@ export interface Intent {
      *  branch routes the application to THIS enemy's per-target store.
      *  `damagedAllyId`: the DAMAGED ally's actor id (on-ally-attacked) — the heal and
      *  buff branches route an 'ally'-target payload to exactly this recipient
-     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default. */
-    eventCtx?: { counterTargetId?: string; damagedAllyId?: string };
+     *  (Cultivator's repair, Refine/Graphite's grants) instead of the default.
+     *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
+     *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
+    eventCtx?: { counterTargetId?: string; damagedAllyId?: string; fromPurgeEvent?: boolean };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
@@ -131,25 +137,25 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
 }
 
 /**
- * Register each player owner's reactive abilities as bus listeners. Listener bodies are
+ * Register each owner's reactive abilities as bus listeners. Listener bodies are
  * PURE (Phase 1 contract): they only `enqueue` an intent — never mutate combat state. Match
  * guards are now per OWNER (Task 6) so a team ship's reactive ability keys on ITS OWN events:
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once per CRITTING HIT (critHits field; falls back to the didCrit binary for events without it)
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`
- *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied with `sourceId !== ownerId &&
- *    !isEnemySide(sourceId)` (any OTHER PLAYER's infliction is an ally-infliction from this
- *    owner's perspective — the attacker's inflictions trigger a team Oleander, and vice versa).
- *    Every enemy-side actor (dummy wall + enemy attackers) is excluded — an enemy is never an
- *    ally. The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
- *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER PLAYER actor (ally crit-cast DoT;
- *    enemy-side sources excluded)
+ *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
+ *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
+ *    PLAYER's infliction; for the ENEMY registration this is any other enemy actor's infliction.
+ *    The dot-applied subscription is now LIVE (the team dot-applied seam exists since Task 4).
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
+ *    excluded, own casts excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
- *    fires once PER CRITTING HIT; the owner's own casts and every enemy-side actor are excluded
+ *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
  *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
+ *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round; C2b-2)
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
@@ -158,21 +164,22 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    triggerCritFilter discriminates on the hit's own crit outcome: 'crit' → critting hits only,
  *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
  *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
- *  - on-ally-attacked → attacked where targetId !== ownerId && !isEnemySide(targetId) (per hit;
- *    critFilter + roleFilter applied). Fires when ANY OTHER player actor is hit — own hits are
- *    on-attacked's job; an enemy-side target is never an ally. triggerCritFilter discriminates on
- *    the hit's own crit outcome (same contract as on-attacked); roleFilter (Graphite) matches the
- *    DAMAGED ally's role category via the optional roleOf lookup.
+ *  - on-ally-attacked → attacked where the target is a same-side ally (not opposing, not self)
+ *    (per hit; critFilter + roleFilter applied). Fires when ANY OTHER same-side actor is hit —
+ *    own hits are on-attacked's job; an opposing-side target is never an ally.
+ *    triggerCritFilter discriminates on the hit's own crit outcome (same contract as on-attacked);
+ *    roleFilter (Graphite) matches the DAMAGED ally's role category via the optional roleOf lookup.
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
- *  - on-ally-destroyed → ship-destroyed where actorId !== ownerId && !isEnemySide(actorId)
- *    (any OTHER player actor's destruction; mirrors on-ally-crit's ally scoping).
- *  - on-enemy-destroyed → ship-destroyed where isEnemySide(actorId)
- *    (any enemy-side actor — dummy wall + walked enemy attackers).
- *  - on-enemy-repaired → heal-performed where isEnemySide(casterId)
- *    (any enemy-side actor's repair cast — dummy wall + enemy attackers). One enqueue per cast.
- *  - on-enemy-cleansed → cleanse-performed where isEnemySide(casterId)
- *    (any enemy-side actor's cleanse cast — dummy wall + enemy attackers). One enqueue per cast.
+ *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not self)
+ *    (any OTHER same-side actor's destruction; mirrors on-ally-crit's ally scoping).
+ *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
+ *    (any opposing-side actor — for players: dummy wall + walked enemy attackers;
+ *    for enemy owners: any player actor).
+ *  - on-enemy-repaired → heal-performed where isOpposing(casterId)
+ *    (any opposing-side actor's repair cast). One enqueue per cast.
+ *  - on-enemy-cleansed → cleanse-performed where isOpposing(casterId)
+ *    (any opposing-side actor's cleanse cast). One enqueue per cast.
  *  - on-hp-threshold-crossed → hp-changed where targetId === ownerId and the event is a
  *    DOWNWARD crossing of N (oldPct >= N > newPct), N read from the ability's self
  *    hp-threshold condition (trigger CONFIG — executeIntent scrubs it from the drain-time
@@ -193,21 +200,23 @@ export function registerReactiveListeners(args: {
     bus: CombatEventBus;
     perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
     enqueue: (intent: Intent) => void;
-    /** True for ANY enemy-side actor id: the singular dummy wall enemy AND every enemy
-     *  ATTACKER (healing mode). Enemy attackers now walk runPlayerTurn (commit 6c456a14) and
-     *  therefore emit the full reactive event suite (`ability-performed` with crits,
-     *  `dot-applied`, `debuff-applied`, …) with `side === 'enemy'`. Ally-scoped player
-     *  listeners treat "any OTHER player actor" as an ally, so they MUST exclude every
-     *  enemy-side id — not just the dummy — or an enemy's crit/debuff wrongly fires a
-     *  player's on-ally-* reaction. The engine passes a predicate closing over the dummy id
-     *  + all enemy-attacker ids; for an attacker-only/DPS run only the dummy is enemy-side. */
-    isEnemySide: (actorId: string) => boolean;
+    /** True for any actor on the side OPPOSING this listener set's owners. The engine
+     *  passes a per-call predicate: the PLAYER registration passes the enemy-side
+     *  predicate (opposing = enemy-side); the ENEMY registration passes its negation
+     *  (opposing = player-side). This per-call approach ensures an enemy owner's
+     *  opposing/ally reactions route against the correct side (bySide PR2). */
+    isOpposing: (actorId: string) => boolean;
     /** Damaged-ally role lookup for role-filtered ally-damage reactions (Graphite).
      *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
      *  Optional: DPS-mode runs and unit fixtures omit it. */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
 }): void {
-    const { bus, perOwner, enqueue, isEnemySide, roleOf } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf } = args;
+    // Same-side ally = NOT opposing AND not the owner itself (own events route to the
+    // self-scoped triggers). For the player registration (opposing = enemy-side) this
+    // is byte-identical to the old pattern.
+    const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
+        !isOpposing(actorId) && actorId !== ownerId;
     for (const { ownerId, reactiveAbilities } of perOwner) {
         for (const ra of reactiveAbilities) {
             const intent: Intent = { ability: ra.ability, sourceSlot: ra.sourceSlot, ownerId };
@@ -232,25 +241,25 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        // Ally = ANY OTHER player's infliction. Exclude this owner (own
-                        // inflictions go to on-debuff-inflicted) AND every enemy-side actor
-                        // (dummy wall + enemy attackers — an enemy is never an ally).
-                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
+                        // Ally = any OTHER same-side actor's infliction. Exclude this owner
+                        // (own inflictions go to on-debuff-inflicted) AND every opposing actor
+                        // (an opposing actor is never an ally).
+                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications now emit dot-applied with the team sourceId
                         // (Task 4 seam, live since Task 6) — an ally DoT infliction triggers
                         // this listener exactly as an ally debuff does.
-                        if (e.sourceId !== ownerId && !isEnemySide(e.sourceId)) enqueue(intent);
+                        if (isSameSideAlly(e.sourceId, ownerId)) enqueue(intent);
                     });
                     break;
                 case 'on-ally-crit-dot':
                     bus.on('dot-applied', (e) => {
                         // Ally DoT infliction whose cast crit (viaCrit): any OTHER
-                        // player's crit-cast DoT. Own casts and every enemy-side actor are
-                        // excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
+                        // same-side actor's crit-cast DoT. Own casts and every opposing actor
+                        // are excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
                         // enqueue per qualifying infliction EVENT (per-infliction-event rule).
-                        if (e.viaCrit && e.sourceId !== ownerId && !isEnemySide(e.sourceId)) {
+                        if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
                             enqueue(intent);
                         }
                     });
@@ -272,16 +281,21 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
                         // An ALLY's critting hits (mirrors on-crit with ally scoping):
-                        // fires once PER CRITTING HIT, own casts and every enemy-side actor
-                        // (dummy wall + enemy attackers) excluded — an enemy crit is NOT an
-                        // ally crit, even though a walked enemy now emits ability-performed.
-                        if (e.actorId === ownerId || isEnemySide(e.actorId)) return;
+                        // fires once PER CRITTING HIT, own casts and every opposing actor
+                        // excluded — an opposing crit is NOT an ally crit, even though a
+                        // walked enemy now emits ability-performed.
+                        if (!isSameSideAlly(e.actorId, ownerId)) return;
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
                         for (let i = 0; i < n; i++) enqueue(intent);
                     });
                     break;
                 case 'start-of-round':
                     bus.on('round-started', () => enqueue(intent));
+                    break;
+                case 'end-of-round':
+                    // Global, like start-of-round: every round-ended enqueues this owner's intent
+                    // (Rhodium's end-of-round purge). Gating handled in the executor.
+                    bus.on('round-ended', () => enqueue(intent));
                     break;
                 case 'on-bomb-detonated':
                     bus.on('bomb-detonated', () => enqueue(intent));
@@ -310,16 +324,16 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
-                        // Ally-scoped: fires when ANY OTHER player actor is hit — per HIT (the
-                        // engine emits one event per hit, PR 1). Excludes this owner (own hits
-                        // are on-attacked's job) and every enemy-side actor, mirroring
+                        // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
+                        // (the engine emits one event per hit, PR 1). Excludes this owner (own
+                        // hits are on-attacked's job) and every opposing actor, mirroring
                         // on-ally-destroyed's scoping. triggerCritFilter discriminates on the
                         // hit's own crit outcome, same contract as on-attacked. roleFilter
                         // (Graphite) matches the DAMAGED ally's role category; an unknown role
                         // never matches (conservative — a manual actor with no ship picked keeps
                         // role-filtered reactions dormant rather than inflating numbers); an
                         // EMPTY filter array is treated as absent (any ally), not never-match.
-                        if (e.targetId === ownerId || isEnemySide(e.targetId)) return;
+                        if (!isSameSideAlly(e.targetId, ownerId)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -342,38 +356,76 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Self-scoped: fires when THIS OWNER itself is destroyed (mirrors
-                        // on-crit's own-id scoping). One enqueue per destruction event.
-                        if (e.actorId === ownerId) enqueue(intent);
+                        // Self-scoped: THIS owner was destroyed (mirrors on-crit's own-id scoping).
+                        // Faust's PURGE only fires when killed by DIRECT damage and targets the
+                        // killer (counterTargetId = e.killerId); Salvation's self-destruct HEAL (and
+                        // any other on-destroyed reaction) fires on ANY death, unchanged.
+                        if (e.actorId !== ownerId) return;
+                        if (ra.ability.config.type === 'purge') {
+                            if (!e.byDirectDamage) return;
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.killerId },
+                            });
+                        } else {
+                            enqueue(intent);
+                        }
                     });
                     break;
                 case 'on-ally-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Ally-scoped: any OTHER player actor's destruction. Exclude this
-                        // owner (own death goes to on-destroyed) AND every enemy-side actor
-                        // (dummy wall + enemy attackers — an enemy is never an ally), mirroring
-                        // on-ally-crit's scoping.
-                        if (e.actorId !== ownerId && !isEnemySide(e.actorId)) enqueue(intent);
+                        // Ally-scoped: any OTHER same-side actor's destruction. Exclude this
+                        // owner (own death goes to on-destroyed) AND every opposing actor
+                        // (an opposing actor is never an ally), mirroring on-ally-crit's scoping.
+                        if (isSameSideAlly(e.actorId, ownerId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Enemy-scoped: fires when any enemy-side actor (dummy wall + enemy
-                        // attackers) is destroyed. One enqueue per destruction event.
-                        if (isEnemySide(e.actorId)) enqueue(intent);
+                        // Opposing-scoped: fires when any opposing-side actor is destroyed.
+                        // For the player call: dummy wall + enemy attackers.
+                        // For the enemy call: any player actor. One enqueue per destruction event.
+                        if (isOpposing(e.actorId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-repaired':
                     bus.on('heal-performed', (e) => {
-                        // Enemy-scoped: any enemy-side actor's repair (dummy wall + enemy
-                        // attackers). One enqueue per qualifying cast — Zosimos banks a charge.
-                        if (isEnemySide(e.casterId)) enqueue(intent);
+                        // Opposing-scoped: any opposing-side actor's repair. For the player
+                        // call: dummy wall + enemy attackers. For the enemy call: any player
+                        // actor. One enqueue per qualifying cast — Zosimos banks a charge.
+                        if (isOpposing(e.casterId)) enqueue(intent);
                     });
                     break;
                 case 'on-enemy-cleansed':
                     bus.on('cleanse-performed', (e) => {
-                        // Enemy-scoped: any enemy-side actor's cleanse. One enqueue per cast.
-                        if (isEnemySide(e.casterId)) enqueue(intent);
+                        // Opposing-scoped: any opposing-side actor's cleanse. For the player
+                        // call: enemy side. For the enemy call: player side.
+                        // One enqueue per cast.
+                        if (isOpposing(e.casterId)) enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-purged':
+                    bus.on('purge-performed', (e) => {
+                        // Self-scoped on the caster: THIS owner purged an enemy (Sefuba).
+                        // Route counterTargetId = e.targetId so Sefuba's chain "purge 1 more"
+                        // re-purges the SAME victim (not ctx.enemyId — victim-routing).
+                        // fromPurgeEvent guards the chain purge from re-emitting → depth-1.
+                        if (e.casterId === ownerId)
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId, fromPurgeEvent: true },
+                            });
+                    });
+                    break;
+                case 'on-ally-purged':
+                    bus.on('purge-performed', (e) => {
+                        // Victim-scoped: a buff was purged from MY ally (Salvation). Route the
+                        // heal to that ally via damagedAllyId; fromPurgeEvent guards any chained purge.
+                        if (isSameSideAlly(e.targetId, ownerId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId, fromPurgeEvent: true },
+                            });
                     });
                     break;
                 case 'on-cheat-death-activated':
@@ -438,9 +490,15 @@ export interface IntentExecContext {
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
      *  round when there is no live queue — the post-round enemy-death case). */
-    grantExtraAction: (granterId: string, abilityId: string, oncePerRound: boolean) => void;
-    /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
-     *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
+    grantExtraAction: (
+        granterId: string,
+        abilityId: string,
+        oncePerRound: boolean,
+        endOfRound: boolean
+    ) => void;
+    /** Same-side ally/recipient id order for the current drain side: player team ids when
+     *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
+     *  sideCtx.recipientIds — used for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
     /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
      *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
@@ -482,6 +540,11 @@ export interface IntentExecContext {
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
      *  sees it. Absent → the damage branch is inert (unit fixtures / DPS mode w/o delegate). */
     creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
+     *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
+     *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
+     *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
+    enemyWithMostBuffs?: (ownerId: string) => string | undefined;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -491,7 +554,7 @@ export interface IntentExecContext {
  *  so crit-gated conditions are evaluated with effectiveCritRate 0 (treated as
  *  not-crit at drain time). */
 /**
- * Build a ConditionContext for ONE player actor (`ownerId`) from the status engine + the shared
+ * Build a ConditionContext for ONE actor (`ownerId`, either side) from the status engine + the shared
  * enemy state. Reused by the drain-time gate (buildDrainContext) and by the player-turn aura/accum
  * resolver (Task 5: an ally-cast aura sitting on a recipient is gated by its CASTER's context —
  * the resolver maps casterId → this ctx). The `selfBuffNames` come from that owner's snapshot, so
@@ -628,9 +691,11 @@ const NEUTRAL_NAMES_CTX = buildRoundContext({
 /** Union of self-buff NAMES held by the given owners (e.g. all enemy attackers).
  *  Scheduled non-payload buffs come from snapshot().activeSelfBuffs; payload-carrying
  *  ability self statuses (timed window-persisting + aura/accum) come from the
- *  ability-status reads. Used to populate `enemyBuffNames` for a player actor's
- *  `enemy-buff` gates: the OPPOSING side from a player gate's view is the enemy
- *  attacker(s). Aggregation choice: UNION across all enemy owners (the condition is
+ *  ability-status reads. Used to populate `enemyBuffNames` for any actor's
+ *  `enemy-buff` gate: a player actor sees the enemy attackers, an enemy actor sees
+ *  the player team — the engine passes the correct opposing owner ids; this function
+ *  just unions self-buff names for whatever owner ids it's given. Aggregation choice:
+ *  UNION across all the given owners (the condition is
  *  conceptually "does an enemy have a buff", not "does THIS enemy" — the simplest
  *  correct interpretation for multi-enemy healing mode). De-duplicated. */
 export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: string[]): string[] {
@@ -657,7 +722,7 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
  *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
  *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads
- *  keyed by the same target. Used to populate `selfDebuffNames` for a player actor whose own
+ *  keyed by the same target. Used to populate `selfDebuffNames` for an actor (either side) whose own
  *  enemy-applied debuffs live under its id (the heal target / tank). De-duplicated. */
 export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string): string[] {
     const names = new Set<string>();
@@ -677,6 +742,49 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
         names.add(s.active.buffName);
     }
     return [...names];
+}
+
+// DEFAULT_ENEMY_TARGET is imported from statusEngine.ts — single source of truth.
+
+/** Returns the full per-victim enemy-debuff SET as SelectedGameBuff effects, folding BOTH
+ *  channels:
+ *  - scheduled (__enemy__ global auras/manual — upsertBuff is hardcoded to '__enemy__')
+ *  - ability (payload, per-victim — timed + aura/accum keyed by targetId)
+ *  Reads the same three sources as ownerDebuffNamesFor, with ONE deliberate difference: the
+ *  scheduled source is keyed to the GLOBAL '__enemy__' store (because upsertBuff is hardcoded to
+ *  write there) — NOT per-victim like ownerDebuffNamesFor's snapshot(undefined, targetId). The two
+ *  ability sources ARE per-victim (keyed by targetId). If upsertBuff ever becomes per-victim aware,
+ *  revisit the scheduled key here. Import-cycle safe: expandEnemyDebuffs + payloadToSelectedBuff
+ *  come from ./buffTotals (leaf module), not from ./playerTurn (which imports triggers.ts).
+ *
+ *  APPROXIMATION NOTE (finding I1): the aura/accumulating branch — `activeAbilityStatuses('enemy',
+ *  () => NEUTRAL_NAMES_CTX, ...)` — deliberately mirrors `ownerDebuffNamesFor`'s names read: it
+ *  applies a NEUTRAL gating ctx (full HP, no debuffs, default context) and NO per-round landing
+ *  re-roll. This differs from the aggregate `roundEnemyDebuffs` fold in `playerTurn.ts` (~925-963),
+ *  which applies a per-round re-roll (`isApply ? !affinityDisadvantage : roundDebuffLanded()`,
+ *  dropping resisted entries) and uses the real gating context. Consequently, for aura/accumulating
+ *  enemy debuffs that carry stat effects (`defense`/`incomingDamage`), the per-victim modifier
+ *  returned here is an APPROXIMATION that may diverge from what the aggregate would produce.
+ *  This is an accepted approximation: it is internally consistent with the names reader (which
+ *  B2/B3 Stasis relies on), and Stasis — the primary aura/accum enemy debuff in the current
+ *  model — carries empty parsedEffects so no modifier divergence occurs in practice. The timed
+ *  ability channel is NOT approximated (landing is gated at application time, before this read). */
+export function victimEnemyBuffs(
+    statusEngine: StatusEngine,
+    targetId: string,
+    enemyDebuffLookup: Map<string, SelectedGameBuff[]>
+): SelectedGameBuff[] {
+    const scheduled = expandEnemyDebuffs(
+        statusEngine.snapshot(undefined, DEFAULT_ENEMY_TARGET).activeEnemyDebuffs,
+        enemyDebuffLookup
+    );
+    const timed = statusEngine
+        .timedAbilityStatuses('enemy', undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    const active = statusEngine
+        .activeAbilityStatuses('enemy', () => NEUTRAL_NAMES_CTX, undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    return [...scheduled, ...timed, ...active];
 }
 
 /** The id of the actor that applied an active 'Provoke' debuff to `actorId`, or undefined
@@ -733,6 +841,24 @@ function payloadFromConfig(cfg: {
         parsedEffects: cfg.parsedEffects,
         ...(cfg.application ? { application: cfg.application } : {}),
     };
+}
+
+/**
+ * Resolve the recipient id list for a reactive heal/cleanse/purge intent.
+ * 'ally'-target: prefers eventCtx.damagedAllyId (the ally that was hit), falls
+ * back to fallbackTargetId (the heal target). 'all-allies': fans out to every
+ * same-side id (ctx.playerIds). Anything else (self, enemy, …): the owner only.
+ */
+export function reactiveRecipients(
+    intent: Intent,
+    ctx: IntentExecContext,
+    fallbackTargetId: string
+): string[] {
+    return intent.ability.target === 'ally'
+        ? [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
+        : intent.ability.target === 'all-allies'
+          ? ctx.playerIds
+          : [intent.ownerId];
 }
 
 /**
@@ -804,7 +930,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'charge') {
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
-        // EVERY player actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
+        // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
             ctx.grantAllyCharges(cfg.amount);
             return;
@@ -914,8 +1040,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
-        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
-        if (!owner.debuffLandingGate(owner.debuffLandingChance)) return;
+        // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Reads the
+        // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn); `?? 1` is a neutral
+        // guard (the owner applied this DoT on its own turn → the field is set).
+        const liveLanding = owner.liveDebuffLandingChance ?? 1;
+        if (!owner.debuffLandingGate(liveLanding)) return;
         // Owner-routed (Task 6): DoT entries are stamped with the firing owner's id so the
         // enemy's per-entry tick attributes to (and scales with) the applier; bombs snapshot
         // the owner's last-turn effective attack + affinity.
@@ -1005,12 +1134,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
-        const recipients =
-            intent.ability.target === 'ally'
-                ? [intent.eventCtx?.damagedAllyId ?? healing.targetId]
-                : intent.ability.target === 'all-allies'
-                  ? ctx.playerIds
-                  : [intent.ownerId];
+        const recipients = reactiveRecipients(intent, ctx, healing.targetId);
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1056,7 +1180,16 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'cleanse') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
-        ctx.healing.credit(intent.ownerId, 'cleanseCount', cfg.count);
+        // ctx.playerIds is the SAME-SIDE ally id order (sideCtx.recipientIds) — side-correct for
+        // both player and enemy reactive drains. ctx.statusEngine is the live store. Mirrors the
+        // reactive heal branch's recipient resolution: an 'ally'-target cleanse prefers the
+        // eventCtx.damagedAllyId (an ally-damage reaction cleanses THAT ally) over the heal target;
+        // 'all-allies' fans out to every same-side id; self → the owner.
+        const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);
+        let removed = 0;
+        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, cfg.count);
+        // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
+        ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
         return;
     }
 
@@ -1086,9 +1219,39 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // the next round — post-round enemy death, no live queue). The owner is the GRANTER (the
         // ship whose death-triggered passive fired): Sokol/Liberator gain the extra turn, not the
         // dead enemy. The engine's processExtraActionGrants enforces oncePerRound + the backstop.
-        ctx.grantExtraAction(intent.ownerId, intent.ability.id, cfg.oncePerRound);
+        ctx.grantExtraAction(
+            intent.ownerId,
+            intent.ability.id,
+            cfg.oncePerRound,
+            cfg.endOfRound ?? false
+        );
         return;
     }
 
-    // Any other type (purge/control/...) → not-simulated follow-up; skip.
+    if (cfg.type === 'purge') {
+        // Reactive purge (C2b): remove buffs from the victim. Target = the routed
+        // attacker/killer (counterTargetId — set by on-attacked/on-destroyed in C2b-2,
+        // and by on-enemy-purged for Sefuba's chain victim-routing) else the turn's
+        // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
+        // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
+        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
+        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the turn's enemy.
+        const targetId =
+            intent.ability.target === 'enemy-most-buffs'
+                ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
+                : (intent.eventCtx?.counterTargetId ?? ctx.enemyId);
+        const removed = ctx.statusEngine.purge(targetId, cfg.count);
+        if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
+            ctx.bus.emit({
+                type: 'purge-performed',
+                casterId: intent.ownerId,
+                targetId,
+                count: removed,
+                round: ctx.round,
+            });
+        }
+        return;
+    }
+
+    // Any other type (control/...) → not-simulated follow-up; skip.
 }

@@ -60,6 +60,7 @@ const SpeedCalculatorPage = lazy(() => import('./pages/calculators/SpeedCalculat
 const ChronoReaverCalculatorPage = lazy(
     () => import('./pages/calculators/ChronoReaverCalculatorPage')
 );
+const SimulatorPage = lazy(() => import('./pages/SimulatorPage'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 const ClassifiedPage = lazy(() => import('./pages/ClassifiedPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
@@ -256,6 +257,12 @@ const App: React.FC = () => {
                                                                                         path="/chrono-reaver"
                                                                                         element={
                                                                                             <ChronoReaverCalculatorPage />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="/simulator"
+                                                                                        element={
+                                                                                            <SimulatorPage />
                                                                                         }
                                                                                     />
                                                                                     <Route

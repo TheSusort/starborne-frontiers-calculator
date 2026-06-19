@@ -21,7 +21,13 @@ export type AbilityType =
     | 'purge'
     | 'control';
 
-export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
+export type AbilityTarget =
+    | 'self'
+    | 'ally'
+    | 'all-allies'
+    | 'enemy'
+    | 'all-enemies'
+    | 'enemy-most-buffs';
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -32,6 +38,7 @@ export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enem
 export type AbilityTrigger =
     | 'on-cast'
     | 'start-of-round'
+    | 'end-of-round' // Rhodium end-of-round purge — C2b-2
     | 'on-crit'
     | 'on-debuff-inflicted'
     | 'on-ally-debuff-inflicted'
@@ -55,7 +62,10 @@ export type AbilityTrigger =
     // debuff (cleanse-performed). Player reactions: Zosimos charge gain on enemy
     // repair; Arum/Yarrow/Larkspur/Grif reactions on enemy cleanse. Phase 4c PR 4.
     | 'on-enemy-repaired'
-    | 'on-enemy-cleansed';
+    | 'on-enemy-cleansed'
+    // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
+    | 'on-enemy-purged'
+    | 'on-ally-purged';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -67,6 +77,7 @@ export type AbilityTrigger =
  */
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
+    'end-of-round', // Rhodium end-of-round purge — C2b-2
     'on-crit',
     'on-debuff-inflicted',
     'on-ally-debuff-inflicted',
@@ -84,6 +95,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-hp-threshold-crossed',
     'on-enemy-repaired',
     'on-enemy-cleansed',
+    // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
+    'on-enemy-purged',
+    'on-ally-purged',
 ]);
 
 export type ConditionSubject =
@@ -115,7 +129,13 @@ export type ConditionSubject =
     // (ties → all tied qualify). Used by Chakara's start-of-round self-buffs.
     // Evaluated from ConditionContext.isLowestSpeedAlly; defaults true (lone-actor
     // DPS assumption: a single attacker is trivially the slowest).
-    | 'lowest-speed-ally';
+    | 'lowest-speed-ally'
+    // Binary gate: the acting attacker's TARGET was repaired (HP healed) earlier this
+    // round. Live-derived by the engine (ConditionContext.targetRepairedThisRound);
+    // defaults false (DPS mode / un-repaired target). Nayra's charged purge + Stasis/
+    // Exposed inflicts. derivable:true — a derivable:false condition would always be met
+    // (evaluateConditions.ts:30), defeating the gate.
+    | 'target-repaired-this-round';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -211,7 +231,7 @@ export type AbilityConfig =
     | { type: 'charge'; amount: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
-    | { type: 'extra-action'; oncePerRound: boolean }
+    | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
     | {
           type: 'heal' | 'shield';
           pct: number;
@@ -238,7 +258,7 @@ export type AbilityConfig =
            *  Absent → unbounded (fires on every qualifying trigger). */
           oncePerCombat?: boolean;
       }
-    | { type: 'cleanse' | 'purge'; count: number }
+    | { type: 'cleanse' | 'purge'; count: number | 'all' }
     | {
           type: 'control';
           effect: ControlEffect;
@@ -278,4 +298,8 @@ export interface Skill {
 
 export interface ShipSkills {
     slots: Skill[];
+    /** True when the ship's passive text declares its attacks don't break Stasis
+     *  (Akula / Tygr). Threaded onto CombatActor.doesntBreakStasis by the engine adapter
+     *  and gated at the break-mark site (§4.5 Akula exception). */
+    doesntBreakStasis?: boolean;
 }

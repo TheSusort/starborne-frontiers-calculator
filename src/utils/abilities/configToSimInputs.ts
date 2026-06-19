@@ -24,6 +24,13 @@ export function buildDefaultShipSkills(): ShipSkills {
     };
 }
 
+// Truly-empty kit (no abilities) for a buff-only team actor walked through runCombat: zero
+// damage, no skill-sourced buffs — only the actor's manual selfBuffs/enemyDebuffs apply (via
+// teamSources + sourceFired). Distinct from buildDefaultShipSkills, which carries a damage ability.
+export function buildEmptyShipSkills(): ShipSkills {
+    return { slots: [] };
+}
+
 // Single seam for the page preview (memoize on shipSkills + enemyType). Converts buff/
 // debuff abilities → SelectedGameBuff[] for display-only purposes (the merged attacker
 // buff totals panel). The sim no longer uses this output — buff/debuff abilities are read

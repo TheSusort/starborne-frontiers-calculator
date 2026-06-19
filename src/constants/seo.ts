@@ -68,6 +68,13 @@ export const SEO_CONFIG = {
             "Calculate and optimize your ship's healing capabilities in Starborne Frontiers.",
         keywords: 'healing calculator, ship healing, repair calculations, support ships',
     },
+    simulator: {
+        title: 'Combat Simulator',
+        description:
+            "Place two squads on the board and watch a full round-by-round battle play out using your ships' geared stats in Starborne Frontiers.",
+        keywords:
+            'combat simulator, battle simulator, ship combat, battle playback, round by round',
+    },
     damageDeconstruction: {
         title: 'Damage Deconstruction',
         description: 'Analyze and break down ship damage calculations in Starborne Frontiers.',

@@ -68,7 +68,10 @@ export interface Buff {
         | 'hp'
         | 'outgoingHeal'
         | 'incomingHeal'
-        | 'hotPct';
+        | 'hotPct'
+        | 'speed'
+        | 'hacking'
+        | 'security';
     value: number;
 }
 
@@ -112,6 +115,7 @@ export interface ParsedBuffEffects {
     speed?: number; // additive percentage modifier on speed (+30 = +30%)
 
     // Flat stats (not percentages)
+    hacking?: number; // flat additive on hacking stat
     security?: number; // flat additive on security stat
 }
 
@@ -236,10 +240,20 @@ export interface CombatStatBlock {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** `hacking` required since A1a; `security` optional for back-compat with actor configs predating A2.
+     *  REQUIRED (not optional) deliberately: every CombatStatBlock producer (DPS team-actor walk,
+     *  battle-sim placement plan, healer stats) supplies a real hacking value, so this type stays a
+     *  total contract for the live-landing recompute. Where an undefined CAN reach the engine (e.g. a
+     *  bare enemy attacker, or a legacy actor config), it arrives as `ActorStats.hacking?` /
+     *  `ActorStats.security?` (state.ts) — and the `liveLandingComputable` guard in playerTurn.ts
+     *  (both bases must be defined) cleanly falls back to the threaded static scalar there. */
     hacking: number;
     defence: number; // source stat for Defense-based secondary damage
     hp: number; // source stat for HP-based secondary damage
     healModifier?: number; // heal-modifier %, folded into walked team-actor heal casts
+    /** Live debuff-resist stat. Optional — base for effectiveStatsOf.security (A2 Task 2 plumbing;
+     *  no production reader until the dynamic-landing computation in A2 Task 4). */
+    security?: number;
 }
 
 export interface TeamShipConfig {

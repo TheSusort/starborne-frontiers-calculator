@@ -1,25 +1,36 @@
 /**
- * Phase 4b Task 10 — reactive extra-action bridge.
+ * Phase 4b Task 10 — reactive death-triggered bridge (extra-action + charge).
  *
- * A death-triggered extra-action ability (Sokol on-enemy-destroyed, Harvester
- * on-ally-destroyed, Liberator on-enemy-destroyed) routes from its death listener
- * (Task 5) through the executor's `extra-action` branch into the engine's
- * `grantExtraAction`. Two dispatch paths, by death timing:
+ * A death-triggered ability (Sokol/Liberator on-enemy-destroyed, Harvester on-ally-destroyed)
+ * routes from its death listener (Task 5) through the executor's `extra-action` / `charge` branch
+ * into the engine's `grantExtraAction` / `grantAllyCharges`. Dispatch path is set by death TIMING:
  *
- *  Path A — during-turn death (on-ally-destroyed): the death fires inside an actor's
- *    turn while the round-local queue is still walked → the grant splices into the
- *    CURRENT round (same-round extra turn).
- *  Path B — post-round enemy death (on-enemy-destroyed): the enemy is a cumulative-
- *    damage wall reconciled AFTER the turn loop. No live queue → the grant buffers as
- *    a cross-round pending grant, inserted at the START of the NEXT round's queue.
- *    Landing round = R+1 where R is the round the kill was registered.
+ *  Path A — during-turn death: the death fires inside an actor's turn while the round-local queue
+ *    is still walked → the per-turn drain (drain point (b), `inTurnLoop` true) dispatches the grant
+ *    into the CURRENT round (same-round extra turn / same-round charge bump).
  *
- * Tests assert the LANDING ROUND explicitly.
+ *  Path B — post-round death: a death reconciled AFTER the turn loop has no live queue, so an
+ *    extra-action grant buffers as a cross-round pending grant landing at the START of round R+1.
+ *
+ * PR5d HISTORY (this file): Path B was previously exercised here via the DPS dummy enemy — the
+ * dummy "died" post-round when its cumulative damage crossed `enemyHp`, emitting ship-destroyed
+ * and triggering the player's on-enemy-destroyed reactive into the buffered cross-round grant.
+ * PR5d made the dummy INDESTRUCTIBLE: it is a pure damage wall that never records destroyed, so
+ * the dummy is no longer a death trigger (locked negatively by `indestructibleDeath.test.ts`).
+ *
+ * The on-enemy-destroyed BRIDGE itself is unchanged and still fires for a REAL enemy death. We
+ * now exercise it the honest way: a positioned focus attacker with a parsed target + pattern lands
+ * lethal damage on a positioned ENEMY ATTACKER during its turn (the same positional kill machinery
+ * `positionalDamage.integration.test.ts` pins). That death fires DURING the focus turn → Path A
+ * (same-round), so these tests now assert a SAME-round extra action / charge bump — mirroring the
+ * Harvester on-ally-destroyed test below. (The old dummy-driven Path-B R+1 timing was an artifact
+ * of the now-immortal dummy and is gone by design.)
  */
 import { describe, expect, it } from 'vitest';
-import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import type { Position } from '../../../types/encounters';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -30,30 +41,71 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
     ...partial,
 });
 
-const BASE: DPSSimulationInput = {
-    attack: 10000,
+type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+// Single-target target selection: the front-most enemy (origin-only footprint).
+const frontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
+// Origin-only pattern (Pattern-Base): hits exactly the anchored cell.
+const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+
+// A positioned, finite-HP enemy attacker with zero offense — a stationary damageable target.
+// `hp` is sized to bracket the focus's firing-hit damage so it dies exactly when intended.
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        shipSkills: { slots: [] } as ShipSkills,
+    }) as EnemyAttacker;
+
+// A positioned focus attacker that lands a real, lethal positional hit on the enemy at M4.
+// attack 5000 × 100% × 1 hit vs defence 0, no crit → firing-hit damage = 5000. Healing mode
+// (healTargetId) is REQUIRED for the positioned enemy roster to be built (enemyAttackers require
+// healTargetId), and the focus IS the heal target so no separate team actor is needed.
+const positionalKillBase = (
+    shipSkills: ShipSkills,
+    overrides: Partial<CombatEngineInput> = {}
+): CombatEngineInput => ({
+    attack: 5000,
     crit: 0,
     critDamage: 0,
     defensePenetration: 0,
     chargeCount: 0,
+    shipSkills,
     enemyDefense: 0,
-    enemyHp: 10_000_000,
-    rounds: 3,
+    // Dummy sink HP huge so the dummy is never even close to a (now impossible) death — the only
+    // death in these runs is the positioned enemy attacker the focus kills.
+    enemyHp: 1_000_000_000,
+    numRounds: 4,
     selfBuffs: [],
     enemyDebuffs: [],
-    hacking: 0,
-    enemySecurity: 0,
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
     defence: 0,
-    hp: 30000,
-};
+    hp: 1_000_000_000,
+    healTargetId: 'attacker',
+    position: 'M4',
+    target: frontTarget(),
+    pattern: basePattern(),
+    // One positioned enemy attacker at the focus's targeted cell (M4), HP 5000 → dies to the
+    // 5000 firing-hit in round 1. Overridable per test.
+    enemyAttackers: [enemyAt('enemy-front', 'M4', 5000)],
+    ...overrides,
+});
 
-describe('reactive extra-action bridge', () => {
-    // ── Path B: Sokol on-enemy-destroyed → extra action in round R+1 ─────────
-    // Sokol-style: plain 100% active + a passive extra-action gated on-enemy-destroyed,
-    // once per round. attack=10000, defense=0 → base turn damage 10000.
-    // enemyHp small enough to die in round 1 (10000 dmg/round kills 10000-HP enemy).
-    // The enemy's death is reconciled POST-round-1; the on-enemy-destroyed extra-action
-    // grant has no live queue this round → buffers and lands in round 2.
+describe('reactive death-triggered bridge', () => {
+    // ── Path A: Sokol on-enemy-destroyed → SAME-round extra action (real enemy kill) ─────────
+    // Sokol-style: plain 100% active + a passive extra-action gated on-enemy-destroyed, once per
+    // round. The focus lands a lethal positional hit on the positioned enemy attacker DURING its
+    // own turn → ship-destroyed fires while the round queue is still live → the on-enemy-destroyed
+    // listener enqueues → the per-turn drain (Path A) splices the focus a same-round extra turn.
     const sokolSkills = (): ShipSkills => {
         idCounter = 0;
         return {
@@ -61,7 +113,11 @@ describe('reactive extra-action bridge', () => {
                 {
                     slot: 'active',
                     abilities: [
-                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
                     ],
                 },
                 {
@@ -79,52 +135,47 @@ describe('reactive extra-action bridge', () => {
         };
     };
 
-    it('Sokol on-enemy-destroyed: gains ONE extra action in round R+1 (kill in R)', () => {
-        const result = simulateDPS({
-            ...BASE,
-            rounds: 4,
-            // 10000 dmg/round → enemy (10000 HP) dies at the end of round 1.
-            enemyHp: 10000,
-            shipSkills: sokolSkills(),
-        });
+    it('Sokol on-enemy-destroyed: SAME-round extra action when a real enemy dies mid-turn (Path A)', () => {
+        const result = runCombat(positionalKillBase(sokolSkills()));
 
-        // Round 1: the kill is REGISTERED post-round (reconciliation). No live queue →
-        // no extra turn this round. extraTurns undefined (legacy shape, single turn).
-        expect(result.rounds[0].extraTurns).toBeUndefined();
-        // Round 2 (R+1): the buffered grant is flushed into the queue → exactly ONE
-        // extra action. The enemy dies once → the grant fires at most once.
-        expect(result.rounds[1].extraTurns).toBe(1);
-        // Round 3+: the buffer was already cleared at the R+1 flush, and the enemy is
-        // already dead → no new grant is buffered → no further extra turns.
+        // Round 1: the focus kills the positioned enemy during its turn → on-enemy-destroyed
+        // splices ONE same-round extra action (oncePerRound caps it at one).
+        expect(result.rounds[0].extraTurns).toBe(1);
+        // Subsequent rounds: the enemy is already dead → no new kill → no new grant. (The
+        // positional path whiffs against an all-dead roster, so no phantom re-trigger.)
+        expect(result.rounds[1].extraTurns).toBeUndefined();
         expect(result.rounds[2].extraTurns).toBeUndefined();
         expect(result.rounds[3].extraTurns).toBeUndefined();
     });
 
-    it('Sokol round 2 damage doubles (the extra action is a full turn)', () => {
-        const result = simulateDPS({
-            ...BASE,
-            rounds: 3,
-            enemyHp: 10000,
-            shipSkills: sokolSkills(),
-        });
-        // Round 1: single 10000 turn. Round 2: two 10000 turns (base + extra) = 20000.
-        expect(result.rounds[0].totalRoundDamage).toBe(10000);
-        expect(result.rounds[1].totalRoundDamage).toBe(20000);
+    it('Sokol: NO extra action when the enemy survives the round (the trigger is the death)', () => {
+        // Same skills, but the positioned enemy has HP above the firing-hit damage → it never
+        // dies → on-enemy-destroyed never fires → no extra turn in any round. Isolates the grant
+        // to the real enemy death (rules out an unrelated extra-turn source).
+        const result = runCombat(
+            positionalKillBase(sokolSkills(), {
+                enemyAttackers: [enemyAt('enemy-front', 'M4', 1_000_000_000)],
+            })
+        );
+        expect(result.rounds.some((rd) => rd.extraTurns !== undefined)).toBe(false);
     });
 
-    // ── Path B: Liberator all-allies charge drains immediately ───────────────
-    // Liberator-style: a charge(all-allies) ability on-enemy-destroyed. The post-round
-    // drainIntents (added after the enemy ship-destroyed emit) applies the charge the
-    // round the enemy dies; charges carry into the next round. Self has chargeCount > 0
-    // so the charge bumps the attacker's own charge counter.
-    it('Liberator on-enemy-destroyed all-allies charge bumps charges the round the enemy dies', () => {
+    // ── Path A: Liberator on-enemy-destroyed all-allies charge → SAME-round charge bump ──────
+    // Liberator-style: a charge(all-allies) ability on-enemy-destroyed. When the real positioned
+    // enemy dies during the focus turn, the per-turn drain applies the all-allies charge SAME-round
+    // → the focus's own charge counter bumps beyond the baseline per-round cadence.
+    it('Liberator on-enemy-destroyed all-allies charge bumps charges the round a real enemy dies', () => {
         idCounter = 0;
         const liberatorSkills: ShipSkills = {
             slots: [
                 {
                     slot: 'active',
                     abilities: [
-                        ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
                     ],
                 },
                 {
@@ -140,35 +191,36 @@ describe('reactive extra-action bridge', () => {
                 },
             ],
         };
-        const result = simulateDPS({
-            ...BASE,
-            rounds: 3,
-            // chargeCount 5 so the charge gain is observable on the round row (not capped to 0).
-            chargeCount: 5,
-            enemyHp: 10000,
-            shipSkills: liberatorSkills,
-        });
-        // Baseline: identical run but with ONLY the active damage ability (no reactive
-        // charge passive). Its round-1 charges reflect only the chargeCount 5 cadence.
-        const baseline = simulateDPS({
-            ...BASE,
-            rounds: 3,
-            chargeCount: 5,
-            enemyHp: 10000,
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        ],
-                    },
-                ],
-            },
-        });
-        // Round 1: enemy dies post-round; the post-emit drainIntents applies the all-allies
-        // charge to the attacker. The round-end `charges` field reflects the bumped counter.
-        // The reactive charge must add beyond the baseline per-round cadence.
+        // chargeCount 5 + hasChargedSkill so the charge gain is observable on the round row (not
+        // capped to 0). The focus kills the positioned enemy in round 1 → the reactive all-allies
+        // charge bumps the focus's own counter that same round.
+        const result = runCombat(
+            positionalKillBase(liberatorSkills, { chargeCount: 5, hasChargedSkill: true })
+        );
+        // Baseline: identical run but with ONLY the active damage ability (no reactive charge
+        // passive). Its round-1 charges reflect only the chargeCount-5 cadence.
+        const baseline = runCombat(
+            positionalKillBase(
+                {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 100 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+                { chargeCount: 5, hasChargedSkill: true }
+            )
+        );
+        // Round 1: the enemy dies during the focus turn; the per-turn drain applies the all-allies
+        // charge to the focus. The round-end `charges` field reflects the bumped counter — strictly
+        // above the baseline per-round cadence.
         expect(result.rounds[0].charges).toBeGreaterThan(baseline.rounds[0].charges);
     });
 
@@ -242,7 +294,6 @@ describe('reactive extra-action bridge', () => {
                     defence: 0,
                     hp,
                 },
-                debuffLandingChance: 1,
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: 0,
@@ -264,7 +315,6 @@ describe('reactive extra-action bridge', () => {
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],
-            debuffLandingChance: 1,
             selfDotModifier: 0,
             defensePenetrationBuff: 0,
             hasChargedSkill: false,

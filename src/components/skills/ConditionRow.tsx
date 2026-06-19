@@ -31,6 +31,7 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'ally-crit-dot',
     'ally-on-team',
     'lowest-speed-ally',
+    'target-repaired-this-round',
 ];
 
 // Labels not covered by CONDITIONAL_CONDITION_LABELS.
@@ -45,6 +46,7 @@ const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
     'ally-crit-dot': 'when an ally crits with a DoT',
     'ally-on-team': 'when a specific ally is on the team',
     'lowest-speed-ally': 'when this unit has the lowest Speed among allies',
+    'target-repaired-this-round': 'when the target was repaired this round',
 };
 
 const subjectLabel = (subject: ConditionSubject): string =>

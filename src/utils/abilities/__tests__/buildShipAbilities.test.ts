@@ -2174,8 +2174,9 @@ describe('buildShipAbilities', () => {
     // Phase 4b Task 9: Salvation's on-destroyed ally-heal. The refit-active (R4 / 3rd) passive
     // "When this Unit is destroyed it repairs 80% of its max HP to all allies" parses as a heal
     // ability stamped with trigger 'on-destroyed' so it fires only on death (via the Task-5
-    // listener), NOT every round. The conjoined "when a buff is purged … repairs that ally 5%"
-    // on-buff-purged heal is NOT modeled this phase and must stay disqualified (not emitted).
+    // listener), NOT every round.
+    // C2b-1 T5 update: the conjoined "when a buff is purged … repairs that ally 5%"
+    // on-ally-purged heal is NOW modeled (on-ally-purged is a live trigger). Both heals emit.
     describe('Salvation 3rd passive: on-destroyed ally-heal (Task 9)', () => {
         const salvation = () =>
             ship({
@@ -2183,27 +2184,28 @@ describe('buildShipAbilities', () => {
                     "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
             });
 
-        it('emits an all-allies 80%-max-HP repair on trigger on-destroyed', () => {
+        it('emits the all-allies 80%-max-HP repair on trigger on-destroyed', () => {
             const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
-            const heals = passive.abilities.filter((a) => a.type === 'heal');
-            // Only the on-destroyed 80% heal is emitted — the 5% on-buff-purged heal stays
-            // disqualified (its trigger is not live this phase).
-            expect(heals).toHaveLength(1);
-            const heal = heals[0];
-            expect(heal.target).toBe('all-allies');
-            expect(heal.trigger).toBe('on-destroyed');
-            if (heal.config.type === 'heal') {
-                expect(heal.config.pct).toBe(80);
-                expect(heal.config.basis).toBe('hp');
+            const heal = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 80
+            );
+            expect(heal).toBeDefined();
+            expect(heal!.target).toBe('all-allies');
+            expect(heal!.trigger).toBe('on-destroyed');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.basis).toBe('hp');
             }
         });
 
-        it('does NOT emit the on-buff-purged 5% repair (trigger not live this phase)', () => {
+        it('emits the ally 5%-max-HP repair on trigger on-ally-purged (C2b-1 T5)', () => {
+            // on-ally-purged is now a live trigger — the 5% heal emits alongside the 80% heal.
             const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
             const fivePct = passive.abilities.find(
                 (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
             );
-            expect(fivePct).toBeUndefined();
+            expect(fivePct).toBeDefined();
+            expect(fivePct!.trigger).toBe('on-ally-purged');
+            expect(fivePct!.target).toBe('ally');
         });
     });
 
@@ -2729,5 +2731,411 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
         });
         // No spurious on-cast charge from parseAllyChargeGrant.
         expect(charges.some((c) => c.trigger === 'on-cast')).toBe(false);
+    });
+});
+
+// ── §4.5 Akula exception: doesntBreakStasis ───────────────────────────────────────────────
+
+describe('buildShipAbilities doesntBreakStasis', () => {
+    it("Akula: doesntBreakStasis=true (curly-apostrophe don't break Stasis in passive)", () => {
+        // Akula's refit-active passive text uses curly apostrophe + "don't break Stasis".
+        const s = ship({
+            firstPassiveSkillText:
+                "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBe(true);
+    });
+
+    it('Tygr: doesntBreakStasis=true (bare "do not break Stasis" in passive)', () => {
+        // Tygr's refit-active passive text uses "do not break Stasis".
+        const s = ship({
+            firstPassiveSkillText:
+                "This Unit's attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.",
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBe(true);
+    });
+
+    it('unrelated ship: doesntBreakStasis is absent (falsy) when no don-break clause', () => {
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit deals 180% damage and inflicts Corrosion for 2 turns.',
+        });
+        const result = buildShipAbilities(s);
+        expect(result.doesntBreakStasis).toBeFalsy();
+    });
+});
+
+// C2b-1 T5: Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
+// RAW strings from docs/ship-skills.csv.
+describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers (T5)', () => {
+    describe('Sefuba p1: on-enemy-purged self-heal, no chain purge', () => {
+        const sefubaP1 = () =>
+            ship({
+                firstPassiveSkillText:
+                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+            });
+
+        it('emits a self heal with trigger on-enemy-purged', () => {
+            const passive = slot(buildShipAbilities(sefubaP1()).slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeDefined();
+            expect(heal!.trigger).toBe('on-enemy-purged');
+            expect(heal!.target).toBe('self');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.pct).toBe(8);
+            }
+        });
+
+        it('does NOT emit a chain purge ability', () => {
+            const passive = slot(buildShipAbilities(sefubaP1()).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+    });
+
+    describe('Sefuba p2: on-enemy-purged self-heal + chain purge (count 1)', () => {
+        // secondPassiveSkillText maps to the refit-active passive → slot 'passive'
+        const sefubaP2 = () =>
+            ship({
+                secondPassiveSkillText:
+                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+            });
+
+        it('emits a self heal with trigger on-enemy-purged', () => {
+            const passive = slot(buildShipAbilities(sefubaP2()).slots, 'passive')!;
+            const heal = passive.abilities.find((a) => a.type === 'heal');
+            expect(heal).toBeDefined();
+            expect(heal!.trigger).toBe('on-enemy-purged');
+            expect(heal!.target).toBe('self');
+            if (heal!.config.type === 'heal') {
+                expect(heal!.config.pct).toBe(12);
+            }
+        });
+
+        it('emits exactly ONE chain purge with trigger on-enemy-purged and count 1', () => {
+            const passive = slot(buildShipAbilities(sefubaP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-enemy-purged');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(1);
+            }
+        });
+    });
+
+    describe('Salvation p3: on-ally-purged 5% heal + on-destroyed 80% heal', () => {
+        const salvation = () =>
+            ship({
+                thirdPassiveSkillText:
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+            });
+
+        it('emits the 5% ally heal with trigger on-ally-purged', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const fivePct = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 5
+            );
+            expect(fivePct).toBeDefined();
+            expect(fivePct!.trigger).toBe('on-ally-purged');
+            expect(fivePct!.target).toBe('ally');
+        });
+
+        it('still emits the 80% all-allies heal with trigger on-destroyed', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            const eightyPct = passive.abilities.find(
+                (a) => a.type === 'heal' && a.config.type === 'heal' && a.config.pct === 80
+            );
+            expect(eightyPct).toBeDefined();
+            expect(eightyPct!.trigger).toBe('on-destroyed');
+            expect(eightyPct!.target).toBe('all-allies');
+        });
+
+        it('emits exactly 2 heal abilities (80% on-destroyed + 5% on-ally-purged), no purge', () => {
+            const passive = slot(buildShipAbilities(salvation()).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'heal')).toHaveLength(2);
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+    });
+});
+
+// C2b-2 T1: Iridium passive-slot purge emit (on-attacked trigger from "when directly damaged").
+// RAW strings from docs/ship-skills.csv.
+describe('buildShipAbilities — Iridium passive purge emit (C2b-2 T1)', () => {
+    // Iridium p1: "When directly damaged, This Unit purges 1 buff from the enemy ..."
+    // → exactly ONE purge ability with trigger:'on-attacked', count:1
+    describe('Iridium p1: on-attacked purge count 1', () => {
+        const iridiumP1 = () =>
+            ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+
+        it('emits exactly ONE purge ability with trigger on-attacked and count 1', () => {
+            const passive = slot(buildShipAbilities(iridiumP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-attacked');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(1);
+            }
+        });
+    });
+
+    // Iridium p2: "... When directly damaged, This Unit purges 2 buffs from the enemy ..."
+    // → exactly ONE purge ability with trigger:'on-attacked', count:2
+    describe('Iridium p2: on-attacked purge count 2', () => {
+        const iridiumP2 = () =>
+            ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
+            });
+
+        it('emits exactly ONE purge ability with trigger on-attacked and count 2', () => {
+            const passive = slot(buildShipAbilities(iridiumP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-attacked');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    // Negative regressions: Sefuba, Zeolite, Cobalt must NOT be affected.
+    describe('negative regressions: Sefuba / Zeolite / Cobalt', () => {
+        it('Sefuba p1: passive emits ZERO purge abilities (only on-enemy-purged heal, no generic-loop purge)', () => {
+            const sefubaP1 = ship({
+                firstPassiveSkillText:
+                    'When this Unit <unit-aid>purges a buff</unit-aid> from an enemy, it <unit-damage>repairs itself for 8%</unit-damage> Max HP.',
+            });
+            const passive = slot(buildShipAbilities(sefubaP1).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+
+        it('Sefuba p2: passive emits exactly ONE purge (chain, on-enemy-purged via PURGE_MORE_RE — NOT a generic-loop purge)', () => {
+            const sefubaP2 = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'When this Unit <unit-aid>purges an enemy buff</unit-aid>, it <unit-damage>repairs itself for 12%</unit-damage> Max HP and <unit-aid>purges 1</unit-aid> more buff from the enemy.',
+            });
+            const passive = slot(buildShipAbilities(sefubaP2).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-enemy-purged'); // PURGE_MORE_RE path, not generic loop
+        });
+
+        it('Zeolite p1: passive emits ZERO purge abilities ("when dealing damage to a Defender" has no detected damage-reaction trigger)', () => {
+            const zeoliteP1 = ship({
+                firstPassiveSkillText:
+                    'This Unit <unit-aid>purges 1</unit-aid> buff from the enemy when dealing damage to a Defender.',
+            });
+            const passive = slot(buildShipAbilities(zeoliteP1).slots, 'passive');
+            // Either no passive slot at all, or if a slot exists it has no purge abilities.
+            if (passive) {
+                expect(passive.abilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+            }
+        });
+
+        it('Cobalt active: emits exactly ONE purge with trigger on-cast (active slot unaffected)', () => {
+            const cobalt = ship({
+                activeSkillText:
+                    "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.",
+                chargeSkillCharge: 3,
+            });
+            const active = slot(buildShipAbilities(cobalt).slots, 'active')!;
+            const purges = active.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-cast');
+        });
+
+        it('Cobalt charged: emits exactly ONE purge with trigger on-cast (charged slot unaffected)', () => {
+            const cobalt = ship({
+                activeSkillText:
+                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>.',
+                chargeSkillText:
+                    'This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>230% damage</unit-damage>. If this Unit is at full HP, it deals additional <unit-damage>damage equal to 30%</unit-damage> of its max HP.',
+                chargeSkillCharge: 3,
+            });
+            const charged = slot(buildShipAbilities(cobalt).slots, 'charged')!;
+            const purges = charged.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-cast');
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2b-2 T4: Rhodium end-of-round + enemy-most-buffs purge build tests.
+// RAW strings from docs/ship-skills.csv (Rhodium row).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4)', () => {
+    // Rhodium p1 RAW: "At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs
+    // from the enemy with the most buffs."
+    const rhodiumP1 = () =>
+        ship({
+            firstPassiveSkillText:
+                'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.',
+        });
+
+    // Rhodium p2 RAW: same purge phrase + "deals <unit-damage>80% damage</unit-damage> that
+    // cannot critically hit."
+    const rhodiumP2 = () =>
+        ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs and deals <unit-damage>80% damage</unit-damage> that cannot critically hit.',
+        });
+
+    describe('Rhodium p1: end-of-round purge with target enemy-most-buffs', () => {
+        it('emits exactly ONE purge ability with trigger end-of-round, target enemy-most-buffs, count 2', () => {
+            const passive = slot(buildShipAbilities(rhodiumP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('end-of-round');
+            expect(purge.target).toBe('enemy-most-buffs');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Rhodium p2: purge ability present with correct shape (also has 80%-no-crit damage)', () => {
+        it('contains a purge with trigger end-of-round, target enemy-most-buffs, count 2', () => {
+            const passive = slot(buildShipAbilities(rhodiumP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges.length).toBeGreaterThanOrEqual(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('end-of-round');
+            expect(purge.target).toBe('enemy-most-buffs');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Iridium p1 regression: on-attacked + target:enemy UNCHANGED', () => {
+        it('Iridium p1 still emits trigger on-attacked, target enemy (not end-of-round / most-buffs)', () => {
+            const iridiumP1 = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(iridiumP1).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-attacked');
+            expect(purges[0].target).toBe('enemy');
+            if (purges[0].config.type === 'purge') {
+                expect(purges[0].config.count).toBe(1);
+            }
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2b-2 T6: Faust on-destroyed killed-by-direct-damage purge build tests.
+// RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Faust on-destroyed killer-targeted purge (C2b-2 T6)', () => {
+    // Faust p1 RAW: "This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by
+    // direct Damage."
+    const faustP1 = () =>
+        ship({
+            firstPassiveSkillText:
+                'This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy when killed by direct Damage.',
+        });
+
+    // Faust p2 RAW (refit-active 2nd passive): purges 3.
+    const faustP2 = () =>
+        ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText:
+                'This Unit <unit-aid>purges 3</unit-aid> buffs from the enemy when killed by direct Damage.',
+        });
+
+    describe('Faust p1: on-destroyed purge with target enemy, count 2', () => {
+        it('emits exactly ONE purge ability with trigger on-destroyed, target enemy, count 2', () => {
+            const passive = slot(buildShipAbilities(faustP1()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-destroyed');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('Faust p2: on-destroyed purge, count 3', () => {
+        it('emits a purge with trigger on-destroyed, target enemy, count 3', () => {
+            const passive = slot(buildShipAbilities(faustP2()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            const purge = purges[0];
+            expect(purge.trigger).toBe('on-destroyed');
+            expect(purge.target).toBe('enemy');
+            if (purge.config.type === 'purge') {
+                expect(purge.config.count).toBe(3);
+            }
+        });
+    });
+
+    describe('Salvation regression: on-destroyed HEAL still emitted as heal (not purge)', () => {
+        it('Salvation p3 still emits an 80% all-allies heal on trigger on-destroyed', () => {
+            const salvation = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    "When this Unit is destroyed it <unit-damage>repairs 80%</unit-damage> of its max HP to all allies.<br /><br />When a <unit-aid>buff</unit-aid> is <unit-aid>purged</unit-aid> from an ally, this Unit <unit-damage>repairs that ally for 5%</unit-damage> of this Unit's max HP.",
+            });
+            const passive = slot(buildShipAbilities(salvation).slots, 'passive')!;
+            const heal = passive.abilities.find(
+                (a) => a.type === 'heal' && a.trigger === 'on-destroyed'
+            );
+            expect(heal).toBeDefined();
+            // No purge ability emitted from Salvation's passives (the "is purged from an ally"
+            // phrasing is a heal trigger, not a purge action).
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(0);
+        });
+    });
+});
+
+// C2b-3: Nayra target-repaired-this-round purge condition build tests.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Nayra target-repaired-this-round purge (C2b-3)', () => {
+    const nayraChargedText =
+        'This Unit inflicts <unit-skill>Attack Down II</unit-skill> and <unit-skill>Crit Power Down III</unit-skill> for 2 turns, dealing <unit-damage>210% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its defense.<br />If the target was repaired this round, inflict <unit-skill>Exposed</unit-skill> for 1 turn and purge all buffs from the enemy.';
+    const nayra = () =>
+        ship({
+            chargeSkillText: nayraChargedText,
+            chargeSkillCharge: 4,
+        });
+
+    it('emits exactly ONE purge ability from the charged slot with trigger on-cast, count all, and target-repaired-this-round condition', () => {
+        const charged = slot(buildShipAbilities(nayra()).slots, 'charged')!;
+        const purges = charged.abilities.filter((a) => a.type === 'purge');
+        expect(purges).toHaveLength(1);
+        const purge = purges[0];
+        expect(purge.trigger).toBe('on-cast');
+        if (purge.config.type === 'purge') {
+            expect(purge.config.count).toBe('all');
+        }
+        expect(purge.conditions).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
     });
 });

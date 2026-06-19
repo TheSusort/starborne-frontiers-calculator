@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { createEventBus, CombatEvent } from '../../combat/events';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
-import * as engine from '../../combat/engine';
 import { buildEnemyPlayerActorRuntime, EnemyActorInput } from '../../combat/engine';
 import { createStatusEngine } from '../../combat/statusEngine';
 
@@ -901,123 +900,75 @@ describe('Task 6: role threading for role-filtered on-ally-attacked reactions', 
     });
 });
 
-// ── Task 10: per-enemy inbound debuff landing chance from enemy hacking vs tank security ─
-// The adapter computes each enemy attacker's debuffLandingChance =
-//   clamp(enemyHacking − healTargetSecurity, 0, 100) / 100 (NO affinity — the adapter's
-// landing convention), and attaches it to the engine enemy ONLY when the enemy carries a
-// `hacking` value. Omitted hacking → field omitted → engine `?? 1` → 100% (backward compat).
-// These tests spy on runCombat and assert on the exact value handed to the engine.
-describe('Task 10: enemy debuff landing chance from hacking vs heal-target security', () => {
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
+// ── Holistic review #1: healing mode engages the LIVE per-turn landing recompute ──
+// Before the fix, simulateHealing passed NO `hacking` / `enemySecurity` to runCombat, so
+// `liveLandingComputable` (playerTurn.ts) was FALSE for every healing-mode actor → landing fell
+// back to the STATIC threaded scalar (computed once at the boundary, with NO buff fold). After the
+// fix the healer's hacking + the ENEMY_SECURITY constant are threaded onto the focus + dummy
+// actors, so the engine's live recompute drives the healer's OWN debuff landing — exactly as in
+// DPS / battle-sim (the ratified UNIFORM-affinity decision). This is observable: a self Hacking
+// Down buff on the healer FOLDS into effectiveStatsOf(focus).hacking and lowers landing — which
+// the old static path (no fold) could NOT do.
+describe('Holistic review #1: healing mode engages the live debuff-landing recompute', () => {
+    // A heal + an 'inflict' Defense Down debuff on the dummy enemy. The debuff's landing draws the
+    // live hacking-vs-(dummy)security gate. We capture `debuff-applied` to count landed rounds.
+    const healPlusInflictSkills = (): ShipSkills =>
+        healSkills([
+            ab({ type: 'heal', target: 'self', config: { type: 'heal', pct: 10, basis: 'hp' } }),
+            ab({
+                type: 'debuff',
+                target: 'enemy',
+                config: {
+                    type: 'debuff',
+                    buffName: 'Defense Down',
+                    parsedEffects: { defense: -10 },
+                    stacks: 1,
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 2,
+                },
+            }),
+        ]);
 
-    // Capture the enemyAttackers passed to runCombat, then delegate to the real impl so the
-    // simulation still runs (and existing assertions stay meaningful).
-    const captureEnemyAttackers = () => {
-        const captured: { enemyAttackers: engine.EnemyActorInput[] } = { enemyAttackers: [] };
-        const real = engine.runCombat;
-        vi.spyOn(engine, 'runCombat').mockImplementation((arg) => {
-            captured.enemyAttackers = (arg.enemyAttackers ??
-                []) as unknown as engine.EnemyActorInput[];
-            return real(arg);
-        });
-        return captured;
+    const countHealerApplied = (input: HealingSimulationInput): number => {
+        const events: CombatEvent[] = [];
+        const bus = createEventBus();
+        bus.on('debuff-applied', (e) => events.push(e));
+        simulateHealing({ ...input, bus });
+        return events.filter((e) => e.type === 'debuff-applied').length;
     };
 
-    const enemyWith = (id: string, extra: Record<string, unknown>) => ({
-        id,
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        ...extra,
+    it('baseline: healer hacking 200 vs dummy security 100 → its inflict debuff lands every round', () => {
+        idCounter = 0;
+        // clamp(200 - 100)/100 = 1.0 → lands all 6 rounds (non-vacuous baseline).
+        const landed = countHealerApplied(
+            BASE({ rounds: 6, healer: { ...HEALER }, shipSkills: healPlusInflictSkills() })
+        );
+        expect(landed).toBe(6);
     });
 
-    it('hacking 150 vs security 100 → debuffLandingChance 0.5', () => {
+    it('a self Hacking Down buff on the healer FOLDS into live hacking and stops the debuff landing', () => {
         idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
+        // Hacking Down -120 → effective hacking 80 < dummy security 100 → live chance 0 → NEVER
+        // lands. Only possible because the live recompute (now engaged) folds the buff; the old
+        // static scalar (1.0, no fold) would still have landed every round. The contrast vs the
+        // baseline above is the engagement proof.
+        const landed = countHealerApplied(
             BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                healTargetSecurity: 100,
-                enemies: [enemyWith('e1', { hacking: 150 })],
+                rounds: 6,
+                healer: { ...HEALER },
+                shipSkills: healPlusInflictSkills(),
+                selfBuffs: [
+                    {
+                        id: 'hd1',
+                        buffName: 'Hacking Down',
+                        stacks: 1,
+                        parsedEffects: { hacking: -120 },
+                        isStackable: false,
+                    },
+                ],
             })
         );
-        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0.5);
-    });
-
-    it('hacking 250 vs security 100 → clamps to 1 (ceiling 100%)', () => {
-        idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
-            BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                healTargetSecurity: 100,
-                enemies: [enemyWith('e1', { hacking: 250 })],
-            })
-        );
-        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(1);
-    });
-
-    it('hacking 50 vs security 100 → floors at 0 (no minimum)', () => {
-        idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
-            BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                healTargetSecurity: 100,
-                enemies: [enemyWith('e1', { hacking: 50 })],
-            })
-        );
-        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0);
-    });
-
-    it('enemy with NO hacking → debuffLandingChance omitted (engine ?? 1 → 100%)', () => {
-        idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
-            BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                healTargetSecurity: 100,
-                enemies: [enemyWith('e1', {})],
-            })
-        );
-        expect('debuffLandingChance' in cap.enemyAttackers[0]).toBe(false);
-        expect(cap.enemyAttackers[0].debuffLandingChance).toBeUndefined();
-    });
-
-    it('healTargetSecurity omitted → defaults to 0: hacking 80 → 0.8', () => {
-        idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
-            BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                // healTargetSecurity omitted → 0
-                enemies: [enemyWith('e1', { hacking: 80 })],
-            })
-        );
-        expect(cap.enemyAttackers[0].debuffLandingChance).toBe(0.8);
-    });
-
-    it('per-enemy: one enemy with hacking, one without → independent landing fields', () => {
-        idCounter = 0;
-        const cap = captureEnemyAttackers();
-        simulateHealing(
-            BASE({
-                rounds: 1,
-                healer: { ...HEALER, hp: 1_000_000, defence: 0 },
-                healTargetSecurity: 100,
-                enemies: [enemyWith('e1', { hacking: 150 }), enemyWith('e2', {})],
-            })
-        );
-        const e1 = cap.enemyAttackers.find((e) => e.id === 'e1');
-        const e2 = cap.enemyAttackers.find((e) => e.id === 'e2');
-        expect(e1?.debuffLandingChance).toBe(0.5);
-        expect('debuffLandingChance' in (e2 as object)).toBe(false);
+        expect(landed).toBe(0);
     });
 });

@@ -13,7 +13,15 @@
  *     symmetric source for BOTH sides; we do NOT use `hp-changed`).
  *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only).
  *   - death = `ship-destroyed` { actorId }.
- *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied`.
+ *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied` / `dot-applied`.
+ *
+ * The per-round event LOG is a CHRONOLOGICAL (emission-order) play-by-play, team-labeled
+ * at render time. It walks the round's events in bus-emission order and emits one line per
+ * relevant event: turn delimiters (`turn-started`), ATTACKER-centric damage (from
+ * `ability-performed` — actorId=attacker, targetId, amount; dummy-'enemy' target lines are
+ * kept), heals, buffs, debuffs, dots, deaths. (The dummy-'enemy' targetId on ally/self-
+ * targeting ships means some damage lines read as "X → enemy"; that's accepted — the
+ * per-victim unification is a deferred follow-up.)
  *
  * HP% is derived as maxHp - cumulative(damageTaken over rounds <= r), uniform for both
  * sides (ignores healing/shields on the HP curve — acceptable for PR1's surface).
@@ -78,18 +86,39 @@ export interface ShipRoundState {
     activeDebuffs: string[];
 }
 
+/**
+ * A single render-ready line in a round's event log, emitted in CHRONOLOGICAL
+ * (bus-emission) order. `actorId` is the SUBJECT of the line.
+ *
+ *   - turn:   `actorId`'s turn began — a delimiter line (no amount/label/target).
+ *   - damage: `actorId` (ATTACKER) dealt `amount` to `targetId` (from `ability-performed`;
+ *     a `targetId` not on the roster — the dummy 'enemy' — renders as "enemy").
+ *   - heal:   `actorId` (caster) heals `targetId` for `amount` (even-split per recipient).
+ *   - buff:   `actorId` gains `label` (buff name).
+ *   - debuff: `actorId` (victim) afflicted with `label` (debuff name).
+ *   - dot:    `actorId` (victim) afflicted with `label` (dot type name).
+ *   - death:  `actorId` (victim) destroyed.
+ */
 export interface BattleLogEvent {
     round: number;
-    kind: 'damage' | 'heal' | 'death';
+    kind: 'turn' | 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'death';
     actorId: string;
     targetId?: string;
     amount?: number;
+    /** Buff/debuff/dot name. */
+    label?: string;
 }
 
 export interface BattleRound {
     round: number;
     ships: ShipRoundState[];
     events: BattleLogEvent[];
+    /**
+     * Distinct acting `actorId`s for this round in true speed order (emission order of
+     * `turn-started`). Only roster actorIds — the dummy player-offense `'enemy'` id is
+     * filtered out since it's not on the board.
+     */
+    turnOrder: string[];
 }
 
 export interface BattleResult {
@@ -121,6 +150,8 @@ export const ASSEMBLED_EVENT_TYPES = [
     'buff-applied',
     'buff-expired',
     'debuff-applied',
+    'dot-applied',
+    'turn-started',
 ] as const satisfies readonly CombatEvent['type'][];
 
 /**
@@ -160,6 +191,10 @@ export function assembleBattleResult(args: {
 
     // Cumulative damage taken per actor across rounds (for HP% derivation).
     const cumulativeTaken = new Map<string, number>();
+
+    // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
+    // is filtered out of turnOrder since it's not on the board.
+    const rosterIds = new Set(roster.map((r) => r.actorId));
 
     const rounds: BattleRound[] = [];
     let lastRound = numRounds;
@@ -230,41 +265,79 @@ export function assembleBattleResult(args: {
             };
         });
 
-        // Readable per-round log: damage (ability-performed), heal (heal-performed),
-        // death (ship-destroyed). NOT `attacked` (no amount).
+        // Readable per-round log, in CHRONOLOGICAL (bus-emission) order — a turn-by-turn
+        // play-by-play. We walk `roundEvents` ONCE (it preserves emission order) and emit
+        // one line per relevant event. Damage is ATTACKER-centric (from `ability-performed`:
+        // actorId=attacker, targetId, amount) — dummy-'enemy' target lines are KEPT (they
+        // render as "X → enemy"; the per-victim unification is a deferred follow-up).
         const log: BattleLogEvent[] = [];
         for (const e of roundEvents) {
-            if (e.type === 'ability-performed' && typeof e.damage === 'number') {
-                log.push({
-                    round,
-                    kind: 'damage',
-                    actorId: e.actorId,
-                    targetId: e.targetId,
-                    amount: e.damage,
-                });
-            } else if (e.type === 'heal-performed') {
-                for (const tid of e.targets) {
-                    log.push({
-                        round,
-                        kind: 'heal',
-                        actorId: e.casterId,
-                        targetId: tid,
-                        amount: e.targets.length > 0 ? e.amount / e.targets.length : e.amount,
-                    });
-                }
-                if (e.targets.length === 0) {
-                    // Divergence from the aggregation site above: that splits `amount`
-                    // across targets, so an empty-targets heal credits nobody's
-                    // healingReceived. Here the log instead surfaces a single full-amount
-                    // line so the heal is still visible in the per-round log.
-                    log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
-                }
-            } else if (e.type === 'ship-destroyed') {
-                log.push({ round, kind: 'death', actorId: e.actorId });
+            switch (e.type) {
+                case 'turn-started':
+                    // Turn delimiter. Skip the dummy player-offense 'enemy' (not on the board).
+                    if (rosterIds.has(e.actorId)) {
+                        log.push({ round, kind: 'turn', actorId: e.actorId });
+                    }
+                    break;
+                case 'ability-performed':
+                    if (typeof e.damage === 'number') {
+                        log.push({
+                            round,
+                            kind: 'damage',
+                            actorId: e.actorId,
+                            targetId: e.targetId,
+                            amount: e.damage,
+                        });
+                    }
+                    break;
+                case 'heal-performed':
+                    if (e.targets.length > 0) {
+                        for (const tid of e.targets) {
+                            log.push({
+                                round,
+                                kind: 'heal',
+                                actorId: e.casterId,
+                                targetId: tid,
+                                amount: e.amount / e.targets.length,
+                            });
+                        }
+                    } else {
+                        // Empty-targets heal: surface a single full-amount line so the heal
+                        // is still visible (it credits nobody's healingReceived above).
+                        log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
+                    }
+                    break;
+                case 'buff-applied':
+                    log.push({ round, kind: 'buff', actorId: e.actorId, label: e.buffName });
+                    break;
+                case 'debuff-applied':
+                    log.push({ round, kind: 'debuff', actorId: e.targetId, label: e.buffName });
+                    break;
+                case 'dot-applied':
+                    log.push({ round, kind: 'dot', actorId: e.targetId, label: e.dotType });
+                    break;
+                case 'ship-destroyed':
+                    log.push({ round, kind: 'death', actorId: e.actorId });
+                    break;
             }
         }
 
-        rounds.push({ round, ships, events: log });
+        // Per-round turn order: distinct acting roster actorIds in `turn-started` emission
+        // order (true speed order). Dummy/non-roster ids are dropped.
+        const turnOrder: string[] = [];
+        const seenActors = new Set<string>();
+        for (const e of roundEvents) {
+            if (
+                e.type === 'turn-started' &&
+                rosterIds.has(e.actorId) &&
+                !seenActors.has(e.actorId)
+            ) {
+                seenActors.add(e.actorId);
+                turnOrder.push(e.actorId);
+            }
+        }
+
+        rounds.push({ round, ships, events: log, turnOrder });
 
         // Termination: first round where ALL of one side's actors are destroyed.
         // A side counts as wiped only if it has >=1 member AND all are destroyed —
@@ -349,6 +422,8 @@ interface DerivedCombatStats {
     critDamage: number;
     defensePenetration: number;
     hacking: number;
+    /** Debuff-resist stat. Defaults to baseStats.security ?? 100 (the OLD landing-formula default). */
+    security: number;
     defence: number;
     hp: number;
     /** Turn-order speed. Defaults to baseStats.speed ?? 100. */
@@ -370,6 +445,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         critDamage: o.critDamage ?? b.critDamage ?? 0,
         defensePenetration: o.defensePenetration ?? b.defensePenetration ?? 0,
         hacking: o.hacking ?? b.hacking ?? 200,
+        security: o.security ?? b.security ?? 100,
         defence: o.defence ?? b.defence ?? 0,
         hp: o.hp ?? b.hp ?? 0,
         speed: o.speed ?? b.speed ?? 100,
@@ -382,7 +458,15 @@ function toWalkStats(
     stats: DerivedCombatStats
 ): Pick<
     DerivedCombatStats,
-    'attack' | 'crit' | 'critDamage' | 'defensePenetration' | 'hacking' | 'defence' | 'hp' | 'speed'
+    | 'attack'
+    | 'crit'
+    | 'critDamage'
+    | 'defensePenetration'
+    | 'hacking'
+    | 'security'
+    | 'defence'
+    | 'hp'
+    | 'speed'
 > {
     return {
         attack: stats.attack,
@@ -390,6 +474,7 @@ function toWalkStats(
         critDamage: stats.critDamage,
         defensePenetration: stats.defensePenetration,
         hacking: stats.hacking,
+        security: stats.security,
         defence: stats.defence,
         hp: stats.hp,
         speed: stats.speed,
@@ -400,7 +485,10 @@ function toWalkStats(
  *  future stat addition can't be missed at one of the call sites. */
 function toEnemyStats(
     stats: DerivedCombatStats
-): Pick<DerivedCombatStats, 'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp'> {
+): Pick<
+    DerivedCombatStats,
+    'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp' | 'hacking' | 'security'
+> {
     return {
         attack: stats.attack,
         crit: stats.crit,
@@ -408,6 +496,10 @@ function toEnemyStats(
         speed: stats.speed,
         defence: stats.defence,
         hp: stats.hp,
+        // Base hacking/security (A2 Task 4): the enemy attacker folds ITS hacking when attacking
+        // and ITS security when targeted, so the engine's live landing recompute has real inputs.
+        hacking: stats.hacking,
+        security: stats.security,
     };
 }
 
@@ -493,19 +585,8 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
     const enemyRepAffinity = enemyPlans[0]?.affinity;
     const playerRepAffinity = playerPlans[0]?.affinity;
 
-    // Landing chance from an actor's hacking vs the opposing security. baseStats carry a
-    // `security` field; the enemy/player representative security drives the clamp. Default 100.
+    // Representative enemy security (threaded onto the dummy target for live landing recompute).
     const enemyRepSecurity = input.enemyTeam[0]?.ship.baseStats.security ?? 100;
-    const playerRepSecurity = input.playerTeam[0]?.ship.baseStats.security ?? 100;
-
-    const landingChance = (
-        plan: PlacementPlan,
-        aff: ReturnType<typeof computeAffinityModifiers>,
-        defenderSecurity: number
-    ): number => {
-        const effectiveHacking = plan.stats.hacking * (1 + aff.damageModifier / 100);
-        return Math.min(100, Math.max(0, effectiveHacking - defenderSecurity)) / 100;
-    };
 
     const hasCharged = (plan: PlacementPlan): boolean => {
         const charged = selectFiringSkill(plan.shipSkills, 'charged');
@@ -518,7 +599,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         throw new Error('simulateBattle: playerTeam must contain at least one placement');
     }
     const focusAff = computeAffinityModifiers(focus.affinity, enemyRepAffinity);
-    const focusLanding = landingChance(focus, focusAff, enemyRepSecurity);
 
     // ----- The rest of the player team → walked teamActors -----
     const teamActors: TeamActorEngineInput[] = playerPlans.slice(1).map((plan) => {
@@ -533,10 +613,11 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
             position: plan.position,
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
+            // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
+            doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
-                debuffLandingChance: landingChance(plan, aff, enemyRepSecurity),
                 selfDotModifier: 0,
                 defensePenetrationBuff: 0,
                 affinityDamageModifier: aff.damageModifier,
@@ -558,10 +639,12 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
                 chargeCount: plan.chargeCount,
                 startCharged: false,
                 shipSkills: plan.shipSkills,
+                // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
+                // engine input so the break-mark gate reads the flag from the CombatActor.
+                doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
-                debuffLandingChance: landingChance(plan, aff, playerRepSecurity),
                 position: plan.position,
                 target: plan.targeting?.target,
                 pattern: plan.targeting?.pattern,
@@ -592,7 +675,6 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
-        debuffLandingChance: focusLanding,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: hasCharged(focus),
@@ -604,9 +686,19 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
         defence: focus.stats.defence,
         hp: focus.stats.hp,
         speed: focus.stats.speed,
+        // Base hacking/security so the engine's live landing recompute has real inputs for
+        // the focus actor and the vestigial dummy enemy. The dummy carries the representative
+        // enemy security (first opponent). When the focus targets a POSITIONED enemy with
+        // differing security, the live recompute resolves against that actual target's security
+        // and therefore differs from the representative-security basis — the intended per-target
+        // behaviour covered by the heterogeneous-security team-vs-team test in twoTeamBattle.test.ts.
+        hacking: focus.stats.hacking,
+        enemySecurity: enemyRepSecurity,
         position: focus.position,
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,
+        // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
+        doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
         // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
         healTargetId: focus.id,

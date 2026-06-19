@@ -75,3 +75,13 @@ describe('liveGateConditions — lowest-speed-ally', () => {
         expect(out).toEqual([{ subject: 'lowest-speed-ally', derivable: true }]);
     });
 });
+
+describe('liveGateConditions — target-repaired-this-round (C2b-3)', () => {
+    // Guards the LIVE_SUBJECTS membership: if this subject is ever dropped from
+    // LIVE_SUBJECTS, the condition would neutralize to 'always' and Nayra's
+    // Stasis/Exposed inflicts would silently fire unconditionally again.
+    it('keeps a derivable target-repaired-this-round condition (does NOT neutralize to always)', () => {
+        const out = liveGateConditions([{ subject: 'target-repaired-this-round', derivable: true }]);
+        expect(out).toEqual([{ subject: 'target-repaired-this-round', derivable: true }]);
+    });
+});

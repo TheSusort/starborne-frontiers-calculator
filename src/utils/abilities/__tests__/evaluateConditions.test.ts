@@ -350,6 +350,21 @@ describe('hp-threshold hpSubject target', () => {
     });
 });
 
+describe('target-repaired-this-round condition', () => {
+    const cond = { subject: 'target-repaired-this-round' as const, derivable: true };
+
+    it('is met when the target was repaired this round', () => {
+        expect(evaluateCondition(cond, ctx({ targetRepairedThisRound: true }))).toBe(1);
+        expect(conditionsMet([cond], ctx({ targetRepairedThisRound: true }))).toBe(true);
+    });
+
+    it('is NOT met when the target was not repaired (false or undefined)', () => {
+        expect(evaluateCondition(cond, ctx({ targetRepairedThisRound: false }))).toBe(0);
+        expect(evaluateCondition(cond, ctx())).toBe(0);
+        expect(conditionsMet([cond], ctx())).toBe(false);
+    });
+});
+
 describe('lowest-speed-ally', () => {
     it('returns 1 when isLowestSpeedAlly is true', () => {
         const ctx = buildRoundContext({

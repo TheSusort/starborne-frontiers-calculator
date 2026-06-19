@@ -118,6 +118,11 @@ export interface StatusEngine {
         slot: 'active' | 'charge',
         round: number
     ): { resistedEnemy: string[]; appliedEnemy: string[] };
+    /** Swap the TIMED-enemy landing hook used by `sourceFired` (A2 Task 4). The engine resets
+     *  this per turn to the ACTING actor's live landing closure (live hacking-vs-target-security
+     *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
+     *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
+    setLandsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
     /** The round's active lists (was step()'s return). Pure read.
      *  `ownerId` selects which player-side carrier's maps to read; defaults to
      *  'attacker' so all pre-Task-2 call sites remain unchanged. Always-active
@@ -147,6 +152,18 @@ export interface StatusEngine {
      *  Calling on an unknown id (lazy-empty maps) is a safe no-op. Pure: mutates only this
      *  engine's own stores. */
     clearRemovable(id: string): void;
+    /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store.
+     *  Targeted — unlike clearRemovable's broad sweep, deletes ONLY the named family, preserving
+     *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    removeTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
+     *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
+     *  the number actually removed. Unknown id → no-op (returns 0). */
+    cleanse(actorId: string, count: number | 'all'): number;
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
+     *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
+    purge(actorId: string, count: number | 'all'): number;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -252,6 +269,10 @@ interface BuffState {
      *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
      *  identity) and for timed statuses whose registered status omitted casterId. */
     casterId?: string;
+    /** Monotonic application order, newest = largest. Stamped at every write/refresh (both
+     *  the initial create and any family-rule refresh that re-sets the same key). Drives
+     *  cleanse/purge newest-applied-first removal ordering. */
+    appliedSeq: number;
 }
 
 interface AccumulatingState {
@@ -266,6 +287,10 @@ interface AccumulatingState {
     /** The caster of an ability-sourced accumulating status — its gate evaluates against the
      *  caster's ctx (Task 5). Undefined for scheduled accum entries (no conditions → no gate). */
     casterId?: string;
+    /** Application order, stamped at the 0→positive stack transition (when the status first
+     *  becomes active). Undefined while seeded-but-inert (stacks === 0). Drives cleanse/purge
+     *  newest-applied-first removal ordering for accumulating statuses. */
+    appliedSeq?: number;
 }
 
 /** Persistent stacking status state (game-verified 2026-06-05). These statuses land ONCE at
@@ -297,12 +322,24 @@ interface TimedSourceSets {
  * `decrementEnemy` run in each owner's Post Turn. It predicts nothing — cadences
  * are reported, not computed (the old computeChargeSchedule path is retired).
  */
+
+/** Sentinel enemy-target id used for the default (non-per-victim) scheduled-debuff store.
+ *  Callers that do not supply an explicit enemyTargetId resolve to this value — byte-identical
+ *  to the old singular enemyMap path. Exported so triggers.ts can reference the same constant
+ *  instead of duplicating the string literal. */
+export const DEFAULT_ENEMY_TARGET = '__enemy__';
+
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
     const teamSources = input.teamSources ?? [];
     // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
     // tests simple. The engine supplies the real hacking/affinity decision.
-    const landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
+    // Mutable so the engine can swap it per turn to the ACTING actor's live landing closure
+    // (A2 Task 4). Default: every timed enemy application lands (no gate).
+    let landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
+    const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
+        landsTimedEnemyApplication = fn;
+    };
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
@@ -342,8 +379,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     // DEFAULT_ENEMY_TARGET: the pre-Task-1 singular enemy target id. Callers that do not
     // supply an enemyTargetId resolve to this constant → byte-identical to the old singular
-    // enemyMap/accumEnemyMap/auraEnemy path.
-    const DEFAULT_ENEMY_TARGET = '__enemy__';
+    // enemyMap/accumEnemyMap/auraEnemy path. Declared at module level (exported); used here
+    // as a closure-visible reference with no re-declaration needed.
 
     // Per-owner player-side accumulating maps. `accumSelfMaps` is keyed by ownerId → (buffName →
     // AccumulatingState), lazy-created on first write (mirroring selfMaps/persistentSelfMaps).
@@ -533,6 +570,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     let lastRound = 0;
 
+    // Monotonic application sequence for newest-first cleanse/purge ordering.
+    // Incremented at every BuffState write (create + refresh) and at the 0→positive
+    // stack transition for AccumulatingState entries.
+    let appliedSeqCounter = 0;
+    const nextAppliedSeq = (): number => ++appliedSeqCounter;
+
     // beginRound: advance the round counter (strictly sequential) and apply the
     // per-round accumulating increment. Per-round stacks tick once at round top,
     // independent of any source firing. Called before any turns — preserving the
@@ -551,10 +594,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
                 if (state.trigger !== 'per-round') continue;
+                const before = state.stacks;
                 state.stacks =
                     state.maxStacks !== undefined
                         ? Math.min(state.stacks + state.rate, state.maxStacks)
                         : state.stacks + state.rate;
+                // Stamp appliedSeq at the 0→positive transition (first time the status
+                // becomes active). Later stack gains do not re-stamp — the first-active
+                // order is what cleanse/purge needs for newest-first ordering.
+                if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
             }
         };
         // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
@@ -594,6 +642,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             buffName: buff.buffName,
             turnsRemaining: buff.skillDuration,
             tier,
+            appliedSeq: nextAppliedSeq(),
         });
     };
 
@@ -630,10 +679,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                         (state.trigger === 'per-active' && slot === 'active') ||
                         (state.trigger === 'per-charge' && slot === 'charge');
                     if (fires) {
+                        const before = state.stacks;
                         state.stacks =
                             state.maxStacks !== undefined
                                 ? Math.min(state.stacks + state.rate, state.maxStacks)
                                 : state.stacks + state.rate;
+                        // Stamp appliedSeq at the 0→positive transition — identical rule to
+                        // incrementPerRound. Later stack gains do not re-stamp.
+                        if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
                     }
                 }
             };
@@ -798,8 +851,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // statuses are removed and their stored buffName reported so the engine emits
     // buff-expired. Ability-sourced timed statuses live in the same maps and decrement here.
 
-    /** Decrement all timed statuses for the named player-side carrier. Calling on an owner
-     *  with no statuses (lazy-empty map) is a safe no-op. */
+    /** Decrement all timed statuses in the SELF-BUFF STORE for the named carrier (side-agnostic;
+     *  the 'Player' suffix is legacy — this is the store for buffs the actor applied to itself).
+     *  Calling on a carrier with no statuses (lazy-empty map) is a safe no-op. */
     const decrementPlayer = (ownerId: string): { expired: string[] } => {
         const map = selfMaps.get(ownerId);
         const expired: string[] = [];
@@ -815,9 +869,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return { expired };
     };
 
-    /** Decrement all timed enemy statuses for the given targetId.
-     *  Defaults to DEFAULT_ENEMY_TARGET (pre-Task-1 path, byte-identical).
-     *  Calling on a target with no statuses (lazy-empty map) is a safe no-op. */
+    /** Decrement all timed statuses in the DEBUFFS-LANDED-ON store for the given actor id
+     *  (side-agnostic; the 'Enemy' suffix is legacy — this is the store for debuffs landed ON
+     *  the named carrier by an opposing actor). Defaults to DEFAULT_ENEMY_TARGET (the DPS-dummy
+     *  sentinel '__enemy__'; pre-Task-1 path, byte-identical).
+     *  Calling on a carrier with no statuses (lazy-empty map) is a safe no-op. */
     const decrementEnemy = (targetId = DEFAULT_ENEMY_TARGET): { expired: string[] } => {
         const map = enemyMaps.get(targetId);
         const expired: string[] = [];
@@ -860,6 +916,82 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sweep(selfMaps.get(id));
         sweep(enemyMaps.get(id));
     };
+
+    /** Remove a SINGLE named timed enemy status from `targetId`'s per-actor enemy store (the
+     *  channel applyTimedAbilityStatus writes, keyed by familyKey). Targeted — unlike
+     *  clearRemovable's broad sweep, deletes ONLY the named family, preserving co-applied
+     *  debuffs on the same victim. Used by the engine's §4.5 direct-damage Stasis break.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    const removeTimedEnemyStatus = (targetId: string, buffName: string): void => {
+        const map = enemyMaps.get(targetId);
+        if (!map) return;
+        map.delete(deriveFamilyKey(buffName).familyKey);
+    };
+
+    /** Remove up to `count` removable statuses for `actorId` on the chosen side, NEWEST-APPLIED
+     *  FIRST (highest `appliedSeq` removed first).
+     *
+     *  Side mapping:
+     *  - `'debuffs'` → the actor's per-victim enemy-side timed + accumulating stores (cleanse).
+     *  - `'buffs'`   → the actor's player-side self stores (purge, wired in C2).
+     *
+     *  Skips:
+     *  - entries whose `buffName` is in `UNREMOVABLE_STATUSES`.
+     *  - timed entries with `turnsRemaining === 'permanent'` (belt-and-braces guard; in
+     *    practice 'permanent'-sentinel entries live in the separate persistent maps, not here).
+     *  - accumulating entries that are still inert (`stacks <= 0` or `appliedSeq` not yet stamped).
+     *
+     *  NOT gathered (unremovable by construction):
+     *  - persistent-stacking maps (`persistentSelfMaps` / `persistentEnemyMaps`) — never visited.
+     *
+     *  NOT in these maps (re-derive each round, no stored entry to remove):
+     *  - always-active / aura statuses.
+     *
+     *  `count === 'all'` removes every removable candidate.
+     *  Unknown actor id → lazy-empty maps → no-op (returns 0).
+     *  Returns the number of statuses actually removed. */
+    const removeNewestFirst = (
+        actorId: string,
+        side: 'debuffs' | 'buffs',
+        count: number | 'all'
+    ): number => {
+        const timedMap = side === 'debuffs' ? enemyMaps.get(actorId) : selfMaps.get(actorId);
+        const accumMap =
+            side === 'debuffs' ? accumEnemyMaps.get(actorId) : accumSelfMaps.get(actorId);
+        const candidates: { seq: number; remove: () => void }[] = [];
+        if (timedMap) {
+            for (const [key, s] of timedMap) {
+                if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+                candidates.push({ seq: s.appliedSeq, remove: () => timedMap.delete(key) });
+            }
+        }
+        if (accumMap) {
+            for (const [key, s] of accumMap) {
+                if (s.stacks <= 0 || s.appliedSeq === undefined) continue;
+                // Accumulating statuses never expire by time → name-gate only.
+                // (accum entries have no duration; 0 is an inert placeholder — only the name gate applies)
+                if (isUnremovable(s.buffName, 0)) continue;
+                candidates.push({ seq: s.appliedSeq, remove: () => accumMap.delete(key) });
+            }
+        }
+        candidates.sort((a, b) => b.seq - a.seq);
+        const limit =
+            count === 'all' ? candidates.length : Math.max(0, Math.min(count, candidates.length));
+        for (let i = 0; i < limit; i++) candidates[i].remove();
+        return limit;
+    };
+
+    /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
+     *  first (see removeNewestFirst). `'all'` removes every removable debuff. Returns the number
+     *  actually removed. Unknown id → no-op (returns 0). */
+    const cleanse = (actorId: string, count: number | 'all'): number =>
+        removeNewestFirst(actorId, 'debuffs', count);
+
+    /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
+     *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
+     *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
+    const purge = (actorId: string, count: number | 'all'): number =>
+        removeNewestFirst(actorId, 'buffs', count);
 
     // --- Ability-status API (Task 6) ---
 
@@ -960,6 +1092,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             tier,
             payload: status.payload,
             casterId: status.casterId,
+            appliedSeq: nextAppliedSeq(),
         });
     };
 
@@ -1062,10 +1195,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     return {
         beginRound,
         sourceFired,
+        setLandsTimedEnemyApplication,
         snapshot,
         decrementPlayer,
         decrementEnemy,
         clearRemovable,
+        removeTimedEnemyStatus,
+        cleanse,
+        purge,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

@@ -33,11 +33,9 @@ export interface EnemyAttackerInput {
      *  computeAffinityModifiers(enemyAffinity, targetAffinity) to produce the matchup.
      *  Absent → neutral defaults (modifier 0, cap 100, penalty 0). */
     affinity?: AffinityName;
-    /** Enemy attacker's hacking stat — combined with the heal target's security
-     *  (HealingSimulationInput.healTargetSecurity) to compute this enemy's INBOUND debuff
-     *  landing chance: clamp(hacking − security, 0, 100) / 100 (no affinity, matching the
-     *  adapter's landing convention). Absent → the engine enemy omits debuffLandingChance →
-     *  engine `?? 1` → debuffs land at 100% (backward compatible). */
+    /** Enemy attacker's hacking stat — threaded onto the engine enemy actor so the engine's
+     *  live per-turn landing recompute (hacking vs heal-target security) drives inbound debuff
+     *  landing. Absent → engine defaults hacking to 200 (100% landing at neutral security). */
     hacking?: number;
 }
 
@@ -59,8 +57,9 @@ export interface HealingSimulationInput {
      *  team walk). Absent (manual stats / no ship picked) → the focus actor never matches a
      *  role filter — the reaction stays dormant for hits on it (conservative). */
     healerRole?: ShipTypeName;
-    /** The heal target's security stat — used with each enemy's hacking for the inbound debuff
-     *  landing roll. Absent → 0 (debuffs land at up to 100%, preserving prior behavior). */
+    /** The heal target's security stat. Deprecated — reserved for future per-target live landing
+     *  recompute; currently unused by the adapter (inbound enemy landing is driven by the live
+     *  hacking-vs-security recompute from enemy.hacking / heal-target's effective security). */
     healTargetSecurity?: number;
     teamActors?: TeamActorInput[];
     enemies: EnemyAttackerInput[];
@@ -161,17 +160,12 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         rounds: numRounds,
         teamActors,
         healTargetAffinity,
-        healTargetSecurity,
     } = input;
 
     // Dummy-enemy defaults: a high-defence, huge-HP punching bag that never dies and acts last.
     const ENEMY_DEFENSE = 10000;
     const ENEMY_HP = 1_000_000;
     const ENEMY_SECURITY = 100;
-
-    // Landing chance from the healer's hacking vs the dummy's security (no affinity this
-    // increment): clamp(hacking − 100, 0, 100) / 100.
-    const debuffLandingChance = Math.min(100, Math.max(0, healer.hacking - ENEMY_SECURITY)) / 100;
 
     // Self-side static folds (defPen / dot from self-buffs) — same discipline as simulateDPS.
     const { defensePenetrationBuff, dotDamageModifier: selfDotModifier } = toDotAndPenModifiers(
@@ -191,7 +185,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // player team's affinity matchup vs the dummy punching-bag enemy is irrelevant to
     // healing output). healModifier IS threaded from CombatStatBlock.healModifier
     // (default 0 when absent), so walked team actors fold their own heal-modifier into heal casts.
-    const engineTeamActors = deriveTeamEngineActors(teamActors, ENEMY_SECURITY, undefined);
+    const engineTeamActors = deriveTeamEngineActors(teamActors, undefined);
     const hasTeamActors = !!teamActors && teamActors.length > 0;
 
     // Pre-resolve each enemy attacker's affinity matchup vs the heal target (Task 9).
@@ -201,22 +195,11 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
     // byte-identical to prior behaviour for all fixtures that omit affinity.
     const engineEnemyAttackers = enemies.map((e) => {
         const aff = computeAffinityModifiers(e.affinity, healTargetAffinity);
-        // INBOUND debuff landing for THIS enemy: clamp(hacking − tank security, 0, 100) / 100.
-        // No affinity (matches the adapter's healer-side landing convention above). Attached
-        // ONLY when the enemy carries a hacking value — omitted hacking → field omitted →
-        // engine `?? 1` → 100% (backward compatible with every fixture that omits hacking).
-        const enemyDebuffLandingChance =
-            e.hacking == null
-                ? undefined // omitted → engine defaults to 1 (100%), current behavior
-                : Math.min(100, Math.max(0, e.hacking - (healTargetSecurity ?? 0))) / 100;
         return {
             ...e,
             affinityDamageModifier: aff.damageModifier,
             affinityCritCap: aff.critCap,
             affinityCritPenalty: aff.critPenalty,
-            ...(enemyDebuffLandingChance != null
-                ? { debuffLandingChance: enemyDebuffLandingChance }
-                : {}),
         };
     });
 
@@ -232,7 +215,6 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         numRounds,
         selfBuffs,
         enemyDebuffs: [],
-        debuffLandingChance,
         selfDotModifier,
         defensePenetrationBuff,
         hasChargedSkill,
@@ -243,6 +225,12 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         defence: healer.defence,
         hp: healer.hp,
         speed: healer.speed,
+        // Base hacking/security (holistic review #1) — thread onto the focus (healer) actor and
+        // the dummy enemy actor so the engine's live per-turn recompute drives landing uniformly
+        // across all three modes (DPS / battle-sim / healing). Walked team-actor hacking flows via
+        // the walk bundle (deriveTeamEngineActors → engine reads walk.stats.hacking).
+        hacking: healer.hacking,
+        enemySecurity: ENEMY_SECURITY,
         enemySpeed: 0,
         healModifier: healer.healModifier,
         role: input.healerRole,

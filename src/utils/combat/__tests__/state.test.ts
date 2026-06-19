@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     createActor,
     selectNextActor,
+    selectNextBySpeed,
     buildTurnQueue,
     orderByTurnPriority,
     advanceChargeCadence,
@@ -89,6 +90,34 @@ describe('createActor', () => {
     it('leaves affinity undefined when omitted (neutral default downstream)', () => {
         const actor = createActor({ id: 'a', side: 'player', kind: 'attacker', stats: baseStats });
         expect(actor.affinity).toBeUndefined();
+    });
+});
+
+describe('createActor indestructible flag', () => {
+    const baseStats = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 100,
+        speed: 50,
+    };
+
+    it('defaults indestructible to undefined when not provided', () => {
+        const a = createActor({ id: 'x', side: 'player', kind: 'attacker', stats: baseStats });
+        expect(a.indestructible).toBeUndefined();
+    });
+
+    it('passes indestructible through when provided', () => {
+        const a = createActor({
+            id: 'dummy',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: baseStats,
+            indestructible: true,
+        });
+        expect(a.indestructible).toBe(true);
     });
 });
 
@@ -223,6 +252,73 @@ describe('buildTurnQueue', () => {
         const input = [actor('attacker', 'attacker', 100), actor('t1', 'team', 140)];
         buildTurnQueue(input);
         expect(input.map((a) => a.id)).toEqual(['attacker', 't1']);
+    });
+});
+
+describe('selectNextBySpeed', () => {
+    const actor = (id: string, kind: CombatActor['kind'], speed: number): CombatActor =>
+        createActor({
+            id,
+            side: kind === 'enemy' ? 'enemy' : 'player',
+            kind,
+            stats: { ...baseStats, hp: 1, speed },
+        });
+
+    const allPending = () => 1;
+
+    it('picks the actor with the highest effective speed', () => {
+        const actors = [
+            actor('attacker', 'attacker', 100),
+            actor('t1', 'team', 140),
+            actor('enemy', 'enemy', 120),
+        ];
+        const next = selectNextBySpeed(actors, allPending, (a) => a.stats.speed);
+        expect(next?.id).toBe('t1');
+    });
+
+    it('excludes actors whose pending count is 0', () => {
+        const actors = [actor('t1', 'team', 140), actor('attacker', 'attacker', 100)];
+        const next = selectNextBySpeed(
+            actors,
+            (id) => (id === 't1' ? 0 : 1),
+            (a) => a.stats.speed
+        );
+        expect(next?.id).toBe('attacker');
+    });
+
+    it('breaks ties: player side before enemy', () => {
+        const actors = [actor('enemy', 'enemy', 100), actor('attacker', 'attacker', 100)];
+        const next = selectNextBySpeed(actors, allPending, (a) => a.stats.speed);
+        expect(next?.id).toBe('attacker');
+    });
+
+    it('breaks ties within a side by input order', () => {
+        const actors = [actor('t1', 'team', 100), actor('t2', 'team', 100)];
+        const next = selectNextBySpeed(actors, allPending, (a) => a.stats.speed);
+        expect(next?.id).toBe('t1');
+    });
+
+    it('uses the effectiveSpeedOf callback, not static actor.stats.speed', () => {
+        // Static speed ranks t1 (140) > attacker (100), but the live callback inverts it.
+        const actors = [actor('t1', 'team', 140), actor('attacker', 'attacker', 100)];
+        const liveSpeed = (a: CombatActor) => (a.id === 'attacker' ? 999 : a.stats.speed);
+        const next = selectNextBySpeed(actors, allPending, liveSpeed);
+        expect(next?.id).toBe('attacker');
+    });
+
+    it('returns undefined when no actors have pending > 0', () => {
+        const actors = [actor('t1', 'team', 140), actor('enemy', 'enemy', 120)];
+        expect(
+            selectNextBySpeed(
+                actors,
+                () => 0,
+                (a) => a.stats.speed
+            )
+        ).toBeUndefined();
+    });
+
+    it('returns undefined for an empty actor list', () => {
+        expect(selectNextBySpeed([], allPending, (a) => a.stats.speed)).toBeUndefined();
     });
 });
 

@@ -175,9 +175,14 @@ describe('healingGoldenParity', () => {
     // ── Scenario 4: reactive cleanse on crit-repair ──────────────────────────
     // crit 50. The healer heals an ALLY (a walked team actor t1, speed 10 so the healer
     // acts first), routing the heal to the bombard target. A passive cleanse triggers on
-    // 'on-ally-critically-repaired' (count 1) — it fires only on the casts that crit. With
-    // the back-loaded gate at rate 0.5, crits land on casts 2, 4, 6, 8, 10 → cleanseCount
-    // appears those rounds only.
+    // 'on-ally-critically-repaired' (count 1, target self) — it fires only on the casts that
+    // crit. With the back-loaded gate at rate 0.5, crits land on casts 2, 4, 6, 8, 10.
+    // C1 T4: the reactive cleanse now performs REAL removal and credits the ACTUAL count
+    // removed. The healer carries NO removable debuff (no enemy bombards the focus here), so
+    // every fire removes nothing → cleanseCount 0 on every round (was the nominal 1-per-crit
+    // before T4). The crit cadence/heal shape is unchanged; only the cleanse bucket is honest now.
+    // Positive reactive-removal coverage lives in combat/__tests__/cleanseReactivePath.test.ts
+    // and the on-ally-critically-repaired integration tests in combat/__tests__/healing.test.ts.
     snap('reactive cleanse on ally crit-repair (crit 50)', () => {
         const team: TeamActorInput = {
             id: 't1',

@@ -1,12 +1,7 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
-import {
-    Buff,
-    DoTApplicationConfig,
-    EnemyBaseClass,
-    SelectedGameBuff,
-} from '../../types/calculator';
+import { DoTApplicationConfig, EnemyBaseClass, SelectedGameBuff } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
 import type { ConditionContext } from '../abilities/evaluateConditions';
@@ -19,17 +14,11 @@ import {
     controlAbilitiesFromSkill,
     detonationsFromSkill,
     accumulatorsFromSkill,
-    modifierTotalsFromAbilities,
     gateFiringAbilities,
     extraActionsFromSkill,
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
-import {
-    toSimBuffs,
-    toEnemyModifiers,
-    toEnemyDotModifier,
-    toDotAndPenModifiers,
-} from '../calculators/dpsBuffHelpers';
+import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
 import {
     ActiveDoTStack,
     ActorHealing,
@@ -40,7 +29,6 @@ import {
 } from './state';
 import {
     ActiveBuff,
-    AbilityStatusPayload,
     ActiveAbilityStatus,
     RegisteredAbilityStatus,
     createStatusEngine,
@@ -49,6 +37,17 @@ import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
+import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
+// Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
+// historical public API (engine.ts + tests import these from playerTurn). Keeping the
+// definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
+import {
+    calculateBuffTotals,
+    expandBuffEntry,
+    expandEnemyDebuffs,
+    payloadToSelectedBuff,
+} from './buffTotals';
+export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
@@ -159,7 +158,12 @@ export interface PlayerActorRuntime {
     /** Caster heal-modifier stat (healing calc). Default 0. */
     healModifier: number;
     // Per-actor adapter-derived rates
-    debuffLandingChance: number;
+    /** LIVE per-target debuff-landing chance (0..1) for THIS actor, set at turn start by
+     *  runPlayerTurn from current effective hacking-vs-target-security + affinity (A2 Task 4).
+     *  Read by the REACTIVE (triggers.ts) landing path via the runtime's landing closure /
+     *  debuffLandingGate so an owner's reactive inflictions draw against the live chance too.
+     *  Undefined until the actor's first turn — callers use `?? 1` as a neutral default. */
+    liveDebuffLandingChance?: number;
     selfDotModifier: number;
     defensePenetrationBuff: number;
     affinityDamageModifier: number;
@@ -210,10 +214,6 @@ export interface PlayerTurnArgs {
     bus: CombatEventBus;
     // Per-call round state.
     round: number;
-    /** Enemy HP decline so far (focus + team cumulative) — drives this turn's entering-round
-     *  enemyHpPct (the value hp-threshold gates and the HP% column react to). Renamed from
-     *  `cumulativeDamage` (Task 4): it now includes team damage, not just the focus actor's. */
-    enemyHpDecline: number;
     /** Grant `amount` charges to EVERY player actor (Task 5 ally-charge routing). Supplied by
      *  the engine, which loops all player actors (incl. this caster) bumping
      *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
@@ -241,6 +241,9 @@ export interface PlayerTurnArgs {
      *  as if the target is full HP → a "below N" gate fails → grant inert in DPS (correct).
      *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
     targetHpPct?: number;
+    /** The acting attacker's STRUCK target was repaired (HP-healed) this round (C2b-3). Default
+     *  false. Threaded into the round contexts to gate target-repaired-this-round conditions. */
+    targetRepairedThisRound?: boolean;
     /** Enemy-side debuff target key (Task 6). Passed as the `enemyTargetId` arg to the three
      *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
      *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
@@ -258,72 +261,20 @@ export interface PlayerTurnArgs {
      *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
+    /** §4.5 Stasis direct-damage break hook (B3 Task 2). When supplied, fires AFTER scheduled
+     *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
+     *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
+     *  Receives the resolved enemy target id (`targetId`). The engine supplies this for DIRECT-
+     *  channel apply boundaries (non-positional and positional via emitHit override); absent for
+     *  DPS/standalone callers → inert (byte-identical). */
+    onHitBreakStasis?: (targetId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Module-private helpers used EXCLUSIVELY by the player turn.
 // ---------------------------------------------------------------------------
 
-// Mirror toSimBuffs/toEnemyModifiers semantics for an ability-status payload: wrap it as
-// a SelectedGameBuff so the existing buff-fold helpers apply (effect × stacks). The payload's
-// own stacks (current count for accumulating; configured stacks otherwise) become the buff stacks.
-function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGameBuff {
-    // NOTE: the derived id `ability-${buffName}` is non-unique by design for duplicate buffNames
-    // (only summed by stat downstream, never deduped by id).
-    return {
-        id: `ability-${payload.buffName}`,
-        buffName: payload.buffName,
-        stacks: payload.stacks,
-        parsedEffects: payload.parsedEffects,
-        isStackable: false,
-        ...(payload.application ? { application: payload.application } : {}),
-    };
-}
-
-function calculateBuffTotals(buffs: Buff[]) {
-    const attackBuff = buffs
-        .filter((b) => b.stat === 'attack')
-        .reduce((sum, b) => sum + b.value, 0);
-    const critBuff = buffs.filter((b) => b.stat === 'crit').reduce((sum, b) => sum + b.value, 0);
-    const critDamageBuff = buffs
-        .filter((b) => b.stat === 'critDamage')
-        .reduce((sum, b) => sum + b.value, 0);
-    const outgoingDamageBuff = buffs
-        .filter((b) => b.stat === 'outgoingDamage')
-        .reduce((sum, b) => sum + b.value, 0);
-    const defenceBuff = buffs
-        .filter((b) => b.stat === 'defence')
-        .reduce((sum, b) => sum + b.value, 0);
-    const hpBuff = buffs.filter((b) => b.stat === 'hp').reduce((sum, b) => sum + b.value, 0);
-    // Heal channels (healing calc). hotPct is intentionally NOT summed here: HoTs need
-    // per-status applier identity, so a later task reads those statuses directly.
-    const outgoingHealBuff = buffs
-        .filter((b) => b.stat === 'outgoingHeal')
-        .reduce((sum, b) => sum + b.value, 0);
-    const incomingHealBuff = buffs
-        .filter((b) => b.stat === 'incomingHeal')
-        .reduce((sum, b) => sum + b.value, 0);
-    return {
-        attackBuff,
-        critBuff,
-        critDamageBuff,
-        outgoingDamageBuff,
-        defenceBuff,
-        hpBuff,
-        outgoingHealBuff,
-        incomingHealBuff,
-    };
-}
-
-// Expand an active buff/debuff into its underlying SelectedGameBuff effects.
-// Accumulating buffs override their static stacks with the per-round count and
-// drop out entirely when at zero stacks; non-accumulating ones pass through.
-function expandBuffs(ab: ActiveBuff, bufs: SelectedGameBuff[]): SelectedGameBuff[] {
-    if (ab.stacks !== undefined) {
-        return ab.stacks > 0 ? bufs.map((b) => ({ ...b, stacks: ab.stacks! })) : [];
-    }
-    return bufs;
-}
+// expandBuffs/expandEnemyDebuffs moved to buffTotals.ts (re-exported from lines 41-50 above).
 
 // Per-round self-buff totals from the status engine's active list. Expands each
 // active buff back into its SelectedGameBuff effects (stack override included) and
@@ -336,7 +287,7 @@ function resolveSelfBuffTotals(args: {
 }): ReturnType<typeof calculateBuffTotals> {
     const roundSelfBuffs = args.activeSelfBuffs.flatMap((ab) =>
         // Accumulating buff: override static stacks with per-round count; skip when 0
-        expandBuffs(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
+        expandBuffEntry(ab, args.selfBuffLookup.get(ab.buffName) ?? [])
     );
     return calculateBuffTotals(toSimBuffs(roundSelfBuffs));
 }
@@ -380,7 +331,7 @@ function resolveEnemyDebuffs(args: {
             return [];
         }
         landedEnemyDebuffs.push(ab);
-        return expandBuffs(ab, bufs);
+        return expandBuffEntry(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs, resistedEnemyDebuffs };
 }
@@ -399,7 +350,7 @@ function foldTimedEnemyDebuffs(args: {
     const roundEnemyDebuffs = args.timedEnemyDebuffs.flatMap((ab) => {
         const bufs = args.enemyDebuffLookup.get(ab.buffName) ?? [];
         landedEnemyDebuffs.push(ab);
-        return expandBuffs(ab, bufs);
+        return expandBuffEntry(ab, bufs);
     });
     return { roundEnemyDebuffs, landedEnemyDebuffs };
 }
@@ -651,14 +602,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyType,
         bus,
         round: r,
-        enemyHpDecline,
         grantAllyCharges,
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
+        targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
         selfDebuffNames: selfDebuffNamesArg = [],
         healEventOnly = false,
+        onHitBreakStasis,
     } = args;
 
     const {
@@ -673,7 +625,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         chargedHealCritGate,
         debuffLandingGate,
         extendChanceGate,
-        landsTimedEnemyApplication,
         healModifier,
         castSkills: shipSkills,
         hasChargedSkill,
@@ -683,7 +634,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         defensePenetration,
         defensePenetrationBuff,
         selfDotModifier,
-        debuffLandingChance,
         affinityDamageModifier,
         affinityCritCap,
         affinityCritPenalty,
@@ -713,8 +663,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
-    // Enemy HP% entering this round, derived from enemy HP decline so far (focus + team).
-    // Floors at 0 once decline exceeds the pool (the sim keeps hitting the "dead" dummy).
+    // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
+    // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
+    // its max, so decline = how much HP the victim has lost). For the DPS dummy sink this equals
+    // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracks it post-round);
+    // for a real positional victim it now reflects that victim's actual HP.
+    // LOAD-BEARING TIMING: in DPS the dummy's currentHp updates POST-round (engine.ts ~3772),
+    // not per-hit, so this derived value equals the entering-round scalar the old param carried.
+    const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
     const enemyHpPct = enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
 
     const firingSkill = selectFiringSkill(shipSkills, action);
@@ -734,6 +690,38 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // or for every round a standing timed status is active — only at the infliction site.
     const emitDebuffApplied = (sourceId: string, buffName: string) =>
         bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
+
+    // LIVE per-target debuff-landing chance (A2 Task 4 / A-closeout). The sole producer of
+    // landing chance: recomputed each turn from the acting actor's effective hacking (× this
+    // actor's affinity) vs the TURN TARGET's effective security. `liveDebuffLandingChance` is
+    // self-sufficient — it defaults a missing attacker hacking → 200 and target security → 100,
+    // reproducing the old static formula for base-less/neutral actors. The acting actor's
+    // `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/security
+    // buffs that move landing) fold lookup-free from the status engine. Cached once per turn here
+    // — every landing consumer below reads this value.
+    const liveLandingChance = liveDebuffLandingChance(
+        statusEngine,
+        selfBuffLookup,
+        actor,
+        enemy,
+        affinityDamageModifier
+    );
+    // Turn-local landing decision: 'apply' (affinity) lands unless at an affinity disadvantage
+    // (UNCHANGED rule); 'inflict' (and unmarked) draws the runtime's deterministic gate against
+    // the LIVE chance. Replaces the runtime's pre-baked `landsTimedEnemyApplication` so every
+    // 'inflict' draw — the playerTurn timed loop, the status-engine sourceFired hook, and the
+    // reactive (triggers.ts) path — uses the live value uniformly.
+    const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
+        application === 'apply' ? !affinityDisadvantage : debuffLandingGate(liveLandingChance);
+    // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
+    // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
+    // uses the same live value. Always set now (the live path is unconditional).
+    runtime.liveDebuffLandingChance = liveLandingChance;
+    // Point the status engine's sourceFired landing hook at THIS actor's live closure for the
+    // duration of this turn (it is invoked synchronously inside sourceFired below).
+    statusEngine.setLandsTimedEnemyApplication((buff) =>
+        landsTimedEnemyApplicationLive(buff.application)
+    );
 
     // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
@@ -762,19 +750,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const scheduledSelfBuffNames = entry.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
-    let {
-        attackBuff,
-        critBuff,
-        critDamageBuff,
-        outgoingDamageBuff,
-        defenceBuff,
-        hpBuff,
-        outgoingHealBuff,
-        incomingHealBuff,
-    } = resolveSelfBuffTotals({
+    // Layer 1 of the damage fold (scheduled manual + team self buffs). The accessor
+    // (effectiveDamageStatsOf) recomputes ALL four layers from scheduledTotals +
+    // abilitySelfEffects + modifiers, so the per-layer `+=` staging that used to live
+    // here is gone — only critBuffForGates is staged, to feed the three mid-fold gate
+    // estimates (cappedCrit) that read a partial crit total before the final fold.
+    const scheduledTotals = resolveSelfBuffTotals({
         activeSelfBuffs: entry.activeSelfBuffs,
         selfBuffLookup,
     });
+    // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
+    // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
+    let critBuffForGates = scheduledTotals.critBuff;
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
     // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
@@ -785,7 +772,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let roundDebuffLandedValue: boolean | undefined;
     const roundDebuffLanded = (): boolean => {
         if (roundDebuffLandedValue === undefined) {
-            roundDebuffLandedValue = debuffLandingGate(debuffLandingChance);
+            roundDebuffLandedValue = debuffLandingGate(liveLandingChance);
         }
         return roundDebuffLandedValue;
     };
@@ -860,14 +847,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
-        effectiveCritRate: cappedCrit(critBuff),
+        effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
+
+    // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
+    // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
+    // debuff abilities is not inadvertently removed. The engine supplies `onHitBreakStasis` only
+    // for direct-channel apply boundaries (non-positional and positional emitHit paths); DPS/
+    // standalone callers leave it absent → no-op. Receives the resolved target id so the break
+    // can key the statusEngine's per-actor enemy store correctly (side-symmetric: same key
+    // regardless of whether the actor is a player or enemy).
+    // Only fire when targetId is defined (the engine always supplies it for direct-channel
+    // break-eligible turns; DPS/standalone callers without a real targetId are inert).
+    if (targetId !== undefined) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
     // Each application that passes its condition gate draws the landing decision
@@ -890,7 +889,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
-        if (landsTimedEnemyApplication(status.payload.application)) {
+        if (landsTimedEnemyApplicationLive(status.payload.application)) {
             statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
             // Discrete infliction event — emit ONCE at this application site.
             emitDebuffApplied(actor.id, status.payload.buffName);
@@ -995,11 +994,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
-        effectiveCritRate: cappedCrit(critBuff),
+        effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1034,22 +1034,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...statusEngine.activeAbilityStatuses('self', resolveCtx(postDebuffGateCtx), actor.id),
     ];
     const abilitySelfEffects = selfAbilityStatuses.map((s) => payloadToSelectedBuff(s.payload));
-    const abilitySelfTotals = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
-    attackBuff += abilitySelfTotals.attackBuff;
-    critBuff += abilitySelfTotals.critBuff;
-    critDamageBuff += abilitySelfTotals.critDamageBuff;
-    outgoingDamageBuff += abilitySelfTotals.outgoingDamageBuff;
-    defenceBuff += abilitySelfTotals.defenceBuff;
-    hpBuff += abilitySelfTotals.hpBuff;
-    outgoingHealBuff += abilitySelfTotals.outgoingHealBuff;
-    incomingHealBuff += abilitySelfTotals.incomingHealBuff;
-
-    // (f) Per-round defPen/dot fold from ability-status payloads (KNOWN-DIFF b): these
-    // no longer ride the always-on static toDotAndPenModifiers path (the adapter feeds
-    // only manual+team buffs there). Self defPen + self Out. DoT apply THIS round. The
-    // enemy side ([]) is intentionally empty here — enemy Inc. DoT is already folded via
-    // toEnemyDotModifier(roundEnemyDebuffs), which includes abilityEnemyEffects.
-    const abilityDotPen = toDotAndPenModifiers(abilitySelfEffects, []);
+    // Stage layers 2+3 into the gate-only crit partial so the modifier gate (modifierCtx,
+    // below) sees layers 1+2+3 — matching the pre-A1b staged critBuff at that point. The
+    // full four-layer fold (and the other channels) is owned by effectiveDamageStatsOf.
+    const abilityTotalsForGates = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
+    critBuffForGates += abilityTotalsForGates.critBuff;
 
     // Snapshot lists for this round / context: ability statuses appended AFTER
     // scheduled ones (KNOWN-DIFF c ordering).
@@ -1064,19 +1053,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Fold active passive modifiers (firing skill + passive slot) into the round's
     // buff totals so they affect damage exactly like an equivalent buff. Folded here,
     // after enemy modifiers are known but before the effective-stat computations consume
-    // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuff)) is used only
-    // for the rare self-crit-gated modifier condition, avoiding a self-referential gate.
+    // the buff totals. The PRE-modifier crit estimate (cappedCrit(critBuffForGates), layers
+    // 1+2+3) is used only for the rare self-crit-gated modifier condition, avoiding a
+    // self-referential gate.
     const modifierCtx = buildRoundContext({
         selfBuffNames: activeSelfBuffNames,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         corrosionEntryCount: corrosionEntries.length,
         infernoEntryCount: infernoEntries.length,
         bombCount: pendingBombs.length,
-        effectiveCritRate: cappedCrit(critBuff),
+        effectiveCritRate: cappedCrit(critBuffForGates),
         enemyType,
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1085,17 +1076,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...(firingSkill?.abilities ?? []),
         ...(passiveSkill?.abilities ?? []),
     ];
-    const modTotals = modifierTotalsFromAbilities(modifierAbilities, modifierCtx);
-    attackBuff += modTotals.attack;
-    critBuff += modTotals.crit;
-    critDamageBuff += modTotals.critDamage;
-    outgoingDamageBuff += modTotals.outgoingDamage;
-    defenceBuff += modTotals.defence;
-    hpBuff += modTotals.hp;
-
-    const effectiveAttack = attack * (1 + attackBuff / 100);
-    const effectiveCrit = cappedCrit(critBuff);
-    const effectiveCritDamage = critDamage + critDamageBuff;
+    // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
+    // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
+    // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
+    const dmgStats = effectiveDamageStatsOf({
+        base: { attack, defence, crit, critDamage, hp, defensePenetration, defensePenetrationBuff },
+        scheduledTotals,
+        abilitySelfEffects,
+        modifierAbilities,
+        modifierCtx,
+    });
+    const effectiveAttack = dmgStats.attack;
+    // Full buff total at the final fold; equals the prior staged critBuff (layers 1+2+3+4).
+    const effectiveCrit = cappedCrit(dmgStats.totals.critBuff);
+    const effectiveCritDamage = dmgStats.critDamage;
     // Per-hit crit checks (game-verified 2026-06-06): each hit of a multi-hit skill
     // draws the deterministic crit gate INDIVIDUALLY. Draw count = the UNGATED firing
     // skill's hit count (schedule is cast-based like the old single draw — gating
@@ -1123,11 +1117,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
     // registerReactiveListeners in triggers.ts.
     const roundCrit = critHits > 0;
-    const effectivePen =
-        defensePenetration +
-        defensePenetrationBuff +
-        modTotals.defensePenetration +
-        abilityDotPen.defensePenetrationBuff;
+    const effectivePen = dmgStats.effectivePen;
     const effectiveDefense =
         enemyDefense * (1 + enemyDefenseModifier / 100) * (1 - effectivePen / 100);
     const damageReduction = effectiveDefense > 0 ? calculateDamageReduction(effectiveDefense) : 0;
@@ -1136,10 +1126,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const enemyDotMod = toEnemyDotModifier(roundEnemyDebuffs);
     // Ability-status self Out. DoT folds in per-round (KNOWN-DIFF b). Enemy Inc. DoT is
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
-    const dotMult = 1 + (selfDotModifier + enemyDotMod + abilityDotPen.dotDamageModifier) / 100;
+    const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     const affinityMult = 1 + affinityDamageModifier / 100;
-    const effectiveDefence = defence * (1 + defenceBuff / 100);
-    const effectiveHp = hp * (1 + hpBuff / 100);
+    const effectiveDefence = dmgStats.defence;
+    const effectiveHp = dmgStats.hp;
 
     // Per-round condition context for the Phase 1 condition engine. Built once
     // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
@@ -1157,6 +1147,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHpPct,
         selfHpPct: selfHpPctArg,
         targetHpPct: targetHpPctArg,
+        targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
     });
@@ -1286,7 +1277,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
     const nonCritFactor =
         (1 - damageReduction / 100) *
-        (1 + outgoingDamageBuff / 100) *
+        (1 + dmgStats.totals.outgoingDamageBuff / 100) *
         (1 + incomingDamageModifier / 100) *
         affinityMult;
     const postDefenseFactor = damageCritMultiplier * nonCritFactor;
@@ -1392,6 +1383,38 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
     }
 
+    // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
+    // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
+    // healEventOnly gate). gatedSkill holds the fired slot's abilities. DPS mode (dummy target,
+    // no buffs) → no-op → byte-identical. NOT inside the args.healing gate.
+    // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
+    // condition) so conditional purges only fire when their precondition holds.
+    if (targetId !== undefined) {
+        for (const ab of gatedSkill?.abilities ?? []) {
+            if (
+                ab.config.type === 'purge' &&
+                ab.trigger === 'on-cast' &&
+                conditionsMet(ab.conditions, ctx)
+            ) {
+                // 'all-enemies' purges only the single targetId in C2a (single-anchor;
+                // multi-victim AoE → sub-project E).
+                const removed = statusEngine.purge(targetId, ab.config.count);
+                // Emit purge-performed (C2b-1) — on-cast purges are never depth-guarded,
+                // so they ALWAYS emit (when something was removed), triggering Sefuba/
+                // Salvation. Suppressed at 0 removed (honest metric; mirrors cleanse-performed).
+                if (removed > 0) {
+                    bus.emit({
+                        type: 'purge-performed',
+                        casterId: actor.id,
+                        targetId,
+                        count: removed,
+                        round: r,
+                    });
+                }
+            }
+        }
+    }
+
     // ====================================================================
     // HEALING MODE — heal/shield/cleanse consumption against the live heal
     // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
@@ -1408,7 +1431,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // any other recipient resolves through lastTurnCtxByActor (may be stale/base for a
         // non-target non-self recipient — an accepted approximation, see plan).
         const incomingPctFor = (rid: string): number =>
-            rid === actor.id ? incomingHealBuff : healing.recipientIncomingHealPct(rid);
+            rid === actor.id
+                ? dmgStats.totals.incomingHealBuff
+                : healing.recipientIncomingHealPct(rid);
         // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
         // all-allies → every player in fixed source order. Shared by the heal + shield branches.
         const recipientsFor = (target: Ability['target']): string[] =>
@@ -1458,7 +1483,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // applierEffectiveMaxHp × hotPct% × stacks, attributed to the APPLIER's hotHeal
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
-        // but DO get the HOLDER's incomingHeal amplification (the local incomingHealBuff,
+        // but DO get the HOLDER's incomingHeal amplification (dmgStats.totals.incomingHealBuff,
         // since the holder is the acting actor). Holder === target → the consumption split
         // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal.
         //
@@ -1472,7 +1497,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
         // applier = status.casterId) and scheduled snapshot buffs (entry.activeSelfBuffs ×
         // selfBuffLookup, expanded SelectedGameBuff.parsedEffects.hotPct × stacks, applier = holder).
-        const holderIncomingFactor = 1 + incomingHealBuff / 100;
+        const holderIncomingFactor = 1 + dmgStats.totals.incomingHealBuff / 100;
         // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.
         const hotApplierMaxHp = (applierId: string | undefined): number | undefined => {
             if (applierId === undefined || applierId === actor.id) return effectiveHp;
@@ -1510,7 +1535,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
             // SelectedGameBuff carries the effective stacks already.
             for (const ab of entry.activeSelfBuffs) {
-                for (const b of expandBuffs(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
                     const hotPct = b.parsedEffects?.hotPct;
                     if (!hotPct) continue;
                     tickHot(undefined, hotPct, b.stacks ?? 1);
@@ -1564,7 +1589,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         (cfg.pct / 100) *
                         (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                         (1 + healModifier / 100) *
-                        (1 + outgoingHealBuff / 100) *
+                        (1 + dmgStats.totals.outgoingHealBuff / 100) *
                         (1 + incomingPctFor(rid) / 100);
                     healing.credit(actor.id, 'directHeal', raw);
                     if (rid === healing.targetId) {
@@ -1590,10 +1615,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     }
                 }
             } else if (cfg.type === 'cleanse') {
-                // Accumulate for the cleanse-performed emit in BOTH modes; only credit the
-                // player bucket OUTSIDE event-only mode (the enemy must not pollute the map).
-                cleansePerformedCount += cfg.count;
-                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', cfg.count);
+                // Real removal is player-side only (recipientsFor returns player ids; enemy-side
+                // actors run event-only and side-correct enemy routing is deferred). The metric
+                // and the cleanse-performed event reflect the ACTUAL number removed.
+                if (!healEventOnly) {
+                    let removed = 0;
+                    for (const rid of recipientsFor(ability.target)) {
+                        removed += statusEngine.cleanse(rid, cfg.count);
+                    }
+                    cleansePerformedCount += removed;
+                    healing.credit(actor.id, 'cleanseCount', removed);
+                } else {
+                    // Enemy-side event-only: no removal yet — preserve the cleanse-performed
+                    // cadence so on-enemy-cleansed reactors (Arum/Grif) stay unaffected.
+                    cleansePerformedCount += typeof cfg.count === 'number' ? cfg.count : 1;
+                }
             }
         }
 
@@ -1644,8 +1680,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         affinityMult,
         effectiveDefence,
         effectiveMaxHp: effectiveHp,
-        outgoingHealPct: outgoingHealBuff,
-        incomingHealPct: incomingHealBuff,
+        outgoingHealPct: dmgStats.totals.outgoingHealBuff,
+        incomingHealPct: dmgStats.totals.incomingHealBuff,
     };
 
     // Per-cast attacker-side scalars for the positional apply path (Task 7). Sourced from
@@ -1663,7 +1699,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               secondaryStatValue,
               hits,
               effectiveCritDamage,
-              outgoingDamageBuffPct: outgoingDamageBuff,
+              outgoingDamageBuffPct: dmgStats.totals.outgoingDamageBuff,
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
               attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',

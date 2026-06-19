@@ -34,10 +34,10 @@ describe('parseBuffEffects', () => {
                 critDamage: 15,
             });
         });
-        it('parses Outgoing Crit Power form', () => {
+        it('parses Crit Power in a combined buff (Crit Power + Hacking)', () => {
             expect(
                 parseBuffEffects('Tianchao Precision II', '+30% Crit Power, +20 Hacking')
-            ).toEqual({ critDamage: 30 });
+            ).toEqual({ critDamage: 30, hacking: 20 });
         });
         it('parses negative Crit Power', () => {
             expect(parseBuffEffects('Crit Power Down I', '-15% Crit Power')).toEqual({
@@ -184,9 +184,45 @@ describe('parseBuffEffects', () => {
         });
     });
 
+    describe('hacking', () => {
+        it('parses Hacking Up I', () => {
+            expect(parseBuffEffects('Hacking Up I', '+20 Hacking')).toEqual({ hacking: 20 });
+        });
+        it('parses Hacking Up II', () => {
+            expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({ hacking: 40 });
+        });
+        it('parses Hacking Up III', () => {
+            expect(parseBuffEffects('Hacking Up III', '+60 Hacking')).toEqual({ hacking: 60 });
+        });
+        it('parses Hacking Down I (negative)', () => {
+            expect(parseBuffEffects('Hacking Down I', '-20 Hacking')).toEqual({ hacking: -20 });
+        });
+        it('parses Hacking Down II (negative)', () => {
+            expect(parseBuffEffects('Hacking Down II', '-40 Hacking')).toEqual({ hacking: -40 });
+        });
+        it('parses Hacking in a combined buff (Crit Power + Hacking)', () => {
+            const result = parseBuffEffects(
+                'Tianchao Precision II',
+                '+30% Crit Power, +20 Hacking'
+            );
+            expect(result.hacking).toBe(20);
+            expect(result.critDamage).toBe(30);
+        });
+        it('parses Hacking in combined buff (Hacking + Speed)', () => {
+            const result = parseBuffEffects('Combined Buff', '+30 Hacking, +5% Speed');
+            expect(result.hacking).toBe(30);
+            expect(result.speed).toBe(5);
+        });
+        it('parses Hacking Module Overdrive (+9999)', () => {
+            expect(parseBuffEffects('Hacking Module Overdrive', '+9999 Hacking')).toEqual({
+                hacking: 9999,
+            });
+        });
+    });
+
     describe('no DPS effect', () => {
-        it('returns empty object for hacking-only buff', () => {
-            expect(parseBuffEffects('Hacking Up II', '+40 Hacking')).toEqual({});
+        it('returns empty object for buff with no recognized stat', () => {
+            expect(parseBuffEffects('Taunt', 'Redirects attacks to this unit')).toEqual({});
         });
         it('silently drops DoT value when name has neither Out. nor Inc. prefix', () => {
             expect(parseBuffEffects('DoT Damage Up I', '+20% DoT Damage')).toEqual({});

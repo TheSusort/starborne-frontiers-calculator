@@ -13,6 +13,7 @@ import {
     SkillSlot,
     Condition,
     AbilityTarget,
+    AbilityTrigger,
     ModifierChannel,
     ScalingRule,
 } from '../../types/abilities';
@@ -40,15 +41,24 @@ import {
     detectCheatDeathActivatedTrigger,
     detectDestroyedTrigger,
     detectEnemyCleanseTrigger,
+    detectEnemyPurgedTrigger,
+    detectAllyPurgedTrigger,
+    detectEndOfRoundPurgeTrigger,
+    detectKilledByDirectDamageTrigger,
+    detectMostBuffsTarget,
+    detectRepairedThisRoundCondition,
+    PURGE_MORE_RE,
     parseControlInflict,
     detectAllyCritTrigger,
     parseNoCrit,
+    parseDoesntBreakStasis,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
     parseHealAbilities,
     parseCleanse,
+    parsePurge,
     parseHealNoCrit,
     parseSkillEffects,
     classifyEnemyEffect,
@@ -946,6 +956,12 @@ function abilitiesFromText(
               // position-scoped). The parser only emits this all-allies heal when that shape is
               // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
               detectDestroyedTrigger(text, healPos) ??
+              // Sefuba p1/p2: a self-repair anchored in the "when this Unit purges … enemy"
+              // sentence rides the on-enemy-purged reactive trigger (position-scoped).
+              detectEnemyPurgedTrigger(text, healPos) ??
+              // Salvation p3: a repair anchored in the "when a buff is purged from an ally"
+              // sentence rides the on-ally-purged reactive trigger (position-scoped).
+              detectAllyPurgedTrigger(text, healPos) ??
               (h.kind === 'shield'
                   ? (detectDebuffInflictedTrigger(text, healPos) ??
                     // Defiant: a SHIELD anchored in the "when applying Stasis" clause rides the
@@ -1040,6 +1056,84 @@ function abilitiesFromText(
         });
     }
 
+    // Emit purge from active/charged (on-cast, C2a) AND from a PASSIVE slot WHEN a purge
+    // trigger is detected in the purge's own sentence (C2b-2): Iridium "when directly damaged"
+    // → on-attacked. Rhodium end-of-round + Faust killed-by-direct-damage detectors are added
+    // in later tasks. A passive purge with NO detected trigger is NOT emitted (Sefuba's chain
+    // stays on PURGE_MORE_RE below; Zeolite's "when dealing damage to a Defender" stays
+    // deferred). Purge is enemy-only (no support-flip).
+    //
+    // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
+    // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
+    // detectRepairedThisRoundCondition below). The engine cast path evaluates this condition;
+    // Task 3 populates targetRepairedThisRound on ConditionContext. Until then the condition
+    // always evaluates false, keeping production byte-identical (no Nayra fixture in any golden).
+    //
+    // C2a under-approximation (still open): the passive-voice "is Purged of all buffs" form
+    // (Lodolite charged) is NOT matched by PURGE_RE and therefore not emitted here — deferred.
+    // Amartya count-scaling under-counts to 1 — SAFE under direction.
+    for (const p of parsePurge(text)) {
+        const purgePos = text.search(/purge/i);
+        const passiveTrigger: AbilityTrigger | undefined =
+            // Iridium: self-subject "when directly damaged" → on-attacked. (Ignore the
+            // on-ally-attacked branch — no corpus ally-purge exists.)
+            detectDamageReactionTrigger(text, purgePos)?.trigger === 'on-attacked'
+                ? ('on-attacked' as const)
+                : (detectEndOfRoundPurgeTrigger(text, purgePos) ?? // Rhodium
+                  detectKilledByDirectDamageTrigger(text, purgePos)); // Faust
+        const trigger: AbilityTrigger | undefined =
+            slot === 'active' || slot === 'charged' ? 'on-cast' : passiveTrigger;
+        if (!trigger) continue; // passive purge with no recognized trigger → not emitted
+        // Most-buffs target override: applies regardless of slot (future-proofs active/charged
+        // most-buffs purges; harmless for current corpus where only Rhodium passive carries it).
+        const target: AbilityTarget = detectMostBuffsTarget(text, purgePos)
+            ? 'enemy-most-buffs'
+            : p.target;
+        const repairedCond = detectRepairedThisRoundCondition(text, purgePos);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'purge',
+                target,
+                trigger,
+                conditions: repairedCond ? [repairedCond] : [],
+                config: { type: 'purge', count: p.count },
+                autoFilled: true,
+            },
+            pos: purgePos >= 0 ? purgePos : MAX_POS,
+        });
+    }
+
+    // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
+    // Emitted here, separately from the generic loop above. Sefuba's passive sentences carry no
+    // recognized purge trigger (on-attacked/end-of-round/killed-by-direct), so the generic loop's
+    // trigger-detection `continue` skips both of Sefuba p2's parsePurge matches — there is no
+    // double-emit risk. Count: PURGE_MORE_RE capture group 1 (digit or 'a'/'an' → 1).
+    {
+        const purgeMoreMatch = PURGE_MORE_RE.exec(text);
+        if (purgeMoreMatch) {
+            const purgeMorePos = purgeMoreMatch.index;
+            if (detectEnemyPurgedTrigger(text, purgeMorePos)) {
+                // PURGE_MORE_RE group 1 is (\d+|a|an) — never 'all' — so a digit → its value,
+                // 'a'/'an' → 1. (Type stays number|'all' to match the purge config shape.)
+                const rawCount = purgeMoreMatch[1];
+                const count: number | 'all' = /^\d+$/.test(rawCount) ? parseInt(rawCount, 10) : 1;
+                out.push({
+                    ability: {
+                        id: nextId(),
+                        type: 'purge',
+                        target: 'enemy',
+                        trigger: 'on-enemy-purged',
+                        conditions: [],
+                        config: { type: 'purge', count },
+                        autoFilled: true,
+                    },
+                    pos: purgeMorePos,
+                });
+            }
+        }
+    }
+
     const charge = parseChargeGain(text);
     if (charge) {
         const chargePos = text.search(/charge/i);
@@ -1131,7 +1225,11 @@ function abilitiesFromText(
                 // Default on-cast grants (Nuqtu/Sustainer/Tormenter/Tygr) keep trigger on-cast.
                 trigger: extra.trigger ?? 'on-cast',
                 conditions: extra.conditions,
-                config: { type: 'extra-action', oncePerRound: extra.oncePerRound },
+                config: {
+                    type: 'extra-action',
+                    oncePerRound: extra.oncePerRound,
+                    endOfRound: extra.endOfRound,
+                },
                 autoFilled: true,
             },
             pos: extraPos >= 0 ? extraPos : MAX_POS,
@@ -1491,5 +1589,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         positioned.sort((a, b) => a.pos - b.pos);
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }
-    return { slots };
+
+    // §4.5 Akula exception: check ALL skill rows for the don't-break-Stasis clause and
+    // fold the result onto the ShipSkills object. Only the refit-active passive applies in
+    // game, but getShipSkillRows already resolves that — scan only the rows that were used
+    // for ability building (the same rows iterated above, now re-queried via getShipSkillRows).
+    const doesntBreakStasis = getShipSkillRows(ship).some((row) =>
+        parseDoesntBreakStasis(row.text)
+    );
+
+    return { slots, ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}) };
 }

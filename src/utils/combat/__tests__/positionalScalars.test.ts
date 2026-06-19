@@ -72,7 +72,6 @@ function makeRuntime(skills: ShipSkills): PlayerActorRuntime {
         defence: 0,
         hp: 20000,
         healModifier: 0,
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: AFFINITY_DAMAGE_MODIFIER,
@@ -124,7 +123,6 @@ function makeArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-        enemyHpDecline: 0,
     } as PlayerTurnArgs;
 }
 

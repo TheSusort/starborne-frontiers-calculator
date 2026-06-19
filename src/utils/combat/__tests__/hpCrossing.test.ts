@@ -79,7 +79,6 @@ const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput
     numRounds: 2,
     selfBuffs: [],
     enemyDebuffs: [],
-    debuffLandingChance: 1,
     selfDotModifier: 0,
     defensePenetrationBuff: 0,
     hasChargedSkill: false,
@@ -365,7 +364,7 @@ describe('Phase 4c PR 3 Task 3 — on-hp-threshold-crossed listener', () => {
             bus,
             perOwner: [{ ownerId, reactiveAbilities: [ra] }],
             enqueue: (intent) => enqueued.push(intent),
-            isEnemySide: (id) => id === 'enemy-dummy',
+            isOpposing: (id) => id === 'enemy-dummy',
         });
         const fire = (oldPct: number, newPct: number, targetId = ownerId, round = 1) =>
             bus.emit({ type: 'hp-changed', targetId, round, oldPct, newPct });
@@ -849,7 +848,6 @@ const tankActor = (id: string, hp: number, speed = 30): TeamActorEngineInput => 
             defence: 0,
             hp,
         },
-        debuffLandingChance: 1,
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         affinityDamageModifier: 0,
