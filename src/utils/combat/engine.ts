@@ -1911,30 +1911,30 @@ export function runCombat(input: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              applyHealToTarget: (raw) => {
+              applyHealToTarget: (raw, victim = healTarget) => {
                   // Dead target → all overheal. Otherwise consume up to the deficit against
                   // the target's CURRENT effective max HP (live ctx via recipientMaxHp).
-                  if (healTarget.currentHp <= 0) {
+                  if (victim.currentHp <= 0) {
                       return { consumed: 0, overheal: raw };
                   }
-                  const targetMaxHp = recipientMaxHp(healTarget.id);
+                  const targetMaxHp = recipientMaxHp(victim.id);
                   // Clamp the deficit at 0: a max-HP buff expiring can shrink effectiveMaxHp
                   // below currentHp, making (targetMaxHp - currentHp) negative — without the
                   // Math.max a heal would REDUCE the target's HP. Floor at 0 → consumed 0,
                   // overheal = raw (the whole heal is wasted, which is correct in that state).
-                  const consumed = Math.max(0, Math.min(raw, targetMaxHp - healTarget.currentHp));
-                  healTarget.currentHp += consumed;
-                  if (consumed > 0) repairedThisRound.add(healTarget.id);
+                  const consumed = Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp));
+                  victim.currentHp += consumed;
+                  if (consumed > 0) repairedThisRound.add(victim.id);
                   return { consumed, overheal: raw - consumed };
               },
-              grantShieldToTarget: (raw) => {
-                  if (healTarget.currentHp <= 0) return; // dead → no-op
-                  const targetMaxHp = recipientMaxHp(healTarget.id);
+              grantShieldToTarget: (raw, victim = healTarget) => {
+                  if (victim.currentHp <= 0) return; // dead → no-op
+                  const targetMaxHp = recipientMaxHp(victim.id);
                   // Capped at the CURRENT effective max HP. Note: if a max-HP buff later expires
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
                   // persists (we never shrink an existing shield) — acceptable, as the cap is only
                   // enforced at grant time and a shield is additive, never HP-reducing.
-                  healTarget.shieldPool = Math.min(healTarget.shieldPool + raw, targetMaxHp);
+                  victim.shieldPool = Math.min(victim.shieldPool + raw, targetMaxHp);
               },
               playerIds,
           }
