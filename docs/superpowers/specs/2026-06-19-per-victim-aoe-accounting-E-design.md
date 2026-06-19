@@ -123,6 +123,20 @@ path, existing non-positional fixtures add no enemy keys → byte-identical (see
   per victim but currently discards — E2 surfaces `applyToVictim`'s return through the per-victim hook in
   `applyPositionalDamage` / `drivePositionalApply`).
 
+> **E2 SHIPPED** (2026-06-19, commits `bff66b74`→`680957fb`). Per-victim leech is live on the positional path.
+> **T1** parametrized `applyHealToTarget` / `grantShieldToTarget` by victim (defaulting to `healTarget`) so the
+> pool-application closures now heal/shield any owner's OWN pool — byte-identical for every non-positional call.
+> **T2** added the inert `onVictimResolved` hook to `drivePositionalApply` carrying each victim's per-hit damage
+> outcome. **T3** procs standing leech (heal/shield off damage dealt) per footprint victim off that victim's own
+> dealt damage (covered cells already at reduced 50%), crediting the leeching owner's pool via the parametrized
+> closures, bypassing the cumulative `dmg()` accumulator (no double-count). **T4** expanded `takenLeeches`
+> registration from heal-target-only to per-owner (all player runtimes, mirroring `standingLeeches`) —
+> byte-identical. **T5** un-gated the `!enemyPositional` taken-leech block so each victim procs its own reactive
+> off the damage IT took into its OWN pool, with the per-victim Barrier carve-out (fully-blocked round reads 0)
+> and `requiresHpDamage` (Quixilver) holding per victim. Production byte-identical: **zero `.snap` movement**
+> across the whole PR (working-tree and `main...HEAD`), full suite green (2673 tests), lint 0 / tsc clean /
+> audit 0/141. E5's per-victim repair (Nayra) can now reuse the T1 parametrized closures, so **E5 is now thin**.
+
 **E3 — AoE purge/cleanse.** Replace the single-`targetId` removal with a loop over the footprint
 victims for "all-enemies"-style targets. There are **two single-anchor purge sites** to fix (cleanse
 already loops recipients): the **on-cast purge** at `playerTurn.ts:1392-1401` (the literal
