@@ -2047,26 +2047,28 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
-    // The heal target's passive damage-taken abilities (damage-leech spec §5): each enemy
-    // ATTACK on the target procs these AFTER the attack's shield-first drain. Sibling shape
-    // to the standing leeches above. Enemy attacks only ever hit the heal target in this
-    // model, so only the heal target's runtime is scanned. Healing mode only.
+    // Passive damage-taken abilities per owner (damage-leech spec §5): each enemy ATTACK on a
+    // victim procs that victim's own abilities AFTER the attack's shield-first drain. Sibling
+    // shape to the standing leeches above — scanned once at setup from every runtime, keyed by
+    // owner id. The non-positional consumption site reads only the heal target's list (enemy
+    // attacks land on the heal target in that model), so its behavior is unchanged; the
+    // per-owner map prepares the per-victim positional path (Phase-5 follow-up). Healing mode only.
     interface TakenLeech {
         kind: 'heal' | 'shield';
         pct: number;
         noCrit: boolean;
         requiresHpDamage: boolean;
     }
-    const takenLeeches: TakenLeech[] = [];
+    const takenLeechesByOwner = new Map<string, TakenLeech[]>();
     if (healTarget) {
-        const rt = runtimesById.get(healTarget.id);
-        if (rt) {
+        for (const [ownerId, rt] of runtimesById) {
+            const entries: TakenLeech[] = [];
             for (const slot of rt.castSkills.slots) {
                 if (slot.slot !== 'passive') continue;
                 for (const a of slot.abilities) {
                     const c = a.config;
                     if ((c.type === 'heal' || c.type === 'shield') && c.basis === 'damage-taken') {
-                        takenLeeches.push({
+                        entries.push({
                             kind: c.type,
                             pct: c.pct,
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
@@ -2075,6 +2077,7 @@ export function runCombat(input: CombatEngineInput): {
                     }
                 }
             }
+            if (entries.length > 0) takenLeechesByOwner.set(ownerId, entries);
         }
     }
 
@@ -4019,14 +4022,16 @@ export function runCombat(input: CombatEngineInput): {
                             // procing its OWN damage-taken reactive off the damage IT took) is the documented
                             // Phase-5 follow-up. Inert today either way (no fixture runs a damage-taken
                             // reactive in healing mode → takenLeeches is empty).
+                            const healTargetTakenLeeches =
+                                takenLeechesByOwner.get(healTarget!.id) ?? [];
                             if (
                                 !enemyPositional &&
-                                takenLeeches.length > 0 &&
+                                healTargetTakenLeeches.length > 0 &&
                                 healingCtx &&
                                 !barriered
                             ) {
                                 const rt = runtimesById.get(healTarget!.id);
-                                for (const e of takenLeeches) {
+                                for (const e of healTargetTakenLeeches) {
                                     if (e.requiresHpDamage && !(shieldBefore > 0 && hpDamage > 0)) {
                                         continue;
                                     }
