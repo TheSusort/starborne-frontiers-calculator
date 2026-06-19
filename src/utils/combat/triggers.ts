@@ -529,6 +529,11 @@ export interface IntentExecContext {
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
      *  sees it. Absent → the damage branch is inert (unit fixtures / DPS mode w/o delegate). */
     creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
+     *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
+     *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
+     *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
+    enemyWithMostBuffs?: (ownerId: string) => string | undefined;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -1218,7 +1223,12 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // and by on-enemy-purged for Sefuba's chain victim-routing) else the turn's
         // enemy. statusEngine is in ctx scope — call it directly (mirrors cleanse). Emit
         // purge-performed UNLESS this purge was itself triggered by a purge (depth-1 guard).
-        const targetId = intent.eventCtx?.counterTargetId ?? ctx.enemyId;
+        // Target: enemy-most-buffs (Rhodium) → the opposing actor with the most buffs;
+        // else the routed attacker/killer (counterTargetId — Iridium/Faust) else the turn's enemy.
+        const targetId =
+            intent.ability.target === 'enemy-most-buffs'
+                ? (ctx.enemyWithMostBuffs?.(intent.ownerId) ?? ctx.enemyId)
+                : (intent.eventCtx?.counterTargetId ?? ctx.enemyId);
         const removed = ctx.statusEngine.purge(targetId, cfg.count);
         if (removed > 0 && !intent.eventCtx?.fromPurgeEvent) {
             ctx.bus.emit({

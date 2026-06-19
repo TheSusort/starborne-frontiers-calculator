@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability, ShipSkills, AbilityTarget } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
-import type { StatusEngine } from '../statusEngine';
+import { createStatusEngine, type StatusEngine } from '../statusEngine';
+import { executeIntent, Intent, IntentExecContext } from '../triggers';
+import type { CombatActor } from '../state';
 
 // ---------------------------------------------------------------------------
 // C2b-2 Task 1: Integration — Iridium passive purge fires on-attacked.
@@ -265,5 +267,118 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
         const lastTurnEndedIdx = eventOrder.lastIndexOf('turn-ended:1');
         expect(roundEndedIdx).toBeGreaterThan(-1);
         expect(roundEndedIdx).toBeGreaterThan(lastTurnEndedIdx);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C2b-2 Task 3: executeIntent — enemy-most-buffs purge target resolution.
+//
+// Drives a purge intent through executeIntent directly (mirrors the
+// purgeReactive.test.ts executor harness) and asserts target selection:
+//   - target:'enemy-most-buffs' → ctx.enemyWithMostBuffs(ownerId) (NOT counterTargetId/enemyId)
+//   - target:'enemy'            → counterTargetId ?? enemyId (unchanged)
+//   - target:'enemy-most-buffs' with delegate returning undefined → ctx.enemyId fallback
+// ---------------------------------------------------------------------------
+
+/** Minimal purge intent for the executor tests (target configurable). */
+function makeMostBuffsIntent(opts?: {
+    target?: AbilityTarget;
+    counterTargetId?: string;
+}): Intent {
+    const { target = 'enemy-most-buffs', counterTargetId } = opts ?? {};
+    return {
+        ownerId: 'caster1',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'mb-purge-ab',
+            type: 'purge',
+            target,
+            trigger: 'end-of-round',
+            conditions: [],
+            config: { type: 'purge', count: 2 },
+        },
+        eventCtx: counterTargetId !== undefined ? { counterTargetId } : undefined,
+    } as unknown as Intent;
+}
+
+/** Minimal IntentExecContext for the most-buffs executor tests. The purge spy
+ *  records its target id and returns a fixed removed count (>0 so emit fires). */
+function makeMostBuffsCtx(
+    enemyWithMostBuffs?: (ownerId: string) => string | undefined
+): { ctx: IntentExecContext; purgedCalls: Array<[string, number | 'all']> } {
+    const purgedCalls: Array<[string, number | 'all']> = [];
+    const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    vi.spyOn(se, 'purge').mockImplementation((actorId, count) => {
+        purgedCalls.push([actorId, count]);
+        return 2;
+    });
+
+    const bus = createEventBus();
+    const ctx: IntentExecContext = {
+        round: 3,
+        enemy: { id: 'enemy-default' } as CombatActor,
+        enemyId: 'enemy-default',
+        statusEngine: se,
+        bus,
+        corrosionEntries: [],
+        infernoEntries: [],
+        pendingBombs: [],
+        runtimes: new Map([
+            [
+                'caster1',
+                {
+                    actor: { id: 'caster1' } as CombatActor,
+                    healModifier: 0,
+                    attack: 0,
+                    defence: 0,
+                    hp: 1000,
+                } as never,
+            ],
+        ]),
+        grantAllyCharges: () => {},
+        grantExtraAction: () => {},
+        playerIds: ['caster1'],
+        lastTurnCtxByActor: new Map(),
+        enemyHp: 100000,
+        cumulativeDamage: 0,
+        recordResisted: () => {},
+        enemyWithMostBuffs,
+    };
+
+    return { ctx, purgedCalls };
+}
+
+describe('C2b-2 T3: executeIntent — enemy-most-buffs purge target', () => {
+    it('target:enemy-most-buffs purges the id from enemyWithMostBuffs (not counterTargetId/enemyId)', () => {
+        const spy = vi.fn(() => 'most-buffed-enemy');
+        const { ctx, purgedCalls } = makeMostBuffsCtx(spy);
+        // counterTargetId is set too — must be IGNORED for the most-buffs branch.
+        executeIntent(makeMostBuffsIntent({ counterTargetId: 'routed-enemy' }), ctx);
+        expect(spy).toHaveBeenCalledWith('caster1');
+        expect(purgedCalls).toHaveLength(1);
+        expect(purgedCalls[0]).toEqual(['most-buffed-enemy', 2]);
+    });
+
+    it('target:enemy still resolves counterTargetId ?? enemyId (most-buffs delegate unused)', () => {
+        const spy = vi.fn(() => 'most-buffed-enemy');
+        const { ctx, purgedCalls } = makeMostBuffsCtx(spy);
+        executeIntent(
+            makeMostBuffsIntent({ target: 'enemy', counterTargetId: 'routed-enemy' }),
+            ctx
+        );
+        expect(spy).not.toHaveBeenCalled();
+        expect(purgedCalls[0]).toEqual(['routed-enemy', 2]);
+    });
+
+    it('target:enemy falls back to ctx.enemyId when counterTargetId absent', () => {
+        const { ctx, purgedCalls } = makeMostBuffsCtx(() => 'most-buffed-enemy');
+        executeIntent(makeMostBuffsIntent({ target: 'enemy' }), ctx);
+        expect(purgedCalls[0]).toEqual(['enemy-default', 2]);
+    });
+
+    it('target:enemy-most-buffs falls back to ctx.enemyId when delegate returns undefined', () => {
+        const { ctx, purgedCalls } = makeMostBuffsCtx(() => undefined);
+        executeIntent(makeMostBuffsIntent(), ctx);
+        expect(purgedCalls[0]).toEqual(['enemy-default', 2]);
     });
 });

@@ -21,7 +21,13 @@ export type AbilityType =
     | 'purge'
     | 'control';
 
-export type AbilityTarget = 'self' | 'ally' | 'all-allies' | 'enemy' | 'all-enemies';
+export type AbilityTarget =
+    | 'self'
+    | 'ally'
+    | 'all-allies'
+    | 'enemy'
+    | 'all-enemies'
+    | 'enemy-most-buffs';
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`

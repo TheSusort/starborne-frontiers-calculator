@@ -1012,6 +1012,8 @@ interface ReactiveSideCtx {
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
     selfHpPctFor?: (ownerId: string) => number;
+    /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
+    enemyWithMostBuffs?: (ownerId: string) => string | undefined;
 }
 
 /** Per-victim incoming accounting bucket (PR5a foundation — written in parallel with the
@@ -2918,9 +2920,27 @@ export function runCombat(input: CombatEngineInput): {
                         // has no closure (undefined → buildDrainContext defaults to 100). Enemy
                         // side: 100 for every owner until PR5. byte-identical to the old inline spread.
                         selfHpPctFor: sideCtx.selfHpPctFor,
+                        enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
                     });
                 }
             }
+        };
+
+        // C2b-2: opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff
+        // count via selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still
+        // respects the unremovable set). Ties → first by roster order (deterministic for goldens).
+        // Returns undefined for an empty roster (DPS dummy) → executor falls back to ctx.enemyId.
+        const mostBuffsAmong = (roster: CombatActor[]): string | undefined => {
+            let best: string | undefined;
+            let bestCount = -1;
+            for (const a of roster) {
+                const n = selfBuffNamesForOwners(statusEngine, [a.id]).length;
+                if (n > bestCount) {
+                    bestCount = n;
+                    best = a.id;
+                }
+            }
+            return bestCount > 0 ? best : undefined; // no buffs anywhere → no most-buffs target
         };
 
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
@@ -2932,6 +2952,7 @@ export function runCombat(input: CombatEngineInput): {
                 isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('player').grantAllyCharges,
                 selfHpPctFor: bySide('player').selfHpPctFor,
+                enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
             });
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
@@ -2952,6 +2973,7 @@ export function runCombat(input: CombatEngineInput): {
                 isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
+                enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
             });
         };
 
