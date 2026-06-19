@@ -238,7 +238,7 @@ export type AbilityConfig =
            *  Absent → unbounded (fires on every qualifying trigger). */
           oncePerCombat?: boolean;
       }
-    | { type: 'cleanse' | 'purge'; count: number }
+    | { type: 'cleanse' | 'purge'; count: number | 'all' }
     | {
           type: 'control';
           effect: ControlEffect;

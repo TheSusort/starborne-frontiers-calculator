@@ -1588,7 +1588,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 } else {
                     // Enemy-side event-only: no removal yet — preserve the cleanse-performed
                     // cadence so on-enemy-cleansed reactors (Arum/Grif) stay unaffected.
-                    cleansePerformedCount += cfg.count;
+                    cleansePerformedCount += typeof cfg.count === 'number' ? cfg.count : 1;
                 }
             }
         }

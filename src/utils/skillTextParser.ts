@@ -1992,7 +1992,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
 }
 
 // "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
-const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
+const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
 
 /**
  * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
@@ -2001,19 +2001,20 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+)/gi;
  */
 export function parseCleanse(
     text: string | null | undefined
-): { count: number; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
+): { count: number | 'all'; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const results: {
-        count: number;
+        count: number | 'all';
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CLEANSE_RE.exec(plain)) !== null) {
-        const count = parseInt(m[1], 10);
-        if (!count || isNaN(count)) continue;
+        const raw = m[1].toLowerCase();
+        const count: number | 'all' = raw === 'all' ? 'all' : parseInt(raw, 10);
+        if (count !== 'all' && (!count || isNaN(count))) continue;
         const sentence = sentenceAround(plain, m.index).toLowerCase();
         // explicitTarget mirrors parseHealAbilities: true when a recipient phrase was matched,
         // false when target defaulted to 'self' with no named recipient (the bare-cleanse case

@@ -3164,6 +3164,11 @@ describe('parseCleanse', () => {
     it('does not parse purge as cleanse', () => {
         expect(parseCleanse('<unit-aid>purges 1</unit-aid> buff from the enemy')).toEqual([]);
     });
+    it('parses "cleanse all" debuffs from all allies', () => {
+        expect(parseCleanse('cleanses all debuffs from all allies')).toEqual([
+            { count: 'all', target: 'all-allies', explicitTarget: true },
+        ]);
+    });
 });
 
 describe('parseHealNoCrit', () => {
