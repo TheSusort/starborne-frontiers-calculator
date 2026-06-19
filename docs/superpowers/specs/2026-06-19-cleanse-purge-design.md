@@ -14,7 +14,16 @@ The combat engine does not actually remove statuses.
   It never touches the status store. No debuff is ever removed.
 - **Purge** has a type (`abilities.ts:21`) and config shape (`{type:'cleanse'|'purge', count}`,
   `abilities.ts:241`) but **no parser and no executor** — `executeIntent` skips it (`triggers.ts:1158`,
-  "any other type → not-simulated"). It is annotation-only (`NOT_SIMULATED_TYPES` includes `'purge'`).
+  "any other type → not-simulated"). It is annotation-only (`NOT_SIMULATED_TYPES` at
+  `src/components/skills/simCoverage.ts:16` includes `'purge'`; removing it there also un-greys the
+  ability in the coverage UI / `AbilityCard` — a UI-visible change, not engine-only).
+
+**Two firing paths (verified, correctness-critical).** Cleanse fires from TWO disjoint code paths that
+never converge: (a) the **cast path**, fully inlined in `playerTurn.ts` (the `cfg.type === 'cleanse'`
+arm at `playerTurn.ts:1577-1581`, crediting `cleanseCount` at :1581, over the `healAbilities` loop), and
+(b) the **reactive path** via `executeIntent` (`triggers.ts:1117`). Most cleanse abilities are on-cast,
+so wiring only `executeIntent` would leave the common case credit-only. C must wire **both** sites for
+cleanse and for purge.
 
 Sub-project C makes both real: cleanse removes debuffs from allies; purge removes buffs from enemies.
 
@@ -67,20 +76,28 @@ Existing primitives to build on:
 
 ### 4.1 Application-order field
 
-Add a monotonic `appliedSeq: number` to both `BuffState` and `AccumulatingState`. The engine closure
-holds a single counter, incremented on every successful write and stamped onto the entry:
+Add a monotonic `appliedSeq: number` to both `BuffState` and `AccumulatingState` (NOT to
+`PersistentStackState` — persistent maps are never gathered by the primitive, so persistent entries need
+no seq). The engine closure holds a single counter, incremented on every successful write and stamped
+onto the entry. **Complete write-site enumeration** (verified against `statusEngine.ts`):
 
-- `applyTimedAbilityStatus` (ability-channel timed write)
-- the timed `upsertBuff` path (scheduled timed write)
-- accumulating entry creation / seed
-- **family-refresh** (`familyApplicationWins` re-application) re-stamps `appliedSeq` → a refreshed status
-  counts as newest.
+`BuffState` (finite-duration) creation/refresh:
+- `applyTimedAbilityStatus` (ability-channel timed write, `:993`)
+- the timed `upsertBuff` path (scheduled timed write, `:615`)
+- **family-refresh** — when `familyApplicationWins` returns true and an existing entry is overwritten,
+  re-stamp `appliedSeq` → a refreshed status counts as newest.
+
+`AccumulatingState`:
+- scheduled-accum seeds (`:390` self, `:418` enemy) and the ability-accum seed (`registerAbilityStatuses`,
+  `:921`) all create at `stacks: 0` — **inert until the first stack lands**.
+- **Stamp policy (resolved):** stamp `appliedSeq` at the `0 → positive` stack transition (the moment the
+  accumulating status first becomes active), applied at BOTH increment sites — `beginRound`'s
+  `incrementPerRound` (`:573`) and `sourceFired`'s `incrementSlot` (`:649`). Do **not** re-stamp on later
+  stack gains: a long-accumulating status is OLD, not new, so its recency anchor is when it first appeared.
+  Seed-time creation does not stamp (the entry isn't active yet).
 
 Round granularity (`appliedRound`) is too coarse — AoE / multi-debuff turns apply several statuses in
 one turn; a global sequence makes newest-first ordering deterministic for goldens.
-
-For accumulating entries, `appliedSeq` is stamped at creation; a stack-gain does **not** re-stamp
-(open detail — see §7, defaults to "creation-time" unless review prefers last-stack recency).
 
 ### 4.2 The removal primitive
 
@@ -101,41 +118,76 @@ removeNewestFirst(actorId, side: 'debuffs' | 'buffs', count: number | 'all'): nu
 
 Unknown id → lazy-empty maps → no-op (returns 0).
 
-### 4.3 Eligibility invariant (correctness-critical)
+### 4.3 Eligibility invariant (verified safe)
 
 The primitive must **never** remove an always-active / passive-sourced / aura named status — those
-re-derive and removal is futile (and wrong). The `isUnremovable` `permanent`-sentinel guard plus the
-fact that auras/always-active entries are not finite-duration `BuffState` entries should cover this, but
-**planning must verify the storage representation** of always-active named statuses written via
-`upsertBuff` (what `turnsRemaining` they carry) so the primitive provably skips them. If an always-active
-named entry can land in a timed map with a finite `turnsRemaining`, the gather step must additionally
-exclude always-active-sourced entries.
+re-derive and removal is futile (and wrong). **This is verified safe as built today** (traced in
+`statusEngine.ts`):
+
+- Scheduled always-active buffs are split into `alwaysSelf`/`alwaysEnemy` at construction (`:343-351`)
+  and only surface through `snapshot()` as `turnsRemaining: 'recurring'` (`:717-726`) — never written to
+  the timed maps. `upsertBuff` (`:601`) iterates only `timedSelf`/`timedEnemy`, pre-filtered to
+  `!isAlwaysActive`.
+- Ability-sourced always-active statuses are classified `kind:'aura'` (→ `auraSelfMaps`/`auraEnemyMaps`)
+  or `accumulating`; only `kind:'timed'` reaches `applyTimedAbilityStatus` and writes a finite `BuffState`.
+
+So `selfMaps`/`enemyMaps` contain only genuinely finite statuses, and `removeNewestFirst` is safe without
+any extra always-active exclusion. **Guard:** add an invariant note (and ideally a dev assertion) at the
+`kind:'timed'` write so a future change that routes an always-active named status through the timed path
+can't silently make it removable.
 
 ## 5. C1 — Cleanse (real removal)
 
 1. Add `appliedSeq` (§4.1) and the `removeNewestFirst` / `cleanse` primitive (§4.2).
 2. Expand `UNREMOVABLE_STATUSES` (debuffs): add `Barrier Recharging`, `Damage to Dot`.
-3. New engine delegate on the intent-exec context (mirroring `creditReactiveDamage` / `grantExtraAction`):
-   `ctx.cleanse?(actorId, count)`, wired from the engine where the statusEngine is in scope.
-4. Replace the cleanse executor branch (`triggers.ts:1117`): resolve recipients from
-   `intent.ability.target` (`self` → `[ownerId]`; `ally` → `[damagedAllyId ?? healTarget]`;
-   `all-allies` → `ctx.playerIds`) exactly as the heal branch does, and call `ctx.cleanse(rid, count)`
-   for each. **Keep** the existing `cleanseCount` healing-mode credit (UI metric) — real removal is
-   additive to it. Must engage on both cast-path and reactive firings (wherever the ability fires today).
-5. The `cleanse-performed` event already fires; `on-enemy-cleansed` reactors (Arum/Grif/Larkspur) keep working.
+3. **Parse `"all"`.** `CLEANSE_RE = /\bcleanses?\s+(\d+)/gi` (`skillTextParser.ts:1995`) only captures a
+   digit, so "cleanses all debuffs" is dropped today. Extend to `/\bcleanses?\s+(\d+|all)\b/gi` and widen
+   `count` to `number | 'all'` through `parseCleanse` → `buildShipAbilities` (`:1024-1040`) → the
+   `{type:'cleanse', count}` config (`abilities.ts:241`, today `count: number`). The `'all'` value flows
+   into `removeNewestFirst`. (Without this, §2.1's "all removes everything" is unreachable for cleanse.)
+4. **Reactive path** — new engine delegate on the intent-exec context (mirroring `creditReactiveDamage` /
+   `grantExtraAction`, supplied at `engine.ts` ~`:2852`/`:2891` where `statusEngine` is in scope):
+   `ctx.cleanse?(actorId, count)`. Replace the reactive cleanse branch (`triggers.ts:1117`): resolve
+   recipients from `intent.ability.target` (`self` → `[ownerId]`; `ally` → `[damagedAllyId ?? healTarget]`;
+   `all-allies` → `ctx.playerIds`) exactly as the heal branch (`triggers.ts:1068`), call
+   `ctx.cleanse(rid, count)` for each.
+5. **Cast path** — add the missing second call site at `playerTurn.ts:1577-1581` (the inlined
+   `cfg.type === 'cleanse'` arm): resolve recipients via the existing `recipientsFor(ability.target)`
+   (`playerTurn.ts:1399`) and call `statusEngine.cleanse(rid, count)` directly (statusEngine is already in
+   scope here — no delegate needed; consistent with how the cast path calls other statusEngine methods).
+6. **Keep** the existing `cleanseCount` healing-mode credit (UI metric) at both sites — real removal is
+   additive to it.
+7. The `cleanse-performed` event already fires; `on-enemy-cleansed` reactors (Arum/Grif/Larkspur) keep working.
 
 ## 6. C2 — Purge (buff removal, mirror)
 
-1. New `parsePurge` (`/\bpurges?\s+(\d+|all)/i`, target axis = enemy side), mirroring `parseCleanse`.
+1. New `parsePurge` (target axis = enemy side), mirroring `parseCleanse` but with broader count matching —
+   the corpus uses several phrasings:
+   - "purges N buffs" / "purges all buffs" → `(\d+|all)`
+   - "purges **a** buff" / "purges **an enemy** buff" (Lodolite p3, Sefuba p1/p2) → indefinite article
+     counts as 1.
+   - Proposed: `/\bpurges?\s+(?:(\d+|all)|an?\b)/i`, mapping `a`/`an` → count 1.
+   - "**is Purged of all** buffs" (Lodolite charge, passive voice, target = "the enemy with the most
+     Buffs") — a single-anchor most-buffs target. **Decision needed at plan time:** support the passive
+     form now (single anchor) or defer with the AoE note. Do not silently drop it.
 2. `buildShipAbilities` emits the `{type:'purge', count}` ability (today unparsed → annotation-only).
-   Remove `'purge'` from `NOT_SIMULATED_TYPES` once it is simulated.
+   Remove `'purge'` from `NOT_SIMULATED_TYPES` (`simCoverage.ts:16`) once simulated (UI-visible).
 3. `purge(targetId, count)` = `removeNewestFirst(targetId, 'buffs', count)` (same primitive, buff side).
-4. New `ctx.purge?(actorId, count)` delegate; replace the purge skip (`triggers.ts:1158`).
-   Target = the turn's selected enemy (single-anchor). AoE-purge across multiple enemies is deferred to
-   sub-project E (per-victim AoE accounting), consistent with all other multi-target work.
+4. Wire **both** firing paths (mirror C1.4/C1.5): the reactive `executeIntent` purge branch (replacing the
+   skip at `triggers.ts:1158`) via a new `ctx.purge?(actorId, count)` delegate, AND the cast path in
+   `playerTurn.ts` (add a `cfg.type === 'purge'` arm calling `statusEngine.purge` directly). Target = the
+   turn's selected enemy (single-anchor). AoE-purge across multiple enemies is deferred to sub-project E
+   (per-victim AoE accounting), consistent with all other multi-target work.
 5. Expand `UNREMOVABLE_STATUSES` (buffs): add `Protection` (Magnetized Shielding already present).
-6. `purge-performed` event + reactive trigger (e.g. `on-enemy-purged` / `on-ally-purged`) — add **only if**
-   the corpus has ships reacting to purge (check in planning; YAGNI otherwise).
+6. **`purge-performed` event + reactive triggers are IN SCOPE** (the corpus has purge reactors):
+   - **Salvation** p3 — "when a buff is purged from an ally, repairs that ally 5%" → `on-ally-purged`.
+   - **Sefuba** — "when this Unit purges a buff from an enemy, repairs itself…" and p2 "…**purges 1 more
+     buff** from the enemy" → `on-enemy-purged` whose reaction **re-enters purge**.
+   Add the `purge-performed` event and the `on-enemy-purged` + `on-ally-purged` trigger keys.
+   **Chain guard:** Sefuba's purge-triggers-purge must not recurse unbounded. Follow the heal path's
+   no-re-emit convention (`triggers.ts:1111`): the executor's own purge removal does NOT re-emit
+   `purge-performed` from within a reactive purge (only cast-path / direct purges emit), so a reactive
+   purge cannot re-trigger another reactive purge. Pin this in a test.
 
 ## 7. Resolved decisions & open details
 
@@ -145,11 +197,17 @@ exclude always-active-sourced entries.
   statuses, never aura/always-active continuous modifiers (§2.3).
 - Non-persistent accumulating statuses are removable (§2.4).
 
-**Open details for planning / spec review:**
-- Accumulating `appliedSeq` stamp: creation-time (default) vs last-stack-gain recency.
-- Exact engine wiring site(s) for the `cleanse`/`purge` delegates and the cast-vs-reactive firing paths.
-- Whether any ship reacts to purge (drives the `purge-performed` event decision).
-- Storage representation of always-active named statuses (the §4.3 invariant verification).
+**Resolved during spec review (2026-06-19):**
+- Accumulating `appliedSeq` stamp = at the `0→positive` stack transition, both increment sites (§4.1).
+- Cleanse/purge fire from TWO paths: cast (`playerTurn.ts`, direct statusEngine call) + reactive
+  (`executeIntent`, via delegate). Both wired (§5.4-5.5, §6.4).
+- Purge reactors exist (Salvation, Sefuba) → `purge-performed` event + triggers in scope, with chain
+  guard (§6.6).
+- Always-active named statuses verified to never reach the timed maps (§4.3) — invariant guard added.
+
+**Open details for plan time:**
+- Whether to support the passive "is Purged of all buffs" target form now or defer (§6.1).
+- Final naming of the trigger keys (`on-enemy-purged` / `on-ally-purged`).
 
 ## 8. Golden gate (honesty)
 
@@ -159,7 +217,11 @@ exclude always-active-sourced entries.
   a no-op; purge of a dummy's buffs is a no-op for existing fixtures.
 - **Healing mode and two-team sim** will see **audited churn** wherever a cleanse/purge now legitimately
   removes a real status that previously lingered (e.g. a healer cleansing a DoT off the tank changes
-  subsequent incoming damage). Every delta explained line-by-line; **never** blind `vitest -u`.
+  subsequent incoming damage). The moment cast-path cleanse becomes real (§5.5), churn is likely to span
+  **several existing healing suites** — `healing.test.ts`, `events.test.ts`, `enemyActions.test.ts`,
+  `leech.test.ts` — wherever a cleanse coexists with an enemy-applied debuff on the tank, including the
+  `cleanse-performed`/leech interaction paths. Re-baseline per-file with line-by-line justification; every
+  delta explained; **never** blind `vitest -u`.
 
 This matches the B-series gate convention. `audit:skills` 0/141, lint, and `tsc --noEmit` clean every PR.
 
