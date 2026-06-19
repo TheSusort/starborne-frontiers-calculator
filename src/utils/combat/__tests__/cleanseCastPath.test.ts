@@ -64,7 +64,7 @@ describe('C1 Task 3: cast-path cleanse removes debuffs (player-side)', () => {
         ],
     });
 
-    // Enemy attacker: a FASTER (speed 100) actor whose active cast applies a single
+    // Enemy attacker: a FASTER (speed 200) actor whose active cast applies a single
     // removable debuff (Attack Down, application 'apply' → lands unless affinity
     // disadvantage; none here → always lands) to the heal target.
     const debuffEnemy = (count = 1) => ({

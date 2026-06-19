@@ -451,8 +451,9 @@ export interface IntentExecContext {
         oncePerRound: boolean,
         endOfRound: boolean
     ) => void;
-    /** The FIXED player-id source order ([focusActorId, ...team ids in input order]) — the
-     *  same order Task 5 uses for ally/all-allies buff recipients (deterministic application). */
+    /** Same-side ally/recipient id order for the current drain side: player team ids when
+     *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
+     *  sideCtx.recipientIds — used for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
     /** Enemy attacker ids (healing mode; Task 7). The opposing side for a PLAYER drain owner's
      *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from

@@ -138,29 +138,9 @@ describe('statusEngine.cleanse (newest-first removal)', () => {
         // Load-bearing case: proves that enemyMaps (timed) and accumEnemyMaps (accumulating)
         // are gathered into one candidate list and sorted together by appliedSeq.
 
-        // Scenario A: timed debuff applied FIRST (older), then accumulating debuff goes 0→positive
-        // (newer). cleanse(1) must remove the accumulating one (newer) and leave the timed one (older).
-        const accumDebuffA: RegisteredAbilityStatus = {
-            kind: 'accumulating',
-            side: 'enemy',
-            sourceSlot: 'active',
-            conditions: [],
-            stackTrigger: 'per-round',
-            maxStacks: 5,
-            payload: { buffName: 'Vulnerability', stacks: 1, parsedEffects: {} },
-        };
-        const engA = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-        engA.registerAbilityStatuses([accumDebuffA], 'attacker', 'v1');
-
-        engA.beginRound(1);
-        // Apply the TIMED debuff first → gets appliedSeq=1 (older).
-        engA.applyTimedAbilityStatus(1, mkTimed('Attack Down'), 'attacker', 'v1');
-        // The per-round accum increment already fired at beginRound above,
-        // so Vulnerability stacks went 0→1 inside beginRound (before applyTimedAbilityStatus).
-        // But beginRound(1) ran BEFORE applyTimedAbilityStatus, so Vulnerability's seq < Attack Down's seq.
-        // We need the accum to be NEWER. Run a second round so accum ticks again — but that
-        // would also tick if already >0. Instead: use a per-active trigger so we control the stamp.
-        // Re-do with per-active trigger so we can fire it AFTER the timed apply.
+        // Scenario A: timed debuff applied FIRST (older appliedSeq), then accumulating debuff
+        // goes 0→1 AFTER via per-active trigger (newer appliedSeq). cleanse(1) must remove the
+        // accumulating one (newer) and leave the timed one (older).
         const accumDebuffB: RegisteredAbilityStatus = {
             kind: 'accumulating',
             side: 'enemy',
