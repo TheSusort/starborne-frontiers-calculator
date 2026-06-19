@@ -1055,9 +1055,11 @@ export interface HealingRoundEngine {
 /**
  * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
  * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
- * core; the four bits that differ between the healing-mode player intake and (future)
- * other intakes are injected here so the core stays caller-agnostic. The legacy player
- * wrapper supplies a sink that performs exactly the original closure's mutations.
+ * core; the per-direction intake accounting is injected here so the core stays
+ * caller-agnostic. Both directions now record into the per-actor `perActorIncoming` map keyed
+ * by the victim's id — `playerSink` for enemy→player (tank intake) and `enemySink` for
+ * player→enemy (E1 symmetric surface). The two bodies are identical today but kept separate so
+ * E2 (per-victim leech) can diverge the enemy side without touching the player path.
  */
 interface DamageAccountingSink {
     /** today: intakeFor(victimId).incoming += amount */
