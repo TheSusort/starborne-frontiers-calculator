@@ -5,7 +5,8 @@
  * that the combat engine can consume.
  *
  * Gear-set abilities are resolved via GEAR_SET_ABILITIES (currently: Leech).
- * Implant abilities are resolved via IMPLANT_ABILITIES (currently: Bloodthirst).
+ * Implant abilities are resolved via IMPLANT_ABILITIES (currently: Bloodthirst,
+ * Intrusion, Arcane Siege, Warpstrike).
  *
  * D-PR1 approach (registry, not text-parsing): effect values are baked from the
  * source data in implants.ts / gearSets.ts per the registries above. A variant's
@@ -42,7 +43,7 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
 };
 
 // ---------------------------------------------------------------------------
-// Implant ability registry (D-PR1: Bloodthirst only)
+// Implant ability registry (D-PR1: Bloodthirst; D-PR2: Intrusion, Arcane Siege, Warpstrike)
 // ---------------------------------------------------------------------------
 //
 // Each entry maps an implant name to a per-rarity builder.  A builder returns
