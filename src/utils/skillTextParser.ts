@@ -2118,6 +2118,10 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
 // (no "purges" token). Must NOT match "cleanses".
 const PURGE_RE = /\bpurges?\s+(?:(\d+|all)|an?\b)/gi;
 
+// E4: "for every N% crit power" — purge-count scaling on crit power (Amartya).
+// Sentence-scoped (applied to the purge's own sentence). Matches "for every 50% crit power".
+const CRIT_POWER_SCALING_RE = /for\s+every\s+(\d+)\s*%?\s*crit\s+power/i;
+
 // "cleanses N" — must NOT match "purges". Trailing clause names the recipient.
 const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
 
@@ -2134,13 +2138,19 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
  */
 export function parsePurge(
     text: string | null | undefined
-): { count: number | 'all'; target: 'enemy' | 'all-enemies'; explicitTarget: boolean }[] {
+): {
+    count: number | 'all';
+    target: 'enemy' | 'all-enemies';
+    explicitTarget: boolean;
+    countScaling?: { stat: 'critDamage'; per: number };
+}[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const results: {
         count: number | 'all';
         target: 'enemy' | 'all-enemies';
         explicitTarget: boolean;
+        countScaling?: { stat: 'critDamage'; per: number };
     }[] = [];
     PURGE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -2161,7 +2171,12 @@ export function parsePurge(
         const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
             ? 'all-enemies'
             : 'enemy';
-        results.push({ count, target, explicitTarget: true });
+        const scaleMatch = CRIT_POWER_SCALING_RE.exec(sentence);
+        const countScaling =
+            scaleMatch && typeof count === 'number'
+                ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
+                : undefined;
+        results.push({ count, target, explicitTarget: true, ...(countScaling ? { countScaling } : {}) });
     }
     return results;
 }

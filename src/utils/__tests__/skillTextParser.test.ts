@@ -3195,7 +3195,7 @@ describe('parsePurge', () => {
     });
     it('parses "purges 1 buff from all enemies" (Amartya)', () => {
         expect(parsePurge('purges 1 buff from all enemies for every 50% crit power')).toEqual([
-            { count: 1, target: 'all-enemies', explicitTarget: true },
+            { count: 1, target: 'all-enemies', explicitTarget: true, countScaling: { stat: 'critDamage', per: 50 } },
         ]);
     });
     it('parses "purges a buff from an enemy" (Sefuba p2 / Lodolite p3)', () => {
@@ -3219,6 +3219,25 @@ describe('parsePurge', () => {
         expect(result).toHaveLength(2);
         expect(result[0]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
         expect(result[1]).toEqual({ count: 1, target: 'enemy', explicitTarget: true });
+    });
+});
+
+describe('parsePurge — E4 crit-power scaling', () => {
+    it('extracts countScaling from "for every 50% crit power"', () => {
+        const text =
+            'This Unit deals 210% damage and purges 1 buff from all enemies for every 50% crit power this Unit has.';
+        const [p] = parsePurge(text);
+        expect(p).toMatchObject({
+            count: 1,
+            target: 'all-enemies',
+            countScaling: { stat: 'critDamage', per: 50 },
+        });
+    });
+
+    it('leaves countScaling undefined for a plain purge', () => {
+        const [p] = parsePurge('This Unit purges 2 buffs from the enemy.');
+        expect(p.count).toBe(2);
+        expect(p.countScaling).toBeUndefined();
     });
 });
 
