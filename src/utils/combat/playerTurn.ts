@@ -286,6 +286,11 @@ export interface PlayerTurnArgs {
      * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
      */
     aoeVictimIds?: string[];
+    /** D-PR3: victim-side incoming %-reduction against the bound target.
+     *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
+     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
+    incomingReductionNonCritPct?: number;
+    incomingReductionCritFamilyPct?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1292,13 +1297,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
     // multiplier 1 (the "cannot critically hit" path, unchanged).
     const critFraction = drawHits > 0 ? critHits / drawHits : 0;
-    const damageCritMultiplier = 1 + critFraction * (effectiveCritDamage / 100);
+    // D-PR3 victim-side incoming %-reduction against the bound target (aggregate path).
+    // Both default 0 → byte-identical to the prior fold.
+    const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
+    const R = args.incomingReductionCritFamilyPct ?? 0;
+    // Crit-family reduction applies to the crit FRACTION only (algebraic split:
+    // 1 + cf*cd/100 = (1-cf) + cf*(1+cd/100), so multiply the crit term by (1 - R/100)).
+    // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream
+    // uses — postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are
+    // the SAME enemy attack against the SAME victim, so the victim's crit reduction applies
+    // to both. With R=0 this equals 1 + critFraction*(effectiveCritDamage/100) exactly.
+    const damageCritMultiplier =
+        1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * (1 - R / 100);
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
+    // equipNonCrit subtracts a victim incoming reduction (applies to ALL hits); 0 → unchanged.
     const nonCritFactor =
         (1 - damageReduction / 100) *
         (1 + dmgStats.totals.outgoingDamageBuff / 100) *
-        (1 + incomingDamageModifier / 100) *
+        (1 + (incomingDamageModifier - equipNonCrit) / 100) *
         affinityMult;
     const postDefenseFactor = damageCritMultiplier * nonCritFactor;
     const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;

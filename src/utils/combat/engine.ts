@@ -4021,9 +4021,40 @@ export function runCombat(input: CombatEngineInput): {
                             // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                             // produced no ctx either; this actor has no live DoTs to attribute).
                         } else {
+                            // D-PR3 Task 9: victim-side incoming %-reduction against the bound
+                            // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
+                            // `tgt` is the victim (healTarget on the legacy path); `actor` is the
+                            // acting enemy attacker. The non-crit baseline is the reduction with
+                            // didCrit:false; the crit-family DELTA is the extra reduction a crit adds.
+                            // Guarded by length so a victim with no incoming abilities passes 0/0 →
+                            // byte-identical. (The positional enemy path applies its own per-sub-hit
+                            // reduction via drivePositionalApply; this fold serves the legacy single-apply.)
+                            const tgtIncoming = incomingAbilitiesOf(tgt.id);
+                            const incomingReductionNonCritPct = tgtIncoming.length
+                                ? incomingReductionForHit(tgtIncoming, {
+                                      didCrit: false,
+                                      attackerStealthed: isStealthed(actor.id),
+                                      victimStealthed: isStealthed(tgt.id),
+                                      victimStasised: isStasised(tgt.id),
+                                      hitIndexThisRound: 0,
+                                  })
+                                : 0;
+                            const incomingReductionCritAll = tgtIncoming.length
+                                ? incomingReductionForHit(tgtIncoming, {
+                                      didCrit: true,
+                                      attackerStealthed: isStealthed(actor.id),
+                                      victimStealthed: isStealthed(tgt.id),
+                                      victimStasised: isStasised(tgt.id),
+                                      hitIndexThisRound: 0,
+                                  })
+                                : 0;
+                            const incomingReductionCritFamilyPct =
+                                incomingReductionCritAll - incomingReductionNonCritPct;
                             const enemyTurn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
                                 onHitBreakStasis: enemyBreakHook,
+                                incomingReductionNonCritPct,
+                                incomingReductionCritFamilyPct,
                             });
                             // §4.5: resolve Stasis break for player victims hit by this enemy.
                             if (enemyTurnStasisHitVictims.size > 0) {
