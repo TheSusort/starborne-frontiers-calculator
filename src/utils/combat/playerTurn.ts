@@ -1089,6 +1089,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        selfShielded: actor.shieldPool > 0,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [
