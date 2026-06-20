@@ -190,6 +190,65 @@ describe('applyPositionalDamage', () => {
         expect(coveredCalls[0].damage).toBeCloseTo(originCalls[0].damage * 0.5, 6);
     });
 
+    it('incomingReductionFor threads per-victim reduction into the damage (vs an unsupplied baseline)', () => {
+        const pattern = parsePattern('Pattern-Base');
+        const target = parseTarget('front');
+
+        const run = (incomingReductionFor?: (v: CombatActor, c: boolean) => number): number => {
+            const only = actor('only', 'M4', 1e9);
+            let landed = 0;
+            applyPositionalDamage({
+                hitCrits: [false],
+                scalars: { ...scalars(), hits: 1 },
+                pattern,
+                actorPosition: 'M2',
+                target,
+                opposingLiving: [only],
+                defenseProfileOf: profile,
+                applyToVictim: (victim, damage) => {
+                    landed = damage;
+                    victim.currentHp -= damage;
+                    return { shieldBefore: 0, hpDamage: damage, barriered: false };
+                },
+                incomingReductionFor,
+            });
+            return landed;
+        };
+
+        const baseline = run(); // unsupplied → 0 → byte-identical to pre-D-PR3
+        const reduced = run(() => 40); // 40-point incoming reduction folds in
+
+        // defence 0 + neutral affinity + no buffs → incoming factor is the only modifier.
+        expect(reduced).toBeCloseTo(baseline * 0.6, 6);
+    });
+
+    it('incomingReductionFor receives the per-hit crit outcome', () => {
+        const pattern = parsePattern('Pattern-Base');
+        const target = parseTarget('front');
+        const only = actor('only', 'M4', 1e9);
+        const seenCrits: boolean[] = [];
+
+        applyPositionalDamage({
+            hitCrits: [true, false],
+            scalars: { ...scalars(), hits: 2, effectiveCritDamage: 50 },
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving: [only],
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            incomingReductionFor: (_v, didCrit) => {
+                seenCrits.push(didCrit);
+                return 0;
+            },
+        });
+
+        expect(seenCrits).toEqual([true, false]);
+    });
+
     it('hitCrits shorter than hits → missing entries treated as false (no crash)', () => {
         const pattern = parsePattern('Pattern-Base');
         const target = parseTarget('front');

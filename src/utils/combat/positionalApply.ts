@@ -117,6 +117,13 @@ export function applyPositionalDamage(args: {
         outcome: VictimDamageOutcome,
         didCrit: boolean
     ) => void;
+    /**
+     * OPTIONAL per-sub-hit victim-side incoming %-reduction hook (D-PR3). Invoked per footprint
+     * victim with that victim's per-hit crit outcome; the returned percentage points are folded
+     * additively into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical
+     * (inert for victims without an incoming-reduction ability).
+     */
+    incomingReductionFor?: (victim: CombatActor, didCrit: boolean) => number;
 }): void {
     const {
         hitCrits,
@@ -131,6 +138,7 @@ export function applyPositionalDamage(args: {
         applyToVictim,
         emitHit,
         onVictimResolved,
+        incomingReductionFor,
     } = args;
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
@@ -158,7 +166,14 @@ export function applyPositionalDamage(args: {
             anchorActor.position,
             opposingLiving
         )) {
-            const dmg = victimHitDamage(scalars, defenseProfileOf(victim), didCrit, roleScale);
+            const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
+            const dmg = victimHitDamage(
+                scalars,
+                defenseProfileOf(victim),
+                didCrit,
+                roleScale,
+                equipReductionPct
+            );
             const outcome = applyToVictim(victim, dmg);
             emitHit?.(victim, dmg, didCrit);
             onVictimResolved?.(victim, dmg, outcome, didCrit);
