@@ -102,6 +102,10 @@ describe('E5 §4.1: enemy heals restore enemy HP into its own pool', () => {
         // Scope to the HEALING surface: the player focus attacks the enemy healer, so the
         // enemy id legitimately appears in the DAMAGE perTargetDamage — that's not pollution.
         // The enemy heal must contribute NOTHING to the player healing buckets (no credit).
-        expect(JSON.stringify(result.healing)).not.toContain('enemy-healer');
+        // perActor is a Map, so JSON.stringify would serialize it to {} — check membership directly.
+        const hasEnemyHealingCredits = result.healing?.rounds.some((round) =>
+            round.perActor.has('enemy-healer')
+        );
+        expect(hasEnemyHealingCredits).toBe(false);
     });
 });

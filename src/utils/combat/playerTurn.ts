@@ -1487,6 +1487,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             let best: string | undefined;
             let bestFrac = Infinity;
             for (const id of healing.enemyIds) {
+                if (id === actor.id) continue; // caster is the fallback only, never a primary candidate
                 const a = healing.recipientActor(id);
                 if (!a || a.currentHp <= 0) continue;
                 const maxHp = healing.recipientMaxHp(id);
