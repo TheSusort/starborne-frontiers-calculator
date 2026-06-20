@@ -1055,9 +1055,11 @@ export interface HealingRoundEngine {
 /**
  * Side-specific accounting hooks for {@link applyVictimDamage}. Everything keyed off the
  * `victim` (Barrier/shield/HP/Cheat-Death/recordDestroyed/hp-changed) lives in the shared
- * core; the four bits that differ between the healing-mode player intake and (future)
- * other intakes are injected here so the core stays caller-agnostic. The legacy player
- * wrapper supplies a sink that performs exactly the original closure's mutations.
+ * core; the per-direction intake accounting is injected here so the core stays
+ * caller-agnostic. Both directions now record into the per-actor `perActorIncoming` map keyed
+ * by the victim's id — `playerSink` for enemy→player (tank intake) and `enemySink` for
+ * player→enemy (E1 symmetric surface). The two bodies are identical today but kept separate so
+ * E2 (per-victim leech) can diverge the enemy side without touching the player path.
  */
 interface DamageAccountingSink {
     /** today: intakeFor(victimId).incoming += amount */
@@ -2430,19 +2432,25 @@ export function runCombat(input: CombatEngineInput): {
             }
         ): { shieldBefore: number; hpDamage: number; barriered: boolean } =>
             applyVictimDamage(damage, victim, playerSink, cause);
-        // Player→enemy intake (Phase 4 PR1, Task 3) — the symmetric THIN wrapper over
+        // Player→enemy intake (E1 — symmetric incoming surface). The symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
-        // victim still runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path (enemies
-        // actually take damage and can die), but the per-actor intake buckets here are the TANK's
-        // incoming accounting — they must NOT move when a player hits an enemy. So this sink's
-        // accounting hooks are no-ops for PR 1
-        // (enemy-incoming accounting is the deferred Phase-5 symmetric surface). The enemy victim
-        // is never the heal target, so no heal-target death-round bookkeeping applies. Task 8
-        // wires a caller.
+        // victim runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path AND now records
+        // its incoming / shield-absorbed / barrier-absorbed into the same per-actor `intakeFor`
+        // bucket the playerSink uses — keyed by the ENEMY victim's id (ids are globally unique
+        // across sides, so one map serves both directions). `applyOutgoingToEnemy` is only invoked
+        // on the positional apply path (drivePositionalApply), so non-positional fixtures never add
+        // an enemy key → byte-identical. The enemy victim is never the heal target, so no
+        // heal-target death-round bookkeeping applies. E2 (per-victim leech) reads this surface.
         const enemySink: DamageAccountingSink = {
-            addIncoming: (_amount, _victimId) => {},
-            addShieldAbsorbed: (_amount, _victimId) => {},
-            addBarrierAbsorbed: (_amount, _victimId) => {},
+            addIncoming: (amount, victimId) => {
+                intakeFor(victimId).incoming += amount;
+            },
+            addShieldAbsorbed: (amount, victimId) => {
+                intakeFor(victimId).shieldAbsorbed += amount;
+            },
+            addBarrierAbsorbed: (amount, victimId) => {
+                intakeFor(victimId).barrierAbsorbed += amount;
+            },
         };
         const applyOutgoingToEnemy = (
             damage: number,
