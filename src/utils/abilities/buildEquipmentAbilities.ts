@@ -24,11 +24,11 @@
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { GearPiece } from '../../types/gear';
-import { Ability } from '../../types/abilities';
+import { Ability, IncomingCondition } from '../../types/abilities';
 import { Ship } from '../../types/ship';
 
 // ---------------------------------------------------------------------------
-// Gear-set ability registry (D-PR1: Leech only)
+// Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
 const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
@@ -38,6 +38,21 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
         trigger: 'on-cast',
         conditions: [],
         config: { type: 'heal', pct: 15, basis: 'damage-dealt', leechScope: 'all', noCrit: true },
+        autoFilled: true,
+    }),
+    // Hardened: reduce incoming direct-damage crits by 5% (crit-reduction family).
+    HARDENED: () => ({
+        type: 'incoming-reduction',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'incoming-crit',
+            pct: 5,
+            critFamily: true,
+        },
         autoFilled: true,
     }),
 };
@@ -86,6 +101,63 @@ const WARPSTRIKE_PCT: Record<string, number> = {
     epic: 4,
     legendary: 5,
 };
+
+// D-PR3: incoming-reduction implant value tables
+const VOIDSHADE_PCT: Record<string, number> = {
+    common: 4,
+    uncommon: 8,
+    rare: 12,
+    epic: 16,
+    legendary: 20,
+};
+const NEBULA_PCT: Record<string, number> = {
+    common: 7,
+    uncommon: 14,
+    rare: 21,
+    epic: 28,
+    legendary: 35,
+};
+const HYPERION_PCT: Record<string, number> = {
+    common: 7,
+    uncommon: 14,
+    rare: 21,
+    epic: 28,
+    legendary: 35,
+};
+const VORTEX_VEIL_PCT: Record<string, number> = {
+    common: 6,
+    uncommon: 12,
+    rare: 18,
+    epic: 24,
+    legendary: 30,
+};
+
+// D-PR3: incoming-block implant value tables
+const IRONCLAD_BLOCK: Record<string, { chance: number; pct: number }> = {
+    common: { chance: 0.1, pct: 0.3 },
+    rare: { chance: 0.14, pct: 0.4 },
+    epic: { chance: 0.16, pct: 0.45 },
+    legendary: { chance: 0.2, pct: 0.5 },
+};
+const SHADOWGUARD_CHANCE: Record<string, number> = { uncommon: 0.07, epic: 0.12, legendary: 0.16 };
+
+// D-PR3: shared helper for incoming-reduction abilities
+function mkReduction(
+    pct: number | undefined,
+    scope: 'direct' | 'dot',
+    condition: IncomingCondition,
+    critFamily: boolean
+): Omit<Ability, 'id'> | undefined {
+    if (pct === undefined) return undefined;
+    return {
+        type: 'incoming-reduction',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'incoming-reduction', scope, condition, pct, critFamily },
+        autoFilled: true,
+    };
+}
 
 const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     BLOODTHIRST: (rarity) => {
@@ -161,6 +233,58 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
                 },
             ],
             config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
+            autoFilled: true,
+        };
+    },
+    // D-PR3: incoming-reduction implants
+    // Voidshade: reduce incoming direct damage by X% while stealthed.
+    VOIDSHADE: (rarity) => mkReduction(VOIDSHADE_PCT[rarity], 'direct', 'self-stealth', false),
+    // Nebula Nullifier: reduce incoming direct damage by X% while in stasis.
+    NEBULA_NULLIFIER: (rarity) => mkReduction(NEBULA_PCT[rarity], 'direct', 'self-stasis', false),
+    // Hyperion Gaze: reduce incoming crits from stealthed attackers by X% (crit-reduction family).
+    HYPERION_GAZE: (rarity) =>
+        mkReduction(HYPERION_PCT[rarity], 'direct', 'incoming-crit-by-stealthed', true),
+    // Vortex Veil: reduce incoming Inferno/Corrosion DoT damage by X%.
+    VORTEX_VEIL: (rarity) =>
+        mkReduction(VORTEX_VEIL_PCT[rarity], 'dot', 'dot-inferno-corrosion', false),
+    // D-PR3: incoming-block implants
+    // Ironclad: X% chance to block Y% of each hit from the 2nd hit onward this round.
+    // No uncommon rarity.
+    IRONCLAD: (rarity) => {
+        const b = IRONCLAD_BLOCK[rarity];
+        if (!b) return undefined;
+        return {
+            type: 'incoming-block',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-block',
+                condition: 'nth-hit-2plus',
+                procChance: b.chance,
+                blockPct: b.pct,
+                oncePerRound: false,
+            },
+            autoFilled: true,
+        };
+    },
+    // Shadowguard: X% chance to fully block a hit while stealthed (once per round).
+    // Only uncommon/epic/legendary rarities.
+    SHADOWGUARD: (rarity) => {
+        const chance = SHADOWGUARD_CHANCE[rarity];
+        if (chance === undefined) return undefined;
+        return {
+            type: 'incoming-block',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-block',
+                condition: 'self-stealth',
+                procChance: chance,
+                blockPct: 1,
+                oncePerRound: true,
+            },
             autoFilled: true,
         };
     },

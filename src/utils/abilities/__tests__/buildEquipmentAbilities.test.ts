@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
+import { Ability } from '../../../types/abilities';
+import { GEAR_SETS } from '../../../constants/gearSets';
 
 /** Build a minimal Ship for test purposes. */
 function makeShip(over: Partial<Ship>): Ship {
@@ -177,20 +179,30 @@ describe('buildEquipmentAbilities — unknown implant key', () => {
 // ---------------------------------------------------------------------------
 
 /** Build a ship with a single implant piece in implant_major and call buildEquipmentAbilities. */
-function buildForImplant(name: string, rarity: string) {
-    const implantPiece = makePiece({
-        id: `${name.toLowerCase()}-implant`,
-        slot: 'implant_major',
-        rarity: rarity as unknown as GearPiece['rarity'],
-        setBonus: name as GearPiece['setBonus'],
-    });
-    const ship = makeShip({
-        implants: { implant_major: `${name.toLowerCase()}-implant` },
-    });
-    const getGearPiece = makeGetGearPiece({
-        [`${name.toLowerCase()}-implant`]: implantPiece,
-    });
-    return buildEquipmentAbilities(ship, getGearPiece);
+function buildForImplant(name: string, rarity: GearPiece['rarity']): Ability[] {
+    const implantKey = name;
+    const id = `${implantKey}-piece`;
+    const pieceMap: Record<string, GearPiece> = {
+        [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
+    };
+    return buildEquipmentAbilities(
+        makeShip({ implants: { implant_major: id } }),
+        (g) => pieceMap[g]
+    );
+}
+
+/** Build a ship with enough pieces of a gear set (≥ its minPieces) and return the abilities. */
+function buildForGearSet(setKey: string): Ability[] {
+    const minPieces = GEAR_SETS[setKey]?.minPieces ?? 2;
+    const slots = ['weapon', 'hull', 'sensor', 'engine'] as const;
+    const equipment: Record<string, string> = {};
+    const pieceMap: Record<string, GearPiece> = {};
+    for (let i = 0; i < minPieces; i++) {
+        const id = `${setKey}-${i}`;
+        equipment[slots[i % slots.length]] = id;
+        pieceMap[id] = makePiece({ id, slot: slots[i % slots.length], setBonus: setKey });
+    }
+    return buildEquipmentAbilities(makeShip({ equipment }), (g) => pieceMap[g]);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,5 +250,87 @@ describe('Warpstrike implant', () => {
         expect(a.conditions).toEqual([
             { subject: 'self-debuff', derivable: true, countComparator: 'gte', countThreshold: 1 },
         ]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR3: incoming-reduction implants
+// ---------------------------------------------------------------------------
+describe('D-PR3 incoming-reduction implants', () => {
+    it('Voidshade (legendary) → self-stealth direct reduction 20, non-crit-family', () => {
+        expect(buildForImplant('VOIDSHADE', 'legendary')[0].config).toMatchObject({
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'self-stealth',
+            pct: 20,
+            critFamily: false,
+        });
+    });
+    it('Nebula Nullifier (epic) → self-stasis direct reduction 28', () => {
+        expect(buildForImplant('NEBULA_NULLIFIER', 'epic')[0].config).toMatchObject({
+            type: 'incoming-reduction',
+            condition: 'self-stasis',
+            pct: 28,
+            critFamily: false,
+        });
+    });
+    it('Hyperion Gaze (legendary) → crit-by-stealthed reduction 35, crit-family', () => {
+        expect(buildForImplant('HYPERION_GAZE', 'legendary')[0].config).toMatchObject({
+            type: 'incoming-reduction',
+            condition: 'incoming-crit-by-stealthed',
+            pct: 35,
+            critFamily: true,
+        });
+    });
+    it('Vortex Veil (legendary) → dot-scope reduction 30', () => {
+        expect(buildForImplant('VORTEX_VEIL', 'legendary')[0].config).toMatchObject({
+            type: 'incoming-reduction',
+            scope: 'dot',
+            condition: 'dot-inferno-corrosion',
+            pct: 30,
+            critFamily: false,
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR3: incoming-block implants
+// ---------------------------------------------------------------------------
+describe('D-PR3 incoming-block implants', () => {
+    it('Ironclad (legendary) → nth-hit-2plus block, chance 0.20 / blockPct 0.50, not once-per-round', () => {
+        expect(buildForImplant('IRONCLAD', 'legendary')[0].config).toMatchObject({
+            type: 'incoming-block',
+            condition: 'nth-hit-2plus',
+            procChance: 0.2,
+            blockPct: 0.5,
+            oncePerRound: false,
+        });
+    });
+    it('Ironclad has no uncommon variant → no ability', () => {
+        expect(buildForImplant('IRONCLAD', 'uncommon')).toEqual([]);
+    });
+    it('Shadowguard (legendary) → self-stealth full block, chance 0.16 / blockPct 1, once-per-round', () => {
+        expect(buildForImplant('SHADOWGUARD', 'legendary')[0].config).toMatchObject({
+            type: 'incoming-block',
+            condition: 'self-stealth',
+            procChance: 0.16,
+            blockPct: 1,
+            oncePerRound: true,
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR3: Hardened gear set
+// ---------------------------------------------------------------------------
+describe('Hardened gear set', () => {
+    it('emits a crit-family direct reduction of 5', () => {
+        expect(buildForGearSet('HARDENED')[0].config).toMatchObject({
+            type: 'incoming-reduction',
+            scope: 'direct',
+            condition: 'incoming-crit',
+            pct: 5,
+            critFamily: true,
+        });
     });
 });
