@@ -2328,6 +2328,13 @@ export function runCombat(input: CombatEngineInput): {
         // its own entry; the post-round assembly derives row fields from the focus entry.
         // The helper `dmg(id)` lazily creates entries on first write — actors that never
         // produce damage in a round simply have no entry, keeping the map sparse.
+        //
+        // E5 §4.5 — CREDIT vs INTAKE are COMPLEMENTARY, not redundant (closing the umbrella
+        // spec's "collapse the dual paths" framing). This `roundDamage`/`creditDamage` path is
+        // the CREDIT side: damage *dealt*, keyed by SOURCE id, feeding row totals + damage-dealt
+        // leeches. The `perActorIncoming`/`intakeFor` path below (~2365) is the INTAKE side:
+        // damage *taken*, keyed by VICTIM id, feeding healing-mode rows. They record different
+        // facts about the same hit (who dealt it vs who took it); E5 does NOT merge them.
         const roundDamage = new Map<string, ActorDamage>();
         // Per-round per-victim positional damage accumulator (victim actor id → summed damage
         // dealt to it this round). Populated ONLY by the positional apply path's emitHit
@@ -2362,6 +2369,10 @@ export function runCombat(input: CombatEngineInput): {
         // Barrier (full damage immunity), kept SEPARATE from shieldAbsorbed (Barrier does NOT drain
         // the shield pool) so the UI can attribute the blocked total to the Barrier, not the shield.
         // Fresh map each round; intakeFor() get-or-creates on first write.
+        //
+        // E5 §4.5 — this is the INTAKE side (damage *taken*, keyed by VICTIM id); the
+        // complementary CREDIT side is `roundDamage`/`creditDamage` (~2331, damage *dealt*,
+        // keyed by SOURCE id). Complementary facts, not duplicates — see the note there.
         const perActorIncoming = new Map<string, ActorIntake>();
         const intakeFor = (id: string): ActorIntake => {
             let entry = perActorIncoming.get(id);
@@ -4024,15 +4035,19 @@ export function runCombat(input: CombatEngineInput): {
                                 // Phase-5 symmetric-accounting surface (the result still exposes a single
                                 // heal-target row today). Inert here regardless (no production caller
                                 // threads enemy position+pattern).
-                                // DETONATION CAVEAT (deferred → E5 accounting unification): only the firing
-                                // hit (enemyScalars, the DIRECT channel) lands per-victim here. The
+                                // DETONATION CAVEAT (E5 §4.3 — PEELED to a dedicated follow-up): only the
+                                // firing hit (enemyScalars, the DIRECT channel) lands per-victim here. The
                                 // aggregate `damage` also folds enemyTurn.detonationDamage, which the
-                                // NON-positional branch drains via applyIncomingToTarget(damage, tgt) but
-                                // which is NOT routed to any player victim on the positional path — routing
-                                // it needs per-victim bomb attribution the engine does not track yet
-                                // (detonation is a single turn-scalar, not per-target). Byte-identical today
-                                // (no fixture threads enemy position+pattern WITH detonation); a positional
-                                // enemy-detonation model lands with E5.
+                                // NON-positional branch already drains per-victim via
+                                // applyIncomingToTarget(damage, tgt) → perActorIncoming (so non-positional
+                                // detonation intake is ALREADY recorded). Only the POSITIONAL path leaves it
+                                // unrouted — and routing it per-victim needs per-victim bomb attribution the
+                                // engine does not track yet (detonation is a single turn-scalar, not
+                                // per-target). E5 PEELED this per the spec's §5 pressure valve: it requires
+                                // NEW tracking and has zero observable cost to defer (perActorIncoming is
+                                // internal/unread by the UI, and no fixture threads enemy position+pattern
+                                // WITH detonation → byte-identical today). A positional enemy-detonation
+                                // model lands in the follow-up.
                                 const tb = turnBindings(actor.side);
                                 drivePositionalApply({
                                     scalars: enemyScalars!,

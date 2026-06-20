@@ -234,11 +234,14 @@ export interface PlayerTurnArgs {
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
     healing?: HealingRuntimeCtx;
-    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): when true (the enemy walk),
-     *  the heal block EMITS `heal-performed`/`cleanse-performed` carrying THIS actor's id but
-     *  credits NO player healing bucket and mutates NO target — the shared player `healing` ctx
-     *  must never see an enemy-id mutation. Scopes emission to the CAST skill (gatedSkill) only,
-     *  never the passive. Defaults falsy (player/team turns credit + mutate as before). */
+    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5; HP-restore lifted in E5 §4.1):
+     *  when true (the enemy walk), the heal block EMITS `heal-performed`/`cleanse-performed`
+     *  carrying THIS actor's id and (E5) restores each heal recipient's OWN currentHp via the
+     *  per-victim pool — but credits NO player healing bucket and never mutates the player
+     *  heal-target (the shared player `healing` ctx never sees an enemy-id BUCKET credit).
+     *  Shields/cleanse still mutate nothing on this path. Scopes emission to the CAST skill
+     *  (gatedSkill) only, never the passive. Defaults falsy (player/team turns credit + mutate
+     *  as before). */
     healEventOnly?: boolean;
     /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
@@ -1618,9 +1621,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        // Event-only mode (enemy walk, Task 5): EMIT heal/cleanse events but credit/mutate
-        // NOTHING — and scope to the CAST skill only (the spec: "the cast skill carries"),
-        // never the passive. Normal (player/team) mode keeps both slots and credits/mutates.
+        // Event-only mode (enemy walk, Task 5; HP-restore lifted in E5 §4.1): EMIT heal/cleanse
+        // events and (E5) restore each heal recipient's OWN currentHp via the per-victim pool,
+        // but credit NO player healing bucket and never mutate the player heal-target. Shields
+        // and cleanse still mutate NOTHING on the enemy path (deferred to sub-projects H / enemy
+        // cleanse). Scope to the CAST skill only (the spec: "the cast skill carries"), never the
+        // passive. Normal (player/team) mode keeps both slots and credits/mutates as before.
         const healAbilities = healEventOnly
             ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false))
             : [
