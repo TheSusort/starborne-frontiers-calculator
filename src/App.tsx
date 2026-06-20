@@ -45,6 +45,7 @@ const ShipIndexPage = lazy(() => import('./pages/database/ShipIndexPage'));
 const ShipLorePage = lazy(() => import('./pages/database/ShipLorePage'));
 const ImplantIndexPage = lazy(() => import('./pages/database/ImplantIndexPage'));
 const EffectIndexPage = lazy(() => import('./pages/database/EffectIndexPage'));
+const SquadLeadersPage = lazy(() => import('./pages/database/SquadLeadersPage'));
 const LeaderboardPage = lazy(() => import('./pages/database/LeaderboardPage'));
 
 // Calculator pages
@@ -281,6 +282,12 @@ const App: React.FC = () => {
                                                                                         path="/buffs"
                                                                                         element={
                                                                                             <EffectIndexPage />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="/squad-leaders"
+                                                                                        element={
+                                                                                            <SquadLeadersPage />
                                                                                         }
                                                                                     />
                                                                                     <Route

@@ -336,6 +336,7 @@ export const Sidebar: React.FC = () => {
                     { path: '/ships/lore', label: 'Lore' },
                     { path: '/implants', label: 'Implants' },
                     { path: '/buffs', label: 'Effects' },
+                    { path: '/squad-leaders', label: 'Squad Leaders' },
                 ],
             },
             { path: '/shared-encounters', label: 'Shared Encounters' },

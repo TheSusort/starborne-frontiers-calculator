@@ -148,6 +148,16 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#squad-leaders"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        Squad Leaders
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#leaderboards"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -1954,6 +1964,55 @@ const DocumentationPage: React.FC = () => {
                                     like &quot;hacking&quot; or &quot;security&quot; to find effects
                                     that interact with specific stats.
                                 </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Squad Leaders Section */}
+                    <section id="squad-leaders" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            Squad Leaders
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">
+                                Faction Squad Leaders and Their Bonuses
+                            </h3>
+                            <p className="text-theme-text">
+                                Each faction has three squad leaders — one rare, one epic, and one
+                                legendary — and each leader grants fleet-wide bonuses to that
+                                faction&apos;s units. A leader has three upgrade steps (I, II, III)
+                                whose bonuses are cumulative: a leader upgraded to step III has all
+                                three steps active at once.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Features</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>Browse every faction&apos;s three squad leaders</li>
+                                    <li>Filter by faction and rarity</li>
+                                    <li>Search by leader name or effect text</li>
+                                    <li>See each step&apos;s effects laid out I / II / III</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Reading Effects</h4>
+                                <div className="space-y-3 text-theme-text">
+                                    <div>
+                                        <span className="text-green-400 font-semibold">
+                                            Ally bonuses:
+                                        </span>{' '}
+                                        Stat increases and combat modifiers granted to your own
+                                        faction&apos;s units (e.g., +8% Attack, shield each round).
+                                    </div>
+                                    <div>
+                                        <span className="text-red-400 font-semibold">
+                                            Enemy effects:
+                                        </span>{' '}
+                                        Reductions applied to enemy units (e.g., lower Defence or
+                                        Security, reduced enemy repair output).
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
