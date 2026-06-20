@@ -1719,8 +1719,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
 
         // ONE heal-performed per cast that healed at least one recipient. critHits is the
-        // number of heal abilities that crit (present-only-when-positive). In event-only mode
-        // amount is 0 and critHits is absent (no numeric was computed).
+        // number of heal abilities that crit (present-only-when-positive). In event-only
+        // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
+        // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
         if (healTargets.length > 0) {
             bus.emit({
                 type: 'heal-performed',
