@@ -15,10 +15,11 @@
  *   registered as a listener that fires once per critting hit. procChance 0.20 over 10
  *   rounds (1 crit/round) → floor(10 × 0.20) = 2 fires (accumulator back-loaded: rounds
  *   5 and 10 — acc accumulates 0.20 per crit and first crosses 1.0 on the 5th call).
- *   basis 'damage-dealt' resolves in the reactive executor as the owner's max HP (the
- *   fallthrough branch — not damage-dealt scaling off the attack amount). With hp=10000
- *   and pct=20: each fire credits directHeal of 10000 × 0.20 × healModifier(0) = 2000.
- *   2 fires → 4000 total.
+ *   basis 'damage-dealt': the reactive executor now resolves this as the triggering hit's
+ *   damage (eventCtx.triggerDamage), captured from ability-performed.damage on the on-crit
+ *   listener. Crit damage computation: attack=5000, multiplier=100%, critDamage=0,
+ *   enemyDefense=0 → directDamage = 5000 * 1.0 * 1.0 = 5000. Each fire: pct=20 →
+ *   directHeal = 5000 × 0.20 = 1000. 2 fires → 2000 total.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -212,16 +213,17 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
      *   - procChance 0.20 → accumulator fires floor(10×0.20)=2 times (back-loaded: rounds 5, 10).
      *     The rateAccumulator starts at 0 and accumulates +0.20 per qualifying crit. It fires
      *     when acc >= 1: first fire at call 5 (acc 0.2→0.4→0.6→0.8→1.0), second at call 10.
-     *   - Each fire: basis 'damage-dealt' resolves in the reactive executor as the owner's max HP
-     *     (fallthrough branch — same as 'hp'). hp=10000, pct=20 → raw = 10000 × 0.20 = 2000.
-     *     healModifier 0, no outgoing/incoming buffs → directHeal per fire = 2000.
-     *   - Total directHeal over 10 rounds = 2 × 2000 = 4000.
+     *   - Each fire: basis 'damage-dealt' now resolves as the triggering hit's damage
+     *     (eventCtx.triggerDamage, captured from ability-performed.damage). Crit damage:
+     *     attack=5000, multiplier=100%, critDamage=0, enemyDefense=0 → directDamage=5000.
+     *     pct=20 → raw = 5000 × 0.20 = 1000. healModifier 0 → directHeal per fire = 1000.
+     *   - Total directHeal over 10 rounds = 2 × 1000 = 2000.
      *
      * Two assertions:
      *   (a) fire count = 2 and fires on rounds 5 and 10 (back-loaded accumulator schedule).
-     *   (b) summed directHeal = 4000.
+     *   (b) summed directHeal = 2000.
      */
-    it('Bloodthirst legendary: fires floor(10 × 0.20)=2 times over 10 crits; total directHeal = 2×2000', () => {
+    it('Bloodthirst legendary: fires floor(10 × 0.20)=2 times over 10 crits; total directHeal = 2×1000', () => {
         const ship = makeShip({
             implants: { implant_major: 'bt-legendary' },
         });
@@ -257,11 +259,13 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
             ],
         };
 
-        // Each reactive-heal fire: basis 'damage-dealt' → owner hp fallthrough = 10000.
-        // pct 20 → raw = 10000 × 0.20 = 2000. procChance 0.20 over 10 crits → 2 fires.
-        const perFireAmount = 10_000 * (20 / 100); // = 2000
+        // Each reactive-heal fire: basis 'damage-dealt' → eventCtx.triggerDamage = directDamage.
+        // attack=5000, multiplier=100%, critDamage=0, enemyDefense=0 → directDamage=5000.
+        // pct 20 → raw = 5000 × 0.20 = 1000. procChance 0.20 over 10 crits → 2 fires.
+        const critDamage = 5000; // attack 5000 × mult 1.0 × critMult 1.0 (critDamage=0) × noDefense
+        const perFireAmount = critDamage * (20 / 100); // = 1000
         const expectedFires = Math.floor(10 * 0.2); // = 2
-        const expectedTotal = expectedFires * perFireAmount; // = 4000
+        const expectedTotal = expectedFires * perFireAmount; // = 2000
 
         const result = runCombat(
             BASE({
@@ -278,10 +282,10 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
         expect(result.healing).toBeDefined();
         expect(result.healing!.rounds).toHaveLength(10);
 
-        // (b) total direct heal = 4000.
+        // (b) total direct heal = 2000 (2 fires × 1000 per fire).
         expect(sumHeal(result, 'directHeal')).toBeCloseTo(expectedTotal, 6);
 
-        // (a) fire count: back-loaded accumulator fires on rounds 2 and 10.
+        // (a) fire count: back-loaded accumulator fires on rounds 5 and 10.
         const firedRounds = result
             .healing!.rounds.map((rd, i) => ({
                 round: i + 1,
