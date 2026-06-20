@@ -186,7 +186,7 @@ describe('Intrusion implant', () => {
         expect(abilities).toHaveLength(1);
         const a = abilities[0];
         expect(a.type).toBe('modifier');
-        expect(a.trigger).toBe('passive');
+        expect(a.trigger).toBe('on-cast');
         expect(a.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage', value: 0 });
         expect(a.scaling).toEqual({ conditionIndex: 0, perUnit: 5 });
         expect(a.conditions).toEqual([{ subject: 'enemy-debuff', derivable: true }]);
@@ -251,7 +251,7 @@ Add to `IMPLANT_ABILITIES`:
         return {
             type: 'modifier',
             target: 'self',
-            trigger: 'passive',
+            trigger: 'on-cast',
             conditions: [{ subject: 'enemy-debuff', derivable: true }],
             scaling: { conditionIndex: 0, perUnit },
             config: { type: 'modifier', channel: 'outgoingDamage', value: 0, isMultiplicative: false },
@@ -266,7 +266,7 @@ Add to `IMPLANT_ABILITIES`:
         return {
             type: 'modifier',
             target: 'self',
-            trigger: 'passive',
+            trigger: 'on-cast',
             conditions: [{ subject: 'self-shield', derivable: true }],
             config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
             autoFilled: true,
@@ -282,7 +282,7 @@ Add to `IMPLANT_ABILITIES`:
         return {
             type: 'modifier',
             target: 'self',
-            trigger: 'passive',
+            trigger: 'on-cast',
             conditions: [
                 { subject: 'self-debuff', derivable: true, countComparator: 'gte', countThreshold: 1 },
             ],
@@ -292,7 +292,7 @@ Add to `IMPLANT_ABILITIES`:
     },
 ```
 
-(Confirm the `Ability`/`Condition` types accept these literals; `trigger: 'passive'` must be a valid `AbilityTrigger` — verify and use the engine's passive-trigger value at impl time.)
+(Note: `'passive'` is NOT a valid `AbilityTrigger`. Use `trigger: 'on-cast'` — the same value `buildShipAbilities` assigns to parser-emitted passive-slot `outgoingDamage` modifiers. The trigger is inert for these: `modifierTotalsFromAbilities` filters only on `type === 'modifier'`, never on trigger.)
 
 - [ ] **Step 4: Run the tests, verify they pass**
 
