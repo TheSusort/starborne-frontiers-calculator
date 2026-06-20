@@ -266,15 +266,25 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['enemy1', 'tank'],
+            // E5: an enemy single-'ally' heal routes to the lowest-HP living enemy ally; here the
+            // sole enemy ally is the caster itself ('enemy1'), a living stand-in (currentHp > 0).
+            enemyIds: ['enemy1'],
+            recipientActor: (id) =>
+                id === 'enemy1' ? ({ id, currentHp: 10000 } as CombatActor) : undefined,
         };
         return { healing, credits, applied, shields };
     };
 
     // An enemy-side runtime whose ACTIVE cast skill heals an ally and cleanses.
-    const makeRuntime = (skills: ShipSkills): PlayerActorRuntime => {
+    // `side` mirrors the real engine: an ENEMY caster (event-only path) carries side:'enemy'
+    // so E5's side-aware recipient routing fires; the normal-mode (player) test uses 'player'.
+    const makeRuntime = (
+        skills: ShipSkills,
+        side: CombatActor['side'] = 'player'
+    ): PlayerActorRuntime => {
         const actor = createActor({
             id: 'enemy1',
-            side: 'player', // runPlayerTurn is side-agnostic; the engine flags enemy via healEventOnly
+            side,
             kind: 'attacker',
             stats: {
                 attack: 5000,
@@ -388,10 +398,12 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         ],
     });
 
-    it('emits heal-performed + cleanse-performed with the actor id and mutates NOTHING', () => {
+    it('E5: enemy heal RESTORES HP + emits a real heal-performed amount, still NO player credit', () => {
         const events: CombatEvent[] = [];
         const spy = makeHealingSpy();
-        const args = makeArgs(makeRuntime(healCleanseSkills()), spy.healing, true);
+        // side:'enemy' → E5 side-aware routing: the 'ally' heal targets the lowest-HP enemy ally
+        // (the caster itself here), and applyHealToTarget runs on the enemy path.
+        const args = makeArgs(makeRuntime(healCleanseSkills(), 'enemy'), spy.healing, true);
         args.bus.on('heal-performed', (e) => events.push(e));
         args.bus.on('cleanse-performed', (e) => events.push(e));
 
@@ -406,13 +418,15 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         expect(cleanse!.count).toBe(2);
         expect(heal).toBeDefined();
         expect(heal!.casterId).toBe('enemy1');
-        // Event-only heal carries NO numeric (amount 0, no crit info).
-        expect(heal!.amount).toBe(0);
+        // E5: heal-performed now carries the REAL amount (effectiveHp 10000 × 20% basis 'hp');
+        // no crit (noGate → false) so critHits stays absent.
+        expect(heal!.amount).toBe(2000);
         expect(heal!.critHits).toBeUndefined();
 
-        // CRITICAL: not a single healing.* mutation ran in event-only mode.
+        // E5: the heal IS applied to the enemy's own pool (applied received the raw)...
+        expect(spy.applied).toEqual([2000]);
+        // ...but NOTHING is credited to the player healing buckets, and no shield was granted.
         expect(spy.credits).toHaveLength(0);
-        expect(spy.applied).toHaveLength(0);
         expect(spy.shields).toHaveLength(0);
     });
 
@@ -486,6 +500,9 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['attacker', 'tank'],
+            // E5 fields (unused by the HoT-ticking path — present for type-correctness).
+            enemyIds: ['attacker'],
+            recipientActor: (id) => ({ id, currentHp: 10000 }) as CombatActor,
         };
         return { healing, credits, applied, shields };
     };

@@ -43,7 +43,11 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
-import { applyPositionalDamage, footprintVictims, type VictimDamageOutcome } from './positionalApply';
+import {
+    applyPositionalDamage,
+    footprintVictims,
+    type VictimDamageOutcome,
+} from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
@@ -1684,11 +1688,12 @@ export function runCombat(input: CombatEngineInput): {
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
-    // attacker → input.hp; walked team → walk stats hp; legacy team → its combat-actor hp (1).
-    // Enemy ids are never queried as recipients.
+    // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
+    // (E5: enemy ids ARE now queried as recipients once enemy heals restore HP).
     const baseHpById = new Map<string, number>([
         [attacker.id, hp],
         ...teamActors.map((t) => [t.id, t.walk!.stats.hp] as const),
+        ...enemyAttackerActors.map((a) => [a.id, a.stats.hp] as const),
     ]);
     const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
 
@@ -1935,6 +1940,8 @@ export function runCombat(input: CombatEngineInput): {
                   victim.shieldPool = Math.min(victim.shieldPool + raw, targetMaxHp);
               },
               playerIds,
+              enemyIds: enemyRecipientIds,
+              recipientActor: (id) => allActorsById.get(id),
           }
         : undefined;
 
@@ -2321,6 +2328,13 @@ export function runCombat(input: CombatEngineInput): {
         // its own entry; the post-round assembly derives row fields from the focus entry.
         // The helper `dmg(id)` lazily creates entries on first write — actors that never
         // produce damage in a round simply have no entry, keeping the map sparse.
+        //
+        // E5 §4.5 — CREDIT vs INTAKE are COMPLEMENTARY, not redundant (closing the umbrella
+        // spec's "collapse the dual paths" framing). This `roundDamage`/`creditDamage` path is
+        // the CREDIT side: damage *dealt*, keyed by SOURCE id, feeding row totals + damage-dealt
+        // leeches. The `perActorIncoming`/`intakeFor` path below (~2365) is the INTAKE side:
+        // damage *taken*, keyed by VICTIM id, feeding healing-mode rows. They record different
+        // facts about the same hit (who dealt it vs who took it); E5 does NOT merge them.
         const roundDamage = new Map<string, ActorDamage>();
         // Per-round per-victim positional damage accumulator (victim actor id → summed damage
         // dealt to it this round). Populated ONLY by the positional apply path's emitHit
@@ -2355,6 +2369,10 @@ export function runCombat(input: CombatEngineInput): {
         // Barrier (full damage immunity), kept SEPARATE from shieldAbsorbed (Barrier does NOT drain
         // the shield pool) so the UI can attribute the blocked total to the Barrier, not the shield.
         // Fresh map each round; intakeFor() get-or-creates on first write.
+        //
+        // E5 §4.5 — this is the INTAKE side (damage *taken*, keyed by VICTIM id); the
+        // complementary CREDIT side is `roundDamage`/`creditDamage` (~2331, damage *dealt*,
+        // keyed by SOURCE id). Complementary facts, not duplicates — see the note there.
         const perActorIncoming = new Map<string, ActorIntake>();
         const intakeFor = (id: string): ActorIntake => {
             let entry = perActorIncoming.get(id);
@@ -2930,38 +2948,45 @@ export function runCombat(input: CombatEngineInput): {
             if (actor.id === focusActorId) {
                 // PR6b: read the dummy sink's live currentHp instead of the scalar (identical
                 // value — the sink update at ~3771 keeps enemy.currentHp == enemyHp - cumulative).
-                const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
-                const enemyHpPct =
-                    enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
-                const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                focusTurns.push({
-                    action: 'active',
-                    roundCrit: false,
-                    hitCrits: [],
-                    enemyHpPct,
-                    dotsConfig: [],
-                    dotsLanded: true,
-                    activeSelfBuffs: [],
-                    landedEnemyDebuffs: [],
-                    inflictedEnemyDebuffs: [],
-                    resistedEnemyDebuffs: [],
-                    directDamage: 0,
-                    secondaryDamage: 0,
-                    conditionalDamage: 0,
-                    detonationDamage: 0,
-                    extraActionGrants: [],
-                    turnCtx: lastKnownCtx ?? {
-                        effectiveAttack: 0,
-                        dotMult: 1,
-                        affinityMult: 1,
-                        effectiveDefence: 0,
-                        effectiveMaxHp: 0,
-                        outgoingHealPct: 0,
-                        incomingHealPct: 0,
-                    },
-                });
+                pushSynthesizedFocusSkipTurn();
             }
             return true;
+        };
+
+        // E5 §4.4: the synthesized no-action focus turn pushed when the focus skips its
+        // turn (dead heal-target OR stasised). Extracted from the two byte-identical sites
+        // (handleDeadTargetSkip + the stasis gate) so the shape cannot drift.
+        const pushSynthesizedFocusSkipTurn = (): void => {
+            const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
+            const enemyHpPct =
+                enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+            const lastKnownCtx = lastTurnCtxByActor.get(focusActorId);
+            focusTurns.push({
+                action: 'active',
+                roundCrit: false,
+                hitCrits: [],
+                enemyHpPct,
+                dotsConfig: [],
+                dotsLanded: true,
+                activeSelfBuffs: [],
+                landedEnemyDebuffs: [],
+                inflictedEnemyDebuffs: [],
+                resistedEnemyDebuffs: [],
+                directDamage: 0,
+                secondaryDamage: 0,
+                conditionalDamage: 0,
+                detonationDamage: 0,
+                extraActionGrants: [],
+                turnCtx: lastKnownCtx ?? {
+                    effectiveAttack: 0,
+                    dotMult: 1,
+                    affinityMult: 1,
+                    effectiveDefence: 0,
+                    effectiveMaxHp: 0,
+                    outgoingHealPct: 0,
+                    incomingHealPct: 0,
+                },
+            });
         };
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
@@ -3571,40 +3596,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
                         // was stasised — it did not act, but the round must still assemble).
-                        // Shape copied verbatim from handleDeadTargetSkip's focusTurns.push(…).
+                        // Delegated to pushSynthesizedFocusSkipTurn (E5 §4.4 DRY helper).
                         if (actor.id === focusActorId) {
-                            const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
-                            const enemyHpPct =
-                                enemyHp > 0
-                                    ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))
-                                    : 100;
-                            const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                            focusTurns.push({
-                                action: 'active',
-                                roundCrit: false,
-                                hitCrits: [],
-                                enemyHpPct,
-                                dotsConfig: [],
-                                dotsLanded: true,
-                                activeSelfBuffs: [],
-                                landedEnemyDebuffs: [],
-                                inflictedEnemyDebuffs: [],
-                                resistedEnemyDebuffs: [],
-                                directDamage: 0,
-                                secondaryDamage: 0,
-                                conditionalDamage: 0,
-                                detonationDamage: 0,
-                                extraActionGrants: [],
-                                turnCtx: lastKnownCtx ?? {
-                                    effectiveAttack: 0,
-                                    dotMult: 1,
-                                    affinityMult: 1,
-                                    effectiveDefence: 0,
-                                    effectiveMaxHp: 0,
-                                    outgoingHealPct: 0,
-                                    incomingHealPct: 0,
-                                },
-                            });
+                            pushSynthesizedFocusSkipTurn();
                         }
                     } // end stasis gate (attacker branch)
                 } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
@@ -4041,15 +4035,19 @@ export function runCombat(input: CombatEngineInput): {
                                 // Phase-5 symmetric-accounting surface (the result still exposes a single
                                 // heal-target row today). Inert here regardless (no production caller
                                 // threads enemy position+pattern).
-                                // DETONATION CAVEAT (deferred → E5 accounting unification): only the firing
-                                // hit (enemyScalars, the DIRECT channel) lands per-victim here. The
+                                // DETONATION CAVEAT (E5 §4.3 — PEELED to a dedicated follow-up): only the
+                                // firing hit (enemyScalars, the DIRECT channel) lands per-victim here. The
                                 // aggregate `damage` also folds enemyTurn.detonationDamage, which the
-                                // NON-positional branch drains via applyIncomingToTarget(damage, tgt) but
-                                // which is NOT routed to any player victim on the positional path — routing
-                                // it needs per-victim bomb attribution the engine does not track yet
-                                // (detonation is a single turn-scalar, not per-target). Byte-identical today
-                                // (no fixture threads enemy position+pattern WITH detonation); a positional
-                                // enemy-detonation model lands with E5.
+                                // NON-positional branch already drains per-victim via
+                                // applyIncomingToTarget(damage, tgt) → perActorIncoming (so non-positional
+                                // detonation intake is ALREADY recorded). Only the POSITIONAL path leaves it
+                                // unrouted — and routing it per-victim needs per-victim bomb attribution the
+                                // engine does not track yet (detonation is a single turn-scalar, not
+                                // per-target). E5 PEELED this per the spec's §5 pressure valve: it requires
+                                // NEW tracking and has zero observable cost to defer (perActorIncoming is
+                                // internal/unread by the UI, and no fixture threads enemy position+pattern
+                                // WITH detonation → byte-identical today). A positional enemy-detonation
+                                // model lands in the follow-up.
                                 const tb = turnBindings(actor.side);
                                 drivePositionalApply({
                                     scalars: enemyScalars!,

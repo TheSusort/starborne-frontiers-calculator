@@ -103,6 +103,10 @@ export interface HealingRuntimeCtx {
     grantShieldToTarget: (raw: number, victim?: CombatActor) => void;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
+    /** Fixed enemy-attacker-id order for an ENEMY caster's all-allies routing (E5). */
+    enemyIds: string[];
+    /** Resolve a recipient id to its CombatActor (E5 enemy-heal apply). undefined if absent. */
+    recipientActor: (id: string) => CombatActor | undefined;
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -230,11 +234,14 @@ export interface PlayerTurnArgs {
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
     healing?: HealingRuntimeCtx;
-    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5): when true (the enemy walk),
-     *  the heal block EMITS `heal-performed`/`cleanse-performed` carrying THIS actor's id but
-     *  credits NO player healing bucket and mutates NO target — the shared player `healing` ctx
-     *  must never see an enemy-id mutation. Scopes emission to the CAST skill (gatedSkill) only,
-     *  never the passive. Defaults falsy (player/team turns credit + mutate as before). */
+    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5; HP-restore lifted in E5 §4.1):
+     *  when true (the enemy walk), the heal block EMITS `heal-performed`/`cleanse-performed`
+     *  carrying THIS actor's id and (E5) restores each heal recipient's OWN currentHp via the
+     *  per-victim pool — but credits NO player healing bucket and never mutates the player
+     *  heal-target (the shared player `healing` ctx never sees an enemy-id BUCKET credit).
+     *  Shields/cleanse still mutate nothing on this path. Scopes emission to the CAST skill
+     *  (gatedSkill) only, never the passive. Defaults falsy (player/team turns credit + mutate
+     *  as before). */
     healEventOnly?: boolean;
     /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
@@ -1432,7 +1439,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     scaling.per > 0
                 ) {
                     purgeCount =
-                        ab.config.count * Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
+                        ab.config.count *
+                        Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
                 }
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
@@ -1471,12 +1479,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 : healing.recipientIncomingHealPct(rid);
         // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
         // all-allies → every player in fixed source order. Shared by the heal + shield branches.
-        const recipientsFor = (target: Ability['target']): string[] =>
-            target === 'self'
-                ? [actor.id]
-                : target === 'all-allies'
-                  ? healing.playerIds
-                  : [healing.targetId];
+        const isEnemyCaster = actor.side === 'enemy';
+        // Lowest-HP-fraction living enemy ally for an enemy single-'ally' heal (E5).
+        // Deterministic: ties broken by enemyIds source order. Falls back to the caster
+        // when no other living ally exists. NEVER routes to the player heal target.
+        const lowestHpEnemyAllyId = (): string | undefined => {
+            let best: string | undefined;
+            let bestFrac = Infinity;
+            for (const id of healing.enemyIds) {
+                if (id === actor.id) continue; // caster is the fallback only, never a primary candidate
+                const a = healing.recipientActor(id);
+                if (!a || a.currentHp <= 0) continue;
+                const maxHp = healing.recipientMaxHp(id);
+                const frac = maxHp > 0 ? a.currentHp / maxHp : 0;
+                if (frac < bestFrac) {
+                    bestFrac = frac;
+                    best = id;
+                }
+            }
+            return best ?? actor.id;
+        };
+        const recipientsFor = (target: Ability['target']): string[] => {
+            if (target === 'self') return [actor.id];
+            if (target === 'all-allies')
+                return isEnemyCaster ? healing.enemyIds : healing.playerIds;
+            if (isEnemyCaster) {
+                const rid = lowestHpEnemyAllyId();
+                return rid ? [rid] : [];
+            }
+            return [healing.targetId];
+        };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
             basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken',
@@ -1590,9 +1622,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        // Event-only mode (enemy walk, Task 5): EMIT heal/cleanse events but credit/mutate
-        // NOTHING — and scope to the CAST skill only (the spec: "the cast skill carries"),
-        // never the passive. Normal (player/team) mode keeps both slots and credits/mutates.
+        // Event-only mode (enemy walk, Task 5; HP-restore lifted in E5 §4.1): EMIT heal/cleanse
+        // events and (E5) restore each heal recipient's OWN currentHp via the per-victim pool,
+        // but credit NO player healing bucket and never mutate the player heal-target. Shields
+        // and cleanse still mutate NOTHING on the enemy path (deferred to sub-projects H / enemy
+        // cleanse). Scope to the CAST skill only (the spec: "the cast skill carries"), never the
+        // passive. Normal (player/team) mode keeps both slots and credits/mutates as before.
         const healAbilities = healEventOnly
             ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false))
             : [
@@ -1609,9 +1644,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (cfg.type === 'heal') {
                 const recipients = recipientsFor(ability.target);
                 if (healEventOnly) {
-                    // Event-only: NO numeric at all — do NOT draw the heal crit gate, do NOT
-                    // credit or apply. Just register recipients so heal-performed fires (amount 0).
-                    for (const rid of recipients) healTargets.push(rid);
+                    // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
+                    // per-victim pool), fire repairedThisRound, and emit heal-performed — but
+                    // contribute NOTHING to the player healing buckets (no healing.credit).
+                    const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
+                    if (didCrit) healCritCount += 1;
+                    for (const rid of recipients) {
+                        const basis = basisValue(cfg.basis, rid);
+                        const raw =
+                            basis *
+                            (cfg.pct / 100) *
+                            (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
+                            (1 + healModifier / 100) *
+                            (1 + dmgStats.totals.outgoingHealBuff / 100) *
+                            (1 + incomingPctFor(rid) / 100);
+                        const recipientActor = healing.recipientActor(rid);
+                        if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
+                        healTargets.push(rid);
+                        healRawSum += raw;
+                    }
                     continue;
                 }
                 // ONE crit draw per heal ability (not per recipient).
@@ -1669,8 +1720,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
 
         // ONE heal-performed per cast that healed at least one recipient. critHits is the
-        // number of heal abilities that crit (present-only-when-positive). In event-only mode
-        // amount is 0 and critHits is absent (no numeric was computed).
+        // number of heal abilities that crit (present-only-when-positive). In event-only
+        // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
+        // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
         if (healTargets.length > 0) {
             bus.emit({
                 type: 'heal-performed',
