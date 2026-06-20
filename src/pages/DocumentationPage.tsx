@@ -3063,14 +3063,19 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <p className="text-theme-text">
                                     Equipped implant and gear-set special effects are beginning to
-                                    apply in the simulator. Currently supported:{' '}
-                                    <strong>Leech</strong> gear set (heals the ship for 15% of all
-                                    damage it deals each turn) and the <strong>Bloodthirst</strong>{' '}
-                                    implant (on-crit heal for 12%, 17%, or 20% of damage dealt,
-                                    depending on rarity). Chance-based procs such as Bloodthirst are
-                                    modeled at
-                                    their expected average frequency. More implant and gear-set
-                                    effects will be added in future updates.
+                                    apply in the simulator (and now in the DPS calculator too).
+                                    Currently supported: <strong>Leech</strong> gear set (heals the
+                                    ship for 15% of all damage it deals each turn) and the{' '}
+                                    <strong>Bloodthirst</strong> implant (on-crit heal for 12%, 17%,
+                                    or 20% of damage dealt, depending on rarity). Chance-based procs
+                                    such as Bloodthirst are modeled at their expected average
+                                    frequency. Three conditional damage implants also apply:{' '}
+                                    <strong>Intrusion</strong> (more outgoing damage for each debuff
+                                    on the target), <strong>Arcane Siege</strong> (more outgoing
+                                    damage while the ship is shielded), and{' '}
+                                    <strong>Warpstrike</strong> (more outgoing damage while the ship
+                                    is debuffed). More implant and gear-set effects will be added in
+                                    future updates.
                                 </p>
                             </div>
                         </div>
