@@ -95,8 +95,10 @@ finalHitDamage  = baseHitDamage × (1 + incoming/100) × … × (1 − blockedFr
 
 A full block (Shadowguard) supersedes a partial block. Two partial blocks never co-occur (one
 Ironclad per ship). Multiplicative order is irrelevant to the final number (commutes with the
-additive-channel factor). Block sits at the **damage-computation** step — it reduces the hit amount
-*before* it enters `applyIncomingToTarget` (so Barrier/shield/HP intercepts see the reduced amount).
+additive-channel factor). Block is applied **inside the damage-apply funnel** (`applyVictimDamage`,
+§4.3.3), gated on `byDirectDamage`, **after** the Barrier full-immunity check and **before** the
+shield/HP drain — so a blocked amount reduces what shields/HP absorb, and a fully-Barrier-immune
+intake never burns the proc accumulator.
 
 **Surfacing:** blocked damage is **reduced silently** in D-PR3 (visible only via lower damage-taken).
 A `damageBlocked` per-round accumulator + StatCard (mirroring `barrierAbsorbed`/`shieldsAbsorbed`) is
@@ -172,65 +174,83 @@ interface IncomingHitContext {
 }
 ```
 
-**Pure evaluator** in a new leaf module (e.g. `src/utils/combat/incomingEffects.ts`):
+**Two pure evaluators** in a new leaf module (e.g. `src/utils/combat/incomingEffects.ts`). They are
+split because %-reduction and block live at **different** apply sites (see §4.3):
 
 ```
-incomingEffectsForHit(
+// M1 + M2 — folded at the crit-aware damage-COMPUTATION sites
+incomingReductionForHit(
   victimEquipAbilities: Ability[],
   ctx: IncomingHitContext,
-  rollBlock: (abilityId: string, chance: number) => boolean, // engine-supplied (rate-gate + counters)
-): { reductionPct: number; blockedFraction: number }
+): number   // reductionPct, applying §3: take-max crit family + additive others (gated by condition vs ctx)
+
+// M3 — rolled at the damage-APPLY funnel (applyVictimDamage)
+incomingBlockForIntake(
+  victimEquipAbilities: Ability[],
+  ctx: IncomingHitContext,
+  rollBlock: (abilityId: string, chance: number) => boolean, // engine-supplied (rate-gate)
+): number   // blockedFraction: Shadowguard full (1.0) supersedes Ironclad partial; 0 if none roll
 ```
 
-`reductionPct` applies the §3 composition (take-max crit family + additive others). `blockedFraction`
-rolls the applicable block abilities (Shadowguard full supersedes Ironclad partial). The function is
-pure given `rollBlock`; all RNG/state lives in the engine wrapper.
+Both are pure (block is pure *given* `rollBlock`); all RNG/state lives in the engine wrapper.
 
 ### 4.3 State & wiring in the engine
 
 - **`rollBlock`** reuses D-PR1's per-`(owner,ability)` deterministic `procChanceGates` rate-gate
   (`makeRateGate`, engine-owned at `engine.ts:1860`, key `${ownerId}:${abilityId}`). This adds a
   **second consumer** of that map — today it is read only inside `executeIntent` for reactive heals
-  (`triggers.ts:1138-1146`); D-PR3 adds a victim-side read at the positional driver. Same map / same
+  (`triggers.ts:1138-1146`); D-PR3 adds a victim-side read inside `applyVictimDamage`. Same map / same
   key on purpose (one accumulator per owner+ability across the whole battle). Ironclad and
   Shadowguard get **distinct** ability ids so their gates never collide. Plus two
-  per-victim-per-round trackers the engine owns and resets each round:
-  - **hit-index** per victim (incremented on each direct hit) → drives Ironclad's `nth-hit-2plus`.
+  per-victim-per-round trackers the engine owns and resets each round (at `beginRound`):
+  - **direct-intake index** per victim (incremented on each `byDirectDamage` intake) → drives
+    Ironclad's `nth-hit-2plus`.
   - **once-per-round** flag per `(victim, abilityId)` → drives Shadowguard.
-- **Self-status** (`victimStealthed`, `victimStasised`) read from the `statusEngine` at the apply
-  site: `isStasised` is **already tapped** there (`engine.ts:2664`); stealth via
+- **Self-status** (`victimStealthed`, `victimStasised`) read from the `statusEngine` by victim id:
+  `isStasised` is **already tapped** at the engine apply scope (`engine.ts:2664`); stealth via
   `selfBuffNamesForOwners` / the Phase-3 `buildForcedTargetingStatus` seam.
-- **`attackerStealthed`** read from the acting attacker's status (same stealth query).
+- **`attackerStealthed`** read from the acting attacker's status (same stealth query) — needed only
+  by Hyperion Gaze (a %-reduction), at the computation site.
 
-**Apply sites:**
+**Apply sites — %-reduction (M1) at the crit-aware computation sites; block (M3) at the single funnel.**
 
-1. **Positional per-hit (primary — the simulator's path):** `victimHitDamage` (`victimDamage.ts:71`),
-   driven via `drivePositionalApply`/`applyPositionalDamage`. Here `didCrit` is the genuine per-hit
-   boolean. **Signature change:** add an optional final arg
-   `incoming?: { reductionPct: number; blockedFraction: number }` (computed by the caller from the
-   per-hit `IncomingHitContext`), keeping `victimHitDamage` PURE and its existing `??`-fallback
-   direct-call tests green (default `{reductionPct:0, blockedFraction:0}` → byte-identical). Inside:
-   `reductionPct` adds into the existing `incoming` term (`victimDamage.ts:96`, alongside the
-   per-victim enemy-debuff incoming modifier); `blockedFraction` multiplies the return
-   (`victimDamage.ts:106`) by `(1 − blockedFraction)`. The engine assembles `IncomingHitContext` per
-   victim per hit in the driver and calls the evaluator (with the engine-supplied `rollBlock`) to
-   produce that `incoming` arg.
-2. **Aggregate enemy-attack (non-positional — Iridium as a healing-calc tank):**
-   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1295–1305). The **only in-scope effect
-   that can reach this path is Iridium's crit-reduction** (reduction-only): the aggregate path's
-   victims are the bound healing-mode target, and **no in-scope block effect can reach it** — Ironclad
-   and Shadowguard are *implants* that only attach to positioned sim actors, never to the aggregate
-   non-positional target. So the aggregate path needs **reduction only, no block**. Non-crit-family
-   reductions (none reach this path today — Voidshade/Nebula are also implants; included for
-   uniformity) fold into the incoming term (all hits). The crit-family take-max reduction `R` applies
-   to the **crit fraction only**, via the documented algebraic split (verified algebra:
+The key data-flow facts that drive this split:
+- The **positional** path calls `applyToVictim(victim, dmg)` **per sub-hit** (`positionalApply.ts:139-165`).
+- The **aggregate** enemy-attack path calls `applyIncomingToTarget(damage, victim)` **once per attack**
+  (`engine.ts:2818`, `:3408` for DoT batches with `byDirectDamage:false`).
+- Both funnel through **`applyVictimDamage(damage, victim, sink, cause)`** (the shared delegate;
+  `engine.ts:2592`/`:2618`), which carries `cause.byDirectDamage`. Block doesn't need crit info → this
+  is the natural unified home, working in **both** paths automatically.
+
+1. **%-reduction — positional per-hit:** `victimHitDamage` (`victimDamage.ts:71`). Here `didCrit` is
+   the genuine per-hit boolean. **Signature change:** add an optional final arg
+   `equipReductionPct = 0` (computed by the caller via `incomingReductionForHit` from the per-hit
+   `IncomingHitContext`), keeping `victimHitDamage` PURE and its `??`-fallback direct-call tests green
+   (default `0` → byte-identical). It adds into the existing `incoming` term (`victimDamage.ts:96`,
+   alongside the per-victim enemy-debuff incoming modifier). **No block here** — block is applied at
+   the funnel.
+2. **%-reduction — aggregate enemy-attack** (e.g. Iridium as a healing-calc tank):
+   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1295–1305). Non-crit-family reductions
+   (Voidshade/Nebula) fold into the incoming term (all hits). The crit-family take-max reduction `R`
+   applies to the **crit fraction only**, via the documented algebraic split (verified:
    `1 + cf·cd/100 = (1−cf) + cf·(1+cd/100)`):
    `damageCritMultiplier_adj = (1 − critFraction) + critFraction·(1 + cd/100)·(1 − R/100)`,
-   using the locally-available `effectiveCritDamage` and `critFraction`. **No aggregate-path block
-   model is needed** — this removes the §7 "plan to settle" hole.
-3. **DoT-tick (M2 — Vortex Veil):** the inferno/corrosion tick loop (`engine.ts` ~714–740). Compute
-   `IncomingHitContext{ dotType }`, fold the `scope:'dot'` reductions, multiply the tick by
-   `(1 − reductionPct/100)`. No crit, no block on DoTs.
+   using the locally-available `effectiveCritDamage` and `critFraction`.
+3. **Block (M3) — `applyVictimDamage`** (`engine.ts:2592`), gated on `cause.byDirectDamage === true`
+   (so DoT batches never count as "directly damaged"). Roll `incomingBlockForIntake` against the
+   victim's equip abilities (looked up by `victim.id`) and the engine's per-victim trackers; multiply
+   the intake `damage` by `(1 − blockedFraction)` **before** the Barrier/shield/HP path. Skip the roll
+   when the victim is fully Barrier-immune (don't burn the deterministic accumulator on a 0-damage
+   intake). Because the funnel is per-sub-hit in the sim and per-attack in the healing calc, **Ironclad
+   counts direct-damage intakes** at sub-hit granularity in the sim (a 3-hit skill = hits 1/2/3, so
+   2nd/3rd can proc) and per-attack granularity in the healing calc (the coarser legacy path). This
+   matches the in-game "hit multiple times in a round, from the second time"; the cross-path
+   granularity difference is documented and acceptable (the sim is the high-fidelity consumer).
+   Single-enemy single-hit rounds never reach a 2nd intake → Ironclad inert (mirrors Barrier's
+   single-enemy turn-model consequence).
+4. **DoT-tick (M2 — Vortex Veil):** the inferno/corrosion tick loop (`engine.ts` ~714–740). Build
+   `IncomingHitContext{ dotType }`, fold the `scope:'dot'` reductions via `incomingReductionForHit`,
+   multiply the tick by `(1 − reductionPct/100)`. No crit, no block on DoTs.
 
 ### 4.4 Source emitters
 
@@ -251,6 +271,10 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
   established this), and Iridium is **not** in any healing/sim golden (it appears only in C-era
   *unit* tests as a purge-on-damaged source — those are non-golden and auditable). **If a golden
   moves, the gate leaked — fix the gate, never `vitest -u`.**
+  - The new `applyVictimDamage` block step and the per-victim direct-intake counter must be **inert
+    when the victim has no `incoming-block` ability** (skip the counter/roll entirely in that case) →
+    byte-identical for every existing fixture. Likewise the computation-site `equipReductionPct`
+    defaults to 0 when the victim has no `incoming-reduction` ability.
 - **Unit — `incomingEffectsForHit`:** the §3 composition (crit-family take-max; non-crit additive;
   crit-gated entries inert on non-crit hits; Shadowguard full supersedes Ironclad partial; block
   roll honored). Cover each condition's predicate against `IncomingHitContext`.
@@ -287,5 +311,12 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
   resolution points; integration tests must apply Stealth via a path that is live at the victim apply
   site (mirror the Phase-3 active-slot-Taunt test workaround if needed). The same applies to
   `attackerStealthed` (Hyperion Gaze) — the test must put real Stealth on the *attacker* at its turn.
-- **Aggregate-path block: resolved, not a risk.** §4.3.2 establishes no in-scope block effect can
-  reach the aggregate path, so there is no aggregate-block model to settle.
+- **Block reaches BOTH damage paths** (corrected from an earlier draft): a tank with Shadowguard/
+  Ironclad takes damage via the aggregate `applyIncomingToTarget` path in the (non-positional) healing
+  calc, and via the per-sub-hit positional path in the simulator. Block lives at the shared
+  `applyVictimDamage` funnel so it works in both; the only difference is hit-counting granularity
+  (sub-hit in the sim, per-attack in the healing calc), which is documented and accepted.
+- **Ironclad hit-counting granularity.** "Directly damaged for the 2nd+ time" counts direct-damage
+  *intake events*. The plan must confirm the per-victim direct-intake counter resets per round and
+  excludes DoT batches (`byDirectDamage:false`) and Barrier-fully-absorbed intakes (decision: a
+  Barrier-immune intake should NOT advance the counter, since nothing was "damaged").
