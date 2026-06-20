@@ -728,32 +728,44 @@ function tickDoTs(args: {
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
     emitTicked: (dotType: 'corrosion' | 'inferno', damage: number) => void;
     credit: (sourceId: string, dotType: 'corrosion' | 'inferno', damage: number) => void;
+    /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
+     *  Absent → 0 → byte-identical. */
+    incomingDotReductionPct?: (dotType: 'corrosion' | 'inferno') => number;
 }): void {
     // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
     const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
+    const corrosionCredits: Array<{ sourceId: string; d: number }> = [];
     let corrosionSum = 0;
     for (const e of args.corrosionEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue; // applier has not acted yet this run (faster-enemy round 1)
         const d = e.stacks * (e.tier / 100) * corrosionBaseHp * ctx.dotMult * ctx.affinityMult;
-        args.credit(e.sourceId, 'corrosion', d);
+        corrosionCredits.push({ sourceId: e.sourceId, d });
         corrosionSum += d;
     }
     if (corrosionSum > 0) {
-        args.emitTicked('corrosion', corrosionSum);
+        const reductionPct = args.incomingDotReductionPct?.('corrosion') ?? 0;
+        const factor = 1 - reductionPct / 100;
+        for (const { sourceId, d } of corrosionCredits)
+            args.credit(sourceId, 'corrosion', d * factor);
+        args.emitTicked('corrosion', corrosionSum * factor);
     }
 
     // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
+    const infernoCredits: Array<{ sourceId: string; d: number }> = [];
     let infernoSum = 0;
     for (const e of args.infernoEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue;
         const d = e.stacks * (e.tier / 100) * ctx.effectiveAttack * ctx.dotMult * ctx.affinityMult;
-        args.credit(e.sourceId, 'inferno', d);
+        infernoCredits.push({ sourceId: e.sourceId, d });
         infernoSum += d;
     }
     if (infernoSum > 0) {
-        args.emitTicked('inferno', infernoSum);
+        const reductionPct = args.incomingDotReductionPct?.('inferno') ?? 0;
+        const factor = 1 - reductionPct / 100;
+        for (const { sourceId, d } of infernoCredits) args.credit(sourceId, 'inferno', d * factor);
+        args.emitTicked('inferno', infernoSum * factor);
     }
 
     // Expire DoT stacks after ticking
@@ -3499,6 +3511,19 @@ export function runCombat(input: CombatEngineInput): {
                         credit: (_sourceId, _dotType, damage) => {
                             tankDotDamage += damage;
                         },
+                        // D-PR3 (Vortex Veil): reduce the carrier's incoming DoT ticks when
+                        // the tank equips Vortex Veil. The condition 'dot-inferno-corrosion'
+                        // gates on dotType being set, so querying with either dotType returns
+                        // the same %. Absent → 0 → byte-identical for all existing tests.
+                        incomingDotReductionPct: (dotType) =>
+                            incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
+                                didCrit: false,
+                                attackerStealthed: false,
+                                victimStealthed: false,
+                                victimStasised: false,
+                                hitIndexThisRound: 0,
+                                dotType,
+                            }),
                     });
                     if (tankDotDamage > 0) {
                         // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
