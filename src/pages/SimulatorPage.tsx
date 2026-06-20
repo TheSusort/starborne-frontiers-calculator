@@ -122,10 +122,13 @@ const SimulatorPage: React.FC = () => {
         if (!canRun) return;
         setRunError(null);
         try {
-            const result = simulateBattle({
-                playerTeam: buildTeam(playerBoard),
-                enemyTeam: buildTeam(enemyBoard),
-            });
+            const result = simulateBattle(
+                {
+                    playerTeam: buildTeam(playerBoard),
+                    enemyTeam: buildTeam(enemyBoard),
+                },
+                getGearPiece
+            );
             setBattleResult(result);
         } catch (err) {
             setBattleResult(null);
