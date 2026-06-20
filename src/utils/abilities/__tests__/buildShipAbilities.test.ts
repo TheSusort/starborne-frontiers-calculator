@@ -3163,3 +3163,87 @@ describe('buildShipAbilities — E4 Amartya crit-power-scaled purge (countScalin
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR3 T5: Iridium "takes N% less damage from Critical hits" parser rule.
+// The ability is INERT (no engine consumer yet). Tests confirm the passive slot
+// emits exactly one `incoming-reduction` ability with the correct config and
+// that no other existing abilities on the slot are disturbed.
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', () => {
+    // RAW string from docs/ship-skills.csv (Iridium 3rd passive / refit-active 2nd passive).
+    const IRIDIUM_P2_RAW =
+        'This Unit takes 35% less damage from Critical hits, and this effect does not stack with similar effects.<br /><br />When directly damaged, This Unit <unit-aid>purges 2</unit-aid> buffs from the enemy and inflicts <unit-skill>Speed Down II</unit-skill> for 1 turn.<br /><br />Start of combat, This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
+
+    const iridiumWithCritReduction = () =>
+        ship({
+            // eslint-disable name-convention-any
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            secondPassiveSkillText: IRIDIUM_P2_RAW,
+        });
+
+    describe('positive: crit-reduction clause emits incoming-reduction ability', () => {
+        it('passive slot contains exactly ONE incoming-reduction ability', () => {
+            const passive = slot(buildShipAbilities(iridiumWithCritReduction()).slots, 'passive')!;
+            const reductions = passive.abilities.filter((a) => a.type === 'incoming-reduction');
+            expect(reductions).toHaveLength(1);
+        });
+
+        it('incoming-reduction ability has correct config: scope=direct, condition=incoming-crit, pct=35, critFamily=true', () => {
+            const passive = slot(buildShipAbilities(iridiumWithCritReduction()).slots, 'passive')!;
+            const reduction = passive.abilities.find((a) => a.type === 'incoming-reduction');
+            expect(reduction).toBeDefined();
+            expect(reduction!.config).toEqual({
+                type: 'incoming-reduction',
+                scope: 'direct',
+                condition: 'incoming-crit',
+                pct: 35,
+                critFamily: true,
+            });
+        });
+
+        it('incoming-reduction ability is self-targeted, trigger on-cast, autoFilled true, conditions empty', () => {
+            const passive = slot(buildShipAbilities(iridiumWithCritReduction()).slots, 'passive')!;
+            const reduction = passive.abilities.find((a) => a.type === 'incoming-reduction');
+            expect(reduction).toBeDefined();
+            expect(reduction!.target).toBe('self');
+            expect(reduction!.trigger).toBe('on-cast');
+            expect(reduction!.autoFilled).toBe(true);
+            expect(reduction!.conditions).toEqual([]);
+        });
+
+        it('purge ability (on-attacked, count 2) is still emitted alongside the new reduction', () => {
+            const passive = slot(buildShipAbilities(iridiumWithCritReduction()).slots, 'passive')!;
+            const purges = passive.abilities.filter((a) => a.type === 'purge');
+            expect(purges).toHaveLength(1);
+            expect(purges[0].trigger).toBe('on-attacked');
+            if (purges[0].config.type === 'purge') {
+                expect(purges[0].config.count).toBe(2);
+            }
+        });
+    });
+
+    describe('negative: ships without the crit-reduction phrase do NOT emit incoming-reduction', () => {
+        it('Iridium p1 (purge-only, no crit-reduction clause) emits zero incoming-reduction abilities', () => {
+            const iridiumP1 = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, This Unit <unit-aid>purges 1</unit-aid> buff from the enemy and inflicts <unit-skill>Speed Down I</unit-skill> for 1 turn.',
+            });
+            const passive = slot(buildShipAbilities(iridiumP1).slots, 'passive')!;
+            expect(passive.abilities.filter((a) => a.type === 'incoming-reduction')).toHaveLength(
+                0
+            );
+        });
+
+        it('a "takes less damage" clause WITHOUT "from Critical hits" does NOT emit incoming-reduction', () => {
+            const s = ship({
+                firstPassiveSkillText: 'This Unit takes 20% less damage from all sources.',
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive');
+            const reductions =
+                passive?.abilities.filter((a) => a.type === 'incoming-reduction') ?? [];
+            expect(reductions).toHaveLength(0);
+        });
+    });
+});

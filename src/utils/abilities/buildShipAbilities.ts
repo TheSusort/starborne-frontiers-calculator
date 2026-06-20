@@ -508,6 +508,25 @@ function parseModifiers(text: string): ParsedModifier[] {
     return out;
 }
 
+/**
+ * D-PR3 T5 — Detects Iridium's "takes N% less damage from Critical hits" clause and
+ * returns the reduction percentage, or null when the phrase is absent.
+ *
+ * The match is intentionally narrow: only the `takes … less damage from Critical hits`
+ * construction maps to the crit-family incoming-reduction ability. A generic "less
+ * damage" clause (e.g. "takes 20% less damage from all sources") does NOT match and
+ * returns null.
+ *
+ * Masking: `<br />` tags are normalised to `. ` before the regex so they never
+ * break sentence detection; `stripTags` removes inline markup tags.
+ */
+function parseIncomingCritReduction(text: string): number | null {
+    const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = plain.match(/takes\s+(\d+(?:\.\d+)?)%\s+less\s+damage\s+from\s+critical\s+hits/i);
+    if (!m) return null;
+    return parseFloat(m[1]);
+}
+
 function slotFor(label: string): SkillSlot | null {
     if (label === 'Active') return 'active';
     if (label === 'Charge') return 'charged';
@@ -1259,6 +1278,34 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: modifierPos >= 0 ? modifierPos : MAX_POS,
+        });
+    }
+
+    // D-PR3 T5: Iridium "takes N% less damage from Critical hits" → incoming-reduction.
+    // Emitted as a separate block (approach b) rather than extending parseModifiers,
+    // because ParsedModifier is typed for outgoing-damage channels and the incoming-
+    // reduction config shape is orthogonal. The ability is INERT until a later task
+    // wires up the engine consumer.
+    const critReductionPct = parseIncomingCritReduction(text);
+    if (critReductionPct !== null) {
+        const critRedPos = text.search(/less\s+damage\s+from\s+critical\s+hits/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'incoming-reduction',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'incoming-reduction',
+                    scope: 'direct',
+                    condition: 'incoming-crit',
+                    pct: critReductionPct,
+                    critFamily: true,
+                },
+                autoFilled: true,
+            },
+            pos: critRedPos >= 0 ? critRedPos : MAX_POS,
         });
     }
 
