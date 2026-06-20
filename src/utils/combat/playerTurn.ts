@@ -1301,21 +1301,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Both default 0 → byte-identical to the prior fold.
     const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
     const R = args.incomingReductionCritFamilyPct ?? 0;
-    // Crit-family reduction applies to the crit FRACTION only (algebraic split:
-    // 1 + cf*cd/100 = (1-cf) + cf*(1+cd/100), so multiply the crit term by (1 - R/100)).
-    // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream
-    // uses — postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are
-    // the SAME enemy attack against the SAME victim, so the victim's crit reduction applies
-    // to both. With R=0 this equals 1 + critFraction*(effectiveCritDamage/100) exactly.
+    // D-PR3: crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
+    // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
+    // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
+    // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1 → byte-identical
+    // to the prior expression. The crit fraction therefore sees incoming channel (incBase - R)
+    // additively, exactly like positional victimHitDamage; the non-crit fraction sees incBase.
+    // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream uses —
+    // postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are the SAME enemy
+    // attack against the SAME victim, so the victim's crit reduction applies to both.
+    const incBase = incomingDamageModifier - equipNonCrit; // incoming channel for all hits
+    const incDenom = 1 + incBase / 100;
+    const critIncomingRatio = incDenom !== 0 ? (1 + (incBase - R) / 100) / incDenom : 1;
     const damageCritMultiplier =
-        1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * (1 - R / 100);
+        1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * critIncomingRatio;
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
-    // equipNonCrit subtracts a victim incoming reduction (applies to ALL hits); 0 → unchanged.
+    // The incoming channel (incBase) folds the non-crit reduction additively; 0 → unchanged.
     const nonCritFactor =
         (1 - damageReduction / 100) *
         (1 + dmgStats.totals.outgoingDamageBuff / 100) *
-        (1 + (incomingDamageModifier - equipNonCrit) / 100) *
+        (1 + incBase / 100) *
         affinityMult;
     const postDefenseFactor = damageCritMultiplier * nonCritFactor;
     const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;

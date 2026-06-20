@@ -230,12 +230,27 @@ The key data-flow facts that drive this split:
    alongside the per-victim enemy-debuff incoming modifier). **No block here** — block is applied at
    the funnel.
 2. **%-reduction — aggregate enemy-attack** (e.g. Iridium as a healing-calc tank):
-   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1295–1305). Non-crit-family reductions
-   (Voidshade/Nebula) fold into the incoming term (all hits). The crit-family take-max reduction `R`
-   applies to the **crit fraction only**, via the documented algebraic split (verified:
-   `1 + cf·cd/100 = (1−cf) + cf·(1+cd/100)`):
-   `damageCritMultiplier_adj = (1 − critFraction) + critFraction·(1 + cd/100)·(1 − R/100)`,
-   using the locally-available `effectiveCritDamage` and `critFraction`.
+   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1300–1320). Both families fold
+   **additively into the incoming channel** — exactly like the positional path (`victimHitDamage`),
+   so the two damage paths compose identically when a crit-family reduction co-occurs with an
+   enemy "+N% damage taken" debuff on the same victim. Non-crit-family reductions (Voidshade/Nebula,
+   `equipNonCrit`) subtract from the incoming term for **all** hits; the crit-family take-max
+   reduction `R` subtracts from the incoming term for the **crit fraction only**.
+   Let `incBase = incomingDamageModifier − equipNonCrit` be the all-hits incoming channel. The crit
+   fraction sees channel `(incBase − R)`. To keep the clean `postDefenseFactor =
+   damageCritMultiplier · nonCritFactor` structure (and the passive-hit path that reuses both),
+   express the crit-fraction's extra reduction as a **ratio** against the non-crit incoming factor:
+   ```
+   incDenom          = 1 + incBase/100
+   critIncomingRatio = incDenom !== 0 ? (1 + (incBase − R)/100) / incDenom : 1
+   damageCritMultiplier = (1 − critFraction) + critFraction·(1 + cd/100)·critIncomingRatio
+   nonCritFactor        = (1 − dr/100)·(1 + odb/100)·(1 + incBase/100)·affinityMult
+   ```
+   At `R = 0` the ratio is `1`, so `damageCritMultiplier` reduces to the pre-D-PR3
+   `(1 − cf) + cf·(1 + cd/100)` and `nonCritFactor` (with `equipNonCrit = 0`) to
+   `(1 + incomingDamageModifier/100)` — byte-identical to every existing fixture. Multiplying out
+   the crit-fraction contribution confirms the crit hit sees incoming channel `(incBase − R)`
+   additively, matching positional `victimHitDamage` (no multiplicative `(1 − R/100)` split).
 3. **Block (M3) — `applyVictimDamage`** (`engine.ts:2592`), gated on `cause.byDirectDamage === true`
    (so DoT batches never count as "directly damaged"). Roll `incomingBlockForIntake` against the
    victim's equip abilities (looked up by `victim.id`) and the engine's per-victim trackers; multiply
