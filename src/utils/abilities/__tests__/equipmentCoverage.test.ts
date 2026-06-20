@@ -2,8 +2,14 @@
  * equipmentCoverage.test.ts
  *
  * Documents CURRENT buildEquipmentAbilities coverage across the full IMPLANTS +
- * GEAR_SETS corpus.  The intent is a living regression guard: when D-PR2 adds new
- * effects, this file is updated deliberately so reviewers can see coverage grow.
+ * GEAR_SETS corpus.  The intent is a living regression guard: when new effects are
+ * added, this file is updated deliberately so reviewers can see coverage grow.
+ *
+ * D-PR2 added the outgoing-damage / conditional-damage family
+ * (INTRUSION, ARCANE_SIEGE, WARPSTRIKE + LEECH gear set).
+ * D-PR3 added the incoming-reduction / block family
+ * (VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD
+ * implants + HARDENED gear set).
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
@@ -87,16 +93,16 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 
 // ---------------------------------------------------------------------------
 // Regression guard: implemented effect names must equal exactly this set.
-// Update deliberately when D-PR2 adds more.
+// Update deliberately when new effects are added.
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH (gear set), BLOODTHIRST + INTRUSION + ARCANE_SIEGE + WARPSTRIKE (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + IRONCLAD + SHADOWGUARD (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
         );
-        expect(implementedSets).toEqual(['LEECH']);
+        expect(implementedSets).toEqual(['LEECH', 'HARDENED']);
 
         // Implants with an ability builder (check each implant with a rarity that exists)
         const implementedImplants = Object.keys(IMPLANTS).filter((key) => {
@@ -106,9 +112,15 @@ describe('equipmentCoverage — implemented effects registry', () => {
         });
         expect(implementedImplants).toEqual([
             'ARCANE_SIEGE',
+            'HYPERION_GAZE',
             'INTRUSION',
+            'NEBULA_NULLIFIER',
+            'VOIDSHADE',
+            'VORTEX_VEIL',
             'WARPSTRIKE',
             'BLOODTHIRST',
+            'IRONCLAD',
+            'SHADOWGUARD',
         ]);
     });
 });
@@ -117,13 +129,19 @@ describe('equipmentCoverage — implemented effects registry', () => {
 // Gear-set coverage: one assertion per set
 // ---------------------------------------------------------------------------
 
+const IMPLEMENTED_SETS = new Set(['LEECH', 'HARDENED']);
+
 describe('equipmentCoverage — gear sets', () => {
     it('LEECH produces exactly 1 ability (the standing leech)', () => {
         expect(gearSetAbilityCount('LEECH')).toBe(1);
     });
 
-    const nonLeechSets = Object.keys(GEAR_SETS).filter((k) => k !== 'LEECH');
-    for (const setKey of nonLeechSets) {
+    it('HARDENED produces exactly 1 ability (incoming-reduction)', () => {
+        expect(gearSetAbilityCount('HARDENED')).toBe(1);
+    });
+
+    const unimplementedSets = Object.keys(GEAR_SETS).filter((k) => !IMPLEMENTED_SETS.has(k));
+    for (const setKey of unimplementedSets) {
         it(`${setKey} produces 0 abilities (not yet implemented)`, () => {
             expect(gearSetAbilityCount(setKey)).toBe(0);
         });
@@ -148,7 +166,19 @@ describe('equipmentCoverage — implants', () => {
     });
 
     // D-PR2: INTRUSION, ARCANE_SIEGE, WARPSTRIKE now produce 1 ability each.
-    const implementedImplants = new Set(['BLOODTHIRST', 'INTRUSION', 'ARCANE_SIEGE', 'WARPSTRIKE']);
+    // D-PR3: VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD added.
+    const implementedImplants = new Set([
+        'BLOODTHIRST',
+        'INTRUSION',
+        'ARCANE_SIEGE',
+        'WARPSTRIKE',
+        'VOIDSHADE',
+        'NEBULA_NULLIFIER',
+        'HYPERION_GAZE',
+        'VORTEX_VEIL',
+        'IRONCLAD',
+        'SHADOWGUARD',
+    ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
         const variants = IMPLANTS['INTRUSION'].variants;
@@ -168,6 +198,51 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['WARPSTRIKE'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('WARPSTRIKE', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR3: incoming-reduction implants — 1 ability per available rarity.
+    it('VOIDSHADE produces 1 ability per rarity (incomingDamage reduction while in stealth)', () => {
+        const variants = IMPLANTS['VOIDSHADE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('VOIDSHADE', v.rarity)).toBe(1);
+        }
+    });
+
+    it('NEBULA_NULLIFIER produces 1 ability per rarity (incomingDamage reduction while Stasis/Disable)', () => {
+        const variants = IMPLANTS['NEBULA_NULLIFIER'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('NEBULA_NULLIFIER', v.rarity)).toBe(1);
+        }
+    });
+
+    it('HYPERION_GAZE produces 1 ability per rarity (incomingDamage reduction when crit-hit by stealthed enemy)', () => {
+        const variants = IMPLANTS['HYPERION_GAZE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('HYPERION_GAZE', v.rarity)).toBe(1);
+        }
+    });
+
+    it('VORTEX_VEIL produces 1 ability per rarity (incomingDamage reduction from Inferno/Corrosion)', () => {
+        const variants = IMPLANTS['VORTEX_VEIL'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('VORTEX_VEIL', v.rarity)).toBe(1);
+        }
+    });
+
+    it('IRONCLAD produces 1 ability per rarity (block chance on repeated damage; no uncommon)', () => {
+        // IRONCLAD has common/rare/epic/legendary — no uncommon variant.
+        const variants = IMPLANTS['IRONCLAD'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('IRONCLAD', v.rarity)).toBe(1);
+        }
+    });
+
+    it('SHADOWGUARD produces 1 ability per rarity (block while in stealth; epic/uncommon/legendary only)', () => {
+        // SHADOWGUARD has epic/uncommon/legendary — no common or rare variant.
+        const variants = IMPLANTS['SHADOWGUARD'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('SHADOWGUARD', v.rarity)).toBe(1);
         }
     });
 
