@@ -3139,3 +3139,27 @@ describe('buildShipAbilities — Nayra target-repaired-this-round purge (C2b-3)'
         ]);
     });
 });
+
+// E4: Amartya — crit-power-scaled purge count threaded through the built ability.
+describe('buildShipAbilities — E4 Amartya crit-power-scaled purge (countScaling)', () => {
+    const amartya = () =>
+        ship({
+            chargeSkillText:
+                'This Unit deals 210% damage and purges 1 buff from all enemies for every 50% crit power this Unit has.',
+            chargeSkillCharge: 4,
+        });
+
+    it('emits exactly ONE purge ability from the charged slot with countScaling { stat: critDamage, per: 50 }', () => {
+        const charged = slot(buildShipAbilities(amartya()).slots, 'charged')!;
+        const purges = charged.abilities.filter((a) => a.type === 'purge');
+        expect(purges).toHaveLength(1);
+        const purge = purges[0];
+        expect(purge.trigger).toBe('on-cast');
+        expect(purge.target).toBe('all-enemies');
+        expect(purge.config).toMatchObject({
+            type: 'purge',
+            count: 1,
+            countScaling: { stat: 'critDamage', per: 50 },
+        });
+    });
+});
