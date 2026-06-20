@@ -91,11 +91,16 @@ export interface HealingRuntimeCtx {
      *  local effectiveHp directly, never this accessor.) */
     applierMaxHp: (actorId: string) => number | undefined;
     /** Target-routed heal: consumed = min(raw, maxHp − currentHp); dead target → all overheal.
-     *  Mutates target.currentHp. Returns the split. */
-    applyHealToTarget: (raw: number) => { consumed: number; overheal: number };
-    /** Additive pool capped at the target's max HP; drains before HP (enemy attacks, Task 8).
-     *  Dead target → no-op. */
-    grantShieldToTarget: (raw: number) => void;
+     *  Mutates the victim's currentHp. Returns the split. `victim` defaults to the heal target
+     *  (E2 T1: optional per-victim override for positional AoE leech). */
+    applyHealToTarget: (
+        raw: number,
+        victim?: CombatActor
+    ) => { consumed: number; overheal: number };
+    /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
+     *  Dead victim → no-op. `victim` defaults to the heal target (E2 T1: optional per-victim
+     *  override for positional AoE leech). */
+    grantShieldToTarget: (raw: number, victim?: CombatActor) => void;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
 }

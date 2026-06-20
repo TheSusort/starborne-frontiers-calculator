@@ -105,6 +105,7 @@ describe('applyPositionalDamage', () => {
             applyToVictim: (victim, damage) => {
                 applyCalls.push({ id: victim.id, damage, didCrit: false });
                 victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
             },
             emitHit: (victim, damage, didCrit) => {
                 emitCalls.push({ id: victim.id, damage, didCrit });
@@ -138,6 +139,7 @@ describe('applyPositionalDamage', () => {
             applyToVictim: (victim, damage) => {
                 applyCalls.push({ id: victim.id, damage, didCrit: false });
                 victim.currentHp = 0;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
             },
             emitHit: (victim, damage, didCrit) => {
                 emitCalls.push({ id: victim.id, damage, didCrit });
@@ -171,6 +173,7 @@ describe('applyPositionalDamage', () => {
             // High HP, real damage decrement — nobody dies, so footprint stays stable.
             applyToVictim: (victim, damage) => {
                 victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
             },
             emitHit: (victim, damage, didCrit) => {
                 emitCalls.push({ id: victim.id, damage, didCrit });
@@ -207,6 +210,7 @@ describe('applyPositionalDamage', () => {
                 defenseProfileOf: profile,
                 applyToVictim: (victim, damage) => {
                     victim.currentHp -= damage;
+                    return { shieldBefore: 0, hpDamage: damage, barriered: false };
                 },
                 emitHit: (victim, damage, didCrit) => {
                     emitCalls.push({ id: victim.id, damage, didCrit });

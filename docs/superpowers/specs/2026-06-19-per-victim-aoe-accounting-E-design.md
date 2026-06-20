@@ -100,15 +100,42 @@ path, existing non-positional fixtures add no enemy keys → byte-identical (see
 > a positive per-victim-intake assertion. The enemy intake surface is live but **unread until E2**
 > (per-victim leech).
 
-**E2 — per-victim leech.**
-- *Standing leech* (heal/shield off damage **dealt**): today `procStandingLeeches` (`engine.ts:2086`)
-  fires once at the credit point off the **aggregate** `amount` (~`engine.ts:2200`). E2 moves this to a
-  per-victim sum over footprint victims; covered cells contribute their reduced (50%) damage, since
-  leech is computed off **real damage dealt**.
-- *Taken leech* (reactive heal/shield off damage **taken**): each player victim procs its **own**
-  reactive off the damage **it** took. Un-gates the `!enemyPositional` blocks (`engine.ts:3913`,
-  `3902-3912`).
-- Reads E1's per-victim outcome surface (the shield/hp split each victim needs to leech from).
+**E2 — per-victim leech (now includes per-victim heal/shield POOL generalization — scope decision 2026-06-19).**
+- **Per-victim pool foundation (pulled forward from E5).** Today `applyHealToTarget` / `grantShieldToTarget`
+  (`engine.ts:~1914`/`~1930`) are hardcoded to the single `healTarget` (they close over it and mutate
+  `healTarget.currentHp` / `.shieldPool`). E2 parametrizes them by victim, **defaulting to `healTarget`** so
+  every non-positional call stays byte-identical. This is the machinery that makes a leeching ship heal its
+  OWN pool — and it is exactly what E5's per-victim repair needs, so it lands here (E5 shrinks accordingly).
+- *Standing leech* (heal/shield off damage **dealt**): today `procStandingLeeches` (`engine.ts:2086`) is
+  **entirely suppressed on the positional path** (the `direct` credit is skipped per-victim to avoid
+  double-counting cumulative damage, so the leech never procs). E2 procs it **per footprint victim** off that
+  victim's own dealt damage (covered cells contribute their reduced 50% — already baked into the per-victim
+  `damage`), crediting/applying to the **leeching owner's own pool** via the parametrized closures. Must NOT
+  route through the cumulative `dmg()` accumulator (no double-count); DoT/bomb/detonation-channel leech stays
+  aggregate and untouched.
+- *Taken leech* (reactive heal/shield off damage **taken**): each player victim procs its **own** reactive
+  off the damage **it** took, into its **own** pool. Un-gates the `!enemyPositional` block (`engine.ts:3921-3926`).
+  Requires expanding `takenLeeches` registration (`engine.ts:~2061`, today heal-target-only) to **all player
+  runtimes** (mirror `standingLeeches` at `~2029`), and reading each victim's per-hit outcome
+  (`{shieldBefore, hpDamage, barriered}`) — the Barrier carve-out (a `damage-taken` leech reads 0 in a
+  fully-blocked round) and `requiresHpDamage` (Quixilver) must hold **per victim**.
+- Reads E1's per-victim intake surface + the per-hit damage outcome (which the positional apply path computes
+  per victim but currently discards — E2 surfaces `applyToVictim`'s return through the per-victim hook in
+  `applyPositionalDamage` / `drivePositionalApply`).
+
+> **E2 SHIPPED** (2026-06-19, commits `bff66b74`→`680957fb`). Per-victim leech is live on the positional path.
+> **T1** parametrized `applyHealToTarget` / `grantShieldToTarget` by victim (defaulting to `healTarget`) so the
+> pool-application closures now heal/shield any owner's OWN pool — byte-identical for every non-positional call.
+> **T2** added the inert `onVictimResolved` hook to `drivePositionalApply` carrying each victim's per-hit damage
+> outcome. **T3** procs standing leech (heal/shield off damage dealt) per footprint victim off that victim's own
+> dealt damage (covered cells already at reduced 50%), crediting the leeching owner's pool via the parametrized
+> closures, bypassing the cumulative `dmg()` accumulator (no double-count). **T4** expanded `takenLeeches`
+> registration from heal-target-only to per-owner (all player runtimes, mirroring `standingLeeches`) —
+> byte-identical. **T5** un-gated the `!enemyPositional` taken-leech block so each victim procs its own reactive
+> off the damage IT took into its OWN pool, with the per-victim Barrier carve-out (fully-blocked round reads 0)
+> and `requiresHpDamage` (Quixilver) holding per victim. Production byte-identical: **zero `.snap` movement**
+> across the whole PR (working-tree and `main...HEAD`), full suite green (2673 tests), lint 0 / tsc clean /
+> audit 0/141. E5's per-victim repair (Nayra) can now reuse the T1 parametrized closures, so **E5 is now thin**.
 
 **E3 — AoE purge/cleanse.** Replace the single-`targetId` removal with a loop over the footprint
 victims for "all-enemies"-style targets. There are **two single-anchor purge sites** to fix (cleanse
@@ -123,12 +150,12 @@ cleanse (`playerTurn.ts:1624`) and reactive cleanse (`triggers.ts:1190`); end-of
 computed from the caster's **live** crit power at cast time, applied to **every** footprint victim.
 Builds on E3's multi-victim loop. Removes the C2a single-anchor count-1 under-approximation flag.
 
-**E5 — unification + Nayra consequence.** With the no-op sink gone (E1), collapse the dual
-accounting/credit paths and tidy death-fallback. **Per-victim repair tracking** then lights up:
-`repairedThisRound` is already a per-actor Set, so once the symmetric surface lets any actor be
-healed/tracked per-victim, the documented Nayra limitation
-(player-Nayra-vs-enemy always false because "engine never heals enemy ships") resolves with no new
-mechanism.
+**E5 — unification + Nayra consequence (SHRUNK after E2 pulled the pool generalization forward).** With the
+no-op sink gone (E1) and the per-victim heal/shield pools done (E2), E5 collapses the dual accounting/credit
+paths and tidies death-fallback. **Per-victim repair tracking** then lights up: `repairedThisRound` is
+already a per-actor Set, and once any actor can be healed into its own pool (E2's parametrized closures), the
+documented Nayra limitation (player-Nayra-vs-enemy always false because "engine never heals enemy ships")
+resolves with the Nayra condition + the now-general pools — no new pool mechanism needed.
 
 ## 5. Locked decisions
 
@@ -136,7 +163,10 @@ mechanism.
 - **E1 is internal only** — no simulator-UI surfacing of enemy per-victim absorb/HP. Surfacing waits
   for the shield system (sub-project H), where it is no longer moot.
 - **Full E, sequential PRs** (B/C-series cadence).
-- **Nayra per-victim repair lands in E5** as a consequence of the symmetric surface, not its own PR.
+- **Per-victim heal/shield POOL generalization lands in E2** (scope decision 2026-06-19), not E5 — E2's
+  leech must heal each leeching ship's own pool to be correct in the multi-actor sim, and that machinery is
+  shared with E5's per-victim repair. Closures default to `healTarget` → non-positional byte-identical.
+- **Nayra per-victim repair lands in E5** (condition + credit unification), now riding E2's general pools.
 - **Thread 2 (E3/E4) is independent of Thread 1 (E1/E2)** and may be sequenced first.
 
 ## 6. Out of scope / deferred elsewhere
