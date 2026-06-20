@@ -413,7 +413,11 @@ export function registerReactiveListeners(args: {
                         if (e.casterId === ownerId)
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId, fromPurgeEvent: true },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    counterTargetId: e.targetId,
+                                    fromPurgeEvent: true,
+                                },
                             });
                     });
                     break;
@@ -424,7 +428,11 @@ export function registerReactiveListeners(args: {
                         if (isSameSideAlly(e.targetId, ownerId))
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId, fromPurgeEvent: true },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    damagedAllyId: e.targetId,
+                                    fromPurgeEvent: true,
+                                },
                             });
                     });
                     break;
@@ -1229,6 +1237,9 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'purge') {
+        // Single-target BY DESIGN (counter-attacker / killer / most-buffs routing) — out of E3's
+        // AoE scope: no 'all-enemies' reactive purge exists in the corpus and the firing skill's
+        // footprint (pattern + opposing roster) is not reachable at drain time.
         // Reactive purge (C2b): remove buffs from the victim. Target = the routed
         // attacker/killer (counterTargetId — set by on-attacked/on-destroyed in C2b-2,
         // and by on-enemy-purged for Sefuba's chain victim-routing) else the turn's

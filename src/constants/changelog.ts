@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.64.0';
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: lifesteal/leech (heal or shield from damage dealt or taken) now works per ship — each ship heals or shields itself off its own damage, and AoE splash leeches off the reduced (covered-cell) splash damage.',
+    'Combat simulator: area-of-effect purge skills now remove buffs from every enemy they hit, not just the primary target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

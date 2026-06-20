@@ -43,7 +43,7 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
-import { applyPositionalDamage, type VictimDamageOutcome } from './positionalApply';
+import { applyPositionalDamage, footprintVictims, type VictimDamageOutcome } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
@@ -2829,6 +2829,22 @@ export function runCombat(input: CombatEngineInput): {
             const tb = turnBindings(a.side);
             const rt = runtimeFor(a);
             const maxHp = rt.hp; // unified denom (baseHpFor(id) === runtimeFor(id).hp)
+            // E3 (AoE purge): footprint victim ids for an 'all-enemies' on-cast purge.
+            // Computed ONLY when positional — `tgt.position != null` is the positional
+            // discriminator (selectTurnTarget returns the position-less dummy/heal-target sink
+            // in DPS/healing-single mode). footprintVictims is the same pure resolver the AoE
+            // damage path uses; covered cells are included (status removal is uniform across the
+            // footprint). Non-positional → undefined → the playerTurn purge loop falls back to
+            // the single anchor → byte-identical. The purge ability gates on
+            // target === 'all-enemies', so single-'enemy' purges ignore this regardless.
+            const aoePattern = parsedPatternFor(a);
+            const aoeTarget = parsedTargetFor(a); // parse-completeness guard only (not a footprint arg)
+            const aoeVictimIds =
+                aoePattern != null && aoeTarget != null && tgt.position != null
+                    ? footprintVictims(aoePattern, tgt.position, tb.opposingRoster).map(
+                          (h) => h.victim.id
+                      )
+                    : undefined;
             return {
                 runtime: rt,
                 enemy: tgt,
@@ -2865,6 +2881,7 @@ export function runCombat(input: CombatEngineInput): {
                 targetRepairedThisRound: repairedThisRound.has(tgt.id),
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
+                ...(aoeVictimIds ? { aoeVictimIds } : {}),
             };
         };
 
@@ -4325,6 +4342,7 @@ export function runCombat(input: CombatEngineInput): {
         // round-ended (C2b-2): end-of-round reactive purge (Rhodium). Emitted at the round TAIL,
         // after the post-round death drain so the purge sees post-death state, before roundData
         // assembly. Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
+        // Drains the single-target reactive executor (most-buffs) — single-target by design, out of E3 scope.
         bus.emit({ type: 'round-ended', round: r });
         drainIntents();
         drainEnemyIntents();
