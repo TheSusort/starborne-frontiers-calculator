@@ -70,34 +70,76 @@ every 50% crit power this Unit has." → `count = floor(critDamage / 50)`.
 
 **Removes** the C2a single-anchor count-1 under-approximation flag/note left for E4.
 
+**Edge cases:**
+
+- `count === 0` (crit power < `per`) → no purge, no `purge-performed` emit (the emit is already
+  gated on `removed > 0` at playerTurn.ts:1422, so this falls out for free). Amartya's base crit
+  power is 50 → count 1, so this is only reachable with a crit-power debuff.
+- **Confirm Amartya's charge parses as `target: 'all-enemies'`** so it enters the `aoeVictimIds`
+  footprint branch (playerTurn.ts ~1419) rather than the single-anchor fallback — the per-victim
+  claim depends on it (verify in the plan's baseline task).
+
 **Gate:** byte-identical goldens (Amartya has no golden fixture). New unit test: count scales with
-live crit power (e.g. 150 → 3, 100 → 2, buffed crit power → higher), applied per footprint victim.
+live crit power (e.g. 150 → 3, 100 → 2, buffed crit power → higher; 0-count edge), applied per
+footprint victim.
 
 ## 4. E5 — symmetric healing + Nayra + accounting tidy
 
 ### 4.1 Symmetric healing (the core)
 
-`healEventOnly` was introduced (Phase 4c PR4) so enemy heals **emit** heal events without **polluting
-the player healing buckets** (`healFor` / `credit`). It currently also blocks the HP-restore mutation,
+`healEventOnly` (set only on `enemyTurnBindings`, engine.ts ~2790, never on `playerTurnBindings`)
+was introduced (Phase 4c PR4) so enemy heals **emit** heal events without **polluting the player
+healing buckets** (`healFor` / `healing.credit`). It currently also blocks the HP-restore mutation,
 which is why enemy HP never recovers and `repairedThisRound` never sees an enemy id.
 
-Split `healEventOnly`'s two concerns:
+**The pool mechanism is already fully general** — `applyHealToTarget(raw, victim = healTarget)`
+(engine.ts ~1912) and `grantShieldToTarget(raw, victim = healTarget)` (~1928) heal **any** actor's
+own `currentHp` / `shieldPool`, clamp against per-victim `recipientMaxHp(victim.id)` (~1789, resolves
+any id via `lastTurnCtxByActor ?? baseHpFor`), and already call `repairedThisRound.add(victim.id)`.
+**No pool change is needed.** Three player-centric *routing* facts are what block enemy heals:
 
-- **(a) HP-restore mutation** — `applyHealToTarget(raw, victim)` adding `victim.currentHp` and
-  `repairedThisRound.add(victim.id)`, plus `grantShieldToTarget` adding to `victim.shieldPool`:
-  **ENABLE** for enemy-side heals, routed to the healed enemy ally's **own** pool via E2's
-  parametrized closures (pass the resolved enemy recipient as `victim`, not the player `healTarget`).
-- **(b) Player-bucket credit** — the `healFor` / `healing.credit` writes that build the player healing
-  result: keep **SUPPRESSED** for enemy heals (no enemy result surface until sub-project H).
+1. `recipientsFor(target)` (playerTurn.ts:1457–1462) is hardcoded player-side:
+   `self → [actor.id]`, `all-allies → healing.playerIds`, `ally → [healing.targetId]` (the player
+   heal-target). For an enemy caster these resolve onto **player** ids.
+2. The HP-apply is gated `if (rid === healing.targetId)` (playerTurn.ts:1613/1631), so even on the
+   non-event path only the **player heal-target** gets HP/shield (other recipients get
+   `directHeal`/`shield` credit only). The enemy recipient never reaches `applyHealToTarget`.
+3. In `healEventOnly` mode the heal branch `continue`s (playerTurn.ts:1598) and the shield branch
+   `continue`s (1624) **before computing the numeric `raw`** at all.
 
-So after E5 the enemy heal **restores enemy HP** but its numbers **do not appear** in the player
-healing result. Recipient resolution reuses the existing enemy-team ally routing (enemy-team support
-PRs #102–#104) for `ally` / `all-allies` heal targets; positional heals ride E2's per-victim pools.
+**Mechanism (confined entirely to the `healEventOnly === true` branch → player path byte-identical):**
+Replace the event-only early-`continue` with an enemy-side apply path:
 
-**Affected sites (from the scope map; plan confirms exact lines):** the four `healEventOnly` guards in
-`playerTurn.ts` (~1544 HoT, ~1594/1624 cast heal, ~1639 shield) — separate the HP-mutation call from
-the bucket-credit call so each can be gated independently; the enemy heal recipient resolution; and
-the `applyHealToTarget`/`grantShieldToTarget` call sites that currently pass no `victim` arg.
+- **Compute the heal numeric in enemy mode.** Draw `healCritGate` (1601) and compute `raw`
+  (1605–1611) exactly as the player path does. *(This adds RNG draws on the enemy turn — see the
+  gate note in §6: deterministic-but-new draws, audited two-team-sim churn.)*
+- **Route to the recipient's own pool, NOT the player heal-target.** Resolve each enemy recipient id
+  to its `CombatActor` (via the engine's `allActorsById` / a `victimOf(id)` helper) and call
+  `applyHealToTarget(raw, recipientActor)` / `grantShieldToTarget(raw, recipientActor)`. This heals
+  the enemy's own `currentHp` and fires `repairedThisRound.add(recipientId)`.
+- **Suppress player-bucket credit.** Do **not** call `healing.credit(...)` on the enemy path (no
+  enemy result surface until sub-project H). Still push recipients to `healTargets` so the
+  `heal-performed` event fires (as today).
+
+**Enemy recipient resolution.** Make `recipientsFor` side-aware off the acting actor's side:
+
+- `self → [actor.id]` (already side-agnostic; covers the common case — most enemy repairs are
+  self-targeted, e.g. Isha "when directly damaged, this Unit repairs 3% of its max HP").
+- `all-allies →` the acting side's ally id list. Thread an `enemyIds` list into `HealingRuntimeCtx`
+  (mirror of the existing `playerIds` field, ~1937), sourced like the enemy-team routing of
+  PRs #102–#104 (`enemyRecipientIds`).
+- `ally` (single-target) on the enemy side: **DECISION (plan-level, default proposed):** resolve to
+  the **lowest-HP living enemy ally** (deterministic, mirrors typical healer targeting). If the plan
+  finds no single-target `ally` enemy heal in the corpus that matters for Nayra, this may be deferred
+  with a logged note rather than implemented speculatively.
+
+**healingCtx existence.** `healingCtx` is built only when a player `healTarget` exists (~1901). It is
+present in **healing-calc** mode and in the **two-team battle-sim** (battleSimulator sets
+`healTargetId: focus.id`, the vestigial workaround C1 relies on). In **pure DPS** there is no
+`healingCtx` and the enemy is the indestructible dummy with no heal abilities → enemy heals are moot.
+So every mode that can host an enemy healer already has the ctx. The plan must still confirm
+`baseHpFor` resolves enemy ids (walked enemies populate `lastTurnCtxByActor` after their first turn;
+pre-first-turn falls back to `baseHpFor`).
 
 ### 4.2 Nayra lights up (consequence, no new code beyond 4.1)
 
@@ -138,17 +180,27 @@ them; it documents this (a comment at the two declarations) so the framing is cl
 - **Nayra requires no Nayra-specific code** beyond 4.1 — its condition + repair tracking already ship.
 - **One spec, two sequential PRs:** E4 first (small, gameplay-visible), then E5.
 - **E5 is one PR** (symmetric healing → Nayra → detonation → DRY → doc); user ratified not peeling
-  detonation/DRY into a separate follow-up.
+  detonation/DRY into a separate follow-up. **Known risk / pressure valve:** §4.1 (healing routing)
+  is the riskiest change in the epic and is bundled with two unrelated cleanups (§4.3 detonation
+  intake, §4.4 DRY). If, during planning or implementation, §4.1 proves larger than estimated, peel
+  §4.3/§4.4 into a thin follow-up PR rather than ballooning the symmetric-healing PR's review surface.
 - **Internal only** — no `/simulator` UI surfacing of enemy heal/HP (→ H).
 
 ## 6. Testing / gate
 
 - **DPS goldens: byte-identical** (indestructible dummy enemy has no heal abilities).
-- **Healing-calc goldens: byte-identical** — audit that no healing-calc fixture has an enemy that
-  heals an enemy ally (expected none; if one exists, that churn is audited, not blind `-u`).
+- **Healing-calc goldens: byte-identical** — guaranteed *structurally*, not just by fixture audit:
+  the entire change is confined to the `healEventOnly === true` branch, and `healEventOnly` is set
+  only on `enemyTurnBindings` (never on `playerTurnBindings`). Player-side healing-calc turns never
+  enter the changed code. (Still spot-audit that no healing-calc fixture's *enemy* attacker has a
+  heal/shield ability whose new HP-restore moves a tank-survival trajectory.)
 - **Two-team-sim goldens** (`twoTeamBattle`, `dpsSimulator` multi-actor, `positionalDamage.integration`):
-  **AUDITED churn** only where (a) an enemy ship now heals an enemy ally, or (b) player-Nayra now fires
-  its repaired-this-round purge/Stasis vs a repaired enemy. Every diff explained; never `vitest -u`.
+  **AUDITED churn** where (a) an enemy ship now heals an enemy ally (HP trajectory + survival), (b)
+  player-Nayra now fires its repaired-this-round purge/Stasis vs a repaired enemy, or (c) the new
+  enemy-side `healCritGate` draws shift a deterministic RNG sequence. Every diff explained; never
+  `vitest -u`. **RNG note:** drawing the heal crit gate on the enemy turn is a *new* consumption of
+  the gate; if any two-team fixture shares an RNG stream across turns, downstream draws can shift —
+  audit and explain, do not regenerate blindly.
 - **New tests:**
   - E4: purge count scales with live crit power, per footprint victim.
   - E5: enemy heal restores enemy ally HP into its own pool + populates `repairedThisRound`; enemy
