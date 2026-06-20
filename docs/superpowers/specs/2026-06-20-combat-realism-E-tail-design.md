@@ -114,9 +114,13 @@ Replace the event-only early-`continue` with an enemy-side apply path:
   (1605–1611) exactly as the player path does. *(This adds RNG draws on the enemy turn — see the
   gate note in §6: deterministic-but-new draws, audited two-team-sim churn.)*
 - **Route to the recipient's own pool, NOT the player heal-target.** Resolve each enemy recipient id
-  to its `CombatActor` (via the engine's `allActorsById` / a `victimOf(id)` helper) and call
-  `applyHealToTarget(raw, recipientActor)` / `grantShieldToTarget(raw, recipientActor)`. This heals
-  the enemy's own `currentHp` and fires `repairedThisRound.add(recipientId)`.
+  to its `CombatActor` and call `applyHealToTarget(raw, recipientActor)` (heals enemy `currentHp`,
+  fires `repairedThisRound.add(recipientId)`). **Id→actor resolution (pin):** `allActorsById`
+  (engine.ts ~1665) already includes enemy actors; since `HealingRuntimeCtx` is built in engine.ts
+  but consumed in playerTurn.ts, the enemy apply path must either close over `allActorsById` or gain
+  an explicit `recipientActor(id) => CombatActor` resolver on the ctx (plan picks one — prefer the
+  ctx resolver to keep the closure boundary clean, consistent with how prior routing fixes were
+  threaded).
 - **Suppress player-bucket credit.** Do **not** call `healing.credit(...)` on the enemy path (no
   enemy result surface until sub-project H). Still push recipients to `healTargets` so the
   `heal-performed` event fires (as today).
@@ -137,9 +141,18 @@ Replace the event-only early-`continue` with an enemy-side apply path:
 present in **healing-calc** mode and in the **two-team battle-sim** (battleSimulator sets
 `healTargetId: focus.id`, the vestigial workaround C1 relies on). In **pure DPS** there is no
 `healingCtx` and the enemy is the indestructible dummy with no heal abilities → enemy heals are moot.
-So every mode that can host an enemy healer already has the ctx. The plan must still confirm
-`baseHpFor` resolves enemy ids (walked enemies populate `lastTurnCtxByActor` after their first turn;
-pre-first-turn falls back to `baseHpFor`).
+So every mode that can host an enemy healer already has the ctx.
+
+**REQUIRED CHANGE — enemy max-HP seed (not just a confirm).** `recipientMaxHp(id)` (~1789) is
+`lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? baseHpFor(id)`, and `baseHpById` (~1689) **excludes
+enemy ids** (explicit comment ~1688 "Enemy ids are never queried as recipients"), so `baseHpFor`
+returns `?? 0` for an enemy. For an enemy recipient healed **before its first turn** (no
+`lastTurnCtxByActor` entry yet), `recipientMaxHp` → 0 → the deficit `Math.max(0, min(raw, 0 -
+currentHp))` → `consumed === 0` → the heal is all overheal **and `repairedThisRound.add` never fires**
+(gated on `consumed > 0`, ~1925), silently breaking the Nayra consequence for that case. E5 **must
+extend `baseHpById` to seed enemy attacker base HP** (from `enemyAttackerInputs` / `enemyRecipientIds`)
+so enemy recipients have a real pre-first-turn cap. The same `recipientMaxHp` cap governs
+`grantShieldToTarget` (~1930), so a future enemy-shield lift (sub-project H) inherits this fix for free.
 
 ### 4.2 Nayra lights up (consequence, no new code beyond 4.1)
 
