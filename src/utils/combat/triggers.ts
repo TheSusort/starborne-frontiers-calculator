@@ -5,6 +5,7 @@ import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
+import { makeRateGate } from '../calculators/rateAccumulator';
 import { expandEnemyDebuffs, payloadToSelectedBuff } from './buffTotals';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
@@ -18,7 +19,7 @@ import {
 } from './statusEngine';
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
-import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx } from './playerTurn';
+import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
 import type { ActorTargetingStatus } from './positionalBinding';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
@@ -533,6 +534,10 @@ export interface IntentExecContext {
      *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
      *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
     oncePerCombatFired?: Set<string>;
+    /** Combat-lifetime per-ability proc-chance gates (e.g. Bloodthirst's 12% chance).
+     *  Keyed `${ownerId}:${abilityId}`; the RateGate accumulates across all rounds and all
+     *  reactive fires of the same ability so the proc lands at its true frequency. */
+    procChanceGates?: Map<string, RateGate>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
      *  PR 1). The engine closes over the heal target's current/max HP (healing mode);
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
@@ -1108,6 +1113,17 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             const key = `${intent.ownerId}:${intent.ability.id}`;
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
+        }
+        const pc = intent.ability.procChance;
+        if (pc !== undefined && pc > 0 && pc < 1) {
+            const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+            let gate = ctx.procChanceGates?.get(gateKey);
+            if (ctx.procChanceGates && !gate) {
+                gate = makeRateGate();
+                ctx.procChanceGates.set(gateKey, gate);
+            }
+            // absent map (unit-test contexts) → gate stays undefined → pass through
+            if (gate && !gate(pc)) return;
         }
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
