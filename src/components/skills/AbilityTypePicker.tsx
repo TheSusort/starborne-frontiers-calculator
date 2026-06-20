@@ -24,6 +24,8 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     cleanse: 'Cleanse',
     purge: 'Purge',
     control: 'Control',
+    'incoming-reduction': 'Incoming Reduction',
+    'incoming-block': 'Incoming Block',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
