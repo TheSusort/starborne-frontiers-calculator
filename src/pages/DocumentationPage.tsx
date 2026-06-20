@@ -3074,8 +3074,18 @@ const DocumentationPage: React.FC = () => {
                                     on the target), <strong>Arcane Siege</strong> (more outgoing
                                     damage while the ship is shielded), and{' '}
                                     <strong>Warpstrike</strong> (more outgoing damage while the ship
-                                    is debuffed). More implant and gear-set effects will be added in
-                                    future updates.
+                                    is debuffed). Incoming-damage reduction is also modeled:{' '}
+                                    <strong>Voidshade</strong> and <strong>Shadowguard</strong>{' '}
+                                    (reduced damage while stealthed),{' '}
+                                    <strong>Nebula Nullifier</strong> (reduced damage while in
+                                    Stasis), <strong>Hyperion Gaze</strong> and the{' '}
+                                    <strong>Hardened</strong> gear set (reduced incoming
+                                    critical-hit damage), <strong>Iridium&apos;s</strong> passive
+                                    (reduced crit damage taken, scaling with rarity),{' '}
+                                    <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
+                                    damage), and <strong>Ironclad</strong> (a chance to block a
+                                    repeated hit from the same attacker). More implant and gear-set
+                                    effects will be added in future updates.
                                 </p>
                             </div>
                         </div>
