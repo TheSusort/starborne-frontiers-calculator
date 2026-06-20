@@ -5,7 +5,7 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { AbilityTarget, ShipSkills } from '../../types/abilities';
+import { Ability, AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
@@ -49,6 +49,7 @@ import {
     type VictimDamageOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
+import { incomingReductionForHit } from './incomingEffects';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -2091,6 +2092,32 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
+    // D-PR3: per-actor victim-side incoming-effect abilities (incoming-reduction + incoming-block),
+    // side-agnostic (a ship defends on either team). Built once from BOTH runtime maps; empty for
+    // actors without the relevant equipment. Consumed today only by the %-reduction fold in the
+    // positional path; incoming-block is collected here too for the later block task.
+    const incomingAbilitiesById = new Map<string, Ability[]>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        if (incomingAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        const incoming: Ability[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type === 'incoming-reduction' || a.config.type === 'incoming-block') {
+                    incoming.push(a);
+                }
+            }
+        }
+        if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
+    }
+    const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
+
+    // D-PR3: is this actor currently Stealthed? Sibling to isStasised — reads the actor's active
+    // self-buff names (snapshot + timed + active ability statuses). 'Stealth' is the buff name the
+    // positional targeting stealth-filter also queries (triggers.ts buildForcedTargetingStatus).
+    const isStealthed = (actorId: string): boolean =>
+        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Stealth');
+
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
     // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
@@ -2748,6 +2775,18 @@ export function runCombat(input: CombatEngineInput): {
                 },
                 // E2: forward the per-direction leech hook (unsupplied by all current callers).
                 onVictimResolved: args.onVictimResolved,
+                // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
+                // across all three sites (focus / walked-team / enemy) since drivePositionalApply
+                // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
+                // with no incoming-reduction ability → byte-identical when no such equipment exists.
+                incomingReductionFor: (victim, didCrit) =>
+                    incomingReductionForHit(incomingAbilitiesOf(victim.id), {
+                        didCrit,
+                        attackerStealthed: isStealthed(args.actingId),
+                        victimStealthed: isStealthed(victim.id),
+                        victimStasised: isStasised(victim.id),
+                        hitIndexThisRound: 0, // unused by reduction (only block reads it)
+                    }),
             });
         };
 

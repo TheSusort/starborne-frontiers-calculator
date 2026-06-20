@@ -128,6 +128,53 @@ describe('victimHitDamage', () => {
         expect(covered).toBeCloseTo(origin * 0.5, 12);
     });
 
+    it('(e) equipReductionPct folds additively into the incoming term, reducing damage', () => {
+        const s: AttackerDamageScalars = {
+            effectiveAttack: 1000,
+            multiplierPct: 100,
+            secondaryStatValue: 0,
+            hits: 1,
+            effectiveCritDamage: 50,
+            outgoingDamageBuffPct: 0,
+            incomingDamageModifierPct: 0,
+            defensePenetrationPct: 0,
+            attackerAffinity: 'antimatter',
+        };
+        const v: VictimDefenseProfile = {
+            defence: 0, // no defense reduction so the incoming factor dominates cleanly
+            defenceModifierPct: 0,
+            affinity: 'thermal',
+        };
+
+        const base = victimHitDamage(s, v, false, 1); // equipReductionPct defaults to 0
+        const reduced = victimHitDamage(s, v, false, 1, 30);
+
+        // incoming = 0 - 30 = -30 → factor (1 + (-30)/100) = 0.7
+        expect(reduced).toBeCloseTo(base * 0.7, 10);
+    });
+
+    it('(f) equipReductionPct omitted === explicit 0 === current behavior (byte-identical)', () => {
+        const s: AttackerDamageScalars = {
+            effectiveAttack: 1234,
+            multiplierPct: 215,
+            secondaryStatValue: 80,
+            hits: 2,
+            effectiveCritDamage: 65,
+            outgoingDamageBuffPct: 20,
+            incomingDamageModifierPct: -10,
+            defensePenetrationPct: 15,
+            attackerAffinity: 'thermal',
+        };
+        const v: VictimDefenseProfile = {
+            defence: 600,
+            defenceModifierPct: 10,
+            affinity: 'chemical',
+        };
+
+        expect(victimHitDamage(s, v, true, 1, 0)).toBe(victimHitDamage(s, v, true, 1));
+        expect(victimHitDamage(s, v, false, 0.5, 0)).toBe(victimHitDamage(s, v, false, 0.5));
+    });
+
     it('(d) affinity advantage increases and disadvantage decreases damage', () => {
         const base: AttackerDamageScalars = {
             effectiveAttack: 1000,
