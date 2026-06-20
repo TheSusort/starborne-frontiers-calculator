@@ -1097,7 +1097,11 @@ function abilitiesFromText(
                 target,
                 trigger,
                 conditions: repairedCond ? [repairedCond] : [],
-                config: { type: 'purge', count: p.count },
+                config: {
+                    type: 'purge',
+                    count: p.count,
+                    ...(p.countScaling ? { countScaling: p.countScaling } : {}),
+                },
                 autoFilled: true,
             },
             pos: purgePos >= 0 ? purgePos : MAX_POS,

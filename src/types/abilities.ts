@@ -258,7 +258,15 @@ export type AbilityConfig =
            *  Absent → unbounded (fires on every qualifying trigger). */
           oncePerCombat?: boolean;
       }
-    | { type: 'cleanse' | 'purge'; count: number | 'all' }
+    | {
+          type: 'cleanse' | 'purge';
+          count: number | 'all';
+          /** E4: purge count scales with a caster stat — total purged =
+           *  count × floor(effectiveStat / per). Only `critDamage` (crit power) is
+           *  used today (Amartya: "purges 1 buff … for every 50% crit power").
+           *  Absent → static `count`. cleanse never sets this. */
+          countScaling?: { stat: 'critDamage'; per: number };
+      }
     | {
           type: 'control';
           effect: ControlEffect;

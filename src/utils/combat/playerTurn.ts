@@ -1417,8 +1417,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // parsed count.)
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                // E4: when the purge scales on crit power, total purged per victim =
+                // count × floor(live effectiveCritDamage / per). effectiveCritDamage (~line 1104 =
+                // dmgStats.critDamage) is the caster's LIVE crit power (buffs/debuffs folded),
+                // integer percent (e.g. 150). Hoisted out of the victim loop — constant within a cast.
+                const scaling = ab.config.countScaling;
+                // Guard `per` (defensive: the parser only emits per≥1 from `\d+`, but a
+                // hand-built config with per<=0/non-finite would make floor(x/per) Infinity/NaN).
+                let purgeCount: number | 'all' = ab.config.count;
+                if (
+                    scaling &&
+                    typeof ab.config.count === 'number' &&
+                    Number.isFinite(scaling.per) &&
+                    scaling.per > 0
+                ) {
+                    purgeCount =
+                        ab.config.count * Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
+                }
                 for (const vid of recipients) {
-                    const removed = statusEngine.purge(vid, ab.config.count);
+                    const removed = statusEngine.purge(vid, purgeCount);
                     if (removed > 0) {
                         bus.emit({
                             type: 'purge-performed',
