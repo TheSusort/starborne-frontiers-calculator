@@ -2213,6 +2213,8 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             },
             grantShieldToTarget: () => {},
             playerIds: ['A'],
+            enemyIds: [],
+            recipientActor: () => undefined,
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -2728,6 +2730,8 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             },
             grantShieldToTarget: () => {},
             playerIds: ['A'],
+            enemyIds: [],
+            recipientActor: () => undefined,
         };
         const ctx: IntentExecContext = {
             round: 1,
@@ -2985,6 +2989,8 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             },
             grantShieldToTarget: () => {},
             playerIds: PLAYER_IDS,
+            enemyIds: [],
+            recipientActor: () => undefined,
         };
         const ctx: IntentExecContext = {
             ...buildBuffCtx(),

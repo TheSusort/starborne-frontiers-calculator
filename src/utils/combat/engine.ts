@@ -43,7 +43,11 @@ import {
 } from './statusEngine';
 import { liveGateConditions } from './abilityStatusGating';
 import { isPositional, resolvePositionalTarget } from './positionalBinding';
-import { applyPositionalDamage, footprintVictims, type VictimDamageOutcome } from './positionalApply';
+import {
+    applyPositionalDamage,
+    footprintVictims,
+    type VictimDamageOutcome,
+} from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
@@ -1684,11 +1688,12 @@ export function runCombat(input: CombatEngineInput): {
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
-    // attacker → input.hp; walked team → walk stats hp; legacy team → its combat-actor hp (1).
-    // Enemy ids are never queried as recipients.
+    // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
+    // (E5: enemy ids ARE now queried as recipients once enemy heals restore HP).
     const baseHpById = new Map<string, number>([
         [attacker.id, hp],
         ...teamActors.map((t) => [t.id, t.walk!.stats.hp] as const),
+        ...enemyAttackerActors.map((a) => [a.id, a.stats.hp] as const),
     ]);
     const baseHpFor = (id: string): number => baseHpById.get(id) ?? 0;
 
@@ -1935,6 +1940,8 @@ export function runCombat(input: CombatEngineInput): {
                   victim.shieldPool = Math.min(victim.shieldPool + raw, targetMaxHp);
               },
               playerIds,
+              enemyIds: enemyRecipientIds,
+              recipientActor: (id) => allActorsById.get(id),
           }
         : undefined;
 

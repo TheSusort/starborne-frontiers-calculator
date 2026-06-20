@@ -103,6 +103,10 @@ export interface HealingRuntimeCtx {
     grantShieldToTarget: (raw: number, victim?: CombatActor) => void;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
+    /** Fixed enemy-attacker-id order for an ENEMY caster's all-allies routing (E5). */
+    enemyIds: string[];
+    /** Resolve a recipient id to its CombatActor (E5 enemy-heal apply). undefined if absent. */
+    recipientActor: (id: string) => CombatActor | undefined;
 }
 
 /** Everything one player actor's turn contributes to the round's RoundData row. */
@@ -1432,7 +1436,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     scaling.per > 0
                 ) {
                     purgeCount =
-                        ab.config.count * Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
+                        ab.config.count *
+                        Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
                 }
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
@@ -1471,12 +1476,35 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 : healing.recipientIncomingHealPct(rid);
         // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
         // all-allies → every player in fixed source order. Shared by the heal + shield branches.
-        const recipientsFor = (target: Ability['target']): string[] =>
-            target === 'self'
-                ? [actor.id]
-                : target === 'all-allies'
-                  ? healing.playerIds
-                  : [healing.targetId];
+        const isEnemyCaster = actor.side === 'enemy';
+        // Lowest-HP-fraction living enemy ally for an enemy single-'ally' heal (E5).
+        // Deterministic: ties broken by enemyIds source order. Falls back to the caster
+        // when no other living ally exists. NEVER routes to the player heal target.
+        const lowestHpEnemyAllyId = (): string | undefined => {
+            let best: string | undefined;
+            let bestFrac = Infinity;
+            for (const id of healing.enemyIds) {
+                const a = healing.recipientActor(id);
+                if (!a || a.currentHp <= 0) continue;
+                const maxHp = healing.recipientMaxHp(id);
+                const frac = maxHp > 0 ? a.currentHp / maxHp : 0;
+                if (frac < bestFrac) {
+                    bestFrac = frac;
+                    best = id;
+                }
+            }
+            return best ?? actor.id;
+        };
+        const recipientsFor = (target: Ability['target']): string[] => {
+            if (target === 'self') return [actor.id];
+            if (target === 'all-allies')
+                return isEnemyCaster ? healing.enemyIds : healing.playerIds;
+            if (isEnemyCaster) {
+                const rid = lowestHpEnemyAllyId();
+                return rid ? [rid] : [];
+            }
+            return [healing.targetId];
+        };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
             basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken',
@@ -1609,9 +1637,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (cfg.type === 'heal') {
                 const recipients = recipientsFor(ability.target);
                 if (healEventOnly) {
-                    // Event-only: NO numeric at all — do NOT draw the heal crit gate, do NOT
-                    // credit or apply. Just register recipients so heal-performed fires (amount 0).
-                    for (const rid of recipients) healTargets.push(rid);
+                    // E5 §4.1: enemy heals restore each recipient's OWN currentHp (via the
+                    // per-victim pool), fire repairedThisRound, and emit heal-performed — but
+                    // contribute NOTHING to the player healing buckets (no healing.credit).
+                    const didCrit = cfg.noCrit ? false : healCritGate(effectiveCrit / 100);
+                    if (didCrit) healCritCount += 1;
+                    for (const rid of recipients) {
+                        const basis = basisValue(cfg.basis, rid);
+                        const raw =
+                            basis *
+                            (cfg.pct / 100) *
+                            (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
+                            (1 + healModifier / 100) *
+                            (1 + dmgStats.totals.outgoingHealBuff / 100) *
+                            (1 + incomingPctFor(rid) / 100);
+                        const recipientActor = healing.recipientActor(rid);
+                        if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
+                        healTargets.push(rid);
+                        healRawSum += raw;
+                    }
                     continue;
                 }
                 // ONE crit draw per heal ability (not per recipient).

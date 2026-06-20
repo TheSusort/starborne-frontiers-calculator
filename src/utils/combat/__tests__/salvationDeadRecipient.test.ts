@@ -58,6 +58,9 @@ const makeHealing = (
         },
         grantShieldToTarget: () => {},
         playerIds,
+        // E5 fields (unused on this player-path double — present for type-correctness).
+        enemyIds: [],
+        recipientActor: () => undefined,
     };
     return { healing, credits };
 };
