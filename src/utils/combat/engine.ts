@@ -2937,38 +2937,45 @@ export function runCombat(input: CombatEngineInput): {
             if (actor.id === focusActorId) {
                 // PR6b: read the dummy sink's live currentHp instead of the scalar (identical
                 // value — the sink update at ~3771 keeps enemy.currentHp == enemyHp - cumulative).
-                const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
-                const enemyHpPct =
-                    enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
-                const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                focusTurns.push({
-                    action: 'active',
-                    roundCrit: false,
-                    hitCrits: [],
-                    enemyHpPct,
-                    dotsConfig: [],
-                    dotsLanded: true,
-                    activeSelfBuffs: [],
-                    landedEnemyDebuffs: [],
-                    inflictedEnemyDebuffs: [],
-                    resistedEnemyDebuffs: [],
-                    directDamage: 0,
-                    secondaryDamage: 0,
-                    conditionalDamage: 0,
-                    detonationDamage: 0,
-                    extraActionGrants: [],
-                    turnCtx: lastKnownCtx ?? {
-                        effectiveAttack: 0,
-                        dotMult: 1,
-                        affinityMult: 1,
-                        effectiveDefence: 0,
-                        effectiveMaxHp: 0,
-                        outgoingHealPct: 0,
-                        incomingHealPct: 0,
-                    },
-                });
+                pushSynthesizedFocusSkipTurn();
             }
             return true;
+        };
+
+        // E5 §4.4: the synthesized no-action focus turn pushed when the focus skips its
+        // turn (dead heal-target OR stasised). Extracted from the two byte-identical sites
+        // (handleDeadTargetSkip + the stasis gate) so the shape cannot drift.
+        const pushSynthesizedFocusSkipTurn = (): void => {
+            const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
+            const enemyHpPct =
+                enemyHp > 0 ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp)) : 100;
+            const lastKnownCtx = lastTurnCtxByActor.get(focusActorId);
+            focusTurns.push({
+                action: 'active',
+                roundCrit: false,
+                hitCrits: [],
+                enemyHpPct,
+                dotsConfig: [],
+                dotsLanded: true,
+                activeSelfBuffs: [],
+                landedEnemyDebuffs: [],
+                inflictedEnemyDebuffs: [],
+                resistedEnemyDebuffs: [],
+                directDamage: 0,
+                secondaryDamage: 0,
+                conditionalDamage: 0,
+                detonationDamage: 0,
+                extraActionGrants: [],
+                turnCtx: lastKnownCtx ?? {
+                    effectiveAttack: 0,
+                    dotMult: 1,
+                    affinityMult: 1,
+                    effectiveDefence: 0,
+                    effectiveMaxHp: 0,
+                    outgoingHealPct: 0,
+                    incomingHealPct: 0,
+                },
+            });
         };
 
         // Per-round extra-action bookkeeping: oncePerRound abilities fire at most once
@@ -3578,40 +3585,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Synthesize a minimal no-action result so the post-round
                         // `focusTurns.length` guard does not throw (the focus actor
                         // was stasised — it did not act, but the round must still assemble).
-                        // Shape copied verbatim from handleDeadTargetSkip's focusTurns.push(…).
+                        // Delegated to pushSynthesizedFocusSkipTurn (E5 §4.4 DRY helper).
                         if (actor.id === focusActorId) {
-                            const enemyHpDecline = Math.max(0, enemyHp - enemy.currentHp);
-                            const enemyHpPct =
-                                enemyHp > 0
-                                    ? Math.max(0, 100 * (1 - enemyHpDecline / enemyHp))
-                                    : 100;
-                            const lastKnownCtx = lastTurnCtxByActor.get(actor.id);
-                            focusTurns.push({
-                                action: 'active',
-                                roundCrit: false,
-                                hitCrits: [],
-                                enemyHpPct,
-                                dotsConfig: [],
-                                dotsLanded: true,
-                                activeSelfBuffs: [],
-                                landedEnemyDebuffs: [],
-                                inflictedEnemyDebuffs: [],
-                                resistedEnemyDebuffs: [],
-                                directDamage: 0,
-                                secondaryDamage: 0,
-                                conditionalDamage: 0,
-                                detonationDamage: 0,
-                                extraActionGrants: [],
-                                turnCtx: lastKnownCtx ?? {
-                                    effectiveAttack: 0,
-                                    dotMult: 1,
-                                    affinityMult: 1,
-                                    effectiveDefence: 0,
-                                    effectiveMaxHp: 0,
-                                    outgoingHealPct: 0,
-                                    incomingHealPct: 0,
-                                },
-                            });
+                            pushSynthesizedFocusSkipTurn();
                         }
                     } // end stasis gate (attacker branch)
                 } else if (actor.kind === 'team' && teamRuntimeById.has(actor.id)) {
