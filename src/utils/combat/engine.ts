@@ -922,14 +922,12 @@ export interface CombatEngineInput {
      *  wrapper against a hand-built enemy actor. Never set by production code; the closure runs the
      *  real applyVictimDamage path (no mocks).
      *  KEPT (not removed once Task 8/9 wired production callers): `applyOutgoingToEnemy.test.ts`
-     *  behaviour #6 — the enemy-side sink is a no-op (tank accumulators stay 0) — is unique coverage
-     *  the positionalDamage integration test cannot observe (it only sees `ship-destroyed`). Inert
-     *  (optional, never set in production). Revisit if that no-op contract gains an observable seam. */
+     *  behaviour #6 — the enemy-side sink now records per-victim intake (incoming / shield-absorbed /
+     *  barrier-absorbed into the victim's own bucket, since E1) — is unique coverage the
+     *  positionalDamage integration test cannot observe (it only sees `ship-destroyed`). Inert
+     *  (optional, never set in production). */
     __testTapApplyOutgoingToEnemy?: (
-        fn: (
-            damage: number,
-            enemyVictim: CombatActor
-        ) => VictimDamageOutcome
+        fn: (damage: number, enemyVictim: CombatActor) => VictimDamageOutcome
     ) => void;
     /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
      *  are constructed, so unit tests can assert the plumbed base hacking/security on each actor
@@ -4026,6 +4024,15 @@ export function runCombat(input: CombatEngineInput): {
                                 // Phase-5 symmetric-accounting surface (the result still exposes a single
                                 // heal-target row today). Inert here regardless (no production caller
                                 // threads enemy position+pattern).
+                                // DETONATION CAVEAT (deferred → E5 accounting unification): only the firing
+                                // hit (enemyScalars, the DIRECT channel) lands per-victim here. The
+                                // aggregate `damage` also folds enemyTurn.detonationDamage, which the
+                                // NON-positional branch drains via applyIncomingToTarget(damage, tgt) but
+                                // which is NOT routed to any player victim on the positional path — routing
+                                // it needs per-victim bomb attribution the engine does not track yet
+                                // (detonation is a single turn-scalar, not per-target). Byte-identical today
+                                // (no fixture threads enemy position+pattern WITH detonation); a positional
+                                // enemy-detonation model lands with E5.
                                 const tb = turnBindings(actor.side);
                                 drivePositionalApply({
                                     scalars: enemyScalars!,
