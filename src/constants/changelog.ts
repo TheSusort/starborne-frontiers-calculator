@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: Amartya's charge purge now scales with crit power — it removes 1 buff for every 50% crit power (so higher crit power purges more buffs), applied to every enemy hit.",
     'Combat simulator: enemy ships now actually heal — their HP recovers from repair skills instead of being stuck, so enemy teams survive more realistically. Skills that trigger off a target being healed this round (such as Nayra) now also fire against healed enemies.',
     'Combat simulator now applies the Leech gear set and the Bloodthirst implant, with chance-based procs modeled at their true average frequency. More implant and gear-set effects are coming.',
+    'Combat & DPS simulators now model three conditional damage implants: Intrusion (more outgoing damage per debuff on the target), Arcane Siege (more outgoing damage while your ship is shielded), and Warpstrike (more outgoing damage while your ship is debuffed). The DPS calculator now also accounts for equipped implant and gear-set effects.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
