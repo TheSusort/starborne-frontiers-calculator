@@ -118,18 +118,28 @@ hit-context fields would muddy that contract. **Rejected.**
 A dedicated, typed model emitted onto the passive slot by both the equipment registry and the Iridium
 parser rule, evaluated by a pure function at the victim apply sites.
 
-**New ability configs** (in the abilities type union — siblings of the existing `modifier` config):
+**New ability configs.** Both `'incoming-reduction'` and `'incoming-block'` are added as members of
+`AbilityType` (`src/types/abilities.ts:6`) **and** of the `AbilityConfig` union
+(`src/types/abilities.ts:190`), so the standard discriminator pattern
+(`ability.type !== 'X' || ability.config.type !== 'X'`, as in `applyAbilities.ts:36`) works. They are
+emitted with the full `Omit<Ability,'id'>` envelope the registry already uses
+(`buildEquipmentAbilities.ts:35-43`): `target:'self'`, `trigger:'on-cast'` (a passive carrier; the
+trigger is inert — the new evaluator filters by `config.type`, never by `Ability.trigger`),
+`conditions:[]` (gating lives entirely in the config's `condition` field below, **not** in
+`Ability.conditions`).
 
 ```
 // M1 + M2
-{ type: 'incoming-reduction',
+config: { type: 'incoming-reduction',
   scope: 'direct' | 'dot',                 // 'dot' = inferno/corrosion ticks (Vortex Veil)
-  condition: IncomingCondition,            // see below
+  condition: IncomingCondition,            // see below — this is the GATE
   pct: number,                             // positive magnitude; folded as a reduction
-  critFamily: boolean }                    // true → participates in the take-max family
+  critFamily: boolean }                    // grouping ONLY: true → take-max family, false → additive.
+                                           // Orthogonal to the gate: the crit GATE is enforced by
+                                           // condition='incoming-crit*' requiring ctx.didCrit.
 
 // M3
-{ type: 'incoming-block',
+config: { type: 'incoming-block',
   condition: IncomingCondition,            // 'self-stealth' (Shadowguard) | 'nth-hit-2plus' (Ironclad)
   procChance: number,                      // 0..1 (reuses D-PR1 procChance semantics)
   blockPct: number,                        // 0..1 fraction blocked (1.0 = full)
@@ -179,8 +189,12 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
 ### 4.3 State & wiring in the engine
 
 - **`rollBlock`** reuses D-PR1's per-`(owner,ability)` deterministic `procChanceGates` rate-gate
-  (`makeRateGate`), now consumed victim-side. Plus two per-victim-per-round trackers the engine owns
-  and resets each round:
+  (`makeRateGate`, engine-owned at `engine.ts:1860`, key `${ownerId}:${abilityId}`). This adds a
+  **second consumer** of that map — today it is read only inside `executeIntent` for reactive heals
+  (`triggers.ts:1138-1146`); D-PR3 adds a victim-side read at the positional driver. Same map / same
+  key on purpose (one accumulator per owner+ability across the whole battle). Ironclad and
+  Shadowguard get **distinct** ability ids so their gates never collide. Plus two
+  per-victim-per-round trackers the engine owns and resets each round:
   - **hit-index** per victim (incremented on each direct hit) → drives Ironclad's `nth-hit-2plus`.
   - **once-per-round** flag per `(victim, abilityId)` → drives Shadowguard.
 - **Self-status** (`victimStealthed`, `victimStasised`) read from the `statusEngine` at the apply
@@ -190,19 +204,30 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
 
 **Apply sites:**
 
-1. **Positional per-hit (primary — the simulator's path):** `victimHitDamage` (`victimDamage.ts`),
+1. **Positional per-hit (primary — the simulator's path):** `victimHitDamage` (`victimDamage.ts:71`),
    driven via `drivePositionalApply`/`applyPositionalDamage`. Here `didCrit` is the genuine per-hit
-   boolean. Fold `reductionPct` additively into the existing `incoming` term; multiply the result by
-   `(1 − blockedFraction)`. The evaluator's inputs are threaded through the per-victim profile /
-   driver (the engine assembles `IncomingHitContext` per victim per hit).
-2. **Aggregate enemy-attack (non-positional — e.g. Iridium as a healing-calc tank):**
-   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1295–1305). Non-crit-family reductions
-   fold into the incoming term (all hits). Crit-family take-max reduction `R` applies to the **crit
-   fraction only**, via the documented algebraic split:
-   `damageCritMultiplier_adj = (1 − critFraction) + critFraction·(1 + cd/100)·(1 − R/100)`.
-   Block: applied to the aggregate hit damage by expected value or per-hit — **plan to settle**; the
-   simpler model multiplies the aggregate by `(1 − procChance·blockPct)` (expected block). Acceptable
-   because no existing fixture carries these implants → byte-identical regardless.
+   boolean. **Signature change:** add an optional final arg
+   `incoming?: { reductionPct: number; blockedFraction: number }` (computed by the caller from the
+   per-hit `IncomingHitContext`), keeping `victimHitDamage` PURE and its existing `??`-fallback
+   direct-call tests green (default `{reductionPct:0, blockedFraction:0}` → byte-identical). Inside:
+   `reductionPct` adds into the existing `incoming` term (`victimDamage.ts:96`, alongside the
+   per-victim enemy-debuff incoming modifier); `blockedFraction` multiplies the return
+   (`victimDamage.ts:106`) by `(1 − blockedFraction)`. The engine assembles `IncomingHitContext` per
+   victim per hit in the driver and calls the evaluator (with the engine-supplied `rollBlock`) to
+   produce that `incoming` arg.
+2. **Aggregate enemy-attack (non-positional — Iridium as a healing-calc tank):**
+   `playerTurn.ts` `nonCritFactor`/`damageCritMultiplier` (~1295–1305). The **only in-scope effect
+   that can reach this path is Iridium's crit-reduction** (reduction-only): the aggregate path's
+   victims are the bound healing-mode target, and **no in-scope block effect can reach it** — Ironclad
+   and Shadowguard are *implants* that only attach to positioned sim actors, never to the aggregate
+   non-positional target. So the aggregate path needs **reduction only, no block**. Non-crit-family
+   reductions (none reach this path today — Voidshade/Nebula are also implants; included for
+   uniformity) fold into the incoming term (all hits). The crit-family take-max reduction `R` applies
+   to the **crit fraction only**, via the documented algebraic split (verified algebra:
+   `1 + cf·cd/100 = (1−cf) + cf·(1+cd/100)`):
+   `damageCritMultiplier_adj = (1 − critFraction) + critFraction·(1 + cd/100)·(1 − R/100)`,
+   using the locally-available `effectiveCritDamage` and `critFraction`. **No aggregate-path block
+   model is needed** — this removes the §7 "plan to settle" hole.
 3. **DoT-tick (M2 — Vortex Veil):** the inferno/corrosion tick loop (`engine.ts` ~714–740). Compute
    `IncomingHitContext{ dotType }`, fold the `scope:'dot'` reductions, multiply the tick by
    `(1 − reductionPct/100)`. No crit, no block on DoTs.
@@ -237,7 +262,14 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
   while stealthed; Hyperion only on crit-by-stealthed; Ironclad's 1st hit unblocked, 2nd+ rolls;
   Shadowguard once per round; Vortex Veil reduces inferno/corrosion ticks).
 - **Coverage tracker** (`equipmentCoverage.test.ts`): implemented set updated to include the seven
-  new equipment effects.
+  new **equipment** effects (Voidshade, Nebula Nullifier, Hyperion Gaze, Vortex Veil, Ironclad,
+  Shadowguard, Hardened). **Iridium is NOT an equipment-coverage entry** — it is a ship skill,
+  tracked by the parser + `audit:skills` path; do not add it to `equipmentCoverage` (avoids an
+  apparent off-by-one).
+- **Iridium integration test confound:** Iridium's 3rd passive also grants start-of-combat Taunt and
+  an on-directly-damaged purge-2 (`ship-skills.csv` row). A fixture must isolate the crit-reduction —
+  assert on a single controlled hit and neutralize/account for the Taunt (forced targeting) + purge
+  riders so they don't perturb the measured hit.
 - `npm run lint` (max-warnings 0), `tsc`, `npx vitest run` (NOT watch), `npm run audit:skills`
   all green in every task gate.
 
@@ -251,9 +283,9 @@ pure given `rollBlock`; all RNG/state lives in the engine wrapper.
 
 ## 7. Risks
 
-- **Aggregate-path block model.** The expected-value block in the non-positional path (§4.3.2) is an
-  approximation; it is unobservable today (no fixture) and the positional path (the real sim
-  consumer) uses true per-hit rolls. The plan picks the final aggregate-block model.
 - **Stealth query timing.** Phase-3 noted passive-slot self-buffs may not surface at certain
   resolution points; integration tests must apply Stealth via a path that is live at the victim apply
-  site (mirror the Phase-3 active-slot-Taunt test workaround if needed).
+  site (mirror the Phase-3 active-slot-Taunt test workaround if needed). The same applies to
+  `attackerStealthed` (Hyperion Gaze) — the test must put real Stealth on the *attacker* at its turn.
+- **Aggregate-path block: resolved, not a risk.** §4.3.2 establishes no in-scope block effect can
+  reach the aggregate path, so there is no aggregate-block model to settle.
