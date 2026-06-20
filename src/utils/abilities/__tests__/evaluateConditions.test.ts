@@ -365,6 +365,20 @@ describe('target-repaired-this-round condition', () => {
     });
 });
 
+describe('self-shield condition', () => {
+    it('evaluates to 1 when selfShielded is true', () => {
+        expect(
+            evaluateCondition(
+                { subject: 'self-shield', derivable: true },
+                ctx({ selfShielded: true })
+            )
+        ).toBe(1);
+    });
+    it('evaluates to 0 when selfShielded is false/absent', () => {
+        expect(evaluateCondition({ subject: 'self-shield', derivable: true }, ctx())).toBe(0);
+    });
+});
+
 describe('lowest-speed-ally', () => {
     it('returns 1 when isLowestSpeedAlly is true', () => {
         const ctx = buildRoundContext({

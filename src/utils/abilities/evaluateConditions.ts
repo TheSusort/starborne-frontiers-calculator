@@ -26,6 +26,9 @@ export interface ConditionContext {
     /** True when the acting attacker's target was repaired (HP healed) earlier this
      *  round. Live-derived by the engine; defaults false (DPS / un-repaired). */
     targetRepairedThisRound?: boolean;
+    /** True when the condition owner currently has a shield (shieldPool > 0). Live-derived
+     *  by the engine; defaults false (no shield / DPS mode). Used by the Arcane Siege implant. */
+    selfShielded?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -75,6 +78,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.isLowestSpeedAlly ? 1 : 0;
         case 'target-repaired-this-round':
             return ctx.targetRepairedThisRound ? 1 : 0;
+        case 'self-shield':
+            return ctx.selfShielded ? 1 : 0;
         default:
             return 0;
     }

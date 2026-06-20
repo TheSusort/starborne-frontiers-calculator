@@ -135,7 +135,11 @@ export type ConditionSubject =
     // defaults false (DPS mode / un-repaired target). Nayra's charged purge + Stasis/
     // Exposed inflicts. derivable:true — a derivable:false condition would always be met
     // (evaluateConditions.ts:30), defeating the gate.
-    | 'target-repaired-this-round';
+    | 'target-repaired-this-round'
+    // Binary gate: the condition owner currently has a shield (CombatActor.shieldPool > 0).
+    // Live-derived (ConditionContext.selfShielded); defaults false (no shield / DPS mode).
+    // Dormant until sub-project H grants shields in the sim. Used by the Arcane Siege implant.
+    | 'self-shield';
 
 export interface Condition {
     subject: ConditionSubject;
