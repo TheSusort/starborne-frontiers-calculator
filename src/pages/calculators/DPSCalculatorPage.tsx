@@ -12,7 +12,7 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
+import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import {
     buildDefaultShipSkills,
     configShipSkillsToSimInputs,
@@ -70,7 +70,7 @@ const DPSCalculatorPage: React.FC = () => {
                                 ship.secondPassiveSkillText,
                                 ship.thirdPassiveSkillText,
                             ]),
-                            shipSkills: buildShipAbilities(ship),
+                            shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                         },
                     ],
                     nextId: 2,
@@ -381,7 +381,7 @@ const DPSCalculatorPage: React.FC = () => {
                         ship.thirdPassiveSkillText,
                     ]),
                     affinity: ship.affinity,
-                    shipSkills: buildShipAbilities(ship),
+                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                 };
             })
         );
@@ -437,7 +437,7 @@ const DPSCalculatorPage: React.FC = () => {
                     startCharged,
                     speed,
                     chargeCount: ship.chargeSkillCharge ?? 0,
-                    shipSkills: buildShipAbilities(ship),
+                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                     stats: combatStats,
                     affinity: ship.affinity,
                     // Walked skills supersede auto-fill stamping; clear any prior auto-filled
