@@ -43,26 +43,20 @@
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Branch + confirm green baseline**
+- [ ] **Step 1: Branch off local main + confirm green baseline**
 
+Branch off the current local `main` as-is (do NOT `git pull` mid-task — remote ops need `gh auth switch` first and docs are gitignored; local main is already current from the start of this session).
 Run:
 ```bash
-git checkout main && git pull --ff-only
 git checkout -b feat/combat-E4-amartya-crit-purge
 npx tsc --noEmit && npm run lint
 npm run audit:skills
 ```
 Expected: tsc clean, lint clean, `audit:skills` → `Audited 141 ships → 0 findings.`
 
-- [ ] **Step 2: Confirm Amartya parses as an all-enemies on-cast purge (the per-victim claim depends on it)**
+- [ ] **Step 2: Read-confirm Amartya's parse (no code, no scratch test)**
 
-Add a temporary scratch assertion or use an existing test harness. Quickest: a throwaway parser test (delete after).
-
-Run:
-```bash
-npx vitest run skillTextParser -t "purge"
-```
-Then confirm by reading: Amartya's charge text "purges 1 buff from all enemies" → `parsePurge` returns `{ count: 1, target: 'all-enemies', explicitTarget: true }` (the `all enemies` clause → `'all-enemies'`). The charged slot makes `trigger: 'on-cast'` in `buildShipAbilities`. No code change — this is a read/confirm step; record the finding in the commit message of Task 2.
+Pure read-confirm (the permanent assertion lives in Task 2's test). Amartya's charge text "purges 1 buff from all enemies for every 50% crit power this Unit has" → `parsePurge` returns `{ count: 1, target: 'all-enemies', explicitTarget: true }` (the `all enemies` clause → `'all-enemies'`), and the charged slot sets `trigger: 'on-cast'` in `buildShipAbilities` (buildShipAbilities.ts:1084-1085: `slot === 'charged' → 'on-cast'`). The per-victim AoE claim depends on `target === 'all-enemies'`. No change here.
 
 ---
 
@@ -199,7 +193,7 @@ Amartya charge confirmed to parse as on-cast all-enemies purge, count 1."
 
 - [ ] **Step 1: Write the failing test**
 
-Locate the existing build test for Amartya/purge (grep `buildShipAbilities` test dir for `purge`). If one exists, add a case; otherwise add to the parser test file a build-level assertion:
+Build the ability from Amartya's charged-slot text and assert the config carries `countScaling`. `abilitiesIntegration.test.ts` exercises `type: 'purge'` and shows the `ShipSkills`/`slots` fixture shape to copy; the charged slot MUST carry Amartya's exact charge text so `buildShipAbilities` sets `trigger: 'on-cast'` (buildShipAbilities.ts:1084-1085). Add a case there or in the parser test file:
 ```ts
 import { buildShipAbilities } from '../abilities/buildShipAbilities';
 // ...
