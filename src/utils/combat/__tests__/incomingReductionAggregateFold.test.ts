@@ -24,8 +24,28 @@ import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
 import { ShipSkills } from '../../../types/abilities';
+import { SelectedGameBuff } from '../../../types/calculator';
 
-function makeRuntime(critAlwaysFires: boolean): PlayerActorRuntime {
+// An always-active, guaranteed-landing ('apply') enemy "+N% damage taken" debuff on the
+// victim. Drives `incomingDamageModifier` non-zero through the status-engine path so the
+// aggregate fold's incoming channel is exercised together with a crit-family reduction.
+const DMG_TAKEN_BUFF = 'enemy-damage-taken';
+function damageTakenBuff(pct: number): SelectedGameBuff {
+    return {
+        id: 'enemy-damage-taken-1',
+        buffName: DMG_TAKEN_BUFF,
+        stacks: 1,
+        isStackable: false,
+        application: 'apply', // affinity-based → lands unless affinity-disadvantaged (it isn't)
+        skillSource: 'passive1', // always-active → snapshots as 'recurring'
+        parsedEffects: { incomingDamage: pct },
+    } as SelectedGameBuff;
+}
+
+function makeRuntime(
+    critAlwaysFires: boolean,
+    enemyDebuffLookup?: Map<string, SelectedGameBuff[]>
+): PlayerActorRuntime {
     const actor = createActor({
         id: 'attacker',
         side: 'player',
@@ -91,11 +111,15 @@ function makeRuntime(critAlwaysFires: boolean): PlayerActorRuntime {
         extendChanceGate: makeRateGate(),
         landsTimedEnemyApplication: () => true,
         selfBuffLookup: new Map(),
-        enemyDebuffLookup: new Map(),
+        enemyDebuffLookup: enemyDebuffLookup ?? new Map(),
     };
 }
 
-function makeArgs(runtime: PlayerActorRuntime, extra?: Partial<PlayerTurnArgs>): PlayerTurnArgs {
+function makeArgs(
+    runtime: PlayerActorRuntime,
+    extra?: Partial<PlayerTurnArgs>,
+    enemyDebuffs: SelectedGameBuff[] = []
+): PlayerTurnArgs {
     const enemy = createActor({
         id: 'enemy',
         side: 'enemy',
@@ -110,7 +134,7 @@ function makeArgs(runtime: PlayerActorRuntime, extra?: Partial<PlayerTurnArgs>):
             speed: 50,
         },
     });
-    const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs });
     statusEngine.beginRound(1);
     return {
         runtime,
@@ -167,5 +191,35 @@ describe('aggregate-path incoming %-reduction fold', () => {
     it('both inputs omitted → byte-identical to baseline (crit and non-crit)', () => {
         expect(runPlayerTurn(makeArgs(makeRuntime(true))).directDamage).toBe(60000);
         expect(runPlayerTurn(makeArgs(makeRuntime(false))).directDamage).toBe(30000);
+    });
+
+    // PARITY (D-PR3): crit-family reduction must fold ADDITIVELY into the incoming channel —
+    // matching the positional path (victimHitDamage) — when an enemy "+N% damage taken" debuff
+    // (incomingDamageModifier != 0) co-occurs with a crit-family reduction R on the SAME victim.
+    // The crit hit's incoming channel = (incomingDamageModifier - R), NOT a multiplicative split.
+    describe('parity with positional path when incomingDamageModifier != 0', () => {
+        const lookup = new Map<string, SelectedGameBuff[]>([
+            [DMG_TAKEN_BUFF, [damageTakenBuff(30)]],
+        ]);
+
+        it('control: +30% damage-taken alone (no reduction) → 60000 × 1.30 = 78000', () => {
+            const out = runPlayerTurn(
+                makeArgs(makeRuntime(true, lookup), undefined, [damageTakenBuff(30)])
+            );
+            expect(out.directDamage).toBe(78000);
+        });
+
+        it('+30% damage-taken AND crit-family R=35, all hits crit → ADDITIVE channel (30-35)', () => {
+            // ADDITIVE (canonical, positional): crit incoming channel = (30 - 35) = -5
+            //   crit factor = (1 + (30-35)/100) = 0.95 → 60000 × 0.95 = 57000.
+            // OLD multiplicative deviation would give: 60000 × (1.30 × 0.65) = 50700 (WRONG).
+            const out = runPlayerTurn(
+                makeArgs(makeRuntime(true, lookup), { incomingReductionCritFamilyPct: 35 }, [
+                    damageTakenBuff(30),
+                ])
+            );
+            expect(out.directDamage).toBe(57000);
+            expect(out.directDamage).not.toBe(50700);
+        });
     });
 });
