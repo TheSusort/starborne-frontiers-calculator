@@ -62,6 +62,30 @@ const BLOODTHIRST_PROC_CHANCE: Record<string, number> = {
     legendary: 0.2,
 };
 
+const INTRUSION_PER_DEBUFF: Record<string, number> = {
+    common: 1,
+    uncommon: 2,
+    rare: 3,
+    epic: 4,
+    legendary: 5,
+};
+
+const ARCANE_SIEGE_PCT: Record<string, number> = {
+    common: 3,
+    uncommon: 6,
+    rare: 10,
+    epic: 15,
+    legendary: 20,
+};
+
+const WARPSTRIKE_PCT: Record<string, number> = {
+    common: 1,
+    uncommon: 2,
+    rare: 3,
+    epic: 4,
+    legendary: 5,
+};
+
 const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     BLOODTHIRST: (rarity) => {
         const pct = BLOODTHIRST_HEAL_PCT[rarity];
@@ -78,6 +102,64 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
                 pct,
                 basis: 'damage-dealt',
             },
+            autoFilled: true,
+        };
+    },
+    // Intrusion: +N% outgoing direct damage per debuff on the target. Rides the modifier
+    // fold as a pure scaling modifier (value 0 + scaling); the enemy-debuff condition is a
+    // bare scaling source (no countComparator) so it scales, never gates.
+    INTRUSION: (rarity) => {
+        const perUnit = INTRUSION_PER_DEBUFF[rarity];
+        if (perUnit === undefined) return undefined;
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'enemy-debuff', derivable: true }],
+            scaling: { conditionIndex: 0, perUnit },
+            config: {
+                type: 'modifier',
+                channel: 'outgoingDamage',
+                value: 0,
+                isMultiplicative: false,
+            },
+            autoFilled: true,
+        };
+    },
+    // Arcane Siege: +X% outgoing direct damage while shielded. Flat value gated on the new
+    // self-shield condition; dormant until sub-project H grants shields in the sim.
+    ARCANE_SIEGE: (rarity) => {
+        const value = ARCANE_SIEGE_PCT[rarity];
+        if (value === undefined) return undefined;
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [{ subject: 'self-shield', derivable: true }],
+            config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
+            autoFilled: true,
+        };
+    },
+    // Warpstrike (damage half only): +X% outgoing direct damage while self-debuffed. Flat
+    // value + a >=1 self-debuff gate (NOT scaling — scaledBonus uses the raw debuff count and
+    // would over-apply for multiple debuffs). The "reduce a random debuff's duration by 1
+    // turn" half is DEFERRED (self-debuff-mitigation / cleanse-family).
+    WARPSTRIKE: (rarity) => {
+        const value = WARPSTRIKE_PCT[rarity];
+        if (value === undefined) return undefined;
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [
+                {
+                    subject: 'self-debuff',
+                    derivable: true,
+                    countComparator: 'gte',
+                    countThreshold: 1,
+                },
+            ],
+            config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
             autoFilled: true,
         };
     },
