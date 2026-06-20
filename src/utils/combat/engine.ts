@@ -49,7 +49,7 @@ import {
     type VictimDamageOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
-import { incomingReductionForHit } from './incomingEffects';
+import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -2373,6 +2373,9 @@ export function runCombat(input: CombatEngineInput): {
         // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
         // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
         const roundPerTargetDamage = new Map<string, number>();
+        // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
+        const directIntakeIndex = new Map<string, number>();
+        const blockOnceConsumed = new Set<string>(); // key `${victimId}:${abilityId}`
         const dmg = (id: string): ActorDamage => {
             let d = roundDamage.get(id);
             if (!d) {
@@ -2470,7 +2473,7 @@ export function runCombat(input: CombatEngineInput): {
         // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
         // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
         const applyVictimDamage = (
-            damage: number,
+            rawDamage: number,
             victim: CombatActor,
             sink: DamageAccountingSink,
             // C2b-2 T5: optional kill attribution stamped onto ship-destroyed. Direct-damage
@@ -2479,6 +2482,75 @@ export function runCombat(input: CombatEngineInput): {
             // (Faust, Task 6), so production stays byte-identical.
             cause?: { killerId?: string; byDirectDamage?: boolean }
         ): VictimDamageOutcome => {
+            // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
+            // becomes mutable so the block step can shave it; everything downstream (addIncoming,
+            // shield drain, hp damage) operates on the post-block value.
+            let damage = rawDamage;
+            // Barrier — FULL DAMAGE IMMUNITY (locked game rule). Hoisted ABOVE addIncoming (it's a
+            // pure read of the victim's active self-buffs — moving it earlier is byte-identical) so
+            // the block step below can gate on it: a fully-Barrier-immune intake must NOT roll
+            // block nor advance the Ironclad nth-hit counter (Barrier already nullifies the hit).
+            // While the victim carries an active BARRIER_BUFFS status, ALL incoming damage is fully
+            // blocked: direct attacks, DoT ticks, AND bomb detonations (all three funnel here).
+            // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death —
+            // so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers the
+            // Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on first
+            // hit. The damage still "arrives" (the victim's bucket .incoming increments below) but
+            // its effect is nullified; the blocked amount is tracked SEPARATELY as the bucket's
+            // .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never touches the shield).
+            // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
+            // timed + active ability self statuses).
+            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
+                BARRIER_BUFFS.has(n)
+            );
+            // D-PR3: proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
+            // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
+            // Fully inert (no counter touch, no roll) when the victim has no incoming-block ability
+            // → byte-identical for every existing fixture.
+            if (cause?.byDirectDamage && !carriesBarrier) {
+                const blockAbilities = incomingAbilitiesOf(victim.id).filter(
+                    (a) => a.config.type === 'incoming-block'
+                );
+                if (blockAbilities.length > 0) {
+                    const idx = (directIntakeIndex.get(victim.id) ?? 0) + 1;
+                    directIntakeIndex.set(victim.id, idx);
+                    const blocked = incomingBlockForIntake(
+                        blockAbilities,
+                        {
+                            didCrit: false,
+                            attackerStealthed: false,
+                            victimStealthed: isStealthed(victim.id),
+                            victimStasised: isStasised(victim.id),
+                            hitIndexThisRound: idx,
+                        },
+                        (abilityId, chance) => {
+                            const cfg = blockAbilities.find((b) => b.id === abilityId)?.config;
+                            const onceKey = `${victim.id}:${abilityId}`;
+                            // INVARIANT (keep this order): consumed-check BEFORE drawing the gate,
+                            // and set consumed ONLY on a successful proc — else a failed early draw
+                            // would wrongly lock the round.
+                            if (
+                                cfg?.type === 'incoming-block' &&
+                                cfg.oncePerRound &&
+                                blockOnceConsumed.has(onceKey)
+                            ) {
+                                return false;
+                            }
+                            let gate = procChanceGates.get(onceKey);
+                            if (!gate) {
+                                gate = makeRateGate();
+                                procChanceGates.set(onceKey, gate);
+                            }
+                            const proc = gate(chance);
+                            if (proc && cfg?.type === 'incoming-block' && cfg.oncePerRound) {
+                                blockOnceConsumed.add(onceKey);
+                            }
+                            return proc;
+                        }
+                    );
+                    damage = damage * (1 - blocked);
+                }
+            }
             sink.addIncoming(damage, victim.id);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
@@ -2486,22 +2558,11 @@ export function runCombat(input: CombatEngineInput): {
             // the pre-hit value (not 1).
             const hpBefore = victim.currentHp;
             const maxHp = recipientMaxHp(victim.id);
-            // Barrier — FULL DAMAGE IMMUNITY (locked game rule). While the heal target carries
-            // an active BARRIER_BUFFS status, ALL incoming damage is fully blocked: direct
-            // attacks, DoT ticks, AND bomb detonations (all three funnel through this closure).
-            // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death
-            // — so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers
-            // the Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on
-            // first hit. The damage still "arrives" (the victim's bucket .incoming already
-            // incremented above) but its effect is nullified; the blocked amount is tracked
-            // SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never
-            // touches the shield).
-            // HP does not move → the emit below is a no-op crossing (oldPct === newPct), which we
-            // still fire once for emission consistency. Detection mirrors the Cheat-Death check
-            // (selfBuffNamesForOwners aggregates snapshot + timed + active ability self statuses).
-            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
-                BARRIER_BUFFS.has(n)
-            );
+            // Barrier branch (carriesBarrier computed above the block step). HP does not move → the
+            // emit below is a no-op crossing (oldPct === newPct), still fired once for emission
+            // consistency. The damage still "arrives" (the victim's .incoming already incremented)
+            // but its effect is nullified; the blocked amount is tracked as .barrierAbsorbed (NOT
+            // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
                 sink.addBarrierAbsorbed(damage, victim.id);
                 if (victim.currentHp > 0 && maxHp > 0) {
