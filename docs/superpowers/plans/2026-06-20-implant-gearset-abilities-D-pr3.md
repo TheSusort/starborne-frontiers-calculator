@@ -77,6 +77,8 @@ If clean (expected): proceed. If a fixture DOES carry one of these effects, STOP
 
 **Files:**
 - Modify: `src/types/abilities.ts`
+- Modify: `src/components/skills/abilityDefaults.ts` (two forced exhaustiveness sites — see Step 4)
+- Modify: `src/components/skills/AbilityTypePicker.tsx` (one forced exhaustiveness site — see Step 4)
 
 - [ ] **Step 1: Add the two new members to `AbilityType`**
 
@@ -141,7 +143,22 @@ In the `AbilityConfig` union (~line 190-277), add:
       }
 ```
 
-- [ ] **Step 4: Verify byte-identical — full suite + lint + tsc**
+- [ ] **Step 4: Satisfy the three forced editor exhaustiveness sites** (adding to `AbilityType` breaks tsc here — two are `Record`s with NO default branch)
+
+These MUST be updated or tsc fails (verified sites):
+- `src/components/skills/abilityDefaults.ts:7` — `makeDefaultConfig(type: AbilityType): AbilityConfig` switch (no default → add two `case`s returning the new config shapes):
+  ```ts
+      case 'incoming-reduction':
+          return { type: 'incoming-reduction', scope: 'direct', condition: 'incoming-crit', pct: 0, critFamily: false };
+      case 'incoming-block':
+          return { type: 'incoming-block', condition: 'self-stealth', procChance: 0, blockPct: 1, oncePerRound: false };
+  ```
+- `src/components/skills/abilityDefaults.ts:56` — `DEFAULT_TARGETS: Record<AbilityType, AbilityTarget>` → add two keys: `'incoming-reduction': 'self', 'incoming-block': 'self',`.
+- `src/components/skills/AbilityTypePicker.tsx:10` — `TYPE_LABELS: Record<AbilityType, string>` → add two keys: `'incoming-reduction': 'Incoming Reduction', 'incoming-block': 'Incoming Block',`.
+
+(`AbilityCard.tsx`'s `switch (config.type)` HAS a real `default:` returning JSX → no change needed. If any OTHER switch over `AbilityType`/`config.type` surfaces in tsc, add an inert branch.)
+
+- [ ] **Step 5: Verify byte-identical — full suite + lint + tsc**
 
 Run:
 ```bash
@@ -149,12 +166,12 @@ npx vitest run
 npm run lint
 npx tsc --noEmit
 ```
-Expected: all green; ZERO `.snap` changes (pure type additions). Any switch over `AbilityType`/`AbilityConfig` that newly needs the two members will surface as a tsc error here — handle by adding inert default branches (no consumer yet). If `evaluateConditions`/editor exhaustiveness complains, add a no-op `case`/default.
+Expected: all green; ZERO `.snap` changes (pure type additions + inert editor defaults — these two ability types are never produced by the editor's normal flow, and no engine consumer exists yet).
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/types/abilities.ts
+git add src/types/abilities.ts src/components/skills/abilityDefaults.ts src/components/skills/AbilityTypePicker.tsx
 git commit -m "feat(combat): D-PR3 — incoming-reduction/incoming-block ability config types + IncomingHitContext"
 ```
 
@@ -418,7 +435,29 @@ describe('Hardened gear set', () => {
 });
 ```
 
-Add a `buildForGearSet(setKey)` helper if absent (mirror `gearSetAbilityCount` in `equipmentCoverage.test.ts` but return the abilities array).
+**NOTE on test helpers:** `buildForImplant`/`buildForGearSet` do NOT exist yet — `buildEquipmentAbilities.test.ts` currently calls `buildEquipmentAbilities(ship, getGearPiece)` inline, and `equipmentCoverage.test.ts` has `implantAbilityCount`/`gearSetAbilityCount` that return COUNTS only. Add two small ARRAY-returning helpers at the top of `buildEquipmentAbilities.test.ts` (mirror the inline ship/piece fixtures already in that file, and the count helpers in `equipmentCoverage.test.ts`):
+```ts
+function buildForImplant(implantKey: string, rarity: GearPiece['rarity']): Ability[] {
+    const id = `${implantKey}-piece`;
+    const pieceMap: Record<string, GearPiece> = {
+        [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
+    };
+    return buildEquipmentAbilities(makeShip({ implants: { implant_major: id } }), (g) => pieceMap[g]);
+}
+function buildForGearSet(setKey: string): Ability[] {
+    const minPieces = GEAR_SETS[setKey]?.minPieces ?? 2;
+    const slots = ['weapon', 'hull', 'sensor', 'engine'] as const;
+    const equipment: Record<string, string> = {};
+    const pieceMap: Record<string, GearPiece> = {};
+    for (let i = 0; i < minPieces; i++) {
+        const id = `${setKey}-${i}`;
+        equipment[slots[i % slots.length]] = id;
+        pieceMap[id] = makePiece({ id, slot: slots[i % slots.length], setBonus: setKey });
+    }
+    return buildEquipmentAbilities(makeShip({ equipment }), (g) => pieceMap[g]);
+}
+```
+Reuse/copy `makeShip`/`makePiece` from `equipmentCoverage.test.ts` if the file lacks them.
 
 - [ ] **Step 2: Run, verify fail** — `npx vitest run src/utils/abilities/__tests__/buildEquipmentAbilities.test.ts`
 
@@ -502,14 +541,13 @@ git commit -m "feat(combat): D-PR3 — incoming-reduction/block registry entries
 **Goal:** A `skillTextParser` rule that emits an `incoming-reduction { scope:'direct', condition:'incoming-crit', pct:N, critFamily:true }` for the Iridium phrasing, plumbed through `buildShipAbilities` onto the passive slot. Lights up Iridium only.
 
 **Files:**
-- Modify: `src/utils/skillTextParser.ts`
-- Modify: `src/utils/abilities/buildShipAbilities.ts`
-- Test: `src/utils/__tests__/skillTextParser.test.ts`
+- Modify: `src/utils/abilities/buildShipAbilities.ts` (BOTH `parseModifiers` at line 309 AND the modifier-emission loop at ~1244 live HERE — NOT in `skillTextParser.ts`, whose only "less damage" hit is a comment ~line 272)
 - Test: `src/utils/abilities/__tests__/buildShipAbilities.test.ts`
+- (Confirm whether `skillTextParser.ts` needs touching at all — it likely does not.)
 
 - [ ] **Step 1: Characterize the existing parser/builder seam**
 
-Read `parseModifiers` (`skillTextParser.ts:309`) and the modifier-emission loop in `buildShipAbilities.ts:1244`. Decide the cleanest emission point: either (a) `parseModifiers` returns a new parsed-incoming-reduction descriptor that `buildShipAbilities` maps to an `incoming-reduction` ability, or (b) a dedicated detector emitted alongside modifiers. Mirror how D-PR2's passive `outgoingDamage` modifiers flow. Record the chosen seam in the commit body.
+Read `parseModifiers` (`buildShipAbilities.ts:309`) and the modifier-emission loop (`buildShipAbilities.ts:1244`) — both in `buildShipAbilities.ts`. Reuse the file's masking/sentence-scope helpers. Decide the cleanest emission point: either (a) extend `parseModifiers` to return a new parsed-incoming-reduction descriptor that the 1244 loop maps to an `incoming-reduction` ability, or (b) a dedicated detector emitted alongside modifiers onto the passive slot. Mirror how D-PR2's passive `outgoingDamage` modifiers flow. Record the chosen seam in the commit body.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -550,7 +588,7 @@ If an Iridium-referencing combat unit test (e.g. `purgeConditionalSources.test.t
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/utils/skillTextParser.ts src/utils/abilities/buildShipAbilities.ts src/utils/__tests__/skillTextParser.test.ts src/utils/abilities/__tests__/buildShipAbilities.test.ts
+git add src/utils/abilities/buildShipAbilities.ts src/utils/abilities/__tests__/buildShipAbilities.test.ts
 git commit -m "feat(combat): D-PR3 — parse Iridium 'takes N% less damage from Critical hits' → incoming-reduction"
 ```
 
@@ -599,21 +637,27 @@ Unsupplied → 0 → byte-identical. Add a unit test that the callback is thread
 
 - [ ] **Step 3: Build the side-agnostic incoming-ability lookup in the engine**
 
-In `engine.ts`, after both runtime maps exist (`runtimesById` ~2021, `enemyPlayerRuntimeByActorId` ~1649), build a per-combat map of each actor's incoming-* abilities (passive slot):
+In `engine.ts`, after both runtime maps exist (`runtimesById` ~2021, `enemyPlayerRuntimeByActorId` ~1649), build a per-combat map of each actor's incoming-* abilities. Read the passive-slot abilities exactly like the D-PR1 standing-leech precedent at `engine.ts:2041-2043` — `rt.castSkills.slots`, filtered to `slot.slot === 'passive'`:
 ```ts
 // D-PR3: per-actor victim-side incoming-effect abilities (incoming-reduction + incoming-block),
 // side-agnostic (a ship defends on either team). Built once; empty for actors without equipment.
 const incomingAbilitiesById = new Map<string, Ability[]>();
 for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
-    const abilities = rt.actor && /* find passive slot on rt */ [];
-    const incoming = abilities.filter(
-        (a) => a.config.type === 'incoming-reduction' || a.config.type === 'incoming-block'
-    );
+    if (incomingAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+    const incoming: Ability[] = [];
+    for (const slot of rt.castSkills.slots) {
+        if (slot.slot !== 'passive') continue;
+        for (const a of slot.abilities) {
+            if (a.config.type === 'incoming-reduction' || a.config.type === 'incoming-block') {
+                incoming.push(a);
+            }
+        }
+    }
     if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
 }
 const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
 ```
-Confirm at impl time how to read a runtime's passive-slot abilities (the runtimes carry `slots` — see `engine.ts:2043` `for (const a of slot.abilities)`). If a runtime can appear in BOTH maps, dedupe by id.
+(Confirm `rt.castSkills.slots` against the 2041-2043 loop at impl time. The incoming-* abilities survive `partitionReactiveAbilities` because `on-cast` + these types are not in `LIVE_TRIGGERS`/`REACTIVE_ABILITY_TYPES`, so they stay on the passive slot.)
 
 - [ ] **Step 4: Supply `incomingReductionFor` at the three `drivePositionalApply` sites**
 
@@ -852,14 +896,14 @@ git commit -m "feat(combat): D-PR3 — crit-family incoming reduction in the agg
 - [ ] **Step 1: Update the implemented-sets + implemented-implants assertions**
 
 ```ts
-expect(implementedSets).toEqual(['LEECH', 'HARDENED']); // confirm GEAR_SETS declaration order
+expect(implementedSets).toEqual(['LEECH', 'HARDENED']); // LEECH(~85) precedes HARDENED(~210) in gearSets.ts
+// IMPLANTS DECLARATION order (verified via grep — NOT grouped new-before-old):
 expect(implementedImplants).toEqual([
-    /* IMPLANTS declaration order — confirm by reading implants.ts; likely: */
-    'HYPERION_GAZE', 'NEBULA_NULLIFIER', 'VOIDSHADE', 'VORTEX_VEIL', 'IRONCLAD', 'SHADOWGUARD',
-    'ARCANE_SIEGE', 'INTRUSION', 'WARPSTRIKE', 'BLOODTHIRST',
+    'ARCANE_SIEGE', 'HYPERION_GAZE', 'INTRUSION', 'NEBULA_NULLIFIER', 'VOIDSHADE',
+    'VORTEX_VEIL', 'WARPSTRIKE', 'BLOODTHIRST', 'IRONCLAD', 'SHADOWGUARD',
 ]);
 ```
-Determine the exact order with `grep -n "^    [A-Z_]*: {" src/constants/implants.ts` and match `Object.keys(IMPLANTS).filter(...)` order.
+Re-confirm with `grep -n "^    [A-Z_]*: {" src/constants/implants.ts` (the assertion follows `Object.keys(IMPLANTS).filter(...)` order).
 
 - [ ] **Step 2: Move the seven effects out of the "produces 0 abilities" loops**
 
