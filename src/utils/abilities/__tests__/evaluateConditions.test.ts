@@ -1,28 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import {
-    ConditionContext,
-    evaluateCondition,
-    conditionMet,
-    conditionsMet,
-    scaledBonus,
-} from '../evaluateConditions';
+import { evaluateCondition, conditionMet, conditionsMet, scaledBonus } from '../evaluateConditions';
 import { buildRoundContext } from '../roundContext';
 import { Ability, Condition } from '../../../types/abilities';
-
-const ctx = (over: Partial<ConditionContext> = {}): ConditionContext => ({
-    selfBuffNames: [],
-    selfDebuffNames: [],
-    enemyBuffNames: [],
-    enemyDebuffCount: 0,
-    enemyType: undefined,
-    effectiveCritRate: 0,
-    adjacentAllyCount: 0,
-    enemyAdjacentCount: 0,
-    enemyDestroyedCount: 0,
-    selfHpPct: 100,
-    enemyHpPct: 100,
-    ...over,
-});
+import { makeConditionContext } from './conditionContextFixture';
 
 const cond = (over: Partial<Condition>): Condition => ({
     subject: 'always',
@@ -32,11 +12,11 @@ const cond = (over: Partial<Condition>): Condition => ({
 
 describe('evaluateCondition', () => {
     it("'always' is 1", () => {
-        expect(evaluateCondition(cond({ subject: 'always' }), ctx())).toBe(1);
+        expect(evaluateCondition(cond({ subject: 'always' }), makeConditionContext())).toBe(1);
     });
 
     it("derivable 'self-buff' counts active self buffs (all, or by name)", () => {
-        const c = ctx({ selfBuffNames: ['Attack Up II', 'Defense Up II'] });
+        const c = makeConditionContext({ selfBuffNames: ['Attack Up II', 'Defense Up II'] });
         expect(evaluateCondition(cond({ subject: 'self-buff', derivable: true }), c)).toBe(2);
         expect(
             evaluateCondition(
@@ -50,7 +30,7 @@ describe('evaluateCondition', () => {
         expect(
             evaluateCondition(
                 cond({ subject: 'enemy-debuff', derivable: true }),
-                ctx({ enemyDebuffCount: 3 })
+                makeConditionContext({ enemyDebuffCount: 3 })
             )
         ).toBe(3);
     });
@@ -59,13 +39,13 @@ describe('evaluateCondition', () => {
         expect(
             evaluateCondition(
                 cond({ subject: 'enemy-buff', derivable: true, buffName: 'Stealth' }),
-                ctx({ enemyBuffNames: ['Stealth'] })
+                makeConditionContext({ enemyBuffNames: ['Stealth'] })
             )
         ).toBe(1);
         expect(
             evaluateCondition(
                 cond({ subject: 'enemy-buff', derivable: true, buffName: 'Stealth' }),
-                ctx()
+                makeConditionContext()
             )
         ).toBe(0);
     });
@@ -74,21 +54,21 @@ describe('evaluateCondition', () => {
         expect(
             evaluateCondition(
                 cond({ subject: 'self-crit', derivable: true }),
-                ctx({ effectiveCritRate: 100 })
+                makeConditionContext({ effectiveCritRate: 100 })
             )
         ).toBe(1);
         expect(
             evaluateCondition(
                 cond({ subject: 'self-crit', derivable: true }),
-                ctx({ effectiveCritRate: 50 })
+                makeConditionContext({ effectiveCritRate: 50 })
             )
         ).toBe(0.5);
     });
 
     it("'enemy-type' is 1 on match else 0", () => {
         const c = cond({ subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' });
-        expect(evaluateCondition(c, ctx({ enemyType: 'Defender' }))).toBe(1);
-        expect(evaluateCondition(c, ctx({ enemyType: 'Attacker' }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ enemyType: 'Defender' }))).toBe(1);
+        expect(evaluateCondition(c, makeConditionContext({ enemyType: 'Attacker' }))).toBe(0);
     });
 
     it("negated 'enemy-type' is 1 when the enemy is NOT the type (non-Defenders)", () => {
@@ -98,10 +78,10 @@ describe('evaluateCondition', () => {
             requiredEnemyType: 'Defender',
             negate: true,
         });
-        expect(evaluateCondition(c, ctx({ enemyType: 'Attacker' }))).toBe(1);
-        expect(evaluateCondition(c, ctx({ enemyType: 'Defender' }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ enemyType: 'Attacker' }))).toBe(1);
+        expect(evaluateCondition(c, makeConditionContext({ enemyType: 'Defender' }))).toBe(0);
         // Unknown enemy type → cannot confirm "not a Defender" → 0.
-        expect(evaluateCondition(c, ctx({ enemyType: undefined }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ enemyType: undefined }))).toBe(0);
     });
 
     it("'hp-threshold' below/above resolves against context HP", () => {
@@ -111,8 +91,8 @@ describe('evaluateCondition', () => {
             hpComparator: 'below',
             hpPercent: 50,
         });
-        expect(evaluateCondition(below, ctx({ enemyHpPct: 40 }))).toBe(1);
-        expect(evaluateCondition(below, ctx({ enemyHpPct: 60 }))).toBe(0);
+        expect(evaluateCondition(below, makeConditionContext({ enemyHpPct: 40 }))).toBe(1);
+        expect(evaluateCondition(below, makeConditionContext({ enemyHpPct: 60 }))).toBe(0);
     });
 
     it("'hp-threshold' with hpSubject 'self' resolves against the unit's own HP", () => {
@@ -123,22 +103,37 @@ describe('evaluateCondition', () => {
             hpPercent: 99,
             hpSubject: 'self',
         });
-        expect(evaluateCondition(selfAboveFull, ctx({ selfHpPct: 100, enemyHpPct: 10 }))).toBe(1);
-        expect(evaluateCondition(selfAboveFull, ctx({ selfHpPct: 50, enemyHpPct: 100 }))).toBe(0);
+        expect(
+            evaluateCondition(
+                selfAboveFull,
+                makeConditionContext({ selfHpPct: 100, enemyHpPct: 10 })
+            )
+        ).toBe(1);
+        expect(
+            evaluateCondition(
+                selfAboveFull,
+                makeConditionContext({ selfHpPct: 50, enemyHpPct: 100 })
+            )
+        ).toBe(0);
     });
 
     it('non-derivable uses manualCount (default 1)', () => {
-        expect(evaluateCondition(cond({ subject: 'enemy-buff', derivable: false }), ctx())).toBe(1);
+        expect(
+            evaluateCondition(
+                cond({ subject: 'enemy-buff', derivable: false }),
+                makeConditionContext()
+            )
+        ).toBe(1);
         expect(
             evaluateCondition(
                 cond({ subject: 'enemy-buff', derivable: false, manualCount: 3 }),
-                ctx()
+                makeConditionContext()
             )
         ).toBe(3);
         expect(
             evaluateCondition(
                 cond({ subject: 'enemy-buff', derivable: false, manualCount: 0 }),
-                ctx()
+                makeConditionContext()
             )
         ).toBe(0);
     });
@@ -146,7 +141,7 @@ describe('evaluateCondition', () => {
 
 describe('conditionsMet (AND of OR-groups)', () => {
     it('empty conditions → always met', () => {
-        expect(conditionsMet([], ctx())).toBe(true);
+        expect(conditionsMet([], makeConditionContext())).toBe(true);
     });
 
     it('AND: all groups must have count > 0', () => {
@@ -154,12 +149,18 @@ describe('conditionsMet (AND of OR-groups)', () => {
             cond({ subject: 'enemy-type', requiredEnemyType: 'Defender' }),
             cond({ subject: 'self-crit' }),
         ];
-        expect(conditionsMet(conds, ctx({ enemyType: 'Defender', effectiveCritRate: 100 }))).toBe(
-            true
-        );
-        expect(conditionsMet(conds, ctx({ enemyType: 'Defender', effectiveCritRate: 0 }))).toBe(
-            false
-        );
+        expect(
+            conditionsMet(
+                conds,
+                makeConditionContext({ enemyType: 'Defender', effectiveCritRate: 100 })
+            )
+        ).toBe(true);
+        expect(
+            conditionsMet(
+                conds,
+                makeConditionContext({ enemyType: 'Defender', effectiveCritRate: 0 })
+            )
+        ).toBe(false);
     });
 
     it('OR-group (anyOf): any member > 0 satisfies the group', () => {
@@ -173,8 +174,8 @@ describe('conditionsMet (AND of OR-groups)', () => {
                 buffName: 'Stealth',
             }),
         ];
-        expect(conditionsMet(conds, ctx({ enemyType: 'Defender' }))).toBe(true);
-        expect(conditionsMet(conds, ctx({ enemyType: 'Attacker' }))).toBe(false);
+        expect(conditionsMet(conds, makeConditionContext({ enemyType: 'Defender' }))).toBe(true);
+        expect(conditionsMet(conds, makeConditionContext({ enemyType: 'Attacker' }))).toBe(false);
     });
 
     it('non-adjacent anyOf conditions do NOT merge across a plain condition', () => {
@@ -191,49 +192,58 @@ describe('conditionsMet (AND of OR-groups)', () => {
             }),
         ];
         // type true + buff true, but the plain self-crit group is false (crit 0) → overall false
-        expect(conditionsMet(conds, ctx({ enemyType: 'Defender' }))).toBe(false);
+        expect(conditionsMet(conds, makeConditionContext({ enemyType: 'Defender' }))).toBe(false);
         // all three groups satisfied
-        expect(conditionsMet(conds, ctx({ enemyType: 'Defender', effectiveCritRate: 100 }))).toBe(
-            true
-        );
+        expect(
+            conditionsMet(
+                conds,
+                makeConditionContext({ enemyType: 'Defender', effectiveCritRate: 100 })
+            )
+        ).toBe(true);
     });
 });
 
 describe('conditionMet (count comparator gating)', () => {
     it('no comparator → presence rule (count > 0)', () => {
-        expect(conditionMet(cond({ subject: 'enemy-debuff' }), ctx({ enemyDebuffCount: 1 }))).toBe(
-            true
-        );
-        expect(conditionMet(cond({ subject: 'enemy-debuff' }), ctx({ enemyDebuffCount: 0 }))).toBe(
-            false
-        );
+        expect(
+            conditionMet(
+                cond({ subject: 'enemy-debuff' }),
+                makeConditionContext({ enemyDebuffCount: 1 })
+            )
+        ).toBe(true);
+        expect(
+            conditionMet(
+                cond({ subject: 'enemy-debuff' }),
+                makeConditionContext({ enemyDebuffCount: 0 })
+            )
+        ).toBe(false);
     });
 
     it('gte threshold: met only at/above the count (Crocus "more than 3" → gte 4)', () => {
         const c = cond({ subject: 'enemy-debuff', countComparator: 'gte', countThreshold: 4 });
-        expect(conditionMet(c, ctx({ enemyDebuffCount: 3 }))).toBe(false);
-        expect(conditionMet(c, ctx({ enemyDebuffCount: 4 }))).toBe(true);
-        expect(conditionMet(c, ctx({ enemyDebuffCount: 9 }))).toBe(true);
+        expect(conditionMet(c, makeConditionContext({ enemyDebuffCount: 3 }))).toBe(false);
+        expect(conditionMet(c, makeConditionContext({ enemyDebuffCount: 4 }))).toBe(true);
+        expect(conditionMet(c, makeConditionContext({ enemyDebuffCount: 9 }))).toBe(true);
     });
 
     it('eq 0: met only when the count is exactly zero (Sustainer "no debuffs")', () => {
         const c = cond({ subject: 'self-debuff', countComparator: 'eq', countThreshold: 0 });
-        expect(conditionMet(c, ctx({ selfDebuffNames: [] }))).toBe(true);
-        expect(conditionMet(c, ctx({ selfDebuffNames: ['Burn'] }))).toBe(false);
+        expect(conditionMet(c, makeConditionContext({ selfDebuffNames: [] }))).toBe(true);
+        expect(conditionMet(c, makeConditionContext({ selfDebuffNames: ['Burn'] }))).toBe(false);
     });
 
     it('lte threshold: met at/below the count', () => {
         const c = cond({ subject: 'enemy-debuff', countComparator: 'lte', countThreshold: 2 });
-        expect(conditionMet(c, ctx({ enemyDebuffCount: 2 }))).toBe(true);
-        expect(conditionMet(c, ctx({ enemyDebuffCount: 3 }))).toBe(false);
+        expect(conditionMet(c, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(true);
+        expect(conditionMet(c, makeConditionContext({ enemyDebuffCount: 3 }))).toBe(false);
     });
 
     it('comparator flows through conditionsMet as a gate', () => {
         const conds = [
             cond({ subject: 'enemy-debuff', countComparator: 'gte', countThreshold: 3 }),
         ];
-        expect(conditionsMet(conds, ctx({ enemyDebuffCount: 3 }))).toBe(true);
-        expect(conditionsMet(conds, ctx({ enemyDebuffCount: 2 }))).toBe(false);
+        expect(conditionsMet(conds, makeConditionContext({ enemyDebuffCount: 3 }))).toBe(true);
+        expect(conditionsMet(conds, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(false);
     });
 
     it('comparator does NOT affect scaledBonus (scaling always uses the raw count)', () => {
@@ -249,7 +259,7 @@ describe('conditionMet (count comparator gating)', () => {
             config: { type: 'damage', multiplier: 200 },
         };
         // count 2 < threshold 4 (gate would fail), but scaling still uses raw count 2 → 20.
-        expect(scaledBonus(a, ctx({ enemyDebuffCount: 2 }))).toBe(20);
+        expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(20);
     });
 });
 
@@ -270,12 +280,12 @@ describe('scaledBonus', () => {
             perUnit: 10,
             cap: 30,
         });
-        expect(scaledBonus(a, ctx({ enemyDebuffCount: 2 }))).toBe(20);
-        expect(scaledBonus(a, ctx({ enemyDebuffCount: 5 }))).toBe(30);
+        expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(20);
+        expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 5 }))).toBe(30);
     });
 
     it('returns 0 when no scaling rule', () => {
-        expect(scaledBonus(dmg([], undefined), ctx())).toBe(0);
+        expect(scaledBonus(dmg([], undefined), makeConditionContext())).toBe(0);
     });
 
     it('scaling reads only the indexed condition, even inside an anyOf OR-group', () => {
@@ -289,39 +299,49 @@ describe('scaledBonus', () => {
             ],
             { conditionIndex: 0, perUnit: 10, cap: 30 }
         );
-        expect(scaledBonus(a, ctx({ enemyDebuffCount: 2 }))).toBe(20);
-        expect(scaledBonus(a, ctx({ enemyDebuffCount: 5 }))).toBe(30); // capped
+        expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(20);
+        expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 5 }))).toBe(30); // capped
         // self-buffs alone satisfy the OR-gate but contribute nothing to scaling
-        expect(scaledBonus(a, ctx({ selfBuffNames: ['Stealth'] }))).toBe(0);
+        expect(scaledBonus(a, makeConditionContext({ selfBuffNames: ['Stealth'] }))).toBe(0);
     });
 });
 
 describe('binary roundCrit', () => {
     it('self-crit returns 1 when roundCrit is true, 0 when false', () => {
         const cond = { subject: 'self-crit' as const, derivable: true };
-        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70, roundCrit: true }))).toBe(1);
-        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70, roundCrit: false }))).toBe(0);
+        expect(
+            evaluateCondition(
+                cond,
+                makeConditionContext({ effectiveCritRate: 70, roundCrit: true })
+            )
+        ).toBe(1);
+        expect(
+            evaluateCondition(
+                cond,
+                makeConditionContext({ effectiveCritRate: 70, roundCrit: false })
+            )
+        ).toBe(0);
     });
 
     it('self-crit falls back to probability when roundCrit is undefined', () => {
         const cond = { subject: 'self-crit' as const, derivable: true };
-        expect(evaluateCondition(cond, ctx({ effectiveCritRate: 70 }))).toBe(0.7);
+        expect(evaluateCondition(cond, makeConditionContext({ effectiveCritRate: 70 }))).toBe(0.7);
     });
 });
 
 describe('HP-percentage count subjects', () => {
     it('enemy-hp-pct counts the enemy HP percentage', () => {
         const c = cond({ subject: 'enemy-hp-pct' });
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 100 }))).toBe(100);
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 42 }))).toBe(42);
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 0 }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 100 }))).toBe(100);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 42 }))).toBe(42);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 0 }))).toBe(0);
     });
 
     it('enemy-hp-missing-pct counts the missing percentage', () => {
         const c = cond({ subject: 'enemy-hp-missing-pct' });
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 100 }))).toBe(0);
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 30 }))).toBe(70);
-        expect(evaluateCondition(c, ctx({ enemyHpPct: 0 }))).toBe(100);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 100 }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 30 }))).toBe(70);
+        expect(evaluateCondition(c, makeConditionContext({ enemyHpPct: 0 }))).toBe(100);
     });
 });
 
@@ -334,8 +354,8 @@ describe('hp-threshold hpSubject target', () => {
             hpPercent: 40,
             hpSubject: 'target',
         };
-        expect(evaluateCondition(c, ctx({ targetHpPct: 35 }))).toBe(1);
-        expect(evaluateCondition(c, ctx({ targetHpPct: 60 }))).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext({ targetHpPct: 35 }))).toBe(1);
+        expect(evaluateCondition(c, makeConditionContext({ targetHpPct: 60 }))).toBe(0);
     });
 
     it('hp-threshold target defaults to 100 when targetHpPct absent (DPS-mode inert)', () => {
@@ -346,7 +366,7 @@ describe('hp-threshold hpSubject target', () => {
             hpPercent: 40,
             hpSubject: 'target',
         };
-        expect(evaluateCondition(c, ctx())).toBe(0);
+        expect(evaluateCondition(c, makeConditionContext())).toBe(0);
     });
 });
 
@@ -354,14 +374,20 @@ describe('target-repaired-this-round condition', () => {
     const cond = { subject: 'target-repaired-this-round' as const, derivable: true };
 
     it('is met when the target was repaired this round', () => {
-        expect(evaluateCondition(cond, ctx({ targetRepairedThisRound: true }))).toBe(1);
-        expect(conditionsMet([cond], ctx({ targetRepairedThisRound: true }))).toBe(true);
+        expect(
+            evaluateCondition(cond, makeConditionContext({ targetRepairedThisRound: true }))
+        ).toBe(1);
+        expect(conditionsMet([cond], makeConditionContext({ targetRepairedThisRound: true }))).toBe(
+            true
+        );
     });
 
     it('is NOT met when the target was not repaired (false or undefined)', () => {
-        expect(evaluateCondition(cond, ctx({ targetRepairedThisRound: false }))).toBe(0);
-        expect(evaluateCondition(cond, ctx())).toBe(0);
-        expect(conditionsMet([cond], ctx())).toBe(false);
+        expect(
+            evaluateCondition(cond, makeConditionContext({ targetRepairedThisRound: false }))
+        ).toBe(0);
+        expect(evaluateCondition(cond, makeConditionContext())).toBe(0);
+        expect(conditionsMet([cond], makeConditionContext())).toBe(false);
     });
 });
 
@@ -370,12 +396,14 @@ describe('self-shield condition', () => {
         expect(
             evaluateCondition(
                 { subject: 'self-shield', derivable: true },
-                ctx({ selfShielded: true })
+                makeConditionContext({ selfShielded: true })
             )
         ).toBe(1);
     });
     it('evaluates to 0 when selfShielded is false/absent', () => {
-        expect(evaluateCondition({ subject: 'self-shield', derivable: true }, ctx())).toBe(0);
+        expect(
+            evaluateCondition({ subject: 'self-shield', derivable: true }, makeConditionContext())
+        ).toBe(0);
     });
 });
 

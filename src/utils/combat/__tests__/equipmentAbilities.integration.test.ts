@@ -23,13 +23,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { ShipSkills } from '../../../types/abilities';
+import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
-import { ConditionContext } from '../../abilities/evaluateConditions';
+import { makeConditionContext } from '../../abilities/__tests__/conditionContextFixture';
 import { SelectedGameBuff } from '../../../types/calculator';
 
 // ---------------------------------------------------------------------------
@@ -322,21 +322,6 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
 // Step 2 is an ENGINE-LEVEL smoke-test for INTRUSION (the scaling implant):
 // it runs the full runCombat pipeline and asserts directDamage amplification.
 
-/** Minimal ConditionContext with the same required fields as evaluateConditions.test.ts. */
-const makeCtx = (over: Partial<ConditionContext> = {}): ConditionContext => ({
-    selfBuffNames: [],
-    selfDebuffNames: [],
-    enemyBuffNames: [],
-    enemyDebuffCount: 0,
-    effectiveCritRate: 0,
-    adjacentAllyCount: 0,
-    enemyAdjacentCount: 0,
-    enemyDestroyedCount: 0,
-    selfHpPct: 100,
-    enemyHpPct: 100,
-    ...over,
-});
-
 // ---------------------------------------------------------------------------
 // Gear-piece stubs for the three D-PR2 implants
 // ---------------------------------------------------------------------------
@@ -386,7 +371,10 @@ describe('D-PR2 integration — INTRUSION fold (modifier-level)', () => {
         const intrusion = abilities.find((a) => a.id === 'equip-implant-INTRUSION');
         expect(intrusion).toBeDefined();
 
-        const totals = modifierTotalsFromAbilities([intrusion!], makeCtx({ enemyDebuffCount: 3 }));
+        const totals = modifierTotalsFromAbilities(
+            [intrusion!],
+            makeConditionContext({ enemyDebuffCount: 3 })
+        );
         expect(totals.outgoingDamage).toBe(15); // 3 × 5
     });
 
@@ -396,7 +384,10 @@ describe('D-PR2 integration — INTRUSION fold (modifier-level)', () => {
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
         const intrusion = abilities.find((a) => a.id === 'equip-implant-INTRUSION');
 
-        const totals = modifierTotalsFromAbilities([intrusion!], makeCtx({ enemyDebuffCount: 0 }));
+        const totals = modifierTotalsFromAbilities(
+            [intrusion!],
+            makeConditionContext({ enemyDebuffCount: 0 })
+        );
         expect(totals.outgoingDamage).toBe(0);
     });
 });
@@ -419,7 +410,7 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
 
         const totals = modifierTotalsFromAbilities(
             [warpstrike!],
-            makeCtx({ selfDebuffNames: ['Burn'] })
+            makeConditionContext({ selfDebuffNames: ['Burn'] })
         );
         expect(totals.outgoingDamage).toBe(5);
     });
@@ -430,7 +421,10 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
         const warpstrike = abilities.find((a) => a.id === 'equip-implant-WARPSTRIKE');
 
-        const totals = modifierTotalsFromAbilities([warpstrike!], makeCtx({ selfDebuffNames: [] }));
+        const totals = modifierTotalsFromAbilities(
+            [warpstrike!],
+            makeConditionContext({ selfDebuffNames: [] })
+        );
         expect(totals.outgoingDamage).toBe(0);
     });
 
@@ -445,7 +439,7 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
 
             const totals = modifierTotalsFromAbilities(
                 [warpstrike!],
-                makeCtx({ selfDebuffNames: ['A', 'B'] })
+                makeConditionContext({ selfDebuffNames: ['A', 'B'] })
             );
             // Flat value gates once — does NOT scale with debuff count.
             expect(totals.outgoingDamage).toBe(5);
@@ -465,7 +459,10 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
         const arcaneSiege = abilities.find((a) => a.id === 'equip-implant-ARCANE_SIEGE');
         expect(arcaneSiege).toBeDefined();
 
-        const totals = modifierTotalsFromAbilities([arcaneSiege!], makeCtx({ selfShielded: true }));
+        const totals = modifierTotalsFromAbilities(
+            [arcaneSiege!],
+            makeConditionContext({ selfShielded: true })
+        );
         expect(totals.outgoingDamage).toBe(15);
     });
 
@@ -477,7 +474,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
 
         const totals = modifierTotalsFromAbilities(
             [arcaneSiege!],
-            makeCtx({ selfShielded: false })
+            makeConditionContext({ selfShielded: false })
         );
         expect(totals.outgoingDamage).toBe(0);
     });
@@ -519,6 +516,16 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
         };
     }
 
+    /** Single-hit 100% damage active shared between the Intrusion and bare ship-skills builders. */
+    const dmgActiveAbility: Ability = {
+        id: 'dmg-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100, hits: 1 },
+    };
+
     /** Ship with legendary INTRUSION implant. Passive slot injected from buildShipAbilitiesWithEquipment. */
     function buildIntrusionShipSkills(): ShipSkills {
         const ship = makeShip({ implants: { implant_major: 'intrusion-legendary' } });
@@ -530,16 +537,7 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
             slots: [
                 {
                     slot: 'active',
-                    abilities: [
-                        {
-                            id: 'dmg-active',
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 100, hits: 1 },
-                        },
-                    ],
+                    abilities: [dmgActiveAbility],
                 },
                 ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
             ],
@@ -551,16 +549,7 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
         slots: [
             {
                 slot: 'active',
-                abilities: [
-                    {
-                        id: 'dmg-active',
-                        type: 'damage',
-                        target: 'enemy',
-                        trigger: 'on-cast',
-                        conditions: [],
-                        config: { type: 'damage', multiplier: 100, hits: 1 },
-                    },
-                ],
+                abilities: [dmgActiveAbility],
             },
         ],
     };
