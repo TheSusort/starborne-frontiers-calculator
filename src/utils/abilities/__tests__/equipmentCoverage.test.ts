@@ -91,7 +91,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH (gear set), BLOODTHIRST (implant) } are currently implemented', () => {
+    it('exactly { LEECH (gear set), BLOODTHIRST + INTRUSION + ARCANE_SIEGE + WARPSTRIKE (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -104,7 +104,12 @@ describe('equipmentCoverage — implemented effects registry', () => {
             // Try the first available rarity for each implant.
             return variants.some((v) => implantAbilityCount(key, v.rarity) > 0);
         });
-        expect(implementedImplants).toEqual(['BLOODTHIRST']);
+        expect(implementedImplants).toEqual([
+            'ARCANE_SIEGE',
+            'INTRUSION',
+            'WARPSTRIKE',
+            'BLOODTHIRST',
+        ]);
     });
 });
 
@@ -142,8 +147,32 @@ describe('equipmentCoverage — implants', () => {
         expect(implantAbilityCount('BLOODTHIRST', 'legendary')).toBeGreaterThanOrEqual(1);
     });
 
-    const nonBloodthirstImplants = Object.keys(IMPLANTS).filter((k) => k !== 'BLOODTHIRST');
-    for (const implantKey of nonBloodthirstImplants) {
+    // D-PR2: INTRUSION, ARCANE_SIEGE, WARPSTRIKE now produce 1 ability each.
+    const implementedImplants = new Set(['BLOODTHIRST', 'INTRUSION', 'ARCANE_SIEGE', 'WARPSTRIKE']);
+
+    it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
+        const variants = IMPLANTS['INTRUSION'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('INTRUSION', v.rarity)).toBe(1);
+        }
+    });
+
+    it('ARCANE_SIEGE produces 1 ability per rarity (outgoingDamage modifier gated on self-shield)', () => {
+        const variants = IMPLANTS['ARCANE_SIEGE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('ARCANE_SIEGE', v.rarity)).toBe(1);
+        }
+    });
+
+    it('WARPSTRIKE produces 1 ability per rarity (outgoingDamage modifier gated on self-debuff)', () => {
+        const variants = IMPLANTS['WARPSTRIKE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('WARPSTRIKE', v.rarity)).toBe(1);
+        }
+    });
+
+    const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));
+    for (const implantKey of unimplementedImplants) {
         it(`${implantKey} produces 0 abilities (not yet implemented)`, () => {
             const variants = IMPLANTS[implantKey].variants;
             // Check all available rarities — none should produce abilities yet.
