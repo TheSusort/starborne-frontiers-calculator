@@ -12,6 +12,7 @@ import {
 } from '../applyAbilities';
 import { Ability, Condition, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
 import { ConditionContext } from '../evaluateConditions';
+import { makeConditionContext } from './conditionContextFixture';
 
 function damage(id: string, multiplier: number, hits?: number): Ability {
     return {
@@ -79,22 +80,6 @@ function modifier(
     };
 }
 
-function makeCtx(overrides: Partial<ConditionContext> = {}): ConditionContext {
-    return {
-        selfBuffNames: [],
-        selfDebuffNames: [],
-        enemyBuffNames: [],
-        enemyDebuffCount: 0,
-        effectiveCritRate: 0,
-        adjacentAllyCount: 0,
-        enemyAdjacentCount: 0,
-        enemyDestroyedCount: 0,
-        selfHpPct: 100,
-        enemyHpPct: 100,
-        ...overrides,
-    };
-}
-
 describe('modifierTotalsFromAbilities', () => {
     const zero = {
         attack: 0,
@@ -109,7 +94,7 @@ describe('modifierTotalsFromAbilities', () => {
     it('sums a single outgoingDamage modifier', () => {
         const result = modifierTotalsFromAbilities(
             [modifier('m', 'outgoingDamage', 40)],
-            makeCtx()
+            makeConditionContext()
         );
         expect(result).toEqual({ ...zero, outgoingDamage: 40 });
     });
@@ -121,7 +106,7 @@ describe('modifierTotalsFromAbilities', () => {
                     { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
                 ]),
             ],
-            makeCtx({ enemyType: 'Attacker' })
+            makeConditionContext({ enemyType: 'Attacker' })
         );
         expect(result).toEqual(zero);
     });
@@ -133,20 +118,23 @@ describe('modifierTotalsFromAbilities', () => {
                     { subject: 'enemy-type', derivable: true, requiredEnemyType: 'Defender' },
                 ]),
             ],
-            makeCtx({ enemyType: 'Defender' })
+            makeConditionContext({ enemyType: 'Defender' })
         );
         expect(result).toEqual({ ...zero, attack: 50 });
     });
 
     it('maps the "defense" channel to the defence bucket', () => {
-        const result = modifierTotalsFromAbilities([modifier('m', 'defense', 30)], makeCtx());
+        const result = modifierTotalsFromAbilities(
+            [modifier('m', 'defense', 30)],
+            makeConditionContext()
+        );
         expect(result).toEqual({ ...zero, defence: 30 });
     });
 
     it('stacks two modifiers', () => {
         const result = modifierTotalsFromAbilities(
             [modifier('m1', 'attack', 20), modifier('m2', 'attack', 15)],
-            makeCtx()
+            makeConditionContext()
         );
         expect(result).toEqual({ ...zero, attack: 35 });
     });
@@ -154,13 +142,13 @@ describe('modifierTotalsFromAbilities', () => {
     it('ignores channels with no DPS bucket (outgoingHeal, incomingDamage)', () => {
         const result = modifierTotalsFromAbilities(
             [modifier('m1', 'outgoingHeal', 50), modifier('m2', 'incomingDamage', 25)],
-            makeCtx()
+            makeConditionContext()
         );
         expect(result).toEqual(zero);
     });
 
     it('returns all zero with no abilities', () => {
-        expect(modifierTotalsFromAbilities([], makeCtx())).toEqual(zero);
+        expect(modifierTotalsFromAbilities([], makeConditionContext())).toEqual(zero);
     });
 
     it('applies a scaling defense-penetration modifier (per self-buff, capped)', () => {
@@ -183,14 +171,16 @@ describe('modifierTotalsFromAbilities', () => {
         expect(
             modifierTotalsFromAbilities(
                 [scalingDefPen],
-                makeCtx({ selfBuffNames: ['a', 'b', 'c'] })
+                makeConditionContext({ selfBuffNames: ['a', 'b', 'c'] })
             )
         ).toEqual({ ...zero, defensePenetration: 22.5 });
         // 10 self-buffs → capped at 45%
         expect(
             modifierTotalsFromAbilities(
                 [scalingDefPen],
-                makeCtx({ selfBuffNames: Array.from({ length: 10 }, (_, i) => `b${i}`) })
+                makeConditionContext({
+                    selfBuffNames: Array.from({ length: 10 }, (_, i) => `b${i}`),
+                })
             )
         ).toEqual({ ...zero, defensePenetration: 45 });
     });
@@ -571,11 +561,11 @@ describe('extraActionsFromSkill', () => {
         };
         const rawSkill: Skill = { slot: 'active', abilities: [conditionedExtraAction] };
         // Stealth not present → gateFiringAbilities drops the ability
-        const { gatedSkill } = gateFiringAbilities(rawSkill, makeCtx());
+        const { gatedSkill } = gateFiringAbilities(rawSkill, makeConditionContext());
         expect(extraActionsFromSkill(gatedSkill)).toEqual([]);
         // Stealth present → ability passes the gate → grant surfaces
         const { gatedSkill: gatedSkillWith } = gateFiringAbilities(rawSkill, {
-            ...makeCtx(),
+            ...makeConditionContext(),
             selfBuffNames: ['Stealth'],
         });
         expect(extraActionsFromSkill(gatedSkillWith)).toEqual([
