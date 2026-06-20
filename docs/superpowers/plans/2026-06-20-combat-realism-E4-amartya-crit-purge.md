@@ -328,7 +328,7 @@ git commit -m "feat(combat): E4 — purge count scales with live crit power, per
 - [ ] **Step 1: Add the changelog entry**
 
 Add to `UNRELEASED_CHANGES` (plain English, user-facing):
-```
+```text
 "Amartya's charge purge now removes more buffs the higher its crit power (1 buff per 50% crit power), matching the in-game scaling, applied to every enemy hit."
 ```
 (Match the existing array's quoting/format exactly.)

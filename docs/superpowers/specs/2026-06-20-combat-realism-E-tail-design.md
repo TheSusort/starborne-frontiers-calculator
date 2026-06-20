@@ -64,9 +64,10 @@ every 50% crit power this Unit has." → `count = floor(critDamage / 50)`.
    descriptor — shape TBD in the plan, e.g. `countScaling?: { stat: 'critDamage'; per: 50 }` on the
    purge ability config. Only Amartya matches in the corpus today.
 2. **Apply** at `playerTurn.ts:1421` (the E3 footprint loop): when `countScaling` is present,
-   compute `count = floor(effectiveStatsOf(caster).critDamage / per)` and pass that to
-   `statusEngine.purge(vid, count)` for **every** footprint victim; otherwise use `ab.config.count`
-   unchanged.
+   compute `purgeCount = ab.config.count × floor(effectiveStatsOf(caster).critDamage / per)` (the
+   base `count` multiplier preserves faithfulness for any future base-count > 1; 1× for Amartya) and
+   pass that to `statusEngine.purge(vid, purgeCount)` for **every** footprint victim; otherwise use
+   `ab.config.count` unchanged. Guard `per > 0 && finite` before dividing (defensive).
 
 **Removes** the C2a single-anchor count-1 under-approximation flag/note left for E4.
 

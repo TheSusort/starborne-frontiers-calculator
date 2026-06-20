@@ -1422,10 +1422,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // dmgStats.critDamage) is the caster's LIVE crit power (buffs/debuffs folded),
                 // integer percent (e.g. 150). Hoisted out of the victim loop — constant within a cast.
                 const scaling = ab.config.countScaling;
-                const purgeCount: number | 'all' =
-                    scaling && typeof ab.config.count === 'number'
-                        ? ab.config.count * Math.floor(effectiveCritDamage / scaling.per)
-                        : ab.config.count;
+                // Guard `per` (defensive: the parser only emits per≥1 from `\d+`, but a
+                // hand-built config with per<=0/non-finite would make floor(x/per) Infinity/NaN).
+                let purgeCount: number | 'all' = ab.config.count;
+                if (
+                    scaling &&
+                    typeof ab.config.count === 'number' &&
+                    Number.isFinite(scaling.per) &&
+                    scaling.per > 0
+                ) {
+                    purgeCount =
+                        ab.config.count * Math.max(0, Math.floor(effectiveCritDamage / scaling.per));
+                }
                 for (const vid of recipients) {
                     const removed = statusEngine.purge(vid, purgeCount);
                     if (removed > 0) {
