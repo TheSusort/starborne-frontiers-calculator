@@ -7,7 +7,13 @@
  * Gear-set abilities are resolved via GEAR_SET_ABILITIES (currently: Leech).
  * Implant abilities are resolved via IMPLANT_ABILITIES (currently: Bloodthirst).
  *
- * This module is NOT wired into any engine path yet (Task 3 does that).
+ * D-PR1 approach (registry, not text-parsing): effect values are baked from the
+ * source data in implants.ts / gearSets.ts per the registries above. A variant's
+ * `description` is used only as a PRESENCE gate (stat-only variants have none and are
+ * skipped) — its text is NOT parsed. A future PR may add a text-parse path for
+ * implants whose phrasing the skill parser can handle; until then, new effects need a
+ * registry entry. Merged into the passive slot by buildShipAbilitiesWithEquipment.
+ *
  * It is pure: no side effects, no throws out of the function.
  *
  * Modeling note: noCrit:true on the Leech set heal — a derived-from-damage leech

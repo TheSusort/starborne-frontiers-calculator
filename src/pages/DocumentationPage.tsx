@@ -3056,6 +3056,23 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                 </ul>
                             </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Gear Set and Implant Effects
+                                </h4>
+                                <p className="text-theme-text">
+                                    Equipped implant and gear-set special effects are beginning to
+                                    apply in the simulator. Currently supported:{' '}
+                                    <strong>Leech</strong> gear set (heals the ship for 15% of all
+                                    damage it deals each turn) and the <strong>Bloodthirst</strong>{' '}
+                                    implant (on-crit heal for 12%, 17%, or 20% of damage dealt,
+                                    depending on rarity). Chance-based procs such as Bloodthirst are
+                                    modeled at
+                                    their expected average frequency. More implant and gear-set
+                                    effects will be added in future updates.
+                                </p>
+                            </div>
                         </div>
                     </section>
 

@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: area-of-effect purge skills now remove buffs from every enemy they hit, not just the primary target.',
     "Combat simulator: Amartya's charge purge now scales with crit power — it removes 1 buff for every 50% crit power (so higher crit power purges more buffs), applied to every enemy hit.",
     'Combat simulator: enemy ships now actually heal — their HP recovers from repair skills instead of being stuck, so enemy teams survive more realistically. Skills that trigger off a target being healed this round (such as Nayra) now also fire against healed enemies.',
+    'Combat simulator now applies the Leech gear set and the Bloodthirst implant, with chance-based procs modeled at their true average frequency. More implant and gear-set effects are coming.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
