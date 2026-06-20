@@ -85,6 +85,11 @@ the D-PR1 per-rarity-builder pattern. Each returns a single `Ability` (minus `id
 `channel: 'outgoingDamage'`, `target: 'self'`, `trigger: 'passive'`, `autoFilled: true`. Per-rarity
 values are baked from `implants.ts`; a rarity absent from the value map yields `undefined` (skip).
 
+Values are **baked into the registry** (not text-parsed) precisely because the source `description`
+strings are inconsistent ("Direct Damage" vs "direct damage", inconsistent trailing periods, one
+Intrusion variant missing its period) — the registry path sidesteps that fragility, matching D-PR1.
+The `description` is still used only as a presence gate, never parsed.
+
 ### 3.1 Intrusion — per-count scaling
 
 ```
@@ -154,7 +159,7 @@ The minimal additive change required for Arcane Siege:
 4. **`buildRoundContext`** — accept a `selfShielded` input and set it on the context it builds.
 5. **`playerTurn.ts`** — thread `selfShielded: actor.shieldPool > 0` into the `buildRoundContext` call
    that produces `modifierCtx` (`~line 1078`). `actor` is the acting `CombatActor`; `shieldPool` exists
-   on it (`state.ts:104`, init 0) and reflects the live remaining shield at attack time.
+   on it (`state.ts:108`, init 0) and reflects the live remaining shield at attack time.
 
 Emitted conditions use `derivable: true` — a `derivable: false` condition is treated as always-met
 (`evaluateConditions.ts`), which would defeat the gate. (Mirrors the `target-repaired-this-round`
