@@ -21,7 +21,8 @@ export type AbilityType =
     | 'purge'
     | 'control'
     | 'incoming-reduction'
-    | 'incoming-block';
+    | 'incoming-block'
+    | 'outgoing-amplification';
 
 export type AbilityTarget =
     | 'self'
@@ -191,6 +192,20 @@ export interface IncomingHitContext {
     dotType?: 'inferno' | 'corrosion';
 }
 
+/**
+ * Attacker-side condition for an in-flight outgoing-amplification proc, evaluated against the
+ * OutgoingHitContext at the attacker's per-hit seam — NOT a ConditionSubject (those gate the
+ * buff/modifier fold). Mirrors IncomingCondition on the victim side (D-PR3).
+ */
+export type OutgoingCondition = 'amplify-on-crit' | 'amplify-vs-higher-attack';
+
+export interface OutgoingHitContext {
+    /** Did this individual hit critically strike? (Menace.) */
+    didCrit: boolean;
+    /** Is the target's live effective attack higher than the attacker's? (Giant Slayer.) */
+    targetHigherAttack: boolean;
+}
+
 export interface ScalingRule {
     conditionIndex: number;
     perUnit: number;
@@ -320,6 +335,16 @@ export type AbilityConfig =
           /** 0..1 fraction of the hit blocked (1.0 = full block). */
           blockPct: number;
           oncePerRound: boolean;
+      }
+    // D-PR4 attacker-side outgoing-damage amplification (folded at the per-hit seam before victim apply).
+    | {
+          type: 'outgoing-amplification';
+          /** Eligibility condition evaluated per hit. */
+          condition: OutgoingCondition;
+          /** Amplification added to this hit when the proc fires, in percentage points (e.g. 50). */
+          ampPct: number;
+          /** Per-(owner,ability) proc chance in (0,1). Rolled per eligible hit. */
+          procChance: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate

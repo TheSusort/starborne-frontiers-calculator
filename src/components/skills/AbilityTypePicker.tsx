@@ -26,6 +26,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     control: 'Control',
     'incoming-reduction': 'Incoming Reduction',
     'incoming-block': 'Incoming Block',
+    'outgoing-amplification': 'Outgoing Amplification',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [

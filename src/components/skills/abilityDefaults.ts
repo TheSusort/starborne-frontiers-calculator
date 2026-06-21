@@ -66,6 +66,13 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
                 blockPct: 1,
                 oncePerRound: false,
             };
+        case 'outgoing-amplification':
+            return {
+                type: 'outgoing-amplification',
+                condition: 'amplify-on-crit',
+                ampPct: 0,
+                procChance: 0,
+            };
     }
 };
 
@@ -88,6 +95,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     control: 'enemy',
     'incoming-reduction': 'self',
     'incoming-block': 'self',
+    'outgoing-amplification': 'self',
 };
 
 /**
