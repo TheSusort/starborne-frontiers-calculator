@@ -1921,6 +1921,11 @@ export function runCombat(input: CombatEngineInput): {
     // Cleared at each round top; read in buildTurnArgs for the target-repaired gate.
     const repairedThisRound = new Set<string>();
 
+    // D-PR8: actors hit by a direct attack this round (damage landed on shield or HP).
+    // Mirrors repairedThisRound. Feeds the not-hit-this-round gate (Alacrity). Cleared each
+    // round alongside repairedThisRound.
+    const hitThisRound = new Set<string>();
+
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
@@ -2371,6 +2376,7 @@ export function runCombat(input: CombatEngineInput): {
         // Clear the per-round repaired set HERE (not at the round-started emit) so start-of-round
         // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
         repairedThisRound.clear();
+        hitThisRound.clear();
 
         // Forced-targeting/stealth lookup for a roster (phase 3). Reads the status engine
         // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
@@ -2706,6 +2712,15 @@ export function runCombat(input: CombatEngineInput): {
                     oldPct: (100 * hpBefore) / maxHp,
                     newPct: (100 * victim.currentHp) / maxHp,
                 });
+            }
+            // D-PR8: record a direct hit for the not-hit-this-round gate. A hit = a direct
+            // attack that landed damage on shield or HP (absorbed > 0 || hpDamage > 0). The
+            // byDirectDamage guard excludes DoT-tick batches (they pass byDirectDamage:false);
+            // fully-Barrier-blocked hits return earlier (barriered:true) and are not recorded.
+            // TODO(verify): whether a fully-Barrier-blocked direct attack should count as a hit
+            // for Alacrity is unconfirmed in-game; current default is "not a hit".
+            if (cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)) {
+                hitThisRound.add(victim.id);
             }
             return { shieldBefore, hpDamage, barriered: false };
         };
@@ -3354,6 +3369,10 @@ export function runCombat(input: CombatEngineInput): {
                         // side: 100 for every owner until PR5. byte-identical to the old inline spread.
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
+                        // D-PR8: live not-hit-this-round gate (Alacrity). hitThisRound is a single
+                        // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
+                        // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
+                        wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
                     });
                 }
             }

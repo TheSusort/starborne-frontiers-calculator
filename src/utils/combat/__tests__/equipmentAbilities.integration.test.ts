@@ -2086,3 +2086,208 @@ describe('D-PR7 Task 5 integration — enemy-side mirror: enemy Martyrdom routes
         }
     );
 });
+
+// ---------------------------------------------------------------------------
+// D-PR8 Task 4: not-hit-this-round gate — engine hit-tracking → drain-time gate
+// ---------------------------------------------------------------------------
+//
+// Alacrity grants a self-buff at end-of-round ONLY if the owner took no DIRECT hit
+// that round. We exercise the gate with a HAND-BUILT reactive buff ability (NOT the
+// implant registry) so the test isolates the `not-hit-this-round` condition from any
+// proc-gate timing: type 'buff', target 'self', trigger 'end-of-round', a single
+// condition { subject:'not-hit-this-round', derivable:true }, NO procChance, a
+// recognizable buffName, duration 2.
+//
+// The ability sits in the FOCUS actor's ('attacker', the heal target) passive slot.
+// At round tail the engine drains the end-of-round queue; buildDrainContext reads the
+// owner's wasHitThisRound (engine-populated from the combat-wide hitThisRound Set) into
+// the gate. Met (not hit) → buff-applied for 'attacker' fires; not met (hit) → no grant.
+//
+// Scenarios:
+//   (a) no direct hit  → buff IS granted (enemy with attack 0).
+//   (b) direct HP hit  → buff NOT granted (enemy lands HP damage).
+//   (c) shield-absorbed hit only → counts as a hit → NOT granted (focus self-grants a
+//        large shield before the enemy lands a fully-absorbed hit).
+//   (d) DoT tick only (no direct attack) → NOT a hit → buff granted (byDirectDamage:false).
+
+describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-tracking)', () => {
+    const BUFF_NAME = 'Speed Up III';
+    const FOCUS_HP = 100_000;
+    const NUM_ROUNDS = 1;
+
+    /** The hand-built reactive self-buff gated solely on not-hit-this-round (no procChance). */
+    const reactiveSelfBuff: Ability = {
+        id: 'reactive-not-hit-buff',
+        type: 'buff',
+        target: 'self',
+        trigger: 'end-of-round',
+        conditions: [{ subject: 'not-hit-this-round', derivable: true }],
+        config: {
+            type: 'buff',
+            buffName: BUFF_NAME,
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            duration: 2,
+        },
+    };
+
+    /** A self-shield active (basis 'hp') so the focus can seed its own shield pool before a hit. */
+    const selfShieldActive: Ability = {
+        id: 'self-shield',
+        type: 'shield',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'shield', pct: 100, basis: 'hp', noCrit: true },
+    };
+
+    /** A no-op active so the focus takes a turn each round (deals no damage). */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Build the focus ship skills: an active + the reactive buff in the passive slot. */
+    const focusSkills = (active: Ability): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [active] },
+            { slot: 'passive', abilities: [reactiveSelfBuff] },
+        ],
+    });
+
+    /** An enemy attacker that lands a single-hit attack each round. attack 0 → no damage hit. */
+    function makeEnemyAttacker(attack: number, speed = 1_000) {
+        return {
+            id: 'pr8-enemy',
+            stats: { attack, crit: 0, critDamage: 0, speed, defence: 0, hp: 1_000_000_000 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'pr8-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+    }
+
+    /** An enemy that lands ONLY a Corrosion DoT (no direct-damage ability). */
+    function makeDotEnemy(speed = 1_000) {
+        return {
+            id: 'pr8-dot-enemy',
+            stats: { attack: 10_000, crit: 0, critDamage: 0, speed, defence: 0, hp: 1_000_000_000 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'pr8-dot',
+                                type: 'dot' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: {
+                                    type: 'dot' as const,
+                                    dotType: 'corrosion' as const,
+                                    tier: 2,
+                                    stacks: 1,
+                                    duration: 5,
+                                },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+    }
+
+    /** Base engine input: healing mode, 'attacker' is the heal target carrying the reactive buff. */
+    const PR8_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: focusSkills(noopActive),
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: NUM_ROUNDS,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: FOCUS_HP,
+        healTargetId: 'attacker',
+        ...overrides,
+    });
+
+    /** Collect buff-applied events for the focus carrier with the recognizable buff name. */
+    function collectGrants(input: CombatEngineInput): CombatEvent[] {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events.filter(
+            (e) => e.type === 'buff-applied' && e.actorId === 'attacker' && e.buffName === BUFF_NAME
+        );
+    }
+
+    it('(a) no direct hit → not-hit-this-round met → buff IS granted', () => {
+        // Enemy attack 0 → no damage hit lands on the focus → hitThisRound stays empty.
+        const grants = collectGrants(PR8_BASE({ enemyAttackers: [makeEnemyAttacker(0)] }));
+        expect(grants.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('(b) direct HP hit → not-hit-this-round NOT met → buff NOT granted', () => {
+        // Enemy lands a real HP hit on the focus → hitThisRound.add('attacker') → gate fails.
+        const grants = collectGrants(PR8_BASE({ enemyAttackers: [makeEnemyAttacker(5_000)] }));
+        expect(grants).toHaveLength(0);
+    });
+
+    it('(c) shield-absorbed hit only → counts as a hit → buff NOT granted', () => {
+        // Focus is FAST: it self-grants a shield (100% of max HP = 100_000) before the slow
+        // enemy's 5_000 hit lands ENTIRELY on the shield (absorbed > 0, hpDamage 0). A shield
+        // absorption still counts as a direct hit → gate fails.
+        const grants = collectGrants(
+            PR8_BASE({
+                shipSkills: focusSkills(selfShieldActive),
+                speed: 10_000, // focus acts BEFORE the enemy → shield is up when the hit lands
+                enemyAttackers: [makeEnemyAttacker(5_000, 1_000)],
+            })
+        );
+        expect(grants).toHaveLength(0);
+    });
+
+    it('(d) DoT tick only (no direct attack) → NOT a hit → buff IS granted', () => {
+        // The enemy applies ONLY a Corrosion DoT (no direct-damage ability). The turn-start DoT
+        // batch intake passes byDirectDamage:false → never recorded in hitThisRound → gate met.
+        // Give the DoT time to tick at least once (numRounds 2: applied round 1, ticks round 2).
+        const grants = collectGrants(PR8_BASE({ numRounds: 2, enemyAttackers: [makeDotEnemy()] }));
+        expect(grants.length).toBeGreaterThanOrEqual(1);
+    });
+});
