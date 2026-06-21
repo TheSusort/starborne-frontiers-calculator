@@ -84,15 +84,19 @@ direct hits during the current round.**
 `repairedThisRound` Set (cleared at `engine.ts:~2373` right after `beginRound`; that Set is the
 direct precedent for clear-timing and shape).
 - Cleared at round start (right after `beginRound`, alongside `repairedThisRound`).
-- Populated inside the `applyIncomingToTarget` direct-hit path (`engine.ts:~2643`). The closure
-  returns `{shieldBefore, hpDamage, barriered}`. **Exact predicate (locked):** record the victim as
-  hit when `!barriered && (shieldBefore > 0 || hpDamage > 0)` for a direct attack with non-zero
-  incoming damage — i.e. damage landed on shield or HP. `shieldBefore` is the pre-hit pool, so
-  "shield was touched" = `!barriered && shieldBefore > 0 && damage > 0` (the non-barriered branch
-  always drains some shield before HP). A fully Barrier-blocked hit (`barriered === true`, early
-  return `engine.ts:~2636`) records **nothing** → not a hit (the TO-VERIFY default above).
-- The **DoT-batch intake** path (`applyIncomingToTarget(..., { byDirectDamage: false })`,
-  `engine.ts:~3610`/`~4239`) must NOT record into this set — DoT ticks are not "being hit."
+- Populated inside the **shared `applyVictimDamage` core closure** (`engine.ts:~2534`), NOT in a
+  named wrapper. There are two wrappers over this core — `applyIncomingToTarget` (enemy→player
+  victim, `~2729`) and `applyOutgoingToEnemy` (player→enemy victim, `~2760`) — so recording in the
+  core is what makes the hit set **team-agnostic** (an enemy Alacrity must see its own hits too).
+  The core takes a `cause?: { killerId?; byDirectDamage? }` (`~2542`); the wrappers default
+  `byDirectDamage: true`, the DoT-tick batch overrides `byDirectDamage: false`
+  (`applyIncomingToTarget(..., { byDirectDamage: false })`, `~3610`).
+- **Exact predicate (locked):** record the victim as hit when
+  `cause?.byDirectDamage === true && !barriered && (shieldBefore > 0 || hpDamage > 0)`. The
+  `byDirectDamage` guard subsumes the DoT exclusion in one flag — DoT ticks pass `false` and never
+  record. `shieldBefore` is the pre-hit pool (the non-barriered branch always drains shield before
+  HP, so `shieldBefore > 0` ⇒ shield was touched). A fully Barrier-blocked hit (`barriered === true`,
+  early return `~2569`/`~2636`) records **nothing** → not a hit (the TO-VERIFY default above).
 
 **Threading (three files change in lockstep, same triad `self-shield` touched):**
 1. `ConditionContext` + `RoundContextInput` gain `wasHitThisRound?: boolean` (`roundContext.ts`),
@@ -134,8 +138,11 @@ ALACRITY(rarity):            trigger 'end-of-round',     conditions [not-hit-thi
 Per-rarity tables baked from §6. Builders return `undefined` for unsupported rarities (e.g.
 ALACRITY common) → graceful skip, consistent with the registry contract.
 
-The implant ability ids keep the existing `equip-implant-${name}-${gearId}` suffix (unique per
-piece so the proc-rate gate doesn't collapse independent procs).
+The implant ability id follows the current registry convention `equip-implant-${implantName}`
+(no per-piece suffix — the gearId suffix from D-PR1 was dropped in the PR3–7 registry refactor).
+The proc-rate gate keys on `${ownerId}:${ability.id}`, so two copies of the *same* implant on one
+ship would share a gate; this is academic (real loadouts equip one of each implant) and out of
+scope — if per-piece proc independence is ever needed it's a separate change.
 
 ## 5. Liveness & known limits (accepted)
 
