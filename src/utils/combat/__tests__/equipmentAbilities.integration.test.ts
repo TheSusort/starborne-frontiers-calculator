@@ -1583,7 +1583,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
                             config: {
                                 type: 'dot' as const,
                                 dotType: 'corrosion' as const,
-                                tier: 8,
+                                tier: 8, // 5 stacks × (8/100) × 1 000 maxHp = 400 dmg/tick → fatal by tick 3 (within 6 rounds)
                                 stacks: 5,
                                 duration: 5,
                             },
@@ -1655,9 +1655,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
             expect(disableEvents.length).toBeGreaterThanOrEqual(1);
             for (const e of disableEvents) {
                 if (e.type !== 'debuff-applied') continue;
-                expect(e.targetId).toBe(KILLER_ID);
-                // Explicitly NOT the default enemy sink.
-                expect(e.targetId).not.toBe('enemy');
+                expect(e.targetId).toBe(KILLER_ID); // implicitly NOT the default enemy sink
                 // Sourced by the dying carrier.
                 expect(e.sourceId).toBe('attacker');
             }
