@@ -25,3 +25,19 @@ export function makeRateGate(): (rate: number) => boolean {
         return false;
     };
 }
+
+/** Get-or-create a per-key rate gate in `gates` and roll it at `chance`. Absent map → pass-through
+ *  (true). Backs the engine's per-(owner,ability) proc closures (D-PR4 outgoing amplification). */
+export function rollRateGate(
+    gates: Map<string, ReturnType<typeof makeRateGate>> | undefined,
+    key: string,
+    chance: number
+): boolean {
+    if (!gates) return true;
+    let gate = gates.get(key);
+    if (!gate) {
+        gate = makeRateGate();
+        gates.set(key, gate);
+    }
+    return gate(chance);
+}

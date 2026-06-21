@@ -9,7 +9,7 @@ import { Ability, AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
-import { makeRateGate } from '../calculators/rateAccumulator';
+import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toEnemyModifiers } from '../calculators/dpsBuffHelpers';
 import {
@@ -3017,6 +3017,13 @@ export function runCombat(input: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
+                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
+                // a per-(owner,ability) deterministic proc closure. Both are READ only when the
+                // actor's passive slot carries an outgoing-amplification ability → byte-identical
+                // for every fixture without one (rollOutgoingProc never invoked).
+                targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
+                rollOutgoingProc: (abilityId: string, chance: number) =>
+                    rollRateGate(procChanceGates, `${a.id}:${abilityId}`, chance),
             };
         };
 
