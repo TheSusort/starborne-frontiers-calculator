@@ -1006,6 +1006,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
         }
+        // D-PR8: procChance gate for reactive buff grants (Ambush 5-16%, Alacrity 12-20%).
+        // De-Morgan pass-through — true when procChance is undefined/≤0/≥1, so every existing
+        // (procChance-less) buff grant stays byte-identical. Mirrors the heal/shield + damage
+        // branches. Keys on `${ownerId}:${ability.id}` via ctx.procChanceGates.
+        if (!passesProcChanceGate(intent, ctx)) return;
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;
