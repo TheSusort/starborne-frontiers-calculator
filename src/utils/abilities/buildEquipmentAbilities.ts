@@ -307,7 +307,7 @@ function mkNamedBuffGrant(
 
 // D-PR7: build a reactive named-debuff application (Martyrdom's on-death "Disable" on the killer).
 // application:'apply' → lands unless affinity disadvantage (no landing roll), matching "Applies".
-// Killer routing is supplied by the on-destroyed listener via eventCtx.counterTargetId (later task).
+// Killer routing is supplied by the on-destroyed listener via eventCtx.counterTargetId.
 function mkNamedDebuff(
     buffName: string,
     trigger: AbilityTrigger,
@@ -560,7 +560,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         ),
     // Martyrdom: "Applies Disable for N turns on the enemy that killed this Unit." EMIT-ONLY:
     // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
-    // the killer + logged. Killer routing comes from the on-destroyed listener (later task).
+    // the killer + logged. Killer routing comes from the on-destroyed listener.
     MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
 };
 
