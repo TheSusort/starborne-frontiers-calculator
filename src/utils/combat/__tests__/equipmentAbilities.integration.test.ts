@@ -2855,6 +2855,98 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
         expect(buffed.has(ALLY1)).toBe(true);
         expect(buffed.has(CARRIER)).toBe(false);
     });
+
+    // ── D-PR10 Task 4 — caster-attack snapshot into the grant ────────────────
+    //
+    // PIN's description "Grants attack equal to 100% of the caster's attack" parses to the
+    // `attackFlatPctOfCaster: 100` sentinel. At grant time the trigger must freeze a concrete
+    // `attackFlat` = (CASTER's effective attack) × 100/100 into the per-instance payload, so
+    // the recipient's effective attack — and thus its damage output — rises by the caster's
+    // effective attack (NOT the recipient's own attack).
+    //
+    // Harness: the carrier is a Font-of-Power AoE-repair support with statOverrides.attack =
+    // casterAttack; the FOCUS attacker (a non-self repaired recipient) has a DIFFERENT base
+    // attack and is the only thing punching the enemy, so the focus's `damageDealt` isolates
+    // the recipient's attack. PIN is 1-turn, granted on the carrier's turn → it folds into
+    // the focus's same-round attack. Determinism mirrors the presence tests: floor(16×0.16)=2
+    // proc fires, identical across runs (back-loaded makeRateGate accumulator), so the boosted
+    // turn count is the same in every run → the damage delta tracks ONLY the caster's attack.
+    describe('D-PR10 — caster-attack snapshot raises the recipient by the CASTER attack', () => {
+        const FOCUS = 'attacker';
+
+        /** Sum the FOCUS recipient's per-round damageDealt across the whole battle. */
+        const focusDamage = (result: ReturnType<typeof simulateBattle>): number => {
+            let total = 0;
+            for (const round of result.rounds) {
+                for (const ship of round.ships) {
+                    if (ship.actorId === FOCUS) total += ship.damageDealt;
+                }
+            }
+            return total;
+        };
+
+        /**
+         * Focus = a damage attacker (recipient, base attack 1000). Carrier = Font-of-Power
+         * AoE-repair support at `casterAttack`. The enemy is a fat bag so the battle runs all
+         * rounds. `withFont=false` drops the implant for a clean no-PIN baseline.
+         */
+        const run = (casterAttack: number, withFont: boolean) =>
+            simulateBattle(
+                {
+                    playerTeam: [
+                        place(
+                            makeTeamShip('focus', 'Focus', { repair: 'damage' }),
+                            'M4',
+                            1000, // recipient's OWN base attack — deliberately != casterAttack
+                            1_000_000_000
+                        ),
+                        place(
+                            makeTeamShip('carrier', 'Carrier', {
+                                repair: 'all-allies',
+                                withFont,
+                            }),
+                            'M3',
+                            casterAttack,
+                            1_000_000_000
+                        ),
+                    ],
+                    enemyTeam: [
+                        place(
+                            makeTeamShip('enemy', 'Enemy', { repair: 'damage' }),
+                            'M4',
+                            1,
+                            1_000_000_000
+                        ),
+                    ],
+                    rounds: ROUNDS,
+                },
+                getGearPiece
+            );
+
+        it('PIN raises the recipient damage above the no-PIN baseline, and the increase tracks the CASTER attack (not the recipient)', () => {
+            const baseline = focusDamage(run(8000, false)); // no Font → no PIN
+            const withLowCaster = focusDamage(run(4000, true)); // PIN snapshots caster=4000
+            const withHighCaster = focusDamage(run(20000, true)); // PIN snapshots caster=20000
+
+            // (a) Magnitude: PIN can only ADD attack (crit=0 → otherwise-constant per-round
+            // damage), so a granted run strictly exceeds the identical no-PIN baseline.
+            expect(withLowCaster).toBeGreaterThan(baseline);
+            expect(withHighCaster).toBeGreaterThan(baseline);
+
+            // (b) Source: the only thing differing between the two PIN runs is the CASTER's
+            // attack. If the snapshot wrongly used the recipient's own attack (1000, identical
+            // in both runs), the two deltas would be EQUAL. A bigger caster attack must yield a
+            // strictly bigger recipient-damage increase → the boost is sourced from the caster.
+            const deltaLow = withLowCaster - baseline;
+            const deltaHigh = withHighCaster - baseline;
+            expect(deltaHigh).toBeGreaterThan(deltaLow);
+
+            // The deltas scale ~5× with the 5× caster-attack change (4000 → 20000). Allow a
+            // wide band (other folds, rounding) but require it is clearly proportional, not a
+            // flat recipient-sourced offset.
+            expect(deltaHigh).toBeGreaterThan(deltaLow * 3);
+        });
+    });
 });
 
 describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
