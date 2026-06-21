@@ -29,6 +29,7 @@ import { GearPiece } from '../../types/gear';
 import {
     Ability,
     AbilityTrigger,
+    Condition,
     HealAmpCondition,
     IncomingCondition,
     OutgoingCondition,
@@ -211,6 +212,23 @@ const BATTLECRY_DURATION: Record<string, number> = { common: 1, rare: 2, epic: 2
 // Martyrdom: apply a named debuff to the killer on death. Only rare + legendary variants.
 const MARTYRDOM_DURATION: Record<string, number> = { rare: 1, legendary: 2 };
 
+// D-PR8: reactive self-buff implant value tables
+// Ambush: start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
+const AMBUSH_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+// Alacrity: end-of-round, if not hit, X% chance to gain Speed Up III for 2 turns. No common variant.
+const ALACRITY_PROC: Record<string, number> = {
+    uncommon: 0.12,
+    rare: 0.14,
+    epic: 0.16,
+    legendary: 0.2,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -277,11 +295,13 @@ function mkHealAmp(
 // parsedEffects/stackability resolve from the canonical BUFFS entry. EMIT-ONLY for buffs whose
 // effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
 // and logged but has no combat effect until that fold exists.
+// D-PR8: generalised with optional `opts` for conditions + procChance (Battlecry call is byte-identical).
 function mkNamedBuffGrant(
     buffName: string,
     target: 'self' | 'ally' | 'all-allies',
     trigger: AbilityTrigger,
-    duration: number | undefined
+    duration: number | undefined,
+    opts?: { conditions?: Condition[]; procChance?: number }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
@@ -291,7 +311,8 @@ function mkNamedBuffGrant(
         type: 'buff',
         target,
         trigger,
-        conditions: [],
+        conditions: opts?.conditions ?? [],
+        ...(opts?.procChance !== undefined ? { procChance: opts.procChance } : {}),
         config: {
             type: 'buff',
             buffName,
@@ -562,6 +583,31 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
     // the killer + logged. Killer routing comes from the on-destroyed listener.
     MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
+    // D-PR8: Ambush — start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
+    // Gate is self-buff/Stealth (NOT self-stealth — that's an IncomingCondition). DORMANT until a
+    // stealth source exists in the sim (Cloaking / sub-project H); entry + gate are correct now.
+    AMBUSH: (rarity) => {
+        const procChance = AMBUSH_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Crit Power Up III', 'self', 'start-of-round', 1, {
+            conditions: [{ subject: 'self-buff', buffName: 'Stealth', derivable: true }],
+            procChance,
+        });
+    },
+    // D-PR8: Synaptic Resonance — gain Speed Up III for 1 turn when an enemy is directly repaired.
+    // DETERMINISTIC (no procChance). LIVE today (enemies have real healing → on-enemy-repaired fires).
+    // The "+X% next-crit critDamage" half is DEFERRED (stacking next-crit consumable, no seam).
+    SYNAPTIC_RESONANCE: (_rarity) =>
+        mkNamedBuffGrant('Speed Up III', 'self', 'on-enemy-repaired', 1),
+    // D-PR8: Alacrity — at end of round, if not hit, X% chance to gain Speed Up III for 2 turns.
+    ALACRITY: (rarity) => {
+        const procChance = ALACRITY_PROC[rarity];
+        if (procChance === undefined) return undefined; // no common variant
+        return mkNamedBuffGrant('Speed Up III', 'self', 'end-of-round', 2, {
+            conditions: [{ subject: 'not-hit-this-round', derivable: true }],
+            procChance,
+        });
+    },
 };
 
 // ---------------------------------------------------------------------------

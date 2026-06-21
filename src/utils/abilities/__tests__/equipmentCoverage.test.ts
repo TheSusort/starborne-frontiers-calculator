@@ -99,7 +99,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BATTLECRY + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -119,9 +119,12 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'INTRUSION',
             'NEBULA_NULLIFIER',
             'NOURISHMENT',
+            'SYNAPTIC_RESONANCE',
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
+            'ALACRITY',
+            'AMBUSH',
             'BATTLECRY',
             'BLOODTHIRST',
             'EXUBERANCE',
@@ -183,6 +186,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR5: SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR added (reactive-heal family).
     // D-PR6: EXUBERANCE added (repair-amplification on-repair chance).
     // D-PR7: LAST_WISH, BATTLECRY, MARTYRDOM added (on-death repair / buff to allies / disable killer).
+    // D-PR8: SYNAPTIC_RESONANCE, ALACRITY, AMBUSH added (reactive self-buff grants).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -204,6 +208,9 @@ describe('equipmentCoverage — implants', () => {
         'LAST_WISH',
         'BATTLECRY',
         'MARTYRDOM',
+        'SYNAPTIC_RESONANCE',
+        'ALACRITY',
+        'AMBUSH',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -362,6 +369,23 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['MARTYRDOM'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('MARTYRDOM', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR8: reactive self-buff implants
+    it('SYNAPTIC_RESONANCE produces 1 self Speed Up III buff on-enemy-repaired per rarity (no procChance)', () => {
+        for (const v of IMPLANTS['SYNAPTIC_RESONANCE'].variants) {
+            expect(implantAbilityCount('SYNAPTIC_RESONANCE', v.rarity)).toBe(1);
+        }
+    });
+    it('AMBUSH produces 1 self Crit Power Up III buff per rarity (start-of-round, self-buff Stealth gate)', () => {
+        for (const v of IMPLANTS['AMBUSH'].variants) {
+            expect(implantAbilityCount('AMBUSH', v.rarity)).toBe(1);
+        }
+    });
+    it('ALACRITY produces 1 self Speed Up III buff per rarity (end-of-round, not-hit-this-round gate)', () => {
+        for (const v of IMPLANTS['ALACRITY'].variants) {
+            expect(implantAbilityCount('ALACRITY', v.rarity)).toBe(1);
         }
     });
 
