@@ -48,12 +48,21 @@ killer routing.
 
 ### 1.2 Payload fidelity
 
-- **Last Wish** — fully modeled. Reuses the reactive heal fold (no-crit, owner/recipient heal-modifier
-  channels) exactly as Salvation does.
-- **Battlecry** — fully modeled. "Inc. Damage Down II" is a canonical buff (`buffs.ts:296`) whose
-  parsed effect folds into `incomingDamageModifier` (`toEnemyModifiers` → `playerTurn.ts:1301`,
-  `(1 + incomingDamageModifier/100)`), reducing each ally's incoming damage. The per-rarity difference
-  is **duration only**; magnitude is intrinsic to the named buff tier ("II").
+- **Last Wish** — **fully modeled**. Reuses the reactive heal fold (no-crit, owner/recipient
+  heal-modifier channels) exactly as Salvation does. The only on-death implant with real combat impact
+  in this PR.
+- **Battlecry** — **emit-only** (user-confirmed scope). The buff executor applies the canonical
+  "Inc. Damage Down II" buff (`buffs.ts:296`, `-30% Incoming Direct Damage`) to all allies as a
+  **self-side** status and emits `buff-applied`, but it has **no combat effect yet**. The engine only
+  folds incoming-damage modifiers from **enemy-side** statuses on the victim (`victimEnemyBuffs` reads
+  `side:'enemy'` only; the self-buff totals in `buffTotals.ts` fold attack/crit/defence/hp/speed/heal —
+  **not** `incomingDamage`). A unit's own "Inc. Damage Down" self-buff is therefore never folded into the
+  damage it takes. (This is exactly why D-PR3 built dedicated victim-side `incoming-reduction` machinery
+  rather than reusing the named-buff path.) Making Battlecry real requires a **self-side
+  incoming-damage-buff fold** in the victim damage path — a cross-cutting mechanic affecting every ship
+  that self/ally-grants Inc. Damage Down (Makoli, Salvation, Shelter, Refine…) and moving goldens. That
+  is its own PR; Battlecry lights up for free once it lands. The per-rarity difference is **duration
+  only** (magnitude is intrinsic to the named buff tier).
 - **Martyrdom** — **Disable is emit-only** (user-chosen scope). The `debuff-applied` event fires and the
   named "Disable" status is applied to the killer, but Disable has **no turn-effect today** (only Stasis
   is a modeled turn-skip control; `control-applied`/non-Stasis statuses are emit-only). Disable's actual
@@ -129,8 +138,9 @@ Add `BATTLECRY`, `LAST_WISH`, `MARTYRDOM` to the implemented-implants set (IMPLA
 ship-destroyed{actorId, killerId, byDirectDamage}
    └─ on-destroyed listener (actorId === ownerId)
         ├─ Last Wish  (heal,  all-allies) → reactive heal fold → repair living allies % of their max HP
-        ├─ Battlecry  (buff,  all-allies) → applyTimedAbilityStatus "Inc. Damage Down II" to ctx.playerIds
-        │                                    → folds into each ally's incomingDamageModifier next turn
+        ├─ Battlecry  (buff,  all-allies) → applyTimedAbilityStatus "Inc. Damage Down II" (self-side) to
+        │                                    ctx.playerIds + buff-applied event (EMIT-ONLY — self-side
+        │                                    incoming buffs are not folded into incoming damage yet)
         └─ Martyrdom  (debuff, enemy)     → [byDirectDamage gate] counterTargetId = killerId
                                              → landing gate → applyTimedAbilityStatus "Disable" on killer
                                              → debuff-applied event (emit-only; no turn-effect yet)
@@ -157,8 +167,9 @@ any of these implants triggers the same paths against the player side.
 - **Integration (`equipmentAbilities.integration.test.ts` or sibling):**
   - Last Wish: on a carrier's destruction, living allies' HP rises (gross heal credited); dead caster not
     double-credited.
-  - Battlecry: on destruction, all living allies gain "Inc. Damage Down II" (`buff-applied` per ally) and
-    take reduced incoming damage the following turn.
+  - Battlecry: on destruction, all living allies gain "Inc. Damage Down II" (`buff-applied` per ally).
+    Emit-only — assert the events fire; do NOT assert reduced incoming damage (the self-side buff is not
+    folded yet).
   - Martyrdom: on direct-damage death, `debuff-applied` "Disable" lands on the **killer** id (not the
     default enemy); on a non-direct death, no `debuff-applied`.
   - One enemy-side mirror (an enemy carrier dying applies to a player killer) to lock symmetry.
@@ -168,6 +179,10 @@ any of these implants triggers the same paths against the player side.
 
 ## 6. Out of scope / deferred
 
+- **Self-side incoming-damage-buff folding** — making a unit's own / ally-granted "Inc. Damage Down"
+  (and "Inc. Damage Up") actually modify the damage it takes, by gathering the victim's self-side
+  statuses into the incoming-damage fold. Cross-cutting (Makoli/Salvation/Shelter/Refine + Battlecry);
+  golden-moving. Its own PR. Battlecry lights up for free once it lands.
 - **Disable as a turn-effect** — modeling Disable's "prevents active + passive skills" suppression for
   all ~6 inflicting ships. Its own control PR (sub-project B extension). Martyrdom lights up for free
   once it lands.
