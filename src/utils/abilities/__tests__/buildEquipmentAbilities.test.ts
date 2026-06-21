@@ -475,3 +475,36 @@ describe('Insidiousness implant', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR5: Second Wind implant (reactive self-heal on crit-received)
+// ---------------------------------------------------------------------------
+describe('Second Wind implant', () => {
+    it('epic → reactive heal with trigger on-attacked, triggerCritFilter crit, target self, basis hp, pct 10, procChance ≈ 0.12', () => {
+        const abilities = buildForImplant('SECOND_WIND', 'epic');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.trigger).toBe('on-attacked');
+        expect(ab.triggerCritFilter).toBe('crit');
+        expect(ab.target).toBe('self');
+        expect(ab.conditions).toEqual([]);
+        expect(ab.autoFilled).toBe(true);
+        expect(ab.procChance).toBeCloseTo(0.12);
+        expect(ab.config.type).toBe('heal');
+        if (ab.config.type === 'heal') {
+            expect(ab.config.pct).toBe(10);
+            expect(ab.config.basis).toBe('hp');
+        } else {
+            throw new Error('Expected heal config');
+        }
+    });
+
+    it('legendary → procChance ≈ 0.16', () => {
+        const ab = buildForImplant('SECOND_WIND', 'legendary')[0];
+        expect(ab.procChance).toBeCloseTo(0.16);
+    });
+
+    it('common → no ability (no common variant)', () => {
+        expect(buildForImplant('SECOND_WIND', 'common')).toEqual([]);
+    });
+});

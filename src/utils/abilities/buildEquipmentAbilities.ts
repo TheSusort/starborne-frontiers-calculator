@@ -180,6 +180,14 @@ const GIANT_SLAYER_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// D-PR5: Second Wind reactive self-heal on crit-received value table
+const SECOND_WIND_PROC: Record<string, number> = {
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
 // D-PR3: shared helper for incoming-reduction abilities
 function mkReduction(
     pct: number | undefined,
@@ -344,6 +352,22 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
                 blockPct: b.pct,
                 oncePerRound: false,
             },
+            autoFilled: true,
+        };
+    },
+    // Second Wind: X% chance to repair 10% of max HP upon receiving a critical hit.
+    // No common variant.
+    SECOND_WIND: (rarity) => {
+        const pc = SECOND_WIND_PROC[rarity];
+        if (pc === undefined) return undefined;
+        return {
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-attacked',
+            triggerCritFilter: 'crit',
+            conditions: [],
+            procChance: pc,
+            config: { type: 'heal', pct: 10, basis: 'hp' },
             autoFilled: true,
         };
     },

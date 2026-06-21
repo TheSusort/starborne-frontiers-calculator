@@ -790,3 +790,183 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
         }
     );
 });
+
+// ---------------------------------------------------------------------------
+// D-PR5: Second Wind implant — reactive self-heal on crit-received
+// ---------------------------------------------------------------------------
+//
+// Second Wind fires a reactive self-heal when the OWNER receives a critting hit
+// (trigger: 'on-attacked', triggerCritFilter: 'crit'). The heal basis is 'hp'
+// (owner effective max HP). The ability is placed in the 'attacker' (healTarget)
+// passive slot so HP-restore actually applies.
+//
+// Test A: crit attacker fires Second Wind at the gated rate.
+//   - 'attacker' (hp 10000) carries Second Wind (procChance 0.5, pct 10, basis 'hp').
+//   - enemyAttacker with crit 100 attacks the 'attacker' every round for 10 rounds.
+//   - Each round: attacked event with didCrit:true → on-attacked + crit filter → enqueued.
+//   - Rate gate 0.5 over 10 calls fires exactly 5 times (back-loaded: calls 2,4,6,8,10).
+//   - Each fire: 10000 × 10% = 1000 directHeal. total = 5000.
+//   - 'attacker' starts at full HP → effectiveHeal = 0, overheal = 5000.
+//
+// Test B: non-crit attacker — Second Wind never fires (crit filter).
+//   - Same setup but enemyAttacker with crit 0 → no attacked events with didCrit:true.
+//   - directHeal must be 0.
+//
+// NOTE: The Second Wind ability is injected DIRECTLY into the passive slot (not via the
+// registry) to keep the integration test independent of the registry entry. The unit tests
+// (buildEquipmentAbilities.test.ts) cover the registry. The injected ability shape matches
+// the spec exactly (trigger, triggerCritFilter, basis, procChance) and exercises the real
+// engine on-attacked reactive-heal path.
+
+describe('D-PR5 integration — Second Wind reactive self-heal on crit-received', () => {
+    const ATTACKER_HP = 10_000;
+    const NUM_ROUNDS = 10;
+    const SW_PROC = 0.5; // deterministic: floor(10 × 0.5) = 5 fires (calls 2,4,6,8,10)
+    const EXPECTED_FIRES = Math.floor(NUM_ROUNDS * SW_PROC); // 5
+    const PER_FIRE = ATTACKER_HP * (10 / 100); // 1000 (10% of max HP)
+    const EXPECTED_TOTAL = EXPECTED_FIRES * PER_FIRE; // 5000
+
+    /** Second Wind ability injected directly into passive slot (procChance 0.5 for determinism). */
+    const secondWindAbility: Ability = {
+        id: 'equip-implant-SECOND_WIND',
+        type: 'heal',
+        target: 'self',
+        trigger: 'on-attacked',
+        triggerCritFilter: 'crit',
+        conditions: [],
+        procChance: SW_PROC,
+        config: { type: 'heal', pct: 10, basis: 'hp' },
+        autoFilled: true,
+    };
+
+    /** No-op active for the 'attacker' (focus) — it deals no damage, just keeps the round cadence. */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** ShipSkills with Second Wind in passive slot and a no-op active. */
+    const shipSkillsWithSW: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: [noopActive] },
+            { slot: 'passive', abilities: [secondWindAbility] },
+        ],
+    };
+
+    /** ShipSkills without Second Wind (control). */
+    const shipSkillsNoSW: ShipSkills = {
+        slots: [{ slot: 'active', abilities: [noopActive] }],
+    };
+
+    /** A positioned enemy attacker that crits the 'attacker' (healTarget) every turn.
+     *  Attack must be > 0 so the engine emits `attacked` events (the emit is gated on damage > 0). */
+    function makeEnemyAttacker(critRate: number) {
+        return {
+            id: 'sw-enemy',
+            stats: {
+                attack: 1, // minimal attack so damage > 0 → attacked event is emitted
+                crit: critRate,
+                critDamage: 0,
+                speed: 1,
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'sw-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+    }
+
+    /** Base engine input for Second Wind integration: healing mode, 'attacker' is the healTarget. */
+    const SW_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: shipSkillsNoSW,
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: NUM_ROUNDS,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: ATTACKER_HP,
+        healTargetId: 'attacker',
+        ...overrides,
+    });
+
+    it(
+        'A. Crit attacker: Second Wind fires 5 times (rate 0.5 × 10 crits); ' +
+            'total directHeal = 5000, effectiveHeal = 0 (full HP → all overheal)',
+        () => {
+            const result = runCombat(
+                SW_BASE({
+                    shipSkills: shipSkillsWithSW,
+                    enemyAttackers: [makeEnemyAttacker(100)],
+                })
+            );
+
+            expect(result.healing).toBeDefined();
+            expect(result.healing!.rounds).toHaveLength(NUM_ROUNDS);
+
+            // directHeal = 5 fires × (ATTACKER_HP × 10%) = 5 × 1000 = 5000.
+            // basis 'hp' resolves to effectiveMaxHp (unchanged regardless of current HP).
+            expect(sumHeal(result, 'directHeal')).toBeCloseTo(EXPECTED_TOTAL, 6);
+
+            // Verify the gated schedule: fires on rounds 2, 4, 6, 8, 10 (back-loaded at rate 0.5).
+            const firedRounds = result
+                .healing!.rounds.map((rd, i) => ({
+                    round: i + 1,
+                    heal: rd.perActor.get('attacker')?.directHeal ?? 0,
+                }))
+                .filter((r) => r.heal > 0);
+            expect(firedRounds).toHaveLength(EXPECTED_FIRES);
+            expect(firedRounds[0].round).toBe(2);
+            expect(firedRounds[EXPECTED_FIRES - 1].round).toBe(NUM_ROUNDS);
+            for (const r of firedRounds) {
+                expect(r.heal).toBeCloseTo(PER_FIRE, 6);
+            }
+        }
+    );
+
+    it('B. Non-crit attacker: Second Wind (crit filter) never fires — directHeal = 0', () => {
+        const result = runCombat(
+            SW_BASE({
+                shipSkills: shipSkillsWithSW,
+                enemyAttackers: [makeEnemyAttacker(0)],
+            })
+        );
+
+        expect(result.healing).toBeDefined();
+        // No crits → no on-attacked+crit triggers → Second Wind never fires.
+        expect(sumHeal(result, 'directHeal')).toBe(0);
+    });
+});
