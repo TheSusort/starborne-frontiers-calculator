@@ -14,7 +14,7 @@ grants (Resonating Fury, Font of Power) are later sub-PRs.
 
 | Implant | Trigger | Gate condition | Buff granted | Duration | Proc chance (by rarity) |
 |---|---|---|---|---|---|
-| **AMBUSH** (major) | `start-of-round` | `self-stealth` | Crit Power Up III | 1 turn | 0.05 / 0.07 / 0.09 / 0.12 / 0.16 (common→legendary) |
+| **AMBUSH** (major) | `start-of-round` | `self-buff` Stealth | Crit Power Up III | 1 turn | 0.05 / 0.07 / 0.09 / 0.12 / 0.16 (common→legendary) |
 | **SYNAPTIC_RESONANCE** (ultimate) | `on-enemy-repaired` | none | Speed Up III | 1 turn | — (deterministic, no proc) |
 | **ALACRITY** (major) | `end-of-round` | `not-hit-this-round` | Speed Up III | 2 turns | 0.12 / 0.14 / 0.16 / 0.20 (uncommon→legendary; no common) |
 
@@ -31,8 +31,15 @@ Source data: `src/constants/implants.ts` variant `description` strings (quoted i
   and `LIVE_TRIGGERS` (`types/abilities.ts`). `on-enemy-repaired` already fires in the sim because
   E5 gave the enemy real healing (`heal-performed` for enemy actors). `end-of-round` is live
   (Rhodium C2b-2 purge rides it). `start-of-round` is live (Chakara PR6).
-- **`self-stealth` condition** — exists as a `ConditionSubject` (`types/abilities.ts:178`,
-  built in D-PR3 for Voidshade/Shadowguard). Usable in the gate path.
+- **`self-buff` + `buffName` gate** — `self-buff` is a live `ConditionSubject`
+  (`types/abilities.ts`, in `LIVE_SUBJECTS`); `evaluateCondition` matches it via
+  `countNames(ctx.selfBuffNames, cond.buffName)` (`evaluateConditions.ts:41`), and `buildDrainContext`
+  → `buildActorConditionContext` populates `selfBuffNames` from the owner's live status snapshot
+  (`triggers.ts:643`). The `'Stealth'` buff name exists in `buffs.ts:142`. **NOTE:** `self-stealth`
+  is NOT a `ConditionSubject` — it is a member of the `IncomingCondition` union (the per-incoming-hit
+  victim seam used by D-PR3 Voidshade/Shadowguard). AMBUSH's "if in stealth" gate therefore uses
+  `{ subject: 'self-buff', buffName: 'Stealth', derivable: true }`, the standard self-buff path, NOT
+  `self-stealth`.
 - **`procChance` machinery** — `procChanceGates` Map on `IntentExecContext` + `passesProcChanceGate`
   (`triggers.ts:908`), the deterministic rate-gate accumulator. Currently consumed by the
   **heal/shield** branch (`triggers.ts:1160`) and the **damage** branch (`triggers.ts:1264`) only.
@@ -73,21 +80,33 @@ direct hits during the current round.**
   nor HP). Default for this PR: **not a hit** (nothing is touched). Flagged in code as a
   to-verify-in-game item; revisit if the in-game behavior says a blocked attack still counts.
 
-**Engine state:** a per-round `Set<string>` of actor ids hit this round.
-- Cleared at round start (`beginRound`).
-- Populated inside `applyIncomingToTarget` (`engine.ts:~2643`) for a **direct** attack when
-  `outcome.shieldBefore` was reduced **or** `outcome.hpDamage > 0` — i.e. damage actually landed.
-  (The closure already returns `{shieldBefore, hpDamage, barriered}`; `barriered === true` ⇒ not a
-  hit, satisfying the default above.) The DoT-batch intake path must NOT record into this set.
+**Engine state:** a per-round `Set<string>` of actor ids hit this round — mirrors the existing
+`repairedThisRound` Set (cleared at `engine.ts:~2373` right after `beginRound`; that Set is the
+direct precedent for clear-timing and shape).
+- Cleared at round start (right after `beginRound`, alongside `repairedThisRound`).
+- Populated inside the `applyIncomingToTarget` direct-hit path (`engine.ts:~2643`). The closure
+  returns `{shieldBefore, hpDamage, barriered}`. **Exact predicate (locked):** record the victim as
+  hit when `!barriered && (shieldBefore > 0 || hpDamage > 0)` for a direct attack with non-zero
+  incoming damage — i.e. damage landed on shield or HP. `shieldBefore` is the pre-hit pool, so
+  "shield was touched" = `!barriered && shieldBefore > 0 && damage > 0` (the non-barriered branch
+  always drains some shield before HP). A fully Barrier-blocked hit (`barriered === true`, early
+  return `engine.ts:~2636`) records **nothing** → not a hit (the TO-VERIFY default above).
+- The **DoT-batch intake** path (`applyIncomingToTarget(..., { byDirectDamage: false })`,
+  `engine.ts:~3610`/`~4239`) must NOT record into this set — DoT ticks are not "being hit."
 
-**Threading:** new optional delegate `wasHitThisRoundFor?(ownerId: string): boolean` on
-`IntentExecContext` (next to `isLowestSpeedAllyFor`). `buildDrainContext` forwards
-`wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false` into the condition bag;
-`buildRoundContext` owns the `?? false` default. `evaluateCondition` adds the
-`'not-hit-this-round'` case returning `ctx.wasHitThisRound ? 0 : 1` (i.e. condition met when NOT
-hit). `'not-hit-this-round'` is added to `LIVE_SUBJECTS` (else `liveGateConditions` neutralizes it
-to always-true). Engine populates the delegate on **both** side contexts (player + enemy) from the
-per-round hit set — team-agnostic, so an enemy Alacrity behaves identically.
+**Threading (three files change in lockstep, same triad `self-shield` touched):**
+1. `ConditionContext` + `RoundContextInput` gain `wasHitThisRound?: boolean` (`roundContext.ts`),
+   defaulting `?? false` in `buildRoundContext` (mirrors `selfShielded`).
+2. `evaluateCondition` adds the `'not-hit-this-round'` case returning `ctx.wasHitThisRound ? 0 : 1`
+   (met ⇔ NOT hit) (`evaluateConditions.ts`).
+3. `'not-hit-this-round'` is added to `LIVE_SUBJECTS` (`abilityStatusGating.ts`) — otherwise
+   `liveGateConditions` neutralizes it to always-true and ALACRITY would grant even when hit.
+
+**Delegate:** new optional `wasHitThisRoundFor?(ownerId: string): boolean` on `IntentExecContext`
+(next to `isLowestSpeedAllyFor`/`selfHpPctFor`); `buildDrainContext` forwards
+`wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false`. The engine binds it on **both** side
+contexts (player `drainIntents` ~`engine.ts:3385`/`3381`, enemy `drainEnemyIntents` ~`3406`/`3398`)
+from the per-round hit set — team-agnostic, so an enemy Alacrity behaves identically.
 
 ALACRITY fires at `end-of-round`, by which point all direct attacks for the round have landed, so
 the hit set is complete when the gate evaluates.
@@ -101,7 +120,8 @@ D-PR7 `mkNamedBuffGrant`: resolve `parsedEffects` via `parseBuffEffects` from `B
 `isStackable`, guard buff-not-found → `undefined`). Each entry is `type:'buff'`, `target:'self'`.
 
 ```text
-AMBUSH(rarity):              trigger 'start-of-round',   conditions [self-stealth],
+AMBUSH(rarity):              trigger 'start-of-round',
+                             conditions [{subject:'self-buff', buffName:'Stealth', derivable:true}],
                              buffName 'Crit Power Up III', duration 1,
                              procChance AMBUSH_PROC[rarity]            (5 rarities)
 SYNAPTIC_RESONANCE(rarity):  trigger 'on-enemy-repaired', conditions [],
@@ -119,10 +139,17 @@ piece so the proc-rate gate doesn't collapse independent procs).
 
 ## 5. Liveness & known limits (accepted)
 
-- **AMBUSH is dormant today** — nothing grants Stealth in the sim yet, so `self-stealth` is always
-  false → the buff never fires. Accepted, same pattern as D-PR2's Arcane Siege (dormant until
-  shields). Lights up when Cloaking / a stealth-grant lands (a later D / sub-project H PR). The
-  registry entry + condition are correct now; only the trigger source is missing.
+- **AMBUSH is dormant today** — nothing grants the Stealth buff in the sim yet, so the `self-buff`
+  Stealth gate is always unmet → the buff never fires. Accepted, same pattern as D-PR2's Arcane
+  Siege (dormant until shields). Lights up when Cloaking / a stealth-grant lands (a later D PR). The
+  registry entry + gate are correct now; only the Stealth source is missing. **Intra-drain ordering
+  TODO (for when a stealth source ships):** at round start the engine emits `round-started` then
+  calls `drainIntents()`; AMBUSH reads the owner's live `selfBuffNames` at drain time, so if a
+  *different* start-of-round ability is what grants Stealth, queue drain order decides whether
+  AMBUSH sees it that round. Not a blocker now (dormant); flag in code so it isn't forgotten.
+- **Timed-buff expiry:** AMBUSH/ALACRITY's granted self-buffs ride the same reactive-self-buff
+  duration-decrement timing as every other timed self-buff (the documented "1-turn self-buff
+  expires one turn early" engine behavior). Not solved here — shared with all reactive grants.
 - **SYNAPTIC_RESONANCE is live** — `on-enemy-repaired` fires whenever an enemy actor is repaired
   (E5 symmetric healing). The **"+X% next-crit critDamage" half is DEFERRED** — it is a stacking,
   single-consume next-crit modifier with no existing seam; out of scope. Only the Speed Up III
@@ -156,6 +183,10 @@ piece so the proc-rate gate doesn't collapse independent procs).
   (known pitfall — both must move together).
 - **Pure evaluator test** for `not-hit-this-round`: `evaluateCondition` returns met when
   `wasHitThisRound` is false/undefined, not-met when true.
+- **AMBUSH gate test** — assert AMBUSH's gate is `self-buff` Stealth and evaluates met only when the
+  owner carries the Stealth buff (proves the gate uses the correct ConditionSubject, not the broken
+  `self-stealth` IncomingCondition). Since no sim source grants Stealth, an engine-level
+  "fires when Stealth present" test seeds the buff directly onto the owner.
 - **Engine integration tests:**
   - SYNAPTIC_RESONANCE: an enemy actor is repaired → the equipped owner gains Speed Up III for 1
     turn (assert via `buff-applied` / the owner's active statuses).
