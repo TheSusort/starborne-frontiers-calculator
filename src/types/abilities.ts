@@ -74,7 +74,11 @@ export type AbilityTrigger =
     // Fired when the owner performs its CHARGED skill (rides the existing skill-fired
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
-    | 'on-charged-cast';
+    | 'on-charged-cast'
+    // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
+    // event with a non-self recipient). Used by the Font of Power implant (grants the
+    // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
+    | 'on-own-repair-to-ally';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -109,6 +113,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-purged',
     // Spearhead: all-allies buff grant after the owner's charged skill.
     'on-charged-cast',
+    // Font of Power: buff grant to allies the owner repairs.
+    'on-own-repair-to-ally',
 ]);
 
 export type ConditionSubject =

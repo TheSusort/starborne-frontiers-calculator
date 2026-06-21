@@ -99,7 +99,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + FONT_OF_POWER + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -128,6 +128,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'BATTLECRY',
             'BLOODTHIRST',
             'EXUBERANCE',
+            'FONT_OF_POWER',
             'GIANT_SLAYER',
             'INSIDIOUSNESS',
             'IRONCLAD',
@@ -213,6 +214,7 @@ describe('equipmentCoverage — implants', () => {
         'ALACRITY',
         'AMBUSH',
         'SPEARHEAD',
+        'FONT_OF_POWER',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -395,6 +397,15 @@ describe('equipmentCoverage — implants', () => {
     it('SPEARHEAD produces 1 all-allies Attack Up I buff per rarity (on-charged-cast, procChance)', () => {
         for (const v of IMPLANTS['SPEARHEAD'].variants) {
             expect(implantAbilityCount('SPEARHEAD', v.rarity)).toBe(1);
+        }
+    });
+
+    it('FONT_OF_POWER produces 1 ally Power Infused Nanobots buff for rare/epic/legendary, 0 otherwise (on-own-repair-to-ally, procChance)', () => {
+        const SUPPORTED = new Set(['rare', 'epic', 'legendary']);
+        for (const v of IMPLANTS['FONT_OF_POWER'].variants) {
+            expect(implantAbilityCount('FONT_OF_POWER', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
         }
     });
 

@@ -2604,6 +2604,259 @@ describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-
 // casts → floor(8 × 0.32) = 2 fires. There is NO proc=1 override; we run enough qualifying
 // charged casts that the accumulator fires and assert presence + the LIVE effect.
 
+// ---------------------------------------------------------------------------
+// D-PR9 — Font of Power: on-own-repair-to-ally Power Infused Nanobots grant
+// ---------------------------------------------------------------------------
+//
+// Font of Power (legendary, procChance 0.16): "When applying repair to another ally,
+// there is a 16% chance to grant Power Infused Nanobots for 1 turn." It rides the
+// `on-own-repair-to-ally` reactive trigger — a self-scoped listener on `heal-performed`
+// matching casterId === ownerId with >= 1 NON-self recipient. One enqueue per qualifying
+// repair cast → one proc-gate roll; the grant fans out to every repaired non-self ally
+// via eventCtx.repairedAllyIds. EMIT-ONLY this PR: Power Infused Nanobots parses to no
+// stat effect, so we assert PRESENCE of the buff, never a damage/stat change.
+//
+// Driven through `simulateBattle` because the carrier must repair an OTHER ally — the
+// engine routes a non-focus team actor's bare ally-repair to the heal target (the focus
+// 'attacker'), and an all-allies repair to every player id. The carrier is therefore
+// player[1] (a minted p:… id), and the focus player[0] is the repaired non-self ally.
+//
+// Determinism: the proc rides a makeRateGate accumulator keyed `${ownerId}:${abilityId}`,
+// firing floor(N × 0.16) over N qualifying repair casts (back-loaded). The carrier repairs
+// once per round it acts, so over R rounds N ≈ R. At 16 rounds → floor(16 × 0.16) = 2 fires.
+// There is NO proc=1 override; we run enough qualifying casts that the accumulator fires
+// and assert presence (+ fan-out / self-exclusion / self-only-no-grant).
+
+describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () => {
+    const NANOBOTS = 'Power Infused Nanobots';
+
+    /** Legendary FONT_OF_POWER implant piece (proc 0.16). */
+    const fontPiece = makePiece({
+        id: 'font-legendary',
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'FONT_OF_POWER',
+    });
+
+    const getGearPiece = makeGetGearPiece({ 'font-legendary': fontPiece });
+
+    /**
+     * Build a player-team ship. `repair` controls the active skill text:
+     *  - 'ally'        → bare repair (no damage) → the support-flip routes it to a single
+     *                    ally; for a non-focus caster that ally is the heal target (focus).
+     *  - 'all-allies'  → explicit "all allies" repair → every player id (caster + others).
+     *  - 'self'        → explicit "itself" repair → self only (no other ally repaired).
+     *  - 'damage'      → a plain 100% damage attacker (the focus punching the enemy).
+     * Optionally carries the FONT_OF_POWER implant. Support type so the bare repair flips.
+     */
+    function makeTeamShip(
+        id: string,
+        name: string,
+        opts: { repair?: 'ally' | 'all-allies' | 'self' | 'damage'; withFont?: boolean } = {}
+    ): Ship {
+        const repair = opts.repair ?? 'damage';
+        const activeSkillText =
+            repair === 'damage'
+                ? 'This Unit deals <unit-damage>100% damage</unit-damage>.'
+                : repair === 'all-allies'
+                  ? 'This Unit repairs all allies for 30% of their Max HP.'
+                  : repair === 'self'
+                    ? 'This Unit repairs itself for 30% of its Max HP.'
+                    : 'This Unit repairs 30% of its Max HP.';
+        return makeShip({
+            id,
+            name,
+            rarity: 'legendary',
+            faction: 'TERRAN_COMBINE',
+            type: repair === 'damage' ? 'Attacker' : 'Support',
+            baseStats: {
+                hp: 0,
+                attack: 0,
+                defence: 0,
+                hacking: 200,
+                security: 100,
+                crit: 0,
+                critDamage: 0,
+                speed: 100,
+            } as Ship['baseStats'],
+            equipment: {},
+            implants: opts.withFont ? { implant_major: 'font-legendary' } : {},
+            refits: [],
+            affinity: 'antimatter',
+            activeSkillText,
+            chargeSkillCharge: 0,
+            // Bare/ally/all-allies repairs target the ally side; damage targets the front enemy.
+            activeTarget: repair === 'damage' ? 'front' : 'allies',
+            activePattern: 'Pattern-Base',
+        } as Partial<Ship>);
+    }
+
+    const place = (
+        ship: Ship,
+        position: Position,
+        attack: number,
+        hp: number
+    ): BattlePlacement => ({
+        ship,
+        position,
+        statOverrides: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            defence: 0,
+            hp,
+        },
+    });
+
+    const ROUNDS = 16; // carrier repairs each round → floor(16 × 0.16) = 2 proc fires
+
+    /** Collect every actorId that ever received a Power Infused Nanobots GRANT (buff log). */
+    function buffedActors(result: ReturnType<typeof simulateBattle>): Set<string> {
+        const set = new Set<string>();
+        for (const round of result.rounds) {
+            for (const ev of round.events) {
+                if (ev.kind === 'buff' && ev.label === NANOBOTS) set.add(ev.actorId);
+            }
+        }
+        return set;
+    }
+
+    it('carrier repairs another ally → the repaired NON-SELF ally gets Power Infused Nanobots; carrier does NOT', () => {
+        // player[0] = focus (the heal target / repaired ally). player[1] = the Font-of-Power
+        // carrier whose bare ally-repair routes to the focus each round. Over 16 casts the
+        // accumulator fires → the focus carries the buff; the carrier (caster) never does.
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    place(
+                        makeTeamShip('focus', 'Focus', { repair: 'damage' }),
+                        'M4',
+                        5000,
+                        1_000_000_000
+                    ),
+                    place(
+                        makeTeamShip('carrier', 'Carrier', { repair: 'ally', withFont: true }),
+                        'M3',
+                        0,
+                        1_000_000_000
+                    ),
+                ],
+                enemyTeam: [
+                    place(
+                        makeTeamShip('enemy', 'Enemy', { repair: 'damage' }),
+                        'M4',
+                        1,
+                        1_000_000_000
+                    ),
+                ],
+                rounds: ROUNDS,
+            },
+            getGearPiece
+        );
+
+        const buffed = buffedActors(result);
+        const FOCUS = 'attacker';
+        const CARRIER = 'p:carrier:1';
+
+        // The repaired non-self ally (the focus) carries the buff at least once.
+        expect(buffed.has(FOCUS)).toBe(true);
+        // The carrier (the caster / repairer) is excluded — it is not a repaired non-self ally.
+        expect(buffed.has(CARRIER)).toBe(false);
+        // No enemy ever received the grant (ally-side only).
+        const enemyIds = result.roster.filter((r) => r.side === 'enemy').map((r) => r.actorId);
+        for (const id of enemyIds) expect(buffed.has(id)).toBe(false);
+    });
+
+    it('pure self-only repair (no other ally repaired) grants NOTHING', () => {
+        // The carrier repairs ITSELF only → heal-performed targets = [carrier] → the
+        // on-own-repair-to-ally listener finds zero non-self recipients → never enqueues.
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    place(
+                        makeTeamShip('focus', 'Focus', { repair: 'damage' }),
+                        'M4',
+                        5000,
+                        1_000_000_000
+                    ),
+                    place(
+                        makeTeamShip('carrier', 'Carrier', { repair: 'self', withFont: true }),
+                        'M3',
+                        0,
+                        1_000_000_000
+                    ),
+                ],
+                enemyTeam: [
+                    place(
+                        makeTeamShip('enemy', 'Enemy', { repair: 'damage' }),
+                        'M4',
+                        1,
+                        1_000_000_000
+                    ),
+                ],
+                rounds: ROUNDS,
+            },
+            getGearPiece
+        );
+
+        expect(buffedActors(result).size).toBe(0);
+    });
+
+    it('AoE repair reaching multiple OTHER allies grants the buff to all of them (one proc, fan-out)', () => {
+        // The carrier (player[2]) repairs ALL allies → recipients = every player id. The two
+        // OTHER allies (focus + ally1) are repaired non-self → a single proc fan-outs to both.
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    place(
+                        makeTeamShip('focus', 'Focus', { repair: 'damage' }),
+                        'M4',
+                        5000,
+                        1_000_000_000
+                    ),
+                    place(
+                        makeTeamShip('ally1', 'Ally1', { repair: 'damage' }),
+                        'M2',
+                        5000,
+                        1_000_000_000
+                    ),
+                    place(
+                        makeTeamShip('carrier', 'Carrier', {
+                            repair: 'all-allies',
+                            withFont: true,
+                        }),
+                        'M3',
+                        0,
+                        1_000_000_000
+                    ),
+                ],
+                enemyTeam: [
+                    place(
+                        makeTeamShip('enemy', 'Enemy', { repair: 'damage' }),
+                        'M4',
+                        1,
+                        1_000_000_000
+                    ),
+                ],
+                rounds: ROUNDS,
+            },
+            getGearPiece
+        );
+
+        const buffed = buffedActors(result);
+        const FOCUS = 'attacker';
+        const ALLY1 = 'p:ally1:1';
+        const CARRIER = 'p:carrier:2';
+
+        // Both OTHER allies received the grant; the carrier (caster) did not.
+        expect(buffed.has(FOCUS)).toBe(true);
+        expect(buffed.has(ALLY1)).toBe(true);
+        expect(buffed.has(CARRIER)).toBe(false);
+    });
+});
+
 describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
     const ATTACK_UP_I = 'Attack Up I';
 
