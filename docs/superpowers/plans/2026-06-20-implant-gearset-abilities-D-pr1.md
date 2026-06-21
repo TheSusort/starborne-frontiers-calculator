@@ -52,7 +52,7 @@ Expected: all pass.
 
 - [ ] **Step 2: Confirm no combat fixture carries effect-bearing gear (byte-identical premise)**
 
-Run: `grep -rn "equipment:\s*{[^}]" src/utils/combat/__tests__ src/utils/calculators/__tests__ 2>/dev/null; grep -rn "implants:\s*{[^}]" src/utils/combat/__tests__ src/utils/calculators/__tests__ 2>/dev/null`
+Run: `rg -n 'equipment:\s*\{' src/utils/combat/__tests__ src/utils/calculators/__tests__; rg -n 'implants:\s*\{' src/utils/combat/__tests__ src/utils/calculators/__tests__`
 Expected: no matches with non-empty equipment/implants (fixtures use `{}` or omit). If any match resolves to an effect-bearing set/implant, STOP and surface it — the merge is not byte-identical and the plan needs a fixture-neutralization step.
 
 - [ ] **Step 3: Record the baseline test count**

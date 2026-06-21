@@ -79,7 +79,7 @@ A sibling to `buildShipAbilities` (not a modification of it — keeps skill-text
 new concern independently testable). It mirrors the inventory-access pattern of `calculateTotalStats`
 (which takes a `getGearPiece: (id) => GearPiece | undefined` closure rather than importing a context):
 
-```
+```ts
 buildEquipmentAbilities(
   ship: Ship,
   getGearPiece: (id: string) => GearPiece | undefined,

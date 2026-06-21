@@ -146,7 +146,10 @@ export function buildEquipmentAbilities(
                 if (!partial) continue;
                 abilities.push({
                     ...partial,
-                    id: `equip-implant-${implantName}`,
+                    // Suffix the unique gear-piece id so two copies of the same implant get
+                    // distinct ability ids — the proc-rate gate keys on (owner, ability.id),
+                    // so a shared id would collapse independent procs into one gate.
+                    id: `equip-implant-${implantName}-${gearId}`,
                 });
                 continue;
             }

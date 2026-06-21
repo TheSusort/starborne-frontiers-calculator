@@ -235,7 +235,9 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
         // Verify the Bloodthirst ability landed in the passive slot (pre-condition).
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
         expect(passive).toBeDefined();
-        const btAbility = passive!.abilities.find((a) => a.id === 'equip-implant-BLOODTHIRST');
+        const btAbility = passive!.abilities.find((a) =>
+            a.id.startsWith('equip-implant-BLOODTHIRST')
+        );
         expect(btAbility).toBeDefined();
         expect(btAbility!.procChance).toBeCloseTo(0.2);
 

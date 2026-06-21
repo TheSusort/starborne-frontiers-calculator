@@ -80,7 +80,8 @@ describe('buildShipAbilitiesWithEquipment — equipment-bearing ship', () => {
             .filter((a) => a.id.startsWith('equip-'))
             .map((a) => a.id);
         expect(equipIds).toContain('equip-set-LEECH');
-        expect(equipIds).toContain('equip-implant-BLOODTHIRST');
+        // implant id is suffixed with the unique gear-piece id (proc-gate uniqueness)
+        expect(equipIds.some((id) => id.startsWith('equip-implant-BLOODTHIRST'))).toBe(true);
     });
 
     it('equipment abilities are appended after ship own passive abilities', () => {
