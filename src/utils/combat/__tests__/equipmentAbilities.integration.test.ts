@@ -370,7 +370,7 @@ describe('D-PR2 integration — INTRUSION fold (modifier-level)', () => {
         const getGearPiece = makeGetGearPiece({ 'intrusion-legendary': intrusionPiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
 
-        const intrusion = abilities.find((a) => a.id === 'equip-implant-INTRUSION');
+        const intrusion = abilities.find((a) => a.id.startsWith('equip-implant-INTRUSION'));
         expect(intrusion).toBeDefined();
 
         const totals = modifierTotalsFromAbilities(
@@ -384,7 +384,7 @@ describe('D-PR2 integration — INTRUSION fold (modifier-level)', () => {
         const ship = makeShip({ implants: { implant_major: 'intrusion-legendary' } });
         const getGearPiece = makeGetGearPiece({ 'intrusion-legendary': intrusionPiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
-        const intrusion = abilities.find((a) => a.id === 'equip-implant-INTRUSION');
+        const intrusion = abilities.find((a) => a.id.startsWith('equip-implant-INTRUSION'));
 
         const totals = modifierTotalsFromAbilities(
             [intrusion!],
@@ -407,7 +407,7 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
         const ship = makeShip({ implants: { implant_major: 'warpstrike-legendary' } });
         const getGearPiece = makeGetGearPiece({ 'warpstrike-legendary': warpstrikePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
-        const warpstrike = abilities.find((a) => a.id === 'equip-implant-WARPSTRIKE');
+        const warpstrike = abilities.find((a) => a.id.startsWith('equip-implant-WARPSTRIKE'));
         expect(warpstrike).toBeDefined();
 
         const totals = modifierTotalsFromAbilities(
@@ -421,7 +421,7 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
         const ship = makeShip({ implants: { implant_major: 'warpstrike-legendary' } });
         const getGearPiece = makeGetGearPiece({ 'warpstrike-legendary': warpstrikePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
-        const warpstrike = abilities.find((a) => a.id === 'equip-implant-WARPSTRIKE');
+        const warpstrike = abilities.find((a) => a.id.startsWith('equip-implant-WARPSTRIKE'));
 
         const totals = modifierTotalsFromAbilities(
             [warpstrike!],
@@ -437,7 +437,7 @@ describe('D-PR2 integration — WARPSTRIKE fold (modifier-level)', () => {
             const ship = makeShip({ implants: { implant_major: 'warpstrike-legendary' } });
             const getGearPiece = makeGetGearPiece({ 'warpstrike-legendary': warpstrikePiece });
             const abilities = buildEquipmentAbilities(ship, getGearPiece);
-            const warpstrike = abilities.find((a) => a.id === 'equip-implant-WARPSTRIKE');
+            const warpstrike = abilities.find((a) => a.id.startsWith('equip-implant-WARPSTRIKE'));
 
             const totals = modifierTotalsFromAbilities(
                 [warpstrike!],
@@ -458,7 +458,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
         const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
-        const arcaneSiege = abilities.find((a) => a.id === 'equip-implant-ARCANE_SIEGE');
+        const arcaneSiege = abilities.find((a) => a.id.startsWith('equip-implant-ARCANE_SIEGE'));
         expect(arcaneSiege).toBeDefined();
 
         const totals = modifierTotalsFromAbilities(
@@ -472,7 +472,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
         const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
-        const arcaneSiege = abilities.find((a) => a.id === 'equip-implant-ARCANE_SIEGE');
+        const arcaneSiege = abilities.find((a) => a.id.startsWith('equip-implant-ARCANE_SIEGE'));
 
         const totals = modifierTotalsFromAbilities(
             [arcaneSiege!],
