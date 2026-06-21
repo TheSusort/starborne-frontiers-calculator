@@ -16,6 +16,14 @@ PR completes the "reactive heal/leech" row with it.
 - **Exuberance** — "When repaired, there is a 17–30% chance to increase that repair by 12–15%."
   Carried by the unit being healed; **unconditional** (no HP gate); proc-gated per repair received.
 
+**Incoming vs outgoing (key distinction).** Exuberance is an **incoming** (recipient-side) amplifier —
+it boosts repairs the carrier *receives*. This is a different channel from every heal-amp shipped so far,
+all of which are **outgoing** (caster-side): the Repair gear set (`healModifier: 20%`, a stat that boosts
+heals the wearer *casts* — already handled by stat folding) and D-PR5's Nourishment/Vivacious
+(caster-side `heal-amplification`). Concretely, Exuberance folds at the recipient's `incomingPctFor(rid)`
+channel, NOT the caster's `healModifier`/`outgoingHeal` channels (which sit elsewhere in the same `raw`
+product). So it is "the same kind of % bump as an incoming-repair buff, gated behind a random proc."
+
 Reconnaissance findings that shape this design:
 - **No new trigger is needed.** Every place a repair lands on a recipient already applies a
   per-recipient incoming-heal factor and shares the same `HealingRuntimeCtx`. Exuberance is the
