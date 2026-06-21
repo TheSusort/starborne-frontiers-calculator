@@ -10,8 +10,13 @@
  * D-PR3 added the incoming-reduction / block family
  * (VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD
  * implants + HARDENED gear set).
+ * D-PR4 added outgoing-amplification (MENACE, GIANT_SLAYER, INSIDIOUSNESS).
  * D-PR5 added the reactive-heal family
  * (SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR implants).
+ * D-PR6 added repair-amplification (EXUBERANCE).
+ * D-PR7 added the on-death family (LAST_WISH, BATTLECRY, MARTYRDOM).
+ * D-PR8 added reactive self-buffs (SYNAPTIC_RESONANCE, ALACRITY, AMBUSH).
+ * D-PR9 added ally-wide / new-trigger buff grants (SPEARHEAD, FONT_OF_POWER).
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
