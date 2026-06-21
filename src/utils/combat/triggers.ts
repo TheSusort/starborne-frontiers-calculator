@@ -895,6 +895,25 @@ export function reactiveRecipients(
 }
 
 /**
+ * Per-(owner,ability) proc-chance gate, shared by the heal/shield and damage reactive branches.
+ * Pass-through when procChance is undefined / <=0 / >=1, or when the gate map is absent (unit-test
+ * contexts). Do NOT hoist the call above the type-branch dispatch — the heal/shield branch must keep
+ * its `!ctx.healing` early-return BEFORE consulting the gate (else the gate desyncs in non-healing
+ * passes). Branch-local by design.
+ */
+function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
+    const pc = intent.ability.procChance;
+    if (pc === undefined || pc <= 0 || pc >= 1) return true;
+    const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    let gate = ctx.procChanceGates?.get(gateKey);
+    if (ctx.procChanceGates && !gate) {
+        gate = makeRateGate();
+        ctx.procChanceGates.set(gateKey, gate);
+    }
+    return !gate || gate(pc);
+}
+
+/**
  * Execute one drained follow-up intent against the engine context. Dispatches on
  * the ability's config type (the ONLY state mutator in the trigger machinery):
  *  - charge → cap-bumped attacker charges (no-op when chargeCount === 0).
@@ -1134,17 +1153,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
         }
-        const pc = intent.ability.procChance;
-        if (pc !== undefined && pc > 0 && pc < 1) {
-            const gateKey = `${intent.ownerId}:${intent.ability.id}`;
-            let gate = ctx.procChanceGates?.get(gateKey);
-            if (ctx.procChanceGates && !gate) {
-                gate = makeRateGate();
-                ctx.procChanceGates.set(gateKey, gate);
-            }
-            // absent map (unit-test contexts) → gate stays undefined → pass through
-            if (gate && !gate(pc)) return;
-        }
+        if (!passesProcChanceGate(intent, ctx)) return;
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
@@ -1244,6 +1253,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'damage') {
+        if (!passesProcChanceGate(intent, ctx)) return;
         // Reactive direct-damage proc (Grif's on-enemy-cleansed "75% Damage that cannot
         // critically hit"). Bomb-style fold from the owner's last-turn ctx: effectiveAttack
         // × (multiplier/100) × hits × affinityMult, NO enemy-defense mitigation (documented

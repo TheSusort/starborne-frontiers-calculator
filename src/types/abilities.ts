@@ -19,7 +19,10 @@ export type AbilityType =
     | 'shield'
     | 'cleanse'
     | 'purge'
-    | 'control';
+    | 'control'
+    | 'incoming-reduction'
+    | 'incoming-block'
+    | 'outgoing-amplification';
 
 export type AbilityTarget =
     | 'self'
@@ -166,6 +169,43 @@ export interface Condition {
     countThreshold?: number;
 }
 
+/** Gate for a victim-side incoming-effect ability (D-PR3). Evaluated against an
+ *  IncomingHitContext at the victim apply site — NOT a ConditionSubject (those are
+ *  attacker-turn standing facts; these are per-incoming-hit facts). */
+export type IncomingCondition =
+    | 'self-stealth' // Voidshade (reduction), Shadowguard (block)
+    | 'self-stasis' // Nebula Nullifier (Disable folds in here when modeled)
+    | 'incoming-crit' // Hardened set, Iridium
+    | 'incoming-crit-by-stealthed' // Hyperion Gaze
+    | 'nth-hit-2plus' // Ironclad (block)
+    | 'dot-inferno-corrosion'; // Vortex Veil
+
+/** Per-incoming-hit context assembled by the engine at each victim apply site. */
+export interface IncomingHitContext {
+    didCrit: boolean;
+    attackerStealthed: boolean;
+    victimStealthed: boolean;
+    victimStasised: boolean;
+    /** 1-based direct-damage intake index for this victim this round (Ironclad). */
+    hitIndexThisRound: number;
+    /** Set only on the DoT-tick path (Vortex Veil). */
+    dotType?: 'inferno' | 'corrosion';
+}
+
+/**
+ * Attacker-side condition for an in-flight outgoing-amplification proc, evaluated against the
+ * OutgoingHitContext at the attacker's per-hit seam — NOT a ConditionSubject (those gate the
+ * buff/modifier fold). Mirrors IncomingCondition on the victim side (D-PR3).
+ */
+export type OutgoingCondition = 'amplify-on-crit' | 'amplify-vs-higher-attack';
+
+export interface OutgoingHitContext {
+    /** Did this individual hit critically strike? (Menace.) */
+    didCrit: boolean;
+    /** Is the target's live effective attack higher than the attacker's? (Giant Slayer.) */
+    targetHigherAttack: boolean;
+}
+
 export interface ScalingRule {
     conditionIndex: number;
     perUnit: number;
@@ -274,6 +314,37 @@ export type AbilityConfig =
     | {
           type: 'control';
           effect: ControlEffect;
+      }
+    // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
+    | {
+          type: 'incoming-reduction';
+          scope: 'direct' | 'dot';
+          condition: IncomingCondition;
+          /** Positive magnitude (percentage points); folded as a reduction into the incoming channel. */
+          pct: number;
+          /** Grouping ONLY: true → take-max crit-reduction family; false → additive.
+           *  Orthogonal to the gate — the crit gate is enforced by condition='incoming-crit*'. */
+          critFamily: boolean;
+      }
+    // D-PR3 victim-side proc block (rolled at the applyVictimDamage funnel, byDirectDamage only).
+    | {
+          type: 'incoming-block';
+          condition: IncomingCondition;
+          /** 0..1 — reuses D-PR1 procChance semantics (deterministic rate-gate). */
+          procChance: number;
+          /** 0..1 fraction of the hit blocked (1.0 = full block). */
+          blockPct: number;
+          oncePerRound: boolean;
+      }
+    // D-PR4 attacker-side outgoing-damage amplification (folded at the per-hit seam before victim apply).
+    | {
+          type: 'outgoing-amplification';
+          /** Eligibility condition evaluated per hit. */
+          condition: OutgoingCondition;
+          /** Amplification added to this hit when the proc fires, in percentage points (e.g. 50). */
+          ampPct: number;
+          /** Per-(owner,ability) proc chance in (0,1). Rolled per eligible hit. */
+          procChance: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate

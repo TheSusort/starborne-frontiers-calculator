@@ -628,3 +628,165 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
         }
     );
 });
+
+// ---------------------------------------------------------------------------
+// D-PR4 Task 9: Insidiousness implant — reactive damage on debuff-inflicted
+// ---------------------------------------------------------------------------
+//
+// Insidiousness fires a reactive direct-damage proc when the owner inflicts a debuff.
+// The proc fires at the stated procChance rate via the deterministic accumulator.
+//
+// Test strategy:
+//   A. With debuff-applying active + Insidiousness passive:
+//      - Each round, the debuff lands (application:'apply') → debuff-applied emitted
+//        → on-debuff-inflicted listener fires → Insidiousness enqueued → proc-gated.
+//      - procChance 0.5 over N rounds → floor(N × 0.5) reactive-damage procs credited
+//        as directDamage. So withInsidiousness.rawTotals.direct > withoutInsidiousness.
+//   B. Attacker with NO debuff active + same Insidiousness passive:
+//      - No debuff-applied events → on-debuff-inflicted never fires → zero reactive damage.
+//      - directDamage must equal the same damage-only active WITHOUT Insidiousness.
+//
+// Insidiousness used here: uncommon (procChance 0.12, multiplier 70) BUT we override the
+// ability shape directly (injecting into the passive slot) to use procChance 0.5 for a
+// deterministic 10-round test (floor(10 × 0.5) = 5 procs). multiplier 70 means each proc
+// deals effectiveAttack × 0.70. With attack 4000 and affinityMult 1 → 2800 per proc.
+// Over 20 rounds procChance 0.5 → floor(20 × 0.5) = 10 procs → 28_000 reactive total.
+// The active is a bare-damage ability (multiplier 100, 1 hit, 20 rounds) → 4000 × 20 = 80_000.
+// Expected total direct = 80_000 + 28_000 = 108_000.
+//
+// Note: the debuff-applying ability also emits debuff-applied each round (application:'apply'
+// always lands). No primary damage from the debuff ability itself — multiplier left off.
+
+describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on debuff-inflicted', () => {
+    const ATTACK = 4_000;
+    const NUM_ROUNDS = 20;
+    const INSIDIOUSNESS_MULT = 70; // 70% damage per proc
+    const INSIDIOUSNESS_PROC = 0.5; // deterministic: floor(20 × 0.5) = 10 procs
+    const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * INSIDIOUSNESS_PROC); // 10
+    const PER_PROC = ATTACK * (INSIDIOUSNESS_MULT / 100); // 2800
+
+    /** Single-hit 100% damage active (no debuff inflicted). */
+    const dmgOnlyActive: Ability = {
+        id: 'dmg-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100, hits: 1 },
+    };
+
+    /** Debuff-applying active: inflicts 'Corrosion'-named debuff each round (application 'apply'
+     *  bypasses hacking/security so it always lands, emitting debuff-applied every round). */
+    const debuffActive: Ability = {
+        id: 'debuff-active',
+        type: 'debuff',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'debuff',
+            buffName: 'Corrosion',
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            application: 'apply',
+            duration: 1,
+        },
+    };
+
+    /** Insidiousness ability injected directly into passive slot (procChance 0.5, mult 70). */
+    const insidiousnessAbility: Ability = {
+        id: 'equip-implant-INSIDIOUSNESS',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-debuff-inflicted',
+        conditions: [],
+        procChance: INSIDIOUSNESS_PROC,
+        config: { type: 'damage', multiplier: INSIDIOUSNESS_MULT, hits: 1 },
+        autoFilled: true,
+    };
+
+    /** Build ship skills: active abilities in active slot + insidiousness in passive slot. */
+    function buildSkills(activeAbilities: Ability[], withInsidiousness: boolean): ShipSkills {
+        return {
+            slots: [
+                { slot: 'active', abilities: activeAbilities },
+                ...(withInsidiousness
+                    ? [{ slot: 'passive' as const, abilities: [insidiousnessAbility] }]
+                    : []),
+            ],
+        };
+    }
+
+    it(
+        'A. Debuff-applying active + Insidiousness: reactive damage procs add to rawTotals.direct ' +
+            '(floor(20 × 0.5)=10 procs × 2800 = 28000 on top of 80000 base damage)',
+        () => {
+            // With Insidiousness and debuff active: each round the debuff lands → on-debuff-inflicted
+            // → Insidiousness fires at 0.5 rate → reactive-damage credited to direct.
+            const withInsidiousness = runCombat(
+                BASE({
+                    attack: ATTACK,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    // Both a debuff-only (no damage) active AND a damage-only active so
+                    // we have a stable base damage to compare against.
+                    shipSkills: buildSkills([dmgOnlyActive, debuffActive], true),
+                })
+            );
+
+            // Without Insidiousness but same actives: baseline (no reactive damage).
+            const withoutInsidiousness = runCombat(
+                BASE({
+                    attack: ATTACK,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: buildSkills([dmgOnlyActive, debuffActive], false),
+                })
+            );
+
+            // Qualitative: Insidiousness adds reactive damage on top of the base active damage.
+            expect(withInsidiousness.rawTotals.direct).toBeGreaterThan(
+                withoutInsidiousness.rawTotals.direct
+            );
+
+            // Quantitative: the reactive contribution must equal exactly EXPECTED_PROCS × PER_PROC.
+            const reactiveContribution =
+                withInsidiousness.rawTotals.direct - withoutInsidiousness.rawTotals.direct;
+            expect(reactiveContribution).toBeCloseTo(EXPECTED_PROCS * PER_PROC, 1);
+        }
+    );
+
+    it(
+        'B. Damage-only active + Insidiousness: no debuff-applied events → no reactive damage ' +
+            '(same rawTotals.direct as bare damage-only)',
+        () => {
+            // Insidiousness present but active deals ONLY direct damage (no debuff-applied events).
+            const withInsidiousnessNoDeb = runCombat(
+                BASE({
+                    attack: ATTACK,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: buildSkills([dmgOnlyActive], true),
+                })
+            );
+
+            // Bare: same damage-only active, no Insidiousness.
+            const bareNoDeb = runCombat(
+                BASE({
+                    attack: ATTACK,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: buildSkills([dmgOnlyActive], false),
+                })
+            );
+
+            // Must be EQUAL: no debuffs applied → no reactive triggers → zero Insidiousness damage.
+            expect(withInsidiousnessNoDeb.rawTotals.direct).toBe(bareNoDeb.rawTotals.direct);
+        }
+    );
+});

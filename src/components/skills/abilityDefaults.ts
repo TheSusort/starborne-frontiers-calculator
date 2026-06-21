@@ -50,6 +50,29 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'purge', count: 1 };
         case 'control':
             return { type: 'control', effect: 'provoke' };
+        case 'incoming-reduction':
+            return {
+                type: 'incoming-reduction',
+                scope: 'direct',
+                condition: 'incoming-crit',
+                pct: 0,
+                critFamily: false,
+            };
+        case 'incoming-block':
+            return {
+                type: 'incoming-block',
+                condition: 'self-stealth',
+                procChance: 0,
+                blockPct: 1,
+                oncePerRound: false,
+            };
+        case 'outgoing-amplification':
+            return {
+                type: 'outgoing-amplification',
+                condition: 'amplify-on-crit',
+                ampPct: 0,
+                procChance: 0,
+            };
     }
 };
 
@@ -70,6 +93,9 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     cleanse: 'ally',
     purge: 'enemy',
     control: 'enemy',
+    'incoming-reduction': 'self',
+    'incoming-block': 'self',
+    'outgoing-amplification': 'self',
 };
 
 /**

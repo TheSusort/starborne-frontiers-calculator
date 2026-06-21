@@ -38,6 +38,7 @@ import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
+import { outgoingAmplificationForHit } from './outgoingEffects';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
 // historical public API (engine.ts + tests import these from playerTurn). Keeping the
 // definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
@@ -286,6 +287,17 @@ export interface PlayerTurnArgs {
      * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
      */
     aoeVictimIds?: string[];
+    /** D-PR3: victim-side incoming %-reduction against the bound target.
+     *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
+     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
+    incomingReductionNonCritPct?: number;
+    incomingReductionCritFamilyPct?: number;
+    /** D-PR4: the bound target's live effective attack (for Giant Slayer's higher-attack gate).
+     *  Absent → targetHigherAttack false → Giant Slayer inert. */
+    targetEffectiveAttack?: number;
+    /** D-PR4: engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
+     *  ability id under this actor. Absent → no amplification rolled (byte-identical). */
+    rollOutgoingProc?: (abilityId: string, chance: number) => boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1124,14 +1136,38 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // parser output today (gate conditions never land on active/charged damage).
     const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
     const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
+    // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
+    // Sourced from the always-active passive slot. With no amplification ability OR no
+    // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
+    // weighted sums collapse to (nonCritHits, critHits) → byte-identical.
+    const ampAbilities = (passiveSkill?.abilities ?? []).filter(
+        (a) => a.config.type === 'outgoing-amplification'
+    );
+    const targetHigherAttack =
+        args.targetEffectiveAttack !== undefined && args.targetEffectiveAttack > effectiveAttack;
+    const rollOutgoingProc = args.rollOutgoingProc;
     let critHits = 0;
     const hitCrits: boolean[] = [];
+    let ampNonCritWeight = 0;
+    let ampCritWeight = 0;
     for (let h = 0; h < drawHits; h++) {
         const didCritHit = critGate(effectiveCrit / 100);
         if (didCritHit) critHits += 1;
         // Only collect per-hit outcomes when a damage ability actually exists.
         // The draw still advances the gate regardless (determinism preserved).
         if (hasDamageAbility) hitCrits.push(didCritHit);
+        // Only call outgoingAmplificationForHit when amplification is actually present AND a
+        // proc gate is supplied — keeps the critGate sequence and behaviour untouched otherwise.
+        const amp =
+            ampAbilities.length > 0 && rollOutgoingProc
+                ? outgoingAmplificationForHit(
+                      ampAbilities,
+                      { didCrit: didCritHit, targetHigherAttack },
+                      rollOutgoingProc
+                  ) / 100
+                : 0;
+        if (didCritHit) ampCritWeight += 1 + amp;
+        else ampNonCritWeight += 1 + amp;
     }
     // Any-hit binary: feeds ctx self-crit gates, the RoundData row, and didCrit.
     // on-crit triggers consume critHits (per-critting-hit), NOT this binary — see
@@ -1292,15 +1328,42 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
     // multiplier 1 (the "cannot critically hit" path, unchanged).
     const critFraction = drawHits > 0 ? critHits / drawHits : 0;
-    const damageCritMultiplier = 1 + critFraction * (effectiveCritDamage / 100);
+    // D-PR3 victim-side incoming %-reduction against the bound target (aggregate path).
+    // Both default 0 → byte-identical to the prior fold.
+    const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
+    const R = args.incomingReductionCritFamilyPct ?? 0;
+    // D-PR3: crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
+    // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
+    // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
+    // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1 → byte-identical
+    // to the prior expression. The crit fraction therefore sees incoming channel (incBase - R)
+    // additively, exactly like positional victimHitDamage; the non-crit fraction sees incBase.
+    // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream uses —
+    // postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are the SAME enemy
+    // attack against the SAME victim, so the victim's crit reduction applies to both.
+    const incBase = incomingDamageModifier - equipNonCrit; // incoming channel for all hits
+    const incDenom = 1 + incBase / 100;
+    const critIncomingRatio = incDenom !== 0 ? (1 + (incBase - R) / 100) / incDenom : 1;
+    const damageCritMultiplier =
+        1 - critFraction + critFraction * (1 + effectiveCritDamage / 100) * critIncomingRatio;
     // Crit-independent damage pipeline (defense, outgoing/incoming, affinity) — shared
     // by the firing hit and the passive hit, which may differ in crit treatment (noCrit).
+    // The incoming channel (incBase) folds the non-crit reduction additively; 0 → unchanged.
     const nonCritFactor =
         (1 - damageReduction / 100) *
         (1 + dmgStats.totals.outgoingDamageBuff / 100) *
-        (1 + incomingDamageModifier / 100) *
+        (1 + incBase / 100) *
         affinityMult;
-    const postDefenseFactor = damageCritMultiplier * nonCritFactor;
+    // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
+    // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits, ampCritWeight=critHits)
+    // → byte-identical. critIncomingRatio carries D-PR3's crit-family incoming reduction.
+    const amplifiedCritMultiplier =
+        drawHits > 0
+            ? (ampNonCritWeight +
+                  ampCritWeight * (1 + effectiveCritDamage / 100) * critIncomingRatio) /
+              drawHits
+            : damageCritMultiplier;
+    const postDefenseFactor = amplifiedCritMultiplier * nonCritFactor;
     const passiveCritMultiplier = passiveHit.noCrit ? 1 : damageCritMultiplier;
     const passiveDamage =
         effectiveAttack * (passiveMultiplier / 100) * passiveCritMultiplier * nonCritFactor;

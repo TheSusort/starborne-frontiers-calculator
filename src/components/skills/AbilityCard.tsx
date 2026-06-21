@@ -54,6 +54,9 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     cleanse: 'Cleanse',
     purge: 'Purge',
     control: 'Control',
+    'incoming-reduction': 'Incoming Reduction',
+    'incoming-block': 'Incoming Block',
+    'outgoing-amplification': 'Outgoing Amplification',
 };
 
 const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [

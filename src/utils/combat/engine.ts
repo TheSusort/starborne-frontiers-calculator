@@ -5,11 +5,11 @@ import {
     TeamActorInput,
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { AbilityTarget, ShipSkills } from '../../types/abilities';
+import { Ability, AbilityTarget, ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
-import { makeRateGate } from '../calculators/rateAccumulator';
+import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toEnemyModifiers } from '../calculators/dpsBuffHelpers';
 import {
@@ -49,6 +49,8 @@ import {
     type VictimDamageOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
+import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
+import { outgoingAmplificationForHit } from './outgoingEffects';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -727,32 +729,44 @@ function tickDoTs(args: {
     ctxFor: (sourceId: string) => PlayerRoundCtx | undefined;
     emitTicked: (dotType: 'corrosion' | 'inferno', damage: number) => void;
     credit: (sourceId: string, dotType: 'corrosion' | 'inferno', damage: number) => void;
+    /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
+     *  Absent → 0 → byte-identical. */
+    incomingDotReductionPct?: (dotType: 'corrosion' | 'inferno') => number;
 }): void {
     // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
     const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
+    const corrosionCredits: Array<{ sourceId: string; d: number }> = [];
     let corrosionSum = 0;
     for (const e of args.corrosionEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue; // applier has not acted yet this run (faster-enemy round 1)
         const d = e.stacks * (e.tier / 100) * corrosionBaseHp * ctx.dotMult * ctx.affinityMult;
-        args.credit(e.sourceId, 'corrosion', d);
+        corrosionCredits.push({ sourceId: e.sourceId, d });
         corrosionSum += d;
     }
     if (corrosionSum > 0) {
-        args.emitTicked('corrosion', corrosionSum);
+        const reductionPct = args.incomingDotReductionPct?.('corrosion') ?? 0;
+        const factor = 1 - reductionPct / 100;
+        for (const { sourceId, d } of corrosionCredits)
+            args.credit(sourceId, 'corrosion', d * factor);
+        args.emitTicked('corrosion', corrosionSum * factor);
     }
 
     // Step 5: Tick inferno (scales with the applier's effective attack, no outgoing buff)
+    const infernoCredits: Array<{ sourceId: string; d: number }> = [];
     let infernoSum = 0;
     for (const e of args.infernoEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue;
         const d = e.stacks * (e.tier / 100) * ctx.effectiveAttack * ctx.dotMult * ctx.affinityMult;
-        args.credit(e.sourceId, 'inferno', d);
+        infernoCredits.push({ sourceId: e.sourceId, d });
         infernoSum += d;
     }
     if (infernoSum > 0) {
-        args.emitTicked('inferno', infernoSum);
+        const reductionPct = args.incomingDotReductionPct?.('inferno') ?? 0;
+        const factor = 1 - reductionPct / 100;
+        for (const { sourceId, d } of infernoCredits) args.credit(sourceId, 'inferno', d * factor);
+        args.emitTicked('inferno', infernoSum * factor);
     }
 
     // Expire DoT stacks after ticking
@@ -2091,6 +2105,52 @@ export function runCombat(input: CombatEngineInput): {
         }
     }
 
+    // D-PR3: per-actor victim-side incoming-effect abilities (incoming-reduction + incoming-block),
+    // side-agnostic (a ship defends on either team). Built once from BOTH runtime maps; empty for
+    // actors without the relevant equipment. Consumed today only by the %-reduction fold in the
+    // positional path; incoming-block is collected here too for the later block task.
+    const incomingAbilitiesById = new Map<string, Ability[]>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        if (incomingAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        const incoming: Ability[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type === 'incoming-reduction' || a.config.type === 'incoming-block') {
+                    incoming.push(a);
+                }
+            }
+        }
+        if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
+    }
+    const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
+
+    // D-PR4: per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
+    // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
+    // actors without the relevant equipment. Consumed by the per-victim amplification hook on the
+    // positional path.
+    const outgoingAbilitiesById = new Map<string, Ability[]>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        if (outgoingAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        const outgoing: Ability[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type === 'outgoing-amplification') {
+                    outgoing.push(a);
+                }
+            }
+        }
+        if (outgoing.length) outgoingAbilitiesById.set(rt.actor.id, outgoing);
+    }
+    const outgoingAbilitiesOf = (id: string): Ability[] => outgoingAbilitiesById.get(id) ?? [];
+
+    // D-PR3: is this actor currently Stealthed? Sibling to isStasised — reads the actor's active
+    // self-buff names (snapshot + timed + active ability statuses). 'Stealth' is the buff name the
+    // positional targeting stealth-filter also queries (triggers.ts buildForcedTargetingStatus).
+    const isStealthed = (actorId: string): boolean =>
+        selfBuffNamesForOwners(statusEngine, [actorId]).includes('Stealth');
+
     // Proc an owner's standing leeches against a damage credit (heals immediately at
     // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
     // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
@@ -2346,6 +2406,9 @@ export function runCombat(input: CombatEngineInput): {
         // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
         // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
         const roundPerTargetDamage = new Map<string, number>();
+        // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
+        const directIntakeIndex = new Map<string, number>();
+        const blockOnceConsumed = new Set<string>(); // key `${victimId}:${abilityId}`
         const dmg = (id: string): ActorDamage => {
             let d = roundDamage.get(id);
             if (!d) {
@@ -2443,7 +2506,7 @@ export function runCombat(input: CombatEngineInput): {
         // cheatDeathConsumed/cheatDeathConsumedRound/recordDestroyed/BARRIER_BUFFS/
         // CHEAT_DEATH_BUFFS/selfBuffNamesForOwners exactly as before.
         const applyVictimDamage = (
-            damage: number,
+            rawDamage: number,
             victim: CombatActor,
             sink: DamageAccountingSink,
             // C2b-2 T5: optional kill attribution stamped onto ship-destroyed. Direct-damage
@@ -2452,6 +2515,75 @@ export function runCombat(input: CombatEngineInput): {
             // (Faust, Task 6), so production stays byte-identical.
             cause?: { killerId?: string; byDirectDamage?: boolean }
         ): VictimDamageOutcome => {
+            // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
+            // becomes mutable so the block step can shave it; everything downstream (addIncoming,
+            // shield drain, hp damage) operates on the post-block value.
+            let damage = rawDamage;
+            // Barrier — FULL DAMAGE IMMUNITY (locked game rule). Hoisted ABOVE addIncoming (it's a
+            // pure read of the victim's active self-buffs — moving it earlier is byte-identical) so
+            // the block step below can gate on it: a fully-Barrier-immune intake must NOT roll
+            // block nor advance the Ironclad nth-hit counter (Barrier already nullifies the hit).
+            // While the victim carries an active BARRIER_BUFFS status, ALL incoming damage is fully
+            // blocked: direct attacks, DoT ticks, AND bomb detonations (all three funnel here).
+            // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death —
+            // so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers the
+            // Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on first
+            // hit. The damage still "arrives" (the victim's bucket .incoming increments below) but
+            // its effect is nullified; the blocked amount is tracked SEPARATELY as the bucket's
+            // .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never touches the shield).
+            // Detection mirrors the Cheat-Death check (selfBuffNamesForOwners aggregates snapshot +
+            // timed + active ability self statuses).
+            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
+                BARRIER_BUFFS.has(n)
+            );
+            // D-PR3: proc block on DIRECT damage only, when not fully Barrier-immune. Reduces the
+            // hit before it is recorded/absorbed (silent reduction — no separate surface this PR).
+            // Fully inert (no counter touch, no roll) when the victim has no incoming-block ability
+            // → byte-identical for every existing fixture.
+            if (cause?.byDirectDamage && !carriesBarrier) {
+                const blockAbilities = incomingAbilitiesOf(victim.id).filter(
+                    (a) => a.config.type === 'incoming-block'
+                );
+                if (blockAbilities.length > 0) {
+                    const idx = (directIntakeIndex.get(victim.id) ?? 0) + 1;
+                    directIntakeIndex.set(victim.id, idx);
+                    const blocked = incomingBlockForIntake(
+                        blockAbilities,
+                        {
+                            didCrit: false,
+                            attackerStealthed: false,
+                            victimStealthed: isStealthed(victim.id),
+                            victimStasised: isStasised(victim.id),
+                            hitIndexThisRound: idx,
+                        },
+                        (abilityId, chance) => {
+                            const cfg = blockAbilities.find((b) => b.id === abilityId)?.config;
+                            const onceKey = `${victim.id}:${abilityId}`;
+                            // INVARIANT (keep this order): consumed-check BEFORE drawing the gate,
+                            // and set consumed ONLY on a successful proc — else a failed early draw
+                            // would wrongly lock the round.
+                            if (
+                                cfg?.type === 'incoming-block' &&
+                                cfg.oncePerRound &&
+                                blockOnceConsumed.has(onceKey)
+                            ) {
+                                return false;
+                            }
+                            let gate = procChanceGates.get(onceKey);
+                            if (!gate) {
+                                gate = makeRateGate();
+                                procChanceGates.set(onceKey, gate);
+                            }
+                            const proc = gate(chance);
+                            if (proc && cfg?.type === 'incoming-block' && cfg.oncePerRound) {
+                                blockOnceConsumed.add(onceKey);
+                            }
+                            return proc;
+                        }
+                    );
+                    damage = damage * (1 - blocked);
+                }
+            }
             sink.addIncoming(damage, victim.id);
             // Capture the pre-drain HP + the target's current effective max HP for the
             // tank-side hp-changed emission below (Phase 4c PR 3). Read BEFORE the drain
@@ -2459,22 +2591,11 @@ export function runCombat(input: CombatEngineInput): {
             // the pre-hit value (not 1).
             const hpBefore = victim.currentHp;
             const maxHp = recipientMaxHp(victim.id);
-            // Barrier — FULL DAMAGE IMMUNITY (locked game rule). While the heal target carries
-            // an active BARRIER_BUFFS status, ALL incoming damage is fully blocked: direct
-            // attacks, DoT ticks, AND bomb detonations (all three funnel through this closure).
-            // Precedence: Barrier sits strictly IN FRONT OF both the shield pool AND Cheat Death
-            // — so a lethal-sized hit blocked by Barrier neither drains the shield nor triggers
-            // the Cheat-Death intercept below. Duration-based (timed lifecycle), NOT consumed on
-            // first hit. The damage still "arrives" (the victim's bucket .incoming already
-            // incremented above) but its effect is nullified; the blocked amount is tracked
-            // SEPARATELY as the bucket's .barrierAbsorbed (NOT .shieldAbsorbed — Barrier never
-            // touches the shield).
-            // HP does not move → the emit below is a no-op crossing (oldPct === newPct), which we
-            // still fire once for emission consistency. Detection mirrors the Cheat-Death check
-            // (selfBuffNamesForOwners aggregates snapshot + timed + active ability self statuses).
-            const carriesBarrier = selfBuffNamesForOwners(statusEngine, [victim.id]).some((n) =>
-                BARRIER_BUFFS.has(n)
-            );
+            // Barrier branch (carriesBarrier computed above the block step). HP does not move → the
+            // emit below is a no-op crossing (oldPct === newPct), still fired once for emission
+            // consistency. The damage still "arrives" (the victim's .incoming already incremented)
+            // but its effect is nullified; the blocked amount is tracked as .barrierAbsorbed (NOT
+            // .shieldAbsorbed — Barrier never touches the shield).
             if (carriesBarrier) {
                 sink.addBarrierAbsorbed(damage, victim.id);
                 if (victim.currentHp > 0 && maxHp > 0) {
@@ -2748,6 +2869,41 @@ export function runCombat(input: CombatEngineInput): {
                 },
                 // E2: forward the per-direction leech hook (unsupplied by all current callers).
                 onVictimResolved: args.onVictimResolved,
+                // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
+                // across all three sites (focus / walked-team / enemy) since drivePositionalApply
+                // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
+                // with no incoming-reduction ability → byte-identical when no such equipment exists.
+                incomingReductionFor: (victim, didCrit) =>
+                    incomingReductionForHit(incomingAbilitiesOf(victim.id), {
+                        didCrit,
+                        attackerStealthed: isStealthed(args.actingId),
+                        victimStealthed: isStealthed(victim.id),
+                        victimStasised: isStasised(victim.id),
+                        hitIndexThisRound: 0, // unused by reduction (only block reads it)
+                    }),
+                // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
+                // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
+                // outgoing-amplification ability → byte-identical when no such equipment exists.
+                outgoingAmplificationFor: (victim, didCrit) => {
+                    // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
+                    // outgoing-amplification ability (the overwhelmingly common case) — matches the
+                    // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
+                    const outs = outgoingAbilitiesOf(args.actingId);
+                    if (outs.length === 0) return 0;
+                    const attacker = allActorsById.get(args.actingId);
+                    if (!attacker) return 0;
+                    return outgoingAmplificationForHit(
+                        outs,
+                        {
+                            didCrit,
+                            targetHigherAttack:
+                                effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
+                                effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
+                        },
+                        (abilityId, chance) =>
+                            rollRateGate(procChanceGates, `${args.actingId}:${abilityId}`, chance)
+                    );
+                },
             });
         };
 
@@ -2905,6 +3061,13 @@ export function runCombat(input: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
+                // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
+                // a per-(owner,ability) deterministic proc closure. Both are READ only when the
+                // actor's passive slot carries an outgoing-amplification ability → byte-identical
+                // for every fixture without one (rollOutgoingProc never invoked).
+                targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
+                rollOutgoingProc: (abilityId: string, chance: number) =>
+                    rollRateGate(procChanceGates, `${a.id}:${abilityId}`, chance),
             };
         };
 
@@ -3399,6 +3562,19 @@ export function runCombat(input: CombatEngineInput): {
                         credit: (_sourceId, _dotType, damage) => {
                             tankDotDamage += damage;
                         },
+                        // D-PR3 (Vortex Veil): reduce the carrier's incoming DoT ticks when
+                        // the tank equips Vortex Veil. The condition 'dot-inferno-corrosion'
+                        // gates on dotType being set, so querying with either dotType returns
+                        // the same %. Absent → 0 → byte-identical for all existing tests.
+                        incomingDotReductionPct: (dotType) =>
+                            incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
+                                didCrit: false,
+                                attackerStealthed: false,
+                                victimStealthed: false,
+                                victimStasised: false,
+                                hitIndexThisRound: 0,
+                                dotType,
+                            }),
                     });
                     if (tankDotDamage > 0) {
                         // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
@@ -3896,9 +4072,40 @@ export function runCombat(input: CombatEngineInput): {
                             // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                             // produced no ctx either; this actor has no live DoTs to attribute).
                         } else {
+                            // D-PR3 Task 9: victim-side incoming %-reduction against the bound
+                            // target on the AGGREGATE (non-positional) damage path — Iridium-as-tank.
+                            // `tgt` is the victim (healTarget on the legacy path); `actor` is the
+                            // acting enemy attacker. The non-crit baseline is the reduction with
+                            // didCrit:false; the crit-family DELTA is the extra reduction a crit adds.
+                            // Guarded by length so a victim with no incoming abilities passes 0/0 →
+                            // byte-identical. (The positional enemy path applies its own per-sub-hit
+                            // reduction via drivePositionalApply; this fold serves the legacy single-apply.)
+                            const tgtIncoming = incomingAbilitiesOf(tgt.id);
+                            const incomingReductionNonCritPct = tgtIncoming.length
+                                ? incomingReductionForHit(tgtIncoming, {
+                                      didCrit: false,
+                                      attackerStealthed: isStealthed(actor.id),
+                                      victimStealthed: isStealthed(tgt.id),
+                                      victimStasised: isStasised(tgt.id),
+                                      hitIndexThisRound: 0,
+                                  })
+                                : 0;
+                            const incomingReductionCritAll = tgtIncoming.length
+                                ? incomingReductionForHit(tgtIncoming, {
+                                      didCrit: true,
+                                      attackerStealthed: isStealthed(actor.id),
+                                      victimStealthed: isStealthed(tgt.id),
+                                      victimStasised: isStasised(tgt.id),
+                                      hitIndexThisRound: 0,
+                                  })
+                                : 0;
+                            const incomingReductionCritFamilyPct =
+                                incomingReductionCritAll - incomingReductionNonCritPct;
                             const enemyTurn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
                                 onHitBreakStasis: enemyBreakHook,
+                                incomingReductionNonCritPct,
+                                incomingReductionCritFamilyPct,
                             });
                             // §4.5: resolve Stasis break for player victims hit by this enemy.
                             if (enemyTurnStasisHitVictims.size > 0) {

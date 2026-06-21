@@ -67,12 +67,16 @@ export interface VictimDefenseProfile {
  * @param v        this victim's defensive profile
  * @param didCrit  the per-hit crit outcome (hitCrits[h])
  * @param roleScale 1 (origin) | 0.5 (covered) positional split factor
+ * @param equipReductionPct  D-PR3 victim-side incoming %-reduction (percentage points),
+ *        folded ADDITIVELY into the incoming term. Default 0 → byte-identical to the
+ *        pre-D-PR3 behavior (inert for victims without an incoming-reduction ability).
  */
 export function victimHitDamage(
     s: AttackerDamageScalars,
     v: VictimDefenseProfile,
     didCrit: boolean,
-    roleScale: number
+    roleScale: number,
+    equipReductionPct = 0
 ): number {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
@@ -93,7 +97,8 @@ export function victimHitDamage(
     // Prefer the per-victim incoming-damage debuff when present; fall back to the
     // attacker-fixed scalar (B1/PR7b). The engine-wired path always passes an explicit
     // value; the `??` fallback serves direct-call callers (e.g. positionalApply unit tests).
-    const incoming = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
+    const incoming =
+        (v.incomingDamageModifierPct ?? s.incomingDamageModifierPct) - equipReductionPct;
 
     const nonCritFactor =
         (1 - damageReduction / 100) *
