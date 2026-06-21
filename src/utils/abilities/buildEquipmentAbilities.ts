@@ -315,7 +315,8 @@ function mkNamedDebuff(
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
-    const parsedEffects = buff ? parseBuffEffects(buff.name, buff.description) : {};
+    if (!buff) return undefined;
+    const { stackable, maxStacks } = isStackable(buff.description);
     return {
         type: 'debuff',
         target: 'enemy',
@@ -324,9 +325,10 @@ function mkNamedDebuff(
         config: {
             type: 'debuff',
             buffName,
-            parsedEffects,
+            parsedEffects: parseBuffEffects(buff.name, buff.description),
             stacks: 1,
-            isStackable: false,
+            isStackable: stackable,
+            maxStacks,
             application: 'apply',
             duration,
         },
