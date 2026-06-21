@@ -194,6 +194,16 @@ const NOURISHMENT_AMP: Record<string, number> = { uncommon: 10, rare: 15, epic: 
 // No common/uncommon rarity for Vivacious Repair
 const VIVACIOUS_PROC: Record<string, number> = { rare: 0.21, epic: 0.26, legendary: 0.32 };
 
+// D-PR6: incoming-heal-amplification implant value tables
+// No common rarity for Exuberance
+const EXUBERANCE_PROC: Record<string, number> = {
+    uncommon: 0.17,
+    rare: 0.2,
+    epic: 0.24,
+    legendary: 0.3,
+};
+const EXUBERANCE_AMP: Record<string, number> = { uncommon: 12, rare: 13, epic: 14, legendary: 15 };
+
 // D-PR3: shared helper for incoming-reduction abilities
 function mkReduction(
     pct: number | undefined,
@@ -418,6 +428,22 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // Nourishment: +X% repair when targeting an ally with lower HP. Deterministic (no procChance).
     // No common rarity.
     NOURISHMENT: (rarity) => mkHealAmp(NOURISHMENT_AMP[rarity], 'target-hp-below-self'),
+    // D-PR6: incoming-heal-amplification implants
+    // Exuberance: X% chance to increase incoming repair by Y%. No common rarity.
+    // Recipient-side fold is wired in a later task; this entry is inert until then.
+    EXUBERANCE: (rarity) => {
+        const amp = EXUBERANCE_AMP[rarity];
+        const pc = EXUBERANCE_PROC[rarity];
+        if (amp === undefined) return undefined;
+        return {
+            type: 'incoming-heal-amplification',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'incoming-heal-amplification', ampPct: amp, procChance: pc },
+            autoFilled: true,
+        };
+    },
     // Vivacious Repair: X% chance to double the repair amount when targeting an ally below 25% HP.
     // No common/uncommon rarity.
     VIVACIOUS_REPAIR: (rarity) =>

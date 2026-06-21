@@ -549,6 +549,42 @@ describe('Vivacious Repair implant', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// D-PR6: Exuberance implant (incoming-heal-amplification, probabilistic)
+// ---------------------------------------------------------------------------
+describe('Exuberance implant', () => {
+    it('epic → incoming-heal-amplification, ampPct 14, procChance ≈ 0.24', () => {
+        const abilities = buildForImplant('EXUBERANCE', 'epic');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('incoming-heal-amplification');
+        expect(ab.target).toBe('self');
+        expect(ab.autoFilled).toBe(true);
+        if (ab.config.type === 'incoming-heal-amplification') {
+            expect(ab.config.ampPct).toBe(14);
+            expect(ab.config.procChance).toBeCloseTo(0.24);
+        } else {
+            throw new Error('Expected incoming-heal-amplification config');
+        }
+    });
+
+    it('legendary → ampPct 15, procChance ≈ 0.30', () => {
+        const abilities = buildForImplant('EXUBERANCE', 'legendary');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        if (ab.config.type === 'incoming-heal-amplification') {
+            expect(ab.config.ampPct).toBe(15);
+            expect(ab.config.procChance).toBeCloseTo(0.30);
+        } else {
+            throw new Error('Expected incoming-heal-amplification config');
+        }
+    });
+
+    it('common → no ability (no common variant)', () => {
+        expect(buildForImplant('EXUBERANCE', 'common')).toEqual([]);
+    });
+});
+
 // D-PR5: Second Wind implant (reactive self-heal on crit-received)
 // ---------------------------------------------------------------------------
 describe('Second Wind implant', () => {
