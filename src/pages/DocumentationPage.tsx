@@ -3084,7 +3084,13 @@ const DocumentationPage: React.FC = () => {
                                     (reduced crit damage taken, scaling with rarity),{' '}
                                     <strong>Vortex Veil</strong> (reduced Inferno and Corrosion
                                     damage), and <strong>Ironclad</strong> (a chance to block a
-                                    repeated hit from the same attacker). More implant and gear-set
+                                    repeated hit from the same attacker). Outgoing-damage
+                                    amplification is also modeled: <strong>Menace</strong> (chance
+                                    to amplify a hit&apos;s damage), <strong>Giant Slayer</strong>{' '}
+                                    (chance to amplify a hit&apos;s damage on a critical hit or
+                                    against an enemy with higher attack), and{' '}
+                                    <strong>Insidiousness</strong> (chance to deal bonus damage when
+                                    you apply a debuff to an enemy). More implant and gear-set
                                     effects will be added in future updates.
                                 </p>
                             </div>
