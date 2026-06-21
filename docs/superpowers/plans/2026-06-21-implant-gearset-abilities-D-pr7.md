@@ -342,7 +342,7 @@ git commit -m "feat(combat): D-PR7 — Martyrdom implant registry entry (Disable
 - Modify: `src/utils/combat/triggers.ts` (the `on-destroyed` listener, ~line 385)
 - Test: `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` (engine-level Martyrdom routing)
 
-- [ ] **Step 1: Write the failing test.** Add a Martyrdom block to the integration test. Build a focus ship equipped with a legendary Martyrdom implant whose HP is low enough to die to a direct hit, run combat with an enemy that deals lethal direct damage, and assert a `debuff-applied` event with `buffName:'Disable'` whose `targetId` is the **killer** id (not the default enemy). Read the file's existing harness (`makeShip`/`makePiece`/`makeGetGearPiece`/`BASE`/`runCombat`) and event-collection pattern first; mirror the closest existing reactive-on-X test. Skeleton (adapt to the harness):
+- [ ] **Step 1: Write the failing test.** Add a Martyrdom block to the integration test. Build a focus ship equipped with a legendary Martyrdom implant whose HP is low enough to die to a direct hit, run combat with an enemy that deals lethal direct damage, and assert a `debuff-applied` event with `buffName:'Disable'` whose `targetId` is the **killer** id (not the default enemy). Read the file's existing harness (`makeShip`/`makePiece`/`makeGetGearPiece`/`BASE`/`runCombat`) first. NOTE: `equipmentAbilities.integration.test.ts` has **no event-collection helper** (it asserts via heal buckets only). For event assertions, copy the `collect()` pattern from `src/utils/combat/__tests__/engine.events.test.ts` (~lines 71-93): create a bus, subscribe `bus.on(type, e => events.push(e))`, and pass it into `runCombat({ ...input, bus })`. Skeleton (adapt to the harness):
 
 ```ts
 describe('Martyrdom on-destroyed (killer routing)', () => {
@@ -438,7 +438,11 @@ git commit -m "test(combat): D-PR7 — engine integration for Last Wish/Battlecr
 - Modify: `src/utils/abilities/__tests__/equipmentCoverage.test.ts`
 - Modify: `src/constants/changelog.ts`
 
-- [ ] **Step 1: Update the coverage tracker.** In `equipmentCoverage.test.ts`, add `BATTLECRY`, `LAST_WISH`, `MARTYRDOM` to the `implementedImplants` expected array (it asserts `.toEqual([...])` in IMPLANTS declaration order — insert each key in the position matching `src/constants/implants.ts`; `MARTYRDOM` and `BATTLECRY` and `LAST_WISH` sit at their declaration offsets). Update the `it('exactly { ... }')` test title to mention the three. Add per-rarity `implantAbilityCount` smoke assertions if the file has them for other implants (e.g. `implantAbilityCount('LAST_WISH','legendary')` ≥ 1; `MARTYRDOM` epic = 0).
+- [ ] **Step 1: Update the coverage tracker — TWO places.** `equipmentCoverage.test.ts` has **two** implemented-implant enumerations; update **both** or you'll get an unexpected second failure:
+  1. The **`.toEqual([...])` array** (~line 115): add `BATTLECRY`, `LAST_WISH`, `MARTYRDOM` each at the position matching `IMPLANTS` **declaration order** in `src/constants/implants.ts` — they are **non-adjacent** (`MARTYRDOM` is declared first at line 19, `BATTLECRY` at ~1316, `LAST_WISH` at ~2217), so slot each at its own offset (the failure message prints the expected order if you get it wrong). Update the `it('exactly { ... }')` test title to mention the three.
+  2. The **`implementedImplants` Set** (~line 182), which drives a loop (~lines 332-341) asserting every implant NOT in the Set "produces 0 abilities." Add the same three keys to this Set, otherwise that loop newly fails with `MARTYRDOM/BATTLECRY/LAST_WISH produces 0 abilities`.
+  
+  Add per-rarity `implantAbilityCount` smoke assertions if the file has them for other implants (e.g. `implantAbilityCount('LAST_WISH','legendary')` ≥ 1; `implantAbilityCount('MARTYRDOM','epic')` === 0).
 
 - [ ] **Step 2: Run it, verify it passes.** `npx vitest --run src/utils/abilities/__tests__/equipmentCoverage.test.ts`. If the `.toEqual` array order is wrong the failure message shows the expected order — match it (declaration order from `IMPLANTS`).
 
