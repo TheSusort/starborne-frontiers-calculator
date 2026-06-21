@@ -135,7 +135,7 @@ git commit -m "feat(combat): D-PR6 — pure incomingHealAmpForRecipient evaluato
 
 **Files:** Modify `src/utils/abilities/buildEquipmentAbilities.ts`; Test `src/utils/abilities/__tests__/buildEquipmentAbilities.test.ts`.
 
-- [ ] **Step 1: Unit tests** (reuse the single-implant-ability resolution helper): Exuberance 'epic' → `incoming-heal-amplification` config, ampPct 14, procChance ≈ 0.24; 'legendary' ampPct 15, procChance ≈ 0.30; 'common' → undefined (no common variant).
+- [ ] **Step 1: Unit tests** (reuse the single-implant-ability resolution helper): Exuberance 'epic' → `config.type === 'incoming-heal-amplification'`, `config.ampPct === 14`, `config.procChance ≈ 0.24`; 'legendary' `config.ampPct === 15`, `config.procChance ≈ 0.30`; 'common' → undefined (no common variant). (Assert on `config.procChance`, NOT the top-level `Ability.procChance` — Exuberance doesn't set the latter.)
 - [ ] **Step 2:** Run, verify FAIL.
 - [ ] **Step 3: Implement:**
 ```ts
@@ -152,12 +152,12 @@ EXUBERANCE: (rarity) => {
         target: 'self',
         trigger: 'on-cast', // inert: not event-driven; consumed by the recipient-side fold
         conditions: [],
-        procChance: pc,
         config: { type: 'incoming-heal-amplification', ampPct: amp, procChance: pc },
         autoFilled: true,
     };
 },
 ```
+NOTE: do NOT set the top-level `Ability.procChance` here — Exuberance is not reactive (no trigger gate reads it); the proc lives in `config.procChance`, consumed by the recipient-side fold evaluator. Matches the sibling `mkHealAmp`/`mkReduction` helpers, which set procChance only in `config`.
 - [ ] **Step 4:** Run unit (PASS) + FULL suite. Byte-identical (config inert until Task 6 wires the apply sites): snapshot diff EMPTY. `npm run lint && npx tsc --noEmit`. KNOWN: `equipmentCoverage.test.ts` now fails for EXUBERANCE — expected. Commit `--no-verify` if sole block.
 - [ ] **Step 5:** Commit:
 ```bash
@@ -236,9 +236,9 @@ At each site, immediately AFTER the existing per-recipient incoming factor (`inc
   - **HoT tick** (playerTurn.ts ~1672, `const raw = maxHp * (hotPct/100) * stacks * holderIncomingFactor`): change to `let raw`, then append `raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;` (recipient = holder = `actor.id`). Place after the `if (raw <= 0) return;` guard? NO — compute the amp on the post-incoming `raw` BEFORE the `raw <= 0` guard is irrelevant (raw>0 here); put the `raw *=` right after the `const→let raw =` line and before `healing.credit`. Verify there is only ONE HoT `raw` computation; if an enemy/event-only HoT path computes a separate `raw` that lands a repair on a recipient, fold there too (and report if the HoT path is thornier than a single raw).
   - **Reactive heal** (triggers.ts ~1214-1219; `const raw = cfg.type==='heal' ? basisValue * ... * (1 + incomingPctFor(rid)/100) : basisValue * (cfg.pct/100)`): change to `let raw`, then AFTER it, for the heal case only, append:
     ```ts
-    if (cfg.type === 'heal') raw *= 1 + (ctx.healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
+    if (cfg.type === 'heal') raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
     ```
-    (Do NOT amplify the shield branch.) Place before the `ctx.healing.credit(...)` calls.
+    (`healing` is the local `const healing = ctx.healing` binding at triggers.ts ~1147, matching the surrounding `incomingPctFor`/`healing.*` style; `ctx.healing.` also compiles.) Do NOT amplify the shield branch. Place before the `ctx.healing.credit(...)` calls.
 - [ ] **Step 4:** Run integration tests (PASS) + FULL suite. Byte-identical: snapshot diff EMPTY (no fixture has Exuberance → method returns 0). `npm run lint && npx tsc --noEmit`. KNOWN: only the EXUBERANCE coverage failure remains. Commit `--no-verify` if sole block.
 - [ ] **Step 5:** Commit:
 ```bash
@@ -253,7 +253,7 @@ git commit -m "feat(combat): D-PR6 — fold Exuberance at all repair-apply sites
 **Files:** Modify `src/utils/abilities/__tests__/equipmentCoverage.test.ts`.
 
 - [ ] **Step 1:** Add `EXUBERANCE` to BOTH the `.toEqual([...])` ordered array (determine position empirically — run the test, match received order; follows `Object.keys(IMPLANTS)`) and the `implementedImplants` Set.
-- [ ] **Step 2:** Add a per-implant assertion block: Exuberance produces 1 ability for uncommon/rare/epic/legendary; common → 0. Confirm Voidfire Catalyst REMAINS in the unimplemented loop (still deferred — 0 abilities).
+- [ ] **Step 2:** Add a per-implant assertion block: Exuberance produces 1 ability for uncommon/rare/epic/legendary; common → 0. Confirm Voidfire Catalyst (and the many other not-yet-modeled implants) REMAIN in the `unimplementedImplants` loop — that loop auto-asserts 0 abilities for everything not in the implemented Set, so only the EXUBERANCE additions are needed. (Within the D-design "reactive heal/leech" row, Exuberance was the last unshipped effect; Voidfire Catalyst belongs to a different row and stays deferred.)
 - [ ] **Step 3:** `npx vitest run src/utils/abilities/__tests__/equipmentCoverage.test.ts` → PASS. FULL suite → ALL GREEN. Snapshot diff EMPTY. `npm run lint && npx tsc --noEmit`.
 - [ ] **Step 4:** Commit (NO `--no-verify` — branch fully green now):
 ```bash
