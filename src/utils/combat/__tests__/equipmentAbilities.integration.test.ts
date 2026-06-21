@@ -1511,7 +1511,9 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
         // Pre-condition: the Martyrdom on-destroyed debuff landed in the passive slot.
-        const martyrdom = passive?.abilities.find((a) => a.id === 'equip-implant-MARTYRDOM');
+        const martyrdom = passive?.abilities.find((a) =>
+            a.id.startsWith('equip-implant-MARTYRDOM')
+        );
         expect(martyrdom).toBeDefined();
         expect(martyrdom!.trigger).toBe('on-destroyed');
         expect(martyrdom!.config.type).toBe('debuff');
@@ -1829,7 +1831,7 @@ describe('D-PR7 Task 5 integration — Last Wish repairs living allies on death'
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
         // Pre-condition: the Last Wish on-destroyed heal landed in the passive slot.
-        const lw = passive?.abilities.find((a) => a.id === 'equip-implant-LAST_WISH');
+        const lw = passive?.abilities.find((a) => a.id.startsWith('equip-implant-LAST_WISH'));
         expect(lw).toBeDefined();
         expect(lw!.trigger).toBe('on-destroyed');
         expect(lw!.target).toBe('all-allies');
@@ -1924,7 +1926,7 @@ describe('D-PR7 Task 5 integration — Battlecry emits Inc. Damage Down II on li
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
         // Pre-condition: the Battlecry on-destroyed buff grant landed in the passive slot.
-        const bc = passive?.abilities.find((a) => a.id === 'equip-implant-BATTLECRY');
+        const bc = passive?.abilities.find((a) => a.id.startsWith('equip-implant-BATTLECRY'));
         expect(bc).toBeDefined();
         expect(bc!.trigger).toBe('on-destroyed');
         expect(bc!.target).toBe('all-allies');
@@ -2015,7 +2017,7 @@ describe('D-PR7 Task 5 integration — enemy-side mirror: enemy Martyrdom routes
         const getGearPiece = makeGetGearPiece({ 'mart-enemy': martPiece });
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
-        const mart = passive?.abilities.find((a) => a.id === 'equip-implant-MARTYRDOM');
+        const mart = passive?.abilities.find((a) => a.id.startsWith('equip-implant-MARTYRDOM'));
         expect(mart).toBeDefined();
         expect(mart!.trigger).toBe('on-destroyed');
 
