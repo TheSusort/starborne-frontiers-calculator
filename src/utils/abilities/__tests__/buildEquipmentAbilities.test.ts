@@ -334,3 +334,79 @@ describe('Hardened gear set', () => {
         });
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR4: Menace implant (outgoing-amplification, amplify-on-crit)
+// ---------------------------------------------------------------------------
+describe('Menace implant', () => {
+    it('emits an outgoing-amplification with condition amplify-on-crit, ampPct 35, procChance ≈ 0.11 for epic', () => {
+        const abilities = buildForImplant('MENACE', 'epic');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('outgoing-amplification');
+        expect(ab.target).toBe('self');
+        expect(ab.autoFilled).toBe(true);
+        if (ab.config.type === 'outgoing-amplification') {
+            expect(ab.config.condition).toBe('amplify-on-crit');
+            expect(ab.config.ampPct).toBe(35);
+            expect(ab.config.procChance).toBeCloseTo(0.11);
+        } else {
+            throw new Error('Expected outgoing-amplification config');
+        }
+    });
+
+    it('emits correct values for common (ampPct 20, procChance ≈ 0.08)', () => {
+        const ab = buildForImplant('MENACE', 'common')[0];
+        if (ab.config.type === 'outgoing-amplification') {
+            expect(ab.config.ampPct).toBe(20);
+            expect(ab.config.procChance).toBeCloseTo(0.08);
+        } else {
+            throw new Error('Expected outgoing-amplification config');
+        }
+    });
+
+    it('emits correct values for legendary (ampPct 45, procChance ≈ 0.12)', () => {
+        const ab = buildForImplant('MENACE', 'legendary')[0];
+        if (ab.config.type === 'outgoing-amplification') {
+            expect(ab.config.ampPct).toBe(45);
+            expect(ab.config.procChance).toBeCloseTo(0.12);
+        } else {
+            throw new Error('Expected outgoing-amplification config');
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR4: Giant Slayer implant (outgoing-amplification, amplify-vs-higher-attack)
+// ---------------------------------------------------------------------------
+describe('Giant Slayer implant', () => {
+    it('emits an outgoing-amplification with condition amplify-vs-higher-attack, ampPct 50, procChance ≈ 0.20 for legendary', () => {
+        const abilities = buildForImplant('GIANT_SLAYER', 'legendary');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('outgoing-amplification');
+        expect(ab.target).toBe('self');
+        expect(ab.autoFilled).toBe(true);
+        if (ab.config.type === 'outgoing-amplification') {
+            expect(ab.config.condition).toBe('amplify-vs-higher-attack');
+            expect(ab.config.ampPct).toBe(50);
+            expect(ab.config.procChance).toBeCloseTo(0.20);
+        } else {
+            throw new Error('Expected outgoing-amplification config');
+        }
+    });
+
+    it('has no common variant → no ability', () => {
+        expect(buildForImplant('GIANT_SLAYER', 'common')).toEqual([]);
+    });
+
+    it('emits correct procChance for uncommon (≈ 0.12)', () => {
+        const ab = buildForImplant('GIANT_SLAYER', 'uncommon')[0];
+        if (ab.config.type === 'outgoing-amplification') {
+            expect(ab.config.ampPct).toBe(50);
+            expect(ab.config.procChance).toBeCloseTo(0.12);
+        } else {
+            throw new Error('Expected outgoing-amplification config');
+        }
+    });
+});

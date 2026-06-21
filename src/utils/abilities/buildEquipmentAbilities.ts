@@ -24,7 +24,7 @@
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { GearPiece } from '../../types/gear';
-import { Ability, IncomingCondition } from '../../types/abilities';
+import { Ability, IncomingCondition, OutgoingCondition } from '../../types/abilities';
 import { Ship } from '../../types/ship';
 
 // ---------------------------------------------------------------------------
@@ -141,6 +141,29 @@ const IRONCLAD_BLOCK: Record<string, { chance: number; pct: number }> = {
 };
 const SHADOWGUARD_CHANCE: Record<string, number> = { uncommon: 0.07, epic: 0.12, legendary: 0.16 };
 
+// D-PR4: outgoing-amplification implant value tables
+const MENACE_AMP: Record<string, number> = {
+    common: 20,
+    uncommon: 25,
+    rare: 30,
+    epic: 35,
+    legendary: 45,
+};
+const MENACE_PROC: Record<string, number> = {
+    common: 0.08,
+    uncommon: 0.09,
+    rare: 0.1,
+    epic: 0.11,
+    legendary: 0.12,
+};
+// No common rarity for Giant Slayer
+const GIANT_SLAYER_PROC: Record<string, number> = {
+    uncommon: 0.12,
+    rare: 0.14,
+    epic: 0.16,
+    legendary: 0.2,
+};
+
 // D-PR3: shared helper for incoming-reduction abilities
 function mkReduction(
     pct: number | undefined,
@@ -155,6 +178,23 @@ function mkReduction(
         trigger: 'on-cast',
         conditions: [],
         config: { type: 'incoming-reduction', scope, condition, pct, critFamily },
+        autoFilled: true,
+    };
+}
+
+// D-PR4: shared helper for outgoing-amplification abilities
+function mkAmplification(
+    ampPct: number | undefined,
+    condition: OutgoingCondition,
+    procChance: number | undefined
+): Omit<Ability, 'id'> | undefined {
+    if (ampPct === undefined || procChance === undefined) return undefined;
+    return {
+        type: 'outgoing-amplification',
+        target: 'self',
+        trigger: 'on-cast', // inert: the live condition lives in config, evaluated per-hit
+        conditions: [],
+        config: { type: 'outgoing-amplification', condition, ampPct, procChance },
         autoFilled: true,
     };
 }
@@ -236,6 +276,13 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
+    // D-PR4: outgoing-amplification implants
+    // Menace: X% chance to amplify a crit hit's damage by Y%.
+    MENACE: (rarity) => mkAmplification(MENACE_AMP[rarity], 'amplify-on-crit', MENACE_PROC[rarity]),
+    // Giant Slayer: X% chance to amplify damage vs. a higher-attack enemy by 50%.
+    // No common rarity.
+    GIANT_SLAYER: (rarity) =>
+        mkAmplification(50, 'amplify-vs-higher-attack', GIANT_SLAYER_PROC[rarity]),
     // D-PR3: incoming-reduction implants
     // Voidshade: reduce incoming direct damage by X% while stealthed.
     VOIDSHADE: (rarity) => mkReduction(VOIDSHADE_PCT[rarity], 'direct', 'self-stealth', false),
