@@ -1841,9 +1841,25 @@ describe('D-PR7 Task 5 integration — Last Wish repairs living allies on death'
         ];
     }
 
+    // Last Wish legendary: target-hp basis, pct 32, noCrit. Per LIVING recipient the gross is
+    //   recipientMaxHp × 0.32 × (1 + healModifier/100) × (1 + outgoingHeal/100) × (1 + incomingHeal/100)
+    // and every fold factor here is 1 (dier healModifier 0, no heal-up/incoming-heal buffs).
+    // The ONLY living recipient is the focus survivor ('attacker', maxHP FOCUS_HP) — the dead
+    // caster ('dier', maxHP DYER_HP) is skipped by the recipientHp<=0 guard in the executor.
+    const LW_LEGENDARY_PCT = 32;
+    // Gross over living recipients only = FOCUS_HP × 0.32 = 320_000.
+    const EXPECTED_GROSS = FOCUS_HP * (LW_LEGENDARY_PCT / 100); // 320_000
+    // If the dead caster were wrongly counted as a living recipient, its target-hp share
+    // (DYER_HP × 0.32 = 320) would be ADDED → 320_320. The upper bound below excludes that.
+    const DEAD_CASTER_SHARE = DYER_HP * (LW_LEGENDARY_PCT / 100); // 320
+    // The covered (half-damage) hit the survivor takes: enemy attack 5000 × 100% × ½ = 2500,
+    // mitigated by the focus's defence 0 → 2500. This is the deficit the repair fills, so
+    // effectiveHeal is capped at exactly this (320_000 >> 2500).
+    const SCRATCH_DAMAGE = 2_500;
+
     it(
-        'A non-focus ally carrying Last Wish dies → surviving allies are repaired; ' +
-            'the credited repair (keyed to the dead caster) is positive and the survivor pool is filled',
+        'A non-focus ally carrying Last Wish dies → only the LIVING focus is repaired (dead caster ' +
+            "excluded from the gross); the survivor's scratch deficit is filled",
         () => {
             // Dying carrier at the front origin (M4, lethal full hit). Focus survivor at M3 (covered).
             // The enemy attack must one-shot the 1000-HP carrier (origin = full) while leaving the
@@ -1859,19 +1875,27 @@ describe('D-PR7 Task 5 integration — Last Wish repairs living allies on death'
             expect(result.healing).toBeDefined();
 
             // The dead caster ('dier') is credited with the gross Last Wish repair (the engine keys
-            // all reactive-heal credit by the casting owner, summed over LIVING recipients). It must
-            // be strictly positive: at least the surviving focus repaired % of its own max HP.
-            expect(sumHeal(result, 'directHeal', 'dier')).toBeGreaterThan(0);
+            // all reactive-heal credit by the casting owner, summed over LIVING recipients only). The
+            // gross must equal EXACTLY the focus survivor's share (320_000) and NOT include the dead
+            // caster's own 320 share. The lower bound + upper bound window
+            // [EXPECTED_GROSS − 1, EXPECTED_GROSS + DEAD_CASTER_SHARE/2) pins the value AND excludes
+            // the dead-caster-included total (320_320): 320_320 fails the < (EXPECTED_GROSS + 160)
+            // upper bound. A bare `> 100_000` (the old assertion) would pass for BOTH 320_000 and
+            // 320_320 — this window is what makes the exclusion load-bearing.
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeGreaterThan(EXPECTED_GROSS - 1);
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeLessThan(
+                EXPECTED_GROSS + DEAD_CASTER_SHARE / 2
+            );
+            // Belt-and-suspenders exact pin: toBeCloseTo digits −2 ⇒ tolerance 0.5×10² = ±50, well
+            // under the 320 gap to the dead-caster-included total, so 320_320 would also fail here.
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeCloseTo(EXPECTED_GROSS, -2);
 
-            // The heal-target survivor's pool was actually filled (effectiveHeal credited under the
-            // dead caster). With a 1_000_000-HP focus scratched for ~2500, the legendary 32% repair
-            // (≈ 320_000) is mostly consumed → effectiveHeal is positive.
-            expect(sumHeal(result, 'effectiveHeal', 'dier')).toBeGreaterThan(0);
-
-            // The dead caster is NOT credited as a LIVING recipient: a `target-hp` legendary repair on
-            // its own 1000-HP pool would be 320; the surviving focus's share alone (32% of 1_000_000 =
-            // 320_000) dwarfs that, proving the caster's own pool was excluded from the gross.
-            expect(sumHeal(result, 'directHeal', 'dier')).toBeGreaterThan(100_000);
+            // The heal-target survivor's pool was actually filled: effectiveHeal (credited under the
+            // dead caster) equals the survivor's deficit = the SCRATCH_DAMAGE it took from the covered
+            // hit. The 320_000 repair vastly exceeds the 2500 deficit, so effectiveHeal is capped at
+            // exactly the deficit. Asserting ≈ SCRATCH_DAMAGE distinguishes "pool actually filled"
+            // from a residual/near-zero credit (which a `> 0` check would also accept).
+            expect(sumHeal(result, 'effectiveHeal', 'dier')).toBeCloseTo(SCRATCH_DAMAGE, 6);
 
             // No OTHER actor id is credited with directHeal — all reactive-heal credit is keyed to
             // the dead caster ('dier'), never the focus or the enemy.
