@@ -1216,3 +1216,249 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR6 Task 6: Exuberance implant — recipient-side incoming-heal amplification fold
+// ---------------------------------------------------------------------------
+//
+// Exuberance is a RECIPIENT-side, unconditional ("when repaired") incoming-heal
+// amplification: each repair landing on the carrier rolls a combat-lifetime proc gate
+// (keyed `${recipientId}:${abilityId}`); when it fires, the repair's raw is multiplied
+// by (1 + ampPct/100). The gate is SHARED across every repair source the unit receives
+// (one probability stream), so cast heals, reactive heals, and HoT ticks all draw from it.
+//
+// Harness shape (deterministic): the FOCUS actor ('attacker') is the HEALER AND the
+// recipient — it self-casts a `target: 'self'` repair (basis 'hp' → raw = own max HP × pct,
+// a CONSTANT per cast). Exuberance lives in its OWN passive slot, so the engine's
+// incomingHealAmpAbilitiesById picks it up. With procChance 0.5 over N rounds the gate fires
+// floor(N × 0.5) times (back-loaded: calls 2,4,6,8,10 for N=10), so exactly that many casts
+// are boosted by ampPct, and the rest land at baseline.
+//
+// Because the basis is 'hp' (constant raw) and the cast is noCrit, the ONLY variable between
+// the Exuberance and no-Exuberance runs is the amplification factor → the difference isolates
+// EXACTLY (number of procs) × baseRaw × (ampPct/100).
+
+describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplification', () => {
+    const SELF_HP = 10_000;
+    const HEAL_PCT = 10; // self-repair = SELF_HP × 10% = 1000 per cast (basis 'hp', no other folds)
+    const BASE_PER_CAST = SELF_HP * (HEAL_PCT / 100); // 1000
+    const EXU_PROC = 0.5; // deterministic: floor(N × 0.5) procs (back-loaded calls 2,4,...)
+    const EXU_AMP = 50; // +50% per boosted repair
+
+    /** The actor's self-repair (basis 'hp' → constant raw; noCrit so the crit gate never perturbs). */
+    const selfRepair: Ability = {
+        id: 'self-repair',
+        type: 'heal',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal', pct: HEAL_PCT, basis: 'hp', noCrit: true },
+    };
+
+    /** Exuberance passive ability (recipient-side incoming-heal amplification). */
+    const exuberance = (ampPct: number, procChance: number): Ability => ({
+        id: 'equip-implant-EXUBERANCE',
+        type: 'incoming-heal-amplification',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'incoming-heal-amplification', ampPct, procChance },
+        autoFilled: true,
+    });
+
+    /** Ship skills: self-repair active + optional Exuberance passive. */
+    const skills = (exuAbility?: Ability): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [selfRepair] },
+            ...(exuAbility ? [{ slot: 'passive' as const, abilities: [exuAbility] }] : []),
+        ],
+    });
+
+    /** Base input: healing mode, focus 'attacker' is healer + recipient (self-heal). Never attacked. */
+    const EXU_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: skills(),
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 10,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: SELF_HP,
+        healModifier: 0,
+        healTargetId: 'attacker',
+        ...overrides,
+    });
+
+    it(
+        'Carrier repaired by cast heals: boosted repairs land at the gated frequency; ' +
+            'total received exceeds baseline by ampPct × (number of procs)',
+        () => {
+            const NUM_ROUNDS = 10;
+            const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * EXU_PROC); // 5
+
+            const withExu = runCombat(
+                EXU_BASE({
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: skills(exuberance(EXU_AMP, EXU_PROC)),
+                })
+            );
+            const baseline = runCombat(
+                EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() })
+            );
+
+            const baseHeal = sumHeal(baseline, 'directHeal');
+            const exuHeal = sumHeal(withExu, 'directHeal');
+
+            // Baseline: NUM_ROUNDS casts × 1000.
+            expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
+            // With Exuberance: EXPECTED_PROCS casts boosted by +50% → the rest at baseline.
+            const expectedExu =
+                NUM_ROUNDS * BASE_PER_CAST + EXPECTED_PROCS * BASE_PER_CAST * (EXU_AMP / 100);
+            expect(exuHeal).toBeCloseTo(expectedExu, 6);
+            expect(exuHeal).toBeGreaterThan(baseHeal);
+
+            // The boost lands on exactly EXPECTED_PROCS rounds (back-loaded gate schedule),
+            // each boosted round crediting baseRaw × (1 + ampPct/100).
+            const boostedRounds = withExu
+                .healing!.rounds.map((rd, i) => ({
+                    round: i + 1,
+                    heal: rd.perActor.get('attacker')?.directHeal ?? 0,
+                }))
+                .filter((r) => r.heal > BASE_PER_CAST + 1e-6);
+            expect(boostedRounds).toHaveLength(EXPECTED_PROCS);
+            for (const r of boostedRounds) {
+                expect(r.heal).toBeCloseTo(BASE_PER_CAST * (1 + EXU_AMP / 100), 6);
+            }
+        }
+    );
+
+    it('No Exuberance: every cast lands at baseline (control, byte-identical fold)', () => {
+        const NUM_ROUNDS = 10;
+        const result = runCombat(EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() }));
+        expect(result.healing).toBeDefined();
+        expect(sumHeal(result, 'directHeal')).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
+        // Every round credits exactly the unboosted base.
+        for (const rd of result.healing!.rounds) {
+            expect(rd.perActor.get('attacker')?.directHeal ?? 0).toBeCloseTo(BASE_PER_CAST, 6);
+        }
+    });
+
+    // ── Second-source assertion: reactive self-heal on an Exuberance carrier ──────
+    //
+    // Proves the REACTIVE repair-apply fold (triggers.ts) also draws from the recipient's
+    // single Exuberance gate. The focus 'attacker' carries BOTH a reactive Second-Wind-style
+    // self-heal (on-attacked + crit, basis 'hp') AND Exuberance. An enemy crits it every
+    // round; the reactive heal fires at its own rate and — when Exuberance's gate fires —
+    // the landed reactive repair is boosted.
+
+    /** Reactive self-heal: fires on a crit received (basis 'hp' → constant raw). */
+    const reactiveSelfHeal = (procChance: number): Ability => ({
+        id: 'equip-implant-REACTIVE_HEAL',
+        type: 'heal',
+        target: 'self',
+        trigger: 'on-attacked',
+        triggerCritFilter: 'crit',
+        conditions: [],
+        procChance,
+        config: { type: 'heal', pct: HEAL_PCT, basis: 'hp' },
+        autoFilled: true,
+    });
+
+    /** A no-op active so the focus actor still takes a turn each round (deals no damage). */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Enemy that crits the focus actor every round (minimal attack so `attacked` is emitted). */
+    const critEnemy = {
+        id: 'exu-enemy',
+        stats: { attack: 1, crit: 100, critDamage: 0, speed: 1, defence: 0, hp: 1_000_000_000 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'exu-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    };
+
+    it(
+        'Reactive self-heal on an Exuberance carrier is boosted (proves the reactive site folds ' +
+            'and shares the recipient gate)',
+        () => {
+            const NUM_ROUNDS = 10;
+            // Reactive heal fires every round (procChance 1.0) → a repair lands each round →
+            // the recipient gate is rolled once per landed reactive repair.
+            const withExu = runCombat(
+                EXU_BASE({
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: {
+                        slots: [
+                            { slot: 'active', abilities: [noopActive] },
+                            {
+                                slot: 'passive',
+                                abilities: [
+                                    reactiveSelfHeal(1.0),
+                                    exuberance(EXU_AMP, EXU_PROC),
+                                ],
+                            },
+                        ],
+                    },
+                    enemyAttackers: [critEnemy],
+                })
+            );
+            const baseline = runCombat(
+                EXU_BASE({
+                    numRounds: NUM_ROUNDS,
+                    shipSkills: {
+                        slots: [
+                            { slot: 'active', abilities: [noopActive] },
+                            { slot: 'passive', abilities: [reactiveSelfHeal(1.0)] },
+                        ],
+                    },
+                    enemyAttackers: [critEnemy],
+                })
+            );
+
+            const baseHeal = sumHeal(baseline, 'directHeal');
+            const exuHeal = sumHeal(withExu, 'directHeal');
+            // Reactive heal fires every round → NUM_ROUNDS landed repairs of baseRaw each.
+            expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
+            // Exuberance boosts floor(NUM_ROUNDS × 0.5) of those landed repairs.
+            const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * EXU_PROC);
+            const expectedExu =
+                NUM_ROUNDS * BASE_PER_CAST + EXPECTED_PROCS * BASE_PER_CAST * (EXU_AMP / 100);
+            expect(exuHeal).toBeCloseTo(expectedExu, 6);
+            expect(exuHeal).toBeGreaterThan(baseHeal);
+        }
+    );
+});

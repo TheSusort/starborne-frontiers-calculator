@@ -1674,7 +1674,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (maxHp === undefined) return; // foreign applier with no ctx yet → skip the tick
             // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
             const creditId = applierId ?? actor.id;
-            const raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
+            // D-PR6: recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
+            // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick (0 → byte-identical).
+            raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
             healing.credit(creditId, 'hotHeal', raw);
             // Holder === target → the heal lands on the target; split consumption to the applier.
@@ -1755,6 +1758,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             (1 + incomingPctFor(rid) / 100);
                         // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                         raw *= 1 + healAmpPctFor(rid) / 100;
+                        // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
+                        // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                        raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
                         healTargets.push(rid);
@@ -1776,6 +1782,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         (1 + incomingPctFor(rid) / 100);
                     // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                     raw *= 1 + healAmpPctFor(rid) / 100;
+                    // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
+                    // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                    raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                     healing.credit(actor.id, 'directHeal', raw);
                     if (rid === healing.targetId) {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);
