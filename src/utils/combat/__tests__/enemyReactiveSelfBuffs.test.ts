@@ -378,7 +378,7 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
 //   - Spearhead       — trigger `on-charged-cast` → grant all allies `Attack Up I` (1 turn)
 //                        after a charged-skill cast (per-rarity proc).
 //   - Font of Power   — trigger `on-own-repair-to-ally` → grant `Power Infused Nanobots`
-//                        (emit-only) to every repaired NON-self ally (per-rarity proc).
+//                        (flat attack = 100% of caster's attack, D-PR10) to every repaired NON-self ally (per-rarity proc).
 //
 // The engine registers reactive listeners for BOTH sides; the listeners self-scope via
 // `e.actorId === ownerId` / `e.casterId === ownerId`. So an ENEMY-side carrier of either
@@ -388,7 +388,9 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
 //
 // Determinism: same back-loaded makeRateGate accumulator keyed `${ownerId}:${abilityId}`.
 // There is NO proc=1 hook — we run enough qualifying casts that the accumulator fires and
-// assert PRESENCE of the grant (Power Infused Nanobots is emit-only → presence only).
+// assert PRESENCE of the grant (Power Infused Nanobots now grants flat attack = 100% of caster's
+// attack, D-PR10; magnitude is covered by the dedicated snapshot test in
+// equipmentAbilities.integration.test.ts).
 //
 // EXPECTED: these tests PASS immediately if the engine is truly team-agnostic. A FAILURE
 // here indicates a real side-routing regression, NOT a test bug.
@@ -595,7 +597,9 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
             // repaired NON-self recipient. A plain ship anchors the PLAYER team. The carrier
             // repairs every enemy ally each round → the OTHER enemy ally is a non-self
             // recipient. Over 16 casts the accumulator fires → that ally carries the buff.
-            // Emit-only → PRESENCE only (Power Infused Nanobots parses to no stat effect).
+            // PRESENCE only — this test covers the grant mechanic (correct ally, correct side).
+            // Power Infused Nanobots now grants flat attack = 100% of caster's attack (D-PR10);
+            // magnitude is covered by the dedicated snapshot test in equipmentAbilities.integration.test.ts.
             const result = simulateBattle(
                 {
                     playerTeam: [

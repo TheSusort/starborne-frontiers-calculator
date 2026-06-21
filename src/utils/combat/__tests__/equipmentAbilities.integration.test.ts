@@ -2613,8 +2613,8 @@ describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-
 // `on-own-repair-to-ally` reactive trigger — a self-scoped listener on `heal-performed`
 // matching casterId === ownerId with >= 1 NON-self recipient. One enqueue per qualifying
 // repair cast → one proc-gate roll; the grant fans out to every repaired non-self ally
-// via eventCtx.repairedAllyIds. EMIT-ONLY this PR: Power Infused Nanobots parses to no
-// stat effect, so we assert PRESENCE of the buff, never a damage/stat change.
+// via eventCtx.repairedAllyIds. Power Infused Nanobots now grants flat attack = 100% of
+// the caster's attack (snapshotted at grant time, D-PR10); we assert PRESENCE + fan-out.
 //
 // Driven through `simulateBattle` because the carrier must repair an OTHER ally — the
 // engine routes a non-focus team actor's bare ally-repair to the heal target (the focus
@@ -2625,7 +2625,7 @@ describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-
 // firing floor(N × 0.16) over N qualifying repair casts (back-loaded). The carrier repairs
 // once per round it acts, so over R rounds N ≈ R. At 16 rounds → floor(16 × 0.16) = 2 fires.
 // There is NO proc=1 override; we run enough qualifying casts that the accumulator fires
-// and assert presence (+ fan-out / self-exclusion / self-only-no-grant).
+// and assert presence + fan-out / self-exclusion / self-only-no-grant.
 
 describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () => {
     const NANOBOTS = 'Power Infused Nanobots';

@@ -718,7 +718,7 @@ describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
     });
 });
 
-describe('Power Infused Nanobots buff (D-PR9 — Font of Power, emit-only)', () => {
+describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat attack = caster attack)', () => {
     it('exists in the buff corpus as a buff', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
         expect(buff).toBeDefined();
