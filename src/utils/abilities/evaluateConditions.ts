@@ -29,6 +29,9 @@ export interface ConditionContext {
     /** True when the condition owner currently has a shield (shieldPool > 0). Live-derived
      *  by the engine; defaults false (no shield / DPS mode). Used by the Arcane Siege implant. */
     selfShielded?: boolean;
+    /** True when the condition owner was hit by a direct attack this round (damage landed
+     *  on shield or HP). Live-derived by the engine; defaults false (DPS / not-yet-hit). */
+    wasHitThisRound?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -80,6 +83,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.targetRepairedThisRound ? 1 : 0;
         case 'self-shield':
             return ctx.selfShielded ? 1 : 0;
+        case 'not-hit-this-round':
+            return ctx.wasHitThisRound ? 0 : 1;
         default:
             return 0;
     }

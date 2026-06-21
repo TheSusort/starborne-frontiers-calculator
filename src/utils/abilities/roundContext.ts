@@ -38,6 +38,8 @@ export function buildRoundContext(state: {
     targetRepairedThisRound?: boolean;
     /** True when the acting unit has a shield (shieldPool > 0). Default false. */
     selfShielded?: boolean;
+    /** True when the acting unit was hit by a direct attack this round. Default false. */
+    wasHitThisRound?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -60,6 +62,7 @@ export function buildRoundContext(state: {
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
+        wasHitThisRound: state.wasHitThisRound ?? false,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }
