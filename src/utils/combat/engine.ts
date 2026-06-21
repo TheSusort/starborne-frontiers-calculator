@@ -2885,10 +2885,15 @@ export function runCombat(input: CombatEngineInput): {
                 // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
                 // outgoing-amplification ability → byte-identical when no such equipment exists.
                 outgoingAmplificationFor: (victim, didCrit) => {
+                    // Fast path: skip the per-victim effectiveStatsOf folds when the attacker has no
+                    // outgoing-amplification ability (the overwhelmingly common case) — matches the
+                    // aggregate path's `ampAbilities.length > 0` guard. Byte-identical (returns 0).
+                    const outs = outgoingAbilitiesOf(args.actingId);
+                    if (outs.length === 0) return 0;
                     const attacker = allActorsById.get(args.actingId);
                     if (!attacker) return 0;
                     return outgoingAmplificationForHit(
-                        outgoingAbilitiesOf(args.actingId),
+                        outs,
                         {
                             didCrit,
                             targetHigherAttack:
