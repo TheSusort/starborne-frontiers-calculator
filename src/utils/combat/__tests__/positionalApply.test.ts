@@ -249,6 +249,92 @@ describe('applyPositionalDamage', () => {
         expect(seenCrits).toEqual([true, false]);
     });
 
+    it('outgoingAmplificationFor amplifies the damage that reaches applyToVictim (×1.5 for 50%)', () => {
+        const pattern = parsePattern('Pattern-Base');
+        const target = parseTarget('front');
+
+        const run = (outgoingAmplificationFor?: (v: CombatActor, c: boolean) => number): number => {
+            const only = actor('only', 'M4', 1e9);
+            let landed = 0;
+            applyPositionalDamage({
+                hitCrits: [false],
+                scalars: { ...scalars(), hits: 1 },
+                pattern,
+                actorPosition: 'M2',
+                target,
+                opposingLiving: [only],
+                defenseProfileOf: profile,
+                applyToVictim: (victim, damage) => {
+                    landed = damage; // the amplified value MUST reach applyToVictim
+                    victim.currentHp -= damage;
+                    return { shieldBefore: 0, hpDamage: damage, barriered: false };
+                },
+                outgoingAmplificationFor,
+            });
+            return landed;
+        };
+
+        const baseline = run(); // unsupplied → 0 → byte-identical
+        const amplified = run(() => 50); // 50% outgoing amplification → ×1.5
+
+        expect(amplified).toBeCloseTo(baseline * 1.5, 6);
+    });
+
+    it('outgoingAmplificationFor returning 0 is byte-identical to unsupplied', () => {
+        const pattern = parsePattern('Pattern-Base');
+        const target = parseTarget('front');
+
+        const run = (outgoingAmplificationFor?: (v: CombatActor, c: boolean) => number): number => {
+            const only = actor('only', 'M4', 1e9);
+            let landed = 0;
+            applyPositionalDamage({
+                hitCrits: [false],
+                scalars: { ...scalars(), hits: 1 },
+                pattern,
+                actorPosition: 'M2',
+                target,
+                opposingLiving: [only],
+                defenseProfileOf: profile,
+                applyToVictim: (victim, damage) => {
+                    landed = damage;
+                    victim.currentHp -= damage;
+                    return { shieldBefore: 0, hpDamage: damage, barriered: false };
+                },
+                outgoingAmplificationFor,
+            });
+            return landed;
+        };
+
+        expect(run(() => 0)).toBe(run());
+    });
+
+    it('outgoingAmplificationFor receives the per-hit crit outcome', () => {
+        const pattern = parsePattern('Pattern-Base');
+        const target = parseTarget('front');
+        const only = actor('only', 'M4', 1e9);
+        const seenCrits: boolean[] = [];
+
+        applyPositionalDamage({
+            hitCrits: [true, false],
+            scalars: { ...scalars(), hits: 2, effectiveCritDamage: 50 },
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving: [only],
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            outgoingAmplificationFor: (_v, didCrit) => {
+                seenCrits.push(didCrit);
+                return 0;
+            },
+        });
+
+        expect(seenCrits).toEqual([true, false]);
+    });
+
     it('hitCrits shorter than hits → missing entries treated as false (no crash)', () => {
         const pattern = parsePattern('Pattern-Base');
         const target = parseTarget('front');

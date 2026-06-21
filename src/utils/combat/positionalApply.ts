@@ -124,6 +124,13 @@ export function applyPositionalDamage(args: {
      * (inert for victims without an incoming-reduction ability).
      */
     incomingReductionFor?: (victim: CombatActor, didCrit: boolean) => number;
+    /**
+     * OPTIONAL per-hit attacker-side outgoing amplification % hook (D-PR4 — Menace/Giant Slayer).
+     * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
+     * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0 →
+     * byte-identical (inert for attackers without an outgoing-amplification ability).
+     */
+    outgoingAmplificationFor?: (victim: CombatActor, didCrit: boolean) => number;
 }): void {
     const {
         hitCrits,
@@ -139,6 +146,7 @@ export function applyPositionalDamage(args: {
         emitHit,
         onVictimResolved,
         incomingReductionFor,
+        outgoingAmplificationFor,
     } = args;
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
@@ -167,13 +175,15 @@ export function applyPositionalDamage(args: {
             opposingLiving
         )) {
             const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
-            const dmg = victimHitDamage(
+            const dmgBase = victimHitDamage(
                 scalars,
                 defenseProfileOf(victim),
                 didCrit,
                 roleScale,
                 equipReductionPct
             );
+            const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
+            const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
             const outcome = applyToVictim(victim, dmg);
             emitHit?.(victim, dmg, didCrit);
             onVictimResolved?.(victim, dmg, outcome, didCrit);

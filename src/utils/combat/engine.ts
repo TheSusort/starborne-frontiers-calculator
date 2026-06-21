@@ -50,6 +50,7 @@ import {
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
+import { outgoingAmplificationForHit } from './outgoingEffects';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -2124,6 +2125,26 @@ export function runCombat(input: CombatEngineInput): {
     }
     const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
 
+    // D-PR4: per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
+    // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
+    // actors without the relevant equipment. Consumed by the per-victim amplification hook on the
+    // positional path.
+    const outgoingAbilitiesById = new Map<string, Ability[]>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        if (outgoingAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        const outgoing: Ability[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type === 'outgoing-amplification') {
+                    outgoing.push(a);
+                }
+            }
+        }
+        if (outgoing.length) outgoingAbilitiesById.set(rt.actor.id, outgoing);
+    }
+    const outgoingAbilitiesOf = (id: string): Ability[] => outgoingAbilitiesById.get(id) ?? [];
+
     // D-PR3: is this actor currently Stealthed? Sibling to isStasised — reads the actor's active
     // self-buff names (snapshot + timed + active ability statuses). 'Stealth' is the buff name the
     // positional targeting stealth-filter also queries (triggers.ts buildForcedTargetingStatus).
@@ -2860,6 +2881,24 @@ export function runCombat(input: CombatEngineInput): {
                         victimStasised: isStasised(victim.id),
                         hitIndexThisRound: 0, // unused by reduction (only block reads it)
                     }),
+                // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
+                // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
+                // outgoing-amplification ability → byte-identical when no such equipment exists.
+                outgoingAmplificationFor: (victim, didCrit) => {
+                    const attacker = allActorsById.get(args.actingId);
+                    if (!attacker) return 0;
+                    return outgoingAmplificationForHit(
+                        outgoingAbilitiesOf(args.actingId),
+                        {
+                            didCrit,
+                            targetHigherAttack:
+                                effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
+                                effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
+                        },
+                        (abilityId, chance) =>
+                            rollRateGate(procChanceGates, `${args.actingId}:${abilityId}`, chance)
+                    );
+                },
             });
         };
 
