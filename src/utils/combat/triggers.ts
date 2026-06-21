@@ -1211,7 +1211,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             if (recipientHp !== undefined && recipientHp <= 0) continue;
             const basisValue =
                 cfg.basis === 'target-hp' ? ctx.healing.recipientMaxHp(rid) : nonTargetHpBasis;
-            const raw =
+            let raw =
                 cfg.type === 'heal'
                     ? basisValue *
                       (cfg.pct / 100) *
@@ -1219,6 +1219,10 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                       (1 + ownerOutgoing / 100) *
                       (1 + incomingPctFor(rid) / 100)
                     : basisValue * (cfg.pct / 100);
+            // D-PR6: recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
+            // shields). Rolls the recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+            if (cfg.type === 'heal')
+                raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
             if (cfg.type === 'heal') {
                 ctx.healing.credit(intent.ownerId, 'directHeal', raw);
                 if (rid === ctx.healing.targetId) {

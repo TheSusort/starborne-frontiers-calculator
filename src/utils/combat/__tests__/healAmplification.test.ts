@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { healAmplificationForCast } from '../healAmplification';
+import { healAmplificationForCast, incomingHealAmpForRecipient } from '../healAmplification';
 import { Ability } from '../../../types/abilities';
 
 const amp = (
@@ -50,5 +50,43 @@ describe('healAmplificationForCast', () => {
             amp('v', 'target-below-25', 100, undefined),
         ];
         expect(healAmplificationForCast(a, { targetHpPct: 10, selfHpPct: 90 }, always)).toBe(130);
+    });
+});
+
+const inc = (id: string, ampPct: number, procChance: number): Ability => ({
+    id,
+    type: 'incoming-heal-amplification',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'incoming-heal-amplification', ampPct, procChance },
+});
+
+describe('incomingHealAmpForRecipient', () => {
+    it('returns 0 with no incoming-heal-amplification abilities', () => {
+        expect(incomingHealAmpForRecipient([], () => true)).toBe(0);
+    });
+    it('adds ampPct when the proc fires', () => {
+        expect(incomingHealAmpForRecipient([inc('e', 13, 0.5)], () => true)).toBe(13);
+    });
+    it('returns 0 when the proc does not fire', () => {
+        expect(incomingHealAmpForRecipient([inc('e', 13, 0.5)], () => false)).toBe(0);
+    });
+    it('rolls with (abilityId, procChance) and sums additively across abilities', () => {
+        const roll = vi.fn(() => true);
+        expect(incomingHealAmpForRecipient([inc('a', 12, 0.17), inc('b', 15, 0.3)], roll)).toBe(27);
+        expect(roll).toHaveBeenCalledWith('a', 0.17);
+        expect(roll).toHaveBeenCalledWith('b', 0.3);
+    });
+    it('ignores non-incoming-heal-amplification configs', () => {
+        const other = {
+            id: 'x',
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'heal', pct: 10, basis: 'hp' },
+        } as Ability;
+        expect(incomingHealAmpForRecipient([other], () => true)).toBe(0);
     });
 });

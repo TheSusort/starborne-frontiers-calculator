@@ -3095,8 +3095,9 @@ const DocumentationPage: React.FC = () => {
                                     when it takes a critical hit), <strong>Nourishment</strong>{' '}
                                     (stronger repairs on allies with less HP than the healer), and{' '}
                                     <strong>Vivacious Repair</strong> (chance to double a repair on
-                                    an ally below 25% HP). More implant and gear-set effects will be
-                                    added in future updates.
+                                    an ally below 25% HP), and <strong>Exuberance</strong> (chance
+                                    to increase the amount of a repair this unit receives). More
+                                    implant and gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

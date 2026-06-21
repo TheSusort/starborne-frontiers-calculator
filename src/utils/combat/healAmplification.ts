@@ -30,3 +30,22 @@ export function healAmplificationForCast(
     }
     return sum;
 }
+
+/**
+ * Summed incoming-heal amplification % for ONE repair landing on a recipient (Exuberance).
+ * Unconditional ("when repaired"): for each incoming-heal-amplification ability the recipient carries,
+ * add ampPct iff its proc fires. `rollProc` MUST be keyed by the recipient so all repairs the unit
+ * receives share one combat-lifetime gate (single probability stream). Returns 0 when nothing applies.
+ */
+export function incomingHealAmpForRecipient(
+    recipientAbilities: Ability[],
+    rollProc: (abilityId: string, chance: number) => boolean
+): number {
+    let sum = 0;
+    for (const a of recipientAbilities) {
+        if (a.config.type !== 'incoming-heal-amplification') continue;
+        if (!rollProc(a.id, a.config.procChance)) continue;
+        sum += a.config.ampPct;
+    }
+    return sum;
+}
