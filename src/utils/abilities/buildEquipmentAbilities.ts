@@ -24,7 +24,7 @@
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { GearPiece } from '../../types/gear';
-import { Ability, IncomingCondition, OutgoingCondition } from '../../types/abilities';
+import { Ability, HealAmpCondition, IncomingCondition, OutgoingCondition } from '../../types/abilities';
 import { Ship } from '../../types/ship';
 
 // ---------------------------------------------------------------------------
@@ -180,6 +180,20 @@ const GIANT_SLAYER_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// D-PR5: Second Wind reactive self-heal on crit-received value table
+const SECOND_WIND_PROC: Record<string, number> = {
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
+// D-PR5: heal-amplification implant value tables
+// No common rarity for Nourishment
+const NOURISHMENT_AMP: Record<string, number> = { uncommon: 10, rare: 15, epic: 20, legendary: 30 };
+// No common/uncommon rarity for Vivacious Repair
+const VIVACIOUS_PROC: Record<string, number> = { rare: 0.21, epic: 0.26, legendary: 0.32 };
+
 // D-PR3: shared helper for incoming-reduction abilities
 function mkReduction(
     pct: number | undefined,
@@ -211,6 +225,23 @@ function mkAmplification(
         trigger: 'on-cast', // inert: the live condition lives in config, evaluated per-hit
         conditions: [],
         config: { type: 'outgoing-amplification', condition, ampPct, procChance },
+        autoFilled: true,
+    };
+}
+
+// D-PR5: shared helper for heal-amplification abilities
+function mkHealAmp(
+    ampPct: number | undefined,
+    condition: HealAmpCondition,
+    procChance?: number
+): Omit<Ability, 'id'> | undefined {
+    if (ampPct === undefined) return undefined;
+    return {
+        type: 'heal-amplification',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal-amplification', condition, ampPct, procChance },
         autoFilled: true,
     };
 }
@@ -347,6 +378,22 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
+    // Second Wind: X% chance to repair 10% of max HP upon receiving a critical hit.
+    // No common variant.
+    SECOND_WIND: (rarity) => {
+        const pc = SECOND_WIND_PROC[rarity];
+        if (pc === undefined) return undefined;
+        return {
+            type: 'heal',
+            target: 'self',
+            trigger: 'on-attacked',
+            triggerCritFilter: 'crit',
+            conditions: [],
+            procChance: pc,
+            config: { type: 'heal', pct: 10, basis: 'hp' },
+            autoFilled: true,
+        };
+    },
     // Shadowguard: X% chance to fully block a hit while stealthed (once per round).
     // Only uncommon/epic/legendary rarities.
     SHADOWGUARD: (rarity) => {
@@ -367,6 +414,18 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
+    // D-PR5: heal-amplification implants
+    // Nourishment: +X% repair when targeting an ally with lower HP. Deterministic (no procChance).
+    // No common rarity.
+    NOURISHMENT: (rarity) => mkHealAmp(NOURISHMENT_AMP[rarity], 'target-hp-below-self'),
+    // Vivacious Repair: X% chance to double the repair amount when targeting an ally below 25% HP.
+    // No common/uncommon rarity.
+    VIVACIOUS_REPAIR: (rarity) =>
+        mkHealAmp(
+            VIVACIOUS_PROC[rarity] !== undefined ? 100 : undefined,
+            'target-below-25',
+            VIVACIOUS_PROC[rarity]
+        ),
 };
 
 // ---------------------------------------------------------------------------

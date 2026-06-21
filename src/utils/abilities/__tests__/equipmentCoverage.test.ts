@@ -10,6 +10,8 @@
  * D-PR3 added the incoming-reduction / block family
  * (VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD
  * implants + HARDENED gear set).
+ * D-PR5 added the reactive-heal family
+ * (SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR implants).
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
@@ -97,7 +99,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SHADOWGUARD (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -115,6 +117,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'HYPERION_GAZE',
             'INTRUSION',
             'NEBULA_NULLIFIER',
+            'NOURISHMENT',
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
@@ -123,7 +126,9 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'INSIDIOUSNESS',
             'IRONCLAD',
             'MENACE',
+            'SECOND_WIND',
             'SHADOWGUARD',
+            'VIVACIOUS_REPAIR',
         ]);
     });
 });
@@ -171,6 +176,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR2: INTRUSION, ARCANE_SIEGE, WARPSTRIKE now produce 1 ability each.
     // D-PR3: VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD added.
     // D-PR4: MENACE, GIANT_SLAYER, INSIDIOUSNESS added (outgoing-amplification on-crit / vs higher-attack / on-debuff).
+    // D-PR5: SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR added (reactive-heal family).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -185,6 +191,9 @@ describe('equipmentCoverage — implants', () => {
         'MENACE',
         'GIANT_SLAYER',
         'INSIDIOUSNESS',
+        'SECOND_WIND',
+        'NOURISHMENT',
+        'VIVACIOUS_REPAIR',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -275,6 +284,35 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['INSIDIOUSNESS'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('INSIDIOUSNESS', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR5: reactive-heal implants
+    it('SECOND_WIND produces 1 ability per rarity (on-crit-hit reactive heal; no common variant)', () => {
+        // SECOND_WIND has uncommon/rare/epic/legendary — no common variant.
+        expect(implantAbilityCount('SECOND_WIND', 'common')).toBe(0);
+        const variants = IMPLANTS['SECOND_WIND'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('SECOND_WIND', v.rarity)).toBe(1);
+        }
+    });
+
+    it('NOURISHMENT produces 1 ability per rarity (repair amplification vs lower-HP ally; no common variant)', () => {
+        // NOURISHMENT has uncommon/rare/epic/legendary — no common variant.
+        expect(implantAbilityCount('NOURISHMENT', 'common')).toBe(0);
+        const variants = IMPLANTS['NOURISHMENT'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('NOURISHMENT', v.rarity)).toBe(1);
+        }
+    });
+
+    it('VIVACIOUS_REPAIR produces 1 ability per rarity (double-repair chance vs low-HP ally; rare/epic/legendary only)', () => {
+        // VIVACIOUS_REPAIR has rare/epic/legendary — no common or uncommon variant.
+        expect(implantAbilityCount('VIVACIOUS_REPAIR', 'common')).toBe(0);
+        expect(implantAbilityCount('VIVACIOUS_REPAIR', 'uncommon')).toBe(0);
+        const variants = IMPLANTS['VIVACIOUS_REPAIR'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('VIVACIOUS_REPAIR', v.rarity)).toBe(1);
         }
     });
 

@@ -22,7 +22,8 @@ export type AbilityType =
     | 'control'
     | 'incoming-reduction'
     | 'incoming-block'
-    | 'outgoing-amplification';
+    | 'outgoing-amplification'
+    | 'heal-amplification';
 
 export type AbilityTarget =
     | 'self'
@@ -199,6 +200,19 @@ export interface IncomingHitContext {
  */
 export type OutgoingCondition = 'amplify-on-crit' | 'amplify-vs-higher-attack';
 
+/**
+ * Condition for a heal-cast amplification, evaluated against the HealAmpContext at the cast-heal
+ * seam (per recipient) — NOT a global ConditionSubject. Mirrors OutgoingCondition (D-PR4).
+ */
+export type HealAmpCondition = 'target-hp-below-self' | 'target-below-25';
+
+export interface HealAmpContext {
+    /** The heal recipient's HP% at cast time. */
+    targetHpPct: number;
+    /** The caster's HP% at cast time. */
+    selfHpPct: number;
+}
+
 export interface OutgoingHitContext {
     /** Did this individual hit critically strike? (Menace.) */
     didCrit: boolean;
@@ -345,6 +359,15 @@ export type AbilityConfig =
           ampPct: number;
           /** Per-(owner,ability) proc chance in (0,1). Rolled per eligible hit. */
           procChance: number;
+      }
+    // D-PR5 caster-side heal amplification (folded at the cast-heal seam per recipient).
+    | {
+          type: 'heal-amplification';
+          condition: HealAmpCondition;
+          /** Amplification added to the cast repair when it fires, in percentage points. */
+          ampPct: number;
+          /** Proc chance in (0,1); ABSENT = deterministic (always fires when gated). */
+          procChance?: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate

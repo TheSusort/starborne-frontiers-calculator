@@ -27,6 +27,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'incoming-reduction': 'Incoming Reduction',
     'incoming-block': 'Incoming Block',
     'outgoing-amplification': 'Outgoing Amplification',
+    'heal-amplification': 'Heal Amplification',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
