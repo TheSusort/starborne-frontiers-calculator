@@ -39,6 +39,7 @@ import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import { outgoingAmplificationForHit } from './outgoingEffects';
+import { healAmplificationForCast } from './healAmplification';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
 // historical public API (engine.ts + tests import these from playerTurn). Keeping the
 // definitions in the leaf module breaks the playerTurn ⇄ effectiveStats import cycle.
@@ -1541,6 +1542,32 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             rid === actor.id
                 ? dmgStats.totals.incomingHealBuff
                 : healing.recipientIncomingHealPct(rid);
+        // D-PR5: caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
+        // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
+        // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
+        // 0 (and never rolls) → byte-identical for every fixture without one.
+        const healAmpAbilities = (passiveSkill?.abilities ?? []).filter(
+            (a) => a.config.type === 'heal-amplification'
+        );
+        // Recipient HP% at cast time: live ctx via recipientActor/recipientMaxHp; fall back to the
+        // engine-threaded targetHpPct for the heal target before it has a ctx, else 100.
+        const recipientHpPctFor = (rid: string): number => {
+            const max = healing.recipientMaxHp(rid);
+            const a = healing.recipientActor(rid);
+            if (a && max > 0) return (100 * Math.max(0, a.currentHp)) / max;
+            if (rid === healing.targetId) return targetHpPctArg;
+            return 100;
+        };
+        // Summed amp % for ONE cast on recipient `rid`. Rolls each ability's proc gate exactly
+        // once (call this ONCE per recipient per cast). selfHpPctArg = the caster's live HP%.
+        const healAmpPctFor = (rid: string): number =>
+            healAmpAbilities.length > 0 && rollOutgoingProc
+                ? healAmplificationForCast(
+                      healAmpAbilities,
+                      { targetHpPct: recipientHpPctFor(rid), selfHpPct: selfHpPctArg },
+                      rollOutgoingProc
+                  )
+                : 0;
         // Recipient routing (user-confirmed): self → caster; ally → the bombarded target;
         // all-allies → every player in fixed source order. Shared by the heal + shield branches.
         const isEnemyCaster = actor.side === 'enemy';
@@ -1715,13 +1742,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     if (didCrit) healCritCount += 1;
                     for (const rid of recipients) {
                         const basis = basisValue(cfg.basis, rid);
-                        const raw =
+                        let raw =
                             basis *
                             (cfg.pct / 100) *
                             (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                             (1 + healModifier / 100) *
                             (1 + dmgStats.totals.outgoingHealBuff / 100) *
                             (1 + incomingPctFor(rid) / 100);
+                        // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
+                        raw *= 1 + healAmpPctFor(rid) / 100;
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
                         healTargets.push(rid);
@@ -1734,13 +1763,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 if (didCrit) healCritCount += 1;
                 for (const rid of recipients) {
                     const basis = basisValue(cfg.basis, rid);
-                    const raw =
+                    let raw =
                         basis *
                         (cfg.pct / 100) *
                         (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                         (1 + healModifier / 100) *
                         (1 + dmgStats.totals.outgoingHealBuff / 100) *
                         (1 + incomingPctFor(rid) / 100);
+                    // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
+                    raw *= 1 + healAmpPctFor(rid) / 100;
                     healing.credit(actor.id, 'directHeal', raw);
                     if (rid === healing.targetId) {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);

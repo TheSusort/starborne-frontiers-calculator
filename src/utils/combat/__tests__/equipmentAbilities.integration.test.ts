@@ -22,7 +22,7 @@
  *   directHeal = 5000 × 0.20 = 1000. 2 fires → 2000 total.
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
@@ -968,5 +968,251 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
         expect(result.healing).toBeDefined();
         // No crits → no on-attacked+crit triggers → Second Wind never fires.
         expect(sumHeal(result, 'directHeal')).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR5 Task 6: heal-cast amplification fold (Nourishment / Vivacious)
+// ---------------------------------------------------------------------------
+//
+// A heal-amplification ability in the CASTER's passive slot boosts the cast repair's
+// raw when its condition is met at cast time. The fold multiplies the existing 6-factor
+// `raw` by (1 + ampPct/100), so directHeal scales linearly with the boost.
+//
+// Harness shape (deterministic):
+//   - The FOCUS actor ('attacker') is the HEALER. It is never attacked (the enemy drains
+//     all of its damage into the heal target), so the healer's HP% stays at 100.
+//   - The heal target is a TEAM actor ('tank'), set as healTargetId. The healer casts a
+//     `target: 'ally'` repair, which routes to healing.targetId === 'tank'.
+//   - An enemy attacker (faster than the healer) damages 'tank' at the round top, so by the
+//     time the healer acts, the heal target's HP% is BELOW the healer's 100%.
+//   - The repair basis is 'hp' → the raw equals the HEALER's effective max HP × pct, which
+//     is CONSTANT regardless of the target's current HP. Only the amp CONDITION reads the
+//     target/healer HP%, so directHeal_with / directHeal_without isolates the amp factor.
+//
+// selfHpPct (engine buildTurnArgs) = the ACTING actor's live HP% = the healer's 100.
+// targetHpPct = the heal target's live HP% (healTargetHpPctNow()).
+
+describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Vivacious)', () => {
+    const HEALER_HP = 10_000;
+    const TANK_HP = 10_000;
+    const HEAL_PCT = 10; // repair = HEALER_HP × 10% = 1000 per cast (basis 'hp', no other folds)
+    const BASE_PER_CAST = HEALER_HP * (HEAL_PCT / 100); // 1000
+
+    /** The healer's active repair, targeting an ally (routes to the heal target). noCrit so
+     *  the heal crit gate never perturbs raw — the only variable is the amp factor. */
+    const repairAlly: Ability = {
+        id: 'repair-ally',
+        type: 'heal',
+        target: 'ally',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal', pct: HEAL_PCT, basis: 'hp', noCrit: true },
+    };
+
+    /** A passive-slot heal-amplification ability. */
+    const healAmp = (
+        condition: 'target-hp-below-self' | 'target-below-25',
+        ampPct: number,
+        procChance?: number
+    ): Ability => ({
+        id: `equip-implant-AMP-${condition}`,
+        type: 'heal-amplification',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal-amplification', condition, ampPct, ...(procChance !== undefined ? { procChance } : {}) },
+        autoFilled: true,
+    });
+
+    /** Healer ship skills: active repair + optional heal-amp passive. */
+    const healerSkills = (ampAbility?: Ability): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [repairAlly] },
+            ...(ampAbility ? [{ slot: 'passive' as const, abilities: [ampAbility] }] : []),
+        ],
+    });
+
+    /** Team-actor heal target (the tank). Inert skills — it just receives the heal & enemy hits. */
+    const tankActor = (speed: number): TeamActorEngineInput => ({
+        id: 'tank',
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: TANK_HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    /** An enemy attacker that damages the heal target ('tank') for `dmgPerRound` each round.
+     *  attack === multiplier-scaled damage; speed high so it acts before the healer. */
+    const enemyHitter = (dmgPerRound: number, speed = 1_000) => ({
+        id: 'amp-enemy',
+        stats: {
+            attack: dmgPerRound,
+            crit: 0,
+            critDamage: 0,
+            speed,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'amp-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    });
+
+    /** Base input: healing mode, focus 'attacker' is the HEALER (slow), heal target is 'tank'. */
+    const AMP_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: healerSkills(),
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: HEALER_HP,
+        speed: 10, // healer is slow → acts AFTER the enemy hit each round
+        healTargetId: 'tank',
+        teamActors: [tankActor(20)], // tank also acts before the healer (inert)
+        ...overrides,
+    });
+
+    // ── Control: no implant → byte-identical to the bare baseline ────────────────
+    it('Control: no heal-amp implant → directHeal = base per-cast (1000), unchanged', () => {
+        const result = runCombat(
+            AMP_BASE({
+                shipSkills: healerSkills(),
+                enemyAttackers: [enemyHitter(3000)], // damage tank below healer, but no amp ability
+            })
+        );
+        expect(result.healing).toBeDefined();
+        expect(sumHeal(result, 'directHeal')).toBeCloseTo(BASE_PER_CAST, 6);
+    });
+
+    // ── Nourishment (deterministic, +30%) ────────────────────────────────────────
+    it('Nourishment: target HP% BELOW healer → cast repair ×1.30', () => {
+        // Enemy drops tank to 70% (< healer 100%) before the healer casts.
+        const withAmp = runCombat(
+            AMP_BASE({
+                shipSkills: healerSkills(healAmp('target-hp-below-self', 30)),
+                enemyAttackers: [enemyHitter(3000)],
+            })
+        );
+        const without = runCombat(
+            AMP_BASE({
+                shipSkills: healerSkills(),
+                enemyAttackers: [enemyHitter(3000)],
+            })
+        );
+        const ampHeal = sumHeal(withAmp, 'directHeal');
+        const baseHeal = sumHeal(without, 'directHeal');
+        expect(baseHeal).toBeCloseTo(BASE_PER_CAST, 6);
+        expect(ampHeal).toBeCloseTo(baseHeal * 1.3, 6);
+    });
+
+    it('Nourishment: target HP% NOT below healer → no boost (equals baseline)', () => {
+        // No enemy → tank stays at 100%; healer at 100% → target-hp-below-self is FALSE.
+        const withAmp = runCombat(
+            AMP_BASE({
+                shipSkills: healerSkills(healAmp('target-hp-below-self', 30)),
+            })
+        );
+        const without = runCombat(AMP_BASE({ shipSkills: healerSkills() }));
+        expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(sumHeal(without, 'directHeal'), 6);
+        expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(BASE_PER_CAST, 6);
+    });
+
+    // ── Vivacious (proc'd, target-below-25) ──────────────────────────────────────
+    it('Vivacious: target <25% HP → repair roughly doubles at the gated frequency', () => {
+        const NUM_ROUNDS = 10;
+        const VIV_PROC = 0.5; // floor(10 × 0.5) = 5 fires (back-loaded at rate 0.5)
+        const VIV_AMP = 100; // +100% → ×2 when it fires
+        // Enemy hits hard enough to keep tank below 25% (heal basis 'hp' restores only 1000/round
+        // into a 10000 tank → with 8000 dmg/round the tank stays pinned far below 25%).
+        const withAmp = runCombat(
+            AMP_BASE({
+                numRounds: NUM_ROUNDS,
+                shipSkills: healerSkills(healAmp('target-below-25', VIV_AMP, VIV_PROC)),
+                enemyAttackers: [enemyHitter(8000)],
+            })
+        );
+        const without = runCombat(
+            AMP_BASE({
+                numRounds: NUM_ROUNDS,
+                shipSkills: healerSkills(),
+                enemyAttackers: [enemyHitter(8000)],
+            })
+        );
+        const baseHeal = sumHeal(without, 'directHeal');
+        const ampHeal = sumHeal(withAmp, 'directHeal');
+        // Baseline: 10 casts × 1000 = 10000. With 5 proc'd ×2 fires: 5 normal + 5 doubled =
+        // 5×1000 + 5×2000 = 15000.
+        expect(baseHeal).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
+        const EXPECTED_FIRES = Math.floor(NUM_ROUNDS * VIV_PROC); // 5
+        const expectedAmp =
+            NUM_ROUNDS * BASE_PER_CAST + EXPECTED_FIRES * BASE_PER_CAST * (VIV_AMP / 100);
+        expect(ampHeal).toBeCloseTo(expectedAmp, 6);
+        expect(ampHeal).toBeGreaterThan(baseHeal);
+    });
+
+    it('Vivacious: target ≥25% HP → never doubles (equals baseline)', () => {
+        const NUM_ROUNDS = 5;
+        // No enemy → tank stays at 100% (≥25%) → target-below-25 never met.
+        const withAmp = runCombat(
+            AMP_BASE({
+                numRounds: NUM_ROUNDS,
+                shipSkills: healerSkills(healAmp('target-below-25', 100, 0.5)),
+            })
+        );
+        const without = runCombat(
+            AMP_BASE({ numRounds: NUM_ROUNDS, shipSkills: healerSkills() })
+        );
+        expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(sumHeal(without, 'directHeal'), 6);
+        expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
     });
 });
