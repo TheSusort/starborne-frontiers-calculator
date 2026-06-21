@@ -229,6 +229,15 @@ const ALACRITY_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// D-PR9: Spearhead — after the charged skill, X% chance to grant all allies Attack Up I for 1 turn.
+const SPEARHEAD_PROC: Record<string, number> = {
+    common: 0.15,
+    uncommon: 0.18,
+    rare: 0.21,
+    epic: 0.26,
+    legendary: 0.32,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -607,6 +616,13 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             conditions: [{ subject: 'not-hit-this-round', derivable: true }],
             procChance,
         });
+    },
+    // D-PR9: Spearhead — after using the charged skill, X% chance to grant all allies
+    // Attack Up I for 1 turn. LIVE (Attack Up I folds into attack). Rides on-charged-cast.
+    SPEARHEAD: (rarity) => {
+        const procChance = SPEARHEAD_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Attack Up I', 'all-allies', 'on-charged-cast', 1, { procChance });
     },
 };
 

@@ -70,7 +70,11 @@ export type AbilityTrigger =
     | 'on-enemy-cleansed'
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     | 'on-enemy-purged'
-    | 'on-ally-purged';
+    | 'on-ally-purged'
+    // Fired when the owner performs its CHARGED skill (rides the existing skill-fired
+    // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
+    // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
+    | 'on-charged-cast';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -103,6 +107,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // Purge ecosystem C2b: Sefuba self-purge / Salvation ally-purged
     'on-enemy-purged',
     'on-ally-purged',
+    // Spearhead: all-allies buff grant after the owner's charged skill.
+    'on-charged-cast',
 ]);
 
 export type ConditionSubject =

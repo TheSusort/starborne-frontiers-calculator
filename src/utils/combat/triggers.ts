@@ -252,6 +252,15 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-charged-cast':
+                    bus.on('skill-fired', (e) => {
+                        // Self-scoped: THIS owner performed its CHARGED skill. The skill-fired
+                        // event carries slot:'active'|'charged' (events.ts). Team-agnostic —
+                        // enemy actors run the same turn path and emit skill-fired too; the
+                        // ownerId guard self-scopes per registered owner. One enqueue per cast.
+                        if (e.actorId === ownerId && e.slot === 'charged') enqueue(intent);
+                    });
+                    break;
                 case 'on-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
                         if (e.sourceId === ownerId) enqueue(intent);

@@ -135,6 +135,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'MENACE',
             'SECOND_WIND',
             'SHADOWGUARD',
+            'SPEARHEAD',
             'VIVACIOUS_REPAIR',
         ]);
     });
@@ -211,6 +212,7 @@ describe('equipmentCoverage — implants', () => {
         'SYNAPTIC_RESONANCE',
         'ALACRITY',
         'AMBUSH',
+        'SPEARHEAD',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -386,6 +388,13 @@ describe('equipmentCoverage — implants', () => {
     it('ALACRITY produces 1 self Speed Up III buff per rarity (end-of-round, not-hit-this-round gate)', () => {
         for (const v of IMPLANTS['ALACRITY'].variants) {
             expect(implantAbilityCount('ALACRITY', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR9: all-allies reactive buff implant
+    it('SPEARHEAD produces 1 all-allies Attack Up I buff per rarity (on-charged-cast, procChance)', () => {
+        for (const v of IMPLANTS['SPEARHEAD'].variants) {
+            expect(implantAbilityCount('SPEARHEAD', v.rarity)).toBe(1);
         }
     });
 

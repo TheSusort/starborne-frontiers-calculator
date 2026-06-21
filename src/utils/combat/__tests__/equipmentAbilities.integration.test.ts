@@ -29,6 +29,7 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
+import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
 import { makeConditionContext } from '../../abilities/__tests__/conditionContextFixture';
 import { SelectedGameBuff } from '../../../types/calculator';
@@ -2580,5 +2581,202 @@ describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-
             })
         );
         expect(grants).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR9 — Spearhead: on-charged-cast all-allies Attack Up I grant
+// ---------------------------------------------------------------------------
+//
+// Spearhead (legendary, procChance 0.32): "After using the charged skill, X% chance to
+// grant all allies Attack Up I for 1 turn." It rides the `on-charged-cast` reactive
+// trigger — a self-scoped listener on the `skill-fired` event matching
+// (actorId === ownerId && slot === 'charged'). The reactive buff executor honors
+// procChance via the deterministic makeRateGate accumulator keyed `${ownerId}:${abilityId}`.
+//
+// Driven through `simulateBattle` (not raw runCombat) because the grant targets ALL
+// player allies — a multi-ship player team is required to prove "every ally (incl. the
+// carrier) gets the buff" and to prove the LIVE damage effect on an ally.
+//
+// Determinism: with chargeSkillCharge=1 the focus fires its CHARGED skill on the even
+// rounds (2, 4, 6, …) — charged casts ≈ floor(rounds / 2). procChance 0.32 over C charged
+// casts fires floor(C × 0.32) times (back-loaded accumulator). At 16 rounds → 8 charged
+// casts → floor(8 × 0.32) = 2 fires. There is NO proc=1 override; we run enough qualifying
+// charged casts that the accumulator fires and assert presence + the LIVE effect.
+
+describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
+    const ATTACK_UP_I = 'Attack Up I';
+
+    /** Legendary SPEARHEAD implant piece (proc 0.32). */
+    const spearheadPiece = makePiece({
+        id: 'spearhead-legendary',
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'SPEARHEAD',
+    });
+
+    /**
+     * Build a player team ship where the focus optionally carries the SPEARHEAD implant
+     * and has a CHARGED skill (chargeSkillCharge=1 → charged fires on even rounds). A plain
+     * second ally proves the all-allies grant + LIVE effect. The enemy is a fat punching
+     * bag so nobody dies and the battle runs full rounds.
+     */
+    function makeTeamShip(
+        id: string,
+        name: string,
+        opts: { withSpearhead?: boolean; withCharge?: boolean } = {}
+    ): Ship {
+        return makeShip({
+            id,
+            name,
+            rarity: 'legendary',
+            faction: 'TERRAN_COMBINE',
+            type: 'Attacker',
+            baseStats: {
+                hp: 0,
+                attack: 0,
+                defence: 0,
+                hacking: 200,
+                security: 100,
+                crit: 0,
+                critDamage: 0,
+                speed: 100,
+            } as Ship['baseStats'],
+            equipment: {},
+            implants: opts.withSpearhead ? { implant_major: 'spearhead-legendary' } : {},
+            refits: [],
+            affinity: 'antimatter',
+            // Single-hit 100% active damage skill (real damage ability via skillTextParser).
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            // A charged skill so the focus can fire CHARGED (chargeSkillCharge=1 → even rounds).
+            ...(opts.withCharge
+                ? {
+                      chargeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                      chargeSkillCharge: 1,
+                  }
+                : { chargeSkillCharge: 0 }),
+            activeTarget: 'front',
+            activePattern: 'Pattern-Base',
+        } as Partial<Ship>);
+    }
+
+    const place = (
+        ship: Ship,
+        position: Position,
+        attack: number,
+        hp: number
+    ): BattlePlacement => ({
+        ship,
+        position,
+        statOverrides: {
+            attack,
+            crit: 0, // no crit variance → per-round damage is constant except when buffed
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            defence: 0,
+            hp,
+        },
+    });
+
+    const getGearPiece = makeGetGearPiece({ 'spearhead-legendary': spearheadPiece });
+
+    const ROUNDS = 16; // 8 charged casts → floor(8 × 0.32) = 2 proc fires
+
+    /** Run a battle with a 2-ship player team; the focus optionally carries Spearhead. */
+    function runBattle(withSpearhead: boolean) {
+        return simulateBattle(
+            {
+                playerTeam: [
+                    // Focus: charged skill + (optionally) Spearhead.
+                    place(
+                        makeTeamShip('focus', 'Focus', { withSpearhead, withCharge: true }),
+                        'M4',
+                        5000,
+                        1_000_000_000
+                    ),
+                    // Plain ally — receives the all-allies grant; proves the LIVE effect.
+                    place(makeTeamShip('ally', 'Ally', {}), 'M3', 5000, 1_000_000_000),
+                ],
+                enemyTeam: [place(makeTeamShip('enemy', 'Enemy', {}), 'M4', 1, 1_000_000_000)],
+                rounds: ROUNDS,
+            },
+            getGearPiece
+        );
+    }
+
+    it('after charged-skill casts, the accumulator fires and grants Attack Up I to EVERY player ally (focus + ally)', () => {
+        const result = runBattle(true);
+
+        // Player roster ids: focus is the reserved 'attacker'; the ally is a minted p:… id.
+        const playerIds = result.roster.filter((r) => r.side === 'player').map((r) => r.actorId);
+        expect(playerIds.length).toBe(2);
+
+        // Collect every actorId that ever received an Attack Up I GRANT, via the round event
+        // log's buff lines (the buff-applied source). The end-of-round `activeBuffs` snapshot is
+        // unreliable for the carrier here: the carrier grants the 1-turn buff on its OWN turn,
+        // so it has already expired by the round-end snapshot — but the application still
+        // happened (and folded into that turn's damage). The buff log captures every recipient.
+        const buffedActors = new Set<string>();
+        for (const round of result.rounds) {
+            for (const ev of round.events) {
+                if (ev.kind === 'buff' && ev.label === ATTACK_UP_I) buffedActors.add(ev.actorId);
+            }
+        }
+
+        // Every player ally — including the carrier — got the buff at least once.
+        for (const id of playerIds) {
+            expect(buffedActors.has(id)).toBe(true);
+        }
+        // No enemy ever received the grant (all-allies = the caster's side only).
+        const enemyIds = result.roster.filter((r) => r.side === 'enemy').map((r) => r.actorId);
+        for (const id of enemyIds) {
+            expect(buffedActors.has(id)).toBe(false);
+        }
+    });
+
+    it('LIVE: total player damage with Spearhead strictly exceeds the no-Spearhead baseline (Attack Up I folds into attack)', () => {
+        const sumPlayerDamage = (result: ReturnType<typeof simulateBattle>): number => {
+            let total = 0;
+            for (const round of result.rounds) {
+                for (const ship of round.ships) {
+                    if (ship.side === 'player') total += ship.damageDealt;
+                }
+            }
+            return total;
+        };
+
+        const withSpear = sumPlayerDamage(runBattle(true));
+        const without = sumPlayerDamage(runBattle(false));
+
+        // crit=0 → per-round damage is otherwise constant; Attack Up I (+15% Attack) can only
+        // ADD. At least one proc fire → strictly more total player damage.
+        expect(withSpear).toBeGreaterThan(without);
+    });
+
+    it('when the carrier fires its ACTIVE skill (no charged skill), NO Attack Up I is granted', () => {
+        // Focus WITH Spearhead but WITHOUT a charged skill → it only ever fires ACTIVE →
+        // skill-fired.slot is always 'active' → on-charged-cast never matches → no grant.
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    place(
+                        makeTeamShip('focus', 'Focus', { withSpearhead: true, withCharge: false }),
+                        'M4',
+                        5000,
+                        1_000_000_000
+                    ),
+                    place(makeTeamShip('ally', 'Ally', {}), 'M3', 5000, 1_000_000_000),
+                ],
+                enemyTeam: [place(makeTeamShip('enemy', 'Enemy', {}), 'M4', 1, 1_000_000_000)],
+                rounds: ROUNDS,
+            },
+            getGearPiece
+        );
+
+        const grantedAttackUp = result.rounds.some((round) =>
+            round.events.some((ev) => ev.kind === 'buff' && ev.label === ATTACK_UP_I)
+        );
+        expect(grantedAttackUp).toBe(false);
     });
 });
