@@ -23,7 +23,8 @@ export type AbilityType =
     | 'incoming-reduction'
     | 'incoming-block'
     | 'outgoing-amplification'
-    | 'heal-amplification';
+    | 'heal-amplification'
+    | 'incoming-heal-amplification';
 
 export type AbilityTarget =
     | 'self'
@@ -368,6 +369,14 @@ export type AbilityConfig =
           ampPct: number;
           /** Proc chance in (0,1); ABSENT = deterministic (always fires when gated). */
           procChance?: number;
+      }
+    // D-PR6 recipient-side incoming heal amplification (unconditional — no condition field).
+    | {
+          type: 'incoming-heal-amplification';
+          /** Amplification added to a repair RECEIVED when it fires, in percentage points. */
+          ampPct: number;
+          /** Proc chance in (0,1). Rolled once per repair received. */
+          procChance: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate
