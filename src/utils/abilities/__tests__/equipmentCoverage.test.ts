@@ -97,7 +97,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + IRONCLAD + SHADOWGUARD (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SHADOWGUARD (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -119,7 +119,10 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'VORTEX_VEIL',
             'WARPSTRIKE',
             'BLOODTHIRST',
+            'GIANT_SLAYER',
+            'INSIDIOUSNESS',
             'IRONCLAD',
+            'MENACE',
             'SHADOWGUARD',
         ]);
     });
@@ -167,6 +170,7 @@ describe('equipmentCoverage — implants', () => {
 
     // D-PR2: INTRUSION, ARCANE_SIEGE, WARPSTRIKE now produce 1 ability each.
     // D-PR3: VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD added.
+    // D-PR4: MENACE, GIANT_SLAYER, INSIDIOUSNESS added (outgoing-amplification on-crit / vs higher-attack / on-debuff).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -178,6 +182,9 @@ describe('equipmentCoverage — implants', () => {
         'VORTEX_VEIL',
         'IRONCLAD',
         'SHADOWGUARD',
+        'MENACE',
+        'GIANT_SLAYER',
+        'INSIDIOUSNESS',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -243,6 +250,31 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['SHADOWGUARD'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('SHADOWGUARD', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR4: outgoing-amplification implants
+    it('MENACE produces 1 ability per rarity (outgoing-amplification on-crit)', () => {
+        // MENACE has common/uncommon/epic/rare/legendary (all 5 rarities).
+        const variants = IMPLANTS['MENACE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('MENACE', v.rarity)).toBe(1);
+        }
+    });
+
+    it('GIANT_SLAYER produces 1 ability per rarity (outgoing-amplification vs higher-attack enemy; no common variant)', () => {
+        // GIANT_SLAYER has uncommon/legendary/rare/epic — no common variant.
+        const variants = IMPLANTS['GIANT_SLAYER'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('GIANT_SLAYER', v.rarity)).toBe(1);
+        }
+    });
+
+    it('INSIDIOUSNESS produces 1 ability per rarity (reactive damage on-debuff)', () => {
+        // INSIDIOUSNESS has uncommon/rare/legendary/common/epic (all 5 rarities).
+        const variants = IMPLANTS['INSIDIOUSNESS'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('INSIDIOUSNESS', v.rarity)).toBe(1);
         }
     });
 
