@@ -2291,3 +2291,280 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
         expect(grants.length).toBeGreaterThanOrEqual(1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR8 Task 6: Synaptic Resonance (LIVE on-enemy-repaired) + Ambush gate (seeded Stealth)
+// ---------------------------------------------------------------------------
+//
+// Two reactive self-buff-grant implants from the D-PR8 registry:
+//
+//   SYNAPTIC_RESONANCE — type:'buff', target:'self', trigger:'on-enemy-repaired',
+//     grants 'Speed Up III' for 1 turn, DETERMINISTIC (no procChance). LIVE today:
+//     enemies have real (symmetric) healing, so 'on-enemy-repaired' fires. We drive a
+//     genuine enemy repair the way nayraEnemyRepairedPurge.test.ts does — an enemy ally
+//     takes a dent and then self-heals (HP-restoring → heal-performed with an opposing
+//     caster), which routes through the on-enemy-repaired listener to the player owner.
+//
+//   AMBUSH — type:'buff', target:'self', trigger:'start-of-round', grants 'Crit Power
+//     Up III' for 1 turn, gated { subject:'self-buff', buffName:'Stealth', derivable:true }
+//     + a procChance. DORMANT in normal play (nothing grants Stealth). To test the GATE in
+//     isolation from proc timing, we (a) SEED a recurring 'Stealth' self-buff on the owner
+//     ('attacker'), which surfaces in snapshot('attacker').activeSelfBuffs every round and
+//     thus in the start-of-round drain gate's selfBuffNames, and (b) inject a HAND-BUILT
+//     Ambush-shaped buff ability with procChance OMITTED (so the proc gate always passes —
+//     the only variable is the Stealth gate).
+
+describe('D-PR8 Task 6 integration — Synaptic Resonance fires on enemy repair (LIVE, deterministic)', () => {
+    const OWNER_ID = 'attacker';
+    const ENEMY_ALLY_ID = 'syn-enemy-ally';
+    const SPEED_UP = 'Speed Up III';
+
+    /** SYNAPTIC_RESONANCE legendary implant gear stub. */
+    const synapticPiece = makePiece({
+        id: 'syn-legendary',
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'SYNAPTIC_RESONANCE',
+    });
+
+    /** A basic 100% hit (so the focus dents the enemy ally → opens the deficit its self-heal fills). */
+    const hitActive: Ability = {
+        id: 'syn-hit',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100, hits: 1 },
+    };
+
+    /** Build the owner's ship skills: a damage active + the Synaptic Resonance passive (registry). */
+    function buildSynapticShipSkills(): ShipSkills {
+        const ship = makeShip({ implants: { implant_major: 'syn-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'syn-legendary': synapticPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Synaptic Resonance on-enemy-repaired buff grant landed in the passive slot.
+        const syn = passive?.abilities.find((a) => a.id === 'equip-implant-SYNAPTIC_RESONANCE');
+        expect(syn).toBeDefined();
+        expect(syn!.trigger).toBe('on-enemy-repaired');
+        expect(syn!.target).toBe('self');
+        expect(syn!.config.type).toBe('buff');
+        expect(syn!.procChance).toBeUndefined(); // deterministic — no proc gate
+
+        return {
+            slots: [
+                { slot: 'active', abilities: [hitActive] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+    }
+
+    /** An enemy ally that takes the focus's dent each round and self-heals it back (HP-restoring
+     *  → heal-performed with an opposing caster → on-enemy-repaired fires for the player owner).
+     *  Mirrors nayraEnemyRepairedPurge.test.ts's deficit→self-heal sequence. Acts FIRST (fast) so
+     *  by round 2 it consumes the round-1 deficit (> 0 → a real repair). */
+    function makeRepairingEnemyAlly() {
+        return {
+            id: ENEMY_ALLY_ID,
+            stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 200 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            // Self-heal 10% of own max HP — consumes any HP deficit (> 0 → repaired).
+                            {
+                                id: 'syn-enemy-self-heal',
+                                type: 'heal' as const,
+                                target: 'self' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'heal' as const, pct: 10, basis: 'target-hp' },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+    }
+
+    /** Collect buff-applied events for the owner with the Synaptic buff name. */
+    function collectGrants(input: CombatEngineInput): CombatEvent[] {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events.filter(
+            (e) => e.type === 'buff-applied' && e.actorId === OWNER_ID && e.buffName === SPEED_UP
+        );
+    }
+
+    it(
+        'Owner equipped with SYNAPTIC_RESONANCE gains Speed Up III when an enemy is directly ' +
+            'repaired (on-enemy-repaired, deterministic — no proc flakiness)',
+        () => {
+            // The focus (slow, acts last) dents the enemy ally each round; the enemy ally (fast)
+            // self-heals the prior-round deficit → a real enemy repair → heal-performed (opposing
+            // caster) → Synaptic Resonance grants Speed Up III to the owner.
+            const grants = collectGrants(
+                BASE({
+                    attack: 5_000,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: 3,
+                    enemyHp: 1_000_000_000,
+                    hp: 1_000_000,
+                    speed: 100, // focus acts AFTER the enemy ally (200) — irrelevant for the listener,
+                    // but mirrors the established deficit→heal cadence.
+                    shipSkills: buildSynapticShipSkills(),
+                    enemyAttackers: [makeRepairingEnemyAlly()],
+                })
+            );
+
+            // The enemy was repaired → on-enemy-repaired fired → owner gained Speed Up III at least once.
+            expect(grants.length).toBeGreaterThanOrEqual(1);
+        }
+    );
+
+    it('Control: no enemy repair → Synaptic Resonance never fires (owner gains no Speed Up III)', () => {
+        // Same owner + Synaptic implant, but the enemy ally NEVER self-heals (no heal-performed →
+        // on-enemy-repaired never fires). The grant must be absent — proving the trigger is keyed
+        // to a genuine enemy repair, not merely to the implant's presence.
+        const nonHealingEnemyAlly = {
+            id: ENEMY_ALLY_ID,
+            stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 200 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'syn-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+
+        const grants = collectGrants(
+            BASE({
+                attack: 5_000,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 3,
+                enemyHp: 1_000_000_000,
+                hp: 1_000_000,
+                speed: 100,
+                shipSkills: buildSynapticShipSkills(),
+                enemyAttackers: [nonHealingEnemyAlly],
+            })
+        );
+
+        expect(grants).toHaveLength(0);
+    });
+});
+
+describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-round self-buff)', () => {
+    const OWNER_ID = 'attacker';
+    const CRIT_POWER_UP = 'Crit Power Up III';
+    const STEALTH = 'Stealth';
+    const NUM_ROUNDS = 2;
+
+    /** A no-op active so the owner takes a turn each round (deals no damage). */
+    const noopActive: Ability = {
+        id: 'amb-noop',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Hand-built Ambush-shaped reactive buff: procChance OMITTED so the proc gate always passes,
+     *  isolating the self-buff/Stealth gate. start-of-round, self, Crit Power Up III for 1 turn. */
+    const ambushBuff: Ability = {
+        id: 'ambush-shaped-buff',
+        type: 'buff',
+        target: 'self',
+        trigger: 'start-of-round',
+        conditions: [{ subject: 'self-buff', buffName: STEALTH, derivable: true }],
+        config: {
+            type: 'buff',
+            buffName: CRIT_POWER_UP,
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            duration: 1,
+        },
+    };
+
+    /** Ship skills: a no-op active + the Ambush-shaped buff in the passive slot. */
+    const ambushSkills: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: [noopActive] },
+            { slot: 'passive', abilities: [ambushBuff] },
+        ],
+    };
+
+    /** A recurring 'Stealth' self-buff seeded on the owner ('attacker'). Recurring (always-active)
+     *  scheduled self-buffs surface in snapshot('attacker').activeSelfBuffs from round 1, so the
+     *  start-of-round drain gate sees Stealth in its selfBuffNames. */
+    const stealthSeed: SelectedGameBuff = {
+        id: 'seed-stealth',
+        buffName: STEALTH,
+        stacks: 1,
+        parsedEffects: {},
+        isStackable: false,
+        skillDuration: 'recurring',
+        autoFilled: false,
+    };
+
+    /** Collect buff-applied events for the owner with the Crit Power Up buff name. */
+    function collectGrants(input: CombatEngineInput): CombatEvent[] {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events.filter(
+            (e) =>
+                e.type === 'buff-applied' && e.actorId === OWNER_ID && e.buffName === CRIT_POWER_UP
+        );
+    }
+
+    it('Stealth present on the owner → start-of-round self-buff gate met → Crit Power Up III IS granted', () => {
+        const grants = collectGrants(
+            BASE({
+                attack: 0,
+                numRounds: NUM_ROUNDS,
+                hp: 100_000,
+                shipSkills: ambushSkills,
+                selfBuffs: [stealthSeed], // recurring Stealth → visible at start-of-round each round
+            })
+        );
+        // Gate met every round → at least one Crit Power Up III grant.
+        expect(grants.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('Stealth ABSENT → self-buff gate fails → Crit Power Up III is NOT granted', () => {
+        const grants = collectGrants(
+            BASE({
+                attack: 0,
+                numRounds: NUM_ROUNDS,
+                hp: 100_000,
+                shipSkills: ambushSkills,
+                selfBuffs: [], // no Stealth → gate's selfBuffNames lacks Stealth → never fires
+            })
+        );
+        expect(grants).toHaveLength(0);
+    });
+});
