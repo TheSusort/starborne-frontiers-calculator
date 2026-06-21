@@ -1076,8 +1076,9 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                     : [intent.ownerId];
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
-        // CASTER's effective attack at grant time (same last-turn ctx value bombs/reactive-damage
-        // snapshot). One value for all recipients → the shared hoisted payload stays correct.
+        // CASTER's effective attack at grant time (the same last-turn ctx value that
+        // bombs/reactive-damage snapshot). One value for all recipients → the shared hoisted
+        // payload stays correct.
         const pinPct = cfg.parsedEffects.attackFlatPctOfCaster;
         let buffCfg = cfg;
         if (pinPct !== undefined) {

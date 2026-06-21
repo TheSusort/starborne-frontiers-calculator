@@ -2872,6 +2872,8 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
     // proc fires, identical across runs (back-loaded makeRateGate accumulator), so the boosted
     // turn count is the same in every run → the damage delta tracks ONLY the caster's attack.
     describe('D-PR10 — caster-attack snapshot raises the recipient by the CASTER attack', () => {
+        // The first player attacker's runtime actorId, which simulateBattle reassigns to
+        // 'attacker' regardless of the makeTeamShip id passed in.
         const FOCUS = 'attacker';
 
         /** Sum the FOCUS recipient's per-round damageDealt across the whole battle. */
