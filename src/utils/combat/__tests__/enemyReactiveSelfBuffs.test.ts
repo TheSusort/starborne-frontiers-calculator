@@ -25,6 +25,10 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ship } from '../../../types/ship';
+import { GearPiece } from '../../../types/gear';
+import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -363,5 +367,273 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
 
         // Player-side outgoing damage is byte-identical — the enemy buff never leaked across.
         expect(playerDamage(withBuff)).toEqual(playerDamage(withoutBuff));
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR9 — team-agnostic mirror: Spearhead + Font of Power on the ENEMY side
+// ---------------------------------------------------------------------------
+//
+// Tasks 1 & 3 added two implant abilities that ride team-agnostic engine machinery:
+//   - Spearhead       — trigger `on-charged-cast` → grant all allies `Attack Up I` (1 turn)
+//                        after a charged-skill cast (per-rarity proc).
+//   - Font of Power   — trigger `on-own-repair-to-ally` → grant `Power Infused Nanobots`
+//                        (emit-only) to every repaired NON-self ally (per-rarity proc).
+//
+// The engine registers reactive listeners for BOTH sides; the listeners self-scope via
+// `e.actorId === ownerId` / `e.casterId === ownerId`. So an ENEMY-side carrier of either
+// implant must produce the SAME behaviour on the enemy team. These tests are the mirror of
+// the player-side D-PR9 tests in equipmentAbilities.integration.test.ts, with the carrier +
+// the repaired/buffed ally moved onto the ENEMY team (a plain ship anchors the player team).
+//
+// Determinism: same back-loaded makeRateGate accumulator keyed `${ownerId}:${abilityId}`.
+// There is NO proc=1 hook — we run enough qualifying casts that the accumulator fires and
+// assert PRESENCE of the grant (Power Infused Nanobots is emit-only → presence only).
+//
+// EXPECTED: these tests PASS immediately if the engine is truly team-agnostic. A FAILURE
+// here indicates a real side-routing regression, NOT a test bug.
+
+describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', () => {
+    /** Minimal Ship stub (mirrors the integration-test harness). */
+    const makeShip = (over: Partial<Ship>): Ship =>
+        ({
+            id: 'test-ship',
+            name: 'Test Ship',
+            rarity: 'legendary',
+            faction: 'TERRAN_COMBINE',
+            type: 'Attacker',
+            baseStats: {} as Ship['baseStats'],
+            equipment: {},
+            implants: {},
+            refits: [],
+            ...over,
+        }) as Ship;
+
+    /** Minimal legendary implant_major GearPiece stub for the given set bonus. */
+    const makeImplant = (id: string, setBonus: string): GearPiece =>
+        ({
+            id,
+            slot: 'implant_major',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: null,
+            subStats: [],
+            setBonus,
+        }) as GearPiece;
+
+    const place = (
+        ship: Ship,
+        position: Position,
+        attack: number,
+        hp: number
+    ): BattlePlacement => ({
+        ship,
+        position,
+        statOverrides: {
+            attack,
+            crit: 0, // no crit variance
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            defence: 0,
+            hp,
+        },
+    });
+
+    /** Every actorId that ever received a GRANT of `label` (buff event log). */
+    const buffedActors = (
+        result: ReturnType<typeof simulateBattle>,
+        label: string
+    ): Set<string> => {
+        const set = new Set<string>();
+        for (const round of result.rounds) {
+            for (const ev of round.events) {
+                if (ev.kind === 'buff' && ev.label === label) set.add(ev.actorId);
+            }
+        }
+        return set;
+    };
+
+    const idsBySide = (
+        result: ReturnType<typeof simulateBattle>,
+        side: 'player' | 'enemy'
+    ): string[] => result.roster.filter((r) => r.side === side).map((r) => r.actorId);
+
+    const ROUNDS = 16;
+
+    // ── Spearhead mirror ───────────────────────────────────────────────────
+    describe('Spearhead on the ENEMY side', () => {
+        const ATTACK_UP_I = 'Attack Up I';
+        const getGearPiece = (id: string): GearPiece | undefined =>
+            id === 'spearhead-legendary'
+                ? makeImplant('spearhead-legendary', 'SPEARHEAD')
+                : undefined;
+
+        const makeEnemyShip = (
+            id: string,
+            name: string,
+            opts: { withSpearhead?: boolean; withCharge?: boolean } = {}
+        ): Ship =>
+            makeShip({
+                id,
+                name,
+                type: 'Attacker',
+                baseStats: {
+                    hp: 0,
+                    attack: 0,
+                    defence: 0,
+                    hacking: 200,
+                    security: 100,
+                    crit: 0,
+                    critDamage: 0,
+                    speed: 100,
+                } as Ship['baseStats'],
+                implants: opts.withSpearhead ? { implant_major: 'spearhead-legendary' } : {},
+                affinity: 'antimatter',
+                activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                ...(opts.withCharge
+                    ? {
+                          chargeSkillText:
+                              'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                          chargeSkillCharge: 1,
+                      }
+                    : { chargeSkillCharge: 0 }),
+                activeTarget: 'front',
+                activePattern: 'Pattern-Base',
+            } as Partial<Ship>);
+
+        it('an enemy carrier firing its CHARGED skill grants Attack Up I to every ENEMY ally; no PLAYER actor gets it', () => {
+            // Carrier + a plain ally on the ENEMY team. A plain ship anchors the PLAYER team.
+            // Over 16 rounds the carrier fires CHARGED on even rounds → 8 charged casts →
+            // floor(8 × 0.32) = 2 accumulator fires. Each fire fans the all-allies grant to
+            // every ENEMY id (carrier + enemy ally).
+            const result = simulateBattle(
+                {
+                    playerTeam: [
+                        place(makeEnemyShip('pfocus', 'PlayerFocus'), 'M4', 5000, 1_000_000_000),
+                    ],
+                    enemyTeam: [
+                        place(
+                            makeEnemyShip('carrier', 'Carrier', {
+                                withSpearhead: true,
+                                withCharge: true,
+                            }),
+                            'M4',
+                            5000,
+                            1_000_000_000
+                        ),
+                        place(makeEnemyShip('ally', 'EnemyAlly'), 'M3', 5000, 1_000_000_000),
+                    ],
+                    rounds: ROUNDS,
+                },
+                getGearPiece
+            );
+
+            const buffed = buffedActors(result, ATTACK_UP_I);
+            const enemyIds = idsBySide(result, 'enemy');
+            const playerIds = idsBySide(result, 'player');
+
+            // Two enemy allies on the roster (carrier + ally).
+            expect(enemyIds.length).toBe(2);
+
+            // Every ENEMY ally — including the carrier — got the buff at least once.
+            for (const id of enemyIds) {
+                expect(buffed.has(id)).toBe(true);
+            }
+
+            // Non-vacuous: at least one player actor exists, and NONE of them received it
+            // (all-allies = the enemy carrier's OWN side only — never leaks to the player team).
+            expect(playerIds.length).toBeGreaterThan(0);
+            for (const id of playerIds) {
+                expect(buffed.has(id)).toBe(false);
+            }
+        });
+    });
+
+    // ── Font of Power mirror ─────────────────────────────────────────────────
+    describe('Font of Power on the ENEMY side', () => {
+        const NANOBOTS = 'Power Infused Nanobots';
+        const getGearPiece = (id: string): GearPiece | undefined =>
+            id === 'font-legendary' ? makeImplant('font-legendary', 'FONT_OF_POWER') : undefined;
+
+        const makeEnemyShip = (
+            id: string,
+            name: string,
+            opts: { repair?: 'all-allies' | 'damage'; withFont?: boolean } = {}
+        ): Ship => {
+            const repair = opts.repair ?? 'damage';
+            const activeSkillText =
+                repair === 'all-allies'
+                    ? 'This Unit repairs all allies for 30% of their Max HP.'
+                    : 'This Unit deals <unit-damage>100% damage</unit-damage>.';
+            return makeShip({
+                id,
+                name,
+                type: repair === 'damage' ? 'Attacker' : 'Support',
+                baseStats: {
+                    hp: 0,
+                    attack: 0,
+                    defence: 0,
+                    hacking: 200,
+                    security: 100,
+                    crit: 0,
+                    critDamage: 0,
+                    speed: 100,
+                } as Ship['baseStats'],
+                implants: opts.withFont ? { implant_major: 'font-legendary' } : {},
+                affinity: 'antimatter',
+                activeSkillText,
+                chargeSkillCharge: 0,
+                activeTarget: repair === 'damage' ? 'front' : 'allies',
+                activePattern: 'Pattern-Base',
+            } as Partial<Ship>);
+        };
+
+        it('an enemy carrier that repairs another enemy ally grants Power Infused Nanobots to that ally; carrier excluded; no PLAYER actor gets it', () => {
+            // ENEMY carrier (support, AoE all-allies repair) + a plain enemy ally that is the
+            // repaired NON-self recipient. A plain ship anchors the PLAYER team. The carrier
+            // repairs every enemy ally each round → the OTHER enemy ally is a non-self
+            // recipient. Over 16 casts the accumulator fires → that ally carries the buff.
+            // Emit-only → PRESENCE only (Power Infused Nanobots parses to no stat effect).
+            const result = simulateBattle(
+                {
+                    playerTeam: [
+                        place(makeEnemyShip('pfocus', 'PlayerFocus'), 'M4', 5000, 1_000_000_000),
+                    ],
+                    enemyTeam: [
+                        place(
+                            makeEnemyShip('carrier', 'Carrier', {
+                                repair: 'all-allies',
+                                withFont: true,
+                            }),
+                            'M3',
+                            0,
+                            1_000_000_000
+                        ),
+                        place(makeEnemyShip('ally', 'EnemyAlly'), 'M4', 5000, 1_000_000_000),
+                    ],
+                    rounds: ROUNDS,
+                },
+                getGearPiece
+            );
+
+            const buffed = buffedActors(result, NANOBOTS);
+            // Enemy ids are minted `e:<shipId>:<idx>` in placement order.
+            const CARRIER = 'e:carrier:0';
+            const ENEMY_ALLY = 'e:ally:1';
+            const playerIds = idsBySide(result, 'player');
+
+            // The repaired non-self ENEMY ally carries the buff at least once.
+            expect(buffed.has(ENEMY_ALLY)).toBe(true);
+            // The carrier (the repairer) is excluded — it is not a repaired non-self ally.
+            expect(buffed.has(CARRIER)).toBe(false);
+            // Non-vacuous: a player actor exists, and NONE received it (ally-side only,
+            // and the enemy carrier's own side at that — never leaks to the player team).
+            expect(playerIds.length).toBeGreaterThan(0);
+            for (const id of playerIds) {
+                expect(buffed.has(id)).toBe(false);
+            }
+        });
     });
 });
