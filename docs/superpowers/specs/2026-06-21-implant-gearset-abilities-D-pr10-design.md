@@ -65,22 +65,31 @@ The per-stat `Buff` leaves consumed by `calculateBuffTotals` are produced by `to
 - `effectiveStatsOf`: `attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff`.
 - `effectiveDamageStatsOf`: thread `attackFlatBuff` through the `totals` assembly (it has no modifier-channel equivalent, so just `scheduledTotals.attackFlatBuff + ability.attackFlatBuff`) and apply `attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff`.
 
-### 5.5 Snapshot at the grant site — `src/utils/combat/triggers.ts` (buff branch, ~1080)
+### 5.5 Snapshot at the grant site — `src/utils/combat/triggers.ts` (buff branch, opens ~1045; hoisted `status` built ~1079)
 
-In `executeIntent`'s `cfg.type === 'buff'` block, before constructing the hoisted `status`:
+In `executeIntent`'s `cfg.type === 'buff'` block, before constructing the hoisted `status` (~line 1079):
 
-- If `cfg.parsedEffects.attackFlatPctOfCaster` is defined, resolve `const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack` (resolve `ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId)` exactly as the existing damage/heal branches do) and compute `attackFlat = casterAttack * (pct / 100)`.
-- Build a per-instance `parsedEffects` copy `{ ...cfg.parsedEffects, attackFlat }` and pass it into `payloadFromConfig` (or a small per-instance payload override) so the timed-ability-status payload carries the concrete frozen value.
+- If `cfg.parsedEffects.attackFlatPctOfCaster` is defined, resolve `const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId)` and `const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack` (exactly as the heal branch ~1238 and reactive-damage branch ~1328 already do; `owner` is `ctx.runtimes.get(intent.ownerId)`, with `owner.attack` a base-stat fallback). Compute `attackFlat = casterAttack * (pct / 100)`.
+- Materialize a per-instance payload: pass `{ ...cfg, parsedEffects: { ...cfg.parsedEffects, attackFlat } }` into `payloadFromConfig` (~line 914 — it reads `parsedEffects` straight off its `cfg` arg), so the timed-ability-status payload carries the concrete frozen value. When the sentinel is absent, pass `cfg` unchanged.
 - The snapshot is one value for all recipients (the caster's attack), so a single shared payload remains correct — the existing hoist-above-the-loop structure is unchanged.
 - When the sentinel is absent (every other buff), the payload is byte-identical to today.
 
-### 5.6 Coverage tracker — `src/utils/abilities/__tests__/equipmentCoverage.test.ts`
+### 5.6 Emit-only → modeled: update the presence-only tests (NOT the coverage tracker)
 
-`FONT_OF_POWER` moves from the emit-only set to the fully-modeled set (PIN now has a real stat effect). Keep both the `.toEqual` decl-order array and the implemented Set in sync (known pitfall).
+There is no "emit-only set vs fully-modeled set" in `equipmentCoverage.test.ts` — `FONT_OF_POWER` is already in both `implementedImplants` and the `.toEqual` decl-order array there (that test asserts only the per-rarity ability *count*, which D-PR10 does not change). **No edit to `equipmentCoverage.test.ts` is needed.**
+
+The real "emit-only / no stat effect" tracking lives as **presence-only assertions with explanatory comments**:
+
+- `src/utils/combat/__tests__/enemyReactiveSelfBuffs.test.ts` (~lines 391, 598): comments "Emit-only → PRESENCE only (Power Infused Nanobots parses to no stat effect)".
+- `src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts` (~line 2590).
+
+D-PR10 makes these comments **false** (PIN now has a real attack effect). Update each: correct the stale comments, and where a test previously asserted only presence, upgrade it to also assert the recipient's attack rose by the snapshot (or, where the test's purpose is solely the *grant* mechanic, leave the presence assertion but fix the comment to say the magnitude is covered by the dedicated integration test in §7). The implementer must read each cited site and decide per-test; do not assume a single mechanical edit.
 
 ## 6. Byte-identical guarantee
 
-No buff in the corpus other than `Power Infused Nanobots` carries `attackFlat`/`attackFlatPctOfCaster` (verified — PIN is the sole match of the `of the caster's attack` phrasing). The new fold channel is `+0` everywhere it is summed → zero golden / `.snap` drift, consistent with every prior D-PR. The grant-site snapshot only triggers when the sentinel is present (PIN only), so all existing buff grants emit identical payloads.
+No buff in the corpus other than `Power Infused Nanobots` carries `attackFlat`/`attackFlatPctOfCaster` (verified — PIN is the sole match of the `of the caster's attack` phrasing). The new fold channel is `+0` everywhere it is summed; the grant-site snapshot only fires when the sentinel is present (PIN only), so all existing buff grants emit identical payloads → **zero production golden / `.snap` drift** (no committed golden scenario carries a Font-of-Power healer), consistent with every prior D-PR.
+
+**Exception (intended churn, not byte-identical):** the existing **emit-only presence tests** that exercise PIN (the §5.6 sites in `enemyReactiveSelfBuffs.test.ts` and `equipmentAbilities.integration.test.ts`) now produce a real recipient attack increase. Any assertion in those tests that observes the recipient's stats/damage will change and must be updated as part of §5.6. This is confined to those PIN-bearing tests; the broader suite and all production goldens stay byte-identical.
 
 ## 7. Testing
 
