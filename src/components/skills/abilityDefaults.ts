@@ -73,6 +73,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
                 ampPct: 0,
                 procChance: 0,
             };
+        case 'heal-amplification':
+            return { type: 'heal-amplification', condition: 'target-hp-below-self', ampPct: 0 };
     }
 };
 
@@ -96,6 +98,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'incoming-reduction': 'self',
     'incoming-block': 'self',
     'outgoing-amplification': 'self',
+    'heal-amplification': 'self',
 };
 
 /**
