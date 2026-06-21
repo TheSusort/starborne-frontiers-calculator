@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat & DPS simulators now model three conditional damage implants: Intrusion (more outgoing damage per debuff on the target), Arcane Siege (more outgoing damage while your ship is shielded), and Warpstrike (more outgoing damage while your ship is debuffed). The DPS calculator now also accounts for equipped implant and gear-set effects.',
     "Combat simulator now models conditional incoming-damage-reduction implants and gear sets: Voidshade and Shadowguard (reduced damage while stealthed), Nebula Nullifier (reduced damage while in Stasis), Hyperion Gaze, the Hardened set, and Iridium's passive (reduced incoming critical-hit damage), Vortex Veil (reduced Inferno and Corrosion damage), and Ironclad (a chance to block a repeat hit from the same attacker). Ships with these equipped now take less damage when the relevant conditions are met.",
     "Combat simulator now models three outgoing-damage amplification implants: Menace (chance to amplify a hit's damage on a critical hit), Giant Slayer (chance to amplify a hit's damage against an enemy with higher attack), and Insidiousness (chance to deal bonus damage when you apply a debuff to an enemy).",
+    'Combat simulator now models three more heal implants: Second Wind (chance to repair itself when it takes a critical hit), Nourishment (stronger repairs on allies with less HP than the healer), and Vivacious Repair (chance to double a repair on an ally below 25% HP).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
