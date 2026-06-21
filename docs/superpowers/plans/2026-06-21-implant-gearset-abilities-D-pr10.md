@@ -303,20 +303,18 @@ In `src/utils/combat/triggers.ts`, in `executeIntent` `if (cfg.type === 'buff') 
         // ctx value bombs/reactive-damage snapshot). One value for all recipients → the shared
         // hoisted payload stays correct.
         const pinPct = cfg.parsedEffects.attackFlatPctOfCaster;
-        const buffCfg =
-            pinPct !== undefined
-                ? (() => {
-                      const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-                      const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack;
-                      return {
-                          ...cfg,
-                          parsedEffects: {
-                              ...cfg.parsedEffects,
-                              attackFlat: casterAttack * (pinPct / 100),
-                          },
-                      };
-                  })()
-                : cfg;
+        let buffCfg = cfg;
+        if (pinPct !== undefined) {
+            const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+            const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack;
+            buffCfg = {
+                ...cfg,
+                parsedEffects: {
+                    ...cfg.parsedEffects,
+                    attackFlat: casterAttack * (pinPct / 100),
+                },
+            };
+        }
 ```
 
 Then change the `status` literal's payload to use `buffCfg`:
