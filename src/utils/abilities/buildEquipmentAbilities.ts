@@ -297,7 +297,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     INSIDIOUSNESS: (rarity) => {
         const m = INSIDIOUSNESS_MULT[rarity];
         const pc = INSIDIOUSNESS_PROC[rarity];
-        if (m === undefined) return undefined;
+        if (m === undefined || pc === undefined) return undefined;
         return {
             type: 'damage',
             target: 'enemy',

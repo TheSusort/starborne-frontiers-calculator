@@ -3177,7 +3177,6 @@ describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', 
 
     const iridiumWithCritReduction = () =>
         ship({
-            // eslint-disable name-convention-any
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             refits: [{}, {}] as any,
             secondPassiveSkillText: IRIDIUM_P2_RAW,
