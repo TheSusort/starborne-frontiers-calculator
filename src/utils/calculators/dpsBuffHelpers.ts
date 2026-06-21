@@ -64,6 +64,12 @@ export function toSimBuffs(selected: SelectedGameBuff[]): Buff[] {
                 stat: 'security',
                 value: parsedEffects.security * stacks,
             });
+        if (parsedEffects.attackFlat !== undefined)
+            entries.push({
+                id: `${s.id}-attackFlat`,
+                stat: 'attackFlat',
+                value: parsedEffects.attackFlat * stacks,
+            });
         return entries;
     });
 }
