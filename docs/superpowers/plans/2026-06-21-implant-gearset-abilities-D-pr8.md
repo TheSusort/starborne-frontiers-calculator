@@ -29,7 +29,7 @@
 | `src/utils/abilities/buildEquipmentAbilities.ts` | Generalize `mkNamedBuffGrant` (optional conditions + procChance); add AMBUSH / SYNAPTIC_RESONANCE / ALACRITY entries + proc tables. |
 | `src/utils/abilities/__tests__/equipmentCoverage.test.ts` | Add the 3 implants to BOTH the decl-order array and the `implementedImplants` Set. |
 | `src/utils/abilities/__tests__/evaluateConditions.test.ts` | New unit tests for the condition (or co-located). |
-| `src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts` | Engine integration tests (Synaptic / Alacrity / Ambush gate). |
+| `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` | Engine integration tests (Synaptic / Alacrity / Ambush gate). |
 | `src/constants/changelog.ts` | `UNRELEASED_CHANGES` entry. |
 
 ---
@@ -46,37 +46,28 @@ The precedent is `target-repaired-this-round` (a live binary gate present in Con
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `src/utils/abilities/__tests__/evaluateConditions.test.ts` (create the import block if the file is new; mirror existing tests in that dir):
+`src/utils/abilities/__tests__/evaluateConditions.test.ts` ALREADY EXISTS and uses the shared
+`makeConditionContext` fixture from `./conditionContextFixture`. Reuse it (it spreads overrides, and
+`wasHitThisRound` being optional on `ConditionContext` means NO fixture change is needed). Add:
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import { evaluateCondition, ConditionContext } from '../evaluateConditions';
-import { Condition } from '../../../types/abilities';
-
-function ctx(over: Partial<ConditionContext> = {}): ConditionContext {
-    return {
-        selfBuffNames: [], selfDebuffNames: [], enemyBuffNames: [],
-        enemyDebuffCount: 0, effectiveCritRate: 0,
-        adjacentAllyCount: 0, enemyAdjacentCount: 0, enemyDestroyedCount: 0,
-        selfHpPct: 100, enemyHpPct: 100,
-        ...over,
-    };
-}
-
+// (makeConditionContext is already imported at the top of this file)
 describe('not-hit-this-round condition', () => {
     const cond: Condition = { subject: 'not-hit-this-round', derivable: true };
 
     it('is met (1) when wasHitThisRound is false', () => {
-        expect(evaluateCondition(cond, ctx({ wasHitThisRound: false }))).toBe(1);
+        expect(evaluateCondition(cond, makeConditionContext({ wasHitThisRound: false }))).toBe(1);
     });
     it('is met (1) when wasHitThisRound is undefined (default)', () => {
-        expect(evaluateCondition(cond, ctx())).toBe(1);
+        expect(evaluateCondition(cond, makeConditionContext())).toBe(1);
     });
     it('is NOT met (0) when wasHitThisRound is true', () => {
-        expect(evaluateCondition(cond, ctx({ wasHitThisRound: true }))).toBe(0);
+        expect(evaluateCondition(cond, makeConditionContext({ wasHitThisRound: true }))).toBe(0);
     });
 });
 ```
+
+(If `Condition` isn't already imported in that file, add it to its `../../../types/abilities` import.)
 
 - [ ] **Step 2: Run it to verify it fails**
 
@@ -240,7 +231,7 @@ git commit -m "feat(combat): D-PR8 — honor procChance in the reactive buff exe
 **Files:**
 - Modify: `src/utils/combat/triggers.ts` (`IntentExecContext` + `buildDrainContext` + `buildActorConditionContext`)
 - Modify: `src/utils/combat/engine.ts` (`hitThisRound` Set + record site + delegate binding)
-- Test: `src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts` (Alacrity end-to-end, hand-built ability to isolate the condition from proc timing)
+- Test: `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` (Alacrity end-to-end, hand-built ability to isolate the condition from proc timing)
 
 - [ ] **Step 1: Write the failing integration test**
 
@@ -348,7 +339,7 @@ Expected: PASS, ZERO `.snap` changes, tsc clean.
 - [ ] **Step 10: Commit**
 
 ```bash
-git add src/utils/combat/triggers.ts src/utils/combat/engine.ts src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts
+git add src/utils/combat/triggers.ts src/utils/combat/engine.ts src/utils/combat/__tests__/equipmentAbilities.integration.test.ts
 git commit -m "feat(combat): D-PR8 — engine hit-tracking + wasHitThisRound gate delegate"
 ```
 
@@ -363,7 +354,7 @@ git commit -m "feat(combat): D-PR8 — engine hit-tracking + wasHitThisRound gat
 - [ ] **Step 1: Write the failing coverage + shape tests**
 
 In `equipmentCoverage.test.ts`:
-- Add `'AMBUSH'`, `'ALACRITY'`, `'SYNAPTIC_RESONANCE'` to BOTH the `.toEqual([...])` decl-order array (in `'exactly { … }'` test) AND the `implementedImplants` `new Set([...])` (known pitfall — both must move together). **Decl-order matters**: insert each at its position in `Object.keys(IMPLANTS)` order — verify by reading the IMPLANTS declaration order; do not guess.
+- Add `'AMBUSH'`, `'ALACRITY'`, `'SYNAPTIC_RESONANCE'` to BOTH the `.toEqual([...])` array AND the `implementedImplants` `new Set([...])`. Only the `.toEqual` array is order-sensitive (it compares a `filter` over `Object.keys(IMPLANTS)`); the Set is membership-only. **Decl-order (confirmed against `implants.ts`):** insert `SYNAPTIC_RESONANCE` after `NOURISHMENT` (before `VOIDFIRE_CATALYST`); insert `ALACRITY` then `AMBUSH` after `VIVACIOUS_REPAIR` / before `BATTLECRY`. Re-verify by reading the IMPLANTS declaration order; the failing test surfaces any mismatch.
 - Add per-implant shape assertions (mirror the INTRUSION/WARPSTRIKE blocks):
 
 ```ts
@@ -427,7 +418,10 @@ function mkNamedBuffGrant(
 }
 ```
 
-Add `Condition` to the `import { Ability } from '../../types/abilities';` line → `import { Ability, Condition } from '../../types/abilities';` (verify exact current import).
+Add `Condition` to the EXISTING multi-line abilities import block (it currently imports
+`Ability, AbilityTrigger, HealAmpCondition, IncomingCondition, OutgoingCondition` from
+`'../../types/abilities'` across several lines — `buildEquipmentAbilities.ts:~29-35`). Insert
+`Condition,` into that block; there is NO single-line `import { Ability }` to find/replace.
 
 - [ ] **Step 4: Add proc tables + registry entries**
 
@@ -496,7 +490,7 @@ git commit -m "feat(combat): D-PR8 — Ambush / Synaptic Resonance / Alacrity re
 ## Task 6: Engine integration — Synaptic Resonance (live) + Ambush gate
 
 **Files:**
-- Test: `src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts`
+- Test: `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts`
 
 - [ ] **Step 1: Write the Synaptic Resonance integration test**
 
@@ -514,7 +508,7 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/utils/abilities/__tests__/equipmentAbilities.integration.test.ts
+git add src/utils/combat/__tests__/equipmentAbilities.integration.test.ts
 git commit -m "test(combat): D-PR8 — Synaptic Resonance live + Ambush gate integration"
 ```
 
@@ -569,6 +563,7 @@ gh pr create --base feat/combat-d-pr7-on-death --head feat/combat-d-pr8-reactive
 - **Never `vitest -u`** to "fix" a moved golden — a moved snapshot means a gate leaked; fix the gate.
 - **Decl-order in the coverage `.toEqual`** must match `Object.keys(IMPLANTS)` exactly — read the IMPLANTS declaration order, don't guess.
 - **`self-stealth` is a trap** — it's an `IncomingCondition`, not a `ConditionSubject`. AMBUSH gates on `self-buff` + `buffName:'Stealth'`.
-- **The hit predicate** is `cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)` in `applyVictimDamage` — the `byDirectDamage` flag is what excludes DoT ticks (they call in with `byDirectDamage:false`); fully-Barrier-blocked hits return earlier and never reach the record site.
+- **The hit predicate** is `cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)` in `applyVictimDamage` — the `byDirectDamage` flag is what excludes DoT ticks (they call in with `byDirectDamage:false`); fully-Barrier-blocked hits return earlier and never reach the record site. **This plan intentionally refines the spec's `shieldBefore > 0` wording to `absorbed > 0` (= post-block `damage > 0`, i.e. "damage actually landed") — follow the plan, not the spec, here.**
+- **Delegate binding:** the plan binds `wasHitThisRoundFor` ONCE in the shared `drainQueue` IntentExecContext literal (the combat-wide `hitThisRound` Set serves both sides). The spec described per-side binding mirroring `isLowestSpeedAllyFor`; the plan's single binding is simpler and correct — follow the plan.
 - **TO-VERIFY (in-game):** whether a fully-Barrier-blocked direct attack should count as "hit" for Alacrity. Current default: not a hit. Leave a `// TODO(verify):` near the record site.
 - **Worktree env:** `.env` + `docs/*.csv` are symlinked from the main checkout; if tests fail on missing env/data, re-check the symlinks.
