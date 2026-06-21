@@ -390,7 +390,7 @@ describe('Giant Slayer implant', () => {
         if (ab.config.type === 'outgoing-amplification') {
             expect(ab.config.condition).toBe('amplify-vs-higher-attack');
             expect(ab.config.ampPct).toBe(50);
-            expect(ab.config.procChance).toBeCloseTo(0.20);
+            expect(ab.config.procChance).toBeCloseTo(0.2);
         } else {
             throw new Error('Expected outgoing-amplification config');
         }
@@ -407,6 +407,71 @@ describe('Giant Slayer implant', () => {
             expect(ab.config.procChance).toBeCloseTo(0.12);
         } else {
             throw new Error('Expected outgoing-amplification config');
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR4: Insidiousness implant (reactive damage on debuff-inflicted)
+// ---------------------------------------------------------------------------
+describe('Insidiousness implant', () => {
+    it('rare → reactive damage with trigger on-debuff-inflicted, multiplier 80, hits 1, procChance ≈ 0.14', () => {
+        const abilities = buildForImplant('INSIDIOUSNESS', 'rare');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('damage');
+        expect(ab.target).toBe('enemy');
+        expect(ab.trigger).toBe('on-debuff-inflicted');
+        expect(ab.conditions).toEqual([]);
+        expect(ab.procChance).toBeCloseTo(0.14);
+        expect(ab.autoFilled).toBe(true);
+        if (ab.config.type === 'damage') {
+            expect(ab.config.multiplier).toBe(80);
+            expect(ab.config.hits).toBe(1);
+        } else {
+            throw new Error('Expected damage config');
+        }
+    });
+
+    it('legendary → multiplier 100, procChance ≈ 0.21', () => {
+        const ab = buildForImplant('INSIDIOUSNESS', 'legendary')[0];
+        expect(ab.trigger).toBe('on-debuff-inflicted');
+        expect(ab.procChance).toBeCloseTo(0.21);
+        if (ab.config.type === 'damage') {
+            expect(ab.config.multiplier).toBe(100);
+            expect(ab.config.hits).toBe(1);
+        } else {
+            throw new Error('Expected damage config');
+        }
+    });
+
+    it('common → multiplier 60, procChance ≈ 0.10', () => {
+        const ab = buildForImplant('INSIDIOUSNESS', 'common')[0];
+        expect(ab.procChance).toBeCloseTo(0.1);
+        if (ab.config.type === 'damage') {
+            expect(ab.config.multiplier).toBe(60);
+        } else {
+            throw new Error('Expected damage config');
+        }
+    });
+
+    it('epic → multiplier 90, procChance ≈ 0.17', () => {
+        const ab = buildForImplant('INSIDIOUSNESS', 'epic')[0];
+        expect(ab.procChance).toBeCloseTo(0.17);
+        if (ab.config.type === 'damage') {
+            expect(ab.config.multiplier).toBe(90);
+        } else {
+            throw new Error('Expected damage config');
+        }
+    });
+
+    it('uncommon → multiplier 70, procChance ≈ 0.12', () => {
+        const ab = buildForImplant('INSIDIOUSNESS', 'uncommon')[0];
+        expect(ab.procChance).toBeCloseTo(0.12);
+        if (ab.config.type === 'damage') {
+            expect(ab.config.multiplier).toBe(70);
+        } else {
+            throw new Error('Expected damage config');
         }
     });
 });

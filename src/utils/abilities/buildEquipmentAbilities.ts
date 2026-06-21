@@ -141,6 +141,22 @@ const IRONCLAD_BLOCK: Record<string, { chance: number; pct: number }> = {
 };
 const SHADOWGUARD_CHANCE: Record<string, number> = { uncommon: 0.07, epic: 0.12, legendary: 0.16 };
 
+// D-PR4: Insidiousness reactive-damage-on-debuff implant value tables
+const INSIDIOUSNESS_MULT: Record<string, number> = {
+    common: 60,
+    uncommon: 70,
+    rare: 80,
+    epic: 90,
+    legendary: 100,
+};
+const INSIDIOUSNESS_PROC: Record<string, number> = {
+    common: 0.1,
+    uncommon: 0.12,
+    rare: 0.14,
+    epic: 0.17,
+    legendary: 0.21,
+};
+
 // D-PR4: outgoing-amplification implant value tables
 const MENACE_AMP: Record<string, number> = {
     common: 20,
@@ -273,6 +289,22 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
                 },
             ],
             config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
+            autoFilled: true,
+        };
+    },
+    // D-PR4: reactive-damage-on-debuff implants
+    // Insidiousness: X% chance to deal Y% damage when debuffing an enemy.
+    INSIDIOUSNESS: (rarity) => {
+        const m = INSIDIOUSNESS_MULT[rarity];
+        const pc = INSIDIOUSNESS_PROC[rarity];
+        if (m === undefined) return undefined;
+        return {
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-inflicted',
+            conditions: [],
+            procChance: pc,
+            config: { type: 'damage', multiplier: m, hits: 1 },
             autoFilled: true,
         };
     },
