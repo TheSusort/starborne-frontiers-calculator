@@ -289,3 +289,21 @@ describe('hasDpsEffect', () => {
         expect(hasDpsEffect({ defense: -30 }, ['defense', 'incomingDamage'])).toBe(true);
     });
 });
+
+describe('parseBuffEffects — flat-attack caster snapshot (D-PR10)', () => {
+    it('extracts the caster-attack percentage sentinel from Power Infused Nanobots', () => {
+        const e = parseBuffEffects(
+            'Power Infused Nanobots',
+            "Grants attack equal to 100% of the caster's attack"
+        );
+        expect(e.attackFlatPctOfCaster).toBe(100);
+        expect(e.attack).toBeUndefined();
+        expect(e.attackFlat).toBeUndefined();
+    });
+
+    it('does NOT false-match an ordinary percentage Attack buff', () => {
+        const e = parseBuffEffects('Atlas Coordination II', '+20% Attack');
+        expect(e.attackFlatPctOfCaster).toBeUndefined();
+        expect(e.attack).toBe(20);
+    });
+});
