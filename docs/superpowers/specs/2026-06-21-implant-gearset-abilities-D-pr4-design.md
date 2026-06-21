@@ -57,11 +57,45 @@ mirror of D-PR3's victim-side incoming-reduction.
 
 ## 3. Architecture
 
-### 3.1 Insidiousness — rides existing machinery (no engine change)
+### 3.1 Insidiousness — reactive-damage rider + one small gate fix
 
 Insidiousness deals a *separate* damage instance, structurally identical to the existing reactive
-`damage` executor (the "Grif" 75%-damage proc). It needs **no new machinery**: a single registry entry
-in `buildEquipmentAbilities.ts`.
+`damage` executor (the "Grif" 75%-damage proc). It is *almost* pure reuse, with **one required engine
+fix**:
+
+> **The reactive `damage` executor does NOT honor `procChance` today.** The proc-chance rate gate
+> (`triggers.ts:~1137`) lives **only inside the `cfg.type === 'heal' || 'shield'` branch** of
+> `executeIntent`. The `cfg.type === 'damage'` branch (`triggers.ts:~1246`) has no gate, and the
+> on-debuff-inflicted listener enqueues unconditionally. Grif's reactive-damage proc sets no
+> `procChance` (it fires on every cleanse), so this was never exercised. Insidiousness **does** set
+> `procChance`, so without a fix it would deal its chunk on *every* debuff application — violating the
+> LOCKED chance model.
+
+**Fix (localized, byte-identical for shipped effects):** extract the existing inline gate block into a
+small helper and call it in the `damage` branch too:
+
+```ts
+// triggers.ts — extracted from the current inline block in the heal/shield branch
+function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
+    const pc = intent.ability.procChance;
+    if (pc === undefined || pc <= 0 || pc >= 1) return true;
+    const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+    let gate = ctx.procChanceGates?.get(gateKey);
+    if (ctx.procChanceGates && !gate) { gate = makeRateGate(); ctx.procChanceGates.set(gateKey, gate); }
+    return !gate || gate(pc);  // absent map (unit-test ctx) → pass through
+}
+```
+
+- The heal/shield branch replaces its inline block with `if (!passesProcChanceGate(intent, ctx)) return;`
+  at the **same position** (after the `oncePerCombat` check and the `!ctx.healing` guard) → byte-identical.
+- The `damage` branch gains `if (!passesProcChanceGate(intent, ctx)) return;` at its top.
+- **Safety verified:** no existing reactive `damage` ability in the corpus sets `procChance` (only
+  Bloodthirst[heal] / Ironclad / Shadowguard set it, and the latter two ride D-PR3's `rollBlock` path,
+  not `executeIntent`). So the damage-branch gate changes nothing for shipped effects → goldens
+  byte-identical. The helper is **not** hoisted above the type-branch dispatch (which would change the
+  heal-branch ordering vs `!ctx.healing`); it stays branch-local.
+
+With the gate in place, the registry entry is then pure reuse:
 
 ```ts
 INSIDIOUSNESS: (rarity) => {
@@ -83,7 +117,8 @@ INSIDIOUSNESS: (rarity) => {
 - `on-debuff-inflicted` already fires when the owner applies a debuff or DoT (`triggers.ts`).
 - The reactive `damage` branch computes `effectiveAttack × (multiplier/100) × hits × affinityMult`
   (noCrit, no defense mitigation — the documented bomb/reactive approximation).
-- `procChance` rides the existing top-level per-(owner,ability) `procChanceGates` map.
+- `procChance` rides the same per-(owner,ability) `procChanceGates` map, now consulted by the damage
+  branch via the extracted `passesProcChanceGate` helper above.
 - Verified non-overlap: Insidiousness fires on debuff-application; it does not double with the
   amplification primitive (different trigger surface).
 
@@ -237,7 +272,11 @@ have a real opposing target.
 - **Integration:** over N hits a 50%-ish proc fires at the expected deterministic frequency; amplified
   damage exceeds the un-amplified baseline by the correct amount; Menace amplifies only crit hits;
   Giant Slayer amplifies only when the target's effective attack is higher; Insidiousness lands a
-  separate damage chunk on debuff application and not otherwise.
+  separate damage chunk on debuff application **at its gated frequency** (e.g. a 10% proc over N debuffs
+  fires ~N/10 times, NOT every debuff — the regression test for the §3.1 gate fix) and not otherwise.
+- **Unit — `passesProcChanceGate`:** extracted helper returns the same result as the prior inline block
+  (pass-through when `procChance` is undefined / ≤0 / ≥1 or the map is absent; gated otherwise); the
+  heal/shield branch behavior is unchanged.
 - **Load-bearing invariant:** all DPS / healing / battle-sim goldens stay **byte-identical**. The new
   builder runs only where equipment is threaded; no committed fixture carries Menace/Giant
   Slayer/Insidiousness; the aggregate seam collapses to the prior expression at empty `ampAbilities`;
