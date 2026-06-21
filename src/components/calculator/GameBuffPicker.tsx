@@ -38,7 +38,7 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     security: 'Sec',
     speed: 'Speed',
     attackFlat: 'Atk (flat)',
-    attackFlatPctOfCaster: 'Atk (caster%)',
+    attackFlatPctOfCaster: 'of caster Atk',
 };
 
 // Stats stored as flat values, not percentages
