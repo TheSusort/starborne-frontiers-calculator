@@ -5,6 +5,7 @@ import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
+import { makeRateGate } from '../calculators/rateAccumulator';
 import { expandEnemyDebuffs, payloadToSelectedBuff } from './buffTotals';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
@@ -18,7 +19,7 @@ import {
 } from './statusEngine';
 // Type-only import (erased at runtime) → no circular-import cycle even though playerTurn.ts
 // imports buildActorConditionContext/ReactiveAbility from this module.
-import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx } from './playerTurn';
+import type { PlayerActorRuntime, PlayerRoundCtx, HealingRuntimeCtx, RateGate } from './playerTurn';
 import type { ActorTargetingStatus } from './positionalBinding';
 
 /** The trigger values the engine consumes — defined next to AbilityTrigger in
@@ -93,7 +94,15 @@ export interface Intent {
      *  (Cultivator's repair, Refine/Graphite's grants) instead of the default.
      *  `fromPurgeEvent`: depth-1 purge chain guard — a purge triggered by a
      *  purge-performed event does not re-emit purge-performed, preventing infinite chains. */
-    eventCtx?: { counterTargetId?: string; damagedAllyId?: string; fromPurgeEvent?: boolean };
+    eventCtx?: {
+        counterTargetId?: string;
+        damagedAllyId?: string;
+        fromPurgeEvent?: boolean;
+        /** The damage dealt by the triggering event (ability-performed.damage), used by a
+         *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
+         *  triggering hit's damage rather than the owner's max HP. */
+        triggerDamage?: number;
+    };
 }
 
 /** Whether an ability is reactive (routed through the trigger machinery): a
@@ -228,7 +237,19 @@ export function registerReactiveListeners(args: {
                         // follow-up fires twice. Events without critHits fall back
                         // to the didCrit binary (one enqueue).
                         const n = e.critHits ?? (e.didCrit ? 1 : 0);
-                        for (let i = 0; i < n; i++) enqueue(intent);
+                        // Per-event copy: carry e.damage (total damage for this ability-performed
+                        // event) into eventCtx.triggerDamage so that a reactive basis:'damage-dealt'
+                        // heal (e.g. Bloodthirst) scales off the triggering hit's damage.
+                        // KNOWN APPROXIMATION: for a multi-hit ability, each critting hit enqueues
+                        // with the same event-total damage (not per-hit damage), so the heal is
+                        // proportionally over-counted per fire when critHits > 1. Per-hit attribution
+                        // is not supported in the event model today; document and accept.
+                        for (let i = 0; i < n; i++) {
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, triggerDamage: e.damage },
+                            });
+                        }
                     });
                     break;
                 case 'on-debuff-inflicted':
@@ -533,6 +554,10 @@ export interface IntentExecContext {
      *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
      *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
     oncePerCombatFired?: Set<string>;
+    /** Combat-lifetime per-ability proc-chance gates (e.g. Bloodthirst's 12% chance).
+     *  Keyed `${ownerId}:${abilityId}`; the RateGate accumulates across all rounds and all
+     *  reactive fires of the same ability so the proc lands at its true frequency. */
+    procChanceGates?: Map<string, RateGate>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
      *  PR 1). The engine closes over the heal target's current/max HP (healing mode);
      *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
@@ -1109,6 +1134,17 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
         }
+        const pc = intent.ability.procChance;
+        if (pc !== undefined && pc > 0 && pc < 1) {
+            const gateKey = `${intent.ownerId}:${intent.ability.id}`;
+            let gate = ctx.procChanceGates?.get(gateKey);
+            if (ctx.procChanceGates && !gate) {
+                gate = makeRateGate();
+                ctx.procChanceGates.set(gateKey, gate);
+            }
+            // absent map (unit-test contexts) → gate stays undefined → pass through
+            if (gate && !gate(pc)) return;
+        }
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
@@ -1137,7 +1173,13 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 ? (ownerCtx?.effectiveAttack ?? owner.attack)
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
-                  : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+                  : cfg.basis === 'damage-dealt'
+                    ? // Reactive damage-dealt (e.g. Bloodthirst on-crit): scale off the triggering
+                      // hit's damage captured in eventCtx.triggerDamage. Falls back to 0 when no
+                      // triggering damage is present (non-crit path or missing context) — a
+                      // damage-dealt reactive heal with no damage context heals nothing.
+                      (intent.eventCtx?.triggerDamage ?? 0)
+                    : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every

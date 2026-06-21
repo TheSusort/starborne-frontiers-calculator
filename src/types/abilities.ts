@@ -293,6 +293,11 @@ export interface Ability {
      *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
      *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
     roleFilter?: ShipRoleCategory[];
+    /** Probabilistic proc gate for equipment-sourced reactive abilities ("N% chance to …").
+     *  A value in (0,1) means the ability fires at that rate via a combat-lifetime per-(owner,
+     *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
+     *  → fires on every qualifying trigger. */
+    procChance?: number;
     scaling?: ScalingRule;
     config: AbilityConfig;
     autoFilled?: boolean;

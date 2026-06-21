@@ -40,6 +40,9 @@ import type { CombatStatBlock } from '../../types/calculator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../combat/engine';
 import { createEventBus } from '../combat/events';
 import { buildShipAbilities } from '../abilities/buildShipAbilities';
+import { buildShipAbilitiesWithEquipment } from '../abilities/buildShipAbilitiesWithEquipment';
+import type { ShipSkills } from '../../types/abilities';
+import type { GearPiece } from '../../types/gear';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting } from '../targetingParser';
 import { computeAffinityModifiers } from './affinityUtils';
@@ -510,14 +513,18 @@ interface PlacementPlan {
     name: string;
     position: Position;
     stats: DerivedCombatStats;
-    shipSkills: ReturnType<typeof buildShipAbilities>;
+    shipSkills: ShipSkills;
     affinity: AffinityName | undefined;
     /** Parsed ACTIVE targeting ({ target, pattern }); undefined if the ship has no targeting data. */
     targeting: SkillTargeting | undefined;
     chargeCount: number;
 }
 
-function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
+function planPlacement(
+    p: BattlePlacement,
+    id: string,
+    getGearPiece?: (id: string) => GearPiece | undefined
+): PlacementPlan {
     const targeting = parseShipTargeting(p.ship);
     // Use the ACTIVE targeting (target + pattern). The engine input takes ONE target/pattern
     // per actor, so charged-skill targeting is a follow-up (PR2) — when a ship's charged
@@ -527,7 +534,9 @@ function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
         name: p.ship.name,
         position: p.position,
         stats: resolveStats(p),
-        shipSkills: buildShipAbilities(p.ship),
+        shipSkills: getGearPiece
+            ? buildShipAbilitiesWithEquipment(p.ship, getGearPiece)
+            : buildShipAbilities(p.ship),
         affinity: p.ship.affinity,
         targeting: targeting.active,
         chargeCount: p.ship.chargeSkillCharge ?? 0,
@@ -557,7 +566,10 @@ function planPlacement(p: BattlePlacement, id: string): PlacementPlan {
  * Actor ids are minted globally-unique across both squads (`p:<shipId>:<idx>` / `e:<shipId>:<idx>`),
  * avoiding the reserved `'attacker'`/`'enemy'` ids and any duplicate (runCombat throws on either).
  */
-export function simulateBattle(input: BattleSimulationInput): BattleResult {
+export function simulateBattle(
+    input: BattleSimulationInput,
+    getGearPiece?: (id: string) => GearPiece | undefined
+): BattleResult {
     // Validate inputs up front (trust boundary): empty teams or a bad round count
     // would otherwise flow through and produce misleading draw/empty outcomes.
     if (input.playerTeam.length === 0) {
@@ -577,9 +589,11 @@ export function simulateBattle(input: BattleSimulationInput): BattleResult {
     // team + every enemy get minted globally-unique ids that avoid `'attacker'`/`'enemy'`.
     const FOCUS_ID = 'attacker';
     const playerPlans = input.playerTeam.map((p, i) =>
-        planPlacement(p, i === 0 ? FOCUS_ID : `p:${p.ship.id}:${i}`)
+        planPlacement(p, i === 0 ? FOCUS_ID : `p:${p.ship.id}:${i}`, getGearPiece)
     );
-    const enemyPlans = input.enemyTeam.map((p, i) => planPlacement(p, `e:${p.ship.id}:${i}`));
+    const enemyPlans = input.enemyTeam.map((p, i) =>
+        planPlacement(p, `e:${p.ship.id}:${i}`, getGearPiece)
+    );
 
     // Representative opposing affinity for each side's matchup resolution (first opponent).
     const enemyRepAffinity = enemyPlans[0]?.affinity;

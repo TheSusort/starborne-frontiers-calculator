@@ -59,6 +59,7 @@ import {
     PlayerActorRuntime,
     PlayerRoundCtx,
     PlayerTurnResult,
+    RateGate,
     runPlayerTurn,
 } from './playerTurn';
 import {
@@ -1853,6 +1854,10 @@ export function runCombat(input: CombatEngineInput): {
     // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
     // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
     const oncePerCombatFired = new Set<string>();
+    // Combat-lifetime proc-chance gates for equipment reactive procs (D-PR1). Keyed
+    // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
+    // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
+    const procChanceGates = new Map<string, RateGate>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -3146,6 +3151,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Combat-lifetime proc-chance gates (D-PR1): equipment reactive procs
+                        // that carry a procChance fire at their stated rate via this accumulator.
+                        procChanceGates,
                         // Phase 4c PR 6: live lowest-speed-ally gate. UNCONDITIONAL (unlike the
                         // healing-only selfHpPctFor spread) — in DPS mode the set is {attacker}, so
                         // the lone attacker resolves true and DPS gating stays byte-identical.

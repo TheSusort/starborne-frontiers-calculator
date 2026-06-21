@@ -13,7 +13,7 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
+import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import {
@@ -118,7 +118,7 @@ const HealingCalculatorPage: React.FC = () => {
                             ...healerStatsFromShip(shipFinalStats(ship)),
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             startCharged: detectShipCharged(ship),
-                            shipSkills: buildShipAbilities(ship),
+                            shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                         },
                     ],
                     nextId: 2,
@@ -232,7 +232,7 @@ const HealingCalculatorPage: React.FC = () => {
                     ...stats,
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
-                    shipSkills: buildShipAbilities(ship),
+                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                 };
             })
         );
@@ -249,7 +249,7 @@ const HealingCalculatorPage: React.FC = () => {
             speed: Math.round(final.speed ?? 100),
             security: Math.round(final.security ?? 0),
         }));
-        setTargetShipSkills(buildShipAbilities(ship));
+        setTargetShipSkills(buildShipAbilitiesWithEquipment(ship, getGearPiece));
         setTargetChargeCount(ship.chargeSkillCharge ?? 0);
         setTargetStartCharged(detectShipCharged(ship));
         setTargetAffinity(ship.affinity);
@@ -304,7 +304,7 @@ const HealingCalculatorPage: React.FC = () => {
                     hacking: Math.round(final.hacking ?? 200),
                     chargeCount: ship.chargeSkillCharge ?? 0,
                     startCharged: detectShipCharged(ship),
-                    shipSkills: buildShipAbilities(ship),
+                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                     affinity: ship.affinity,
                 };
             })
@@ -353,7 +353,7 @@ const HealingCalculatorPage: React.FC = () => {
                     startCharged: detectShipCharged(ship),
                     speed: Math.round(final.speed ?? 100),
                     chargeCount: ship.chargeSkillCharge ?? 0,
-                    shipSkills: buildShipAbilities(ship),
+                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                     stats: {
                         attack: Math.round(final.attack ?? 0),
                         crit: Math.round(final.crit ?? 0),
