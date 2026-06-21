@@ -36,6 +36,8 @@ export function buildRoundContext(state: {
     isLowestSpeedAlly?: boolean;
     /** The acting attacker's target was repaired this round. Default false. */
     targetRepairedThisRound?: boolean;
+    /** True when the acting unit has a shield (shieldPool > 0). Default false. */
+    selfShielded?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -57,6 +59,7 @@ export function buildRoundContext(state: {
         enemyHpPct: state.enemyHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
+        selfShielded: state.selfShielded ?? false,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

@@ -171,3 +171,72 @@ describe('buildEquipmentAbilities — unknown implant key', () => {
         expect(abilities).toHaveLength(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Helpers for implant-only tests
+// ---------------------------------------------------------------------------
+
+/** Build a ship with a single implant piece in implant_major and call buildEquipmentAbilities. */
+function buildForImplant(name: string, rarity: string) {
+    const implantPiece = makePiece({
+        id: `${name.toLowerCase()}-implant`,
+        slot: 'implant_major',
+        rarity: rarity as unknown as GearPiece['rarity'],
+        setBonus: name as GearPiece['setBonus'],
+    });
+    const ship = makeShip({
+        implants: { implant_major: `${name.toLowerCase()}-implant` },
+    });
+    const getGearPiece = makeGetGearPiece({
+        [`${name.toLowerCase()}-implant`]: implantPiece,
+    });
+    return buildEquipmentAbilities(ship, getGearPiece);
+}
+
+// ---------------------------------------------------------------------------
+// Case 7: Intrusion implant
+// ---------------------------------------------------------------------------
+describe('Intrusion implant', () => {
+    it('emits a passive outgoingDamage modifier scaling per enemy debuff (legendary = 5/debuff)', () => {
+        const abilities = buildForImplant('INTRUSION', 'legendary');
+        expect(abilities).toHaveLength(1);
+        const a = abilities[0];
+        expect(a.type).toBe('modifier');
+        expect(a.trigger).toBe('on-cast');
+        expect(a.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage', value: 0 });
+        expect(a.scaling).toEqual({ conditionIndex: 0, perUnit: 5 });
+        expect(a.conditions).toEqual([{ subject: 'enemy-debuff', derivable: true }]);
+    });
+    it('bakes the uncommon per-debuff value (2)', () => {
+        expect(buildForImplant('INTRUSION', 'uncommon')[0].scaling).toEqual({
+            conditionIndex: 0,
+            perUnit: 2,
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Case 8: Arcane Siege implant
+// ---------------------------------------------------------------------------
+describe('Arcane Siege implant', () => {
+    it('emits a flat outgoingDamage modifier gated on self-shield (epic = 15)', () => {
+        const a = buildForImplant('ARCANE_SIEGE', 'epic')[0];
+        expect(a.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage', value: 15 });
+        expect(a.scaling).toBeUndefined();
+        expect(a.conditions).toEqual([{ subject: 'self-shield', derivable: true }]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Case 9: Warpstrike implant
+// ---------------------------------------------------------------------------
+describe('Warpstrike implant', () => {
+    it('emits a flat outgoingDamage modifier gated on >=1 self-debuff (legendary = 5)', () => {
+        const a = buildForImplant('WARPSTRIKE', 'legendary')[0];
+        expect(a.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage', value: 5 });
+        expect(a.scaling).toBeUndefined();
+        expect(a.conditions).toEqual([
+            { subject: 'self-debuff', derivable: true, countComparator: 'gte', countThreshold: 1 },
+        ]);
+    });
+});
