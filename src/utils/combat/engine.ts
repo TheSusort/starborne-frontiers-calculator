@@ -51,6 +51,7 @@ import {
 import type { AttackerDamageScalars } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { outgoingAmplificationForHit } from './outgoingEffects';
+import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
@@ -1930,6 +1931,12 @@ export function runCombat(input: CombatEngineInput): {
               },
               recipientMaxHp,
               recipientIncomingHealPct,
+              recipientIncomingHealAmpPct: (rid) =>
+                  incomingHealAmpForRecipient(
+                      incomingHealAmpAbilitiesOf(rid),
+                      (abilityId, chance) =>
+                          rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance)
+                  ),
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
@@ -2124,6 +2131,25 @@ export function runCombat(input: CombatEngineInput): {
         if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
     }
     const incomingAbilitiesOf = (id: string): Ability[] => incomingAbilitiesById.get(id) ?? [];
+
+    // D-PR6: per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
+    // side-agnostic (a ship can be a heal recipient on either team). Built once from BOTH runtime
+    // maps; empty for actors without the relevant equipment. Consumed by the heal-apply fold (a
+    // later task) — nothing reads it yet, so this is byte-identical.
+    const incomingHealAmpAbilitiesById = new Map<string, Ability[]>();
+    for (const rt of [...runtimesById.values(), ...enemyPlayerRuntimeByActorId.values()]) {
+        if (incomingHealAmpAbilitiesById.has(rt.actor.id)) continue; // dedupe if an actor is in both maps
+        const heals: Ability[] = [];
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const a of slot.abilities) {
+                if (a.config.type === 'incoming-heal-amplification') heals.push(a);
+            }
+        }
+        if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
+    }
+    const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
+        incomingHealAmpAbilitiesById.get(id) ?? [];
 
     // D-PR4: per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
     // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for

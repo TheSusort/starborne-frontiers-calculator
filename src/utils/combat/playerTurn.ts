@@ -86,6 +86,10 @@ export interface HealingRuntimeCtx {
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
     recipientIncomingHealPct: (actorId: string) => number;
+    /** D-PR6: summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
+     *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
+     *  use 0 → byte-identical. */
+    recipientIncomingHealAmpPct?: (rid: string) => number;
     /** A FOREIGN HoT applier's effective max HP at tick time (Task 7): reads
      *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
      *  rule). Returns undefined when the applier has not acted this run yet, in which case
