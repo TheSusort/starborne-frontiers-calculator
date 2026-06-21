@@ -99,7 +99,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -122,6 +122,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'VORTEX_VEIL',
             'WARPSTRIKE',
             'BLOODTHIRST',
+            'EXUBERANCE',
             'GIANT_SLAYER',
             'INSIDIOUSNESS',
             'IRONCLAD',
@@ -177,6 +178,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR3: VOIDSHADE, NEBULA_NULLIFIER, HYPERION_GAZE, VORTEX_VEIL, IRONCLAD, SHADOWGUARD added.
     // D-PR4: MENACE, GIANT_SLAYER, INSIDIOUSNESS added (outgoing-amplification on-crit / vs higher-attack / on-debuff).
     // D-PR5: SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR added (reactive-heal family).
+    // D-PR6: EXUBERANCE added (repair-amplification on-repair chance).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -194,6 +196,7 @@ describe('equipmentCoverage — implants', () => {
         'SECOND_WIND',
         'NOURISHMENT',
         'VIVACIOUS_REPAIR',
+        'EXUBERANCE',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -313,6 +316,16 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['VIVACIOUS_REPAIR'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('VIVACIOUS_REPAIR', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR6: repair-amplification implant
+    it('EXUBERANCE produces 1 ability per rarity (repair-amplification on-repair chance; no common variant)', () => {
+        // EXUBERANCE has uncommon/rare/epic/legendary — no common variant.
+        expect(implantAbilityCount('EXUBERANCE', 'common')).toBe(0);
+        const variants = IMPLANTS['EXUBERANCE'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('EXUBERANCE', v.rarity)).toBe(1);
         }
     });
 
