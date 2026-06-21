@@ -164,11 +164,17 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
+ *  - on-own-repair-to-ally → the OWNER's OWN heal-performed (casterId === ownerId) with at least
+ *    one non-self recipient — the on-ally-critically-repaired twin WITHOUT the crit filter (Font
+ *    of Power). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff branch fans
+ *    the grant out to exactly those allies. One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
  *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
  *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round; C2b-2)
+ *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
+ *    fires when THIS OWNER performs its CHARGED skill — Spearhead). One enqueue per cast.
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
