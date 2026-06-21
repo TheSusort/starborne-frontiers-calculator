@@ -51,8 +51,10 @@
 
 In `equipmentAbilities.integration.test.ts`, add a `describe('Spearhead — on-charged-cast all-allies Attack Up I', ...)`. Mirror the combat-building harness already used in that file (and in `reactiveBuffProcGate.test.ts`) to set up a two-actor player team where the focus carries a legendary `SPEARHEAD` implant (via the `getGearPiece` arg to the equipment-aware ability builder / `simulateBattle`) and has enough charges to fire its charged skill on its turn.
 
-Assert (procChance forced to 1 for determinism — see Step 4 note):
-- After the carrier's charged-skill turn, every player ally (including the carrier) carries the `Attack Up I` buff (assert via the round's buff state / a `buff-applied` event for `Attack Up I`).
+**Determinism (important — there is NO proc=1 override in `simulateBattle`):** the proc rides a `makeRateGate` accumulator keyed `${ownerId}:${abilityId}`. Follow the **Bloodthirst** integration precedent in this same file (`equipmentAbilities.integration.test.ts:214-275`): run a fixed number `N` of qualifying casts (here: charged-skill turns) and assert the deterministic fire count `floor(N × procChance)`, or run enough qualifying casts that it fires at least once and assert presence. Do NOT look for a "force to 1" hook — it doesn't exist. (The `reactiveBuffProcGate.test.ts` file is a hand-built-Intent UNIT test of `executeIntent`'s gate — useful for the gate mechanism, but it does NOT drive a full battle; use the Bloodthirst harness for the end-to-end battle determinism.)
+
+Assert:
+- After enough charged-skill turns for the accumulator to fire, every player ally (including the carrier) carries the `Attack Up I` buff (assert via the round's buff state / a `buff-applied` event for `Attack Up I`).
 - An ally's outgoing damage in a round where `Attack Up I` is active is strictly greater than the same ally's damage with no Spearhead equipped (LIVE-effect proof — `Attack Up I` is `+15% Attack` and folds).
 - When the carrier fires its ACTIVE skill (insufficient charges), NO `Attack Up I` is granted.
 
@@ -114,7 +116,7 @@ And add to `IMPLANT_ABILITIES` (alongside the D-PR8 entries ~line 610, before th
 - [ ] **Step 6: Run the Spearhead test to verify it passes**
 
 Run: `npx vitest run src/utils/combat/__tests__/equipmentAbilities.integration.test.ts -t Spearhead`
-Expected: PASS. (For determinism, the test should force the proc — e.g. the harness's RNG seeding or a procChance-of-1 path used by `reactiveBuffProcGate.test.ts`. Follow that file's approach to make the gate deterministic.)
+Expected: PASS. (Determinism via the `makeRateGate` accumulator schedule per the Bloodthirst precedent — see the determinism note in Step 1.)
 
 - [ ] **Step 7: Commit**
 
@@ -158,7 +160,7 @@ In `src/constants/buffs.ts`, add (anywhere in the `BUFFS` array; match the commi
 
 The generator currently writes a `{ name, description }`-only interface and `buffsMap` value type, which would strip the committed `type`/`imageKey` fields (and drop this implant-only buff) on the next `npm run fetch-buffs`. Apply two changes:
 
-(a) Widen the in-memory value type and the emitted `Buff` interface template to include `type` and `imageKey?` so a regen preserves the committed shape. In the file-content template string, change the interface to:
+(a) Widen the in-memory value type and the emitted `Buff` interface template to include OPTIONAL `type`/`imageKey` so that `MANUAL_BUFFS` entries (which carry `type`) serialize validly and a regen no longer fails to type-check the committed shape. In the file-content template string, change the interface to:
 ```ts
 export interface Buff {
     name: string;
@@ -167,7 +169,9 @@ export interface Buff {
     imageKey?: string;
 }
 ```
-and widen the `buffsMap`/`buffsArray` types accordingly (carry `type`/`imageKey` through from the fetched buffs).
+and widen the `buffsMap`/`buffsArray` value types to `{ name; description; type?; imageKey? }`.
+
+> Scope note: the upstream fetcher (`updateBuffsDataFetcher.ts`) returns only `{name,description}`, so a regen still won't populate `type` for FETCHED buffs (that fidelity gap is pre-existing and out of scope for D-PR9). The load-bearing pieces are Step 2 (the committed `buffs.ts` entry) and Step 3(b) `MANUAL_BUFFS` (re-adds the implant-only buff on regen) — both correct and sufficient for the goal: corpus presence now + survival of a future regen.
 
 (b) Add a `MANUAL_BUFFS` supplement (parallel to `MANUAL_DESCRIPTION_OVERRIDES`), merged into `buffsMap` before the array is built:
 ```ts
@@ -219,7 +223,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing integration test (Font of Power emit-only grant)**
 
-Add a `describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', ...)`. Set up a player team where the focus is a healer carrying a legendary `FONT_OF_POWER` implant and repairs ≥1 other ally. Force the proc deterministically.
+Add a `describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', ...)`. Set up a player team where the focus is a healer carrying a legendary `FONT_OF_POWER` implant and repairs ≥1 other ally. Drive the proc deterministically via the `makeRateGate` accumulator (run a fixed number of qualifying repair casts and assert the `floor(N × procChance)` fire count, or run enough that it fires at least once) — same mechanism as the Spearhead/Bloodthirst determinism note above.
 
 Assert:
 - After the carrier repairs another ally, every repaired non-self ally carries the `Power Infused Nanobots` buff (presence only — emit-only, so assert the buff is present; do NOT assert any stat/damage change).
@@ -452,7 +456,7 @@ Dispatch a final code review (superpowers:requesting-code-review or a code-revie
 
 ## Notes for the implementer
 
-- **Determinism for proc gates:** the proc-chance gate is a `makeRateGate` accumulator. The existing `reactiveBuffProcGate.test.ts` shows how D-PR8 made buff procs deterministic in tests — reuse that approach (force the proc to fire) rather than relying on RNG.
+- **Determinism for proc gates:** the proc-chance gate is a `makeRateGate` accumulator keyed `${ownerId}:${abilityId}` — deterministic given a fixed number of qualifying events (`floor(N × procChance)` fires over N events, back-loaded). For full-battle integration tests use the **Bloodthirst** precedent (`equipmentAbilities.integration.test.ts:214-275`): run a fixed count of qualifying casts and assert the fire count, or run enough that it fires at least once. There is NO proc=1 override in `simulateBattle`. (`reactiveBuffProcGate.test.ts` is a unit test of `executeIntent`'s gate, not a battle driver.)
 - **`Attack Up I` is the corpus name** (`+15% Attack`, `buffs.ts:406`); the implant text's "Attack Up 1" maps to it. The registry call MUST pass `'Attack Up I'`.
 - **Do not text-parse the implant descriptions** (the rare Font of Power variant even has a "grand"/"grant" typo) — the registry hard-codes buff names and values.
 - **Emit-only means the buff applies + logs with zero stat effect** because `parseBuffEffects` yields nothing for its caster-derived description. The buff NAME becomes visible to name-based condition gates only once a fixture carries the implant (none do today) — D-PR10 (which folds the real effect) must keep this in mind.
