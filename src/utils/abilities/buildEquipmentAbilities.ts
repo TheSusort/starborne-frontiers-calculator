@@ -23,9 +23,12 @@
 
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
+import { BUFFS } from '../../constants/buffs';
+import { parseBuffEffects, isStackable } from '../calculators/buffParser';
 import { GearPiece } from '../../types/gear';
 import {
     Ability,
+    AbilityTrigger,
     HealAmpCondition,
     IncomingCondition,
     OutgoingCondition,
@@ -202,6 +205,9 @@ const VIVACIOUS_PROC: Record<string, number> = { rare: 0.21, epic: 0.26, legenda
 // D-PR7: on-death implant value tables
 // Last Wish: repair all allies % of their max HP on death. No common variant.
 const LAST_WISH_PCT: Record<string, number> = { uncommon: 14, rare: 19, epic: 25, legendary: 32 };
+// Battlecry: grant all allies a named defensive buff on death. Per-rarity = DURATION only;
+// magnitude is intrinsic to the buff tier. No uncommon variant.
+const BATTLECRY_DURATION: Record<string, number> = { common: 1, rare: 2, epic: 2, legendary: 3 };
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -261,6 +267,38 @@ function mkHealAmp(
         trigger: 'on-cast',
         conditions: [],
         config: { type: 'heal-amplification', condition, ampPct, procChance },
+        autoFilled: true,
+    };
+}
+
+// D-PR7: build a reactive named-buff grant (e.g. Battlecry's on-death "Inc. Damage Down II").
+// parsedEffects/stackability resolve from the canonical BUFFS entry. EMIT-ONLY for buffs whose
+// effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
+// and logged but has no combat effect until that fold exists.
+function mkNamedBuffGrant(
+    buffName: string,
+    target: 'self' | 'ally' | 'all-allies',
+    trigger: AbilityTrigger,
+    duration: number | undefined
+): Omit<Ability, 'id'> | undefined {
+    if (duration === undefined) return undefined;
+    const buff = BUFFS.find((b) => b.name === buffName);
+    if (!buff) return undefined;
+    const { stackable, maxStacks } = isStackable(buff.description);
+    return {
+        type: 'buff',
+        target,
+        trigger,
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName,
+            parsedEffects: parseBuffEffects(buff.name, buff.description),
+            stacks: 1,
+            isStackable: stackable,
+            maxStacks,
+            duration,
+        },
         autoFilled: true,
     };
 }
@@ -477,6 +515,16 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
+    // Battlecry: "Upon death, grants all allies Inc. Damage Down II for N turns." EMIT-ONLY:
+    // self-side "Inc. Damage Down" is not folded into incoming damage yet (victimEnemyBuffs reads
+    // enemy-side only). The buff is applied + logged; lights up when self-side incoming folding lands.
+    BATTLECRY: (rarity) =>
+        mkNamedBuffGrant(
+            'Inc. Damage Down II',
+            'all-allies',
+            'on-destroyed',
+            BATTLECRY_DURATION[rarity]
+        ),
 };
 
 // ---------------------------------------------------------------------------

@@ -650,3 +650,34 @@ describe('Second Wind implant', () => {
         expect(buildForImplant('SECOND_WIND', 'common')).toEqual([]);
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR7: Battlecry (on-death Inc. Damage Down to allies — emit-only)
+// ---------------------------------------------------------------------------
+describe('Battlecry (on-death Inc. Damage Down to allies — emit-only)', () => {
+    it('legendary → buff/all-allies/on-destroyed, Inc. Damage Down II, duration 3', () => {
+        const piece = makePiece({ id: 'bc-1', setBonus: 'BATTLECRY', rarity: 'legendary' });
+        const ship = makeShip({ implants: { implant_major: 'bc-1' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'bc-1': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-BATTLECRY');
+        expect(a).toBeDefined();
+        expect(a!.trigger).toBe('on-destroyed');
+        expect(a!.target).toBe('all-allies');
+        expect(a!.config).toMatchObject({
+            type: 'buff',
+            buffName: 'Inc. Damage Down II',
+            duration: 3,
+        });
+        expect(
+            (a!.config as { parsedEffects: { incomingDamage?: number } }).parsedEffects
+                .incomingDamage
+        ).toBe(-30);
+    });
+    it('common → duration 1', () => {
+        const piece = makePiece({ id: 'bc-2', setBonus: 'BATTLECRY', rarity: 'common' });
+        const ship = makeShip({ implants: { implant_major: 'bc-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'bc-2': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-BATTLECRY');
+        expect(a!.config).toMatchObject({ type: 'buff', duration: 1 });
+    });
+});
