@@ -71,7 +71,6 @@ export function foldActorBuffTotals(
     // Field-by-field sum is intentional: explicit enumeration preserves type-safety over a generic key reduce.
     return {
         attackBuff: scheduled.attackBuff + timed.attackBuff,
-        attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
         critBuff: scheduled.critBuff + timed.critBuff,
         critDamageBuff: scheduled.critDamageBuff + timed.critDamageBuff,
         outgoingDamageBuff: scheduled.outgoingDamageBuff + timed.outgoingDamageBuff,
@@ -82,6 +81,7 @@ export function foldActorBuffTotals(
         speedBuff: scheduled.speedBuff + timed.speedBuff,
         hackingBuff: scheduled.hackingBuff + timed.hackingBuff,
         securityBuff: scheduled.securityBuff + timed.securityBuff,
+        attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
     };
 }
 
@@ -93,7 +93,7 @@ export function effectiveStatsOf(
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
     const s = actor.stats;
     return {
-        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff,
+        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
         defence: s.defence * (1 + t.defenceBuff / 100),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -186,7 +186,6 @@ export function effectiveDamageStatsOf(args: {
 
     const totals: ReturnType<typeof calculateBuffTotals> = {
         attackBuff: scheduledTotals.attackBuff + ability.attackBuff + mod.attack,
-        attackFlatBuff: scheduledTotals.attackFlatBuff + ability.attackFlatBuff,
         critBuff: scheduledTotals.critBuff + ability.critBuff + mod.crit,
         critDamageBuff: scheduledTotals.critDamageBuff + ability.critDamageBuff + mod.critDamage,
         outgoingDamageBuff:
@@ -198,10 +197,11 @@ export function effectiveDamageStatsOf(args: {
         speedBuff: scheduledTotals.speedBuff + ability.speedBuff,
         hackingBuff: scheduledTotals.hackingBuff + ability.hackingBuff,
         securityBuff: scheduledTotals.securityBuff + ability.securityBuff,
+        attackFlatBuff: scheduledTotals.attackFlatBuff + ability.attackFlatBuff,
     };
 
     return {
-        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff,
+        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
         defence: base.defence * (1 + totals.defenceBuff / 100),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,

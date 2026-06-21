@@ -194,7 +194,7 @@ describe('toSimBuffs — attackFlat channel (D-PR10)', () => {
             },
         ]);
         expect(out).toContainEqual({ id: 'b1-attackFlat', stat: 'attackFlat', value: 500 });
-        expect(out.some((b) => b.value === 100)).toBe(false); // sentinel inert — no leaf
+        expect(out.some((b) => (b.stat as string) === 'attackFlatPctOfCaster')).toBe(false); // sentinel inert — no leaf
     });
 });
 
