@@ -24,7 +24,12 @@
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { GearPiece } from '../../types/gear';
-import { Ability, HealAmpCondition, IncomingCondition, OutgoingCondition } from '../../types/abilities';
+import {
+    Ability,
+    HealAmpCondition,
+    IncomingCondition,
+    OutgoingCondition,
+} from '../../types/abilities';
 import { Ship } from '../../types/ship';
 
 // ---------------------------------------------------------------------------
@@ -193,6 +198,10 @@ const SECOND_WIND_PROC: Record<string, number> = {
 const NOURISHMENT_AMP: Record<string, number> = { uncommon: 10, rare: 15, epic: 20, legendary: 30 };
 // No common/uncommon rarity for Vivacious Repair
 const VIVACIOUS_PROC: Record<string, number> = { rare: 0.21, epic: 0.26, legendary: 0.32 };
+
+// D-PR7: on-death implant value tables
+// Last Wish: repair all allies % of their max HP on death. No common variant.
+const LAST_WISH_PCT: Record<string, number> = { uncommon: 14, rare: 19, epic: 25, legendary: 32 };
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -452,6 +461,22 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             'target-below-25',
             VIVACIOUS_PROC[rarity]
         ),
+    // D-PR7: on-death implants ----------------------------------------------------
+    // Last Wish: "Upon death, repairs X% of all allies' max HP." Rides the reactive
+    // heal executor on the on-destroyed trigger (Salvation precedent); basis 'target-hp'
+    // repairs each ally % of its OWN max HP. Reactive heals never crit. Fully modeled.
+    LAST_WISH: (rarity) => {
+        const pct = LAST_WISH_PCT[rarity];
+        if (pct === undefined) return undefined;
+        return {
+            type: 'heal',
+            target: 'all-allies',
+            trigger: 'on-destroyed',
+            conditions: [],
+            config: { type: 'heal', pct, basis: 'target-hp', noCrit: true },
+            autoFilled: true,
+        };
+    },
 };
 
 // ---------------------------------------------------------------------------
