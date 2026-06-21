@@ -681,3 +681,37 @@ describe('Battlecry (on-death Inc. Damage Down to allies — emit-only)', () => 
         expect(a!.config).toMatchObject({ type: 'buff', duration: 1 });
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR7: Martyrdom (on-death Disable the killer — emit-only)
+// ---------------------------------------------------------------------------
+describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
+    it('legendary → debuff/enemy/on-destroyed, Disable, application apply, duration 2', () => {
+        const piece = makePiece({ id: 'm-1', setBonus: 'MARTYRDOM', rarity: 'legendary' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-1' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-1': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-MARTYRDOM');
+        expect(a).toBeDefined();
+        expect(a!.trigger).toBe('on-destroyed');
+        expect(a!.target).toBe('enemy');
+        expect(a!.config).toMatchObject({
+            type: 'debuff',
+            buffName: 'Disable',
+            application: 'apply',
+            duration: 2,
+        });
+    });
+    it('rare → duration 1', () => {
+        const piece = makePiece({ id: 'm-2', setBonus: 'MARTYRDOM', rarity: 'rare' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-2': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-MARTYRDOM');
+        expect(a!.config).toMatchObject({ type: 'debuff', duration: 1 });
+    });
+    it('epic → no ability (only rare + legendary variants exist)', () => {
+        const piece = makePiece({ id: 'm-3', setBonus: 'MARTYRDOM', rarity: 'epic' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-3' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-3': piece }));
+        expect(abilities.find((x) => x.id === 'equip-implant-MARTYRDOM')).toBeUndefined();
+    });
+});
