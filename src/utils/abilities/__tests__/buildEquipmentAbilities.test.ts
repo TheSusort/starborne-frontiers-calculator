@@ -477,6 +477,78 @@ describe('Insidiousness implant', () => {
 });
 
 // ---------------------------------------------------------------------------
+// D-PR5: Nourishment implant (heal-amplification, target-hp-below-self, deterministic)
+// ---------------------------------------------------------------------------
+describe('Nourishment implant', () => {
+    it('epic → heal-amplification, condition target-hp-below-self, ampPct 20, no procChance', () => {
+        const abilities = buildForImplant('NOURISHMENT', 'epic');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('heal-amplification');
+        expect(ab.target).toBe('self');
+        expect(ab.autoFilled).toBe(true);
+        expect(ab.procChance).toBeUndefined();
+        if (ab.config.type === 'heal-amplification') {
+            expect(ab.config.condition).toBe('target-hp-below-self');
+            expect(ab.config.ampPct).toBe(20);
+            expect(ab.config.procChance).toBeUndefined();
+        } else {
+            throw new Error('Expected heal-amplification config');
+        }
+    });
+
+    it('legendary → ampPct 30', () => {
+        const ab = buildForImplant('NOURISHMENT', 'legendary')[0];
+        if (ab.config.type === 'heal-amplification') {
+            expect(ab.config.ampPct).toBe(30);
+        } else {
+            throw new Error('Expected heal-amplification config');
+        }
+    });
+
+    it('common → no ability (no common variant)', () => {
+        expect(buildForImplant('NOURISHMENT', 'common')).toEqual([]);
+    });
+});
+
+// D-PR5: Vivacious Repair implant (heal-amplification, target-below-25, probabilistic)
+// ---------------------------------------------------------------------------
+describe('Vivacious Repair implant', () => {
+    it('legendary → heal-amplification, condition target-below-25, ampPct 100, procChance ≈ 0.32', () => {
+        const abilities = buildForImplant('VIVACIOUS_REPAIR', 'legendary');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('heal-amplification');
+        expect(ab.target).toBe('self');
+        expect(ab.autoFilled).toBe(true);
+        if (ab.config.type === 'heal-amplification') {
+            expect(ab.config.condition).toBe('target-below-25');
+            expect(ab.config.ampPct).toBe(100);
+            expect(ab.config.procChance).toBeCloseTo(0.32);
+        } else {
+            throw new Error('Expected heal-amplification config');
+        }
+    });
+
+    it('rare → procChance ≈ 0.21', () => {
+        const ab = buildForImplant('VIVACIOUS_REPAIR', 'rare')[0];
+        if (ab.config.type === 'heal-amplification') {
+            expect(ab.config.ampPct).toBe(100);
+            expect(ab.config.procChance).toBeCloseTo(0.21);
+        } else {
+            throw new Error('Expected heal-amplification config');
+        }
+    });
+
+    it('common → no ability (no common variant)', () => {
+        expect(buildForImplant('VIVACIOUS_REPAIR', 'common')).toEqual([]);
+    });
+
+    it('uncommon → no ability (no uncommon variant)', () => {
+        expect(buildForImplant('VIVACIOUS_REPAIR', 'uncommon')).toEqual([]);
+    });
+});
+
 // D-PR5: Second Wind implant (reactive self-heal on crit-received)
 // ---------------------------------------------------------------------------
 describe('Second Wind implant', () => {
