@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
@@ -1021,7 +1022,12 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         target: 'self',
         trigger: 'on-cast',
         conditions: [],
-        config: { type: 'heal-amplification', condition, ampPct, ...(procChance !== undefined ? { procChance } : {}) },
+        config: {
+            type: 'heal-amplification',
+            condition,
+            ampPct,
+            ...(procChance !== undefined ? { procChance } : {}),
+        },
         autoFilled: true,
     });
 
@@ -1209,9 +1215,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
                 shipSkills: healerSkills(healAmp('target-below-25', 100, 0.5)),
             })
         );
-        const without = runCombat(
-            AMP_BASE({ numRounds: NUM_ROUNDS, shipSkills: healerSkills() })
-        );
+        const without = runCombat(AMP_BASE({ numRounds: NUM_ROUNDS, shipSkills: healerSkills() }));
         expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(sumHeal(without, 'directHeal'), 6);
         expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
     });
@@ -1314,9 +1318,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
                     shipSkills: skills(exuberance(EXU_AMP, EXU_PROC)),
                 })
             );
-            const baseline = runCombat(
-                EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() })
-            );
+            const baseline = runCombat(EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() }));
 
             const baseHeal = sumHeal(baseline, 'directHeal');
             const exuHeal = sumHeal(withExu, 'directHeal');
@@ -1426,10 +1428,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
                             { slot: 'active', abilities: [noopActive] },
                             {
                                 slot: 'passive',
-                                abilities: [
-                                    reactiveSelfHeal(1.0),
-                                    exuberance(EXU_AMP, EXU_PROC),
-                                ],
+                                abilities: [reactiveSelfHeal(1.0), exuberance(EXU_AMP, EXU_PROC)],
                             },
                         ],
                     },
@@ -1461,4 +1460,229 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             expect(exuHeal).toBeGreaterThan(baseHeal);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7 Task 4: Martyrdom implant — on-destroyed debuff routes to the killer
+// ---------------------------------------------------------------------------
+//
+// Martyrdom is an on-destroyed DEBUFF reaction: "Applies Disable on the enemy that
+// killed this Unit." It fires only when the carrier is killed by DIRECT damage, and
+// the Disable debuff must land on the KILLER — not the engine's default enemy sink.
+//
+// Harness shape (mirrors the Second Wind crit-received scenario):
+//   - The FOCUS actor ('attacker') is the heal target (healTargetId), carries the
+//     legendary Martyrdom implant in its passive slot (via buildShipAbilitiesWithEquipment),
+//     and has a tiny HP pool so a single enemy hit is lethal.
+//   - A named enemy attacker ('mart-killer') deals a lethal DIRECT hit on round 1.
+//     recordDestroyed stamps ship-destroyed with killerId='mart-killer', byDirectDamage:true.
+//   - The on-destroyed listener (post-change) routes the Disable debuff's counterTargetId
+//     to the killer → debuff-applied.targetId === 'mart-killer' (NOT the default 'enemy').
+//
+// Test A: lethal DIRECT kill → a Disable debuff-applied fires, targeting the KILLER.
+// Test B: lethal NON-direct (DoT) kill → no Disable debuff-applied fires (byDirectDamage:false).
+
+describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to the killer', () => {
+    const KILLER_ID = 'mart-killer';
+    const FOCUS_HP = 1_000;
+
+    /** No-op active for the focus — deals no damage, just keeps the round cadence. */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Build focus ship skills: no-op active + the legendary Martyrdom passive (from the registry). */
+    function buildMartyrdomShipSkills(): ShipSkills {
+        const ship = makeShip({ implants: { implant_major: 'mart-legendary' } });
+        const martyrdomPiece = makePiece({
+            id: 'mart-legendary',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'MARTYRDOM',
+        });
+        const getGearPiece = makeGetGearPiece({ 'mart-legendary': martyrdomPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Martyrdom on-destroyed debuff landed in the passive slot.
+        const martyrdom = passive?.abilities.find((a) => a.id === 'equip-implant-MARTYRDOM');
+        expect(martyrdom).toBeDefined();
+        expect(martyrdom!.trigger).toBe('on-destroyed');
+        expect(martyrdom!.config.type).toBe('debuff');
+
+        return {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+    }
+
+    /** A fast enemy attacker that lands a lethal DIRECT hit on the focus each round. */
+    const directKiller = {
+        id: KILLER_ID,
+        stats: {
+            attack: 1_000_000, // dwarfs FOCUS_HP → guaranteed lethal direct hit
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000, // acts before the slow focus
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'mart-killer-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    };
+
+    /** A fast enemy attacker that lands a corrosion DoT (no direct damage) which kills the focus. */
+    const dotKiller = {
+        id: KILLER_ID,
+        stats: {
+            attack: 1_000_000,
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        // DoT only — no direct-damage ability → the kill comes from the
+                        // turn-start DoT tick (byDirectDamage:false), never a direct hit.
+                        {
+                            id: 'mart-killer-dot',
+                            type: 'dot' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: {
+                                type: 'dot' as const,
+                                dotType: 'corrosion' as const,
+                                tier: 8,
+                                stacks: 5,
+                                duration: 5,
+                            },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    };
+
+    /** Base engine input: healing mode, slow focus 'attacker' is the heal target. */
+    const MART_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 3,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: FOCUS_HP,
+        speed: 1, // focus is slow → the enemy acts (and kills it) first
+        healTargetId: 'attacker',
+        ...overrides,
+    });
+
+    /** Collect debuff-applied + ship-destroyed events from a runCombat with the given input. */
+    function collect(input: CombatEngineInput) {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events;
+    }
+
+    it(
+        'A. Focus killed by a DIRECT hit: a Disable debuff-applied fires and targets the KILLER ' +
+            "(not the default 'enemy')",
+        () => {
+            const events = collect(
+                MART_BASE({
+                    shipSkills: buildMartyrdomShipSkills(),
+                    enemyAttackers: [directKiller],
+                })
+            );
+
+            // Sanity: the focus actually died to a DIRECT-damage kill attributed to the killer.
+            const destroyed = events.filter(
+                (e) => e.type === 'ship-destroyed' && e.actorId === 'attacker'
+            );
+            expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+            // The Disable debuff must be applied, and it must target the KILLER actor id.
+            const disableEvents = events.filter(
+                (e) => e.type === 'debuff-applied' && e.buffName === 'Disable'
+            );
+            expect(disableEvents.length).toBeGreaterThanOrEqual(1);
+            for (const e of disableEvents) {
+                if (e.type !== 'debuff-applied') continue;
+                expect(e.targetId).toBe(KILLER_ID);
+                // Explicitly NOT the default enemy sink.
+                expect(e.targetId).not.toBe('enemy');
+                // Sourced by the dying carrier.
+                expect(e.sourceId).toBe('attacker');
+            }
+        }
+    );
+
+    it('B. Focus killed by NON-direct (DoT) damage: NO Disable debuff-applied fires', () => {
+        const events = collect(
+            MART_BASE({
+                numRounds: 6, // give the DoT time to tick the focus to death
+                shipSkills: buildMartyrdomShipSkills(),
+                enemyAttackers: [dotKiller],
+            })
+        );
+
+        // Sanity: the focus did die (so the on-destroyed listener fired at all).
+        const destroyed = events.filter(
+            (e) => e.type === 'ship-destroyed' && e.actorId === 'attacker'
+        );
+        expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+        // A DoT kill is byDirectDamage:false → Martyrdom's debuff gate must NOT fire.
+        const disableEvents = events.filter(
+            (e) => e.type === 'debuff-applied' && e.buffName === 'Disable'
+        );
+        expect(disableEvents).toHaveLength(0);
+    });
 });
