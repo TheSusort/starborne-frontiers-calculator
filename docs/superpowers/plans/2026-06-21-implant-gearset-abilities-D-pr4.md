@@ -33,7 +33,7 @@
 Run:
 ```bash
 cd .worktrees/d-pr4-outgoing-amplification
-grep -rniE "menace|giant.?slayer|insidious" src/utils/combat src/utils/calculators src/utils/abilities --include=*.ts | grep -viE "docs/|\.md" || echo "NONE FOUND"
+grep -rniE "menace|giant.?slayer|insidious" src/utils/combat src/utils/calculators src/utils/abilities --include='*.ts' | grep -viE "docs/|\.md" || echo "NONE FOUND"
 ```
 Expected: `NONE FOUND` (or only matches inside this plan/spec). If any real fixture builds a ship with these implants, STOP and note it — the plan's byte-identical premise must be re-confirmed (neutralize the fixture or deliberately audit the churn; never `vitest -u`).
 
@@ -421,19 +421,19 @@ git commit -m "feat(combat): D-PR4 — aggregate-path in-flight outgoing amplifi
 
 ---
 
-## Task 7: Engine wiring — supply `targetEffectiveAttack` + `rollOutgoingProc` at the 3 aggregate sites
+## Task 7: Engine wiring — supply `targetEffectiveAttack` + `rollOutgoingProc` (via `buildTurnArgs`)
 
 **Files:**
-- Modify: `src/utils/calculators/rateAccumulator.ts` (add a tiny shared `rollRateGate` helper) — OR inline the closure; prefer the helper for DRY
-- Modify: `src/utils/combat/engine.ts` (the three `runPlayerTurn({...})` sites: focus ~3594, team ~3770, enemy ~4053)
+- Modify: `src/utils/calculators/rateAccumulator.ts` (add a tiny shared `rollRateGate` helper)
+- Modify: `src/utils/combat/engine.ts` (`buildTurnArgs(actor, tgt)` ~line 2963 — covers all 3 `runPlayerTurn` sites at once, since focus/team/enemy each spread `...buildTurnArgs(...)`)
 - Test: `src/utils/combat/__tests__/` — an engine-level integration test (mirror an existing `runCombat` DPS test) proving a player ship with a Menace implant deals more total damage than the same ship without it, over enough rounds for the gate to fire.
 
-- [ ] **Step 1: Add `rollRateGate`** to `rateAccumulator.ts`:
+- [ ] **Step 1: Add `rollRateGate`** to `rateAccumulator.ts`. NOTE: do NOT import the `RateGate` type here — it lives in `playerTurn.ts`, which imports `makeRateGate` from this module, so importing it back is circular. Use `ReturnType<typeof makeRateGate>` for the gate value type:
 ```ts
-/** Get-or-create a per-key RateGate in `gates` and roll it at `chance`. Absent map → pass-through
- *  (true). Used by the engine to back per-(owner,ability) proc closures. */
+/** Get-or-create a per-key rate gate in `gates` and roll it at `chance`. Absent map → pass-through
+ *  (true). Backs the engine's per-(owner,ability) proc closures (D-PR4 outgoing amplification). */
 export function rollRateGate(
-    gates: Map<string, RateGate> | undefined,
+    gates: Map<string, ReturnType<typeof makeRateGate>> | undefined,
     key: string,
     chance: number
 ): boolean {
@@ -448,16 +448,12 @@ export function rollRateGate(
 
 - [ ] **Step 3: Run, verify fail.** `npx vitest run <integration test>` (the amplified run won't yet differ because the engine passes no `rollOutgoingProc`).
 
-- [ ] **Step 4: Implement the 3 site wirings.** At each `runPlayerTurn({...})` call, add:
+- [ ] **Step 4: Implement once in `buildTurnArgs`.** Read `buildTurnArgs` (~2963) first to confirm its params are `(actor, tgt)` and it returns the `PlayerTurnArgs` object the three sites spread. Add to the returned object:
 ```ts
-targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, <victim>).attack,
-rollOutgoingProc: (abilityId, chance) => rollRateGate(procChanceGates, `${<actingId>}:${abilityId}`, chance),
+targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
+rollOutgoingProc: (abilityId, chance) => rollRateGate(procChanceGates, `${actor.id}:${abilityId}`, chance),
 ```
-- focus site (~3594): victim = the bound target the focus attacks (the `tgt`/dummy used at that site); actingId = the focus actor id.
-- team site (~3770): victim = that team actor's resolved target; actingId = team actor id.
-- enemy site (~4053): victim = `tgt` (already in scope); actingId = `actor.id` (already in scope).
-
-Use the SAME `selfBuffLookup`/`statusEngine` args already used by the existing `effectiveStatsOf(...).speed` call (~1570) and `procChanceGates` (already in scope, created ~1873). Verify the exact victim variable name at each site before editing (read ±15 lines).
+Here `actor` = the acting attacker, `tgt` = the bound victim — both are `buildTurnArgs` params, so this single edit covers focus/team/enemy. `statusEngine`/`selfBuffLookup` are the same args used by the existing `effectiveStatsOf(...).speed` call (~1570); `procChanceGates` is in scope (created ~1873). Import `rollRateGate` from `../calculators/rateAccumulator`. If `buildTurnArgs` turns out NOT to be spread by all three sites (verify), fall back to editing the three `runPlayerTurn({...})` literals individually (focus ~3594 / team ~3770 / enemy ~4053, each with its own `actor`/`tgt`).
 
 - [ ] **Step 5: Run the integration test + FULL suite.** `npx vitest run` — Expected: integration PASS, control byte-identical, ZERO golden movement (no fixture carries the implant). `npm run lint && npx tsc --noEmit`.
 
@@ -488,26 +484,40 @@ git commit -m "feat(combat): D-PR4 — wire targetEffectiveAttack + rollOutgoing
  *  byte-identical. Applied multiplicatively on the resolved hit AFTER victimHitDamage. */
 outgoingAmplificationFor?: (victim: CombatActor, didCrit: boolean) => number;
 ```
-In the per-hit loop, after `const dmg = victimHitDamage(...)`:
+**CRITICAL:** the amplified value must reach `applyToVictim` (which actually deals HP/shield damage and produces `outcome`), NOT just the reporting callbacks. The current loop is:
 ```ts
-const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
-const dmg2 = ampPct !== 0 ? dmg * (1 + ampPct / 100) : dmg;
-emitHit?.(victim, dmg2, didCrit);
-onVictimResolved?.(victim, dmg2, outcome, didCrit);
+const dmg = victimHitDamage(...);
+const outcome = applyToVictim(victim, dmg);   // ← deals the damage
+emitHit?.(victim, dmg, didCrit);
+onVictimResolved?.(victim, dmg, outcome, didCrit);
 ```
-(Rename the local so the amplified value flows to `emitHit`/`onVictimResolved`; keep the unamplified `dmg` only if `outcome` needs it — check the existing `outcome` derivation.)
+Compute the amplification BEFORE `applyToVictim` and thread the amplified `dmg` through all three:
+```ts
+const dmgBase = victimHitDamage(...);
+const ampPct = outgoingAmplificationFor?.(victim, didCrit) ?? 0;
+const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;   // single `dmg` used everywhere below
+const outcome = applyToVictim(victim, dmg);
+emitHit?.(victim, dmg, didCrit);
+onVictimResolved?.(victim, dmg, outcome, didCrit);
+```
+(Keep ONE `dmg` binding so HP-applied, credited, and reported values all match — no `dmg2` split.)
 
 (b) `drivePositionalApply` (engine): add alongside `incomingReductionFor`:
 ```ts
-outgoingAmplificationFor: (victim, didCrit) =>
-    outgoingAmplificationForHit(outgoingAbilitiesOf(args.actingId), {
+outgoingAmplificationFor: (victim, didCrit) => {
+    const attacker = allActorsById.get(args.actingId);
+    if (!attacker) return 0; // defensive — acting actor always resolvable in practice
+    return outgoingAmplificationForHit(outgoingAbilitiesOf(args.actingId), {
         didCrit,
         targetHigherAttack:
             effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack >
-            effectiveStatsOf(statusEngine, selfBuffLookup, actorById(args.actingId)).attack,
-    }, (abilityId, chance) => rollRateGate(procChanceGates, `${args.actingId}:${abilityId}`, chance)),
+            effectiveStatsOf(statusEngine, selfBuffLookup, attacker).attack,
+    }, (abilityId, chance) => rollRateGate(procChanceGates, `${args.actingId}:${abilityId}`, chance));
+},
 ```
-Add an `outgoingAbilitiesOf(id)` lookup mirroring `incomingAbilitiesOf` (build an `outgoingAbilitiesById` Map in the same pass that builds `incomingAbilitiesById` ~line 2056–2125, filtering `config.type === 'outgoing-amplification'`), and import `outgoingAmplificationForHit`. Confirm an actor-by-id accessor exists (e.g. the roster/`runtimesById` or `args.opposingLiving` + acting roster) — reuse whatever `incomingReductionFor` siblings use to resolve an actor; if only ids are handy, resolve via the existing actor map.
+- `allActorsById` (engine.ts:1683, `Map<string, CombatActor>`) resolves the acting attacker — genuinely new plumbing vs `incomingReductionFor`, which only needs the victim id. Guard the `undefined` case.
+- Add an `outgoingAbilitiesOf(id)` lookup mirroring `incomingAbilitiesOf`: build an `outgoingAbilitiesById` Map in the SAME pass that builds `incomingAbilitiesById` (~line 2056–2125), filtering `a.config.type === 'outgoing-amplification'`; `const outgoingAbilitiesOf = (id) => outgoingAbilitiesById.get(id) ?? [];`.
+- Import `outgoingAmplificationForHit` from `./outgoingEffects` and `rollRateGate` from `../calculators/rateAccumulator`.
 
 - [ ] **Step 4: Run test + FULL suite.** `npx vitest run` — Expected: PASS, ZERO golden movement. `npm run lint && npx tsc --noEmit`.
 
