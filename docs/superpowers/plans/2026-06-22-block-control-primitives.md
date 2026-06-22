@@ -25,11 +25,11 @@
 - **Buff corpus:** `src/constants/buffs.ts` (`BUFFS: Buff[]`, `type: 'buff'|'debuff'|'effect'`); regen-preserve list `MANUAL_BUFFS` in `src/utils/dataUpdate/updateBuffsData.ts:21` (merged only-if-absent, mirrors `Power Infused Nanobots`).
 - **Purge:** `statusEngine.purge(actorId, count)` (`statusEngine.ts:993`) → `removeNewestFirst(actorId,'buffs',count)`; **cleanse** is the separate `removeNewestFirst(actorId,'debuffs',count)` (`:987`). statusEngine internal reads available to `purge`: `snapshot(ownerId)` closure (`:743`) returning `activeSelfBuffs`, and `timedAbilityStatuses('self', ownerId)`.
 - **Cast-side landing decision:** `landsTimedEnemyApplicationLive(application)` (`playerTurn.ts:750`) — drives BOTH the cast timed loop (`:928`) and the scheduled path via `statusEngine.setLandsTimedEnemyApplication(...)` (`:758`). Turn target = `enemy` (id `enemy.id`, also `targetId`).
-- **Cast-side DoT gate:** `roundDebuffLanded()` (`playerTurn.ts:809`) consumed at `:1425` (`dotsLanded`), applied via `applyNewDoTs(...)` at `:1430`; DoT target = `enemy.id`; each `dotsConfig` entry has `{ dotType, tier, ... }`.
+- **Cast-side DoT gate:** `roundDebuffLanded()` (`playerTurn.ts:809`) consumed at `:1425` (`dotsLanded`), applied via `applyNewDoTs(...)` at `:1430`; DoT target = `enemy.id`. Cast-side `dotsConfig` is `DoTApplicationEntry[]` (`src/types/calculator.ts:81`) whose kind field is **`type`** (`dot.type === 'corrosion'`, consumed `playerTurn.ts:568`) — NOT `dotType`. (The REACTIVE DoT config in `triggers.ts` uses `cfg.dotType` — different shape; do not confuse them.)
 - **Reactive timed debuff:** `triggers.ts:1177` (`if (owner.landsTimedEnemyApplication(...)) {apply} else {recordResisted + debuff-resisted}`); target = `intent.eventCtx?.counterTargetId ?? ctx.enemy.id`.
 - **Reactive DoT:** `triggers.ts:1214` (`if (!owner.debuffLandingGate(liveLanding)) return;` — silent); target = `ctx.enemy.id`.
 - **Buff-name read idiom:** `selfBuffNamesForOwners(statusEngine, [id])` (`triggers.ts:795`) — reads `snapshot(id).activeSelfBuffs` + self ability statuses; Barrier uses it at `engine.ts:2578`.
-- **Test patterns:** sim-level synthetic buff via `enemyAttacker(id, selfBuffSkills('Barrier'))` (`applyOutgoingToEnemy.test.ts:194`); statusEngine-level seeding via `eng.applyTimedAbilityStatus(1, mkTimed('X'), 'attacker', 'v1')` (`cleanseRemoval.test.ts:240`).
+- **Test patterns:** engine entry point is **`runCombat(input)`** (`engine.ts:1109`) — there is NO `simulateBattle`. Sim-level synthetic buff via `enemyAttacker(id, selfBuffSkills('Barrier'))` (`applyOutgoingToEnemy.test.ts:194`). statusEngine **self-store** seeding (the store `purge` reads) via `mkTimedBuff` with **`side: 'self'`** + `eng.applyTimedAbilityStatus(1, mkTimedBuff('X'), 'e1')` — see **`purgeRemoval.test.ts`** (this is the correct purge-test model; `cleanseRemoval.test.ts`'s `mkTimed` is `side:'enemy'` = the DEBUFF store, WRONG for purge). Note: `selfBuffSkills`/`enemyAttacker`/`mkTimedBuff` are local consts in their test files (not exported) → copy them into the new test files, don't import.
 
 ---
 
@@ -108,19 +108,19 @@ export const BUFF_PROTECTION_BUFFS: ReadonlySet<string> = new Set(['Buff Protect
 export const isBuffProtection = (name: string): boolean => BUFF_PROTECTION_BUFFS.has(name);
 ```
 
-- [ ] **Step 2: Write the failing test** in `buffProtection.test.ts`. Mirror `cleanseRemoval.test.ts` for statusEngine setup (`mkTimed`, `applyTimedAbilityStatus`). Cover:
-  1. Apply `Buff Protection` + another buff (e.g. `Attack Up I`) to `'attacker'`; `purge('attacker', 'all')` returns `0` and the other buff survives.
-  2. Without `Buff Protection`, the same purge removes the buff (control — proves the guard is the cause).
-  3. A debuff on the same actor is still removable by `cleanse(actorId,'all')` (purge-only scope intact).
+- [ ] **Step 2: Write the failing test** in `buffProtection.test.ts`. Model setup on **`purgeRemoval.test.ts`** (`mkTimedBuff` with `side: 'self'` — the self/buffs store `purge` reads; do NOT use `cleanseRemoval`'s `side:'enemy'` `mkTimed`, which seeds the debuff store and would make BOTH the main and control cases trivially return 0). Cover:
+  1. Apply `Buff Protection` + another buff (e.g. `Attack Up I`) as **self** statuses on an actor id (e.g. `'e1'`); `purge('e1', 'all')` returns `0` and the other buff survives.
+  2. Without `Buff Protection` (only `Attack Up I`), the same purge removes the buff (control — `> 0`).
+  3. Cleanse is unaffected: seed a removable **debuff** (`side:'enemy'`) on a Buff-Protection holder and assert `cleanse(id,'all') > 0` (purge-only scope intact).
 
 ```ts
-// sketch
+// sketch — mkTimedBuff is the side:'self' helper copied from purgeRemoval.test.ts
 const eng = createStatusEngine(/* per existing test helper */);
 eng.beginRound(1);
-eng.applyTimedAbilityStatus(1, mkTimed('Buff Protection'), 'attacker');
-eng.applyTimedAbilityStatus(1, mkTimed('Attack Up I'), 'attacker');
-expect(eng.purge('attacker', 'all')).toBe(0);
-// control test: a second engine without Buff Protection → purge removes > 0
+eng.applyTimedAbilityStatus(1, mkTimedBuff('Buff Protection'), 'e1'); // 3-arg: recipient = self id
+eng.applyTimedAbilityStatus(1, mkTimedBuff('Attack Up I'), 'e1');
+expect(eng.purge('e1', 'all')).toBe(0);
+// control: a second engine seeded with ONLY 'Attack Up I' → purge('e1','all') > 0
 ```
 
 - [ ] **Step 3: Run → fails** (`npm test -- src/utils/combat/__tests__/buffProtection.test.ts`): purge currently returns > 0.
@@ -136,11 +136,14 @@ const purge = (actorId: string, count: number | 'all'): number => {
         if (ab.stacks === undefined || ab.stacks > 0) selfBuffNames.add(ab.buffName);
     }
     for (const s of timedAbilityStatuses('self', actorId)) selfBuffNames.add(s.active.buffName);
+    // NOTE: deliberately omits the aura/accum channel (`activeAbilityStatuses('self', …)`) that
+    // `selfBuffNamesForOwners` also reads — Buff Protection is only ever granted as a TIMED buff,
+    // so the timed + scheduled channels cover every real grant. Revisit if an aura grant appears.
     if ([...selfBuffNames].some(isBuffProtection)) return 0;
     return removeNewestFirst(actorId, 'buffs', count);
 };
 ```
-Import `isBuffProtection` at the top of `statusEngine.ts`. (Confirm `snapshot` and `timedAbilityStatuses` are in-closure consts declared before `purge`; both are.)
+Import `isBuffProtection` from `./buffProtectionBuffs` at the top of `statusEngine.ts`. (Confirm `snapshot` and `timedAbilityStatuses` are in-closure consts declared before `purge`; both are.)
 
 - [ ] **Step 5: Run → passes.** Then `npm test -- src/utils/combat/__tests__/cleanseRemoval.test.ts` to confirm cleanse/purge characterization tests still pass.
 
@@ -219,9 +222,9 @@ Fold immunity into `landsTimedEnemyApplicationLive` so an immune turn-target aut
 
 **Files:**
 - Modify: `src/utils/combat/playerTurn.ts:750` (and add the per-turn immunity flag near `:744`)
-- Test: `blockDebuff.test.ts` (engine-level, `simulateBattle`)
+- Test: `blockDebuff.test.ts` (engine-level, `runCombat`)
 
-- [ ] **Step 1: Write the failing test.** Set up a two-side sim where the player (or enemy) attacker casts a **timed** debuff (e.g. `Attack Down II`) at a target carrying `Block Debuff` (seed via `selfBuffSkills('Block Debuff')` on the target ship, per `applyOutgoingToEnemy.test.ts:194`). Assert: the debuff is NOT applied (target's debuff list has no `Attack Down`) and a `debuff-resisted` event for it is emitted. Add a second case for a **persistent-stacking** debuff (e.g. `Defense Shred`) → resisted, no stack added.
+- [ ] **Step 1: Write the failing test.** Set up a two-side `runCombat` sim where the player (or enemy) attacker casts a **timed** debuff (e.g. `Attack Down II`) at a target carrying `Block Debuff` (seed via `selfBuffSkills('Block Debuff')` on the target ship, per `applyOutgoingToEnemy.test.ts:194`). Assert: the debuff is NOT applied (target's debuff list has no `Attack Down`) and a `debuff-resisted` event for it is emitted. Add a second case for a **persistent-stacking** debuff (e.g. `Defense Shred`) → resisted, no stack added.
 
 - [ ] **Step 2: Run → fails** (debuff currently lands).
 
@@ -312,14 +315,16 @@ if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
     // Block Debuff: blocked DoTs are recorded as resists (block-path only — normal landing
     // failures below stay silent / byte-identical).
     for (const dot of dotsConfig) {
-        emitBlockDebuffResist(bus, enemy.id, r, dotResistLabel(dot.dotType, dot.tier));
+        emitBlockDebuffResist(bus, enemy.id, r, dotResistLabel(dot.type, dot.tier));
     }
 } else {
     const dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
-    // ... existing corrosionEntriesBefore/infernoEntriesBefore capture + if (dotsLanded) applyNewDoTs(...) + inflicted-scope extension block UNCHANGED, moved inside this else ...
+    // ... ALL existing cast-DoT code UNCHANGED, moved inside this else ...
 }
 ```
-Verify the exact `dotsConfig` field names (`dotType`, `tier`) against the local shape; keep the existing `corrosionEntriesBefore`/`infernoEntriesBefore` capture and the `if (dotsLanded)` extension block (`:1457`) on the non-immune branch. When not immune, the original code path is unchanged → byte-identical.
+**Field name:** cast-side `dotsConfig` entries use **`dot.type`** (`'corrosion'|'inferno'|'bomb'`) and `dot.tier` — NOT `dotType` (that's the reactive config in Task 7). Using `dot.dotType` here → `undefined` label + TS error.
+
+**Which code moves into the `else`:** there are **three** consecutive `if (dotsLanded)`-gated blocks in this region — `applyNewDoTs` (`:1430`), the inflicted-scope DoT extension (`:1457`), and `applyAccumulators` (`:1470`) — plus the `corrosionEntriesBefore`/`infernoEntriesBefore` capture (`:1428`). All of them (and the `const dotsLanded = …` line) go on the **non-immune `else` branch** together; the immune branch does ONLY the resist-event loop and applies no DoTs/accumulators/extensions. When not immune, the original code path is byte-for-byte unchanged.
 
 - [ ] **Step 4: Run → passes** (both the block case and the silent-normal-failure case).
 
@@ -377,7 +382,7 @@ git commit -m "feat(combat): D-PR15 — Block Debuff reactive DoT block + resist
 - Test: `src/utils/combat/__tests__/blockDebuff.test.ts` (integration describe)
 - Modify: `src/constants/changelog.ts`
 
-- [ ] **Step 1: Write the integration test(s).** In a two-team `simulateBattle`, give one actor a `Block Debuff` buff and have the opposing side attempt, across a few rounds, each debuff family — (a) timed, (b) persistent-stacking, (c) DoT, (d) control-as-named-debuff (`Stasis`/`Disable`). Assert all are resisted / not applied. Add a case proving an **already-landed** debuff (applied before Block Debuff goes up) is NOT removed when Block Debuff becomes active (Block Debuff blocks new applications only). Add an **immunity-beats-landing** case (a would-otherwise-land application is still blocked).
+- [ ] **Step 1: Write the integration test(s).** In a two-team `runCombat`, give one actor a `Block Debuff` buff (`selfBuffSkills('Block Debuff')` — copy the local helper) and have the opposing side attempt, across a few rounds, each debuff family — (a) timed, (b) persistent-stacking, (c) DoT, (d) control-as-named-debuff (`Stasis`/`Disable`). Assert all are resisted / not applied. Add a case proving an **already-landed** debuff (applied before Block Debuff goes up) is NOT removed when Block Debuff becomes active (Block Debuff blocks new applications only). Add an **immunity-beats-landing** case (a would-otherwise-land application is still blocked).
 
 - [ ] **Step 2: Run the targeted suites** → pass:
   - `npm test -- src/utils/combat/__tests__/blockDebuff.test.ts`
