@@ -278,8 +278,9 @@ Top-of-file imports:
 ```ts
 // add to the triggers import (the line with victimEnemyBuffs):
 import { /* …, */ victimEnemyBuffs, victimSelfBuffs } from './triggers';
-// add to the dpsBuffHelpers import (the line with toEnemyModifiers):
-import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
+// add toSelfIncomingDamageModifier to the EXISTING dpsBuffHelpers import line in engine.ts
+// (it currently imports only toEnemyModifiers — do NOT add toSimBuffs/toEnemyDotModifier here):
+import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
 ```
 
 Rewrite the closure (rename `victimEnemyModifiers` → `victimIncomingModifiers`; keep the existing comment, append a friendly-side note):
@@ -349,6 +350,9 @@ it('composes ADDITIVELY with a D-PR3 incoming-reduction ability (one factor, not
     // incoming = (-30) - 20 = -50 → factor (1 + -50/100) = 0.50.
     // Assert taken ≈ 0.50× baseline — NOT the product 0.70 × 0.80 = 0.56.
     // (Build the D-PR3 ability side from incomingReductionEngine.test.ts.)
+    // NOTE: the SAME victim must carry BOTH simultaneously — one passive-sourced
+    // incoming-reduction ability AND one friendly Inc. Damage Down self-buff status —
+    // for the -50 → 0.50 magnitude to hold.
 });
 ```
 

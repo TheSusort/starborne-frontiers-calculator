@@ -93,7 +93,7 @@ export function victimSelfBuffs(
     selfBuffLookup: Map<string, SelectedGameBuff[]>
 ): SelectedGameBuff[] {
     const scheduled = expandSelfBuffs(
-        statusEngine.snapshot(undefined, victimId).activeSelfBuffs,
+        statusEngine.snapshot(victimId).activeSelfBuffs, // self-side: owner id is the FIRST arg
         selfBuffLookup
     );
     const timed = statusEngine
