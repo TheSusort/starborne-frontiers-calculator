@@ -556,3 +556,250 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
         expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 8: Block Debuff — end-to-end integration coverage.
+//
+// The per-family seams (timed/persistent/DoT × cast/reactive) are each unit-tested
+// above (Tasks 4-7). This block covers the cross-cutting cases those seams do not
+// individually assert end-to-end:
+//
+//   1. Control-as-named-debuff: a control inflict (Stasis / Disable) reaches the
+//      engine as an ordinary NAMED timed debuff routed through the same timed
+//      landing fold as `Attack Down II`. So a `Block Debuff` target must auto-resist
+//      it — the target never becomes stasised/disabled. We assert end-to-end via
+//      the enemy round-effects surface AND the engine-local `isStasised` reader tap.
+//   2. Already-landed debuffs survive: Block Debuff only gates NEW applications. A
+//      debuff that landed on a target BEFORE the target gained Block Debuff stays
+//      present and decrements/expires on its normal cadence — the immunity never
+//      retroactively removes it. Staged at the statusEngine level (a real "before"
+//      landed status + a "now" immune target, then a fresh inflict attempt).
+//   3. Immunity beats landing: an attacker with a very high landing chance (would
+//      otherwise definitely land) is still resisted by a Block Debuff target — the
+//      immunity fold short-circuits the landing roll entirely.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Block Debuff — integration (engine)', () => {
+    const namedControlDebuff = (buffName: string): Ability => ({
+        id: `ctrl-${buffName.toLowerCase()}`,
+        type: 'debuff',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'debuff',
+            buffName,
+            // Control inflicts carry no stat effects — they are pure named debuffs
+            // routed through the timed landing path (mirrors stasis.test.ts).
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            application: 'inflict',
+            duration: 3,
+        },
+    });
+
+    // (1) Control-as-named-debuff blocked: Stasis & Disable are auto-resisted on a
+    //     Block Debuff target — the target never enters the control state.
+    it('auto-resists an inflicted Stasis: resisted, NOT applied, target never becomes stasised', () => {
+        let isStasisedReader: ((actorId: string) => boolean) | undefined;
+        const result = runCombat(
+            blockDebuffEngineBase({
+                enemyAttackers: [debuffEnemy(namedControlDebuff('Stasis'))],
+                shipSkills: blockDebuffSelfSkills(),
+                __testTapIsStasised: (fn) => {
+                    isStasisedReader = fn;
+                },
+            })
+        );
+
+        const entry = e1Effects(result);
+        expect(entry).toBeDefined();
+        expect(entry!.resistedDebuffs.map((d) => d.buffName)).toContain('Stasis');
+        expect(entry!.debuffs.map((d) => d.buffName)).not.toContain('Stasis');
+        // Behavioral proof: the heal target (the Block Debuff carrier) never enters Stasis.
+        expect(isStasisedReader).toBeDefined();
+        expect(isStasisedReader!('attacker')).toBe(false);
+    });
+
+    it('control: WITHOUT Block Debuff the inflicted Stasis lands and stasises the target (non-vacuity)', () => {
+        let isStasisedReader: ((actorId: string) => boolean) | undefined;
+        const result = runCombat(
+            blockDebuffEngineBase({
+                enemyAttackers: [debuffEnemy(namedControlDebuff('Stasis'))],
+                shipSkills: { slots: [] },
+                __testTapIsStasised: (fn) => {
+                    isStasisedReader = fn;
+                },
+            })
+        );
+
+        const entry = e1Effects(result);
+        expect(entry).toBeDefined();
+        expect(entry!.debuffs.map((d) => d.buffName)).toContain('Stasis');
+        expect(entry!.resistedDebuffs).toHaveLength(0);
+        expect(isStasisedReader).toBeDefined();
+        expect(isStasisedReader!('attacker')).toBe(true);
+    });
+
+    it('auto-resists an inflicted Disable (named control debuff): resisted, NOT applied', () => {
+        const entry = e1Effects(
+            runWith(namedControlDebuff('Disable'), blockDebuffSelfSkills())
+        );
+        expect(entry).toBeDefined();
+        expect(entry!.resistedDebuffs.map((d) => d.buffName)).toContain('Disable');
+        expect(entry!.debuffs.map((d) => d.buffName)).not.toContain('Disable');
+    });
+
+    // (2) Already-landed debuff survives the target later becoming immune.
+    //     Staged at the statusEngine level: apply Attack Down II to enemy-1 while it is
+    //     NOT immune (round 1), THEN seed Block Debuff on enemy-1, THEN fire a fresh
+    //     reactive inflict. The pre-existing debuff must remain and decrement normally;
+    //     only the NEW inflict is blocked.
+    it('already-landed debuff survives when the target later gains Block Debuff (and ticks down normally)', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+
+        // "Before": Attack Down II lands on enemy-1 (no immunity yet), 2-turn duration.
+        const landed: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            payload: { buffName: 'Attack Down II', stacks: 1, parsedEffects: { attack: -50 } },
+            side: 'enemy',
+            sourceSlot: 'active',
+            conditions: [],
+            casterId: 'attacker',
+            recipients: ['enemy-1'],
+            kind: 'timed',
+            duration: 2,
+        };
+        se.applyTimedAbilityStatus(1, landed, undefined, 'enemy-1');
+        expect(
+            se
+                .timedAbilityStatuses('enemy', undefined, 'enemy-1')
+                .some((s) => s.active.buffName === 'Attack Down II')
+        ).toBe(true);
+
+        // "Now": enemy-1 gains Block Debuff (self-buff on its own store).
+        const block: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            payload: { buffName: 'Block Debuff', stacks: 1, parsedEffects: {} },
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            casterId: 'enemy-1',
+            recipients: ['enemy-1'],
+            kind: 'timed',
+            duration: 5,
+        };
+        se.applyTimedAbilityStatus(1, block, 'enemy-1');
+
+        // A fresh inflict attempt against the now-immune enemy-1 is resisted...
+        const resisted: ActiveBuff[] = [];
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy-1' } as CombatActor,
+            enemyId: 'enemy-1',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([
+                [
+                    'attacker',
+                    {
+                        actor: { id: 'attacker' } as CombatActor,
+                        landsTimedEnemyApplication: () => true,
+                        debuffLandingGate: () => true,
+                    } as unknown as PlayerActorRuntime,
+                ],
+            ]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: (r: ActiveBuff) => resisted.push(r),
+        } as unknown as IntentExecContext;
+
+        const freshInflict: Intent = {
+            ownerId: 'attacker',
+            sourceSlot: 'passive',
+            ability: {
+                id: 'fresh-debuff',
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Defense Down',
+                    stacks: 1,
+                    parsedEffects: { defense: -30 },
+                    isStackable: false,
+                    application: 'inflict',
+                    duration: 3,
+                },
+            },
+            eventCtx: { counterTargetId: 'enemy-1' },
+        };
+        executeIntent(freshInflict, ctx);
+
+        // ...the NEW debuff is blocked...
+        expect(resisted.map((r) => r.buffName)).toContain('Defense Down');
+        const afterInflict = se.timedAbilityStatuses('enemy', undefined, 'enemy-1');
+        expect(afterInflict.some((s) => s.active.buffName === 'Defense Down')).toBe(false);
+        // ...but the ALREADY-LANDED debuff is untouched.
+        expect(afterInflict.some((s) => s.active.buffName === 'Attack Down II')).toBe(true);
+
+        // And it ticks down normally: decrement round 1 (1 turn left), round 2 → expires.
+        se.decrementEnemy('enemy-1');
+        expect(
+            se
+                .timedAbilityStatuses('enemy', undefined, 'enemy-1')
+                .some((s) => s.active.buffName === 'Attack Down II')
+        ).toBe(true);
+        se.beginRound(2);
+        se.decrementEnemy('enemy-1');
+        expect(
+            se
+                .timedAbilityStatuses('enemy', undefined, 'enemy-1')
+                .some((s) => s.active.buffName === 'Attack Down II')
+        ).toBe(false);
+    });
+
+    // (3) Immunity beats landing: even a guaranteed-landing attacker is resisted.
+    it('a high-landing-chance attacker is still resisted by a Block Debuff target', () => {
+        // Same Task 4 timed debuff, but the enemy attacker is given a very high base
+        // hacking so its live landing chance is maximal — the ONLY thing that resists
+        // is the Block Debuff immunity fold.
+        const highHackingEnemy: EnemyAttacker = {
+            ...debuffEnemy(timedAttackDown),
+            stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking: 5000 },
+        } as EnemyAttacker;
+
+        const immune = e1Effects(
+            runCombat(
+                blockDebuffEngineBase({
+                    enemyAttackers: [highHackingEnemy],
+                    shipSkills: blockDebuffSelfSkills(),
+                })
+            )
+        );
+        expect(immune).toBeDefined();
+        expect(immune!.resistedDebuffs.map((d) => d.buffName)).toContain('Attack Down II');
+        expect(immune!.debuffs.map((d) => d.buffName)).not.toContain('Attack Down II');
+
+        // Non-vacuity: the same high-hacking attacker DOES land on a non-immune target.
+        const landed = e1Effects(
+            runCombat(
+                blockDebuffEngineBase({
+                    enemyAttackers: [highHackingEnemy],
+                    shipSkills: { slots: [] },
+                })
+            )
+        );
+        expect(landed).toBeDefined();
+        expect(landed!.debuffs.map((d) => d.buffName)).toContain('Attack Down II');
+        expect(landed!.resistedDebuffs).toHaveLength(0);
+    });
+});
