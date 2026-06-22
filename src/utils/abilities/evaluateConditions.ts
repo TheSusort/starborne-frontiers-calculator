@@ -32,6 +32,9 @@ export interface ConditionContext {
     /** True when the condition owner was hit by a direct attack this round (damage landed
      *  on shield or HP). Live-derived by the engine; defaults false (DPS / not-yet-hit). */
     wasHitThisRound?: boolean;
+    /** D-PR14: this owner took the round's first real turn. Live-derived by the engine;
+     *  defaults false. Used by the Doomsayer implant. */
+    firstActivator?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -85,6 +88,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.selfShielded ? 1 : 0;
         case 'not-hit-this-round':
             return ctx.wasHitThisRound ? 0 : 1;
+        case 'first-activator':
+            return ctx.firstActivator ? 1 : 0;
         default:
             return 0;
     }

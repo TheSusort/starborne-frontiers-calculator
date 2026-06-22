@@ -28,6 +28,7 @@ import { parseBuffEffects, isStackable } from '../calculators/buffParser';
 import { GearPiece } from '../../types/gear';
 import {
     Ability,
+    AbilityTarget,
     AbilityTrigger,
     Condition,
     HealAmpCondition,
@@ -256,6 +257,24 @@ const FORTIFYING_SHROUD_PROC_CHANCE: Record<string, number> = {
     legendary: 0.32,
 };
 
+// D-PR14: Bulwark — X% chance, when an adjacent ally is directly damaged, apply Provoke 1 turn, once per round.
+const BULWARK_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+// D-PR14: Doomsayer — at end of round, if first to activate, X% chance to apply Concentrate Fire
+// to the highest-attack enemy 1 turn. No common variant. (Proc from THIS table, not the
+// description text — Doomsayer's legendary text has a "change"/"chance" typo.)
+const DOOMSAYER_PROC: Record<string, number> = {
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -356,10 +375,13 @@ function mkNamedBuffGrant(
 // D-PR7: build a reactive named-debuff application (Martyrdom's on-death "Disable" on the killer).
 // application:'apply' → lands unless affinity disadvantage (no landing roll), matching "Applies".
 // Killer routing is supplied by the on-destroyed listener via eventCtx.counterTargetId.
+// D-PR14: generalised with optional `opts` for target / procChance / conditions
+// (Martyrdom call is byte-identical — all three opts default away).
 function mkNamedDebuff(
     buffName: string,
     trigger: AbilityTrigger,
-    duration: number | undefined
+    duration: number | undefined,
+    opts?: { target?: AbilityTarget; procChance?: number; conditions?: Condition[] }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
@@ -367,9 +389,10 @@ function mkNamedDebuff(
     const { stackable, maxStacks } = isStackable(buff.description);
     return {
         type: 'debuff',
-        target: 'enemy',
+        target: opts?.target ?? 'enemy',
         trigger,
-        conditions: [],
+        conditions: opts?.conditions ?? [],
+        ...(opts?.procChance !== undefined ? { procChance: opts.procChance } : {}),
         config: {
             type: 'debuff',
             buffName,
@@ -661,6 +684,27 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         if (procChance === undefined) return undefined;
         return mkNamedBuffGrant('Defense Up I', 'adjacent-allies', 'start-of-turn', 1, {
             procChance,
+        });
+    },
+    // D-PR14: Bulwark — X% chance, when an adjacent ally is directly damaged, apply Provoke
+    // to that enemy for 1 turn, once per round. requireDamagedAllyAdjacent gates the trigger
+    // to the specific case where the attacked ally is adjacent to the owner.
+    BULWARK: (rarity) => {
+        const procChance = BULWARK_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        const base = mkNamedDebuff('Provoke', 'on-ally-attacked', 1, { procChance });
+        if (!base) return undefined;
+        return { ...base, oncePerRound: true, requireDamagedAllyAdjacent: true };
+    },
+    // D-PR14: Doomsayer — at end of round, if first to activate, X% chance to apply
+    // Concentrate Fire to the enemy with highest attack for 1 turn. No common variant.
+    DOOMSAYER: (rarity) => {
+        const procChance = DOOMSAYER_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedDebuff('Concentrate Fire', 'end-of-round', 1, {
+            procChance,
+            target: 'enemy-highest-attack',
+            conditions: [{ subject: 'first-activator', derivable: true }],
         });
     },
 };

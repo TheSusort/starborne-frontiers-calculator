@@ -40,6 +40,8 @@ export function buildRoundContext(state: {
     selfShielded?: boolean;
     /** True when the acting unit was hit by a direct attack this round. Default false. */
     wasHitThisRound?: boolean;
+    /** True when the acting unit took the round's first real turn. Default false. */
+    firstActivator?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -63,6 +65,7 @@ export function buildRoundContext(state: {
         targetRepairedThisRound: state.targetRepairedThisRound ?? false,
         selfShielded: state.selfShielded ?? false,
         wasHitThisRound: state.wasHitThisRound ?? false,
+        firstActivator: state.firstActivator ?? false,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

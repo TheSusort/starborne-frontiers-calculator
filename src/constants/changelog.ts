@@ -23,6 +23,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: the Font of Power implant's Power Infused Nanobots buff now grants the repaired ally flat attack equal to 100% of the caster's attack at the time of the repair (previously this attack bonus had no effect).",
     'Combat simulator now models the Fortifying Shroud implant — a chance each turn to grant adjacent allies a Defense Up buff.',
     "Combat simulator: the Disable control now skips the affected ship's turn and locks out its reactions, so effects that apply Disable — like the Martyrdom implant and Disable-inflicting skills — now take effect in the simulation.",
+    'Combat simulator: Bulwark implants now apply Provoke to an enemy that damages a nearby ally, and Doomsayer implants apply Concentrate Fire to the strongest enemy at the end of the round.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

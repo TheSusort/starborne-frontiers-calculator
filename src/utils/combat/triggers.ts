@@ -229,8 +229,12 @@ export function registerReactiveListeners(args: {
      *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
      *  Optional: DPS-mode runs and unit fixtures omit it. */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
+    /** D-PR14 Bulwark: same-side ids adjacent to an owner (living, owner excluded; non-positional
+     *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
+     *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
+    adjacentAllyIdsFor?: (ownerId: string) => string[];
 }): void {
-    const { bus, perOwner, enqueue, isOpposing, roleOf } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
     // self-scoped triggers). For the player registration (opposing = enemy-side) this
     // is byte-identical to the old pattern.
@@ -404,6 +408,15 @@ export function registerReactiveListeners(args: {
                             roles &&
                             roles.length > 0 &&
                             !matchesRoleCategory(roleOf?.(e.targetId), roles)
+                        ) {
+                            return;
+                        }
+                        // D-PR14 Bulwark: fire only when the DAMAGED ally is adjacent to this
+                        // owner. Pure read (listener stays enqueue-only). Helper absent → allow.
+                        if (
+                            ra.ability.requireDamagedAllyAdjacent &&
+                            adjacentAllyIdsFor &&
+                            !adjacentAllyIdsFor(ownerId).includes(e.targetId)
                         ) {
                             return;
                         }
@@ -632,6 +645,12 @@ export interface IntentExecContext {
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
      *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
+    firstActivatorId?: string;
+    /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
+    enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
+    oncePerRoundConsumed?: Set<string>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -690,6 +709,9 @@ export function buildActorConditionContext(
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
+        /** Owner took the round's first real turn. Default false. Populated by
+         *  buildDrainContext (D-PR14). */
+        firstActivator?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -717,6 +739,7 @@ export function buildActorConditionContext(
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         wasHitThisRound: shared.wasHitThisRound,
+        firstActivator: shared.firstActivator,
     });
 }
 
@@ -751,6 +774,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // D-PR8: live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
         // paths read "not hit" ⇒ met and stay byte-identical.
         wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,
+        // D-PR14: live first-activator gate (Doomsayer). Default false → DPS / no-delegate
+        // paths read "not first" ⇒ not met and stay byte-identical.
+        firstActivator: ctx.firstActivatorId === ownerId,
     });
 }
 
@@ -1159,6 +1185,21 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'debuff') {
+        // D-PR14: once-per-round gate (Bulwark) — check consumed BEFORE drawing the proc gate,
+        // so a failed roll never locks the round (mirrors D-PR3 incoming-block invariant).
+        const onceKey = `${intent.ownerId}:${intent.ability.id}`;
+        if (intent.ability.oncePerRound && ctx.oncePerRoundConsumed?.has(onceKey)) return;
+        // D-PR14: proc-chance gate for reactive debuff appliers (Bulwark). Pass-through when
+        // procChance is undefined → BYTE-IDENTICAL for every existing debuff applier (Martyrdom/Warden).
+        if (!passesProcChanceGate(intent, ctx)) return;
+        // Mark consumed ONLY after a successful proc (before the landing roll — "once per round"
+        // is per attempt, matching the spec's read). NOTE: marked before the enemy-highest-attack
+        // no-target no-op below; harmless today because no ability is both `oncePerRound` AND
+        // `enemy-highest-attack` (Bulwark is oncePerRound+counterTarget; Doomsayer is neither). If
+        // a future ability combines them, move this mark below the target-resolution guard so a
+        // no-living-target round doesn't burn the charge.
+        if (intent.ability.oncePerRound) ctx.oncePerRoundConsumed?.add(onceKey);
+
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
             payload: payloadFromConfig(cfg),
             side: 'enemy',
@@ -1171,7 +1212,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
         // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
-        const counterTargetId = intent.eventCtx?.counterTargetId;
+        // D-PR14: target resolution — enemy-highest-attack global selector (Doomsayer) else the
+        // counter-infliction route (Bulwark/Warden). Existing appliers use counterTargetId → identical.
+        const counterTargetId =
+            intent.ability.target === 'enemy-highest-attack'
+                ? ctx.enemyWithHighestAttack?.(intent.ownerId)
+                : intent.eventCtx?.counterTargetId;
+        // No living highest-attack enemy → no-op (don't fall back to the default enemy).
+        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined) return;
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
         if (owner.landsTimedEnemyApplication(cfg.application)) {

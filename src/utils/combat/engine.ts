@@ -56,6 +56,7 @@ import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
+import { highestAttackAmong } from './highestAttack';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import {
@@ -1037,6 +1038,12 @@ interface ReactiveSideCtx {
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** D-PR14 Doomsayer: per-side highest-attack opposing-actor resolver. See IntentExecContext. */
+    enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** D-PR14: id of the round's first real activator (live value at drain-build time). */
+    firstActivatorId?: string;
+    /** D-PR14 Bulwark: per-round once-per-(owner,ability) consume set (shared across both sides). */
+    oncePerRoundConsumed?: Set<string>;
     /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
     adjacentAllyIdsFor: (ownerId: string) => string[];
 }
@@ -2031,6 +2038,8 @@ export function runCombat(input: CombatEngineInput): {
         enqueue: (intent) => intentQueue.push(intent),
         isOpposing: isEnemySide,
         roleOf: (id) => roleByActorId.get(id),
+        adjacentAllyIdsFor: (ownerId: string) =>
+            bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
     });
 
     // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
@@ -2055,6 +2064,8 @@ export function runCombat(input: CombatEngineInput): {
             // (bySide PR2 — fixes the enemy reactive-routing bug).
             isOpposing: (id: string) => !isEnemySide(id),
             roleOf: (id) => roleByActorId.get(id),
+            adjacentAllyIdsFor: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
         });
     }
 
@@ -3404,6 +3415,12 @@ export function runCombat(input: CombatEngineInput): {
                         // side: 100 for every owner until PR5. byte-identical to the old inline spread.
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
+                        // D-PR14: Doomsayer enemy-highest-attack resolver, the round's first
+                        // real activator id, and the shared once-per-round consume set. All
+                        // inert today — only consumed by the next task's executor branch.
+                        enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
+                        firstActivatorId: sideCtx.firstActivatorId,
+                        oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
                         // D-PR8: live not-hit-this-round gate (Alacrity). hitThisRound is a single
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
                         // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
@@ -3415,6 +3432,10 @@ export function runCombat(input: CombatEngineInput): {
                 }
             }
         };
+
+        // D-PR14: per-round state — reset each round (declared inside the round loop).
+        let firstActivatorId: string | undefined;
+        const oncePerRoundConsumed = new Set<string>();
 
         // C2b-2: opposing actor with the most buffs (Rhodium's enemy-most-buffs purge). Buff
         // count via selfBuffNamesForOwners (incl. unremovable — fine for SELECTION; removal still
@@ -3433,6 +3454,18 @@ export function runCombat(input: CombatEngineInput): {
             return bestCount > 0 ? best : undefined; // no buffs anywhere → no most-buffs target
         };
 
+        // D-PR14: living opposing actor with the greatest LIVE effective attack
+        // (Doomsayer's enemy-highest-attack target). Ties → roster order.
+        const highestAttackInRoster = (roster: CombatActor[]): string | undefined =>
+            highestAttackAmong(
+                roster.map((a) => a.id),
+                (id) => {
+                    const a = roster.find((x) => x.id === id);
+                    return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack : 0;
+                },
+                (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
+            );
+
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
         // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
         const drainIntents = (): void =>
@@ -3443,6 +3476,9 @@ export function runCombat(input: CombatEngineInput): {
                 grantAllyCharges: bySide('player').grantAllyCharges,
                 selfHpPctFor: bySide('player').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
+                enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
+                firstActivatorId,
+                oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
             });
 
@@ -3465,6 +3501,9 @@ export function runCombat(input: CombatEngineInput): {
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
+                enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
+                firstActivatorId,
+                oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
             });
         };
@@ -3696,6 +3735,9 @@ export function runCombat(input: CombatEngineInput): {
                     // A stasised FOCUS actor must push a synthesized focus turn so the
                     // post-round `focusTurns.length` guard does not throw.
                     if (!isTurnBlocked(actor.id)) {
+                        // D-PR14: first REAL activation of the round (Stasis/Disable-skipped
+                        // actors never enter these blocks). ??= writes once.
+                        firstActivatorId ??= actor.id;
                         const target = parsedTargetFor(actor);
                         const pattern = parsedPatternFor(actor);
                         // Positional target selection (Task C1, GATED). When the focus attacker
@@ -3884,6 +3926,9 @@ export function runCombat(input: CombatEngineInput): {
                     // (below) still run. A walked team actor is never the focus → no focusTurns
                     // synthesis needed (no-else). §4.3 deviation: skip action, decrement preserved.
                     if (!isTurnBlocked(actor.id)) {
+                        // D-PR14: first REAL activation of the round (Stasis/Disable-skipped
+                        // actors never enter these blocks). ??= writes once.
+                        firstActivatorId ??= actor.id;
                         // Positional target selection (Task C2, GATED). Mirrors the focus-turn
                         // branch (C1) but keyed to THIS team actor's own board position
                         // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
@@ -4096,6 +4141,9 @@ export function runCombat(input: CombatEngineInput): {
                     // generate while stasised"). §4.3 deviation: skip action, decrement
                     // preserved. No cadence-advance in the skip path.
                     if (!isTurnBlocked(actor.id)) {
+                        // D-PR14: first REAL activation of the round (Stasis/Disable-skipped
+                        // actors never enter these blocks). ??= writes once.
+                        firstActivatorId ??= actor.id;
                         const enemyRuntime = runtimeFor(actor);
                         // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
                         // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
