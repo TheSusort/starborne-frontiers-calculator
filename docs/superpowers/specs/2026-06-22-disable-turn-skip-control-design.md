@@ -72,20 +72,28 @@ Doc comment spells out the divergence from Stasis: turn-skip + reactive-lockout,
 ### `src/utils/combat/engine.ts` — surgical
 
 1. Import `isDisable` (and `DISABLE_BUFFS` for the skip-body if needed).
-2. Next to `isStasised` (~1689) add:
+2. Next to `isStasised` (~1710) add:
    - `const isDisabled = (id) => ownerDebuffNames(id).some(isDisable);`
    - `const isTurnBlocked = (id) => isStasised(id) || isDisabled(id);`
 3. Swap `isStasised` → `isTurnBlocked` at the **three turn-action gates**: focus
-   (~3437), walked-team (~3625), enemy (~3837).
-4. Swap `isStasised` → `isTurnBlocked` at the **reactive-suppression** site (~3092,
+   (~3690), walked-team (~3878), enemy (~4090) — each `if (!isStasised(actor.id))`.
+4. Swap `isStasised` → `isTurnBlocked` at the **reactive-suppression** site (~3323,
    `if (isStasised(intent.ownerId)) continue;`).
+
+(Line numbers are as of branch base `998416c3`; the implementer should grep for the
+exact `isStasised(` call sites rather than trusting offsets, and confirm each is one of
+the four routed sites above before switching it.)
 
 **Left Stasis-only, untouched** (Disable must not break, and is never break-marked):
 
-- The `tgtWasStasised` break sites (~3463 / ~3643 / ~3882) and the `onHitBreakStasis`
-  hook (~2627).
-- The `stasisBreakPending` consumption in the three skip-body else-branches (a disabled
-  actor is never added to `stasisBreakPending`, so these are no-ops for it).
+- The `tgtWasStasised` / `teamTgtWasStasised` / `enemyTgtWasStasised` break sites
+  (~3716 / ~3896 / ~4135) and the `onHitBreakStasis` hook (param defined
+  `playerTurn.ts:288`, injected at `engine.ts` ~3724 / ~3900 / ~4183).
+- The `stasisBreakPending` consumption in the three skip-body else-branches (~3852 /
+  ~4001 / ~4468) — a disabled actor is never added to `stasisBreakPending`, so these
+  are no-ops for it.
+- The `victimStasised` damage-event metadata fields (~2598 / ~2949 / ~4166 / ~4175) —
+  event reporting, not a turn gate.
 - `__testTapIsStasised`.
 
 Decrement story: a disabled unit is still scheduled by `selectNextBySpeed`; the gate
