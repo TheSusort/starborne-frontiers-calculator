@@ -1754,7 +1754,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
         const getGearPiece = makeGetGearPiece({ 'mart-skip': martPiece });
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
-        const mart = passive?.abilities.find((a) => a.id === 'equip-implant-MARTYRDOM');
+        const mart = passive?.abilities.find((a) => a.id.startsWith('equip-implant-MARTYRDOM'));
         expect(mart).toBeDefined();
         expect(mart!.trigger).toBe('on-destroyed');
         return [
