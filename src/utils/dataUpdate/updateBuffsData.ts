@@ -16,8 +16,30 @@ const MANUAL_DESCRIPTION_OVERRIDES: Record<string, string> = {
     'Bomb III': '300% Attack',
 };
 
+// Implant-only buffs that never appear in ship-buff fetch data and so are never
+// produced upstream — re-added here so a regen preserves them. (D-PR9: Font of Power.)
+const MANUAL_BUFFS: Array<{
+    name: string;
+    description: string;
+    type: 'buff' | 'debuff' | 'effect';
+}> = [
+    {
+        name: 'Power Infused Nanobots',
+        description: "Grants attack equal to 100% of the caster's attack",
+        type: 'buff',
+    },
+];
+
 async function updateBuffsData() {
-    const buffsMap = new Map<string, { name: string; description: string }>();
+    const buffsMap = new Map<
+        string,
+        {
+            name: string;
+            description: string;
+            type?: 'buff' | 'debuff' | 'effect';
+            imageKey?: string;
+        }
+    >();
     const errors: string[] = [];
 
     // Process all ships to collect unique buffs
@@ -53,6 +75,12 @@ async function updateBuffsData() {
         }
     }
 
+    // Re-add implant-only buffs that the upstream fetch never produces, so a regen
+    // preserves them. Only add when absent — never clobber a fetched description.
+    for (const b of MANUAL_BUFFS) {
+        if (!buffsMap.has(b.name)) buffsMap.set(b.name, b);
+    }
+
     // Convert map to array for easier handling
     const buffsArray = Array.from(buffsMap.values());
 
@@ -61,6 +89,8 @@ async function updateBuffsData() {
 export interface Buff {
     name: string;
     description: string;
+    type?: 'buff' | 'debuff' | 'effect';
+    imageKey?: string;
 }
 
 export const BUFFS: Buff[] = ${JSON.stringify(buffsArray, null, 4)};

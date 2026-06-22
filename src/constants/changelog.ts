@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models the Exuberance implant (chance to increase the amount of a repair this unit receives).',
     'Combat simulator now models three on-death implants: Last Wish (repairs all allies when the carrier is destroyed), Battlecry (grants all allies Inc. Damage Down II on death), and Martyrdom (applies Disable to the unit that landed the killing blow). Last Wish is fully resolved; Battlecry and Martyrdom apply and appear in the combat log with full effects coming in a later update.',
     'Combat simulator now models three reactive self-buff implants: Ambush (grants Crit Power Up to itself when it goes into stealth at round start), Synaptic Resonance (grants Speed Up to itself when any enemy is repaired), and Alacrity (grants Speed Up to itself at round end when it took no damage that round).',
+    'Combat simulator now models two ally-support implants: Spearhead (after the carrier uses its charged skill, a chance to grant all allies Attack Up for 1 turn) and Font of Power (a chance to grant a buff to the allies it repairs). Spearhead is fully resolved; Font of Power applies and appears in the combat log with its attack bonus coming in a later update.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

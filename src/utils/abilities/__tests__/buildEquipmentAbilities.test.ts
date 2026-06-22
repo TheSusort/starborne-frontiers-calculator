@@ -4,6 +4,8 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { Ability } from '../../../types/abilities';
 import { GEAR_SETS } from '../../../constants/gearSets';
+import { BUFFS } from '../../../constants/buffs';
+import { parseBuffEffects } from '../../calculators/buffParser';
 
 /** Build a minimal Ship for test purposes. */
 function makeShip(over: Partial<Ship>): Ship {
@@ -713,5 +715,21 @@ describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
         const ship = makeShip({ implants: { implant_ultimate: 'm-3' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-3': piece }));
         expect(abilities.find((x) => x.id.startsWith('equip-implant-MARTYRDOM'))).toBeUndefined();
+    });
+});
+
+describe('Power Infused Nanobots buff (D-PR9 — Font of Power, emit-only)', () => {
+    it('exists in the buff corpus as a buff', () => {
+        const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
+        expect(buff).toBeDefined();
+        expect(buff!.type).toBe('buff');
+    });
+
+    it('parses to no stat effect (emit-only — real effect deferred to D-PR10)', () => {
+        const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
+        const effects = parseBuffEffects(buff!.name, buff!.description);
+        // Emit-only: the description has no leading +/- sign before "attack", so
+        // nothing parses → applying the buff is a no-op.
+        expect(Object.keys(effects)).toHaveLength(0);
     });
 });

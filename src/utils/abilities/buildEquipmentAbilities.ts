@@ -229,6 +229,24 @@ const ALACRITY_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// D-PR9: Spearhead — after the charged skill, X% chance to grant all allies Attack Up I for 1 turn.
+const SPEARHEAD_PROC: Record<string, number> = {
+    common: 0.15,
+    uncommon: 0.18,
+    rare: 0.21,
+    epic: 0.26,
+    legendary: 0.32,
+};
+
+// D-PR9: Font of Power — when repairing another ally, X% chance to grant the repaired
+// allies Power Infused Nanobots for 1 turn. Rare/epic/legendary only. EMIT-ONLY this PR
+// (the caster-attack-snapshot flat-attack fold is D-PR10).
+const FONT_OF_POWER_PROC: Record<string, number> = {
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -605,6 +623,23 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         if (procChance === undefined) return undefined; // no common variant
         return mkNamedBuffGrant('Speed Up III', 'self', 'end-of-round', 2, {
             conditions: [{ subject: 'not-hit-this-round', derivable: true }],
+            procChance,
+        });
+    },
+    // D-PR9: Spearhead — after using the charged skill, X% chance to grant all allies
+    // Attack Up I for 1 turn. LIVE (Attack Up I folds into attack). Rides on-charged-cast.
+    SPEARHEAD: (rarity) => {
+        const procChance = SPEARHEAD_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Attack Up I', 'all-allies', 'on-charged-cast', 1, { procChance });
+    },
+    // D-PR9: Font of Power — on-own-repair-to-ally, grant repaired allies Power Infused
+    // Nanobots (target:'ally' + eventCtx.repairedAllyIds routing). EMIT-ONLY: the buff has
+    // no parseable effect yet; the +100%-of-caster-attack fold lands in D-PR10.
+    FONT_OF_POWER: (rarity) => {
+        const procChance = FONT_OF_POWER_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Power Infused Nanobots', 'ally', 'on-own-repair-to-ally', 1, {
             procChance,
         });
     },
