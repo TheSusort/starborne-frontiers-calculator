@@ -6,7 +6,7 @@ import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuf
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
-import { expandEnemyDebuffs, payloadToSelectedBuff } from './buffTotals';
+import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -877,6 +877,33 @@ export function victimEnemyBuffs(
         .map((s) => payloadToSelectedBuff(s.payload));
     const active = statusEngine
         .activeAbilityStatuses('enemy', () => NEUTRAL_NAMES_CTX, undefined, targetId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    return [...scheduled, ...timed, ...active];
+}
+
+/** Friendly twin of victimEnemyBuffs: a victim's OWN self-/ally-granted buffs, across all
+ *  three channels — scheduled self-buffs (snapshot(victimId).activeSelfBuffs, expanded via
+ *  selfBuffLookup), timed ability statuses, and aura/accumulating ability statuses. Used by
+ *  the engine's per-victim incoming fold (victimIncomingModifiers, D-PR12) to source friendly
+ *  Inc. Damage Down/Up. Team-agnostic: 'self'-side statuses are keyed by the actor's own id
+ *  (same read selfBuffNamesForOwners uses for either team). The aura/accumulating channel
+ *  carries the same NEUTRAL-ctx approximation noted on victimEnemyBuffs; the live ship sources
+ *  (Makoli/Salvation/Shelter/Refine/Battlecry) are TIMED and not approximated. */
+export function victimSelfBuffs(
+    statusEngine: StatusEngine,
+    victimId: string,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>
+): SelectedGameBuff[] {
+    const scheduled = statusEngine
+        .snapshot(victimId)
+        .activeSelfBuffs.flatMap((ab) =>
+            expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])
+        );
+    const timed = statusEngine
+        .timedAbilityStatuses('self', victimId)
+        .map((s) => payloadToSelectedBuff(s.payload));
+    const active = statusEngine
+        .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, victimId)
         .map((s) => payloadToSelectedBuff(s.payload));
     return [...scheduled, ...timed, ...active];
 }
