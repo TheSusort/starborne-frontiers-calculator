@@ -63,24 +63,6 @@ function timedSelfStatus(
     };
 }
 
-/** Build a minimal aura RegisteredAbilityStatus (self-side, no conditions = always passes). */
-function auraSelfStatus(
-    buffName: string,
-    incomingDamagePct: number
-): Extract<RegisteredAbilityStatus, { kind: 'aura' }> {
-    return {
-        kind: 'aura',
-        side: 'self',
-        sourceSlot: 'passive',
-        conditions: [],
-        payload: {
-            buffName,
-            stacks: 1,
-            parsedEffects: { incomingDamage: incomingDamagePct },
-        },
-    };
-}
-
 /** Build a minimal timed RegisteredAbilityStatus (enemy-side), for the isolation test. */
 function timedEnemyStatus(
     buffName: string,
@@ -156,36 +138,53 @@ describe('victimSelfBuffs — channel coverage', () => {
     });
 
     // -----------------------------------------------------------------------
-    // 4. Scheduled channel: an activeSelfBuffs entry whose name is in selfBuffLookup
-    //    is expanded and toSelfIncomingDamageModifier returns the looked-up value.
-    //    Use the scheduled selfBuffs injection (createStatusEngine({ selfBuffs: [...] }))
-    //    to seed the scheduled store — these appear as non-payload entries in
-    //    snapshot(ownerId).activeSelfBuffs under 'attacker'.
-    //    For per-ship scheduled entries, use registerAbilityStatuses with an aura self-side
-    //    status and a separate owner id so the lookup correctly expands via selfBuffLookup.
+    // 4. Scheduled channel (channel 1): a timed scheduled self-buff (seeded via
+    //    createStatusEngine({ selfBuffs: [...] }) + sourceFired) appears in
+    //    snapshot('attacker').activeSelfBuffs as a BARE NAME ENTRY — its payload/effects
+    //    carry NO incomingDamage. The value MUST come from selfBuffLookup. Guard: the test
+    //    fails if selfBuffLookup is empty (verifies channel 1 is genuinely wired).
+    //
+    //    How seeding works:
+    //      createStatusEngine receives a SelectedGameBuff with skillSource:'active' and a
+    //      numeric skillDuration — isAlwaysActive() returns false so it goes into timedSelf.
+    //      sourceFired('attacker','active',1) upserts it into getSelfMap('attacker') via
+    //      upsertBuff(), which stores NO payload (scheduled path). snapshot('attacker')
+    //      returns it in activeSelfBuffs as { buffName, turnsRemaining } with no effects.
+    //      expandBuffEntry() calls selfBuffLookup.get(buffName) to obtain the effects.
     // -----------------------------------------------------------------------
-    it('scheduled channel: activeSelfBuffs entry expanded via selfBuffLookup gives correct modifier', () => {
+    it('scheduled channel: activeSelfBuffs bare-name entry expanded via selfBuffLookup gives correct modifier', () => {
         const buffName = 'Makoli Shelter';
-        const lookupEntry = makeSelfBuff(buffName, -25);
+        // The lookup carries the incomingDamage effect; the scheduled entry itself carries NONE.
+        const lookupEntry = makeSelfBuff(buffName, -15);
         const selfBuffLookup = new Map<string, SelectedGameBuff[]>([[buffName, [lookupEntry]]]);
 
-        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-
-        // Register an aura self-side status for 'ship-2' so it appears in activeSelfBuffs
-        // via snapshot('ship-2').activeSelfBuffs (non-payload aura) — but we need to use
-        // the scheduled channel. Scheduled selfBuffs injected at createStatusEngine go to
-        // 'attacker'. Use an aura status instead to test expansion via selfBuffLookup.
-        const aura = auraSelfStatus(buffName, -25);
-        eng.registerAbilityStatuses([aura], 'ship-2');
-
+        // Seed a TIMED scheduled self-buff. parsedEffects is empty — no incomingDamage here.
+        // skillSource:'active' + numeric skillDuration → isAlwaysActive() false → goes to timedSelf.
+        const scheduledBuff: SelectedGameBuff = {
+            id: 'test-scheduled-shelter',
+            buffName,
+            stacks: 1,
+            parsedEffects: {},
+            isStackable: false,
+            skillSource: 'active',
+            skillDuration: 2,
+        };
+        const eng = createStatusEngine({ selfBuffs: [scheduledBuff], enemyDebuffs: [] });
         eng.beginRound(1);
+        // Fire the attacker's active slot so the timed scheduled self-buff is upserted to
+        // getSelfMap('attacker') with NO payload — channel 1 write path.
+        eng.sourceFired('attacker', 'active', 1);
 
-        const result = victimSelfBuffs(eng, 'ship-2', selfBuffLookup);
+        // victimId 'attacker' — scheduled timed self-buffs always land in the 'attacker' owner map.
+        const result = victimSelfBuffs(eng, 'attacker', selfBuffLookup);
 
-        // The aura is returned via the active (aura) channel, and its parsedEffects carry
-        // the looked-up value.
         expect(result.some((b) => b.buffName === buffName)).toBe(true);
-        expect(toSelfIncomingDamageModifier(result)).toBe(-25);
+        expect(toSelfIncomingDamageModifier(result)).toBe(-15);
+
+        // Guard: with an empty lookup the same call yields NO incomingDamage contribution.
+        // This proves the value comes from the lookup, not from the scheduled entry's own payload.
+        const resultNoLookup = victimSelfBuffs(eng, 'attacker', new Map());
+        expect(toSelfIncomingDamageModifier(resultNoLookup)).toBe(0);
     });
 
     // -----------------------------------------------------------------------
