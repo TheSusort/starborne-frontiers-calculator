@@ -718,18 +718,20 @@ describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
     });
 });
 
-describe('Power Infused Nanobots buff (D-PR9 — Font of Power, emit-only)', () => {
+describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat attack = caster attack)', () => {
     it('exists in the buff corpus as a buff', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
         expect(buff).toBeDefined();
         expect(buff!.type).toBe('buff');
     });
 
-    it('parses to no stat effect (emit-only — real effect deferred to D-PR10)', () => {
+    it('parses to attackFlatPctOfCaster sentinel (D-PR10 — caster snapshot)', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
         const effects = parseBuffEffects(buff!.name, buff!.description);
-        // Emit-only: the description has no leading +/- sign before "attack", so
-        // nothing parses → applying the buff is a no-op.
-        expect(Object.keys(effects)).toHaveLength(0);
+        // D-PR10: the description "Grants attack equal to 100% of the caster's attack"
+        // now produces the sentinel field; the concrete value is snapshotted at grant time.
+        expect(effects.attackFlatPctOfCaster).toBe(100);
+        expect(effects.attack).toBeUndefined();
+        expect(effects.attackFlat).toBeUndefined();
     });
 });

@@ -81,6 +81,7 @@ export function foldActorBuffTotals(
         speedBuff: scheduled.speedBuff + timed.speedBuff,
         hackingBuff: scheduled.hackingBuff + timed.hackingBuff,
         securityBuff: scheduled.securityBuff + timed.securityBuff,
+        attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
     };
 }
 
@@ -92,7 +93,7 @@ export function effectiveStatsOf(
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
     const s = actor.stats;
     return {
-        attack: s.attack * (1 + t.attackBuff / 100),
+        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
         defence: s.defence * (1 + t.defenceBuff / 100),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -196,10 +197,11 @@ export function effectiveDamageStatsOf(args: {
         speedBuff: scheduledTotals.speedBuff + ability.speedBuff,
         hackingBuff: scheduledTotals.hackingBuff + ability.hackingBuff,
         securityBuff: scheduledTotals.securityBuff + ability.securityBuff,
+        attackFlatBuff: scheduledTotals.attackFlatBuff + ability.attackFlatBuff,
     };
 
     return {
-        attack: base.attack * (1 + totals.attackBuff / 100),
+        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
         defence: base.defence * (1 + totals.defenceBuff / 100),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,

@@ -37,10 +37,12 @@ const STAT_LABELS: Record<keyof ParsedBuffEffects, string> = {
     hacking: 'Hacking',
     security: 'Sec',
     speed: 'Speed',
+    attackFlat: 'Atk (flat)',
+    attackFlatPctOfCaster: 'of caster Atk',
 };
 
 // Stats stored as flat values, not percentages
-const FLAT_STATS = new Set<keyof ParsedBuffEffects>(['hacking', 'security']);
+const FLAT_STATS = new Set<keyof ParsedBuffEffects>(['hacking', 'security', 'attackFlat']);
 
 function buildEffectSummary(
     effects: ParsedBuffEffects,

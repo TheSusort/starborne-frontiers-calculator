@@ -57,6 +57,12 @@ export function parseBuffEffects(name: string, description: string): ParsedBuffE
     const security = extract(/([+-]\d+)\s*Security/);
     if (security !== undefined) effects.security = security;
 
+    // Flat attack granted as a percentage of the CASTER's attack ("...equal to 100% of the
+    // caster's attack"). SENTINEL only — the concrete value is snapshotted at grant time.
+    // Keys on the "of the caster('s) attack" phrasing so it never matches "+N% Attack" buffs.
+    const attackFlatPct = description.match(/(\d+(?:\.\d+)?)%\s*of\s*the\s*caster'?s?\s*attack/i);
+    if (attackFlatPct) effects.attackFlatPctOfCaster = parseFloat(attackFlatPct[1]);
+
     const speed = extract(/([+-]\d+(?:\.\d+)?)%\s*Speed/);
     if (speed !== undefined) effects.speed = speed;
 

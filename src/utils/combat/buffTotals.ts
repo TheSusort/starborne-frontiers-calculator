@@ -42,6 +42,9 @@ export function calculateBuffTotals(buffs: Buff[]) {
     const securityBuff = buffs
         .filter((b) => b.stat === 'security')
         .reduce((sum, b) => sum + b.value, 0);
+    const attackFlatBuff = buffs
+        .filter((b) => b.stat === 'attackFlat')
+        .reduce((sum, b) => sum + b.value, 0);
     return {
         attackBuff,
         critBuff,
@@ -54,6 +57,7 @@ export function calculateBuffTotals(buffs: Buff[]) {
         speedBuff,
         hackingBuff,
         securityBuff,
+        attackFlatBuff,
     };
 }
 

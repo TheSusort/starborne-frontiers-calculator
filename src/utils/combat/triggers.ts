@@ -1074,10 +1074,28 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                   : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
                     ? ctx.playerIds
                     : [intent.ownerId];
+        // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
+        // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
+        // CASTER's effective attack at grant time (the same last-turn ctx value that
+        // bombs/reactive-damage snapshot). One value for all recipients → the shared hoisted
+        // payload stays correct.
+        const pinPct = cfg.parsedEffects.attackFlatPctOfCaster;
+        let buffCfg = cfg;
+        if (pinPct !== undefined) {
+            const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
+            const casterAttack = ownerCtx?.effectiveAttack ?? owner.attack;
+            buffCfg = {
+                ...cfg,
+                parsedEffects: {
+                    ...cfg.parsedEffects,
+                    attackFlat: casterAttack * (pinPct / 100),
+                },
+            };
+        }
         // The status object is identical for every recipient — hoist it above the loop.
         // Only the applyTimedAbilityStatus recipientId argument varies per iteration.
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
-            payload: payloadFromConfig(cfg),
+            payload: payloadFromConfig(buffCfg),
             side: 'self',
             sourceSlot: intent.sourceSlot,
             conditions: gateConditions,

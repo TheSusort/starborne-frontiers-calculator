@@ -239,8 +239,8 @@ const SPEARHEAD_PROC: Record<string, number> = {
 };
 
 // D-PR9: Font of Power — when repairing another ally, X% chance to grant the repaired
-// allies Power Infused Nanobots for 1 turn. Rare/epic/legendary only. EMIT-ONLY this PR
-// (the caster-attack-snapshot flat-attack fold is D-PR10).
+// allies Power Infused Nanobots for 1 turn. Rare/epic/legendary only. D-PR10: the buff
+// grants flat attack = 100% of the caster's attack (snapshotted at grant time).
 const FONT_OF_POWER_PROC: Record<string, number> = {
     rare: 0.09,
     epic: 0.12,
@@ -634,8 +634,8 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         return mkNamedBuffGrant('Attack Up I', 'all-allies', 'on-charged-cast', 1, { procChance });
     },
     // D-PR9: Font of Power — on-own-repair-to-ally, grant repaired allies Power Infused
-    // Nanobots (target:'ally' + eventCtx.repairedAllyIds routing). EMIT-ONLY: the buff has
-    // no parseable effect yet; the +100%-of-caster-attack fold lands in D-PR10.
+    // Nanobots (target:'ally' + eventCtx.repairedAllyIds routing). D-PR10: the buff grants
+    // flat attack = 100% of the caster's attack, snapshotted at grant time.
     FONT_OF_POWER: (rarity) => {
         const procChance = FONT_OF_POWER_PROC[rarity];
         if (procChance === undefined) return undefined;

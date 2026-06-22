@@ -71,7 +71,8 @@ export interface Buff {
         | 'hotPct'
         | 'speed'
         | 'hacking'
-        | 'security';
+        | 'security'
+        | 'attackFlat';
     value: number;
 }
 
@@ -117,6 +118,14 @@ export interface ParsedBuffEffects {
     // Flat stats (not percentages)
     hacking?: number; // flat additive on hacking stat
     security?: number; // flat additive on security stat
+
+    /** CONCRETE frozen flat attack (absolute units), materialized at grant time from a caster
+     *  snapshot. Summed additively in the fold (see effectiveStats / buffTotals). */
+    attackFlat?: number;
+    /** SENTINEL — "grant flat attack = N% of the CASTER's effective attack". Parsed statically
+     *  from the buff description; carries no concrete value, so it is INERT in the fold. The
+     *  reactive buff-grant site resolves it into `attackFlat` per instance. */
+    attackFlatPctOfCaster?: number;
 }
 
 export interface SelectedGameBuff {

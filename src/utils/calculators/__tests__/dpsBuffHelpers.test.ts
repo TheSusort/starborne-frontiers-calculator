@@ -182,6 +182,22 @@ describe('toSimBuffs — hacking/security channels (A2)', () => {
     });
 });
 
+describe('toSimBuffs — attackFlat channel (D-PR10)', () => {
+    it('emits an attackFlat leaf (× stacks) but NOT the sentinel (D-PR10)', () => {
+        const out = toSimBuffs([
+            {
+                id: 'b1',
+                buffName: 'Power Infused Nanobots',
+                stacks: 1,
+                isStackable: false,
+                parsedEffects: { attackFlat: 500, attackFlatPctOfCaster: 100 },
+            },
+        ]);
+        expect(out).toContainEqual({ id: 'b1-attackFlat', stat: 'attackFlat', value: 500 });
+        expect(out.some((b) => (b.stat as string) === 'attackFlatPctOfCaster')).toBe(false); // sentinel inert — no leaf
+    });
+});
+
 describe('calculateBuffTotals — hacking/security channels (A2)', () => {
     it('sums hacking buffs', () => {
         const result = calculateBuffTotals([

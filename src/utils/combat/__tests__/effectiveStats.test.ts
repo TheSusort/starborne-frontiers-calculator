@@ -674,3 +674,91 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
         expect(live).toBe(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// attackFlat additive fold — D-PR10 Task 3
+// ---------------------------------------------------------------------------
+
+describe('attackFlat additive fold — adds AFTER the percentage term', () => {
+    it('effectiveStatsOf: base 1000 + 20% Attack buff + attackFlat 300 → 1500', () => {
+        // Register two self-buffs: a +20% attack (parsedEffects.attack) and an
+        // attackFlat:300 buff (parsedEffects.attackFlat). Both are scheduled
+        // self-buffs routed through foldActorBuffTotals → effectiveStatsOf.
+        const { statusEngine, selfBuffLookup, actor } = buildHarness({
+            base: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                defence: 0,
+                hp: 1,
+                speed: 50,
+            },
+            selfBuffs: [
+                { stat: 'attack', value: 20 },
+                { stat: 'attackFlat', value: 300 },
+            ],
+        });
+        const eff = effectiveStatsOf(statusEngine, selfBuffLookup, actor);
+        // 1000 * 1.20 + 300 = 1500
+        expect(eff.attack).toBeCloseTo(1500);
+    });
+
+    it('effectiveDamageStatsOf: base 1000 + scheduledAttackBuff 20 + abilitySelfEffects attackFlat 300 → 1500', () => {
+        // Layer 1: scheduled totals carry attackBuff=20 (no flat)
+        const scheduledBuffs: SelectedGameBuff[] = [
+            {
+                id: 'sched-atk',
+                buffName: 'Attack Up',
+                stacks: 1,
+                parsedEffects: { attack: 20 },
+                isStackable: false,
+            },
+        ];
+        const scheduledTotals = calculateBuffTotals(toSimBuffs(scheduledBuffs));
+
+        // Layer 2+3: ability self-effects carry attackFlat=300
+        const abilitySelfEffects: SelectedGameBuff[] = [
+            {
+                id: 'abl-flat',
+                buffName: 'Flat Attack Boost',
+                stacks: 1,
+                parsedEffects: { attackFlat: 300 },
+                isStackable: false,
+            },
+        ];
+
+        const modifierCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 0,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+
+        const base = {
+            attack: 1000,
+            defence: 0,
+            crit: 0,
+            critDamage: 0,
+            hp: 1,
+            defensePenetration: 0,
+            defensePenetrationBuff: 0,
+        };
+
+        const dmg = effectiveDamageStatsOf({
+            base,
+            scheduledTotals,
+            abilitySelfEffects,
+            modifierAbilities: [],
+            modifierCtx,
+        });
+        // 1000 * (1 + 20/100) + 300 = 1000 * 1.20 + 300 = 1500
+        expect(dmg.attack).toBeCloseTo(1500);
+    });
+});
