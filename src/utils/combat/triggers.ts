@@ -1172,6 +1172,17 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'debuff') {
+        // D-PR14: once-per-round gate (Bulwark) — check consumed BEFORE drawing the proc gate,
+        // so a failed roll never locks the round (mirrors D-PR3 incoming-block invariant).
+        const onceKey = `${intent.ownerId}:${intent.ability.id}`;
+        if (intent.ability.oncePerRound && ctx.oncePerRoundConsumed?.has(onceKey)) return;
+        // D-PR14: proc-chance gate for reactive debuff appliers (Bulwark). Pass-through when
+        // procChance is undefined → BYTE-IDENTICAL for every existing debuff applier (Martyrdom/Warden).
+        if (!passesProcChanceGate(intent, ctx)) return;
+        // Mark consumed ONLY after a successful proc (before the landing roll — "once per round"
+        // is per attempt, matching the spec's read).
+        if (intent.ability.oncePerRound) ctx.oncePerRoundConsumed?.add(onceKey);
+
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
             payload: payloadFromConfig(cfg),
             side: 'enemy',
@@ -1184,7 +1195,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
         // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
-        const counterTargetId = intent.eventCtx?.counterTargetId;
+        // D-PR14: target resolution — enemy-highest-attack global selector (Doomsayer) else the
+        // counter-infliction route (Bulwark/Warden). Existing appliers use counterTargetId → identical.
+        const counterTargetId =
+            intent.ability.target === 'enemy-highest-attack'
+                ? ctx.enemyWithHighestAttack?.(intent.ownerId)
+                : intent.eventCtx?.counterTargetId;
+        // No living highest-attack enemy → no-op (don't fall back to the default enemy).
+        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined) return;
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
         if (owner.landsTimedEnemyApplication(cfg.application)) {
