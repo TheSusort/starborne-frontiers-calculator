@@ -718,6 +718,67 @@ describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// D-PR11: Fortifying Shroud implant (adjacent-allies Defense Up I, start-of-turn)
+// ---------------------------------------------------------------------------
+describe('Fortifying Shroud implant', () => {
+    it('emits Fortifying Shroud as an adjacent-allies start-of-turn Defense Up I buff', () => {
+        const implantPiece = makePiece({
+            id: 'fs-implant',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'FORTIFYING_SHROUD',
+        });
+        const ship = makeShip({
+            implants: { implant_major: 'fs-implant' },
+        });
+        const getGearPiece = makeGetGearPiece({ 'fs-implant': implantPiece });
+
+        const abilities = buildEquipmentAbilities(ship, getGearPiece);
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-FORTIFYING_SHROUD'));
+        expect(a).toBeDefined();
+        expect(a!.type).toBe('buff');
+        expect(a!.target).toBe('adjacent-allies');
+        expect(a!.trigger).toBe('start-of-turn');
+        expect(a!.procChance).toBeCloseTo(0.32);
+        expect(a!.config).toMatchObject({ type: 'buff', buffName: 'Defense Up I', duration: 1 });
+    });
+
+    it('uncommon → procChance ≈ 0.18', () => {
+        const piece = makePiece({ id: 'fs-2', setBonus: 'FORTIFYING_SHROUD', rarity: 'uncommon' });
+        const ship = makeShip({ implants: { implant_major: 'fs-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-2': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        expect(a).toBeDefined();
+        expect(a!.procChance).toBeCloseTo(0.18);
+    });
+
+    it('rare → procChance ≈ 0.21', () => {
+        const piece = makePiece({ id: 'fs-3', setBonus: 'FORTIFYING_SHROUD', rarity: 'rare' });
+        const ship = makeShip({ implants: { implant_major: 'fs-3' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-3': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        expect(a).toBeDefined();
+        expect(a!.procChance).toBeCloseTo(0.21);
+    });
+
+    it('epic → procChance ≈ 0.26', () => {
+        const piece = makePiece({ id: 'fs-4', setBonus: 'FORTIFYING_SHROUD', rarity: 'epic' });
+        const ship = makeShip({ implants: { implant_major: 'fs-4' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-4': piece }));
+        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        expect(a).toBeDefined();
+        expect(a!.procChance).toBeCloseTo(0.26);
+    });
+
+    it('common → no ability (no common variant)', () => {
+        const piece = makePiece({ id: 'fs-5', setBonus: 'FORTIFYING_SHROUD', rarity: 'common' });
+        const ship = makeShip({ implants: { implant_major: 'fs-5' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-5': piece }));
+        expect(abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD')).toBeUndefined();
+    });
+});
+
 describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat attack = caster attack)', () => {
     it('exists in the buff corpus as a buff', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');

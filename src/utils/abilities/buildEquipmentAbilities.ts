@@ -247,6 +247,15 @@ const FONT_OF_POWER_PROC: Record<string, number> = {
     legendary: 0.16,
 };
 
+// D-PR11: Fortifying Shroud — start-of-turn proc chance to grant adjacent allies Defense Up I.
+// No common variant.
+const FORTIFYING_SHROUD_PROC_CHANCE: Record<string, number> = {
+    uncommon: 0.18,
+    rare: 0.21,
+    epic: 0.26,
+    legendary: 0.32,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -316,7 +325,7 @@ function mkHealAmp(
 // D-PR8: generalised with optional `opts` for conditions + procChance (Battlecry call is byte-identical).
 function mkNamedBuffGrant(
     buffName: string,
-    target: 'self' | 'ally' | 'all-allies',
+    target: 'self' | 'ally' | 'all-allies' | 'adjacent-allies',
     trigger: AbilityTrigger,
     duration: number | undefined,
     opts?: { conditions?: Condition[]; procChance?: number }
@@ -640,6 +649,17 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         const procChance = FONT_OF_POWER_PROC[rarity];
         if (procChance === undefined) return undefined;
         return mkNamedBuffGrant('Power Infused Nanobots', 'ally', 'on-own-repair-to-ally', 1, {
+            procChance,
+        });
+    },
+    // D-PR11: Fortifying Shroud — at the start of its own turn, X% chance to grant all
+    // adjacent allies Defense Up I for 1 turn. The adjacent-allies target resolves to board
+    // neighbours in the simulator and to all same-side allies in non-positional modes.
+    // No common variant.
+    FORTIFYING_SHROUD: (rarity) => {
+        const procChance = FORTIFYING_SHROUD_PROC_CHANCE[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Defense Up I', 'adjacent-allies', 'start-of-turn', 1, {
             procChance,
         });
     },
