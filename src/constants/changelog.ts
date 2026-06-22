@@ -22,6 +22,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models two ally-support implants: Spearhead (after the carrier uses its charged skill, a chance to grant all allies Attack Up for 1 turn) and Font of Power (a chance to grant a buff to the allies it repairs). Spearhead is fully resolved; Font of Power applies and appears in the combat log with its attack bonus coming in a later update.',
     "Combat simulator: the Font of Power implant's Power Infused Nanobots buff now grants the repaired ally flat attack equal to 100% of the caster's attack at the time of the repair (previously this attack bonus had no effect).",
     'Combat simulator now models the Fortifying Shroud implant — a chance each turn to grant adjacent allies a Defense Up buff.',
+    "Combat simulator: the Disable control now skips the affected ship's turn and locks out its reactions, so effects that apply Disable — like the Martyrdom implant and Disable-inflicting skills — now take effect in the simulation.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
