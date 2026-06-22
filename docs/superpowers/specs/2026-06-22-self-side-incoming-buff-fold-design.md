@@ -61,13 +61,13 @@ debuffs already on it. Lights up all five sources above. Direct-damage channel o
 ## Team-agnosticism (unification check)
 
 This stays consistent with the bySide-unification campaign. The seam being extended,
-`victimEnemyModifiers(v.id)` (`engine.ts:2657`), is the single team-agnostic per-victim
-read the unification landed — the engine comment at `engine.ts:2679` states it
+`victimEnemyModifiers(v.id)` (`engine.ts:~2826`), is the single team-agnostic per-victim
+read the unification landed — the engine comment beside it states it
 *"works for ENEMY victims (focus/team site) and PLAYER victims (enemy site) alike — both
 store their debuffs keyed by their own id."* The friendly reader uses
 `timedAbilityStatuses('self', victimId)` / `activeAbilityStatuses('self', …, victimId)`,
 which are already called team-agnostically today (e.g. for enemy attackers' own buffs via
-`selfBuffNamesForOwners`, `triggers.ts:688/734`). So a self-buffing ship (e.g. Makoli)
+`selfBuffNamesForOwners`, `triggers.ts:~795`). So a self-buffing ship (e.g. Makoli)
 receives the reduction on **whichever team it fights for** — no player/enemy branch.
 
 The two readers (`victimEnemyBuffs` for the `'enemy'` store, the new `victimSelfBuffs` for
@@ -79,8 +79,12 @@ different side keys on the victim; their results are **summed into one**
 
 ### 1. New reader: `victimSelfBuffs` (triggers.ts)
 
-A friendly twin of `victimEnemyBuffs` (`triggers.ts:805-821`). Reads the victim's **own**
+A friendly twin of `victimEnemyBuffs` (`triggers.ts:~866`). Reads the victim's **own**
 friendly-side statuses across the same three channels, returning `SelectedGameBuff[]`:
+
+> **Line numbers below are anchored to the D-PR11 base (`e859a75a`) and are approximate** —
+> the stack has shifted them. Resolve every reference by **symbol name** (grep), not the
+> number.
 
 ```ts
 export function victimSelfBuffs(
@@ -143,22 +147,46 @@ const victimIncomingModifiers = (victimId: string) => {
 };
 ```
 
-`selfBuffLookup` is already in scope at this site (`engine.ts:1385`). The
-`__testTapVictimEnemyModifiers` test seam (engine.ts:2663) is renamed to match (or kept as
-an alias). Everything downstream (`defenseProfileOf` → `incomingDamageModifierPct` →
+`selfBuffLookup` is already in scope at this site (`engine.ts:~1403`). The
+`__testTapVictimEnemyModifiers` test seam (`engine.ts:~2830`) is renamed to match (or kept
+as an alias). Everything downstream (`defenseProfileOf` → `incomingDamageModifierPct` →
 `victimHitDamage`) is unchanged.
+
+> **Design note — what this path does NOT touch:** the chosen path reads
+> `parsedEffects.incomingDamage` from the victim's own status payloads
+> (`payloadToSelectedBuff` → `toSelfIncomingDamageModifier`). It **deliberately does not** add
+> `incomingDamage` to the `Buff.stat` union, `toSimBuffs`, or `calculateBuffTotals` — those
+> remain enemy-blind to incoming damage by design. A plan author should NOT add union /
+> `calculateBuffTotals` work; it is unnecessary and would mis-attribute the modifier to the
+> attacker's turn context instead of the victim.
 
 ### 4. Composition with D-PR3 `incoming-reduction`
 
 D-PR3's conditional incoming reduction is **ability-config-sourced** (the
-`incoming-reduction` AbilityConfig, applied via `incomingEffects.ts` as a separate factor in
-`positionalApply.ts`). This PR's fold is **buff-status-sourced** (reads
-`parsedEffects.incomingDamage` from status payloads). The two read **disjoint** sources, so:
+`incoming-reduction` AbilityConfig, applied via `incomingEffects.ts`). This PR's fold is
+**buff-status-sourced** (reads `parsedEffects.incomingDamage` from status payloads). The two
+read **disjoint** sources — `victimSelfBuffs` never sees D-PR3 ability configs (they are not
+buff statuses carrying `incomingDamage`), so there is no double-count.
 
-- No double-count: `victimSelfBuffs` never sees D-PR3 ability configs (they are not buff
-  statuses carrying `incomingDamage`).
-- They stack as separate factors (D-PR3 reduction × this `(1 + incoming/100)`), which is
-  the correct in-game behavior for distinct sources. A composition test pins this.
+**They combine ADDITIVELY within a single damage factor — NOT as a product.** In
+`victimHitDamage` (`victimDamage.ts:100-107`) all incoming terms land in one `incoming`
+scalar before a single `(1 + incoming/100)` multiply:
+
+```ts
+const incoming =
+    (v.incomingDamageModifierPct ?? s.incomingDamageModifierPct)  // ← enemy debuffs + NEW friendly buffs
+    - equipReductionPct;                                          // ← D-PR3 ability reduction
+const nonCritFactor = (1 - damageReduction/100) * (1 + s.outgoingDamageBuffPct/100)
+    * (1 + incoming/100) * affinityMult;
+```
+
+So a `-30%` friendly buff + a `20%` D-PR3 reduction give
+`(1 + (-30 - 20)/100) = 0.50` — **not** the product `0.70 × 0.80 = 0.56`. The new friendly
+term feeds `v.incomingDamageModifierPct` (alongside enemy-side incoming), and D-PR3's
+`equipReductionPct` is subtracted from the same `incoming` scalar. The composition test
+(Testing #3) must assert this additive-within-one-factor magnitude, not a product. This
+additive model is the existing engine behavior and is left unchanged (a true product would
+be out-of-scope and golden-churning).
 
 ## Affected files
 
@@ -190,12 +218,14 @@ running the suite; audit each delta as a faithful incoming-damage reduction. Bot
    without the buff (magnitude proof). Mirror on the enemy side (a self-buffing enemy ship)
    to prove team-agnosticism.
 3. **Composition**: a victim with both a D-PR3 `incoming-reduction` ability and a friendly
-   `Inc. Damage Down` buff → assert both factors apply (product), not one or double.
+   `Inc. Damage Down` buff → assert both terms apply **additively within one factor** (e.g.
+   `-30%` buff + `20%` D-PR3 → `(1 + (-30-20)/100) = 0.50`), NOT a product (`0.56`) and NOT
+   one-or-double.
 4. **Coverage / regression**: full suite green; audit and document every golden delta.
 
 ## Acceptance
 
 - Direct-damage friendly incoming fold live for all five sources, team-agnostic.
-- D-PR3 composition correct (no double-count, factors stack).
+- D-PR3 composition correct (no double-count; additive within one `(1 + incoming/100)` factor).
 - All golden deltas audited and explained; lint/tsc/`audit:skills` clean.
 - Incoming-DoT explicitly deferred with rationale recorded.
