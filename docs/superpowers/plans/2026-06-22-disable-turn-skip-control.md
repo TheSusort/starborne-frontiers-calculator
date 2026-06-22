@@ -96,6 +96,8 @@ git commit -m "feat(combat): D-PR13 — Disable buff-name set + isDisable predic
 
 **Read first:** `stasis.test.ts` tests (i), (iii), and B3 Task 2 (i). You will mirror the harness (`ab`, `basicAttack`, `parsedTarget`, `basePattern`, `offensiveEnemyAt`, `teamAttackerAt`, the `run` helper, `POS_*` constants). Copy that harness into `disable.test.ts` and add a `disableInflictAttack(turns)` builder (identical to `stasisInflictAttack` but `buffName: 'Disable'`).
 
+**IMPORTANT — event shapes (verified against `events.ts`):** the `attacked` event is `{ type, targetId, attackerId, round, didCrit? }` — it has **NO `damage` field**. To prove "damage lands" (no immunity), observe the `hp-changed` event instead: `{ type:'hp-changed', targetId, round, oldPct, newPct }` (fires when an actor takes HP damage). When you copy the `run` helper, ADD `'hp-changed'` to its `INTERESTING_TYPES` array so it is collected.
+
 - [ ] **Step 1: Write the failing tests.** Create `src/utils/combat/__tests__/disable.test.ts` with the mirrored harness plus these tests (full code — adapt imports/harness from `stasis.test.ts`):
 
   **(i) A disabled enemy skips its action.** Mirror `stasis.test.ts` (i) but inflict `Disable(2)` from the focus every round; assert `enemy-front` never emits `ability-performed` across 4 rounds, `enemy-back` (untargeted) fires every round, `result.rounds` has length 4.
@@ -141,18 +143,19 @@ describe('D-PR13 — Disable: direct hit does NOT break it (contrast vs Stasis) 
         expect(focusRounds).toContain(4);     // Disable(3) expired → acts
 
         // No immunity: the breaker actually damaged the focus while it was disabled.
-        const hitFocus = events.filter(
-            (e): e is Extract<CombatEvent, { type: 'attacked' }> =>
-                e.type === 'attacked' && e.targetId === 'attacker' && e.attackerId === 'breaker'
+        // (The `attacked` event has no damage field — observe hp-changed's pct decline instead.)
+        const focusHpChanged = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'hp-changed' }> =>
+                e.type === 'hp-changed' && e.targetId === 'attacker'
         );
-        expect(hitFocus.length).toBeGreaterThan(0);
-        expect(hitFocus.some((e) => e.damage > 0)).toBe(true);
+        expect(focusHpChanged.length).toBeGreaterThan(0);
+        expect(focusHpChanged.some((e) => e.newPct < e.oldPct)).toBe(true);
         expect(result.rounds).toHaveLength(4);
     });
 });
 ```
 
-  > NOTE on the `attacked` event shape: confirm the field names (`targetId`/`attackerId`/`damage`) against `events.ts` while writing — adapt if they differ.
+  > NOTE: `'hp-changed'` must be added to the copied `run` helper's `INTERESTING_TYPES` array (the stasis copy omits it). The `attacked` event carries no `damage` — do not assert on it.
 
 - [ ] **Step 2: Run to verify they fail.** `npx vitest run src/utils/combat/__tests__/disable.test.ts` → FAIL (Disable not honored: the disabled actor still acts).
 
