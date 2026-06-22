@@ -372,13 +372,18 @@ function makeVoidshadePiece(): GearPiece {
 }
 
 /** legendary Voidshade passive slot: -20% incoming direct damage while stealthed. */
-function voidshadePassiveSlot(): ShipSkills['slots'][number] | undefined {
+function voidshadePassiveSlot(): ShipSkills['slots'][number] {
     const ship = makeShipForVoidshade('voidshade-ship');
     const piece = makeVoidshadePiece();
     const skills = buildShipAbilitiesWithEquipment(ship, (gearId) =>
         gearId === 'voidshade-piece' ? piece : undefined
     );
-    return skills.slots.find((s) => s.slot === 'passive');
+    const slot = skills.slots.find((s) => s.slot === 'passive');
+    // Fail loudly rather than silently degrade: if VOIDSHADE ever stops emitting a passive
+    // slot, the Case B "both effects" assertion would become a false-pass (only the friendly
+    // buff would apply, and a product model would survive too). Guard against that.
+    if (!slot) throw new Error('VOIDSHADE legendary should always produce a passive slot');
+    return slot;
 }
 
 /** Active slot that self-casts BOTH Stealth (to gate Voidshade) and Inc. Damage Down II (-30%). */
@@ -606,5 +611,19 @@ describe('D-PR12 Task 4 Case B — additive composition with D-PR3 incoming-redu
                 'victim-cb'
             )
         ).toBe(true);
+    });
+
+    it('NO reductions → full 5000 damage (dies at hp=2650, survives at hp=5001)', () => {
+        // Baseline pin: with neither term, incoming = 0 → taken = 5000 (no floor/cap surprise).
+        expect(
+            destroyedIds(run(2650, { voidshade: false, stealth: false, incDmgDown: false })).has(
+                'victim-cb'
+            )
+        ).toBe(true);
+        expect(
+            destroyedIds(run(5001, { voidshade: false, stealth: false, incDmgDown: false })).has(
+                'victim-cb'
+            )
+        ).toBe(false);
     });
 });
