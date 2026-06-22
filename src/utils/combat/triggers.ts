@@ -1193,7 +1193,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // procChance is undefined → BYTE-IDENTICAL for every existing debuff applier (Martyrdom/Warden).
         if (!passesProcChanceGate(intent, ctx)) return;
         // Mark consumed ONLY after a successful proc (before the landing roll — "once per round"
-        // is per attempt, matching the spec's read).
+        // is per attempt, matching the spec's read). NOTE: marked before the enemy-highest-attack
+        // no-target no-op below; harmless today because no ability is both `oncePerRound` AND
+        // `enemy-highest-attack` (Bulwark is oncePerRound+counterTarget; Doomsayer is neither). If
+        // a future ability combines them, move this mark below the target-resolution guard so a
+        // no-living-target round doesn't burn the charge.
         if (intent.ability.oncePerRound) ctx.oncePerRoundConsumed?.add(onceKey);
 
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {

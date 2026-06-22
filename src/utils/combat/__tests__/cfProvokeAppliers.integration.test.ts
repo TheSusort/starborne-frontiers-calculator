@@ -251,8 +251,8 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
                 position: 'M2',
                 teamActors: [ally('ally-T2', 'T2'), ally('ally-M3', 'M3')],
                 healTargetId: 'ally-T2',
-                // Two positioned enemies in row M each select a player → both adjacent allies get
-                // hit in the same round, producing two `attacked` events on adjacent allies.
+                // Two enemies both hit the adjacent heal target T2 in the same round → two
+                // `attacked` events on an adjacent ally, so the listener enqueues twice.
                 enemyAttackers: [
                     enemyHitter('enemy-1'),
                     enemyHitter('enemy-2'),
