@@ -1,4 +1,8 @@
 import type { StatusEngine } from './statusEngine';
+// Call-time-safe cycle: triggers imports targetCarriesBlockDebuff from this module and we import
+// selfBuffNamesForOwners back. Both are used only inside function bodies (never at top-level
+// evaluation), so there is no initialization-order hazard.
+// eslint-disable-next-line import/no-cycle
 import { selfBuffNamesForOwners } from './triggers';
 import type { CombatEventBus } from './events';
 

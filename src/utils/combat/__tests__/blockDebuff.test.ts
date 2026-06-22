@@ -2,6 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { dotResistLabel, isBlockDebuff } from '../debuffImmunity';
 import { runCombat, CombatEngineInput } from '../engine';
 import { ShipSkills, Ability } from '../../../types/abilities';
+import { executeIntent, Intent, IntentExecContext } from '../triggers';
+import { createEventBus, CombatEvent } from '../events';
+import { createStatusEngine } from '../statusEngine';
+import type { RegisteredAbilityStatus, ActiveBuff } from '../statusEngine';
+import type { PlayerActorRuntime } from '../playerTurn';
+import type { CombatActor } from '../state';
 
 describe('debuffImmunity helpers', () => {
     describe('isBlockDebuff', () => {
@@ -203,5 +209,132 @@ describe('Block Debuff — cast-side timed/persistent landing fold (engine)', ()
         expect(entry).toBeDefined();
         expect(entry!.debuffs.map((d) => d.buffName)).toContain('Defense Shred');
         expect(entry!.resistedDebuffs).toHaveLength(0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 5: Block Debuff — reactive timed-debuff fold (executeIntent).
+//
+// The REACTIVE debuff executor (triggers.ts `cfg.type === 'debuff'`) applies a
+// timed debuff to a target on a triggered event (on-attacked / on-crit, etc).
+// When that target carries `Block Debuff`, the immunity fold must route the
+// application into the EXISTING resist branch: the debuff is NOT applied to the
+// target store, `recordResisted` is called, and a `debuff-resisted` event is
+// emitted. We drive the executor directly (a full runCombat reactive setup is
+// heavy) and seed `Block Debuff` onto the counter target's self-buff store via
+// a timed self-status — exactly the read `targetCarriesBlockDebuff` performs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
+    const makeRuntime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'attacker' } as CombatActor,
+            // Always lands → the ONLY thing that can resist is the Block Debuff fold.
+            landsTimedEnemyApplication: () => true,
+            debuffLandingGate: (_rate: number) => true,
+        }) as unknown as PlayerActorRuntime;
+
+    // A reactive (on-attacked) timed debuff inflicted at a chosen counter target.
+    const makeReactiveDebuffIntent = (counterTargetId?: string): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-debuff',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Attack Down II',
+                stacks: 1,
+                parsedEffects: { attack: -50 },
+                isStackable: false,
+                application: 'inflict',
+                duration: 3,
+            },
+        },
+        ...(counterTargetId !== undefined ? { eventCtx: { counterTargetId } } : {}),
+    });
+
+    // Seed a `Block Debuff` self-buff onto `targetId`'s store (the read
+    // `targetCarriesBlockDebuff` performs: a timed self-status on that owner).
+    const seedBlockDebuff = (
+        statusEngine: ReturnType<typeof createStatusEngine>,
+        round: number,
+        targetId: string
+    ): void => {
+        const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            payload: { buffName: 'Block Debuff', stacks: 1, parsedEffects: {} },
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            casterId: targetId,
+            recipients: [targetId],
+            kind: 'timed',
+            duration: 5,
+        };
+        statusEngine.applyTimedAbilityStatus(round, status, targetId);
+    };
+
+    const buildCtx = (
+        immuneTargetId?: string
+    ): { ctx: IntentExecContext; resisted: ActiveBuff[] } => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        if (immuneTargetId) seedBlockDebuff(se, 1, immuneTargetId);
+        const resisted: ActiveBuff[] = [];
+        const ctx: IntentExecContext = {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['attacker', makeRuntime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: (r: ActiveBuff) => resisted.push(r),
+        } as unknown as IntentExecContext;
+        return { ctx, resisted };
+    };
+
+    it('immune counter target auto-resists a reactive TIMED debuff: not applied, resisted + event', () => {
+        const { ctx, resisted } = buildCtx('enemy-1');
+        const events: CombatEvent[] = [];
+        ctx.bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+        ctx.bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+
+        executeIntent(makeReactiveDebuffIntent('enemy-1'), ctx);
+
+        // NOT applied to the immune target's store.
+        const timedEnemy1 = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, 'enemy-1');
+        expect(timedEnemy1.some((s) => s.active.buffName === 'Attack Down II')).toBe(false);
+        // Recorded as a resist.
+        expect(resisted.map((r) => r.buffName)).toContain('Attack Down II');
+        // A debuff-resisted event fired; no debuff-applied event.
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(true);
+        expect(events.some((e) => e.type === 'debuff-applied')).toBe(false);
+    });
+
+    it('control: WITHOUT Block Debuff the same reactive TIMED debuff lands (non-vacuity)', () => {
+        const { ctx, resisted } = buildCtx(); // no immunity seeded
+        const events: CombatEvent[] = [];
+        ctx.bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+        ctx.bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+
+        executeIntent(makeReactiveDebuffIntent('enemy-1'), ctx);
+
+        const timedEnemy1 = ctx.statusEngine.timedAbilityStatuses('enemy', undefined, 'enemy-1');
+        expect(timedEnemy1.some((s) => s.active.buffName === 'Attack Down II')).toBe(true);
+        expect(resisted).toHaveLength(0);
+        expect(events.some((e) => e.type === 'debuff-applied')).toBe(true);
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
     });
 });
