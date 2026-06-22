@@ -102,6 +102,14 @@ timed debuff (carried in the per-actor enemy-debuff store, like Stasis) ticks do
 duration N skips exactly N scheduled turns. Damage lands normally because nothing in
 the incoming pipeline keys on `isStasised`/`isDisabled`.
 
+**Cleanse resume (verified, free):** because `isDisabled` reads `ownerDebuffNames(id)`
+**live at each turn gate**, a cleanse that removes the `Disable` debuff makes the unit
+resume its regular walk on its next scheduled turn — no extra production wiring.
+Confirmed against the code: `statusEngine.cleanse` → `removeNewestFirst(id, 'debuffs',
+n)` deletes removable timed entries from the per-actor `enemyMaps` store (the same store
+`ownerDebuffNamesFor` reads), and `Disable` is **not** in `UNREMOVABLE_STATUSES`
+(`cheatDeathBuffs.ts`), so it is fully cleanse-removable. This must be locked by a test.
+
 ### What lights up (buff-name-driven, no new parsing)
 
 - **Martyrdom** — on-death `Disable` on the enemy killer; the enemy turn gate (~3837)
@@ -137,6 +145,8 @@ Mirror the existing Stasis suite (`stasisBuffs.test.ts`, `isStasised.test.ts`,
   - **Contrast vs Stasis:** a direct hit does **not** break Disable — the unit stays
     disabled and keeps skipping for the remaining duration.
   - **No immunity:** the hit's damage lands normally on a disabled unit.
+  - **Cleanse resume:** a disabled unit whose `Disable` is cleansed (removed from its
+    debuff store) acts again on its next scheduled turn (no longer turn-blocked).
 - **Martyrdom end-to-end** — extend D-PR7's `equipmentAbilities.integration.test.ts`
   Martyrdom block (already asserts the `debuff-applied` event): a focus ship dies to a
   killer, `Disable` lands on the killer, and the killer **skips** its next turn(s).
