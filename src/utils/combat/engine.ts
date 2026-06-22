@@ -11,7 +11,7 @@ import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { toEnemyModifiers } from '../calculators/dpsBuffHelpers';
+import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
 import {
     type ExtraActionGrant,
     selectFiringSkill,
@@ -77,6 +77,7 @@ import {
     registerReactiveListeners,
     selfBuffNamesForOwners,
     victimEnemyBuffs,
+    victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 
@@ -958,10 +959,12 @@ export interface CombatEngineInput {
      *  in the callback, not after runCombat returns. Base stats (hacking, security, etc.) are
      *  never mutated, so existing base-stat assertions are safe to read post-run. */
     __testTapActors?: (actors: CombatActor[]) => void;
-    /** TEST-ONLY tap (B1 Task 2): receives the per-victim enemy-debuff-derived modifier reader
-     *  once it is built in the round loop. Unit tests capture the closure and call it with a
-     *  victim id to assert per-actor debuff reads (before B1 Task 3 wires it into any damage
-     *  path). Never set by production code; inert when absent. The closure is per-round-identical
+    /** TEST-ONLY tap (B1 Task 2): receives the per-victim incoming-damage modifier reader
+     *  (`victimIncomingModifiers`) once it is built in the round loop. Since D-PR12 the closure
+     *  sums BOTH the enemy-debuff term AND the victim's own friendly self-buff term (field name
+     *  kept as `__testTapVictimEnemyModifiers` to avoid churning the existing tap tests). Unit
+     *  tests capture the closure and call it with a victim id to assert per-actor modifier reads.
+     *  Never set by production code; inert when absent. The closure is per-round-identical
      *  in behaviour (only the live status-engine state changes), so capturing it once is sufficient
      *  for a single-round test. NOTE: the tap reads LIVE statusEngine state at call time, which
      *  is fine for single-round tests (the state is fully settled after runCombat returns). */
@@ -2823,13 +2826,30 @@ export function runCombat(input: CombatEngineInput): {
         // lockstep. Attacker-sourced modifiers (outgoing buff, pen) stay attacker-sourced.
         // NOTE: the aura/accumulating ability channel is an approximation (NEUTRAL ctx, no re-roll)
         // — see the victimEnemyBuffs jsdoc (finding I1) for details and acceptance rationale.
-        const victimEnemyModifiers = (
+        const victimIncomingModifiers = (
             victimId: string
-        ): { enemyDefenseModifier: number; incomingDamageModifier: number } =>
-            toEnemyModifiers(victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup));
-        // TEST-ONLY: hand the reader out once so unit tests can assert per-victim debuff reads
-        // before B1 Task 3 wires it into a damage path. Inert in production (never set).
-        input.__testTapVictimEnemyModifiers?.(victimEnemyModifiers);
+        ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
+            const enemy = toEnemyModifiers(
+                victimEnemyBuffs(statusEngine, victimId, enemyDebuffLookup)
+            );
+            // D-PR12: friendly-side incoming-DIRECT-damage buffs on the victim's OWN 'self' store
+            // (Inc. Damage Down/Up — Makoli/Salvation/Shelter/Refine/Battlecry). Summed into the SAME
+            // per-victim incomingDamageModifier as enemy debuffs. Team-agnostic for the TIMED + AURA
+            // ability channels (victimId keys the actor's own self store regardless of side). The
+            // SCHEDULED channel reads selfBuffLookup, which today is populated only for player/team
+            // actors (enemy runtimes pass an empty map) — a pre-existing gap, irrelevant until an
+            // enemy carries a scheduled self-buff. Direct channel only; incoming-DoT deferred.
+            const selfIncoming = toSelfIncomingDamageModifier(
+                victimSelfBuffs(statusEngine, victimId, selfBuffLookup)
+            );
+            return {
+                enemyDefenseModifier: enemy.enemyDefenseModifier,
+                incomingDamageModifier: enemy.incomingDamageModifier + selfIncoming,
+            };
+        };
+        // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term,
+        // D-PR12) to unit tests that assert per-victim modifier reads. Inert in production (never set).
+        input.__testTapVictimEnemyModifiers?.(victimIncomingModifiers);
         input.__testTapIsStasised?.(isStasised);
 
         // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
@@ -2842,11 +2862,11 @@ export function runCombat(input: CombatEngineInput): {
         //  - `opposingLiving` — focus/team → enemyAttackerActors; enemy → allPlayerActors,
         //  - `applyToVictim` — focus/team → applyOutgoingToEnemy; enemy → applyIncomingToTarget,
         //  - `acting` — the firing actor's position / ignoresForcedTargeting / id (for provokerOf).
-        // `defenseProfileOf` is identical across all three sites (B1/PR7b: wired to
-        // victimEnemyModifiers — reads the victim's OWN per-actor enemy-debuff store, both
-        // channels: scheduled (__enemy__ global) + ability (per-victim payload). Direction-
-        // agnostic: victimEnemyModifiers(v.id) works for ENEMY victims (focus/team site) and
-        // PLAYER victims (enemy site) alike — both store their debuffs keyed by their own id.
+        // `defenseProfileOf` is identical across all three sites (B1/PR7b + D-PR12: wired to
+        // victimIncomingModifiers — reads the victim's OWN per-actor enemy-debuff store AND
+        // the victim's own self-buff store (both channels: scheduled + ability payload).
+        // Direction-agnostic: victimIncomingModifiers(v.id) works for ENEMY victims
+        // (focus/team site) and PLAYER victims (enemy site) alike.
         // No emitHit: runPlayerTurn already emits ONE aggregate ability-performed per turn;
         // per-hit/per-victim event fidelity is a documented Phase-5 follow-up.
         const drivePositionalApply = (args: {
@@ -2886,16 +2906,16 @@ export function runCombat(input: CombatEngineInput): {
                     provokedBy: provokerOf(statusEngine, args.actingId),
                 },
                 defenseProfileOf: (v) => {
-                    const m = victimEnemyModifiers(v.id);
+                    const m = victimIncomingModifiers(v.id);
                     return {
                         defence: v.stats.defence,
                         // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
                         // Direction-agnostic — v.id keys the victim's own enemy-debuff store
                         // regardless of side.
                         defenceModifierPct: m.enemyDefenseModifier,
-                        // B1/PR7b: per-victim incoming-damage debuff; overrides the
-                        // attacker-fixed scalar in victimHitDamage. Attacker-sourced scalars
-                        // (outgoing buff, pen) stay attacker-fixed.
+                        // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
+                        // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
+                        // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
                         incomingDamageModifierPct: m.incomingDamageModifier,
                         affinity: v.affinity ?? 'antimatter',
                     };
