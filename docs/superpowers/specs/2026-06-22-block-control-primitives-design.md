@@ -145,8 +145,11 @@ The seams collapse into three things:
    `if (targetCarriesBlockDebuff) { emitBlockDebuffResist(...); skip; }` — checked *before* the
    normal landing gate. Call sites: cast DoT gate (playerTurn.ts ~811 / `applyNewDoTs`) and
    reactive DoT gate (triggers.ts ~1214). The synthesized `buffName` for the event reflects the
-   DoT kind + tier (e.g. `'Inferno III'`, `'Corrosion II'`) — exact label is an implementation
-   detail.
+   DoT kind + tier as a single shared convention — capitalized kind + Roman-numeral tier
+   (`'Inferno III'`, `'Corrosion II'`; `'Bomb'` has no tier). Define this label in **one place**
+   (in `debuffImmunity.ts`, reusing any existing DoT-naming helper if present) so the
+   `emitBlockDebuffResist` call and the test assertion reference the same source — this is the
+   one spot in the PR where two pieces must agree on a string.
 
 3. **One shared predicate** `targetCarriesBlockDebuff` (via `selfBuffNamesForOwners`) used by
    both the landing-fold checks and the DoT call sites.
