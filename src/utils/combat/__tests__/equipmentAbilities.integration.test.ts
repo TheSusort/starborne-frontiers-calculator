@@ -2344,7 +2344,9 @@ describe('D-PR8 Task 6 integration — Synaptic Resonance fires on enemy repair 
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
         // Pre-condition: the Synaptic Resonance on-enemy-repaired buff grant landed in the passive slot.
-        const syn = passive?.abilities.find((a) => a.id === 'equip-implant-SYNAPTIC_RESONANCE');
+        const syn = passive?.abilities.find((a) =>
+            a.id.startsWith('equip-implant-SYNAPTIC_RESONANCE')
+        );
         expect(syn).toBeDefined();
         expect(syn!.trigger).toBe('on-enemy-repaired');
         expect(syn!.target).toBe('self');
