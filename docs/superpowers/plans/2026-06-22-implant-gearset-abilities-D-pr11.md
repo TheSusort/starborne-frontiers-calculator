@@ -427,8 +427,11 @@ Add the registry entry to `IMPLANT_ABILITIES`:
 ```
 
 Coverage test (`equipmentCoverage.test.ts`) — add `'FORTIFYING_SHROUD'` to BOTH:
-- the `implementedImplants` `.toEqual([...])` array, in `IMPLANTS` **declaration order** (check where `FORTIFYING_SHROUD` sits in `implants.ts` relative to the others already listed), AND
-- the `implementedImplants` `new Set([...])`.
+- the `implementedImplants` `.toEqual([...])` array — **insert it between `'FONT_OF_POWER'` and `'GIANT_SLAYER'`** (that is its `IMPLANTS` declaration-order position; `implants.ts` has FONT_OF_POWER @1752, FORTIFYING_SHROUD @1798, GIANT_SLAYER @1881). A wrong position silently fails the ordered `.toEqual`.
+- the `implementedImplants` `new Set([...])` (order-independent — add anywhere).
+- the `it('exactly { … }')` description string also enumerates the set in prose; add `FORTIFYING_SHROUD` there too for accuracy (not assertion-bearing, but keep it honest).
+
+Note: the registry test's `id.startsWith('equip-implant-FORTIFYING_SHROUD')` matches the exact id `equip-implant-FORTIFYING_SHROUD` (no `-gearId` suffix in current code — buildEquipmentAbilities.ts:711).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -450,12 +453,12 @@ git commit -m "feat(combat): D-PR11 — Fortifying Shroud implant registry entry
 **Files:**
 - Modify: `src/components/skills/AbilityCard.tsx` (`TARGET_OPTIONS` ~line 64; `TRIGGER_OPTIONS` ~line 126)
 
-UI completeness only — no combat behaviour. The new union members may already force `tsc` errors at exhaustive sites; run `tsc` first to find them all.
+UI completeness only — no combat behaviour. Note: there are currently **no** `Record<AbilityTarget,…>` / `Record<AbilityTrigger,…>` or `assertNever`/exhaustive `switch` sites over these unions in `src/`, so adding the members forces **zero** tsc errors — the picker arrays below are non-exhaustive typed arrays. This task is purely additive UI completeness. Run `tsc` anyway to be safe.
 
-- [ ] **Step 1: Find every exhaustive site**
+- [ ] **Step 1: Find any exhaustive site (likely none)**
 
 Run: `npx tsc --noEmit`
-Expected: errors at any `Record<AbilityTarget, …>` / `Record<AbilityTrigger, …>` or exhaustive `switch`. Fix each.
+Expected: clean (no forced errors). If any `Record<AbilityTarget,…>` / exhaustive `switch` does error, fix each.
 
 - [ ] **Step 2: Add the picker options**
 

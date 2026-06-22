@@ -167,9 +167,11 @@ FORTIFYING_SHROUD: (rarity) => {
 `mkNamedBuffGrant` returns `undefined` for an unknown rarity (no common variant) or a
 missing buff — graceful skip, never throws (existing contract). `procChance` rides the
 D-PR8 buff-branch proc gate (`passesProcChanceGate`, defined triggers.ts:953, called in
-the buff branch triggers.ts:1058) keyed `${ownerId}:${ability.id}`. The ability id is suffixed with the gear-piece id
-(`equip-implant-FORTIFYING_SHROUD-${gearId}`) so duplicate copies get independent gates
-(D-PR1 convention).
+the buff branch triggers.ts:1058) keyed `${ownerId}:${ability.id}`. The implant ability id
+is `equip-implant-FORTIFYING_SHROUD` (current code uses `equip-implant-${implantName}` with
+no per-piece suffix, buildEquipmentAbilities.ts:711), so all copies of the implant on one
+owner share a single proc-chance stream — consistent with the "one effect = one
+probability stream per (owner, ability)" fidelity model.
 
 A new `FORTIFYING_SHROUD_PROC_CHANCE` per-rarity constant lives beside the other implant
 constant tables (buildEquipmentAbilities.ts), values from `implants.ts`.
