@@ -23,8 +23,16 @@
 
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
+import { BUFFS } from '../../constants/buffs';
+import { parseBuffEffects, isStackable } from '../calculators/buffParser';
 import { GearPiece } from '../../types/gear';
-import { Ability, HealAmpCondition, IncomingCondition, OutgoingCondition } from '../../types/abilities';
+import {
+    Ability,
+    AbilityTrigger,
+    HealAmpCondition,
+    IncomingCondition,
+    OutgoingCondition,
+} from '../../types/abilities';
 import { Ship } from '../../types/ship';
 
 // ---------------------------------------------------------------------------
@@ -194,6 +202,15 @@ const NOURISHMENT_AMP: Record<string, number> = { uncommon: 10, rare: 15, epic: 
 // No common/uncommon rarity for Vivacious Repair
 const VIVACIOUS_PROC: Record<string, number> = { rare: 0.21, epic: 0.26, legendary: 0.32 };
 
+// D-PR7: on-death implant value tables
+// Last Wish: repair all allies % of their max HP on death. No common variant.
+const LAST_WISH_PCT: Record<string, number> = { uncommon: 14, rare: 19, epic: 25, legendary: 32 };
+// Battlecry: grant all allies a named defensive buff on death. Per-rarity = DURATION only;
+// magnitude is intrinsic to the buff tier. No uncommon variant.
+const BATTLECRY_DURATION: Record<string, number> = { common: 1, rare: 2, epic: 2, legendary: 3 };
+// Martyrdom: apply a named debuff to the killer on death. Only rare + legendary variants.
+const MARTYRDOM_DURATION: Record<string, number> = { rare: 1, legendary: 2 };
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -252,6 +269,69 @@ function mkHealAmp(
         trigger: 'on-cast',
         conditions: [],
         config: { type: 'heal-amplification', condition, ampPct, procChance },
+        autoFilled: true,
+    };
+}
+
+// D-PR7: build a reactive named-buff grant (e.g. Battlecry's on-death "Inc. Damage Down II").
+// parsedEffects/stackability resolve from the canonical BUFFS entry. EMIT-ONLY for buffs whose
+// effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
+// and logged but has no combat effect until that fold exists.
+function mkNamedBuffGrant(
+    buffName: string,
+    target: 'self' | 'ally' | 'all-allies',
+    trigger: AbilityTrigger,
+    duration: number | undefined
+): Omit<Ability, 'id'> | undefined {
+    if (duration === undefined) return undefined;
+    const buff = BUFFS.find((b) => b.name === buffName);
+    if (!buff) return undefined;
+    const { stackable, maxStacks } = isStackable(buff.description);
+    return {
+        type: 'buff',
+        target,
+        trigger,
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName,
+            parsedEffects: parseBuffEffects(buff.name, buff.description),
+            stacks: 1,
+            isStackable: stackable,
+            maxStacks,
+            duration,
+        },
+        autoFilled: true,
+    };
+}
+
+// D-PR7: build a reactive named-debuff application (Martyrdom's on-death "Disable" on the killer).
+// application:'apply' → lands unless affinity disadvantage (no landing roll), matching "Applies".
+// Killer routing is supplied by the on-destroyed listener via eventCtx.counterTargetId.
+function mkNamedDebuff(
+    buffName: string,
+    trigger: AbilityTrigger,
+    duration: number | undefined
+): Omit<Ability, 'id'> | undefined {
+    if (duration === undefined) return undefined;
+    const buff = BUFFS.find((b) => b.name === buffName);
+    if (!buff) return undefined;
+    const { stackable, maxStacks } = isStackable(buff.description);
+    return {
+        type: 'debuff',
+        target: 'enemy',
+        trigger,
+        conditions: [],
+        config: {
+            type: 'debuff',
+            buffName,
+            parsedEffects: parseBuffEffects(buff.name, buff.description),
+            stacks: 1,
+            isStackable: stackable,
+            maxStacks,
+            application: 'apply',
+            duration,
+        },
         autoFilled: true,
     };
 }
@@ -452,6 +532,36 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             'target-below-25',
             VIVACIOUS_PROC[rarity]
         ),
+    // D-PR7: on-death implants ----------------------------------------------------
+    // Last Wish: "Upon death, repairs X% of all allies' max HP." Rides the reactive
+    // heal executor on the on-destroyed trigger (Salvation precedent); basis 'target-hp'
+    // repairs each ally % of its OWN max HP. Reactive heals never crit. Fully modeled.
+    LAST_WISH: (rarity) => {
+        const pct = LAST_WISH_PCT[rarity];
+        if (pct === undefined) return undefined;
+        return {
+            type: 'heal',
+            target: 'all-allies',
+            trigger: 'on-destroyed',
+            conditions: [],
+            config: { type: 'heal', pct, basis: 'target-hp', noCrit: true },
+            autoFilled: true,
+        };
+    },
+    // Battlecry: "Upon death, grants all allies Inc. Damage Down II for N turns." EMIT-ONLY:
+    // self-side "Inc. Damage Down" is not folded into incoming damage yet (victimEnemyBuffs reads
+    // enemy-side only). The buff is applied + logged; lights up when self-side incoming folding lands.
+    BATTLECRY: (rarity) =>
+        mkNamedBuffGrant(
+            'Inc. Damage Down II',
+            'all-allies',
+            'on-destroyed',
+            BATTLECRY_DURATION[rarity]
+        ),
+    // Martyrdom: "Applies Disable for N turns on the enemy that killed this Unit." EMIT-ONLY:
+    // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
+    // the killer + logged. Killer routing comes from the on-destroyed listener.
+    MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
 };
 
 // ---------------------------------------------------------------------------

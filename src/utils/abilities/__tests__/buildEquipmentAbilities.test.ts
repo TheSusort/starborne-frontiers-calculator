@@ -574,7 +574,7 @@ describe('Exuberance implant', () => {
         const ab = abilities[0];
         if (ab.config.type === 'incoming-heal-amplification') {
             expect(ab.config.ampPct).toBe(15);
-            expect(ab.config.procChance).toBeCloseTo(0.30);
+            expect(ab.config.procChance).toBeCloseTo(0.3);
         } else {
             throw new Error('Expected incoming-heal-amplification config');
         }
@@ -582,6 +582,40 @@ describe('Exuberance implant', () => {
 
     it('common → no ability (no common variant)', () => {
         expect(buildForImplant('EXUBERANCE', 'common')).toEqual([]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7: Last Wish (on-death repair all allies)
+// ---------------------------------------------------------------------------
+describe('Last Wish (on-death repair all allies)', () => {
+    it('legendary → heal/all-allies/on-destroyed, basis target-hp, pct 32, noCrit', () => {
+        const piece = makePiece({ id: 'lw-1', setBonus: 'LAST_WISH', rarity: 'legendary' });
+        const ship = makeShip({ implants: { implant_major: 'lw-1' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'lw-1': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-LAST_WISH'));
+        expect(a).toBeDefined();
+        expect(a!.trigger).toBe('on-destroyed');
+        expect(a!.target).toBe('all-allies');
+        expect(a!.config).toMatchObject({
+            type: 'heal',
+            basis: 'target-hp',
+            pct: 32,
+            noCrit: true,
+        });
+    });
+    it('uncommon → pct 14', () => {
+        const piece = makePiece({ id: 'lw-2', setBonus: 'LAST_WISH', rarity: 'uncommon' });
+        const ship = makeShip({ implants: { implant_major: 'lw-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'lw-2': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-LAST_WISH'));
+        expect(a!.config).toMatchObject({ type: 'heal', pct: 14 });
+    });
+    it('common → no ability (no common variant)', () => {
+        const piece = makePiece({ id: 'lw-3', setBonus: 'LAST_WISH', rarity: 'common' });
+        const ship = makeShip({ implants: { implant_major: 'lw-3' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'lw-3': piece }));
+        expect(abilities.find((x) => x.id.startsWith('equip-implant-LAST_WISH'))).toBeUndefined();
     });
 });
 
@@ -614,5 +648,70 @@ describe('Second Wind implant', () => {
 
     it('common → no ability (no common variant)', () => {
         expect(buildForImplant('SECOND_WIND', 'common')).toEqual([]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7: Battlecry (on-death Inc. Damage Down to allies — emit-only)
+// ---------------------------------------------------------------------------
+describe('Battlecry (on-death Inc. Damage Down to allies — emit-only)', () => {
+    it('legendary → buff/all-allies/on-destroyed, Inc. Damage Down II, duration 3', () => {
+        const piece = makePiece({ id: 'bc-1', setBonus: 'BATTLECRY', rarity: 'legendary' });
+        const ship = makeShip({ implants: { implant_major: 'bc-1' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'bc-1': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-BATTLECRY'));
+        expect(a).toBeDefined();
+        expect(a!.trigger).toBe('on-destroyed');
+        expect(a!.target).toBe('all-allies');
+        expect(a!.config).toMatchObject({
+            type: 'buff',
+            buffName: 'Inc. Damage Down II',
+            duration: 3,
+        });
+        expect(
+            (a!.config as { parsedEffects: { incomingDamage?: number } }).parsedEffects
+                .incomingDamage
+        ).toBe(-30);
+    });
+    it('common → duration 1', () => {
+        const piece = makePiece({ id: 'bc-2', setBonus: 'BATTLECRY', rarity: 'common' });
+        const ship = makeShip({ implants: { implant_major: 'bc-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'bc-2': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-BATTLECRY'));
+        expect(a!.config).toMatchObject({ type: 'buff', duration: 1 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7: Martyrdom (on-death Disable the killer — emit-only)
+// ---------------------------------------------------------------------------
+describe('Martyrdom (on-death Disable the killer — emit-only)', () => {
+    it('legendary → debuff/enemy/on-destroyed, Disable, application apply, duration 2', () => {
+        const piece = makePiece({ id: 'm-1', setBonus: 'MARTYRDOM', rarity: 'legendary' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-1' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-1': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-MARTYRDOM'));
+        expect(a).toBeDefined();
+        expect(a!.trigger).toBe('on-destroyed');
+        expect(a!.target).toBe('enemy');
+        expect(a!.config).toMatchObject({
+            type: 'debuff',
+            buffName: 'Disable',
+            application: 'apply',
+            duration: 2,
+        });
+    });
+    it('rare → duration 1', () => {
+        const piece = makePiece({ id: 'm-2', setBonus: 'MARTYRDOM', rarity: 'rare' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-2' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-2': piece }));
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-MARTYRDOM'));
+        expect(a!.config).toMatchObject({ type: 'debuff', duration: 1 });
+    });
+    it('epic → no ability (only rare + legendary variants exist)', () => {
+        const piece = makePiece({ id: 'm-3', setBonus: 'MARTYRDOM', rarity: 'epic' });
+        const ship = makeShip({ implants: { implant_ultimate: 'm-3' } });
+        const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'm-3': piece }));
+        expect(abilities.find((x) => x.id.startsWith('equip-implant-MARTYRDOM'))).toBeUndefined();
     });
 });

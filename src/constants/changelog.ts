@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator now models three outgoing-damage amplification implants: Menace (chance to amplify a hit's damage on a critical hit), Giant Slayer (chance to amplify a hit's damage against an enemy with higher attack), and Insidiousness (chance to deal bonus damage when you apply a debuff to an enemy).",
     'Combat simulator now models three more heal implants: Second Wind (chance to repair itself when it takes a critical hit), Nourishment (stronger repairs on allies with less HP than the healer), and Vivacious Repair (chance to double a repair on an ally below 25% HP).',
     'Combat simulator now models the Exuberance implant (chance to increase the amount of a repair this unit receives).',
+    'Combat simulator now models three on-death implants: Last Wish (repairs all allies when the carrier is destroyed), Battlecry (grants all allies Inc. Damage Down II on death), and Martyrdom (applies Disable to the unit that landed the killing blow). Last Wish is fully resolved; Battlecry and Martyrdom apply and appear in the combat log with full effects coming in a later update.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

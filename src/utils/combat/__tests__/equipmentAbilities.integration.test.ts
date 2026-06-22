@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
@@ -31,6 +32,8 @@ import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
 import { makeConditionContext } from '../../abilities/__tests__/conditionContextFixture';
 import { SelectedGameBuff } from '../../../types/calculator';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import type { Position } from '../../../types/encounters';
 
 // ---------------------------------------------------------------------------
 // Shared test harness helpers
@@ -1021,7 +1024,12 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         target: 'self',
         trigger: 'on-cast',
         conditions: [],
-        config: { type: 'heal-amplification', condition, ampPct, ...(procChance !== undefined ? { procChance } : {}) },
+        config: {
+            type: 'heal-amplification',
+            condition,
+            ampPct,
+            ...(procChance !== undefined ? { procChance } : {}),
+        },
         autoFilled: true,
     });
 
@@ -1209,9 +1217,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
                 shipSkills: healerSkills(healAmp('target-below-25', 100, 0.5)),
             })
         );
-        const without = runCombat(
-            AMP_BASE({ numRounds: NUM_ROUNDS, shipSkills: healerSkills() })
-        );
+        const without = runCombat(AMP_BASE({ numRounds: NUM_ROUNDS, shipSkills: healerSkills() }));
         expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(sumHeal(without, 'directHeal'), 6);
         expect(sumHeal(withAmp, 'directHeal')).toBeCloseTo(NUM_ROUNDS * BASE_PER_CAST, 6);
     });
@@ -1314,9 +1320,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
                     shipSkills: skills(exuberance(EXU_AMP, EXU_PROC)),
                 })
             );
-            const baseline = runCombat(
-                EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() })
-            );
+            const baseline = runCombat(EXU_BASE({ numRounds: NUM_ROUNDS, shipSkills: skills() }));
 
             const baseHeal = sumHeal(baseline, 'directHeal');
             const exuHeal = sumHeal(withExu, 'directHeal');
@@ -1426,10 +1430,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
                             { slot: 'active', abilities: [noopActive] },
                             {
                                 slot: 'passive',
-                                abilities: [
-                                    reactiveSelfHeal(1.0),
-                                    exuberance(EXU_AMP, EXU_PROC),
-                                ],
+                                abilities: [reactiveSelfHeal(1.0), exuberance(EXU_AMP, EXU_PROC)],
                             },
                         ],
                     },
@@ -1459,6 +1460,629 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
                 NUM_ROUNDS * BASE_PER_CAST + EXPECTED_PROCS * BASE_PER_CAST * (EXU_AMP / 100);
             expect(exuHeal).toBeCloseTo(expectedExu, 6);
             expect(exuHeal).toBeGreaterThan(baseHeal);
+        }
+    );
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7 Task 4: Martyrdom implant — on-destroyed debuff routes to the killer
+// ---------------------------------------------------------------------------
+//
+// Martyrdom is an on-destroyed DEBUFF reaction: "Applies Disable on the enemy that
+// killed this Unit." It fires only when the carrier is killed by DIRECT damage, and
+// the Disable debuff must land on the KILLER — not the engine's default enemy sink.
+//
+// Harness shape (mirrors the Second Wind crit-received scenario):
+//   - The FOCUS actor ('attacker') is the heal target (healTargetId), carries the
+//     legendary Martyrdom implant in its passive slot (via buildShipAbilitiesWithEquipment),
+//     and has a tiny HP pool so a single enemy hit is lethal.
+//   - A named enemy attacker ('mart-killer') deals a lethal DIRECT hit on round 1.
+//     recordDestroyed stamps ship-destroyed with killerId='mart-killer', byDirectDamage:true.
+//   - The on-destroyed listener (post-change) routes the Disable debuff's counterTargetId
+//     to the killer → debuff-applied.targetId === 'mart-killer' (NOT the default 'enemy').
+//
+// Test A: lethal DIRECT kill → a Disable debuff-applied fires, targeting the KILLER.
+// Test B: lethal NON-direct (DoT) kill → no Disable debuff-applied fires (byDirectDamage:false).
+
+describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to the killer', () => {
+    const KILLER_ID = 'mart-killer';
+    const FOCUS_HP = 1_000;
+
+    /** No-op active for the focus — deals no damage, just keeps the round cadence. */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Build focus ship skills: no-op active + the legendary Martyrdom passive (from the registry). */
+    function buildMartyrdomShipSkills(): ShipSkills {
+        const ship = makeShip({ implants: { implant_major: 'mart-legendary' } });
+        const martyrdomPiece = makePiece({
+            id: 'mart-legendary',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'MARTYRDOM',
+        });
+        const getGearPiece = makeGetGearPiece({ 'mart-legendary': martyrdomPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Martyrdom on-destroyed debuff landed in the passive slot.
+        const martyrdom = passive?.abilities.find((a) =>
+            a.id.startsWith('equip-implant-MARTYRDOM')
+        );
+        expect(martyrdom).toBeDefined();
+        expect(martyrdom!.trigger).toBe('on-destroyed');
+        expect(martyrdom!.config.type).toBe('debuff');
+
+        return {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+    }
+
+    /** A fast enemy attacker that lands a lethal DIRECT hit on the focus each round. */
+    const directKiller = {
+        id: KILLER_ID,
+        stats: {
+            attack: 1_000_000, // dwarfs FOCUS_HP → guaranteed lethal direct hit
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000, // acts before the slow focus
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'mart-killer-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    };
+
+    /** A fast enemy attacker that lands a corrosion DoT (no direct damage) which kills the focus. */
+    const dotKiller = {
+        id: KILLER_ID,
+        stats: {
+            attack: 1_000_000,
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        // DoT only — no direct-damage ability → the kill comes from the
+                        // turn-start DoT tick (byDirectDamage:false), never a direct hit.
+                        {
+                            id: 'mart-killer-dot',
+                            type: 'dot' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: {
+                                type: 'dot' as const,
+                                dotType: 'corrosion' as const,
+                                tier: 8, // 5 stacks × (8/100) × 1 000 maxHp = 400 dmg/tick → fatal by tick 3 (within 6 rounds)
+                                stacks: 5,
+                                duration: 5,
+                            },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    };
+
+    /** Base engine input: healing mode, slow focus 'attacker' is the heal target. */
+    const MART_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 3,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: FOCUS_HP,
+        speed: 1, // focus is slow → the enemy acts (and kills it) first
+        healTargetId: 'attacker',
+        ...overrides,
+    });
+
+    /** Collect debuff-applied + ship-destroyed events from a runCombat with the given input. */
+    function collect(input: CombatEngineInput) {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events;
+    }
+
+    it(
+        'A. Focus killed by a DIRECT hit: a Disable debuff-applied fires and targets the KILLER ' +
+            "(not the default 'enemy')",
+        () => {
+            const events = collect(
+                MART_BASE({
+                    shipSkills: buildMartyrdomShipSkills(),
+                    enemyAttackers: [directKiller],
+                })
+            );
+
+            // Sanity: the focus actually died to a DIRECT-damage kill attributed to the killer.
+            const destroyed = events.filter(
+                (e) => e.type === 'ship-destroyed' && e.actorId === 'attacker'
+            );
+            expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+            // The Disable debuff must be applied, and it must target the KILLER actor id.
+            const disableEvents = events.filter(
+                (e) => e.type === 'debuff-applied' && e.buffName === 'Disable'
+            );
+            expect(disableEvents.length).toBeGreaterThanOrEqual(1);
+            for (const e of disableEvents) {
+                if (e.type !== 'debuff-applied') continue;
+                expect(e.targetId).toBe(KILLER_ID); // implicitly NOT the default enemy sink
+                // Sourced by the dying carrier.
+                expect(e.sourceId).toBe('attacker');
+            }
+        }
+    );
+
+    it('B. Focus killed by NON-direct (DoT) damage: NO Disable debuff-applied fires', () => {
+        const events = collect(
+            MART_BASE({
+                numRounds: 6, // give the DoT time to tick the focus to death
+                shipSkills: buildMartyrdomShipSkills(),
+                enemyAttackers: [dotKiller],
+            })
+        );
+
+        // Sanity: the focus did die (so the on-destroyed listener fired at all).
+        const destroyed = events.filter(
+            (e) => e.type === 'ship-destroyed' && e.actorId === 'attacker'
+        );
+        expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+        // A DoT kill is byDirectDamage:false → Martyrdom's debuff gate must NOT fire.
+        const disableEvents = events.filter(
+            (e) => e.type === 'debuff-applied' && e.buffName === 'Disable'
+        );
+        expect(disableEvents).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7 Task 5: Last Wish + Battlecry engine integration + enemy-side mirror
+// ---------------------------------------------------------------------------
+//
+// These tests exercise the on-destroyed REACTIVE path for a NON-focus team ally
+// carrying an on-death implant. Killing a non-focus ally requires the POSITIONAL
+// apply path (the non-positional model lands every enemy hit on the heal target),
+// so the fixtures mirror perVictimLeech.test.ts: positioned focus + walked team
+// actor + an offensive positional enemy firing a Line-Range-1 AoE at `front`.
+//
+// Board layout (player side): the DYING carrier sits at the front-most cell (M4 =
+// origin victim → full damage → lethal). The SURVIVOR focus sits one step back (M3
+// = covered victim → half damage → survives) and is the heal target. The enemy at
+// M1 fires `front`, anchoring on the front-most player (the carrier), covering the
+// survivor.
+
+// --- Positional helpers (shared by the Last Wish + Battlecry blocks) ----------
+
+const parsedTargetFront = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
+// Line-Range-1: origin + one covered cell one step toward the back (origin full, covered half).
+const lineRange1 = (): ParsedPattern => ({
+    raw: 'line-range-1',
+    shape: 'line',
+    range: 1,
+    modifiers: {},
+});
+
+/** Single-hit 100% basic attack (so a positioned actor has a damage skill / footprint). */
+const basicAttackSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: 'basic-atk',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 100, hits: 1 },
+        },
+    ],
+});
+
+/** A walked PLAYER team actor at a board position, with optional skill slots + HP. */
+function playerActorAt(
+    id: string,
+    position: Position,
+    slots: ShipSkills['slots'],
+    hp: number
+): TeamActorEngineInput {
+    return {
+        id,
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        target: parsedTargetFront(),
+        pattern: lineRange1(),
+        walk: {
+            shipSkills: { slots },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+            healModifier: 0,
+        },
+    };
+}
+
+/** An OFFENSIVE positioned enemy firing a Line-Range-1 AoE at `front`. */
+function offensiveEnemyAt(id: string, position: Position, attack: number) {
+    return {
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1_000 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTargetFront(),
+        pattern: lineRange1(),
+        shipSkills: { slots: [basicAttackSlot()] },
+    };
+}
+
+/** Positional base input: healing mode, focus 'attacker' is the heal-target SURVIVOR at M3. */
+const POS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [basicAttackSlot()] },
+    enemyDefense: 0,
+    enemyHp: 1_000_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 1_000_000, // default focus pool; overridden per-test
+    healModifier: 0,
+    healTargetId: 'attacker',
+    position: 'M3', // focus is the COVERED survivor
+    target: parsedTargetFront(),
+    pattern: lineRange1(),
+    ...overrides,
+});
+
+describe('D-PR7 Task 5 integration — Last Wish repairs living allies on death', () => {
+    const DYER_HP = 1_000; // tiny pool → the front origin hit is lethal
+    const FOCUS_HP = 1_000_000; // large pool → the covered (half) hit is survivable, leaves a deficit
+
+    /** Build the dying ally's skills with the legendary Last Wish implant (via the registry). */
+    function buildLastWishSlots(): ShipSkills['slots'] {
+        const ship = makeShip({ implants: { implant_major: 'lw-legendary' } });
+        const lwPiece = makePiece({
+            id: 'lw-legendary',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'LAST_WISH',
+        });
+        const getGearPiece = makeGetGearPiece({ 'lw-legendary': lwPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Last Wish on-destroyed heal landed in the passive slot.
+        const lw = passive?.abilities.find((a) => a.id.startsWith('equip-implant-LAST_WISH'));
+        expect(lw).toBeDefined();
+        expect(lw!.trigger).toBe('on-destroyed');
+        expect(lw!.target).toBe('all-allies');
+        expect(lw!.config.type).toBe('heal');
+
+        return [
+            basicAttackSlot(),
+            ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+        ];
+    }
+
+    // Last Wish legendary: target-hp basis, pct 32, noCrit. Per LIVING recipient the gross is
+    //   recipientMaxHp × 0.32 × (1 + healModifier/100) × (1 + outgoingHeal/100) × (1 + incomingHeal/100)
+    // and every fold factor here is 1 (dier healModifier 0, no heal-up/incoming-heal buffs).
+    // The ONLY living recipient is the focus survivor ('attacker', maxHP FOCUS_HP) — the dead
+    // caster ('dier', maxHP DYER_HP) is skipped by the recipientHp<=0 guard in the executor.
+    const LW_LEGENDARY_PCT = 32;
+    // Gross over living recipients only = FOCUS_HP × 0.32 = 320_000.
+    const EXPECTED_GROSS = FOCUS_HP * (LW_LEGENDARY_PCT / 100); // 320_000
+    // If the dead caster were wrongly counted as a living recipient, its target-hp share
+    // (DYER_HP × 0.32 = 320) would be ADDED → 320_320. The upper bound below excludes that.
+    const DEAD_CASTER_SHARE = DYER_HP * (LW_LEGENDARY_PCT / 100); // 320
+    // The covered (half-damage) hit the survivor takes: enemy attack 5000 × 100% × ½ = 2500,
+    // mitigated by the focus's defence 0 → 2500. This is the deficit the repair fills, so
+    // effectiveHeal is capped at exactly this (320_000 >> 2500).
+    const SCRATCH_DAMAGE = 2_500;
+
+    it(
+        'A non-focus ally carrying Last Wish dies → only the LIVING focus is repaired (dead caster ' +
+            "excluded from the gross); the survivor's scratch deficit is filled",
+        () => {
+            // Dying carrier at the front origin (M4, lethal full hit). Focus survivor at M3 (covered).
+            // The enemy attack must one-shot the 1000-HP carrier (origin = full) while leaving the
+            // 1_000_000-HP focus alive (covered = half = 2500, a survivable scratch leaving a deficit).
+            const result = runCombat(
+                POS_BASE({
+                    hp: FOCUS_HP,
+                    teamActors: [playerActorAt('dier', 'M4', buildLastWishSlots(), DYER_HP)],
+                    enemyAttackers: [offensiveEnemyAt('enemy-atk', 'M1', 5_000)],
+                })
+            );
+
+            expect(result.healing).toBeDefined();
+
+            // The dead caster ('dier') is credited with the gross Last Wish repair (the engine keys
+            // all reactive-heal credit by the casting owner, summed over LIVING recipients only). The
+            // gross must equal EXACTLY the focus survivor's share (320_000) and NOT include the dead
+            // caster's own 320 share. The lower bound + upper bound window
+            // [EXPECTED_GROSS − 1, EXPECTED_GROSS + DEAD_CASTER_SHARE/2) pins the value AND excludes
+            // the dead-caster-included total (320_320): 320_320 fails the < (EXPECTED_GROSS + 160)
+            // upper bound. A bare `> 100_000` (the old assertion) would pass for BOTH 320_000 and
+            // 320_320 — this window is what makes the exclusion load-bearing.
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeGreaterThan(EXPECTED_GROSS - 1);
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeLessThan(
+                EXPECTED_GROSS + DEAD_CASTER_SHARE / 2
+            );
+            // Belt-and-suspenders exact pin: toBeCloseTo digits −2 ⇒ tolerance 0.5×10² = ±50, well
+            // under the 320 gap to the dead-caster-included total, so 320_320 would also fail here.
+            expect(sumHeal(result, 'directHeal', 'dier')).toBeCloseTo(EXPECTED_GROSS, -2);
+
+            // The heal-target survivor's pool was actually filled: effectiveHeal (credited under the
+            // dead caster) equals the survivor's deficit = the SCRATCH_DAMAGE it took from the covered
+            // hit. The 320_000 repair vastly exceeds the 2500 deficit, so effectiveHeal is capped at
+            // exactly the deficit. Asserting ≈ SCRATCH_DAMAGE distinguishes "pool actually filled"
+            // from a residual/near-zero credit (which a `> 0` check would also accept).
+            expect(sumHeal(result, 'effectiveHeal', 'dier')).toBeCloseTo(SCRATCH_DAMAGE, 6);
+
+            // No OTHER actor id is credited with directHeal — all reactive-heal credit is keyed to
+            // the dead caster ('dier'), never the focus or the enemy.
+            expect(sumHeal(result, 'directHeal', 'attacker')).toBe(0);
+        }
+    );
+});
+
+describe('D-PR7 Task 5 integration — Battlecry emits Inc. Damage Down II on living allies (emit-only)', () => {
+    const DYER_HP = 1_000;
+    const FOCUS_HP = 1_000_000;
+    const ALLY_HP = 1_000_000;
+    const BATTLECRY_NAME = 'Inc. Damage Down II';
+    const LEGENDARY_DURATION = 3; // BATTLECRY_DURATION.legendary
+
+    /** Build the dying ally's skills with the legendary Battlecry implant (via the registry). */
+    function buildBattlecrySlots(): ShipSkills['slots'] {
+        const ship = makeShip({ implants: { implant_major: 'bc-legendary' } });
+        const bcPiece = makePiece({
+            id: 'bc-legendary',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'BATTLECRY',
+        });
+        const getGearPiece = makeGetGearPiece({ 'bc-legendary': bcPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Battlecry on-destroyed buff grant landed in the passive slot.
+        const bc = passive?.abilities.find((a) => a.id.startsWith('equip-implant-BATTLECRY'));
+        expect(bc).toBeDefined();
+        expect(bc!.trigger).toBe('on-destroyed');
+        expect(bc!.target).toBe('all-allies');
+        expect(bc!.config.type).toBe('buff');
+
+        return [
+            basicAttackSlot(),
+            ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+        ];
+    }
+
+    /** Collect buff-applied + ship-destroyed events. */
+    function collect(input: CombatEngineInput) {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events;
+    }
+
+    it(
+        'A Battlecry carrier dies → a Inc. Damage Down II buff-applied fires once for each living ' +
+            'ally, carrying the legendary duration (3); no damage-reduction asserted (emit-only)',
+        () => {
+            // Dying carrier at the front origin (M4). Two SURVIVORS: focus at M3 (covered, survives)
+            // and a second team ally at M2 (outside the AoE footprint → untouched, survives).
+            const events = collect(
+                POS_BASE({
+                    hp: FOCUS_HP,
+                    teamActors: [
+                        playerActorAt('dier', 'M4', buildBattlecrySlots(), DYER_HP),
+                        playerActorAt('ally-2', 'M2', [basicAttackSlot()], ALLY_HP),
+                    ],
+                    enemyAttackers: [offensiveEnemyAt('enemy-atk', 'M1', 5_000)],
+                })
+            );
+
+            // Sanity: the carrier actually died (so the on-destroyed buff grant fired at all).
+            const destroyed = events.filter(
+                (e) => e.type === 'ship-destroyed' && e.actorId === 'dier'
+            );
+            expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+            const battlecryEvents = events.filter(
+                (e) => e.type === 'buff-applied' && e.buffName === BATTLECRY_NAME
+            );
+            expect(battlecryEvents.length).toBeGreaterThanOrEqual(1);
+
+            // Each LIVING ally received exactly one Inc. Damage Down II buff-applied event.
+            for (const livingId of ['attacker', 'ally-2']) {
+                const forAlly = battlecryEvents.filter(
+                    (e) => e.type === 'buff-applied' && e.actorId === livingId
+                );
+                expect(forAlly).toHaveLength(1);
+            }
+
+            // The event carries the legendary duration (3).
+            for (const e of battlecryEvents) {
+                if (e.type !== 'buff-applied') continue;
+                expect(e.duration).toBe(LEGENDARY_DURATION);
+            }
+        }
+    );
+});
+
+// ---------------------------------------------------------------------------
+// D-PR7 Task 5: enemy-side mirror — an ENEMY Martyrdom carrier routes Disable to the PLAYER killer
+// ---------------------------------------------------------------------------
+//
+// The engine is team-agnostic: an on-destroyed reaction carried by an ENEMY ship must fire the
+// same path against the player side. We mirror the Task-4 Martyrdom scenario but flip the sides —
+// a positioned ENEMY carries the legendary Martyrdom implant, the PLAYER focus lands a lethal
+// DIRECT hit, and the resulting Disable debuff-applied must target the PLAYER killer ('attacker').
+
+describe('D-PR7 Task 5 integration — enemy-side mirror: enemy Martyrdom routes Disable to the player killer', () => {
+    const ENEMY_HP = 1_000; // tiny → the player's hit one-shots it
+
+    /** Build the enemy's Martyrdom skills (legendary) via the registry. */
+    function buildEnemyMartyrdomSlots(): ShipSkills['slots'] {
+        const ship = makeShip({ implants: { implant_major: 'mart-enemy' } });
+        const martPiece = makePiece({
+            id: 'mart-enemy',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'MARTYRDOM',
+        });
+        const getGearPiece = makeGetGearPiece({ 'mart-enemy': martPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        const mart = passive?.abilities.find((a) => a.id.startsWith('equip-implant-MARTYRDOM'));
+        expect(mart).toBeDefined();
+        expect(mart!.trigger).toBe('on-destroyed');
+
+        return [
+            basicAttackSlot(),
+            ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+        ];
+    }
+
+    /** A positioned ENEMY carrier of Martyrdom (tiny HP, no offense needed). */
+    function enemyMartyrdomCarrier() {
+        return {
+            id: 'enemy-mart',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: ENEMY_HP, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4' as Position,
+            target: parsedTargetFront(),
+            pattern: lineRange1(),
+            shipSkills: { slots: buildEnemyMartyrdomSlots() },
+        };
+    }
+
+    /** Collect debuff-applied + ship-destroyed events. */
+    function collect(input: CombatEngineInput) {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
+        runCombat({ ...input, bus });
+        return events;
+    }
+
+    it(
+        'An ENEMY Martyrdom carrier killed by a player DIRECT hit → a Disable debuff-applied fires ' +
+            "targeting the PLAYER killer ('attacker'), proving the on-destroyed path is team-agnostic",
+        () => {
+            // Player focus at M4 fires a lethal Line-Range-1 hit at the front enemy (the carrier at M4).
+            const events = collect(
+                POS_BASE({
+                    attack: 1_000_000, // dwarfs ENEMY_HP → guaranteed lethal direct hit
+                    hp: 1_000_000_000,
+                    position: 'M4', // focus fires from the front
+                    shipSkills: { slots: [basicAttackSlot()] },
+                    enemyAttackers: [enemyMartyrdomCarrier()],
+                })
+            );
+
+            // Sanity: the enemy carrier died.
+            const destroyed = events.filter(
+                (e) => e.type === 'ship-destroyed' && e.actorId === 'enemy-mart'
+            );
+            expect(destroyed.length).toBeGreaterThanOrEqual(1);
+
+            // The Disable debuff fired and targets the PLAYER killer (the focus 'attacker'),
+            // sourced by the dying enemy carrier.
+            const disableEvents = events.filter(
+                (e) => e.type === 'debuff-applied' && e.buffName === 'Disable'
+            );
+            expect(disableEvents.length).toBeGreaterThanOrEqual(1);
+            for (const e of disableEvents) {
+                if (e.type !== 'debuff-applied') continue;
+                expect(e.targetId).toBe('attacker'); // the player killer, NOT an enemy sink
+                expect(e.sourceId).toBe('enemy-mart');
+            }
         }
     );
 });

@@ -99,7 +99,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + BATTLECRY + BLOODTHIRST + EXUBERANCE + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -113,6 +113,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             return variants.some((v) => implantAbilityCount(key, v.rarity) > 0);
         });
         expect(implementedImplants).toEqual([
+            'MARTYRDOM',
             'ARCANE_SIEGE',
             'HYPERION_GAZE',
             'INTRUSION',
@@ -121,11 +122,13 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
+            'BATTLECRY',
             'BLOODTHIRST',
             'EXUBERANCE',
             'GIANT_SLAYER',
             'INSIDIOUSNESS',
             'IRONCLAD',
+            'LAST_WISH',
             'MENACE',
             'SECOND_WIND',
             'SHADOWGUARD',
@@ -179,6 +182,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR4: MENACE, GIANT_SLAYER, INSIDIOUSNESS added (outgoing-amplification on-crit / vs higher-attack / on-debuff).
     // D-PR5: SECOND_WIND, NOURISHMENT, VIVACIOUS_REPAIR added (reactive-heal family).
     // D-PR6: EXUBERANCE added (repair-amplification on-repair chance).
+    // D-PR7: LAST_WISH, BATTLECRY, MARTYRDOM added (on-death repair / buff to allies / disable killer).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -197,6 +201,9 @@ describe('equipmentCoverage — implants', () => {
         'NOURISHMENT',
         'VIVACIOUS_REPAIR',
         'EXUBERANCE',
+        'LAST_WISH',
+        'BATTLECRY',
+        'MARTYRDOM',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -326,6 +333,35 @@ describe('equipmentCoverage — implants', () => {
         const variants = IMPLANTS['EXUBERANCE'].variants;
         for (const v of variants) {
             expect(implantAbilityCount('EXUBERANCE', v.rarity)).toBe(1);
+        }
+    });
+
+    // D-PR7: on-death implants
+    it('LAST_WISH produces 1 ability per rarity (repair all allies on death; no common variant)', () => {
+        expect(implantAbilityCount('LAST_WISH', 'common')).toBe(0);
+        const variants = IMPLANTS['LAST_WISH'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('LAST_WISH', v.rarity)).toBe(1);
+        }
+    });
+
+    it('BATTLECRY produces 1 ability per rarity (Inc. Damage Down to allies on death; no uncommon variant)', () => {
+        expect(implantAbilityCount('BATTLECRY', 'uncommon')).toBe(0);
+        const variants = IMPLANTS['BATTLECRY'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('BATTLECRY', v.rarity)).toBe(1);
+        }
+    });
+
+    it('MARTYRDOM produces 1 ability for rare + legendary (Disable on killer on death; only 2 variants)', () => {
+        // Unsupported rarities (no variant) produce nothing — symmetric with the
+        // siblings above, guarding against accidental expansion of supported rarities.
+        expect(implantAbilityCount('MARTYRDOM', 'common')).toBe(0);
+        expect(implantAbilityCount('MARTYRDOM', 'uncommon')).toBe(0);
+        expect(implantAbilityCount('MARTYRDOM', 'epic')).toBe(0);
+        const variants = IMPLANTS['MARTYRDOM'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('MARTYRDOM', v.rarity)).toBe(1);
         }
     });
 
