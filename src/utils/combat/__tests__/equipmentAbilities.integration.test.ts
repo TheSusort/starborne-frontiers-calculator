@@ -1688,6 +1688,156 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
         );
         expect(disableEvents).toHaveLength(0);
     });
+
+    // -----------------------------------------------------------------------
+    // D-PR13 Task 5: END-TO-END consequence — the disabled killer SKIPS its turns
+    // -----------------------------------------------------------------------
+    //
+    // APPROACH A (the faithful design): a dying TEAM-actor Martyrdom carrier +
+    // a surviving tank focus + an enemy killer. Tests A/B above proved Martyrdom
+    // EMITS a Disable targeting the killer. THIS test proves the CONSEQUENCE:
+    // once the Disable lands, the killer actually skips its scheduled turns
+    // (observed via the absence of its `ability-performed` in the disabled rounds),
+    // and a non-Martyrdom CONTROL run shows the killer WOULD have acted — so the
+    // observed absence is genuine turn-suppression, not a vacuous artefact.
+    //
+    // Board / roster (uses the module-level positional helpers defined below:
+    // `playerActorAt`, `offensiveEnemyAt`, `parsedTargetFront`, `lineRange1`, `POS_BASE`):
+    //   - Focus 'attacker' (heal target, the TANK): huge HP, positioned BACK at M1,
+    //     no offense (POS_BASE's basicAttackSlot fires but deals 0 with attack:0). It
+    //     outlives the whole battle so it stays a valid `front` target after the martyr dies.
+    //   - Team actor 'martyr' at the FRONT cell M4, tiny HP (MARTYR_HP), carrying the
+    //     legendary Martyrdom passive in its `walk.shipSkills`. It is the front-most
+    //     player → the killer's `front` target in round 1 → dies to the lethal hit.
+    //   - Enemy 'mart-killer' at M1, fast (speed 1000 ≫ player speed 1), attack ≫ HP,
+    //     firing a Line-Range-1 hit at `front`. Round 1 it one-shots the front-most
+    //     player (the martyr). From round 2 on, the only living player is the tank at
+    //     M1, so absent Disable the killer keeps emitting `ability-performed`.
+    //
+    // Turn order per round: the fast killer acts first, then the slow players.
+    //   Round 1: killer fires → kills 'martyr' → Martyrdom on-destroyed routes a
+    //            Disable onto the killer. The killer's round-1 `ability-performed`
+    //            IS emitted (the disable lands during/after that turn's kill).
+    //   Round 2: the killer is Disabled → its scheduled turn is SUPPRESSED → NO
+    //            `ability-performed` from the killer. (The Disable is also decremented
+    //            on this skipped turn and expires at its tail.)
+    //   Round 3: the Disable has expired → the killer acts again (attacks the tank).
+    //
+    // numRounds: 3 — enough to observe act(R1) → skip(R2) → resume(R3).
+    //
+    // NOTE ON DURATION: the legendary Martyrdom Disable is duration 2, but the engine's
+    // timed-status decrement runs on the skipped turn too (the documented decrement-
+    // timing behaviour — a debuff applied during an actor's turn is decremented again at
+    // that actor's NEXT post-turn, i.e. the skipped one). The Disable is applied during
+    // the killer's round-1 turn, so it covers exactly ONE scheduled action (round 2) and
+    // expires before round 3. This test LOCKS the engine's actual end-to-end behaviour
+    // (one observable skipped turn for a legendary carrier), not a hand-computed turn count.
+    //
+    // NON-VACUITY CONTROL: an identical run where 'martyr' carries NO Martyrdom (a
+    // plain basic-attack slot only) → no Disable is ever applied → the killer emits
+    // `ability-performed` in round 2 (and every round). This proves the absence in the
+    // main run is genuine Disable suppression, not the killer simply having nothing to do.
+
+    const MARTYR_HP = 1_000; // tiny → the front origin hit one-shots the martyr
+    const TANK_HP = 1_000_000_000; // huge → the tank survives every round it is hit
+    const SKIP_NUM_ROUNDS = 3;
+
+    /** Martyr team-actor slots: a basic attack footprint + the legendary Martyrdom passive. */
+    function buildMartyrdomSlots(): ShipSkills['slots'] {
+        const ship = makeShip({ implants: { implant_major: 'mart-skip' } });
+        const martPiece = makePiece({
+            id: 'mart-skip',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'MARTYRDOM',
+        });
+        const getGearPiece = makeGetGearPiece({ 'mart-skip': martPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        const mart = passive?.abilities.find((a) => a.id.startsWith('equip-implant-MARTYRDOM'));
+        expect(mart).toBeDefined();
+        expect(mart!.trigger).toBe('on-destroyed');
+        return [
+            basicAttackSlot(),
+            ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+        ];
+    }
+
+    /** A fast positional enemy killer firing a lethal Line-Range-1 hit at `front`. */
+    const skipKiller = () => offensiveEnemyAt(KILLER_ID, 'M1', 1_000_000);
+
+    /** Run the positional skip scenario; collect ability-performed + ship-destroyed + debuff-applied. */
+    function runSkip(martyrSlots: ShipSkills['slots']) {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+        bus.on('ship-destroyed', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-applied', (e) => events.push(e as CombatEvent));
+        runCombat({
+            ...POS_BASE({
+                numRounds: SKIP_NUM_ROUNDS,
+                hp: TANK_HP, // the focus tank survives the whole battle
+                position: 'M1', // tank sits at the BACK
+                teamActors: [playerActorAt('martyr', 'M4', martyrSlots, MARTYR_HP)],
+                enemyAttackers: [skipKiller()],
+            }),
+            bus,
+        });
+        return events;
+    }
+
+    const killerActedInRound = (events: CombatEvent[], r: number) =>
+        events.some(
+            (e) => e.type === 'ability-performed' && e.actorId === KILLER_ID && e.round === r
+        );
+
+    it(
+        'C. End-to-end: after killing a Martyrdom carrier the killer is Disabled and SKIPS its turn ' +
+            '(acts round 1, suppressed round 2, resumes round 3) — non-Martyrdom control proves non-vacuity',
+        () => {
+            // --- Main run: martyr carries legendary Martyrdom -----------------
+            const main = runSkip(buildMartyrdomSlots());
+
+            // Sanity: the martyr died in round 1 ...
+            const martyrDeath = main.filter(
+                (e) => e.type === 'ship-destroyed' && e.actorId === 'martyr'
+            );
+            expect(martyrDeath.length).toBeGreaterThanOrEqual(1);
+            expect(martyrDeath.some((e) => e.type === 'ship-destroyed' && e.round === 1)).toBe(
+                true
+            );
+            // ... and a Disable debuff landed on the killer (the cause of the skip).
+            const disableOnKiller = main.filter(
+                (e) =>
+                    e.type === 'debuff-applied' &&
+                    e.buffName === 'Disable' &&
+                    e.targetId === KILLER_ID
+            );
+            expect(disableOnKiller.length).toBeGreaterThanOrEqual(1);
+
+            // The CONSEQUENCE: the killer acts in round 1 (the kill), is SUPPRESSED in
+            // round 2 (Disabled), and acts again in round 3 (Disable expired).
+            expect(killerActedInRound(main, 1)).toBe(true);
+            expect(killerActedInRound(main, 2)).toBe(false);
+            expect(killerActedInRound(main, 3)).toBe(true);
+
+            // --- Control run: martyr carries NO Martyrdom (plain basic attack only) ---
+            // No Disable is ever applied → the killer must keep acting every round it
+            // has a living target (the tank). This is what makes the main-run absence
+            // in round 2 a genuine suppression rather than a vacuous artefact.
+            const control = runSkip([basicAttackSlot()]);
+
+            // No Disable in the control.
+            expect(
+                control.filter((e) => e.type === 'debuff-applied' && e.buffName === 'Disable')
+            ).toHaveLength(0);
+            // The killer acts in every round 1-3 — crucially round 2, exactly where the
+            // main run was suppressed.
+            for (let r = 1; r <= SKIP_NUM_ROUNDS; r++) {
+                expect(killerActedInRound(control, r)).toBe(true);
+            }
+        }
+    );
 });
 
 // ---------------------------------------------------------------------------

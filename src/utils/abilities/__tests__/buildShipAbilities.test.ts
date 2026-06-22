@@ -3246,3 +3246,38 @@ describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', 
         });
     });
 });
+
+// D-PR13: 'inflicts Disable for N turns' in active skill text → named Disable DEBUFF, not control.
+// Locks the contract that parseControlInflict is Stasis-only, so Disable falls through to the
+// named-debuff parser. The engine's isTurnBlocked() then recognises any active 'Disable' buff by
+// name, so all five corpus ships (APEX, IonScorp, Makoli, Xcellence, Yuyan) light up for free.
+describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff, not control', () => {
+    it('active skill "inflicts Disable for 1 turn" produces a named Disable DEBUFF, not a control ability', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active');
+        expect(active).toBeDefined();
+
+        // Must produce a named debuff with buffName === 'Disable'.
+        const debuff = active!.abilities.find((a) => a.type === 'debuff');
+        expect(debuff).toMatchObject({
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: {
+                type: 'debuff',
+                buffName: 'Disable',
+                duration: 1,
+            },
+        });
+
+        // Must NOT produce a control-type ability for Disable
+        // (parseControlInflict is Stasis-only; Disable must not be claimed by it).
+        const control = active!.abilities.find((a) => a.type === 'control');
+        expect(control).toBeUndefined();
+    });
+});
