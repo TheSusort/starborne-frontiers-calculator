@@ -1439,6 +1439,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
         dotsLanded = false;
         for (const dot of dotsConfig) {
+            // NOTE: a blocked `bomb` DoT emits the resist event but has NO `resistedDots`
+            // row — the engine's resistedDots derivation filters to corrosion/inferno only
+            // (bombs are display-only elsewhere too). Event-yes/surface-no is intentional.
             emitBlockDebuffResist(bus, enemy.id, r, dotResistLabel(dot.type, dot.tier));
         }
     } else {
