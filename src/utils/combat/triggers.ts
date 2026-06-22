@@ -634,6 +634,10 @@ export interface IntentExecContext {
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
+    /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
+    enemyWithHighestAttack?: (ownerId: string) => string | undefined;
+    /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
+    oncePerRoundConsumed?: Set<string>;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
