@@ -24,8 +24,9 @@
 - `on-ally-attacked` listener: `triggers.ts:391`; already enqueues `eventCtx: { counterTargetId: e.attackerId, damagedAllyId: e.targetId }`. `roleFilter` precedent at `triggers.ts:402-409`.
 - `registerReactiveListeners` args: `triggers.ts:218-232` (destructures `{ bus, perOwner, enqueue, isOpposing, roleOf }` — NO adjacency helper today).
 - `bySide(...).adjacentAllyIdsFor` built as `(ownerId) => adjacentAllyIds(ownerId, actors)` at `engine.ts:1795`.
-- Round turn-loop: `engine.ts:3544` (`for (let actor = selectNext(); ...)`); `actingActorId = actor.id` + `turn-started` emit ~3601-3602; Stasis/Disable skip via `isTurnBlocked(actor.id)` at `engine.ts:3698` (the `if (!isTurnBlocked(actor.id))` block wrapping `runPlayerTurn` ~3730). `isTurnBlocked` defined `engine.ts:1713`.
-- Condition system: `ConditionContext` (`evaluateConditions.ts:4-35`), `evaluateCondition` switch (`evaluateConditions.ts:38-91`), `conditionsMet`. `buildDrainContext` at `triggers.ts:723` calls `buildActorConditionContext(statusEngine, ownerId, {...})`. `ConditionSubject` union at `abilities.ts:126`; `Condition` interface at `abilities.ts:172` (`{ subject, derivable: boolean, ... }`). ALACRITY end-of-round gate precedent: `conditions: [{ subject: 'not-hit-this-round', derivable: true }]`.
+- Round turn-loop: `engine.ts:3544` (`for (let actor = selectNext(); ...)`); `actingActorId = actor.id` + `turn-started` emit ~3601-3602. There are **THREE** `if (!isTurnBlocked(actor.id))` turn-body gates (one per actor kind): attacker at `engine.ts:3698`, walked-team ally at ~3886, real-enemy at ~4098. `isTurnBlocked` defined `engine.ts:1716`. A Stasis/Disable-skipped actor emits `turn-started` but does NOT enter these blocks.
+- Condition system: `ConditionContext` (`evaluateConditions.ts:4-35`), `evaluateCondition` switch with a `default: return 0` (`evaluateConditions.ts:38-91` — so a new subject causes NO tsc error; the case is for behavior), `conditionsMet`. `buildActorConditionContext` lives at `triggers.ts:670` and delegates to `buildRoundContext` (`src/utils/abilities/roundContext.ts:13-68`) — the ACTUAL constructor; fields flow options-bag → `buildRoundContext` `state` param (~roundContext.ts:42) → return (~roundContext.ts:65) → `ConditionContext` (the `wasHitThisRound` path is the template). `buildDrainContext` at `triggers.ts:723`. `ConditionSubject` union at `abilities.ts:126`; `Condition` interface at `abilities.ts:172`.
+- **Gate liveness:** `liveGateConditions` (`src/utils/combat/abilityStatusGating.ts:37-43`) rewrites any `derivable` condition whose subject is NOT in `LIVE_SUBJECTS` (`:15-29`) to `{ subject: 'always' }`; it runs at `triggers.ts:1068` before `conditionsMet`. ALACRITY's `not-hit-this-round` works ONLY because it is in `LIVE_SUBJECTS` (`:28`). `first-activator` MUST be added there too.
 - Registry helpers: `mkNamedDebuff` (`buildEquipmentAbilities.ts:359-385`, hardcodes `target:'enemy'`), `mkNamedBuffGrant` with `opts.procChance` (`326-354`), proc tables `AMBUSH_PROC`/`SPEARHEAD_PROC`/`ALACRITY_PROC` (`217-239`), `IMPLANT_ABILITIES` map (`387`), implant id stamping `equip-implant-${implantName}` (`732`).
 - `AbilityTarget` union: `abilities.ts:29-38` (currently ends `'enemy-most-buffs'`).
 - `'Provoke'` (`buffs.ts:127`) and `'Concentrate Fire'` (`buffs.ts:461`) exist in `BUFFS`.
@@ -39,10 +40,11 @@
 - **Create** `src/utils/combat/highestAttack.ts` — pure `highestAttackAmong(ids, attackOf, isLiving)` selector (unit-testable).
 - **Create** `src/utils/combat/__tests__/highestAttack.test.ts`.
 - **Modify** `src/types/abilities.ts` — `AbilityTarget += 'enemy-highest-attack'`; `Ability.oncePerRound?`, `Ability.requireDamagedAllyAdjacent?`; `ConditionSubject += 'first-activator'`; `ConditionContext.firstActivator?`.
-- **Modify** `src/utils/abilities/evaluateConditions.ts` — `first-activator` case + `firstActivator` field.
-- **Modify** `src/utils/abilities/buildActorConditionContext.ts` (wherever it lives) — accept + set `firstActivator`.
-- **Modify** `src/utils/combat/triggers.ts` — `buildDrainContext` threading; `IntentExecContext` fields (`enemyWithHighestAttack`, `oncePerRoundConsumed`, `firstActivatorId`); debuff-executor proc gate + once-per-round + target routing; `registerReactiveListeners` adjacency arg + listener filter.
-- **Modify** `src/utils/combat/engine.ts` — `firstActivatorId` round-state + set-site; `oncePerRoundConsumed` Set; `highestAttackAmong` binding into both drain seams; `registerReactiveListeners` call passes `adjacentAllyIdsFor`.
+- **Modify** `src/utils/abilities/evaluateConditions.ts` — `first-activator` case + `firstActivator` field on `ConditionContext`.
+- **Modify** `src/utils/abilities/roundContext.ts` — `buildRoundContext` `state` param + return object carry `firstActivator` (this is the ACTUAL `ConditionContext` constructor; `buildActorConditionContext` delegates to it).
+- **Modify** `src/utils/combat/abilityStatusGating.ts` — add `'first-activator'` to `LIVE_SUBJECTS` (else `liveGateConditions` rewrites the gate to `always` and Doomsayer fires unconditionally — the same step that makes ALACRITY's `not-hit-this-round` work).
+- **Modify** `src/utils/combat/triggers.ts` — `buildActorConditionContext` (lives HERE, ~670, not a standalone file) + `buildDrainContext` (~723) threading; `IntentExecContext` fields (`enemyWithHighestAttack`, `oncePerRoundConsumed`, `firstActivatorId`); debuff-executor proc gate + once-per-round + target routing; `registerReactiveListeners` adjacency arg + listener filter.
+- **Modify** `src/utils/combat/engine.ts` — `firstActivatorId` round-state + set-site (ALL THREE `!isTurnBlocked` turn-body gates); `oncePerRoundConsumed` Set; `highestAttackAmong` binding into both drain seams; both `registerReactiveListeners` calls pass `adjacentAllyIdsFor`.
 - **Modify** `src/utils/abilities/buildEquipmentAbilities.ts` — `mkNamedDebuff` opts; `BULWARK_PROC`/`DOOMSAYER_PROC`; `BULWARK`/`DOOMSAYER` registry entries.
 - **Modify** `src/utils/abilities/__tests__/equipmentCoverage.test.ts` — add both implants.
 - **Create** `src/utils/combat/__tests__/cfProvokeAppliers.integration.test.ts` — Bulwark + Doomsayer end-to-end.
@@ -178,11 +180,11 @@ At the `ConditionSubject` union (`abilities.ts:126`), add:
 - [ ] **Step 4: Run tsc, confirm what breaks**
 
 Run: `npx tsc --noEmit`
-Expected: errors ONLY for non-exhaustive `switch`/`Record` over `AbilityTarget` or `ConditionSubject` that now miss the new members. **Record every such location** — these are the editor/eval exhaustiveness sites. Likely: `evaluateCondition` (handled in Task 3), and possibly editor UI (`AbilityCard`/`AbilityTypePicker`/`abilityDefaults`) or a target-resolution switch. If a switch has a `default` branch it won't error; only add a stub where tsc demands it. Do NOT add behavior — a `case 'enemy-highest-attack':` that mirrors `'enemy-most-buffs'`'s editor default, or a no-op, is sufficient for editor sites.
+Expected: in this codebase there is **no `switch` over `AbilityTarget`** and `evaluateCondition` has a `default` branch, so the new members likely produce **NO** tsc errors. Whatever errors DO appear are exhaustive `switch`/`Record` sites missing the new member (e.g. editor UI `AbilityCard`/`AbilityTypePicker`/`abilityDefaults`). **Record every such location.** If none, proceed (the editor-stub concern is moot).
 
-- [ ] **Step 5: Add minimal stubs ONLY where tsc errors (editor exhaustiveness)**
+- [ ] **Step 5: Add minimal stubs ONLY where tsc errors**
 
-For each tsc error outside `evaluateConditions.ts`, add the minimal case to satisfy exhaustiveness, mirroring the neighbouring `'enemy-most-buffs'` handling. (If no errors outside Task 3's file, skip.)
+For each tsc error, add the minimal case to satisfy exhaustiveness, mirroring the neighbouring `'enemy-most-buffs'` handling (no behavior). If Step 4 produced no errors, skip this step.
 
 - [ ] **Step 6: Commit**
 
@@ -197,10 +199,13 @@ git commit --no-verify -m "feat(combat): D-PR14 — types (enemy-highest-attack 
 ## Task 3: `first-activator` condition evaluation + context threading
 
 **Files:**
-- Modify: `src/utils/abilities/evaluateConditions.ts`
-- Modify: `src/utils/abilities/buildActorConditionContext.ts` (locate via `grep -rn "buildActorConditionContext" src/`)
-- Modify: `src/utils/combat/triggers.ts` (buildDrainContext + IntentExecContext.firstActivatorId)
-- Test: extend an existing evaluateConditions test file or create `src/utils/abilities/__tests__/firstActivatorCondition.test.ts`
+- Modify: `src/utils/abilities/evaluateConditions.ts` (`ConditionContext.firstActivator` + `evaluateCondition` case)
+- Modify: `src/utils/abilities/roundContext.ts` (`buildRoundContext` state param + return — the REAL constructor)
+- Modify: `src/utils/combat/abilityStatusGating.ts` (`LIVE_SUBJECTS += 'first-activator'`)
+- Modify: `src/utils/combat/triggers.ts` (`buildActorConditionContext` ~670 + `buildDrainContext` ~723 + `IntentExecContext.firstActivatorId`)
+- Test: create `src/utils/abilities/__tests__/firstActivatorCondition.test.ts`
+
+> **Threading chain (mirror `wasHitThisRound` end-to-end):** `IntentExecContext.firstActivatorId` → `buildDrainContext` computes `firstActivator: ctx.firstActivatorId === ownerId` → `buildActorConditionContext` options bag → `buildRoundContext` `state` param → `buildRoundContext` return → `ConditionContext.firstActivator` → `evaluateCondition`. AND `LIVE_SUBJECTS` must include `'first-activator'` or `liveGateConditions` neutralizes it to `always`. Miss ANY link and Doomsayer is silently broken (fires always, or never).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -228,9 +233,9 @@ describe('first-activator condition', () => {
 Run: `npx vitest run <test file>`
 Expected: FAIL — `'first-activator'` not handled / `firstActivator` not on the fixture.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement (follow the threading chain end-to-end)**
 
-`evaluateConditions.ts` — add to `ConditionContext` (after `wasHitThisRound?`):
+(a) `evaluateConditions.ts` — add to `ConditionContext` (after `wasHitThisRound?`):
 
 ```typescript
     firstActivator?: boolean; // D-PR14: this owner took the round's first real turn.
@@ -243,31 +248,35 @@ Add a case in `evaluateCondition` (mirror `'not-hit-this-round'`):
             return ctx.firstActivator ? 1 : 0;
 ```
 
-`buildActorConditionContext.ts` — add `firstActivator` to the options bag it accepts and pass it onto the returned context (mirror how `wasHitThisRound` flows through).
+(b) `roundContext.ts` — `buildRoundContext`'s `state` param type: add `firstActivator?: boolean;` (next to `wasHitThisRound`); and in the returned object add `firstActivator: state.firstActivator ?? false,` (mirror the `wasHitThisRound` line exactly).
 
-`triggers.ts` `buildDrainContext` (~723) — add to the options object passed to `buildActorConditionContext`:
+(c) `triggers.ts` `buildActorConditionContext` (~670) — it receives an options bag and forwards to `buildRoundContext`. Add `firstActivator` to the options type and forward it (mirror `wasHitThisRound`).
+
+(d) `triggers.ts` `buildDrainContext` (~723) — add to the options object it passes:
 
 ```typescript
         firstActivator: ctx.firstActivatorId === ownerId,
 ```
 
-`triggers.ts` `IntentExecContext` (near `enemyWithMostBuffs`, ~634) — add:
+(e) `triggers.ts` `IntentExecContext` (near `enemyWithMostBuffs`, ~634) — add:
 
 ```typescript
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
 ```
 
+(f) `abilityStatusGating.ts` — add `'first-activator'` to the `LIVE_SUBJECTS` set (~`:15-29`). **Without this, `liveGateConditions` rewrites Doomsayer's gate to `always` → it fires every round it procs.**
+
 - [ ] **Step 4: Run it, verify it passes** (+ tsc)
 
-Run: `npx vitest run <test file> && npx tsc --noEmit`
-Expected: PASS; tsc clean (the Task-2 `evaluateCondition` exhaustiveness error is now resolved).
+Run: `npx vitest run src/utils/abilities/__tests__/firstActivatorCondition.test.ts && npx tsc --noEmit`
+Expected: PASS; tsc clean.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/utils/abilities/evaluateConditions.ts src/utils/abilities/buildActorConditionContext.ts src/utils/combat/triggers.ts <test file>
-git commit --no-verify -m "feat(combat): D-PR14 — first-activator condition + drain-context threading"
+git add src/utils/abilities/evaluateConditions.ts src/utils/abilities/roundContext.ts src/utils/combat/abilityStatusGating.ts src/utils/combat/triggers.ts src/utils/abilities/__tests__/firstActivatorCondition.test.ts
+git commit --no-verify -m "feat(combat): D-PR14 — first-activator condition (live-subject + roundContext threading)"
 ```
 
 ---
@@ -295,7 +304,7 @@ If `drainIntents` is defined ONCE outside the round loop, instead declare both i
 
 Import at top of file: `import { highestAttackAmong } from './highestAttack';`
 
-After `mostBuffsAmong` (~3437), add a thin adapter that supplies live effective attack + liveness (mirror exactly how effective attack is read elsewhere in engine.ts — search for `effectiveStatsOf(` and use `.attack`; mirror how liveness is checked, `a.destroyedRound === undefined`):
+After `mostBuffsAmong` (~3437), add a thin adapter. **`effectiveStatsOf` takes THREE args** — `effectiveStatsOf(statusEngine, selfBuffLookup, actor: CombatActor)` (`effectiveStats.ts:88`); the working highest-attack idiom is at `engine.ts:2974-2975` (`effectiveStatsOf(statusEngine, selfBuffLookup, actor).attack`, and `selfBuffLookup` is in scope). Liveness = `destroyedRound === undefined`:
 
 ```typescript
             // D-PR14: living opposing actor with the greatest LIVE effective attack
@@ -303,12 +312,15 @@ After `mostBuffsAmong` (~3437), add a thin adapter that supplies live effective 
             const highestAttackInRoster = (roster: CombatActor[]): string | undefined =>
                 highestAttackAmong(
                     roster.map((a) => a.id),
-                    (id) => effectiveStatsOf(id).attack,
+                    (id) => {
+                        const a = roster.find((x) => x.id === id);
+                        return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack : 0;
+                    },
                     (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
                 );
 ```
 
-(Adjust `effectiveStatsOf(id).attack` to the real accessor signature found in engine.ts.)
+(Confirm `effectiveStatsOf` / `selfBuffLookup` are in scope at this point — both are used at 2974; if `selfBuffLookup` is named differently here, match the 2974 call.)
 
 - [ ] **Step 3: Bind into both drain-seam ctx literals**
 
@@ -330,17 +342,19 @@ In `drainEnemyIntents` (~3467), add:
 
 (`firstActivatorId` is read inside the arrow body at call time → reads the live value. If declared in the enclosing scope as a `let`, the closure reads it live; confirm.)
 
-- [ ] **Step 4: Set `firstActivatorId` at the real-activation site**
+- [ ] **Step 4: Set `firstActivatorId` at ALL THREE real-activation sites**
 
-At `engine.ts:3698`, inside `if (!isTurnBlocked(actor.id)) {`, as the FIRST statement (before `parsedTargetFor`/`runPlayerTurn`):
+There are three `if (!isTurnBlocked(actor.id)) {` turn-body gates (attacker ~3698, walked-team ally ~3886, real-enemy ~4098). A team ally or an enemy can be the round's first activator (enemy-side Doomsayer rides the `drainEnemyIntents` seam), so set it in ALL THREE, as the FIRST statement inside each block:
 
 ```typescript
                     if (!isTurnBlocked(actor.id)) {
                         // D-PR14: first REAL activation of the round (Stasis/Disable-skipped
-                        // actors never reach here, so they don't count). ??= writes once.
+                        // actors never enter these blocks, so they don't count). ??= writes once.
                         firstActivatorId ??= actor.id;
-                        const target = parsedTargetFor(actor);
+                        // ... existing block body ...
 ```
+
+Confirm each of the three sites with `grep -n "if (!isTurnBlocked(actor.id))" src/utils/combat/engine.ts` and add the line at the top of each. Goldens are unaffected (no fixture equips the implant); the three sites are for multi-actor / enemy-side correctness.
 
 - [ ] **Step 5: Run tsc**
 
@@ -454,15 +468,15 @@ In the `case 'on-ally-attacked':` listener (`triggers.ts:391`), after the `roleF
                         }
 ```
 
-- [ ] **Step 3: Pass `adjacentAllyIdsFor` from the engine call site**
+- [ ] **Step 3: Pass `adjacentAllyIdsFor` from BOTH engine call sites**
 
-Find the `registerReactiveListeners({ ... })` call(s) in `engine.ts` (`grep -n "registerReactiveListeners" src/utils/combat/engine.ts`). Add to the args:
+There are TWO `registerReactiveListeners({ ... })` calls (player ~`engine.ts:2028`, enemy ~`engine.ts:2049`; confirm via `grep -n "registerReactiveListeners" src/utils/combat/engine.ts`). Add to BOTH args objects:
 
 ```typescript
             adjacentAllyIdsFor: (ownerId: string) => adjacentAllyIds(ownerId, actors),
 ```
 
-(Reuse the existing `adjacentAllyIds(ownerId, actors)` already used at `engine.ts:1795`; `adjacentAllyIds` is already imported. The helper is side-correct — it returns same-side allies of `ownerId` regardless of which team's listeners are being registered.)
+`adjacentAllyIds` is already imported (`engine.ts:83`) and is side-correct (returns same-side allies of `ownerId` regardless of which team's listeners are registered), so the same line works for both. (The per-side `bySide(...).adjacentAllyIdsFor` helper at `engine.ts:1795` is equivalent if you prefer reusing it.)
 
 - [ ] **Step 4: tsc + combat regression**
 
@@ -655,7 +669,12 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
         // highest-effective-attack enemy at end of round (read via ownerDebuffNamesFor / targeting).
     });
     it('does NOT apply when the owner is not the first activator', () => {
-        // make another actor faster; assert no CF applied by Doomsayer.
+        // make another actor (team ally) faster so it activates first; assert no CF from Doomsayer.
+        // This also exercises the walked-team-ally firstActivatorId set-site (~3886).
+    });
+    it('works for an ENEMY-side Doomsayer that activates first', () => {
+        // Doomsayer on an enemy ship, fastest overall; assert CF applied to the highest-attack
+        // PLAYER actor. Exercises the real-enemy set-site (~4098) + drainEnemyIntents seam.
     });
 });
 ```
@@ -742,6 +761,7 @@ git commit --no-verify -m "feat(combat): D-PR14 — coverage tracker + changelog
 
 - **`git commit --no-verify`**: the pre-commit hook runs the full vitest suite; use `--no-verify` for incremental commits and rely on the explicit per-task test runs. Run the full suite once at Task 9.
 - **Byte-identical invariant**: every executor change is gated on a new optional field (`procChance`/`oncePerRound`/`requireDamagedAllyAdjacent`/`target === 'enemy-highest-attack'`). If ANY existing golden moves, a gate's pass-through is broken — stop and fix before continuing.
-- **`liveGateConditions`**: confirm it does not strip `first-activator` (ALACRITY's `not-hit-this-round` is the working precedent for a derivable self-condition used as an end-of-round gate).
+- **`liveGateConditions` (REQUIRED, Task 3f)**: `first-activator` MUST be added to `LIVE_SUBJECTS` in `abilityStatusGating.ts`. Otherwise the gate is rewritten to `always` and Doomsayer fires every round it procs (ALACRITY's `not-hit-this-round` only works because it IS in that set).
+- **Doomsayer threading is fragile**: the field flows through SIX hops (IntentExecContext → buildDrainContext → buildActorConditionContext → buildRoundContext state → buildRoundContext return → ConditionContext) plus LIVE_SUBJECTS. Miss any hop → Doomsayer fires always or never. The integration tests (Task 8) are what catch a broken hop — do not skip them.
 - **Decrement-timing**: a "1 turn" Provoke/CF may expire after one observable enemy turn (locked behavior; not changed here).
 - **DPS calculator page**: intentionally NOT wired — both effects are targeting debuffs that matter only in the battle sim.
