@@ -213,6 +213,106 @@ describe('Block Debuff — cast-side timed/persistent landing fold (engine)', ()
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Task 6: Block Debuff — cast-side DoT block + resist event (engine).
+//
+// A DoT-casting attacker (enemy attacker `e1`, speed 10 — acts AFTER the speed-100
+// focus actor so the focus actor's recurring Block Debuff self-buff is already live)
+// inflicts an `Inferno III` DoT at the focus actor (heal target `attacker`). When that
+// target carries `Block Debuff`, the cast-side DoT region must BLOCK the DoT (no entry
+// appended → no `dot-applied`, the DoT never ticks) AND emit a `debuff-resisted` event
+// labelled `Inferno III` (block-path only — a normal landing failure stays silent).
+// We assert via the emitted events AND the per-enemy round-effects surface
+// (`dots` empty, `resistedDots` carries the blocked Inferno).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// An enemy attacker casting a basic attack + an Inferno III DoT. `hacking` omitted →
+// defaults to 200 → 100% landing, so the ONLY thing that can block the DoT is the
+// Block Debuff immunity branch.
+const infernoIIIEnemy = (): EnemyAttacker =>
+    ({
+        id: 'e1',
+        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        enemyAb({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 3,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+const runDotWith = (focusSkills: ShipSkills, bus?: ReturnType<typeof createEventBus>) =>
+    runCombat(
+        blockDebuffEngineBase({
+            numRounds: 3,
+            enemyAttackers: [infernoIIIEnemy()],
+            shipSkills: focusSkills,
+            ...(bus ? { bus } : {}),
+        })
+    );
+
+describe('Block Debuff — cast-side DoT block + resist event (engine)', () => {
+    it('immune target BLOCKS an inflicted DoT: no dot-applied, resisted Inferno III event + resistedDots', () => {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('dot-applied', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        const result = runDotWith(blockDebuffSelfSkills(), bus);
+
+        // No DoT was applied — the block path never appends an entry.
+        expect(events.some((e) => e.type === 'dot-applied')).toBe(false);
+        // A debuff-resisted event fired, labelled with the blocked DoT's name.
+        const resisted = events.filter((e) => e.type === 'debuff-resisted');
+        expect(resisted.length).toBeGreaterThan(0);
+        expect(
+            resisted.map((e) => (e.type === 'debuff-resisted' ? e.buffName : '')).filter(Boolean)
+        ).toContain('Inferno III');
+
+        // Round-effects surface: the enemy's DoT is blocked → no landed dots, resistedDots
+        // carries the Inferno entry (symmetric with the timed/persistent resist surface).
+        const entry = e1Effects(result);
+        expect(entry).toBeDefined();
+        expect(entry!.dots).toHaveLength(0);
+        expect(entry!.resistedDots).toEqual([{ type: 'inferno', tier: 3, stacks: 2 }]);
+    });
+
+    it('control: WITHOUT Block Debuff the same DoT lands (dot-applied, NO resist event)', () => {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('dot-applied', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        const result = runDotWith({ slots: [] }, bus);
+
+        // The DoT lands normally → dot-applied fires, and the resist event is UNIQUE to the
+        // block path (normal successful casts never emit debuff-resisted for DoTs).
+        expect(events.some((e) => e.type === 'dot-applied')).toBe(true);
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
+
+        const entry = e1Effects(result);
+        expect(entry).toBeDefined();
+        expect(entry!.dots.map((d) => d.type)).toContain('inferno');
+        expect(entry!.resistedDots).toHaveLength(0);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Task 5: Block Debuff — reactive timed-debuff fold (executeIntent).
 //
 // The REACTIVE debuff executor (triggers.ts `cfg.type === 'debuff'`) applies a

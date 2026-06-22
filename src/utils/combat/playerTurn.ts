@@ -38,7 +38,7 @@ import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
-import { targetCarriesBlockDebuff } from './debuffImmunity';
+import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { healAmplificationForCast } from './healAmplification';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
@@ -1430,57 +1430,70 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     });
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
-    // DoTs gate at application: draw the shared per-round roll only when there are
-    // DoTs to apply this round (memoized — shares the recurring partition's single
-    // draw). With nothing to apply, dotsLanded is vacuously true (no draw taken),
-    // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
-    const dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
-    // Capture pre-application lengths so 'inflicted'-scope extensions touch only
-    // the entries this cast adds below (the slice from these indices onward).
-    const corrosionEntriesBefore = corrosionEntries.length;
-    const infernoEntriesBefore = infernoEntries.length;
-    if (dotsLanded) {
-        applyNewDoTs({
-            dotsConfig,
-            effectiveAttack,
-            affinityMult,
-            sourceId: actor.id,
-            corrosionEntries,
-            infernoEntries,
-            pendingBombs,
-            emitDotApplied: (dotType, stacks) =>
-                bus.emit({
-                    type: 'dot-applied',
-                    sourceId: actor.id,
-                    targetId: enemy.id,
-                    round: r,
-                    dotType,
-                    stacks,
-                    ...(critHits > 0 ? { viaCrit: true } : {}),
-                }),
-        });
-    }
+    // Block Debuff (Task 6): when the turn target is immune, every cast-side DoT is
+    // BLOCKED and recorded as a resist — and ONLY here. Normal DoT landing-roll
+    // failures (the else branch) stay SILENT (no event), so the non-immune path is
+    // byte-for-byte unchanged. `dotsLanded` is set false so the downstream display
+    // surfaces the blocked DoTs as resisted (symmetric with timed/persistent resists).
+    let dotsLanded: boolean;
+    if (dotsConfig.length > 0 && targetImmuneToDebuffs) {
+        dotsLanded = false;
+        for (const dot of dotsConfig) {
+            emitBlockDebuffResist(bus, enemy.id, r, dotResistLabel(dot.type, dot.tier));
+        }
+    } else {
+        // DoTs gate at application: draw the shared per-round roll only when there are
+        // DoTs to apply this round (memoized — shares the recurring partition's single
+        // draw). With nothing to apply, dotsLanded is vacuously true (no draw taken),
+        // preserving the all-landing fixtures where no-DoT rounds report dotsLanded:true.
+        dotsLanded = dotsConfig.length > 0 ? roundDebuffLanded() : true;
+        // Capture pre-application lengths so 'inflicted'-scope extensions touch only
+        // the entries this cast adds below (the slice from these indices onward).
+        const corrosionEntriesBefore = corrosionEntries.length;
+        const infernoEntriesBefore = infernoEntries.length;
+        if (dotsLanded) {
+            applyNewDoTs({
+                dotsConfig,
+                effectiveAttack,
+                affinityMult,
+                sourceId: actor.id,
+                corrosionEntries,
+                infernoEntries,
+                pendingBombs,
+                emitDotApplied: (dotType, stacks) =>
+                    bus.emit({
+                        type: 'dot-applied',
+                        sourceId: actor.id,
+                        targetId: enemy.id,
+                        round: r,
+                        dotType,
+                        stacks,
+                        ...(critHits > 0 ? { viaCrit: true } : {}),
+                    }),
+            });
+        }
 
-    // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
-    // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
-    // Guarded by dotsLanded (like applyNewDoTs/applyAccumulators): when the
-    // landing roll failed nothing was appended, and skipping the call keeps
-    // the deterministic extendChanceGate schedule free of phantom draws.
-    if (dotsLanded) {
-        extendInflictedDoTs({
-            abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
-            ctx,
-            effectiveCritDamage,
-            extendChanceGate,
-            corrosionEntries,
-            infernoEntries,
-            corrosionEntriesBefore,
-            infernoEntriesBefore,
-        });
-    }
+        // Step 3a: 'inflicted'-scope extensions grow ONLY this cast's new DoTs
+        // (Valerian). Sourced from the same firing+passive ability set as Step 2.9.
+        // Guarded by dotsLanded (like applyNewDoTs/applyAccumulators): when the
+        // landing roll failed nothing was appended, and skipping the call keeps
+        // the deterministic extendChanceGate schedule free of phantom draws.
+        if (dotsLanded) {
+            extendInflictedDoTs({
+                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+                ctx,
+                effectiveCritDamage,
+                extendChanceGate,
+                corrosionEntries,
+                infernoEntries,
+                corrosionEntriesBefore,
+                infernoEntriesBefore,
+            });
+        }
 
-    if (dotsLanded) {
-        applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+        if (dotsLanded) {
+            applyAccumulators({ gatedSkill, pendingAccumulators, sourceId: actor.id });
+        }
     }
 
     // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
