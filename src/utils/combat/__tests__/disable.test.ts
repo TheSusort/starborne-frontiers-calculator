@@ -713,3 +713,158 @@ describe('D-PR13 Task 3 — reactive suppression: (v) incoming DoT still ticks o
         expect(dotRoundsForFocus).toContain(2);
     });
 });
+
+// ── D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the walk ──────────────────
+
+/**
+ * Disable is a REMOVABLE debuff (NOT in UNREMOVABLE_STATUSES), and the turn-action gate
+ * reads `ownerDebuffNames(id)` LIVE at each turn. So a `cleanse` that removes the Disable
+ * debuff from the focus's per-actor debuff store lets the focus resume acting on its very
+ * next scheduled turn — with NO extra production code. This test locks that.
+ *
+ * `cleanse` config shape (copied from cleanseCastPath.test.ts): { type: 'cleanse', count: 'all' }.
+ * Targeting 'all-allies' so the player-side cleanser reaches every player ally's debuff store,
+ * including the focus (the heal target).
+ */
+const cleanseAllAlliesSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({
+            type: 'cleanse',
+            target: 'all-allies',
+            config: { type: 'cleanse', count: 'all' },
+        }),
+    ],
+});
+
+/** A walked team actor carrying a cleanse-all-allies active (mirrors teamAttackerAt's walk shape). */
+const teamCleanserAt = (id: string, position: Position, speedOverride: number): TeamActor => ({
+    id,
+    speed: speedOverride,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [cleanseAllAlliesSlot()] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+describe('D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the focus walk', () => {
+    it('a same-side cleanser removes Disable(5) so the focus resumes acting immediately, NOT after the natural Disable expiry', () => {
+        idc = 0;
+        /**
+         * Setup (mirrors the disable-bot + killer pattern from tests (ii)/(iii)):
+         *   - disable-bot at POS_ENEMY_FRONT (speed=400, hp=1, hacking=200):
+         *     acts first in round 1, fires disableInflictAttack(5) at 'front' (= focus).
+         *     Then it is killed → Disable is NOT re-applied in later rounds.
+         *   - killer (team actor, speed=300, attack=10000): acts after the bot, kills it in round 1.
+         *   - cleanser (team actor, speed=200, attack=0): acts AFTER the killer but BEFORE the
+         *     focus; its walk carries cleanseAllAlliesSlot → it cleanses every player ally,
+         *     removing the freshly-applied Disable from the focus's debuff store.
+         *   - focus ('attacker', speed=100, basicAttack): acts LAST. By its turn the cleanser
+         *     has already removed Disable → the live gate sees no Disable → the focus FIRES.
+         *   - numRounds:3.
+         *
+         * Round 1 turn order: disable-bot(400) → killer(300) → cleanser(200) → focus(100)
+         *   1. disable-bot applies Disable(5) to focus.
+         *   2. killer kills disable-bot (no re-apply possible later).
+         *   3. cleanser cleanses all allies → focus's Disable is REMOVED.
+         *   4. focus's turn: live gate reads ownerDebuffNames('attacker') → no Disable → FIRES.
+         *
+         * KEY PROOF: WITHOUT the cleanse, Disable(5) keeps the focus disabled rounds 1–5 (it
+         * would only act in round 6). WITH the per-round cleanse the focus acts in round 1 —
+         * far earlier than the natural expiry. No production change is required: the gate read
+         * is live, so removing the debuff frees the unit on its next scheduled turn.
+         */
+        const { events, result } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 100, // focus is the slowest → acts LAST every round
+            healTargetId: 'attacker', // focus is the disabled unit → player-side cleanse reaches it
+            position: POS_FOCUS,
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [
+                teamAttackerAt('killer', POS_TEAM, 300, 10000),
+                teamCleanserAt('cleanser', POS_TEAM, 200),
+            ],
+            enemyAttackers: [
+                {
+                    id: 'disable-bot',
+                    stats: {
+                        attack: 2000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1, // killed by killer in round 1 → cannot re-apply Disable
+                        speed: 400, // acts before killer(300), cleanser(200), focus(100)
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [disableInflictAttack(5)] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const abilityPerformed = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed'
+        );
+        const focusFiredRounds = abilityPerformed
+            .filter((e) => e.actorId === 'attacker')
+            .map((e) => e.round);
+
+        // The cleanser removes Disable before the focus's round-1 turn → focus FIRES round 1.
+        // This is only reachable if Disable was removed: Disable(5) would otherwise block
+        // rounds 1–5 (natural expiry at round 6, beyond this 3-round battle).
+        expect(focusFiredRounds).toContain(1);
+        // Non-vacuity: the focus fires in a round strictly < 5 — impossible under an
+        // unremoved Disable(5). Proves the cleanse genuinely freed the walk.
+        expect(focusFiredRounds.some((r) => r < 5)).toBe(true);
+
+        expect(result.rounds).toHaveLength(3);
+    });
+});
