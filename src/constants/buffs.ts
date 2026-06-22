@@ -13,6 +13,16 @@ export const BUFFS: Buff[] = [
         type: 'buff',
     },
     {
+        name: 'Block Debuff',
+        description: 'Is immune to receiving debuffs',
+        type: 'buff',
+    },
+    {
+        name: 'Buff Protection',
+        description: "Protects this unit's buffs from being removed",
+        type: 'buff',
+    },
+    {
         name: 'Hacking Up II',
         description: '+40 Hacking',
         type: 'buff',

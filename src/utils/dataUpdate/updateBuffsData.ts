@@ -28,6 +28,16 @@ const MANUAL_BUFFS: Array<{
         description: "Grants attack equal to 100% of the caster's attack",
         type: 'buff',
     },
+    {
+        name: 'Block Debuff',
+        description: 'Is immune to receiving debuffs',
+        type: 'buff',
+    },
+    {
+        name: 'Buff Protection',
+        description: "Protects this unit's buffs from being removed",
+        type: 'buff',
+    },
 ];
 
 async function updateBuffsData() {
