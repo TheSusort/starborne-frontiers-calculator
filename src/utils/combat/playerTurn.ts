@@ -38,6 +38,7 @@ import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
+import { targetCarriesBlockDebuff } from './debuffImmunity';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { healAmplificationForCast } from './healAmplification';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
@@ -742,13 +743,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemy,
         affinityDamageModifier
     );
-    // Turn-local landing decision: 'apply' (affinity) lands unless at an affinity disadvantage
-    // (UNCHANGED rule); 'inflict' (and unmarked) draws the runtime's deterministic gate against
-    // the LIVE chance. Replaces the runtime's pre-baked `landsTimedEnemyApplication` so every
-    // 'inflict' draw — the playerTurn timed loop, the status-engine sourceFired hook, and the
-    // reactive (triggers.ts) path — uses the live value uniformly.
+    // Block Debuff: an immune turn-target auto-resists every timed/persistent application.
+    // Computed ONCE per turn (the turn target `enemy` is fixed for this turn) — the immune
+    // short-circuit below is only reached when this is true, which no existing fixture triggers,
+    // so the non-immune path stays byte-identical. Task 6 reuses this for the DoT path.
+    const targetImmuneToDebuffs = targetCarriesBlockDebuff(statusEngine, enemy.id);
+    // Turn-local landing decision: an immune target auto-resists (return false WITHOUT drawing
+    // the gate, so the existing resist branches record it); otherwise 'apply' (affinity) lands
+    // unless at an affinity disadvantage (UNCHANGED rule); 'inflict' (and unmarked) draws the
+    // runtime's deterministic gate against the LIVE chance. Replaces the runtime's pre-baked
+    // `landsTimedEnemyApplication` so every 'inflict' draw — the playerTurn timed loop, the
+    // status-engine sourceFired hook, and the reactive (triggers.ts) path — uses the live value
+    // uniformly.
     const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
-        application === 'apply' ? !affinityDisadvantage : debuffLandingGate(liveLandingChance);
+        targetImmuneToDebuffs
+            ? false
+            : application === 'apply'
+              ? !affinityDisadvantage
+              : debuffLandingGate(liveLandingChance);
     // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
     // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
     // uses the same live value. Always set now (the live path is unconditional).
