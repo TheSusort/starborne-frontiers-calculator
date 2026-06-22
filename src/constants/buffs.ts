@@ -846,4 +846,9 @@ export const BUFFS: Buff[] = [
             'Damage dealt over a duration of turns. All damage over time effects deal damage at the beginning of a Units turn.',
         type: 'effect',
     },
+    {
+        name: 'Power Infused Nanobots',
+        description: "Increases Attack by 100% of the unit's own Attack, stackable.",
+        type: 'buff',
+    },
 ];
