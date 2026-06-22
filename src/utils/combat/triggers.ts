@@ -11,7 +11,7 @@ import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './bu
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
 // top-level evaluation), so there is no initialization-order hazard.
 // eslint-disable-next-line import/no-cycle
-import { targetCarriesBlockDebuff } from './debuffImmunity';
+import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -1265,6 +1265,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
+        // it AND emit a resist event (block path ONLY; a normal landing failure below stays
+        // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
+        // zero-stack/tier DoT doesn't surface a spurious resist.
+        if (targetCarriesBlockDebuff(ctx.statusEngine, ctx.enemy.id)) {
+            emitBlockDebuffResist(
+                ctx.bus,
+                ctx.enemy.id,
+                ctx.round,
+                dotResistLabel(cfg.dotType, cfg.tier)
+            );
+            return;
+        }
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
         // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Reads the
         // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn); `?? 1` is a neutral

@@ -438,3 +438,121 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
         expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Task 7: Block Debuff — reactive DoT block + resist event (executeIntent).
+//
+// The REACTIVE DoT executor (triggers.ts `cfg.type === 'dot'`) appends a DoT to
+// the reactive target (`ctx.enemy.id`) on a triggered event, gated by a landing
+// roll that is SILENT on failure. When that target carries `Block Debuff`, the
+// immunity check must BLOCK the DoT (no entry appended → no `dot-applied`) AND
+// emit a `debuff-resisted` event labelled with the blocked DoT (`Inferno III`) —
+// block-path ONLY. Normal landing failures stay silent (byte-identical). We drive
+// the executor directly, reusing the Task 5 harness, with the reactive DoT firing
+// at `ctx.enemy.id` (`enemy-default`).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
+    const makeRuntime = (): PlayerActorRuntime =>
+        ({
+            actor: { id: 'attacker' } as CombatActor,
+            // Always lands → the ONLY thing that can block the DoT is the Block Debuff branch.
+            landsTimedEnemyApplication: () => true,
+            debuffLandingGate: (_rate: number) => true,
+            liveDebuffLandingChance: 1,
+        }) as unknown as PlayerActorRuntime;
+
+    // A reactive (on-attacked) Inferno III DoT inflicted at the reactive target (ctx.enemy.id).
+    const makeReactiveDotIntent = (): Intent => ({
+        ownerId: 'attacker',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-dot',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'dot',
+                dotType: 'inferno',
+                tier: 3,
+                stacks: 2,
+                duration: 3,
+            },
+        },
+    });
+
+    const seedBlockDebuff = (
+        statusEngine: ReturnType<typeof createStatusEngine>,
+        round: number,
+        targetId: string
+    ): void => {
+        const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            payload: { buffName: 'Block Debuff', stacks: 1, parsedEffects: {} },
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            casterId: targetId,
+            recipients: [targetId],
+            kind: 'timed',
+            duration: 5,
+        };
+        statusEngine.applyTimedAbilityStatus(round, status, targetId);
+    };
+
+    const buildCtx = (immuneTargetId?: string): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        if (immuneTargetId) seedBlockDebuff(se, 1, immuneTargetId);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['attacker', makeRuntime()]]),
+            grantAllyCharges: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['attacker'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        } as unknown as IntentExecContext;
+    };
+
+    it('immune target BLOCKS a reactive DoT: no dot-applied, resisted Inferno III event, no entry', () => {
+        const ctx = buildCtx('enemy-default');
+        const events: CombatEvent[] = [];
+        ctx.bus.on('dot-applied', (e) => events.push(e as CombatEvent));
+        ctx.bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        executeIntent(makeReactiveDotIntent(), ctx);
+
+        // No DoT entry appended → no dot-applied event.
+        expect(ctx.infernoEntries).toHaveLength(0);
+        expect(events.some((e) => e.type === 'dot-applied')).toBe(false);
+        // A debuff-resisted event fired, labelled with the blocked DoT's name.
+        const resisted = events.filter((e) => e.type === 'debuff-resisted');
+        expect(resisted.length).toBeGreaterThan(0);
+        expect(
+            resisted.map((e) => (e.type === 'debuff-resisted' ? e.buffName : '')).filter(Boolean)
+        ).toContain('Inferno III');
+    });
+
+    it('control: WITHOUT Block Debuff the same reactive DoT lands (dot-applied, NO resist event)', () => {
+        const ctx = buildCtx(); // no immunity seeded
+        const events: CombatEvent[] = [];
+        ctx.bus.on('dot-applied', (e) => events.push(e as CombatEvent));
+        ctx.bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        executeIntent(makeReactiveDotIntent(), ctx);
+
+        expect(ctx.infernoEntries).toHaveLength(1);
+        expect(events.some((e) => e.type === 'dot-applied')).toBe(true);
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
+    });
+});
