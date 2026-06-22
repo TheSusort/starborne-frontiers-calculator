@@ -572,6 +572,11 @@ export interface IntentExecContext {
      *  is static turn-order in this sim). Absent → buildDrainContext defaults the gate to true
      *  (lone-actor DPS assumption). */
     isLowestSpeedAllyFor?: (ownerId: string) => boolean;
+    /** Whether `ownerId` was hit by a direct attack this round, feeding the
+     *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
+     *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
+     *  not-yet-hit → "not hit" ⇒ met), keeping existing drain gating byte-identical. */
+    wasHitThisRoundFor?: (ownerId: string) => boolean;
     /** Credit reactive direct damage to the owner's round damage map against the shared
      *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
@@ -637,6 +642,9 @@ export function buildActorConditionContext(
         /** Owner has the lowest Speed among its player team. Default true (lone-actor /
          *  DPS assumption). Populated by buildDrainContext (Phase 4c PR 6). */
         isLowestSpeedAlly?: boolean;
+        /** Owner was hit by a direct attack this round. Default false. Populated by
+         *  buildDrainContext (D-PR8). */
+        wasHitThisRound?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -663,6 +671,7 @@ export function buildActorConditionContext(
         enemyBuffNames: shared.enemyBuffNames,
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
+        wasHitThisRound: shared.wasHitThisRound,
     });
 }
 
@@ -694,6 +703,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // Phase 4c PR 6: live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption and stay byte-identical.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,
+        // D-PR8: live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
+        // paths read "not hit" ⇒ met and stay byte-identical.
+        wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,
     });
 }
 
@@ -1006,6 +1018,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
         }
+        // D-PR8: procChance gate for reactive buff grants (Ambush 5-16%, Alacrity 12-20%).
+        // De-Morgan pass-through — true when procChance is undefined/≤0/≥1, so every existing
+        // (procChance-less) buff grant stays byte-identical. Mirrors the heal/shield + damage
+        // branches. Keys on `${ownerId}:${ability.id}` via ctx.procChanceGates.
+        if (!passesProcChanceGate(intent, ctx)) return;
         // Reactive buffs bypass the aura-by-passive-slot classification — their own
         // duration decides; a duration-less buff defaults to a 1-turn window.
         const duration = typeof cfg.duration === 'number' ? cfg.duration : 1;

@@ -144,7 +144,12 @@ export type ConditionSubject =
     // Binary gate: the condition owner currently has a shield (CombatActor.shieldPool > 0).
     // Live-derived (ConditionContext.selfShielded); defaults false (no shield / DPS mode).
     // Dormant until sub-project H grants shields in the sim. Used by the Arcane Siege implant.
-    | 'self-shield';
+    | 'self-shield'
+    // Binary gate: the condition owner received ZERO direct hits this round (a "hit" =
+    // a direct attack that landed damage on shield or HP; DoT ticks and fully-Barrier-blocked
+    // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
+    // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
+    | 'not-hit-this-round';
 
 export interface Condition {
     subject: ConditionSubject;

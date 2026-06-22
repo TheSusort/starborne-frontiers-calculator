@@ -81,7 +81,16 @@ describe('liveGateConditions — target-repaired-this-round (C2b-3)', () => {
     // LIVE_SUBJECTS, the condition would neutralize to 'always' and Nayra's
     // Stasis/Exposed inflicts would silently fire unconditionally again.
     it('keeps a derivable target-repaired-this-round condition (does NOT neutralize to always)', () => {
-        const out = liveGateConditions([{ subject: 'target-repaired-this-round', derivable: true }]);
+        const out = liveGateConditions([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
         expect(out).toEqual([{ subject: 'target-repaired-this-round', derivable: true }]);
+    });
+});
+
+describe('liveGateConditions — not-hit-this-round (D-PR8)', () => {
+    it('keeps a derivable not-hit-this-round condition (live subject, not neutralized)', () => {
+        const out = liveGateConditions([{ subject: 'not-hit-this-round', derivable: true }]);
+        expect(out[0].subject).toBe('not-hit-this-round');
     });
 });

@@ -25,6 +25,7 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     'enemy-hp-missing-pct',
     'lowest-speed-ally',
     'target-repaired-this-round',
+    'not-hit-this-round',
 ]);
 
 /**

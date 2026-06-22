@@ -407,6 +407,19 @@ describe('self-shield condition', () => {
     });
 });
 
+describe('not-hit-this-round condition', () => {
+    const cond: Condition = { subject: 'not-hit-this-round', derivable: true };
+    it('is met (1) when wasHitThisRound is false', () => {
+        expect(evaluateCondition(cond, makeConditionContext({ wasHitThisRound: false }))).toBe(1);
+    });
+    it('is met (1) when wasHitThisRound is undefined (default)', () => {
+        expect(evaluateCondition(cond, makeConditionContext())).toBe(1);
+    });
+    it('is NOT met (0) when wasHitThisRound is true', () => {
+        expect(evaluateCondition(cond, makeConditionContext({ wasHitThisRound: true }))).toBe(0);
+    });
+});
+
 describe('lowest-speed-ally', () => {
     it('returns 1 when isLowestSpeedAlly is true', () => {
         const ctx = buildRoundContext({
