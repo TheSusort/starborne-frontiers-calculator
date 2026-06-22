@@ -748,7 +748,7 @@ describe('Fortifying Shroud implant', () => {
         const piece = makePiece({ id: 'fs-2', setBonus: 'FORTIFYING_SHROUD', rarity: 'uncommon' });
         const ship = makeShip({ implants: { implant_major: 'fs-2' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-2': piece }));
-        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-FORTIFYING_SHROUD'));
         expect(a).toBeDefined();
         expect(a!.procChance).toBeCloseTo(0.18);
     });
@@ -757,7 +757,7 @@ describe('Fortifying Shroud implant', () => {
         const piece = makePiece({ id: 'fs-3', setBonus: 'FORTIFYING_SHROUD', rarity: 'rare' });
         const ship = makeShip({ implants: { implant_major: 'fs-3' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-3': piece }));
-        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-FORTIFYING_SHROUD'));
         expect(a).toBeDefined();
         expect(a!.procChance).toBeCloseTo(0.21);
     });
@@ -766,7 +766,7 @@ describe('Fortifying Shroud implant', () => {
         const piece = makePiece({ id: 'fs-4', setBonus: 'FORTIFYING_SHROUD', rarity: 'epic' });
         const ship = makeShip({ implants: { implant_major: 'fs-4' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-4': piece }));
-        const a = abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD');
+        const a = abilities.find((x) => x.id.startsWith('equip-implant-FORTIFYING_SHROUD'));
         expect(a).toBeDefined();
         expect(a!.procChance).toBeCloseTo(0.26);
     });
@@ -775,7 +775,9 @@ describe('Fortifying Shroud implant', () => {
         const piece = makePiece({ id: 'fs-5', setBonus: 'FORTIFYING_SHROUD', rarity: 'common' });
         const ship = makeShip({ implants: { implant_major: 'fs-5' } });
         const abilities = buildEquipmentAbilities(ship, makeGetGearPiece({ 'fs-5': piece }));
-        expect(abilities.find((x) => x.id === 'equip-implant-FORTIFYING_SHROUD')).toBeUndefined();
+        expect(
+            abilities.find((x) => x.id.startsWith('equip-implant-FORTIFYING_SHROUD'))
+        ).toBeUndefined();
     });
 });
 
