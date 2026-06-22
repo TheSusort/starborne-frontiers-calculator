@@ -2174,7 +2174,7 @@ export const IMPLANTS: Record<string, ImplantData> = {
                     },
                 ],
                 description:
-                    'When this unit becomes the last one standing, there is a 32% chance to gain Block Damage and Block Debuff for 1 turn',
+                    'When this unit becomes the last one standing, there is a 32% chance to gain Barrier and Block Debuff for 1 turn',
             },
             {
                 rarity: 'uncommon',
@@ -2191,7 +2191,7 @@ export const IMPLANTS: Record<string, ImplantData> = {
                     },
                 ],
                 description:
-                    'When this unit becomes the last one standing, there is a 18% chance to gain Block Damage and Block Debuff for 1 turn',
+                    'When this unit becomes the last one standing, there is a 18% chance to gain Barrier and Block Debuff for 1 turn',
             },
             {
                 rarity: 'rare',
@@ -2200,7 +2200,7 @@ export const IMPLANTS: Record<string, ImplantData> = {
                     { name: 'attack', value: 148, type: 'flat' },
                 ],
                 description:
-                    'When this unit becomes the last one standing, there is a 21% chance to gain Block Damage and Block Debuff for 1 turn.',
+                    'When this unit becomes the last one standing, there is a 21% chance to gain Barrier and Block Debuff for 1 turn.',
             },
             {
                 rarity: 'epic',
