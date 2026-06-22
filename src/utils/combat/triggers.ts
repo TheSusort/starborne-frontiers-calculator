@@ -632,6 +632,8 @@ export interface IntentExecContext {
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
      *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
+    firstActivatorId?: string;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -690,6 +692,9 @@ export function buildActorConditionContext(
         /** Owner was hit by a direct attack this round. Default false. Populated by
          *  buildDrainContext (D-PR8). */
         wasHitThisRound?: boolean;
+        /** Owner took the round's first real turn. Default false. Populated by
+         *  buildDrainContext (D-PR14). */
+        firstActivator?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -717,6 +722,7 @@ export function buildActorConditionContext(
         selfDebuffNames: shared.selfDebuffNames,
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         wasHitThisRound: shared.wasHitThisRound,
+        firstActivator: shared.firstActivator,
     });
 }
 
@@ -751,6 +757,9 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // D-PR8: live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
         // paths read "not hit" ⇒ met and stay byte-identical.
         wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,
+        // D-PR14: live first-activator gate (Doomsayer). Default false → DPS / no-delegate
+        // paths read "not first" ⇒ not met and stay byte-identical.
+        firstActivator: ctx.firstActivatorId === ownerId,
     });
 }
 
