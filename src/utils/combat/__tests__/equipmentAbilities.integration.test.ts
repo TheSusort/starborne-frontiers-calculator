@@ -2287,7 +2287,19 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
         // The enemy applies ONLY a Corrosion DoT (no direct-damage ability). The turn-start DoT
         // batch intake passes byDirectDamage:false → never recorded in hitThisRound → gate met.
         // Give the DoT time to tick at least once (numRounds 2: applied round 1, ticks round 2).
-        const grants = collectGrants(PR8_BASE({ numRounds: 2, enemyAttackers: [makeDotEnemy()] }));
+        // Capture dot-ticked alongside buff-applied: assert the DoT actually ticked on the focus,
+        // otherwise this would pass vacuously — a round where the DoT never lands is indistinguishable
+        // from scenario (a) (no hit at all → buff granted), proving nothing about the DoT path.
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => events.push(e as CombatEvent));
+        bus.on('dot-ticked', (e) => events.push(e as CombatEvent));
+        runCombat({ ...PR8_BASE({ numRounds: 2, enemyAttackers: [makeDotEnemy()] }), bus });
+        const dotTicks = events.filter((e) => e.type === 'dot-ticked' && e.targetId === 'attacker');
+        const grants = events.filter(
+            (e) => e.type === 'buff-applied' && e.actorId === 'attacker' && e.buffName === BUFF_NAME
+        );
+        expect(dotTicks.length).toBeGreaterThanOrEqual(1);
         expect(grants.length).toBeGreaterThanOrEqual(1);
     });
 });
