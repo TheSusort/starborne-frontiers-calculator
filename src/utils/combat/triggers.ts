@@ -102,6 +102,10 @@ export interface Intent {
          *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
          *  triggering hit's damage rather than the owner's max HP. */
         triggerDamage?: number;
+        /** The actor ids of the allies repaired by an on-own-repair-to-ally event
+         *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
+         *  exactly these recipients (Font of Power -> repaired allies). */
+        repairedAllyIds?: string[];
     };
 }
 
@@ -160,11 +164,17 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
+ *  - on-own-repair-to-ally → the OWNER's OWN heal-performed (casterId === ownerId) with at least
+ *    one non-self recipient — the on-ally-critically-repaired twin WITHOUT the crit filter (Font
+ *    of Power). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff branch fans
+ *    the grant out to exactly those allies. One enqueue per qualifying cast.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
  *    fires once PER CRITTING HIT; the owner's own casts and every opposing actor are excluded
  *    (a walked enemy attacker now emits ability-performed, but its crit is NOT an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round; C2b-2)
+ *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
+ *    fires when THIS OWNER performs its CHARGED skill — Spearhead). One enqueue per cast.
  *  - on-bomb-detonated → bomb-detonated (global)
  *  - on-stasis-applied → control-applied where effect === 'stasis' && casterId === ownerId
  *    (Defiant: the OWNER's OWN Stasis application — own-cast scoped). One enqueue per application.
@@ -252,6 +262,15 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-charged-cast':
+                    bus.on('skill-fired', (e) => {
+                        // Self-scoped: THIS owner performed its CHARGED skill. The skill-fired
+                        // event carries slot:'active'|'charged' (events.ts). Team-agnostic —
+                        // enemy actors run the same turn path and emit skill-fired too; the
+                        // ownerId guard self-scopes per registered owner. One enqueue per cast.
+                        if (e.actorId === ownerId && e.slot === 'charged') enqueue(intent);
+                    });
+                    break;
                 case 'on-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
                         if (e.sourceId === ownerId) enqueue(intent);
@@ -297,6 +316,20 @@ export function registerReactiveListeners(args: {
                         ) {
                             enqueue(intent);
                         }
+                    });
+                    break;
+                case 'on-own-repair-to-ally':
+                    bus.on('heal-performed', (e) => {
+                        // The OWNER's own repair that reached >= 1 OTHER ally (Font of Power).
+                        // One enqueue per qualifying cast -> one proc-gate roll; the grant fans
+                        // out to all repaired non-self allies via eventCtx.repairedAllyIds.
+                        if (e.casterId !== ownerId) return;
+                        const repaired = e.targets.filter((t) => t !== ownerId);
+                        if (repaired.length === 0) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: { ...intent.eventCtx, repairedAllyIds: repaired },
+                        });
                     });
                     break;
                 case 'on-ally-crit':
@@ -1034,11 +1067,13 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // casterId = ownerId so its gate evaluates against the caster's ctx even when it
         // lives on another recipient.
         const recipients: string[] =
-            intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
-                ? [intent.eventCtx.damagedAllyId]
-                : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
-                  ? ctx.playerIds
-                  : [intent.ownerId];
+            intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
+                ? intent.eventCtx.repairedAllyIds
+                : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                  ? [intent.eventCtx.damagedAllyId]
+                  : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
+                    ? ctx.playerIds
+                    : [intent.ownerId];
         // The status object is identical for every recipient — hoist it above the loop.
         // Only the applyTimedAbilityStatus recipientId argument varies per iteration.
         const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {

@@ -8,6 +8,11 @@ export interface Buff {
 
 export const BUFFS: Buff[] = [
     {
+        name: 'Power Infused Nanobots',
+        description: "Grants attack equal to 100% of the caster's attack",
+        type: 'buff',
+    },
+    {
         name: 'Hacking Up II',
         description: '+40 Hacking',
         type: 'buff',
