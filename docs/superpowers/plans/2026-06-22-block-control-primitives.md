@@ -143,7 +143,7 @@ const purge = (actorId: string, count: number | 'all'): number => {
     return removeNewestFirst(actorId, 'buffs', count);
 };
 ```
-Import `isBuffProtection` from `./buffProtectionBuffs` at the top of `statusEngine.ts`. (Confirm `snapshot` and `timedAbilityStatuses` are in-closure consts declared before `purge`; both are.)
+Import `isBuffProtection` from `./buffProtectionBuffs` at the top of `statusEngine.ts`. (`snapshot` and `timedAbilityStatuses` are `const` arrow functions in the same factory body; `timedAbilityStatuses` is actually declared AFTER `purge` lexically, but that's fine — both resolve at call-time via the closure, and `purge` only runs post-construction, so no TDZ.)
 
 - [ ] **Step 5: Run → passes.** Then `npm test -- src/utils/combat/__tests__/cleanseRemoval.test.ts` to confirm cleanse/purge characterization tests still pass.
 
