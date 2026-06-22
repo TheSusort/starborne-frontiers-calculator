@@ -187,7 +187,8 @@ describe('D-PR13 Task 2 — Disable turn-skip: (i) disabled enemy skips its acti
          * Setup (mirrors stasis (i) but with Disable):
          *   - Focus at POS_FOCUS fires `front` with disableInflictAttack(2) EVERY round.
          *     player speed 100 > enemy speed 1 → focus always acts before enemy-front.
-         *   - The focus re-applies Disable each round, perpetually keeping enemy-front disabled.
+         *   - Because familyApplicationWins allows overwrite when new duration > remaining,
+         *     the focus re-applies Disable each round, perpetually keeping enemy-front disabled.
          *   - enemy-front is therefore NEVER able to act across all 4 rounds.
          *   - enemy-back at M1 is not targeted (focus targets 'front' = M4) → acts normally
          *     every round (control).
