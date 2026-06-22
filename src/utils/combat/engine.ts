@@ -78,6 +78,7 @@ import {
     selfBuffNamesForOwners,
     victimEnemyBuffs,
 } from './triggers';
+import { adjacentAllyIds } from './adjacency';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
  *  conditions stay true re-fires on the extra turn it granted). Real texts are
@@ -1032,6 +1033,8 @@ interface ReactiveSideCtx {
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
+    adjacentAllyIdsFor: (ownerId: string) => string[];
 }
 
 /** Per-victim incoming accounting bucket (PR5a foundation — written in parallel with the
@@ -1744,6 +1747,9 @@ export function runCombat(input: CombatEngineInput): {
          *  defaults to 100). Enemy side returns 100 for every owner (no per-actor enemy HP until
          *  PR5). Consumed in Task 2. */
         selfHpPctFor?: (ownerId: string) => number;
+        /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
+         *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
+        adjacentAllyIdsFor: (ownerId: string) => string[];
     }
 
     const buildSideContext = (side: Side): SideContext => {
@@ -1777,6 +1783,7 @@ export function runCombat(input: CombatEngineInput): {
                           }
                         : undefined
                     : (): number => 100,
+            adjacentAllyIdsFor: (ownerId: string): string[] => adjacentAllyIds(ownerId, actors),
         };
     };
 
@@ -3373,6 +3380,9 @@ export function runCombat(input: CombatEngineInput): {
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
                         // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
                         wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
+                        // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
+                        // per-side from sideCtx; positional neighbours, else all same-side allies.
+                        adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
                     });
                 }
             }
@@ -3405,6 +3415,7 @@ export function runCombat(input: CombatEngineInput): {
                 grantAllyCharges: bySide('player').grantAllyCharges,
                 selfHpPctFor: bySide('player').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
+                adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
             });
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
@@ -3426,6 +3437,7 @@ export function runCombat(input: CombatEngineInput): {
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
+                adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
             });
         };
 
