@@ -90,6 +90,14 @@ export function toEnemyModifiers(selected: SelectedGameBuff[]): {
     };
 }
 
+/** Sum the self-/friendly-side incoming-DIRECT-damage modifier from a victim's OWN buffs.
+ *  Mirror of toEnemyModifiers' incoming reducer, but for friendly buffs (Inc. Damage Down/Up).
+ *  Negative = less damage taken; positive = more. Summed into the same per-victim
+ *  incomingDamageModifier as enemy-side debuffs (engine victimIncomingModifiers, D-PR12). */
+export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): number {
+    return selected.reduce((sum, s) => sum + (s.parsedEffects.incomingDamage ?? 0) * s.stacks, 0);
+}
+
 export function toDotAndPenModifiers(
     attacker: SelectedGameBuff[],
     enemy: SelectedGameBuff[]
