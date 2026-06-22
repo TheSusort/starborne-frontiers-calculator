@@ -33,7 +33,7 @@ gear stats already folded into combat stats — out of scope; this PR adds only 
 special-effect ability. The `description` string is used solely as a presence gate
 (the D-PR1 convention); the magnitudes are baked into the registry from constants.
 
-The granted buff is **Defense Up I** (`src/constants/buffs.ts:654`), which folds through
+The granted buff is **Defense Up I** (`src/constants/buffs.ts:659`, `+15% Defense`), which folds through
 the existing `defence` buff channel — no new fold work. The implant text says "Defense
 Up 1" (numeral); the registry hard-codes the corpus name `'Defense Up I'`.
 
@@ -122,10 +122,12 @@ adjacentAllyIdsFor(ownerId):
         return all OTHER living same-side actor ids            // non-positional fallback (§3.3)
 ```
 
-- `neighbors()` already encodes the game's 6-direction hex adjacency (board geometry
-  resolver, PR #106, user-verified cell-by-cell).
-- "Living" = not destroyed (same liveness predicate the engine already uses for roster
-  filtering; confirm exact accessor during implementation).
+- `neighbors()` (`src/utils/targeting/board.ts:56`, **not** under `combat/`) already
+  encodes the game's 6-direction hex adjacency (board geometry resolver, PR #106,
+  user-verified cell-by-cell).
+- "Living" = not destroyed. The engine's canonical destroyed signal is
+  `destroyedRound !== undefined` (engine.ts:3528-3546), **not** `currentHp <= 0` — use
+  that accessor.
 - The owner is **excluded** from its own grant ("adjacent allies", not "self + adjacent").
 
 ### 3.3 Non-positional fallback → all-allies (user decision)
@@ -135,10 +137,17 @@ returns **all same-side allies** (the user's chosen fallback), so the implant st
 meaningful effect off-board. This is side-correct (computed per-side) and degrades the
 positional "adjacent" set to the whole team when adjacency is undefined.
 
+**Current reality:** no production caller wires board `position` onto team actors yet —
+`position` is set-at-construction plumbing only; DPS, healing, *and* the simulator all
+pass no positions today. So in every current production path the **all-allies fallback is
+what runs**, and the true positional `neighbors()` branch is exercised **only by the new
+unit/integration tests** in this PR until a future PR wires real board positions from
+loadouts. The branch is built now so it's ready when positions arrive.
+
 **Golden safety:** no existing DPS or healing golden fixture equips Fortifying Shroud
-(true for every D-PR to date — effect-bearing gear is never present in goldens), so the
-all-allies fallback never fires in any golden → **zero golden / `.snap` churn**. The
-effect is exercised only by new tests and real loadouts.
+(true for every D-PR to date — effect-bearing gear is never present in goldens), so
+neither the positional branch nor the all-allies fallback fires in any golden → **zero
+golden / `.snap` churn**.
 
 ### 3.4 Registry entry
 
@@ -157,8 +166,8 @@ FORTIFYING_SHROUD: (rarity) => {
 
 `mkNamedBuffGrant` returns `undefined` for an unknown rarity (no common variant) or a
 missing buff — graceful skip, never throws (existing contract). `procChance` rides the
-D-PR8 buff-branch proc gate (`passesProcChanceGate`, triggers.ts:1058) keyed
-`${ownerId}:${ability.id}`. The ability id is suffixed with the gear-piece id
+D-PR8 buff-branch proc gate (`passesProcChanceGate`, defined triggers.ts:953, called in
+the buff branch triggers.ts:1058) keyed `${ownerId}:${ability.id}`. The ability id is suffixed with the gear-piece id
 (`equip-implant-FORTIFYING_SHROUD-${gearId}`) so duplicate copies get independent gates
 (D-PR1 convention).
 
@@ -243,10 +252,12 @@ discovered by `tsc` (exhaustive `Record`/`switch` errors) during implementation.
 - **Buff-duration timing:** "1 turn" granted at the owner's turn-start inherits the
   engine's existing buff-decrement timing (memory: `buff_duration_decrement_timing`). Not
   changed here; matches every other 1-turn reactive grant.
-- **Liveness accessor:** confirm the exact "is alive" predicate used by the engine roster
-  so dead adjacent allies are excluded consistently.
+- **Liveness accessor:** use `destroyedRound !== undefined` (engine.ts:3528-3546) so dead
+  adjacent allies are excluded consistently.
 - **All-allies fallback fidelity:** off-board the effect over-grants (whole team rather
-  than true neighbours). Accepted (user decision); only the simulator has real positions.
+  than true neighbours). Accepted (user decision). Note this is the *only* path that runs
+  in production today (no caller wires positions yet) — the positional branch is test-only
+  until a future PR supplies board positions.
 - **`start-of-turn` drain ordering:** confirm the per-turn drain that follows
   `turn-started` executes the enqueued intent within the same turn (the
   `on-charged-cast` precedent rides a later same-turn event and is drained, so this is
