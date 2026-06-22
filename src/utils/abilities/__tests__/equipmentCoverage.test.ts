@@ -354,8 +354,15 @@ describe('equipmentCoverage — implants', () => {
     });
 
     it('MARTYRDOM produces 1 ability for rare + legendary (Disable on killer on death; only 2 variants)', () => {
-        expect(implantAbilityCount('MARTYRDOM', 'rare')).toBe(1);
-        expect(implantAbilityCount('MARTYRDOM', 'legendary')).toBe(1);
+        // Unsupported rarities (no variant) produce nothing — symmetric with the
+        // siblings above, guarding against accidental expansion of supported rarities.
+        expect(implantAbilityCount('MARTYRDOM', 'common')).toBe(0);
+        expect(implantAbilityCount('MARTYRDOM', 'uncommon')).toBe(0);
+        expect(implantAbilityCount('MARTYRDOM', 'epic')).toBe(0);
+        const variants = IMPLANTS['MARTYRDOM'].variants;
+        for (const v of variants) {
+            expect(implantAbilityCount('MARTYRDOM', v.rarity)).toBe(1);
+        }
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));
