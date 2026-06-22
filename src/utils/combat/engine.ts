@@ -1711,8 +1711,8 @@ export function runCombat(input: CombatEngineInput): {
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
     /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
-     *  three turn-action gates and (in a later change) the reactive drain filter. The Stasis-only
-     *  break / immunity sites intentionally keep using isStasised — Disable never breaks. */
+     *  three turn-action gates AND the reactive drain filter (drainQueue). The Stasis-only break /
+     *  immunity sites intentionally keep using isStasised — Disable never breaks. */
     const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
@@ -3318,15 +3318,17 @@ export function runCombat(input: CombatEngineInput): {
                 // Snapshot this generation's batch; new enqueues during execution run next pass.
                 const batch = queue.splice(0, queue.length);
                 for (const intent of batch) {
-                    // §4.4 STASIS reactive suppression (B3): a stasised unit's reactives are FULLY locked out.
-                    // Drop every queued intent whose OWNER is currently stasised — on-attacked, on-ally-attacked,
-                    // on-crit, on-enemy-destroyed, AND start-of-round self-buffs (Chakara via round-started) all
-                    // carry intent.ownerId, so this ONE filter covers every reactive type for BOTH sides
-                    // (drainIntents and drainEnemyIntents share this drainQueue). Filtered at the DRAIN, before
-                    // executeIntent. Listeners only ENQUEUE (pure), so dropping an intent leaves NO partial state.
-                    // Incoming effects (damage/heals/ally buffs/DoT ticks) are UNTOUCHED — only the stasised
-                    // unit's OWN outgoing intents drop.
-                    if (isStasised(intent.ownerId)) continue;
+                    // §4.4 TURN-BLOCK reactive suppression (B3 / D-PR13): a turn-blocked unit's reactives are
+                    // FULLY locked out. Drop every queued intent whose OWNER is currently turn-blocked (Stasis OR
+                    // Disable) — on-attacked, on-ally-attacked, on-crit, on-enemy-destroyed, AND start-of-round
+                    // self-buffs (Chakara via round-started) all carry intent.ownerId, so this ONE filter covers
+                    // every reactive type for BOTH sides (drainIntents and drainEnemyIntents share this drainQueue).
+                    // Filtered at the DRAIN, before executeIntent. Listeners only ENQUEUE (pure), so dropping an
+                    // intent leaves NO partial state. Incoming effects (damage/heals/ally buffs/DoT ticks) are
+                    // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
+                    // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
+                    // directly — Disable never breaks and does not grant immunity.
+                    if (isTurnBlocked(intent.ownerId)) continue;
                     executeIntent(intent, {
                         round: r,
                         enemy,

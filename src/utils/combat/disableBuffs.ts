@@ -1,11 +1,10 @@
 /** Named debuffs that mean DISABLE — the game's second turn-skip control (after Stasis).
  *  While a unit carries an active Disable it cannot take its scheduled ACTION (active/charged
- *  skill + attack) and its reactive abilities are suppressed — IDENTICAL to Stasis on those two
- *  axes (recognized via the engine's `isTurnBlocked` composite; the reactive drain filter is
- *  routed through `isTurnBlocked` in the reactive-suppression task; until then a disabled unit's
- *  reactives still fire). DoTs still tick and all timed
- *  statuses (Disable included) still decrement on the skipped turn, so duration N skips exactly
- *  N scheduled actions.
+ *  skill + attack) and its reactive abilities ARE suppressed — IDENTICAL to Stasis on those two
+ *  axes (recognized via the engine's `isTurnBlocked` composite; the reactive drain filter routes
+ *  through `isTurnBlocked`, so a disabled unit's reactive intents are dropped at drain time).
+ *  DoTs still tick and all timed statuses (Disable included) still decrement on the skipped turn,
+ *  so duration N skips exactly N scheduled actions.
  *
  *  DIVERGES from Stasis on two axes (do NOT wire Disable into the Stasis-only sites):
  *    - NOT broken by a direct hit (Stasis is, see engine §4.5) — Disable persists when hit.

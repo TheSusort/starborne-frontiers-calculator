@@ -438,3 +438,278 @@ describe('D-PR13 Task 2 — Disable turn-skip: (iii) Disable does NOT break on a
         expect(result.rounds).toHaveLength(4);
     });
 });
+
+// ── B3 — reactive suppression while disabled ─────────────────────────────────────────────
+
+/**
+ * D-PR13 Task 3 — drain-time reactive suppression for Disable.
+ *
+ * While a unit is disabled, every queued reactive intent whose ownerId matches the
+ * disabled actor is dropped at drainQueue's per-intent loop — IDENTICAL to Stasis.
+ * This is achieved by routing the drain guard through `isTurnBlocked` (isStasised OR
+ * isDisabled) rather than only isStasised.
+ *
+ * Two invariants proved (mirroring B3 Task 1 (a) and (c) for Stasis):
+ *   (iv) on-attacked self-buff reactive on the PLAYER (focus) is suppressed while disabled.
+ *   (v)  INCOMING effects (DoT ticks) on the disabled actor are UNTOUCHED.
+ *
+ * Non-vacuity: the stasis B3 tests (a) and (d) prove the reactive fires absent the
+ * control; the symmetric structure here (same skill builder, same harness) guarantees
+ * the reactive WOULD fire if Disable were not present — suppression is real.
+ */
+
+// Skill helpers for Disable B3 tests ─────────────────────────────────────────────────────
+
+/**
+ * A passive `on-attacked` self-buff slot: 'Counter Shield' (+10% attack, duration 99).
+ * The focus carries this; when hit while NOT disabled it fires buff-applied 'Counter Shield'.
+ * While disabled the intent's ownerId === 'attacker' → dropped by the drain guard.
+ * (Copied from stasis.test.ts B3 — same helper, same semantics.)
+ */
+const onAttackedSelfBuffSlot = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-attacked',
+            config: {
+                type: 'buff',
+                buffName: 'Counter Shield',
+                stacks: 1,
+                parsedEffects: { attack: 10 },
+                isStackable: false,
+                duration: 99,
+            },
+        }),
+    ],
+});
+
+// ── (iv) on-attacked counter suppressed while disabled ────────────────────────────────────
+
+describe('D-PR13 Task 3 — reactive suppression: (iv) on-attacked self-buff suppressed while focus is disabled', () => {
+    it('a disabled focus does NOT receive its on-attacked buff when the enemy strikes it', () => {
+        idc = 0;
+        /**
+         * Setup (mirrors stasis B3 (a) but with Disable):
+         *   - Focus ('attacker') at POS_FOCUS carries onAttackedSelfBuffSlot.
+         *     Speed 50 — SLOWER than the enemies so the enemy acts FIRST each round.
+         *   - disable-enemy (id='disable-enemy', speed=200): fires disableInflictAttack(4)
+         *     at 'front' player (= focus at M4) in round 1. Disable(4) keeps the focus
+         *     disabled for rounds 1–4.
+         *   - attack-enemy (id='attack-enemy', speed=100): a bare flat-card attacker that
+         *     hits the focus every round (speed 100 > focus speed 50, acts before focus).
+         *   - numRounds: 4.
+         *
+         * Round ordering each round: disable-enemy(200) → attack-enemy(100) → focus(50)
+         *
+         * Round 1:
+         *   disable-enemy applies Disable(4) to focus.
+         *   attack-enemy attacks focus → focus is disabled → `attacked` event fires → listener
+         *   enqueues intent(ownerId='attacker') → drain guard: isTurnBlocked('attacker')=true → DROP.
+         *   No 'Counter Shield' buff-applied in round 1.
+         *   focus's own turn: disabled → skip.
+         *
+         * Rounds 2–4: attack-enemy attacks focus every round → intent dropped → no Counter Shield.
+         *
+         * Assert: zero 'buff-applied' events for 'Counter Shield' on actorId='attacker' across
+         *   all 4 rounds (the listener fires, the intent enqueues, but drain discards it).
+         */
+        const bus = createEventBus();
+        const buffApplied: CombatEvent[] = [];
+        bus.on('buff-applied', (e) => buffApplied.push(e as CombatEvent));
+
+        runCombat({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [onAttackedSelfBuffSlot()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 4,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0, // focus cannot inflict anything
+            speed: 50, // SLOWER than all enemies → enemies always act before focus
+            healTargetId: 'attacker',
+            position: POS_FOCUS, // M4 = front-most player
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            bus,
+            enemyAttackers: [
+                // disable-enemy: applies Disable(4) to the front player (focus).
+                {
+                    id: 'disable-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 200, // fastest — acts first
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_FRONT,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [disableInflictAttack(4)] },
+                } as EnemyAttacker,
+                // attack-enemy: bare attacker that triggers the on-attacked listener each round.
+                {
+                    id: 'attack-enemy',
+                    stats: {
+                        attack: 100,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 100, // acts after disable-enemy, before focus
+                        security: 0,
+                        hacking: 0,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: POS_ENEMY_BACK,
+                    target: parsedTarget('front'),
+                    pattern: basePattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as EnemyAttacker,
+            ],
+        });
+
+        // The on-attacked intent was enqueued each round (the enemy hit the focus), but the
+        // drain guard must have dropped every one (focus disabled rounds 1–4).
+        // → Zero 'Counter Shield' buff-applied events for the focus.
+        const counterShield = buffApplied.filter(
+            (e): e is Extract<CombatEvent, { type: 'buff-applied' }> =>
+                e.type === 'buff-applied' &&
+                e.actorId === 'attacker' &&
+                e.buffName === 'Counter Shield'
+        );
+        expect(counterShield).toHaveLength(0);
+    });
+});
+
+// ── (v) incoming DoT still ticks on a disabled actor ─────────────────────────────────────
+
+describe('D-PR13 Task 3 — reactive suppression: (v) incoming DoT still ticks on a disabled actor', () => {
+    it('a DoT applied by an enemy still ticks on the disabled focus — incoming effects are not suppressed', () => {
+        idc = 0;
+        /**
+         * Mirrors stasis B3 (c): only the disabled actor's OWN outgoing intents are suppressed.
+         * Incoming DoT ticks (tickDoTs at turn-start) are completely unaffected.
+         *
+         * Setup: dot-disable-enemy applies Corrosion + Disable(2) in round 1.
+         *   dot-disable-enemy (speed=120) acts BEFORE focus (speed=50) in every round.
+         *   Round 1: applies Corrosion(tier=5, stacks=3, dur=10) + Disable(2) to focus.
+         *   Rounds 1–2: focus disabled; dot-ticked events must still appear for 'attacker'.
+         *
+         * Assert: dot-ticked events for targetId='attacker' fire in both round 1 AND round 2
+         *   (incoming effects are untouched regardless of Disable).
+         */
+        const { events } = run({
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            hacking: 0,
+            speed: 50, // focus slower → enemy always acts first
+            healTargetId: 'attacker',
+            enemyAttackers: [
+                {
+                    id: 'dot-disable-enemy',
+                    stats: {
+                        attack: 1000,
+                        crit: 0,
+                        critDamage: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 120, // fast — always acts before the focus
+                        security: 0,
+                        hacking: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    shipSkills: {
+                        slots: [
+                            {
+                                slot: 'active',
+                                abilities: [
+                                    // Apply corrosion DoT
+                                    ab({
+                                        type: 'dot',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'dot',
+                                            dotType: 'corrosion',
+                                            tier: 5,
+                                            stacks: 3,
+                                            duration: 10,
+                                        },
+                                    }),
+                                    // Apply Disable to the heal target
+                                    ab({
+                                        type: 'debuff',
+                                        target: 'enemy',
+                                        config: {
+                                            type: 'debuff',
+                                            buffName: 'Disable',
+                                            application: 'inflict',
+                                            duration: 2,
+                                            stacks: 1,
+                                            isStackable: false,
+                                            parsedEffects: {},
+                                        },
+                                    }),
+                                ],
+                            },
+                        ],
+                    },
+                } as EnemyAttacker,
+            ],
+        });
+
+        const dotTicked = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'dot-ticked' }> => e.type === 'dot-ticked'
+        );
+
+        // Focus is disabled in rounds 1–2 (enemy acts first in round 1 and applies both DoT
+        // and Disable, then focus's turn is skipped in rounds 1–2 but DoT ticks at turn-start).
+        // Incoming DoT must still fire for 'attacker' in rounds 1 AND 2.
+        const dotRoundsForFocus = dotTicked
+            .filter((e) => e.targetId === 'attacker')
+            .map((e) => e.round);
+        expect(dotRoundsForFocus).toContain(1);
+        expect(dotRoundsForFocus).toContain(2);
+    });
+});
