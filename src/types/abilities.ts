@@ -30,6 +30,9 @@ export type AbilityTarget =
     | 'self'
     | 'ally'
     | 'all-allies'
+    | 'adjacent-allies' // Fortifying Shroud: living same-side allies on neighbouring board
+    // cells (non-positional → all same-side allies). Resolved via
+    // IntentExecContext.adjacentAllyIdsFor.
     | 'enemy'
     | 'all-enemies'
     | 'enemy-most-buffs';
@@ -43,6 +46,8 @@ export type AbilityTarget =
 export type AbilityTrigger =
     | 'on-cast'
     | 'start-of-round'
+    | 'start-of-turn' // Fortifying Shroud: fires at the OWNER's own turn-start (rides the
+    // per-actor turn-started event; self-scoped on actorId === ownerId)
     | 'end-of-round' // Rhodium end-of-round purge — C2b-2
     | 'on-crit'
     | 'on-debuff-inflicted'
@@ -90,6 +95,7 @@ export type AbilityTrigger =
  */
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
+    'start-of-turn',
     'end-of-round', // Rhodium end-of-round purge — C2b-2
     'on-crit',
     'on-debuff-inflicted',

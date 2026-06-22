@@ -7,6 +7,15 @@
  *     (back-loaded: calls 5, 10). Must NOT be 10 (absent gate = broken behavior).
  * (b) A reactive `buff` intent WITHOUT procChance applies the buff on every call
  *     (pass-through — byte-identical to today).
+ *
+ * D-PR11 Task 3: `adjacent-allies` buff target recipient resolution.
+ *
+ * Tests that:
+ * (c) A buff intent with target `'adjacent-allies'` and a stub
+ *     `ctx.adjacentAllyIdsFor` lands on exactly the two adjacent-ally ids returned
+ *     by the delegate (NOT the owner, NOT a non-adjacent ally).
+ * (d) When `ctx.adjacentAllyIdsFor` is absent (undefined), recipients fall back to
+ *     `ctx.playerIds` (all same-side allies, owner included).
  */
 import { describe, it, expect } from 'vitest';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
@@ -57,6 +66,31 @@ function makeBuffIntent(opts?: { procChance?: number }): Intent {
  * Condition gate: intent.ability.conditions is [] → conditionsMet → passes.
  * StatusEngine must be advanced to round 1 (beginRound) before executeIntent is called.
  */
+const ALLY1_ID = 'ally1';
+const ALLY2_ID = 'ally2';
+const NON_ADJACENT_ID = 'non-adjacent';
+
+function makeAdjacentBuffIntent(): Intent {
+    return {
+        ownerId: OWNER_ID,
+        sourceSlot: 'passive',
+        ability: {
+            id: 'fortifying-shroud-ab',
+            type: 'buff',
+            target: 'adjacent-allies',
+            trigger: 'start-of-turn',
+            conditions: [],
+            config: {
+                type: 'buff',
+                buffName: 'Defense Up',
+                stacks: 1,
+                duration: 1,
+                parsedEffects: {},
+            },
+        },
+    } as unknown as Intent;
+}
+
 function makeCtx(opts?: {
     procChanceGates?: Map<string, ReturnType<typeof makeRateGate>>;
 }): IntentExecContext & { buffAppliedEvents: string[] } {
@@ -121,6 +155,78 @@ function makeCtx(opts?: {
     return ctx;
 }
 
+/**
+ * Build a minimal IntentExecContext for the `adjacent-allies` buff branch.
+ *
+ * playerIds = [OWNER_ID, ALLY1_ID, ALLY2_ID, NON_ADJACENT_ID] — the full same-side roster.
+ * adjacentAllyIdsFor (when provided) returns [ALLY1_ID, ALLY2_ID] for OWNER_ID.
+ *
+ * The buff-applied actorId tracks which recipients were actually granted the buff.
+ */
+function makeAdjacentCtx(opts?: {
+    includeAdjacentDelegate?: boolean;
+}): IntentExecContext & { appliedActorIds: string[] } {
+    const bus = createEventBus();
+    const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    se.beginRound(1);
+
+    const appliedActorIds: string[] = [];
+    bus.on('buff-applied', (e) => {
+        appliedActorIds.push(e.actorId);
+    });
+
+    const allPlayerIds = [OWNER_ID, ALLY1_ID, ALLY2_ID, NON_ADJACENT_ID];
+
+    const ctx = {
+        round: 1,
+        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
+        enemyId: 'enemy1',
+        statusEngine: se,
+        bus,
+        corrosionEntries: [],
+        infernoEntries: [],
+        pendingBombs: [],
+        runtimes: new Map([
+            [
+                OWNER_ID,
+                {
+                    actor: { id: OWNER_ID, chargeCount: 0, charges: 0 } as unknown as CombatActor,
+                    attack: 10000,
+                    defence: 0,
+                    hp: 10000,
+                    healModifier: 0,
+                    selfDotModifier: 0,
+                    defensePenetrationBuff: 0,
+                    affinityDamageModifier: 0,
+                    affinityCritCap: 100,
+                    affinityCritPenalty: 0,
+                    affinityDisadvantage: false,
+                    selfBuffLookup: new Map(),
+                    enemyDebuffLookup: new Map(),
+                } as never,
+            ],
+        ]),
+        grantAllyCharges: () => {},
+        grantExtraAction: () => {},
+        playerIds: allPlayerIds,
+        lastTurnCtxByActor: new Map([
+            [OWNER_ID, { effectiveAttack: 10000, affinityMult: 1 } as never],
+        ]),
+        enemyHp: 100000,
+        cumulativeDamage: 0,
+        recordResisted: () => {},
+        ...(opts?.includeAdjacentDelegate
+            ? {
+                  adjacentAllyIdsFor: (ownerId: string) =>
+                      ownerId === OWNER_ID ? [ALLY1_ID, ALLY2_ID] : [],
+              }
+            : {}),
+    } as unknown as IntentExecContext & { appliedActorIds: string[] };
+
+    (ctx as unknown as Record<string, unknown>).appliedActorIds = appliedActorIds;
+    return ctx;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -152,5 +258,31 @@ describe('D-PR8 T3: reactive buff branch — passesProcChanceGate', () => {
 
         // No gate → fires every time.
         expect(ctx.buffAppliedEvents).toHaveLength(4);
+    });
+});
+
+describe('D-PR11 T3: adjacent-allies buff target — recipient resolution', () => {
+    it('(c) with adjacentAllyIdsFor delegate: buff lands on exactly ally1 and ally2 (not owner, not non-adjacent)', () => {
+        const intent = makeAdjacentBuffIntent();
+        const ctx = makeAdjacentCtx({ includeAdjacentDelegate: true });
+
+        executeIntent(intent, ctx);
+
+        // Only the two adjacent allies should receive the buff.
+        expect(ctx.appliedActorIds).toEqual([ALLY1_ID, ALLY2_ID]);
+        // Owner must NOT be in the recipient list.
+        expect(ctx.appliedActorIds).not.toContain(OWNER_ID);
+        // Non-adjacent ally must NOT be in the recipient list.
+        expect(ctx.appliedActorIds).not.toContain(NON_ADJACENT_ID);
+    });
+
+    it('(d) without adjacentAllyIdsFor delegate: recipients fall back to ctx.playerIds (all same-side allies)', () => {
+        const intent = makeAdjacentBuffIntent();
+        const ctx = makeAdjacentCtx({ includeAdjacentDelegate: false });
+
+        executeIntent(intent, ctx);
+
+        // Falls back to the full playerIds list: [OWNER_ID, ALLY1_ID, ALLY2_ID, NON_ADJACENT_ID].
+        expect(ctx.appliedActorIds).toEqual([OWNER_ID, ALLY1_ID, ALLY2_ID, NON_ADJACENT_ID]);
     });
 });

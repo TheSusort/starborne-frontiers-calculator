@@ -3263,6 +3263,106 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
 });
 
 // ----------------------------------------------------------------------
+// D-PR11: start-of-turn trigger — self-scoped on turn-started.
+//
+// Fortifying Shroud fires once at the START of the owner's OWN turn
+// (not every actor's turn). The engine emits `turn-started` once per actor
+// per round; the listener must enqueue ONLY when actorId === ownerId.
+//
+// Pattern mirrors on-cheat-death-activated (self-scoped event subscription).
+// ----------------------------------------------------------------------
+describe('start-of-turn live trigger (D-PR11)', () => {
+    // A minimal reactive buff ability carrying the start-of-turn trigger.
+    const startOfTurnBuff = (): Ability => ({
+        id: 'sot-buff',
+        type: 'buff',
+        target: 'self',
+        trigger: 'start-of-turn',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'Fortifying Shroud',
+            stacks: 1,
+            parsedEffects: { defense: 20 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    function emitTurnStarted(ownerId: string, actorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: startOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId, reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'turn-started', actorId, round: 1 });
+        return intents;
+    }
+
+    it("start-of-turn enqueues on the owner's own turn-started, not another actor's", () => {
+        // Non-owner's turn-started: must NOT enqueue
+        const bus = createEventBus();
+        const queue: Intent[] = [];
+        const ra: ReactiveAbility = { ability: startOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => queue.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+
+        bus.emit({ type: 'turn-started', actorId: 'B', round: 1 });
+        expect(queue.length).toBe(0);
+
+        bus.emit({ type: 'turn-started', actorId: 'A', round: 1 });
+        expect(queue.length).toBe(1);
+        expect(queue[0].ownerId).toBe('A');
+        expect(queue[0].ability.trigger).toBe('start-of-turn');
+    });
+
+    it('enqueues the intent when the owner own turn-started fires', () => {
+        const intents = emitTurnStarted('A', 'A');
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('A');
+        expect(intents[0].ability.trigger).toBe('start-of-turn');
+    });
+
+    it('does NOT enqueue when a DIFFERENT actor turn-started fires', () => {
+        expect(emitTurnStarted('A', 'B')).toHaveLength(0);
+    });
+
+    it('listener is pure: no enqueue on registration, only on matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: startOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'turn-started', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'turn-started', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+
+    it('LIVE_TRIGGERS contains start-of-turn', () => {
+        expect(LIVE_TRIGGERS.has('start-of-turn')).toBe(true);
+    });
+
+    it('AbilityTrigger includes start-of-turn (type-level compile check)', () => {
+        const _trigger: AbilityTrigger = 'start-of-turn';
+        expect(_trigger).toBe('start-of-turn');
+    });
+});
+
+// ----------------------------------------------------------------------
 // C2b-1 — purge partition guard.
 // An `on-cast` purge ability MUST stay in castSkills (the on-cast path
 // handles it). An `on-enemy-purged` purge ability MUST route to

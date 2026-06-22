@@ -3127,3 +3127,322 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
         expect(grantedAttackUp).toBe(false);
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR11 integration — Fortifying Shroud adjacent-allies buff: positional
+//   recipient resolution through the real engine delegate (board positions wired).
+//
+// Goal: prove that when an owner with `target:'adjacent-allies'` + `trigger:'start-of-turn'`
+// fires its start-of-turn reactive buff, ONLY the living allies on neighbouring board cells
+// receive the buff — NOT the owner itself, NOT a non-adjacent ally.
+//
+// Board layout (M2 neighbours per board.ts: T1, T2, M1, M3, B1, B2):
+//   Owner  : M2  (the focus 'attacker')
+//   ally-T2: T2  (adjacent   → must receive the buff)
+//   ally-M3: M3  (adjacent   → must receive the buff)
+//   ally-B4: B4  (NON-adjacent → must NOT receive the buff — the crux non-vacuity assertion)
+//
+// Test strategy:
+//   Inject the Fortifying-Shroud-shaped ability directly into the focus actor's passive slot
+//   (procChance omitted → deterministic, fires every owner turn), run 1 round, and collect
+//   'buff-applied' events via the event bus. Assert the actorId set exactly: {ally-T2, ally-M3}.
+//   A second test mirrors this on the ENEMY SIDE to prove team-agnosticism.
+//
+// Why a test ability rather than the real registry implant:
+//   The legendary Fortifying Shroud procChance (0.32) is non-deterministic over a single turn;
+//   verifying adjacency via the real registry implant would require running enough rounds to
+//   force a proc, making the test fragile. By dropping procChance we get determinism and keep
+//   the assertion focused on the adjacency + trigger + engine-delegate path (which is exactly
+//   what Task 5 registers and D-PR11 T3 already proved at the executor level — this task proves
+//   it end-to-end through runCombat with real board positions).
+// ---------------------------------------------------------------------------
+
+/** Minimal walked team actor placed at a board position. No skills, high HP, no damage. */
+function makePositionedAlly(id: string, position: Position): TeamActorEngineInput {
+    return {
+        id,
+        speed: 50, // slower than the focus (100) so the focus always acts first
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    };
+}
+
+/** The Fortifying Shroud ability with procChance OMITTED for determinism.
+ *  Fires on start-of-turn (self-scoped) and grants 'Defense Up I' to adjacent allies. */
+const fortifyingShroudAbility: Ability = {
+    id: 'test-fortifying-shroud',
+    type: 'buff',
+    target: 'adjacent-allies',
+    trigger: 'start-of-turn',
+    conditions: [],
+    // No procChance → the proc gate is absent → buff fires on every owner turn (deterministic).
+    config: {
+        type: 'buff',
+        buffName: 'Defense Up I',
+        stacks: 1,
+        isStackable: false,
+        duration: 1,
+        parsedEffects: {},
+    },
+    autoFilled: true,
+};
+
+/** A no-op active so the focus actor takes a turn (required to emit turn-started). */
+const noopDmgActive: Ability = {
+    id: 'noop-dmg',
+    type: 'damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'damage', multiplier: 0 },
+};
+
+/** Base engine input for the Fortifying Shroud tests: focus at M2, healing mode (required
+ *  for team actors), 1 round. The event bus is injected per-call so we can observe events. */
+function makeShroudInput(
+    bus: ReturnType<typeof createEventBus>,
+    teamActors: TeamActorEngineInput[],
+    opts: { focusPosition?: Position; side?: 'player' } = {}
+): CombatEngineInput {
+    return {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [noopDmgActive] },
+                { slot: 'passive', abilities: [fortifyingShroudAbility] },
+            ],
+        },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        // Healing mode is required to use team actors.
+        healTargetId: 'attacker',
+        position: opts.focusPosition ?? 'M2',
+        teamActors,
+        bus,
+        speed: 100,
+    };
+}
+
+describe('D-PR11 integration — Fortifying Shroud: positional adjacent-allies buff (player side)', () => {
+    /**
+     * Board layout:
+     *   Owner  : M2  (focus 'attacker')
+     *   ally-T2: T2  (adjacent to M2 — receives Defense Up I)
+     *   ally-M3: M3  (adjacent to M2 — receives Defense Up I)
+     *   ally-B4: B4  (NON-adjacent to M2 — must NOT receive the buff; the crux assertion)
+     *
+     * After the owner's first turn (start-of-turn fires the ability), we expect exactly:
+     *   - ally-T2 got Defense Up I
+     *   - ally-M3 got Defense Up I
+     *   - 'attacker' (owner) did NOT get the buff
+     *   - ally-B4 (non-adjacent) did NOT get the buff
+     */
+    it('buff lands on exactly the two adjacent allies (T2, M3) — NOT the owner, NOT the non-adjacent ally (B4)', () => {
+        const bus = createEventBus();
+
+        const buffGrantedTo = new Set<string>();
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Defense Up I') buffGrantedTo.add(e.actorId);
+        });
+
+        const teamActors: TeamActorEngineInput[] = [
+            makePositionedAlly('ally-T2', 'T2'),
+            makePositionedAlly('ally-M3', 'M3'),
+            makePositionedAlly('ally-B4', 'B4'),
+        ];
+
+        runCombat(makeShroudInput(bus, teamActors));
+
+        // Adjacent allies get the buff.
+        expect(buffGrantedTo.has('ally-T2')).toBe(true);
+        expect(buffGrantedTo.has('ally-M3')).toBe(true);
+
+        // Non-vacuity: the non-adjacent ally must NOT have the buff.
+        expect(buffGrantedTo.has('ally-B4')).toBe(false);
+
+        // The owner must NOT grant the buff to itself.
+        expect(buffGrantedTo.has('attacker')).toBe(false);
+
+        // Exactly two recipients — no spurious extras.
+        expect(buffGrantedTo.size).toBe(2);
+    });
+
+    it('without board positions (non-positional): buff falls back to all same-side allies (all-allies)', () => {
+        // When no positions are wired, adjacentAllyIds falls back to all living same-side
+        // allies (owner excluded). The ability still fires (start-of-turn, no procChance),
+        // and all three team actors receive the buff.
+        const bus = createEventBus();
+
+        const buffGrantedTo = new Set<string>();
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Defense Up I') buffGrantedTo.add(e.actorId);
+        });
+
+        // Team actors without position (non-positional path).
+        const teamActors: TeamActorEngineInput[] = [
+            makePositionedAlly('ally-A', 'T2'),
+            makePositionedAlly('ally-B', 'M3'),
+            makePositionedAlly('ally-C', 'B4'),
+        ].map((a) => ({ ...a, position: undefined }));
+
+        // Focus also without position.
+        const input: CombatEngineInput = {
+            ...makeShroudInput(bus, teamActors),
+            position: undefined,
+        };
+
+        runCombat(input);
+
+        // Without positions all three allies get the buff (all-allies fallback).
+        expect(buffGrantedTo.has('ally-A')).toBe(true);
+        expect(buffGrantedTo.has('ally-B')).toBe(true);
+        expect(buffGrantedTo.has('ally-C')).toBe(true);
+        // Owner still excluded (adjacentAllyIds always excludes the owner).
+        expect(buffGrantedTo.has('attacker')).toBe(false);
+        expect(buffGrantedTo.size).toBe(3);
+    });
+});
+
+describe('D-PR11 integration — Fortifying Shroud: enemy-side mirror (team-agnosticism)', () => {
+    /**
+     * Mirror test: place the Fortifying Shroud owner on the ENEMY side to prove the engine's
+     * `adjacentAllyIdsFor` delegate is correctly wired for enemy actors too.
+     *
+     * Setup: one enemy attacker at M2 carries the test ability; two enemy bystanders at T2
+     * and M3 (adjacent); one enemy bystander at B4 (non-adjacent). The player team is the
+     * focus ('attacker') and two passive allies, all with enough HP to survive.
+     *
+     * Observable: 'buff-applied' events — the enemy actor at M2 fires its start-of-turn
+     * reactive buff; the engine's enemy-side sideCtx.adjacentAllyIdsFor routes the recipients
+     * to exactly the enemy actors at T2 and M3, and B4 is excluded.
+     *
+     * Why we can observe enemy-side buffs: the status engine and bus are shared between player
+     * and enemy turns, so enemy buff-applied events are emitted on the same bus.
+     */
+    it('enemy owner at M2 grants Defense Up I to enemy-side adjacent allies (T2, M3) — NOT B4', () => {
+        const bus = createEventBus();
+
+        const buffGrantedTo = new Set<string>();
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Defense Up I') buffGrantedTo.add(e.actorId);
+        });
+
+        /** A positioned enemy attacker (active skill: deal 0 damage; passive: Fortifying Shroud). */
+        const shroudEnemy = (
+            id: string,
+            position: Position,
+            withShroud: boolean
+        ): NonNullable<CombatEngineInput['enemyAttackers']>[number] => ({
+            id,
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                speed: 10, // all enemies slower than the focus (100); order within enemy side is speed-based
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position,
+            shipSkills: {
+                slots: withShroud
+                    ? [
+                          { slot: 'active', abilities: [noopDmgActive] },
+                          { slot: 'passive', abilities: [fortifyingShroudAbility] },
+                      ]
+                    : [{ slot: 'active', abilities: [noopDmgActive] }],
+            },
+        });
+
+        const input: CombatEngineInput = {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [noopDmgActive] }],
+            },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            // Healing mode is required for enemy attackers to be populated.
+            healTargetId: 'attacker',
+            speed: 100,
+            bus,
+            enemyAttackers: [
+                shroudEnemy('enemy-M2', 'M2', true), // the owner: carries Fortifying Shroud
+                shroudEnemy('enemy-T2', 'T2', false), // adjacent to M2 → should receive buff
+                shroudEnemy('enemy-M3', 'M3', false), // adjacent to M2 → should receive buff
+                shroudEnemy('enemy-B4', 'B4', false), // NON-adjacent → must NOT receive buff
+            ],
+        };
+
+        runCombat(input);
+
+        // Adjacent enemy-side allies receive the buff.
+        expect(buffGrantedTo.has('enemy-T2')).toBe(true);
+        expect(buffGrantedTo.has('enemy-M3')).toBe(true);
+
+        // Non-vacuity: the non-adjacent enemy ally must NOT have the buff.
+        expect(buffGrantedTo.has('enemy-B4')).toBe(false);
+
+        // The owner must NOT grant the buff to itself.
+        expect(buffGrantedTo.has('enemy-M2')).toBe(false);
+
+        // No player-side actor should ever receive an enemy-side buff grant.
+        expect(buffGrantedTo.has('attacker')).toBe(false);
+
+        // Exactly two recipients.
+        expect(buffGrantedTo.size).toBe(2);
+    });
+});

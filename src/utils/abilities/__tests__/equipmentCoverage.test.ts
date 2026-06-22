@@ -17,6 +17,7 @@
  * D-PR7 added the on-death family (LAST_WISH, BATTLECRY, MARTYRDOM).
  * D-PR8 added reactive self-buffs (SYNAPTIC_RESONANCE, ALACRITY, AMBUSH).
  * D-PR9 added ally-wide / new-trigger buff grants (SPEARHEAD, FONT_OF_POWER).
+ * D-PR11 added adjacent-ally buff grant (FORTIFYING_SHROUD).
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
@@ -104,7 +105,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + FONT_OF_POWER + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -134,6 +135,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'BLOODTHIRST',
             'EXUBERANCE',
             'FONT_OF_POWER',
+            'FORTIFYING_SHROUD',
             'GIANT_SLAYER',
             'INSIDIOUSNESS',
             'IRONCLAD',
@@ -220,6 +222,7 @@ describe('equipmentCoverage — implants', () => {
         'AMBUSH',
         'SPEARHEAD',
         'FONT_OF_POWER',
+        'FORTIFYING_SHROUD',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -409,6 +412,17 @@ describe('equipmentCoverage — implants', () => {
         const SUPPORTED = new Set(['rare', 'epic', 'legendary']);
         for (const v of IMPLANTS['FONT_OF_POWER'].variants) {
             expect(implantAbilityCount('FONT_OF_POWER', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    // D-PR11: adjacent-ally buff grant
+    it('FORTIFYING_SHROUD produces 1 adjacent-allies Defense Up I buff for uncommon/rare/epic/legendary (start-of-turn, procChance); no common variant', () => {
+        expect(implantAbilityCount('FORTIFYING_SHROUD', 'common')).toBe(0);
+        const SUPPORTED = new Set(['uncommon', 'rare', 'epic', 'legendary']);
+        for (const v of IMPLANTS['FORTIFYING_SHROUD'].variants) {
+            expect(implantAbilityCount('FORTIFYING_SHROUD', v.rarity)).toBe(
                 SUPPORTED.has(v.rarity) ? 1 : 0
             );
         }

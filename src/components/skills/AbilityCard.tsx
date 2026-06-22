@@ -65,6 +65,7 @@ const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
     { value: 'self', label: 'Self' },
     { value: 'ally', label: 'Ally' },
     { value: 'all-allies', label: 'All allies' },
+    { value: 'adjacent-allies', label: 'Adjacent allies' },
     { value: 'enemy', label: 'Enemy' },
     { value: 'all-enemies', label: 'All enemies' },
 ];
@@ -125,6 +126,7 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
 
 const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-cast', label: 'On cast (default)' },
+    { value: 'start-of-turn', label: 'Start of own turn' },
     { value: 'start-of-round', label: 'Start of round' },
     { value: 'on-crit', label: 'On critical hit' },
     { value: 'on-attacked', label: 'When attacked' },
