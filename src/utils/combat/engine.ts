@@ -55,6 +55,7 @@ import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
+import { isDisable } from './disableBuffs';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import {
@@ -1708,6 +1709,11 @@ export function runCombat(input: CombatEngineInput): {
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
+    const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
+    /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
+     *  three turn-action gates and (in a later change) the reactive drain filter. The Stasis-only
+     *  break / immunity sites intentionally keep using isStasised — Disable never breaks. */
+    const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
@@ -3687,7 +3693,7 @@ export function runCombat(input: CombatEngineInput): {
                     // skips exactly N scheduled actions (each skipped turn decrements Stasis).
                     // A stasised FOCUS actor must push a synthesized focus turn so the
                     // post-round `focusTurns.length` guard does not throw.
-                    if (!isStasised(actor.id)) {
+                    if (!isTurnBlocked(actor.id)) {
                         const target = parsedTargetFor(actor);
                         const pattern = parsedPatternFor(actor);
                         // Positional target selection (Task C1, GATED). When the focus attacker
@@ -3875,7 +3881,7 @@ export function runCombat(input: CombatEngineInput): {
                     // body. The DoT-tick prologue (healTarget branch above) and Post-Turn decrements
                     // (below) still run. A walked team actor is never the focus → no focusTurns
                     // synthesis needed (no-else). §4.3 deviation: skip action, decrement preserved.
-                    if (!isStasised(actor.id)) {
+                    if (!isTurnBlocked(actor.id)) {
                         // Positional target selection (Task C2, GATED). Mirrors the focus-turn
                         // branch (C1) but keyed to THIS team actor's own board position
                         // (`actor.position`) and parsed target (`teamTargetById` lookup), not the
@@ -4087,7 +4093,7 @@ export function runCombat(input: CombatEngineInput): {
                     // action body and is correctly skipped — matches in-game "charges do not
                     // generate while stasised"). §4.3 deviation: skip action, decrement
                     // preserved. No cadence-advance in the skip path.
-                    if (!isStasised(actor.id)) {
+                    if (!isTurnBlocked(actor.id)) {
                         const enemyRuntime = runtimeFor(actor);
                         // Positional target selection (Task C3, side-symmetric, GATED). Mirrors the
                         // focus-turn (C1) and team-turn (C2) branches, but the OPPOSING roster from the
