@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: ships that grant themselves or allies Incoming Damage Down (Makoli, Salvation, Shelter, Refine) — and allies buffed by the Battlecry implant on death — now actually take reduced direct damage. Previously the buff appeared in the log but had no effect on damage taken.',
     'Combat simulator: lifesteal/leech (heal or shield from damage dealt or taken) now works per ship — each ship heals or shields itself off its own damage, and AoE splash leeches off the reduced (covered-cell) splash damage.',
     'Combat simulator: area-of-effect purge skills now remove buffs from every enemy they hit, not just the primary target.',
     "Combat simulator: Amartya's charge purge now scales with crit power — it removes 1 buff for every 50% crit power (so higher crit power purges more buffs), applied to every enemy hit.",
