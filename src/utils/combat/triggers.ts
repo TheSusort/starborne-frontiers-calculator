@@ -613,6 +613,10 @@ export interface IntentExecContext {
      *  is static turn-order in this sim). Absent → buildDrainContext defaults the gate to true
      *  (lone-actor DPS assumption). */
     isLowestSpeedAllyFor?: (ownerId: string) => boolean;
+    /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded), feeding the
+     *  `adjacent-allies` buff target. Engine-populated per side. Absent / undefined → the
+     *  recipient resolver falls back to ctx.playerIds (all same-side allies). */
+    adjacentAllyIdsFor?: (ownerId: string) => string[];
     /** Whether `ownerId` was hit by a direct attack this round, feeding the
      *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
@@ -1075,13 +1079,15 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // casterId = ownerId so its gate evaluates against the caster's ctx even when it
         // lives on another recipient.
         const recipients: string[] =
-            intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
-                ? intent.eventCtx.repairedAllyIds
-                : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
-                  ? [intent.eventCtx.damagedAllyId]
-                  : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
-                    ? ctx.playerIds
-                    : [intent.ownerId];
+            intent.ability.target === 'adjacent-allies'
+                ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
+                : intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
+                  ? intent.eventCtx.repairedAllyIds
+                  : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                    ? [intent.eventCtx.damagedAllyId]
+                    : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
+                      ? ctx.playerIds
+                      : [intent.ownerId];
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
         // CASTER's effective attack at grant time (the same last-turn ctx value that

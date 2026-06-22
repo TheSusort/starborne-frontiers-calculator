@@ -30,6 +30,9 @@ export type AbilityTarget =
     | 'self'
     | 'ally'
     | 'all-allies'
+    | 'adjacent-allies' // Fortifying Shroud: living same-side allies on neighbouring board
+    // cells (non-positional → all same-side allies). Resolved via
+    // IntentExecContext.adjacentAllyIdsFor.
     | 'enemy'
     | 'all-enemies'
     | 'enemy-most-buffs';
