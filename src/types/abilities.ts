@@ -35,7 +35,9 @@ export type AbilityTarget =
     // IntentExecContext.adjacentAllyIdsFor.
     | 'enemy'
     | 'all-enemies'
-    | 'enemy-most-buffs';
+    | 'enemy-most-buffs'
+    | 'enemy-highest-attack'; // D-PR14 Doomsayer: living opposing actor with the greatest
+    //                           live effective attack (global selector, resolved at drain).
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -167,7 +169,9 @@ export type ConditionSubject =
     // a direct attack that landed damage on shield or HP; DoT ticks and fully-Barrier-blocked
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
     // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
-    | 'not-hit-this-round';
+    | 'not-hit-this-round'
+    | 'first-activator'; // D-PR14 Doomsayer: this owner was the first actor to take a REAL
+    //                      (non-Stasis/Disable-skipped) turn this round.
 
 export interface Condition {
     subject: ConditionSubject;
@@ -423,6 +427,18 @@ export interface Ability {
      *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
      *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
     roleFilter?: ShipRoleCategory[];
+    /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
+     *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
+     *  proc draw, mark only on a successful proc). Absent → no per-round limit.
+     *  NOTE: distinct from the `oncePerRound` flag on the extra-action / incoming-block
+     *  AbilityConfig variants — this is the top-level Ability flag (read via
+     *  `intent.ability.oncePerRound`), honoring the spec's "no AbilityConfig change". */
+    oncePerRound?: boolean;
+    /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
+     *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
+     *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →
+     *  any ally (existing behavior). */
+    requireDamagedAllyAdjacent?: boolean;
     /** Probabilistic proc gate for equipment-sourced reactive abilities ("N% chance to …").
      *  A value in (0,1) means the ability fires at that rate via a combat-lifetime per-(owner,
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
