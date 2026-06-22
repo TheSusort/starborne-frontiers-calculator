@@ -45,8 +45,8 @@ single-ship DPS calculator — so **no DPS-page wiring** (unlike D-PR2's outgoin
 - `end-of-round` reactive trigger (live; `events.ts`, Rhodium/C2b-2 precedent).
 - `adjacentAllyIds(ownerId, actors)` (`adjacency.ts:21`) — degrades to all-living-allies in
   non-positional combat.
-- `rollRateGate(gates, key, chance)` (`calculators/rateAccumulator.ts:31`) +
-  `makeRateGate` deterministic proc accumulators.
+- `rollRateGate(gates, key, chance)` (`src/utils/calculators/rateAccumulator.ts:31`) +
+  `makeRateGate` (`:17`) deterministic proc accumulators.
 - Once-per-round pattern from D-PR3 `incoming-block`: `cfg.oncePerRound` flag + a consumed
   `Set` keyed `${ownerId}:${abilityId}`, with the **invariant**: check-consumed BEFORE
   drawing the gate, and mark consumed ONLY on a successful proc (engine.ts ~2607–2625).
@@ -134,7 +134,8 @@ check/roll/mark all happen executor-side, NOT in the listener.
 1. During the round the engine sets `firstActivatorId` once (first real turn).
 2. At `end-of-round`, Doomsayer's listener (owner) checks:
    a. **gate:** `ownerId === firstActivatorId` → else stop.
-   b. **proc roll:** per-rarity chance via `rollRateGate`.
+   b. **proc roll:** per-rarity chance via the executor's `passesProcChanceGate` (the
+      `end-of-round` listener only enqueues; gating is handled at drain, same as Bulwark).
 3. On success → `highestEffectiveAttackAmong(opposingRoster)`; no living enemy → no-op.
 4. Apply **Concentrate Fire** (1 turn, `casterId = ownerId`) to that enemy's per-target
    store.
@@ -196,7 +197,6 @@ timing change in this PR.
 ## Files touched
 
 - `src/constants/implants.ts` — (read-only; data already present, lines ~1428–1609).
-- `src/utils/abilities/buildEquipmentAbilities.ts` — 2 registry entries + 2 proc tables.
 - `src/utils/combat/engine.ts` — `firstActivatorId` round-state field + set-site (before
   `runPlayerTurn`, after all skip branches); `highestEffectiveAttackAmong` selector; bind
   `enemyWithHighestAttack` into `IntentExecContext` at both drain seams; Bulwark
