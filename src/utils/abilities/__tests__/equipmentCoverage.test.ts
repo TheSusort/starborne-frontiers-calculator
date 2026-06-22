@@ -18,6 +18,7 @@
  * D-PR8 added reactive self-buffs (SYNAPTIC_RESONANCE, ALACRITY, AMBUSH).
  * D-PR9 added ally-wide / new-trigger buff grants (SPEARHEAD, FONT_OF_POWER).
  * D-PR11 added adjacent-ally buff grant (FORTIFYING_SHROUD).
+ * D-PR14 added Provoke/Concentrate Fire debuff grants (BULWARK, DOOMSAYER).
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
@@ -105,7 +106,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + EXUBERANCE + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -133,6 +134,8 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'AMBUSH',
             'BATTLECRY',
             'BLOODTHIRST',
+            'BULWARK',
+            'DOOMSAYER',
             'EXUBERANCE',
             'FONT_OF_POWER',
             'FORTIFYING_SHROUD',
@@ -196,6 +199,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR6: EXUBERANCE added (repair-amplification on-repair chance).
     // D-PR7: LAST_WISH, BATTLECRY, MARTYRDOM added (on-death repair / buff to allies / disable killer).
     // D-PR8: SYNAPTIC_RESONANCE, ALACRITY, AMBUSH added (reactive self-buff grants).
+    // D-PR14: BULWARK, DOOMSAYER added (Provoke / Concentrate Fire debuff grants).
     const implementedImplants = new Set([
         'BLOODTHIRST',
         'INTRUSION',
@@ -223,6 +227,8 @@ describe('equipmentCoverage — implants', () => {
         'SPEARHEAD',
         'FONT_OF_POWER',
         'FORTIFYING_SHROUD',
+        'BULWARK',
+        'DOOMSAYER',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -423,6 +429,23 @@ describe('equipmentCoverage — implants', () => {
         const SUPPORTED = new Set(['uncommon', 'rare', 'epic', 'legendary']);
         for (const v of IMPLANTS['FORTIFYING_SHROUD'].variants) {
             expect(implantAbilityCount('FORTIFYING_SHROUD', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    // D-PR14: Provoke / Concentrate Fire debuff grants
+    it('BULWARK produces 1 ability per rarity (on-ally-attacked Provoke debuff, oncePerRound, adjacency-required)', () => {
+        for (const v of IMPLANTS['BULWARK'].variants) {
+            expect(implantAbilityCount('BULWARK', v.rarity)).toBe(1);
+        }
+    });
+
+    it('DOOMSAYER produces 1 ability for uncommon/rare/epic/legendary (end-of-round Concentrate Fire debuff, first-activator gate); no common variant', () => {
+        expect(implantAbilityCount('DOOMSAYER', 'common')).toBe(0);
+        const SUPPORTED = new Set(['uncommon', 'rare', 'epic', 'legendary']);
+        for (const v of IMPLANTS['DOOMSAYER'].variants) {
+            expect(implantAbilityCount('DOOMSAYER', v.rarity)).toBe(
                 SUPPORTED.has(v.rarity) ? 1 : 0
             );
         }
