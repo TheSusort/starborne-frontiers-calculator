@@ -164,7 +164,8 @@ function debuffApplied(
     const bus = createEventBus();
     const out: Array<{ sourceId: string; targetId: string; round: number }> = [];
     bus.on('debuff-applied', (e) => {
-        if (e.buffName === buffName) out.push({ sourceId: e.sourceId, targetId: e.targetId, round: e.round });
+        if (e.buffName === buffName)
+            out.push({ sourceId: e.sourceId, targetId: e.targetId, round: e.round });
     });
     runCombat({ ...input, bus });
     return out;
@@ -241,10 +242,10 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
     });
 
     it('applies at most once per round', () => {
-        // Two adjacent allies (T2, M3) are BOTH hit in one round (two enemy attackers, each
-        // hitting a different adjacent ally). The owner's on-ally-attacked listener fires twice,
-        // but oncePerRound consumes after the first successful proc → exactly one Provoke applied.
-        // healTargetId is T2; a second enemy is positioned to hit M3 via positional targeting.
+        // Two enemy attackers BOTH hit the same adjacent ally (T2) in one round. The owner's
+        // on-ally-attacked listener fires twice, but oncePerRound consumes after the first
+        // successful proc → exactly one Provoke applied. healTargetId is T2; both enemies are
+        // non-positional, so both land on T2.
         const events = debuffApplied(
             BASE({
                 numRounds: 1,
@@ -253,10 +254,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
                 healTargetId: 'ally-T2',
                 // Two enemies both hit the adjacent heal target T2 in the same round → two
                 // `attacked` events on an adjacent ally, so the listener enqueues twice.
-                enemyAttackers: [
-                    enemyHitter('enemy-1'),
-                    enemyHitter('enemy-2'),
-                ],
+                enemyAttackers: [enemyHitter('enemy-1'), enemyHitter('enemy-2')],
             }),
             'Provoke'
         );
@@ -413,7 +411,14 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
 
         const doomEnemy: EnemyAttacker = {
             id: 'enemy-doom',
-            stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 5000 },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 5000,
+            },
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [noopActive, { slot: 'passive', abilities: [doomsayerAbility] }] },
