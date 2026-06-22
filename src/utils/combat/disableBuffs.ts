@@ -6,9 +6,9 @@
  *  DoTs still tick and all timed statuses (Disable included) still decrement on the skipped turn,
  *  so duration N skips exactly N scheduled actions.
  *
- *  DIVERGES from Stasis on two axes (do NOT wire Disable into the Stasis-only sites):
- *    - NOT broken by a direct hit (Stasis is, see engine §4.5) — Disable persists when hit.
- *    - NO damage immunity — hits land normally (same as Stasis, which also takes damage).
+ *  DIVERGES from Stasis on ONE axis (do NOT wire Disable into the Stasis-only break/immunity
+ *  sites): it is NOT broken by a direct hit (Stasis is, see engine §4.5) — Disable persists when
+ *  hit. Like Stasis, a disabled unit has NO damage immunity — hits land normally.
  *
  *  Carried as a timed debuff in the victim's per-actor enemy-debuff store (decrements via the
  *  Post-Turn decrement). Disable carries no stat payload; duration comes from "for N turns".
