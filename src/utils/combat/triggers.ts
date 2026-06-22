@@ -229,8 +229,12 @@ export function registerReactiveListeners(args: {
      *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
      *  Optional: DPS-mode runs and unit fixtures omit it. */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
+    /** D-PR14 Bulwark: same-side ids adjacent to an owner (living, owner excluded; non-positional
+     *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
+     *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
+    adjacentAllyIdsFor?: (ownerId: string) => string[];
 }): void {
-    const { bus, perOwner, enqueue, isOpposing, roleOf } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
     // self-scoped triggers). For the player registration (opposing = enemy-side) this
     // is byte-identical to the old pattern.
@@ -404,6 +408,15 @@ export function registerReactiveListeners(args: {
                             roles &&
                             roles.length > 0 &&
                             !matchesRoleCategory(roleOf?.(e.targetId), roles)
+                        ) {
+                            return;
+                        }
+                        // D-PR14 Bulwark: fire only when the DAMAGED ally is adjacent to this
+                        // owner. Pure read (listener stays enqueue-only). Helper absent → allow.
+                        if (
+                            ra.ability.requireDamagedAllyAdjacent &&
+                            adjacentAllyIdsFor &&
+                            !adjacentAllyIdsFor(ownerId).includes(e.targetId)
                         ) {
                             return;
                         }

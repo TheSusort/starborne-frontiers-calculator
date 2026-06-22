@@ -2038,6 +2038,8 @@ export function runCombat(input: CombatEngineInput): {
         enqueue: (intent) => intentQueue.push(intent),
         isOpposing: isEnemySide,
         roleOf: (id) => roleByActorId.get(id),
+        adjacentAllyIdsFor: (ownerId: string) =>
+            bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
     });
 
     // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
@@ -2062,6 +2064,8 @@ export function runCombat(input: CombatEngineInput): {
             // (bySide PR2 — fixes the enemy reactive-routing bug).
             isOpposing: (id: string) => !isEnemySide(id),
             roleOf: (id) => roleByActorId.get(id),
+            adjacentAllyIdsFor: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
         });
     }
 
