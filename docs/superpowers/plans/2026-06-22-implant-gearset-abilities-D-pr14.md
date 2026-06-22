@@ -159,7 +159,10 @@ Near `roleFilter?` (`abilities.ts:425`), add:
 ```typescript
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
-     *  proc draw, mark only on a successful proc). Absent → no per-round limit. */
+     *  proc draw, mark only on a successful proc). Absent → no per-round limit.
+     *  NOTE: distinct from the `oncePerRound` flag on the extra-action / incoming-block
+     *  AbilityConfig variants — this is the top-level Ability flag (read via
+     *  `intent.ability.oncePerRound`), honoring the spec's "no AbilityConfig change". */
     oncePerRound?: boolean;
     /** D-PR14 Bulwark: an on-ally-attacked reactive fires only when the DAMAGED ally is
      *  adjacent to this owner (board neighbours; non-positional → any living same-side ally).
@@ -470,13 +473,14 @@ In the `case 'on-ally-attacked':` listener (`triggers.ts:391`), after the `roleF
 
 - [ ] **Step 3: Pass `adjacentAllyIdsFor` from BOTH engine call sites**
 
-There are TWO `registerReactiveListeners({ ... })` calls (player ~`engine.ts:2028`, enemy ~`engine.ts:2049`; confirm via `grep -n "registerReactiveListeners" src/utils/combat/engine.ts`). Add to BOTH args objects:
+There are TWO `registerReactiveListeners({ ... })` calls (player ~`engine.ts:2028`, enemy ~`engine.ts:2049`; confirm via `grep -n "registerReactiveListeners" src/utils/combat/engine.ts`). Add to BOTH args objects, using the side-resolving per-side helper:
 
 ```typescript
-            adjacentAllyIdsFor: (ownerId: string) => adjacentAllyIds(ownerId, actors),
+            adjacentAllyIdsFor: (ownerId: string) =>
+                bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
 ```
 
-`adjacentAllyIds` is already imported (`engine.ts:83`) and is side-correct (returns same-side allies of `ownerId` regardless of which team's listeners are registered), so the same line works for both. (The per-side `bySide(...).adjacentAllyIdsFor` helper at `engine.ts:1795` is equivalent if you prefer reusing it.)
+**Do NOT write `adjacentAllyIds(ownerId, actors)` here:** `actors` is a local inside `buildSideContext` (`engine.ts:1765`) and is OUT OF SCOPE at the call sites; and the raw `adjacentAllyIds` (`adjacency.ts:21-30`) does NO side filtering — passing a full roster would make enemy actors count as "adjacent allies" and defeat the restriction. The per-side `buildSideContext(...).adjacentAllyIdsFor` (`engine.ts:1795`) passes the correct same-side roster. `bySide` / `isEnemySide` are in scope at the call sites (`engine.ts:1799-1801`). The listener owner can be on either side, so the `isEnemySide` resolution is required.
 
 - [ ] **Step 4: tsc + combat regression**
 
