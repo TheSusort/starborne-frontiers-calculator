@@ -995,9 +995,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
     /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
      *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only the per-victim timed
-     *  enemy store is visited — accumulating/persistent maps have no finite duration. Skips
-     *  'recurring'/'permanent' sentinels and UNREMOVABLE_STATUSES (consistent with cleanse).
-     *  Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
+     *  enemy store is visited — accumulating/persistent maps have no finite duration (so the
+     *  "newest" picked here is the newest TIMED debuff, which may differ from cleanse's newest
+     *  across all stores). Skips 'recurring'/'permanent' sentinels and UNREMOVABLE_STATUSES (same
+     *  skip rules as cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
     const reduceNewestDebuffDuration = (actorId: string, turns: number): number => {
         const timedMap = enemyMaps.get(actorId);
         if (!timedMap) return 0;
