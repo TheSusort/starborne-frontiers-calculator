@@ -50,6 +50,9 @@ export type AbilityTrigger =
     | 'start-of-round'
     | 'start-of-turn' // Fortifying Shroud: fires at the OWNER's own turn-start (rides the
     // per-actor turn-started event; self-scoped on actorId === ownerId)
+    | 'end-of-turn' // Fires at the OWNER's own turn-END (rides the existing per-actor
+    // `turn-ended` event, self-scoped on actorId === ownerId). Mirror of `start-of-turn`.
+    // Used by Chrono Reaver (end-of-turn + every-n-turns charge gain).
     | 'end-of-round' // Rhodium end-of-round purge — C2b-2
     | 'on-crit'
     | 'on-debuff-inflicted'
@@ -106,6 +109,7 @@ export type AbilityTrigger =
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
     'start-of-turn',
+    'end-of-turn',
     'end-of-round', // Rhodium end-of-round purge — C2b-2
     'on-crit',
     'on-debuff-inflicted',

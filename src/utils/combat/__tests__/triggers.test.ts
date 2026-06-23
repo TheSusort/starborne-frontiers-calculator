@@ -3363,6 +3363,104 @@ describe('start-of-turn live trigger (D-PR11)', () => {
 });
 
 // ----------------------------------------------------------------------
+// Phase 0 (charge) — end-of-turn trigger, self-scoped on turn-ended.
+//
+// Mirror of start-of-turn: fires once at the END of the OWNER's OWN turn
+// (not every actor's turn). The engine emits `turn-ended` once per actor per
+// round; the listener must enqueue ONLY when actorId === ownerId.
+// ----------------------------------------------------------------------
+describe('end-of-turn live trigger (Phase 0 charge)', () => {
+    // A minimal reactive buff ability carrying the end-of-turn trigger.
+    const endOfTurnBuff = (): Ability => ({
+        id: 'eot-buff',
+        type: 'buff',
+        target: 'self',
+        trigger: 'end-of-turn',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName: 'End-of-Turn Shield',
+            stacks: 1,
+            parsedEffects: { defense: 15 },
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    function emitTurnEnded(ownerId: string, actorId: string): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: endOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId, reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({ type: 'turn-ended', actorId, round: 1 });
+        return intents;
+    }
+
+    it("end-of-turn enqueues on the owner's own turn-ended, not another actor's", () => {
+        // Non-owner's turn-ended: must NOT enqueue
+        const bus = createEventBus();
+        const queue: Intent[] = [];
+        const ra: ReactiveAbility = { ability: endOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => queue.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+
+        bus.emit({ type: 'turn-ended', actorId: 'B', round: 1 });
+        expect(queue.length).toBe(0);
+
+        bus.emit({ type: 'turn-ended', actorId: 'A', round: 1 });
+        expect(queue.length).toBe(1);
+        expect(queue[0].ownerId).toBe('A');
+        expect(queue[0].ability.trigger).toBe('end-of-turn');
+    });
+
+    it('enqueues the intent when the owner own turn-ended fires', () => {
+        const intents = emitTurnEnded('A', 'A');
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('A');
+        expect(intents[0].ability.trigger).toBe('end-of-turn');
+    });
+
+    it('does NOT enqueue when a DIFFERENT actor turn-ended fires', () => {
+        expect(emitTurnEnded('A', 'B')).toHaveLength(0);
+    });
+
+    it('listener is pure: no enqueue on registration, only on matching emit', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: endOfTurnBuff(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'A', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'turn-ended', actorId: 'B', round: 1 });
+        expect(intents).toHaveLength(0);
+        bus.emit({ type: 'turn-ended', actorId: 'A', round: 1 });
+        expect(intents).toHaveLength(1);
+    });
+
+    it('LIVE_TRIGGERS contains end-of-turn', () => {
+        expect(LIVE_TRIGGERS.has('end-of-turn')).toBe(true);
+    });
+
+    it('AbilityTrigger includes end-of-turn (type-level compile check)', () => {
+        const _trigger: AbilityTrigger = 'end-of-turn';
+        expect(_trigger).toBe('end-of-turn');
+    });
+});
+
+// ----------------------------------------------------------------------
 // C2b-1 — purge partition guard.
 // An `on-cast` purge ability MUST stay in castSkills (the on-cast path
 // handles it). An `on-enemy-purged` purge ability MUST route to

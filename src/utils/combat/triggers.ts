@@ -366,6 +366,14 @@ export function registerReactiveListeners(args: {
                         if (e.actorId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'end-of-turn':
+                    bus.on('turn-ended', (e) => {
+                        // Self-scoped: THIS owner's own turn ended. turn-ended fires once per
+                        // actor (engine.ts), so the ownerId guard scopes it per owner — mirror
+                        // of start-of-turn (which rides turn-started).
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
                 case 'end-of-round':
                     // Global, like start-of-round: every round-ended enqueues this owner's intent
                     // (Rhodium's end-of-round purge). Gating handled in the executor.
