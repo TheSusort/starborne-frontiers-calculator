@@ -182,8 +182,13 @@ export type ConditionSubject =
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
     // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
     | 'not-hit-this-round'
-    | 'first-activator'; // D-PR14 Doomsayer: this owner was the first actor to take a REAL
-//                      (non-Stasis/Disable-skipped) turn this round.
+    | 'first-activator' // D-PR14 Doomsayer: this owner was the first actor to take a REAL
+    //                      (non-Stasis/Disable-skipped) turn this round.
+    // D-PR16: binary gate — this owner is the SOLE living actor on its own side. Live-derived by
+    // the engine each drain (ConditionContext.isLastStanding); defaults false (DPS / not-alone).
+    // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
+    // Infrastructure for the Last Stand implant (wired in a later task).
+    | 'last-standing';
 
 export interface Condition {
     subject: ConditionSubject;

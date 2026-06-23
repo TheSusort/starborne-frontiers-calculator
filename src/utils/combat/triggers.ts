@@ -678,6 +678,9 @@ export interface IntentExecContext {
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
+    /** D-PR16: id of the sole living actor on the drain owner's side (recomputed each drain),
+     *  or undefined when !=1 actor is alive. Drives the `last-standing` gate (Last Stand). */
+    lastStandingId?: string;
     /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
@@ -743,6 +746,9 @@ export function buildActorConditionContext(
         /** Owner took the round's first real turn. Default false. Populated by
          *  buildDrainContext (D-PR14). */
         firstActivator?: boolean;
+        /** Owner is the sole living actor on its side. Default false. Populated by
+         *  buildDrainContext (D-PR16). */
+        lastStanding?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -771,6 +777,7 @@ export function buildActorConditionContext(
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
+        lastStanding: shared.lastStanding,
     });
 }
 
@@ -808,6 +815,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // D-PR14: live first-activator gate (Doomsayer). Default false → DPS / no-delegate
         // paths read "not first" ⇒ not met and stay byte-identical.
         firstActivator: ctx.firstActivatorId === ownerId,
+        // D-PR16: live last-standing gate (Last Stand). lastStandingId is undefined unless EXACTLY
+        // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met and
+        // stay byte-identical.
+        lastStanding: ctx.lastStandingId === ownerId,
     });
 }
 

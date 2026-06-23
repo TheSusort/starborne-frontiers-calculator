@@ -42,6 +42,8 @@ export function buildRoundContext(state: {
     wasHitThisRound?: boolean;
     /** True when the acting unit took the round's first real turn. Default false. */
     firstActivator?: boolean;
+    /** True when the acting unit is the sole living actor on its side. Default false. */
+    lastStanding?: boolean;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -66,6 +68,7 @@ export function buildRoundContext(state: {
         selfShielded: state.selfShielded ?? false,
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
+        isLastStanding: state.lastStanding ?? false,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }
