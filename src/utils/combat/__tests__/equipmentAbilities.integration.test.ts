@@ -3596,3 +3596,472 @@ describe('D-PR11 integration — Fortifying Shroud: enemy-side mirror (team-agno
         expect(buffGrantedTo.size).toBe(2);
     });
 });
+
+// ---------------------------------------------------------------------------
+// D-PR (reactive cleanse) — Reactive Ward + Warpstrike duration-reduction
+// ---------------------------------------------------------------------------
+//
+// Two implants resolve through the REAL equipment registry
+// (buildShipAbilitiesWithEquipment / simulateBattle's getGearPiece arg):
+//
+//   Reactive Ward (REACTIVE_WARD): on-attacked reactive cleanse — when the carrier is
+//     directly damaged, an X% chance (per rarity) to REMOVE 1 of the carrier's OWN debuffs,
+//     or 2 if the triggering hit CRIT. Registry shape: trigger 'on-attacked', cleanse config
+//     { mode:'remove', count:1, critCount:2, procChance:<rarity> }.
+//
+//   Warpstrike (WARPSTRIKE): TWO abilities —
+//     (1) D-PR2 +X% outgoing-damage modifier while self-debuffed (on-cast modifier), and
+//     (2) NEW: on-deal-damage reactive cleanse in 'reduce-duration' mode — each damage-dealing
+//         turn while self-debuffed reduces the carrier's NEWEST own debuff by 1 turn
+//         (durationTurns 1, DETERMINISTIC — no procChance).
+//
+// DETERMINISM THROUGH THE REAL REGISTRY (the D-PR16 lesson): the abilities below are built
+// by `buildShipAbilitiesWithEquipment(makeShip({ setBonus }), getGearPiece)` and read out of
+// the passive slot — NOT hand-rolled. For Reactive Ward (procChance < 1) we override the
+// built ability's `procChance` to 1 for single-event determinism WHILE keeping every other
+// field the registry produced (mode/count/critCount/trigger), so a registry mutation still
+// fails a test. Warpstrike's reduce-duration half is already deterministic (no procChance).
+//
+// CARRIER SELF-DEBUFFS: a player carrier's OWN debuffs live in its per-target debuff store
+// (statusEngine.enemyMaps[carrierId]), populated when an ENEMY applies a debuff to it
+// (application:'apply' → always lands). Both implants act on / gate off that store. Healing
+// mode (healTargetId='attacker') is required so the carrier is a heal-target whose
+// cleanseCount credit is recorded per round.
+
+describe('D-PR reactive cleanse — Reactive Ward (on-attacked) cleanses 1 / 2-on-crit', () => {
+    const CARRIER_HP = 10_000;
+
+    /** Legendary Reactive Ward implant piece (procChance 0.16 per registry). */
+    const reactiveWardPiece = makePiece({
+        id: 'rw-legendary',
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'REACTIVE_WARD',
+    });
+
+    /**
+     * Build the Reactive Ward passive slot through the REAL registry, then override the built
+     * ability's procChance to 1 for single-event determinism. The mode/count/critCount fields
+     * stay exactly as the registry produced them, so a registry mutation (e.g. critCount→1)
+     * still changes test behaviour.
+     */
+    function buildReactiveWardSlots(): ShipSkills['slots'] {
+        const ship = makeShip({ implants: { implant_major: 'rw-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'rw-legendary': reactiveWardPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const ward = passive!.abilities.find((a) => a.id.startsWith('equip-implant-REACTIVE_WARD'));
+        // Pre-condition: the registry produced the on-attacked remove cleanse with crit-count 2.
+        expect(ward).toBeDefined();
+        expect(ward!.trigger).toBe('on-attacked');
+        expect(ward!.config.type).toBe('cleanse');
+        if (ward!.config.type === 'cleanse') {
+            expect(ward!.config.mode ?? 'remove').toBe('remove');
+            expect(ward!.config.count).toBe(1);
+            expect(ward!.config.critCount).toBe(2);
+        }
+        // Force determinism for the single-hit assertion WITHOUT leaving the registry path:
+        // mutate only procChance on the built ability (keeps mode/count/critCount/trigger).
+        const determinized: Ability = { ...ward!, procChance: 1 };
+        return [
+            { slot: 'active', abilities: [noopWardActive] },
+            { slot: 'passive', abilities: [determinized] },
+        ];
+    }
+
+    /** No-op active so the carrier takes a turn (the cleanse itself fires reactively to the hit). */
+    const noopWardActive: Ability = {
+        id: 'noop-ward-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /**
+     * A FAST enemy that, in one turn, applies THREE distinct removable debuffs to the carrier
+     * (apply → always lands, distinct families so they coexist) AND lands one damaging hit.
+     * `crit` controls whether that hit crits (→ critCount path). attack > 0 so the `attacked`
+     * event is emitted and the on-attacked cleanse enqueues.
+     */
+    function debufferHitter(crit: number) {
+        const debuff = (name: string): Ability => ({
+            id: `rw-debuff-${name}`,
+            type: 'debuff',
+            target: 'enemy', // from the enemy's view the carrier is its enemy
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: name,
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 9, // long enough to outlive the single round
+            },
+        });
+        return {
+            id: 'rw-enemy',
+            stats: {
+                attack: 200, // > 0 → attacked event emitted; small so it never kills the carrier
+                crit,
+                critDamage: 0,
+                speed: 1_000, // faster than the carrier (acts first)
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            // Three distinct debuffs (≥2 so the crit path can remove 2).
+                            debuff('Attack Down'),
+                            debuff('Defense Down'),
+                            debuff('Speed Down'),
+                            // A damaging hit that emits `attacked` (with didCrit per `crit`).
+                            {
+                                id: 'rw-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            },
+        };
+    }
+
+    /** Healing-mode base for the Reactive Ward carrier ('attacker' is the heal target). */
+    const WARD_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: CARRIER_HP,
+        healTargetId: 'attacker',
+        speed: 1,
+        ...overrides,
+    });
+
+    /** Sum the round-1 cleanseCount credited to the carrier ('attacker'). */
+    function round1Cleanse(result: ReturnType<typeof runCombat>): number {
+        return result.healing?.rounds[0]?.perActor.get('attacker')?.cleanseCount ?? 0;
+    }
+
+    it('NON-crit incoming hit cleanses exactly 1 of the carrier’s own debuffs', () => {
+        const result = runCombat(
+            WARD_BASE({
+                shipSkills: { slots: buildReactiveWardSlots() },
+                enemyAttackers: [debufferHitter(0)], // crit 0 → didCrit:false → count path (1)
+            })
+        );
+        expect(result.healing).toBeDefined();
+        // procChance forced to 1 → the on-attacked cleanse fires; non-crit → removes count=1.
+        expect(round1Cleanse(result)).toBe(1);
+    });
+
+    it('CRIT incoming hit cleanses exactly 2 of the carrier’s own debuffs (critCount path)', () => {
+        const result = runCombat(
+            WARD_BASE({
+                shipSkills: { slots: buildReactiveWardSlots() },
+                enemyAttackers: [debufferHitter(100)], // crit 100 → didCrit:true → critCount path (2)
+            })
+        );
+        expect(result.healing).toBeDefined();
+        // CRIT → removes critCount=2 (not count=1). This is the load-bearing crit-count assertion:
+        // if the registry's critCount were mutated to 1, this would read 1 and fail.
+        expect(round1Cleanse(result)).toBe(2);
+    });
+});
+
+describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half', () => {
+    const CARRIER_HP = 1_000_000_000;
+    const ATTACK = 10_000;
+    const NUM_ROUNDS = 4;
+
+    /** Legendary Warpstrike implant piece (outgoingDamage +5% half; reduce-duration half). */
+    const warpstrikeLegendaryPiece = makePiece({
+        id: 'ws-legendary',
+        slot: 'implant_major',
+        rarity: 'legendary',
+        setBonus: 'WARPSTRIKE',
+    });
+
+    /**
+     * Build the Warpstrike passive slot through the REAL registry (BOTH halves) and return the
+     * full passive abilities. No procChance override is needed — the reduce-duration half is
+     * deterministic, and the modifier half is unconditional-once per self-debuffed cast.
+     */
+    function buildWarpstrikePassive(): Ability[] {
+        const ship = makeShip({ implants: { implant_major: 'ws-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'ws-legendary': warpstrikeLegendaryPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        return passive!.abilities;
+    }
+
+    /** A single-hit 100% damage active so the carrier deals direct damage each turn. */
+    const dmgActive: Ability = {
+        id: 'ws-dmg-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100, hits: 1 },
+    };
+
+    /**
+     * Carrier ship skills: the damage active + (optionally) the Warpstrike passive halves.
+     * The control omits the passive entirely (no implant) so the delta isolates Warpstrike.
+     */
+    function carrierSkills(withWarpstrike: boolean): ShipSkills {
+        return {
+            slots: [
+                { slot: 'active', abilities: [dmgActive] },
+                ...(withWarpstrike
+                    ? [{ slot: 'passive' as const, abilities: buildWarpstrikePassive() }]
+                    : []),
+            ],
+        };
+    }
+
+    /**
+     * A FAST enemy that lands TWO distinct self-debuffs on the carrier each round (apply →
+     * always lands) and a token hit. It acts BEFORE the carrier so the carrier is already
+     * self-debuffed when it deals its damage (gating both Warpstrike halves). The two debuffs
+     * are applied in a fixed order ('Older' then 'Newer') so 'Newer' is the newest → the one
+     * Warpstrike's reduce-duration half targets.
+     */
+    function selfDebuffer() {
+        const debuff = (name: string): Ability => ({
+            id: `ws-debuff-${name}`,
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: name,
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 9,
+            },
+        });
+        return {
+            id: 'ws-enemy',
+            stats: {
+                attack: 1, // token damage → never kills the fat carrier
+                crit: 0,
+                critDamage: 0,
+                speed: 1_000, // acts before the carrier each round
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [debuff('Older'), debuff('Newer')],
+                    },
+                ],
+            },
+        };
+    }
+
+    /** Healing-mode base: the carrier 'attacker' is the heal target (so cleanseCount is recorded). */
+    const WS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: ATTACK,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: NUM_ROUNDS,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: CARRIER_HP,
+        healTargetId: 'attacker',
+        speed: 1,
+        ...overrides,
+    });
+
+    /** Total cleanseCount credited to the carrier across all rounds (= count of newest-debuff
+     *  duration reductions Warpstrike performed). */
+    function totalCleanse(result: ReturnType<typeof runCombat>): number {
+        return (result.healing?.rounds ?? []).reduce(
+            (sum, rd) => sum + (rd.perActor.get('attacker')?.cleanseCount ?? 0),
+            0
+        );
+    }
+
+    it(
+        'reduce-duration half fires once per self-debuffed damage turn (control credits 0); ' +
+            'the credited reduction count = Warpstrike’s extra ticks on the newest debuff',
+        () => {
+            const withWarp = runCombat(
+                WS_BASE({
+                    shipSkills: carrierSkills(true),
+                    enemyAttackers: [selfDebuffer()],
+                })
+            );
+            const control = runCombat(
+                WS_BASE({
+                    shipSkills: carrierSkills(false),
+                    enemyAttackers: [selfDebuffer()],
+                })
+            );
+
+            expect(withWarp.healing).toBeDefined();
+            // Control (no Warpstrike) → no duration reductions credited.
+            expect(totalCleanse(control)).toBe(0);
+
+            // Warpstrike: each round the carrier is already self-debuffed (enemy acts first) and
+            // deals direct damage → on-deal-damage reduce-duration fires once, reducing the NEWEST
+            // debuff by 1 turn → cleanseCount += 1 each round. reduceNewestDebuffDuration returns 1
+            // per fire (a SINGLE debuff — the newest — is reduced, never bulk). Over NUM_ROUNDS
+            // self-debuffed damage turns the total extra ticks = NUM_ROUNDS.
+            expect(totalCleanse(withWarp)).toBe(NUM_ROUNDS);
+
+            // Per-round shape: exactly 1 reduction per round (one debuff — the newest — reduced),
+            // never 0 (would mean the reduce half never fired) and never >1 (would mean it bulk-
+            // reduced rather than targeting only the newest).
+            for (let r = 0; r < NUM_ROUNDS; r++) {
+                expect(withWarp.healing!.rounds[r]?.perActor.get('attacker')?.cleanseCount).toBe(1);
+            }
+        }
+    );
+
+    it('D-PR2 damage half is STILL live: outgoing damage is boosted while self-debuffed', () => {
+        // Same self-debuffer setup; compare total direct damage WITH vs WITHOUT Warpstrike.
+        // Warpstrike legendary = +5% outgoingDamage while self-debuffed. crit=0 → per-round damage
+        // is otherwise constant, so the +5% modifier can only ADD → withWarp strictly exceeds the
+        // control. This proves BOTH halves are live (the reduce-duration test above proves the 2nd).
+        const withWarp = runCombat(
+            WS_BASE({
+                shipSkills: carrierSkills(true),
+                enemyAttackers: [selfDebuffer()],
+            })
+        );
+        const control = runCombat(
+            WS_BASE({
+                shipSkills: carrierSkills(false),
+                enemyAttackers: [selfDebuffer()],
+            })
+        );
+        expect(withWarp.rawTotals.direct).toBeGreaterThan(control.rawTotals.direct);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Registry-shape assertions (mutation-probe defense) — REACTIVE_WARD + WARPSTRIKE
+// ---------------------------------------------------------------------------
+//
+// These assert the SHAPE the registry produces, independent of any engine run, so a mutation
+// that drops/changes a wire (e.g. removing WARPSTRIKE's 2nd ability, or flipping REACTIVE_WARD
+// critCount) fails here even if the engine integration runs happened to still pass.
+
+describe('D-PR reactive cleanse — registry shape (buildShipAbilitiesWithEquipment)', () => {
+    it('WARPSTRIKE yields BOTH the on-cast outgoingDamage modifier AND the on-deal-damage reduce-duration cleanse', () => {
+        const ship = makeShip({ implants: { implant_major: 'ws-shape' } });
+        const piece = makePiece({
+            id: 'ws-shape',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'WARPSTRIKE',
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(
+            ship,
+            makeGetGearPiece({ 'ws-shape': piece })
+        );
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const warps = passive!.abilities.filter((a) => a.id.startsWith('equip-implant-WARPSTRIKE'));
+        // BOTH halves present.
+        expect(warps).toHaveLength(2);
+
+        // Half 1: the D-PR2 outgoing-damage modifier (on-cast).
+        const modifier = warps.find((a) => a.config.type === 'modifier');
+        expect(modifier).toBeDefined();
+        expect(modifier!.trigger).toBe('on-cast');
+        if (modifier!.config.type === 'modifier') {
+            expect(modifier!.config.channel).toBe('outgoingDamage');
+            expect(modifier!.config.value).toBe(5); // legendary WARPSTRIKE_PCT
+        }
+
+        // Half 2: the NEW on-deal-damage reduce-duration cleanse (deterministic, no procChance).
+        const cleanse = warps.find((a) => a.config.type === 'cleanse');
+        expect(cleanse).toBeDefined();
+        expect(cleanse!.trigger).toBe('on-deal-damage');
+        expect(cleanse!.procChance).toBeUndefined();
+        if (cleanse!.config.type === 'cleanse') {
+            expect(cleanse!.config.mode).toBe('reduce-duration');
+            expect(cleanse!.config.durationTurns).toBe(1);
+        }
+    });
+
+    it('REACTIVE_WARD yields the on-attacked remove cleanse with count 1, critCount 2, and a per-rarity procChance', () => {
+        const ship = makeShip({ implants: { implant_major: 'rw-shape' } });
+        const piece = makePiece({
+            id: 'rw-shape',
+            slot: 'implant_major',
+            rarity: 'legendary',
+            setBonus: 'REACTIVE_WARD',
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(
+            ship,
+            makeGetGearPiece({ 'rw-shape': piece })
+        );
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const ward = passive!.abilities.find((a) => a.id.startsWith('equip-implant-REACTIVE_WARD'));
+        expect(ward).toBeDefined();
+        expect(ward!.trigger).toBe('on-attacked');
+        // procChance is the legendary rarity value (0.16) — present and < 1 (real-registry proc).
+        expect(ward!.procChance).toBeCloseTo(0.16);
+        expect(ward!.config.type).toBe('cleanse');
+        if (ward!.config.type === 'cleanse') {
+            expect(ward!.config.mode).toBe('remove');
+            expect(ward!.config.count).toBe(1);
+            expect(ward!.config.critCount).toBe(2);
+        }
+    });
+});
