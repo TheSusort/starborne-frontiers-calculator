@@ -726,13 +726,16 @@ export interface IntentExecContext {
  * Timed-only is deliberate: it mirrors the local `priorAbilitySelfNames` in playerTurn.ts, which
  * also collects timed statuses and not persistent ones. The player-turn
  * caster-ctx resolver sets it so a FOREIGN caster's ability self-buffs (e.g. a team ship's
- * self-granted gate buff) are visible to its own aura's gate. The drain path leaves it false
- * (the executor is attacker-only and the drain gate's snapshot-only behaviour is golden-locked).
+ * self-granted gate buff) are visible to its own aura's gate. The drain path now ALSO sets it,
+ * so drain-time `self-buff` gates see ability-granted self-buffs (e.g. Cloaking's Stealth lighting
+ * up the Ambush implant). This was empirically verified golden-neutral: zero `.snap` drift across
+ * the full suite, because no LIVE golden fixture pairs an ability-sourced timed self-status with a
+ * drain-time self-buff gate on the same actor.
  *
  * KNOWN UNDERCOUNT (golden-locked, do not "fix" casually): `landedEnemyDebuffCount` comes from
- * `snapshot().activeEnemyDebuffs`, which — symmetrically with the self-buff side above — EXCLUDES
- * payload-carrying ABILITY-sourced enemy debuffs. So an `enemy-debuff gte N` threshold gate
- * (Asphyxiator etc.) undercounts at drain time and for foreign-caster auras: ability-applied
+ * `snapshot().activeEnemyDebuffs`, which — UNLIKE the now-symmetric self-buff side above — still
+ * EXCLUDES payload-carrying ABILITY-sourced enemy debuffs. So an `enemy-debuff gte N` threshold
+ * gate (Asphyxiator etc.) undercounts at drain time and for foreign-caster auras: ability-applied
  * statuses don't increment the tally. This is intentional drain-time approximation that PRE-DATES
  * the team walk — buildDrainContext used this same snapshot count before the team-walk PR, and the
  * golden drain fixtures are hand-built around it. There is no `includeAbilityEnemyNames` analogue
@@ -805,11 +808,17 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         ctx.enemyHp > 0 ? Math.max(0, 100 * (1 - ctx.cumulativeDamage / ctx.enemyHp)) : 100;
     // Owner-aware drain gate (Task 6): self-buff names come from the OWNER's snapshot so each
     // owner's reactive follow-up is gated against ITS OWN active buffs + the shared enemy state.
-    // `includeAbilitySelfNames` stays FALSE for ALL owners at drain time — the drain path is
-    // snapshot-only (golden-locked behaviour for the attacker; the cast-path/drain-path
-    // self-buff-visibility asymmetry now applies uniformly per owner, by design). For an
-    // attacker-only run ownerId is 'attacker' → byte-identical to the pre-Task-6 drain gate.
+    // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
+    // timed self statuses (which snapshot() excludes because they carry payloads) — this lets a
+    // drain-time `self-buff` gate fire off an ability-granted self-buff (e.g. Cloaking's Stealth
+    // satisfying the Ambush implant's Stealth gate). This is a GENERAL broadening — it applies to
+    // ANY drain-path ability gated on a `self-buff` whose buff is ability-sourced (skill-parsed
+    // self-buff gates too, not just the Ambush registry entry); Ambush is merely the first consumer.
+    // Verified golden-neutral: zero `.snap` drift across the full suite, since no LIVE fixture pairs
+    // such a status with a drain-time self-buff gate. (The enemy-debuff side stays snapshot-only —
+    // see buildActorConditionContext doc.)
     return buildActorConditionContext(ctx.statusEngine, ownerId, {
+        includeAbilitySelfNames: true,
         corrosionEntryCount: ctx.corrosionEntries.length,
         infernoEntryCount: ctx.infernoEntries.length,
         bombCount: ctx.pendingBombs.length,

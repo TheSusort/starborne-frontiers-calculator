@@ -41,7 +41,7 @@ import { Ship } from '../../types/ship';
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
-const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
+const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | undefined>> = {
     LEECH: () => ({
         type: 'heal',
         target: 'self',
@@ -65,6 +65,13 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
         },
         autoFilled: true,
     }),
+    // Cloaking: at the start of combat (round 1, before any ship acts), gain Stealth
+    // for 2 turns, once per battle. Rides start-of-round (drained before the first turn
+    // — engine round-started drain point (a)) + oncePerCombat. First in-engine source
+    // of the 'Stealth' buff: lights up the positional targeting filter, the D-PR3
+    // self-stealth / incoming-crit-by-stealthed conditions, and the D-PR8 Ambush gate.
+    CLOAKING: () =>
+        mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
 };
 
 // ---------------------------------------------------------------------------
@@ -386,7 +393,12 @@ export function mkNamedBuffGrant(
     target: 'self' | 'ally' | 'all-allies' | 'adjacent-allies',
     trigger: AbilityTrigger,
     duration: number | undefined,
-    opts?: { conditions?: Condition[]; procChance?: number; alsoGrantBuffNames?: string[] }
+    opts?: {
+        conditions?: Condition[];
+        procChance?: number;
+        alsoGrantBuffNames?: string[];
+        oncePerCombat?: boolean;
+    }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
@@ -424,6 +436,7 @@ export function mkNamedBuffGrant(
             maxStacks,
             duration,
             ...(additionalBuffs.length ? { additionalBuffs } : {}),
+            ...(opts?.oncePerCombat ? { oncePerCombat: true } : {}),
         },
         autoFilled: true,
     };
@@ -875,6 +888,7 @@ export function buildEquipmentAbilities(
         if (!builder) continue;
 
         const partial = builder();
+        if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     }
 
