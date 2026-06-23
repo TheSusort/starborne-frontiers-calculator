@@ -65,6 +65,13 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | und
         },
         autoFilled: true,
     }),
+    // Cloaking: at the start of combat (round 1, before any ship acts), gain Stealth
+    // for 2 turns, once per battle. Rides start-of-round (drained before the first turn
+    // — engine round-started drain point (a)) + oncePerCombat. First in-engine source
+    // of the 'Stealth' buff: lights up the positional targeting filter, the D-PR3
+    // self-stealth / incoming-crit-by-stealthed conditions, and the D-PR8 Ambush gate.
+    CLOAKING: () =>
+        mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
 };
 
 // ---------------------------------------------------------------------------
