@@ -1,3 +1,4 @@
+import type { ControlEffect } from '../../types/abilities';
 import type { StatusEngine } from './statusEngine';
 // Call-time-safe cycle: triggers imports targetCarriesBlockDebuff from this module and we import
 // selfBuffNamesForOwners back. Both are used only inside function bodies (never at top-level
@@ -25,6 +26,18 @@ export function dotResistLabel(dotType: 'corrosion' | 'inferno' | 'bomb', tier: 
     const numeral = tier > 0 && tier < ROMAN.length ? ` ${ROMAN[tier]}` : '';
     return dotType === 'bomb' ? kind : `${kind}${numeral}`;
 }
+
+/** Resisted-debuff label for a blocked control infliction, matching the named-debuff buff names
+ *  used elsewhere (Stasis, Provoke, Concentrate Fire). Keeps the control block path's resist row
+ *  consistent with the timed/DoT block rows. */
+const CONTROL_EFFECT_LABEL: Record<ControlEffect, string> = {
+    provoke: 'Provoke',
+    taunt: 'Taunt',
+    stasis: 'Stasis',
+    overload: 'Overload',
+    'concentrate-fire': 'Concentrate Fire',
+};
+export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFFECT_LABEL[effect];
 
 /** Emit a debuff-resisted event for a Block-Debuff-blocked DoT. Call ONLY on the block path —
  *  normal DoT landing-roll failures stay silent (byte-identical). */

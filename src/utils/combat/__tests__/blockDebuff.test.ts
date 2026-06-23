@@ -313,6 +313,61 @@ describe('Block Debuff — cast-side DoT block + resist event (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Block Debuff — cast-side control block + resist event (engine).
+//
+// A control infliction (cfg.type 'control', e.g. Stasis) emits `control-applied` so
+// reactions (on-stasis-applied) can fire. When the target carries `Block Debuff` the
+// control is a blocked debuff: NO `control-applied` (so reactions do NOT fire) and a
+// `debuff-resisted` labelled with the control effect — symmetric with the timed/DoT block.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const controlEnemy = (): EnemyAttacker =>
+    debuffEnemy(enemyAb({ type: 'control', config: { type: 'control', effect: 'stasis' } }));
+
+const runControlWith = (focusSkills: ShipSkills, bus: ReturnType<typeof createEventBus>) =>
+    runCombat(
+        blockDebuffEngineBase({
+            numRounds: 3,
+            enemyAttackers: [controlEnemy()],
+            shipSkills: focusSkills,
+            bus,
+        })
+    );
+
+describe('Block Debuff — cast-side control block + resist event (engine)', () => {
+    it('immune target BLOCKS a control infliction: no control-applied, resisted Stasis event', () => {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('control-applied', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        runControlWith(blockDebuffSelfSkills(), bus);
+
+        // The control was blocked → on-stasis-applied reactions never get the signal.
+        expect(events.some((e) => e.type === 'control-applied')).toBe(false);
+        // A debuff-resisted event fired, labelled with the blocked control effect.
+        const resisted = events.filter((e) => e.type === 'debuff-resisted');
+        expect(
+            resisted.map((e) => (e.type === 'debuff-resisted' ? e.buffName : '')).filter(Boolean)
+        ).toContain('Stasis');
+    });
+
+    it('control: WITHOUT Block Debuff the control fires (control-applied, NO resist) — non-vacuity', () => {
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('control-applied', (e) => events.push(e as CombatEvent));
+        bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+
+        runControlWith({ slots: [] }, bus);
+
+        // The control lands normally → control-applied fires; the resist event is UNIQUE to
+        // the block path (a normal control cast never emits debuff-resisted).
+        expect(events.some((e) => e.type === 'control-applied')).toBe(true);
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Task 5: Block Debuff — reactive timed-debuff fold (executeIntent).
 //
 // The REACTIVE debuff executor (triggers.ts `cfg.type === 'debuff'`) applies a
@@ -643,9 +698,7 @@ describe('Block Debuff — integration (engine)', () => {
     });
 
     it('auto-resists an inflicted Disable (named control debuff): resisted, NOT applied', () => {
-        const entry = e1Effects(
-            runWith(namedControlDebuff('Disable'), blockDebuffSelfSkills())
-        );
+        const entry = e1Effects(runWith(namedControlDebuff('Disable'), blockDebuffSelfSkills()));
         expect(entry).toBeDefined();
         expect(entry!.resistedDebuffs.map((d) => d.buffName)).toContain('Disable');
         expect(entry!.debuffs.map((d) => d.buffName)).not.toContain('Disable');
