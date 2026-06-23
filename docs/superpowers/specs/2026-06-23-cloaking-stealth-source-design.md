@@ -86,7 +86,7 @@ Expect **ZERO golden / `.snap` drift**, consistent with every prior D PR:
 
 - **Unit:** `buildEquipmentAbilities` produces the Cloaking ability with `type: 'buff'`, `buffName: 'Stealth'`, `trigger: 'start-of-round'`, `duration: 2`, `oncePerCombat: true`, and resolved `parsedEffects`; gated correctly on `minPieces`.
 - **Integration (real `runCombat`, positional, via the registry — not a hand-rolled ability):**
-  - A Cloaking ship is **untargetable in rounds 1–2** (incoming attacks redirect to a non-stealthed ally) and **targetable from round 3** (Stealth expired).
+  - A Cloaking ship is **untargetable while Stealth is active** (incoming attacks redirect to a non-stealthed ally) and **targetable once Stealth expires**. Note: pin the exact expiry round to the engine's *actual* buff-duration decrement behavior — the known `project_buff_duration_decrement_timing` quirk means a duration-N buff may not expire on the naive round N+1, so the plan should assert against observed decrement timing rather than hard-coding a round number.
   - The grant fires **once** — Stealth is not re-applied / re-extended at the start of round 2.
   - **Cloaking + Ambush synergy:** a ship carrying both the Cloaking set and the Ambush implant procs Ambush (its `self-buff: 'Stealth'` gate is now satisfied) — guarding against the gate being unreachable.
   - **Enemy-side mirror:** an enemy ship with Cloaking is untargetable to the player team (team-agnostic).
