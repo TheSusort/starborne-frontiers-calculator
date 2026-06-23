@@ -47,3 +47,21 @@ describe('mkNamedBuffGrant — additionalBuffs co-grant (D-PR16 Task 5)', () => 
         expect('additionalBuffs' in ability!.config).toBe(false);
     });
 });
+
+describe('mkNamedBuffGrant — oncePerCombat opt', () => {
+    it('sets config.oncePerCombat when opts.oncePerCombat is true', () => {
+        const a = mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, {
+            oncePerCombat: true,
+        });
+        expect(a).toBeDefined();
+        expect(a!.config.type).toBe('buff');
+        // @ts-expect-error narrow at runtime — buff config carries oncePerCombat
+        expect(a!.config.oncePerCombat).toBe(true);
+    });
+
+    it('omits oncePerCombat from config when the opt is absent (byte-identical)', () => {
+        const a = mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2);
+        expect(a).toBeDefined();
+        expect('oncePerCombat' in (a!.config as object)).toBe(false);
+    });
+});

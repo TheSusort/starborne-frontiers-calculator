@@ -386,7 +386,12 @@ export function mkNamedBuffGrant(
     target: 'self' | 'ally' | 'all-allies' | 'adjacent-allies',
     trigger: AbilityTrigger,
     duration: number | undefined,
-    opts?: { conditions?: Condition[]; procChance?: number; alsoGrantBuffNames?: string[] }
+    opts?: {
+        conditions?: Condition[];
+        procChance?: number;
+        alsoGrantBuffNames?: string[];
+        oncePerCombat?: boolean;
+    }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
@@ -424,6 +429,7 @@ export function mkNamedBuffGrant(
             maxStacks,
             duration,
             ...(additionalBuffs.length ? { additionalBuffs } : {}),
+            ...(opts?.oncePerCombat ? { oncePerCombat: true } : {}),
         },
         autoFilled: true,
     };
