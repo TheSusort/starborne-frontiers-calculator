@@ -998,8 +998,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  enemy store is visited — accumulating/persistent maps have no finite duration (so the
      *  "newest" picked here is the newest TIMED debuff, which may differ from cleanse's newest
      *  across all stores). Skips 'recurring'/'permanent' sentinels and UNREMOVABLE_STATUSES (same
-     *  skip rules as cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
+     *  skip rules as cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0.
+     *  A non-positive / non-finite `turns` is rejected (→ 0): only a positive whole-turn
+     *  reduction is meaningful — 0 would credit a no-op as success, a negative value would
+     *  INCREASE the duration, and NaN would corrupt `turnsRemaining`. */
     const reduceNewestDebuffDuration = (actorId: string, turns: number): number => {
+        const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
+        if (delta <= 0) return 0;
         const timedMap = enemyMaps.get(actorId);
         if (!timedMap) return 0;
         let best: { seq: number; key: string; s: BuffState } | undefined;
@@ -1012,7 +1017,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             if (!best || s.appliedSeq > best.seq) best = { seq: s.appliedSeq, key, s };
         }
         if (!best) return 0;
-        best.s.turnsRemaining -= turns;
+        best.s.turnsRemaining -= delta;
         if (best.s.turnsRemaining <= 0) timedMap.delete(best.key);
         return 1;
     };

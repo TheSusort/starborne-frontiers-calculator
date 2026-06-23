@@ -1524,6 +1524,32 @@ describe('reduceNewestDebuffDuration', () => {
         // A throw would fail the test; a wrong return value fails the assertion.
         expect(eng.reduceNewestDebuffDuration('no-such-actor', 1)).toBe(0);
     });
+
+    it.each([0, -1, NaN, Infinity, 1.5])(
+        'rejects a non-positive / non-finite / fractional turns (%s) → returns 0, debuff untouched',
+        (turns) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+            // 1.5 truncates to 1 → it WOULD reduce; assert the guard rejects only <= 0 / non-finite
+            // and that a fractional value is floored (truncated) rather than corrupting state.
+            const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, turns);
+            const remaining = eng
+                .timedAbilityStatuses('enemy')
+                .find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining;
+
+            if (turns === 1.5) {
+                // Math.trunc(1.5) = 1 → a normal one-turn reduction.
+                expect(result).toBe(1);
+                expect(remaining).toBe(2);
+            } else {
+                // 0 / negative / NaN / Infinity rejected — no mutation, no false success.
+                expect(result).toBe(0);
+                expect(remaining).toBe(3);
+            }
+        }
+    );
 });
 
 describe('clearRemovable', () => {

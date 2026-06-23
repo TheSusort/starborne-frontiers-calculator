@@ -30,7 +30,7 @@ The reactive `cleanse` executor branch is the common seam. Reactive Ward uses `m
 
 New method on the status engine (interface + implementation in `src/utils/combat/statusEngine.ts`, beside `cleanse` / `removeNewestFirst`):
 
-```
+```ts
 reduceNewestDebuffDuration(actorId: string, turns: number): number
 ```
 
@@ -64,7 +64,7 @@ Reactive `cleanse` executor branch (`triggers.ts` ~1407):
 
 - Added to the `AbilityTrigger` union and the runtime trigger array (`src/types/abilities.ts`).
 - Listener (`triggers.ts`): rides `ability-performed` —
-  ```
+  ```ts
   bus.on('ability-performed', (e) => {
       if (e.actorId !== ownerId) return;
       if ((e.damage ?? 0) <= 0) return;   // "directly damaging an enemy" (damage is optional → ?? 0)
