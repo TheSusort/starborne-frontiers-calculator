@@ -1492,30 +1492,29 @@ describe('reduceNewestDebuffDuration', () => {
         expect(timed[0].active.turnsRemaining).toBe(3);
     });
 
-    it('skips a non-numeric (recurring) duration and returns 0', () => {
-        // We cannot inject a 'recurring' duration via applyTimedAbilityStatus (duration is
-        // guaranteed numeric). Use a persistent-stacking debuff — its turnsRemaining sentinel
-        // is 'permanent', which is also non-numeric and must be skipped.
-        const persistentShred = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
-            kind: 'timed',
-            side: 'enemy',
-            sourceSlot: 'active',
-            conditions: [],
-            duration: 2, // ignored — name routes to the persistent map
-            payload: {
-                buffName: 'Defense Shred',
-                stacks: 1,
-                parsedEffects: { defense: -2 },
-                application: 'inflict',
-            },
-        });
+    it('skips the newest UNREMOVABLE debuff and reduces the newest REMOVABLE one instead', () => {
+        // Scenario: actor has two timed debuffs — a removable one applied first, then an
+        // unremovable one (Acidic Decay, a real UNREMOVABLE_STATUSES member) applied second
+        // (higher appliedSeq = technically "newer"). The function must skip the unremovable
+        // entry and reduce the removable one, proving the skip logic executes on reachable state.
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
-        eng.applyTimedAbilityStatus(1, persistentShred());
+        // Apply removable debuff first (lower seq).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+        // Apply unremovable debuff second (higher seq — it IS the "newest" by sequence).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
 
-        // The 'permanent' sentinel must be skipped.
         const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
-        expect(result).toBe(0);
+
+        // Should have found a target (the removable Defense Down).
+        expect(result).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        const removable = timed.find((s) => s.payload.buffName === 'Defense Down');
+        const unremovable = timed.find((s) => s.payload.buffName === 'Acidic Decay');
+        // Removable was reduced.
+        expect(removable?.active.turnsRemaining).toBe(2);
+        // Unremovable was skipped — completely untouched.
+        expect(unremovable?.active.turnsRemaining).toBe(3);
     });
 
     it('returns 0 for an unknown actor id without throwing', () => {
