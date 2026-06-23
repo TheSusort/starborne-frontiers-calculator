@@ -3433,6 +3433,10 @@ export function runCombat(input: CombatEngineInput): {
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
                         // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
                         wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
+                        // Phase 0 Task 5: live per-actor own-turn counter (Chrono Reaver /
+                        // every-n-turns). allActorsById covers both sides in a single combat-wide
+                        // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
+                        turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
@@ -3657,6 +3661,22 @@ export function runCombat(input: CombatEngineInput): {
                 actingActorId = actor.id;
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+                // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
+                // can evaluate the live N. Incremented AFTER turn-started so end-of-turn
+                // (turn-ended) reactive drains — which run later — read the correct N. 1-based
+                // (turnsTaken=1 on the first own turn) matches the evaluator's `t % period === offset`.
+                //
+                // STASIS/DISABLE (deferred to Phase 2 / Chrono Reaver): this increment is
+                // UNCONDITIONAL — it bumps even on a turn the actor skips under Stasis/Disable,
+                // unlike advanceChargeCadence (~4172/4233) which is gated behind !isTurnBlocked.
+                // Keeping it monotonic is deliberate: turn-ended (~4595) and the reactive drains
+                // (~4567) fire on skipped turns too, so freezing the counter on a skip would let an
+                // every-n-turns gate spuriously re-fire against the frozen value. Fully suppressing
+                // the every-n-turns proc on a skipped turn (so a stasised unit banks no periodic
+                // charge, matching advanceChargeCadence) is Phase 2 work and will get its own
+                // stasis golden when Chrono Reaver attaches the first every-n-turns ability.
+                // The dummy-sink enemy is also bumped here; harmless (no every-n-turns ability on it).
+                actor.turnsTaken += 1;
 
                 // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
                 // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's

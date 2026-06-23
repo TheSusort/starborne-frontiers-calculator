@@ -28,6 +28,10 @@ const LIVE_SUBJECTS: ReadonlySet<ConditionSubject> = new Set([
     'not-hit-this-round',
     'first-activator',
     'last-standing',
+    // Phase 0 Task 5: every-n-turns is now live-derivable via CombatActor.turnsTaken (populated
+    // by the engine drain context's turnsTakenFor delegate). Evaluated literally so the modulo
+    // period gate fires only when turnsTaken % period === offset.
+    'every-n-turns',
 ]);
 
 /**
