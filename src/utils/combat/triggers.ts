@@ -1226,6 +1226,9 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // D-PR16: co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the
         // SAME application as the primary (the single proc gate above already passed). Reuses
         // the SAME recipients/gate; each extra carries its own duration. Absent → no-op loop.
+        // NOTE: extras use their raw parsedEffects and do NOT receive the `attackFlatPctOfCaster`
+        // pin applied to the primary above — fine for the current attack-less control buffs
+        // (Barrier/Block Debuff); a future attack-scaled co-buff would need pin handling here.
         for (const extra of cfg.additionalBuffs ?? []) {
             const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
                 payload: payloadFromConfig({
