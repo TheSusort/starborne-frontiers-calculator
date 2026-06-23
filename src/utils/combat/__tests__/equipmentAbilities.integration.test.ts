@@ -4067,3 +4067,372 @@ describe('D-PR reactive cleanse — registry shape (buildShipAbilitiesWithEquipm
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// Cloaking gear set — start-of-combat Stealth (Task 5: engine integration)
+// ---------------------------------------------------------------------------
+//
+// The CLOAKING set ability grants the equipped ship the 'Stealth' self-buff for 2 turns,
+// once per combat, on the `start-of-round` trigger. The engine drains start-of-round intents
+// at "drain point (a)" BEFORE the first turn of the round, so in round 1 the Stealth buff
+// lands before any ship acts (buildEquipmentAbilities.ts CLOAKING; engine.ts round-started +
+// "Drain point (a)").
+//
+// Cloaking is the FIRST in-engine source of 'Stealth'. These tests exercise the REAL
+// resolution→merge→engine path (buildShipAbilitiesWithEquipment → passive merge → runCombat),
+// NOT hand-rolled abilities, and assert the dormant positional-targeting consumer
+// (positionalBinding.ts resolvePositionalTarget stealth filter; engine.ts isStealthed) actually
+// fires: a stealthed actor is untargetable while Stealth is active and becomes targetable once
+// it expires.
+//
+// OBSERVABLE: every test runs in HEALING mode (required for the positioned enemy roster) and
+// reads `RoundData.perTargetDamage` — the per-round map of landed direct damage keyed by victim
+// id (set only when the positional path recorded victim damage; positionalDamage.integration.test
+// uses the same observable). A stealthed victim's id is absent / zero in that map for the rounds
+// it is untargetable, and present/non-zero once it is targetable again.
+//
+// EMPIRICAL TIMING (observed from a first run, documented here — NOT a guessed hard-code; the
+// known project_buff_duration_decrement_timing quirk means a duration-2 buff does NOT expire on
+// the naive round 3):
+//   - PLAYER-side carrier (focus 'attacker'): Stealth granted at round-1 drain (a), turnsRemaining
+//     decrements at the carrier's Post Turn each round → active round 1 ONLY (expires at the
+//     round-2 Post Turn, buff-expired emitted at round 2). So the carrier is untargetable in
+//     round 1 and targetable from round 2 onward.
+//   - ENEMY-side carrier: the enemy decrement cadence differs → Stealth is active rounds 1 AND 2,
+//     and the cloaked enemy first becomes targetable at round 3.
+//   Both confirmed empirically; both grant Stealth exactly ONCE (round 1).
+
+describe('Cloaking integration — start-of-combat Stealth', () => {
+    /** Two CLOAKING-set pieces → activates the set ability (>=2 pieces). */
+    const cloakPieceA = makePiece({ id: 'cloak-1', slot: 'weapon', setBonus: 'CLOAKING' });
+    const cloakPieceB = makePiece({ id: 'cloak-2', slot: 'hull', setBonus: 'CLOAKING' });
+
+    /** A single-hit 100% basic-attack active slot. */
+    const basicAttack = (): ShipSkills['slots'][number] => ({
+        slot: 'active',
+        abilities: [
+            {
+                id: 'cloak-basic-atk',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: 100, hits: 1 },
+            },
+        ],
+    });
+
+    const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
+        raw: selection,
+        side: 'enemy',
+        selection,
+    });
+    /** Origin-only (single-target) pattern: anchors on the front-most VISIBLE candidate. */
+    const basePattern = (): ParsedPattern => ({
+        raw: 'base',
+        shape: 'base',
+        range: 0,
+        modifiers: {},
+    });
+
+    /** Build the CLOAKING-equipped focus ship's skills via the REAL registry path:
+     *  resolution → passive merge → (active basic attack appended). */
+    function cloakingFocusSkills(activeSlot: ShipSkills['slots'][number]): ShipSkills {
+        const ship = makeShip({ equipment: { weapon: 'cloak-1', hull: 'cloak-2' } });
+        const getGearPiece = makeGetGearPiece({ 'cloak-1': cloakPieceA, 'cloak-2': cloakPieceB });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        // Pre-condition: the Cloaking set ability landed in the passive slot.
+        expect(passive).toBeDefined();
+        const cloak = passive!.abilities.find((a) => a.id === 'equip-set-CLOAKING');
+        expect(cloak).toBeDefined();
+        return {
+            slots: [activeSlot, { slot: passive!.slot, abilities: passive!.abilities }],
+        };
+    }
+
+    /** A passive, positioned player ally (a walked team actor with no offense). */
+    const passivePlayerAt = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 50,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [basicAttack()] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    /** A positioned enemy attacker firing `base front` (origin-only) at the player roster. */
+    const offensiveEnemyAt = (
+        id: string,
+        position: Position,
+        selection: ParsedTarget['selection'],
+        pattern: ParsedPattern,
+        attack = 5000
+    ): EnemyAttacker =>
+        ({
+            id,
+            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            position,
+            target: parsedTarget(selection),
+            pattern,
+            shipSkills: { slots: [basicAttack()] },
+        }) as EnemyAttacker;
+
+    /** Base healing-mode input: focus 'attacker' positioned, plenty of HP, multi-round. */
+    const CLOAK_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        chargeCount: 0,
+        shipSkills: { slots: [basicAttack()] },
+        enemyDefense: 0,
+        enemyHp: 1_000_000_000,
+        numRounds: 6,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        healTargetId: 'attacker',
+        position: 'M4',
+        speed: 50,
+        ...overrides,
+    });
+
+    /** Collect per-round incoming direct damage for two actor ids from `perTargetDamage`. */
+    function perRoundIncoming(
+        result: ReturnType<typeof runCombat>,
+        idA: string,
+        idB: string
+    ): Array<{ round: number; a: number; b: number }> {
+        return result.rounds.map((rd, i) => ({
+            round: i + 1,
+            a: rd.perTargetDamage?.[idA] ?? 0,
+            b: rd.perTargetDamage?.[idB] ?? 0,
+        }));
+    }
+
+    /** Collect 'Stealth' buff-applied events (actorId + round) across a run. */
+    function stealthApplications(
+        input: CombatEngineInput
+    ): Array<{ actorId: string; round: number }> {
+        const bus = createEventBus();
+        const out: Array<{ actorId: string; round: number }> = [];
+        bus.on('buff-applied', (e) => {
+            if (e.buffName === 'Stealth') out.push({ actorId: e.actorId, round: e.round });
+        });
+        runCombat({ ...input, bus });
+        return out;
+    }
+
+    // ── Case 1: untargetable while stealthed, targetable after expiry ─────────────
+    it(
+        'untargetable while Stealth is active: a non-stealthed ally soaks the enemy hit during the ' +
+            'stealthed round(s); the cloaking ship is hit only AFTER Stealth expires (empirical expiry)',
+        () => {
+            // Player roster: CLOAKING focus 'attacker' at M4 (front) + a non-stealthed ally at M3.
+            // An enemy at M1 fires `base front` (origin-only) → it would anchor on the front-most
+            // VISIBLE player. While 'attacker' is stealthed it is dropped from the candidate set →
+            // the anchor falls to the next visible front-most cell (the M3 ally). Once Stealth
+            // expires, the front-most visible player is 'attacker' again → it takes the hit.
+            const input = CLOAK_BASE({
+                shipSkills: cloakingFocusSkills(basicAttack()),
+                teamActors: [passivePlayerAt('ally-mid', 'M3', 1_000_000_000)],
+                enemyAttackers: [offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern())],
+            });
+            const result = runCombat(input);
+            const perRound = perRoundIncoming(result, 'attacker', 'ally-mid');
+
+            // Empirically observed (player-side decrement cadence): Stealth covers round 1 ONLY
+            // (expires at the round-2 Post Turn — the project_buff_duration_decrement_timing quirk
+            // means the duration-2 buff does NOT survive to round 3). Determine the expiry round
+            // from the data rather than hard-coding it: the first round the cloaking ship is hit.
+            const firstHitRound = perRound.find((r) => r.a > 0)?.round;
+            expect(firstHitRound).toBeDefined();
+            // Sanity: the observed expiry matches the documented empirical timing (round 2).
+            expect(firstHitRound).toBe(2);
+
+            // During every stealthed round (before firstHitRound) the cloaking ship takes ZERO
+            // incoming direct damage and the non-stealthed ally soaks the redirected hit instead.
+            for (const r of perRound.filter((x) => x.round < firstHitRound!)) {
+                expect(r.a).toBe(0); // cloaking ship untargetable → no incoming damage
+                expect(r.b).toBeGreaterThan(0); // the ally soaked the redirected hit
+            }
+            // From the expiry round onward the cloaking ship IS targeted (non-zero incoming).
+            for (const r of perRound.filter((x) => x.round >= firstHitRound!)) {
+                expect(r.a).toBeGreaterThan(0);
+            }
+        }
+    );
+
+    // ── Case 2: Stealth granted exactly once (oncePerCombat) ─────────────────────
+    it('granted once: Stealth is applied a single time (oncePerCombat) — not refreshed each round', () => {
+        const input = CLOAK_BASE({
+            shipSkills: cloakingFocusSkills(basicAttack()),
+            teamActors: [passivePlayerAt('ally-mid', 'M3', 1_000_000_000)],
+            enemyAttackers: [offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern())],
+        });
+        const applications = stealthApplications(input);
+        // Exactly one Stealth application, on the cloaking carrier, at round 1.
+        expect(applications).toHaveLength(1);
+        expect(applications[0].actorId).toBe('attacker');
+        expect(applications[0].round).toBe(1);
+    });
+
+    // ── Case 4: enemy-side mirror — enemy Cloaking untargetable to the player ─────
+    it(
+        'enemy-side mirror: an enemy equipped with Cloaking is untargetable to the player while ' +
+            'stealthed — the player attack redirects to the non-stealthed enemy until expiry',
+        () => {
+            // Player focus 'attacker' at M4 fires `base front` at the enemy roster. Enemy roster:
+            // a CLOAKING-equipped enemy at the front (M4) + a non-stealthed enemy behind (M3).
+            // The engine is team-agnostic (registerReactiveListeners runs both sides), so the enemy
+            // gains Stealth at round 1 and is dropped from the player's targeting candidates while
+            // active → the player's anchor falls to the non-stealthed enemy at M3.
+            const ship = makeShip({ equipment: { weapon: 'cloak-1', hull: 'cloak-2' } });
+            const getGearPiece = makeGetGearPiece({
+                'cloak-1': cloakPieceA,
+                'cloak-2': cloakPieceB,
+            });
+            const enemyBase = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+            const enemyPassive = enemyBase.slots.find((s) => s.slot === 'passive');
+            expect(enemyPassive).toBeDefined();
+            expect(enemyPassive!.abilities.some((a) => a.id === 'equip-set-CLOAKING')).toBe(true);
+
+            const cloakEnemy: EnemyAttacker = {
+                id: 'enemy-cloak',
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                    speed: 1,
+                },
+                chargeCount: 0,
+                startCharged: false,
+                position: 'M4',
+                // No active offense; the CLOAKING passive grants the enemy Stealth at round 1.
+                shipSkills: {
+                    slots: [
+                        { slot: 'active', abilities: [] },
+                        { slot: enemyPassive!.slot, abilities: enemyPassive!.abilities },
+                    ],
+                },
+            } as EnemyAttacker;
+            const plainEnemy: EnemyAttacker = {
+                id: 'enemy-plain',
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
+                    speed: 1,
+                },
+                chargeCount: 0,
+                startCharged: false,
+                position: 'M3',
+                shipSkills: { slots: [] },
+            } as EnemyAttacker;
+
+            const input = CLOAK_BASE({
+                // Focus fires `base front` at the enemy roster (positional).
+                shipSkills: cloakingFocusSkills(basicAttack()),
+                // Re-point the focus' OWN attack at the enemy roster (it is positional via target/pattern).
+                target: parsedTarget('front'),
+                pattern: basePattern(),
+                enemyAttackers: [cloakEnemy, plainEnemy],
+            });
+            // The focus carries the CLOAKING passive too (so it would also be stealthed), but that
+            // is irrelevant here: the assertion is purely about which ENEMY the player's attack
+            // lands on. Use a fresh focus WITHOUT Cloaking to keep the enemy-side mirror isolated.
+            const isolatedInput: CombatEngineInput = {
+                ...input,
+                shipSkills: { slots: [basicAttack()] },
+            };
+
+            const bus = createEventBus();
+            const applications: Array<{ actorId: string; round: number }> = [];
+            bus.on('buff-applied', (e) => {
+                if (e.buffName === 'Stealth')
+                    applications.push({ actorId: e.actorId, round: e.round });
+            });
+            const result = runCombat({ ...isolatedInput, bus });
+            const perRound = perRoundIncoming(result, 'enemy-cloak', 'enemy-plain');
+
+            // Stealth granted exactly once, on the enemy carrier, at round 1.
+            expect(applications).toHaveLength(1);
+            expect(applications[0].actorId).toBe('enemy-cloak');
+            expect(applications[0].round).toBe(1);
+
+            // Empirical expiry: the first round the player's attack lands on the cloaked enemy.
+            // (Enemy decrement cadence → Stealth covers rounds 1 AND 2; first hit at round 3.)
+            const firstHitRound = perRound.find((r) => r.a > 0)?.round;
+            expect(firstHitRound).toBeDefined();
+            expect(firstHitRound).toBe(3);
+
+            // While stealthed (before firstHitRound) the player attack redirects to the
+            // non-stealthed enemy — the cloaked enemy takes ZERO incoming damage.
+            for (const r of perRound.filter((x) => x.round < firstHitRound!)) {
+                expect(r.a).toBe(0); // cloaked enemy untargetable
+                expect(r.b).toBeGreaterThan(0); // redirected onto the non-stealthed enemy
+            }
+            // After expiry the player's attack lands on the (now front-most visible) cloaked enemy.
+            for (const r of perRound.filter((x) => x.round >= firstHitRound!)) {
+                expect(r.a).toBeGreaterThan(0);
+            }
+        }
+    );
+
+    // ── Case 3: Cloaking + Ambush synergy — BLOCKED (see report) ─────────────────
+    //
+    // The spec'd case 3 (Cloaking supplies Stealth → Ambush's `{subject:'self-buff',
+    // buffName:'Stealth'}` gate satisfies → Crit Power Up III is granted to the carrier) is NOT
+    // realizable with the current engine, so no test is written for it (a passing assertion would
+    // be a tautology / would pass even with Cloaking broken). Root cause, empirically confirmed:
+    //
+    //   The Ambush gate is evaluated at start-of-round DRAIN time via buildActorConditionContext
+    //   (triggers.ts buildDrainContext), whose `selfBuffNames` are SNAPSHOT-ONLY
+    //   (`includeAbilitySelfNames` is FALSE for all owners at drain). Cloaking's Stealth is granted
+    //   via mkNamedBuffGrant (type 'buff') → it is registered through registerAbilityStatuses as an
+    //   ABILITY-SOURCED timed status, which snapshot().activeSelfBuffs EXCLUDES. So the gate's
+    //   `selfBuffNames` never contains 'Stealth' (evaluateConditions self-buff reads ctx.selfBuffNames),
+    //   even though the TARGETING reader isStealthed() DOES see it (selfBuffNamesForOwners aggregates
+    //   ability statuses — which is why cases 1/2/4 work). This visibility asymmetry means Ambush
+    //   never fires from Cloaking-supplied Stealth. (Compounding: at round-1 drain Ambush executes
+    //   before Cloaking grants Stealth in the same pass; and the player-side Stealth window is round 1
+    //   only — so even a snapshot-visible buff would not survive to a later round's gate.)
+    //   Verified by a throwaway run: with Ambush procChance forced to 1 over many rounds, zero
+    //   'Crit Power Up III' buff-applied events are emitted; only the single round-1 'Stealth' event.
+});
