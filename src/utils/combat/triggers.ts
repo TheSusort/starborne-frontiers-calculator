@@ -1507,7 +1507,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (cfg.type === 'cleanse') {
         // (reduce-duration mode is added in a later task; remove-mode only for now.)
         // remove mode — keep the !ctx.healing return BEFORE the proc gate (gate-desync rule;
-        // see passesProcChanceGate doc).
+        // see passesProcChanceGate doc). If reordered, a healing-mode-off pass would consume a
+        // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         if (!passesProcChanceGate(intent, ctx)) return;
         // ctx.playerIds is the SAME-SIDE ally id order (sideCtx.recipientIds) — side-correct for
