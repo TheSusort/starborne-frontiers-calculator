@@ -1045,6 +1045,9 @@ interface ReactiveSideCtx {
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
     grantAllyCharges: (amount: number) => void;
+    /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
+     *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). */
+    removeEnemyCharges: (amount: number) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
@@ -1772,6 +1775,11 @@ export function runCombat(input: CombatEngineInput): {
         /** Bump every same-side actor's charges by `amount` (capped at each actor's own
          *  chargeCount; chargeCount 0 skipped — no charge skill to bank). */
         grantAllyCharges: (amount: number) => void;
+        /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
+         *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
+         *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
+         *  THIS side's context (never pre-flipped). */
+        removeEnemyCharges: (amount: number) => void;
         /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
          *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
@@ -1792,6 +1800,15 @@ export function runCombat(input: CombatEngineInput): {
                 for (const a of actors) {
                     if (a.chargeCount <= 0) continue;
                     a.charges = Math.min(a.charges + amount, a.chargeCount);
+                }
+            },
+            // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
+            // skipping immune actors and those with no charged skill. Mirror of grantAllyCharges
+            // but on the opposing side, and subtractive.
+            removeEnemyCharges: (amount: number): void => {
+                for (const a of actorsBySide(side === 'player' ? 'enemy' : 'player')) {
+                    if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
+                    a.charges = Math.max(0, a.charges - amount);
                 }
             },
             lowestSpeedIds: (): Set<string> => {
@@ -3153,6 +3170,7 @@ export function runCombat(input: CombatEngineInput): {
                 bus,
                 round: r,
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
+                removeEnemyCharges: bySide(a.side).removeEnemyCharges,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
                 selfHpPct: maxHp > 0 ? (100 * Math.max(0, a.currentHp)) / maxHp : 100,
@@ -3373,6 +3391,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingBombs,
                         runtimes: sideCtx.runtimes,
                         grantAllyCharges: sideCtx.grantAllyCharges,
+                        removeEnemyCharges: sideCtx.removeEnemyCharges,
                         grantExtraAction,
                         playerIds: sideCtx.recipientIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
@@ -3509,6 +3528,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: playerIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('player').grantAllyCharges,
+                removeEnemyCharges: bySide('player').removeEnemyCharges,
                 selfHpPctFor: bySide('player').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
@@ -3535,6 +3555,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: enemyAttackerActorIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
+                removeEnemyCharges: bySide('enemy').removeEnemyCharges,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),

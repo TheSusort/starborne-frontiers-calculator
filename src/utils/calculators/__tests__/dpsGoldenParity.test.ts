@@ -304,6 +304,12 @@ describe('dpsGoldenParity', () => {
                         ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
                         ab({
                             type: 'charge',
+                            // Self charge GAIN (the scenario's intent) — pin target explicitly so
+                            // it is not treated as an enemy-target charge REMOVAL (Phase 0 Task 7).
+                            // It previously inherited the `ab()` default target:'enemy', which the
+                            // pre-Task-7 'own' charge filter swallowed as a self-gain; the corrected
+                            // semantics route enemy-targets to removal, so the intent is pinned here.
+                            target: 'self',
                             config: { type: 'charge', amount: 1 },
                             conditions: [
                                 {

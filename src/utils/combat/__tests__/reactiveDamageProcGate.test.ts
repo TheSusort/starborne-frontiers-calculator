@@ -86,6 +86,7 @@ function makeCtx(opts?: {
             ],
         ]),
         grantAllyCharges: () => {},
+        removeEnemyCharges: () => {},
         grantExtraAction: () => {},
         playerIds: [OWNER_ID],
         lastTurnCtxByActor: new Map([

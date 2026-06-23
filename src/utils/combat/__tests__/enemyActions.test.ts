@@ -175,6 +175,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
                 ['grif-noctx', makeRuntime('grif-noctx')],
             ]),
             grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
             grantExtraAction: () => {},
             playerIds: ['grif'],
             lastTurnCtxByActor: new Map(),

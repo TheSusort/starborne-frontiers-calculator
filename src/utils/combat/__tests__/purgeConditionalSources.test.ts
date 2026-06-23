@@ -281,10 +281,7 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
 // ---------------------------------------------------------------------------
 
 /** Minimal purge intent for the executor tests (target configurable). */
-function makeMostBuffsIntent(opts?: {
-    target?: AbilityTarget;
-    counterTargetId?: string;
-}): Intent {
+function makeMostBuffsIntent(opts?: { target?: AbilityTarget; counterTargetId?: string }): Intent {
     const { target = 'enemy-most-buffs', counterTargetId } = opts ?? {};
     return {
         ownerId: 'caster1',
@@ -303,9 +300,10 @@ function makeMostBuffsIntent(opts?: {
 
 /** Minimal IntentExecContext for the most-buffs executor tests. The purge spy
  *  records its target id and returns a fixed removed count (>0 so emit fires). */
-function makeMostBuffsCtx(
-    enemyWithMostBuffs?: (ownerId: string) => string | undefined
-): { ctx: IntentExecContext; purgedCalls: Array<[string, number | 'all']> } {
+function makeMostBuffsCtx(enemyWithMostBuffs?: (ownerId: string) => string | undefined): {
+    ctx: IntentExecContext;
+    purgedCalls: Array<[string, number | 'all']>;
+} {
     const purgedCalls: Array<[string, number | 'all']> = [];
     const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
     vi.spyOn(se, 'purge').mockImplementation((actorId, count) => {
@@ -336,6 +334,7 @@ function makeMostBuffsCtx(
             ],
         ]),
         grantAllyCharges: () => {},
+        removeEnemyCharges: () => {},
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),
@@ -789,7 +788,11 @@ describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () =>
             {
                 slot: 'active',
                 abilities: [
-                    ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
                 ],
             },
             {
@@ -810,7 +813,14 @@ describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () =>
     // attack (synthesized from `attack` stat) lands the lethal DIRECT hit on Faust.
     const buffedKiller = (extra: Partial<EnemyAttacker> = {}): EnemyAttacker => ({
         id: 'killer-enemy',
-        stats: { attack: 1_000_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
+        stats: {
+            attack: 1_000_000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 200,
+        },
         chargeCount: 0,
         startCharged: false,
         position: 'M4' as Position,
@@ -845,7 +855,11 @@ describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () =>
                                 duration: 99,
                             },
                         }),
-                        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+                        ab({
+                            type: 'damage',
+                            target: 'enemy',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
                     ],
                 },
             ],

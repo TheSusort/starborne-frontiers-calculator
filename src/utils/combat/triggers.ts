@@ -612,6 +612,11 @@ export interface IntentExecContext {
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
      *  already iterates `allPlayerActors` with the correct chargeCount guard. */
     grantAllyCharges: (amount: number) => void;
+    /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
+     *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
+     *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
+     *  and chargeCount-0 actors. The closure flips to the opposing side internally. */
+    removeEnemyCharges: (amount: number) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
@@ -1156,6 +1161,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
+        // Enemy-targeted charge removal (Task 7): enemy/all-enemies SUBTRACTS from every opposing
+        // actor (floored at 0, immune actors skipped). Routed BEFORE the ally/self handling.
+        // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched here
+        // and fall through to the owner-only gain below. Unreachable for parsed charge abilities today.
+        if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
+            ctx.removeEnemyCharges(cfg.amount);
+            return;
+        }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
