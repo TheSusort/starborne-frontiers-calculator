@@ -811,9 +811,12 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
     // `includeAbilitySelfNames` is now TRUE at drain time so the gate ALSO sees ability-sourced
     // timed self statuses (which snapshot() excludes because they carry payloads) — this lets a
     // drain-time `self-buff` gate fire off an ability-granted self-buff (e.g. Cloaking's Stealth
-    // satisfying the Ambush implant's Stealth gate). Verified golden-neutral: zero `.snap` drift
-    // across the full suite, since no LIVE fixture pairs such a status with a drain-time self-buff
-    // gate. (The enemy-debuff side stays snapshot-only — see buildActorConditionContext doc.)
+    // satisfying the Ambush implant's Stealth gate). This is a GENERAL broadening — it applies to
+    // ANY drain-path ability gated on a `self-buff` whose buff is ability-sourced (skill-parsed
+    // self-buff gates too, not just the Ambush registry entry); Ambush is merely the first consumer.
+    // Verified golden-neutral: zero `.snap` drift across the full suite, since no LIVE fixture pairs
+    // such a status with a drain-time self-buff gate. (The enemy-debuff side stays snapshot-only —
+    // see buildActorConditionContext doc.)
     return buildActorConditionContext(ctx.statusEngine, ownerId, {
         includeAbilitySelfNames: true,
         corrosionEntryCount: ctx.corrosionEntries.length,
