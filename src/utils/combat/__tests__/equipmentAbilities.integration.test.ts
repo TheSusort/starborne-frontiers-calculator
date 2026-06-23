@@ -3851,11 +3851,13 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
     }
 
     /**
-     * A FAST enemy that lands TWO distinct self-debuffs on the carrier each round (apply →
-     * always lands) and a token hit. It acts BEFORE the carrier so the carrier is already
-     * self-debuffed when it deals its damage (gating both Warpstrike halves). The two debuffs
-     * are applied in a fixed order ('Older' then 'Newer') so 'Newer' is the newest → the one
-     * Warpstrike's reduce-duration half targets.
+     * A FAST enemy whose only job is to keep the carrier self-debuffed: it lands TWO distinct
+     * self-debuffs on the carrier each round (apply → always lands) and acts BEFORE the carrier
+     * so the carrier is already self-debuffed when it deals its OWN damage (which is what gates
+     * both Warpstrike halves — the duration-reduction rides the carrier's on-deal-damage, not the
+     * enemy's hit). attack:1 keeps any incidental damage from killing the fat carrier. The two
+     * debuffs are applied in a fixed order ('Older' then 'Newer') so 'Newer' is the newest → the
+     * one Warpstrike's reduce-duration half targets.
      */
     function selfDebuffer() {
         const debuff = (name: string): Ability => ({
