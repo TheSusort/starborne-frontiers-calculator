@@ -188,7 +188,11 @@ export type ConditionSubject =
     // the engine each drain (ConditionContext.isLastStanding); defaults false (DPS / not-alone).
     // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
     // Infrastructure for the Last Stand implant (wired in a later task).
-    | 'last-standing';
+    | 'last-standing'
+    // Binary periodic gate: met when the owner's own-turn counter satisfies
+    // turnsTaken % period === (offset ?? 0). period/offset live on Condition.
+    // Used by Chrono Reaver (every other/third turn). Always derivable:true.
+    | 'every-n-turns';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -213,6 +217,11 @@ export interface Condition {
     // (conditionsMet) only; per-count scaling (scaledBonus) always uses the raw count.
     countComparator?: 'gte' | 'lte' | 'eq';
     countThreshold?: number;
+    /** For 'every-n-turns': the modulo period (e.g. 2 = every other turn). */
+    period?: number;
+    /** For 'every-n-turns': the residue to match, in [0, period-1] (default 0). E.g.
+     *  period 3 + offset 1 → turns 1, 4, 7, …. Out-of-range values never match. */
+    offset?: number;
 }
 
 /** Gate for a victim-side incoming-effect ability (D-PR3). Evaluated against an
