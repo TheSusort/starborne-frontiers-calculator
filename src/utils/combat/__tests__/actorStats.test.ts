@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createActor, CombatActor } from '../state';
+import { createActor, CombatActor, ActorStats } from '../state';
 import {
     runCombat,
     CombatEngineInput,
@@ -204,5 +204,43 @@ describe('A2 Task 2 — base hacking/security on every actor', () => {
         );
         const attacker = captured.find((a) => a.id === 'attacker');
         expect(attacker?.stats.hacking).toBe(215);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 0 Task 1: turnsTaken + chargeLossImmune on CombatActor
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Phase 0 Task 1 — turnsTaken + chargeLossImmune on CombatActor', () => {
+    const baseStats: ActorStats = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        defence: 0,
+        hp: 1,
+        speed: 50,
+    };
+
+    it('createActor seeds turnsTaken to 0 and chargeLossImmune to false', () => {
+        const a = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'team',
+            stats: baseStats,
+        });
+        expect(a.turnsTaken).toBe(0);
+        expect(a.chargeLossImmune).toBe(false);
+    });
+
+    it('createActor honors chargeLossImmune passthrough', () => {
+        const a = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'team',
+            stats: baseStats,
+            chargeLossImmune: true,
+        });
+        expect(a.chargeLossImmune).toBe(true);
     });
 });

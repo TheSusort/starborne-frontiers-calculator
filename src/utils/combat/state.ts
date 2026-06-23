@@ -134,6 +134,15 @@ export interface CombatActor {
      *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
      *  for per-victim affinity re-resolution (Task 8b/9). Absent → treated as neutral downstream. */
     affinity?: AffinityName;
+    // Unlike the optional plumbing flags above (indestructible/doesntBreakStasis/affinity/…),
+    // the next two always carry a defined value: createActor seeds them on every actor, so they
+    // are required (non-optional) by design — no `X ?? default` reads needed at consume sites.
+    /** Per-actor own-turn counter. Starts at 0; incremented at the actor's turn-start
+     *  (engine.ts turn-started emit). Drives the `every-n-turns` condition (Chrono Reaver). */
+    turnsTaken: number;
+    /** When true, enemy-sourced charge removal is a no-op against this actor
+     *  ("immune to charge loss effects"). Derived from ship skill text. */
+    chargeLossImmune: boolean;
 }
 
 export function createActor(
@@ -146,6 +155,7 @@ export function createActor(
         doesntBreakStasis?: boolean;
         affinity?: AffinityName;
         indestructible?: boolean;
+        chargeLossImmune?: boolean;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -167,6 +177,8 @@ export function createActor(
         doesntBreakStasis: partial.doesntBreakStasis,
         affinity: partial.affinity,
         indestructible: partial.indestructible,
+        turnsTaken: 0,
+        chargeLossImmune: partial.chargeLossImmune ?? false,
     };
 }
 
