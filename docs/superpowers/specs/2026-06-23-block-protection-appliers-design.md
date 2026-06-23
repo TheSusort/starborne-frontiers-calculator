@@ -52,7 +52,7 @@ So the PR's real work is **trigger seams** — three new ones plus one new filte
 
 - **Seam:** rides the existing `on-attacked` trigger (self-scoped `attacked` event). Adds a NEW filter: the hit's damage must exceed 25% of the victim's max HP.
 - **Damage granularity (forced by the engine model):** the `attacked` event is emitted per-hit but carries **no damage amount** — direct damage is applied per-attack as an aggregate (engine.ts ~4476/4510). So the threshold is modeled on the **per-attack aggregate** damage, not per individual hit. This is the same per-hit-vs-aggregate limitation Bloodthirst (D-PR1) documented and accepted. The `attacked` event already excludes DoT ticks and bomb detonations (only direct weapon hits emit it) — which matches "**directly** receiving damage".
-- **Plumbing:** add an optional `damage?: number` field to the `attacked` event (the per-attack aggregate, identical across the turn's hits) so the listener can evaluate `damage / victimMaxHp > 0.25`. The listener resolves the victim's effective max HP (the carrier is the attacked unit = owner). A new `Ability`/config filter field expresses the threshold (e.g. `triggerIncomingDamageFracOfMaxHp?: number` = 0.25) — kept generic, defaulting absent → no filter (byte-identical for every existing on-attacked ability).
+- **Plumbing:** add an optional `damage?: number` field to the `attacked` event (the per-attack aggregate, identical across the turn's hits) so the listener can evaluate `damage / victimMaxHp > 0.25`. The listener resolves the victim's effective max HP (the carrier is the attacked unit = owner). A new `Ability` filter field expresses the threshold (`requireIncomingDamageFracOfMaxHp?: number` = 0.25) — kept generic, defaulting absent → no filter (byte-identical for every existing on-attacked ability).
 - **Effect:** all-allies grant `Buff Protection`, duration 2, procChance per rarity.
 
 ### 3.4 Last Stand — `on-ally-destroyed` + NEW `last-standing` condition subject
@@ -102,7 +102,7 @@ New `AbilityTrigger` values (`on-debuffed`, `on-debuff-resisted`) and the `last-
 
 ## 9. Key file seams (for the plan)
 
-- `src/types/abilities.ts` — `AbilityTrigger` += `on-debuffed`, `on-debuff-resisted`; buff `AbilityConfig` += `alsoGrantBuffNames?`; the Tenacity threshold filter field; `Condition` subject `last-standing`.
+- `src/types/abilities.ts` — `AbilityTrigger` += `on-debuffed`, `on-debuff-resisted`; buff `AbilityConfig` += `additionalBuffs?` (co-grant list, built from `mkNamedBuffGrant`'s `alsoGrantBuffNames` input); the Tenacity threshold filter field `requireIncomingDamageFracOfMaxHp?`; `Condition` subject `last-standing`.
 - `src/utils/combat/events.ts` — `attacked` event += optional `damage?`.
 - `src/utils/combat/triggers.ts` — three new listener arms (`on-debuffed`, `on-debuff-resisted` self-scoped; Tenacity damage filter on the `on-attacked` arm); `cfg.type === 'buff'` co-grant loop; `last-standing` thread through `buildDrainContext`.
 - `src/utils/combat/engine.ts` — `attacked` emission += aggregate `damage`; `isLastStandingFor` delegate on the IntentExecContext (both drain seams, side-bound); thread through `ReactiveSideCtx` if needed (D-PR14 lesson — not just the drain literals).
