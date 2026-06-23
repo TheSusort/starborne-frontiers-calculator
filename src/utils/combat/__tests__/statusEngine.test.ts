@@ -1521,7 +1521,7 @@ describe('reduceNewestDebuffDuration', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.beginRound(1);
 
-        expect(() => eng.reduceNewestDebuffDuration('no-such-actor', 1)).not.toThrow();
+        // A throw would fail the test; a wrong return value fails the assertion.
         expect(eng.reduceNewestDebuffDuration('no-such-actor', 1)).toBe(0);
     });
 });

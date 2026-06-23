@@ -1005,7 +1005,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const [key, s] of timedMap) {
             // Defensive: BuffState.turnsRemaining is typed `number` — non-numeric durations
             // ('recurring'/'permanent') live in separate maps and cannot reach enemyMaps today.
-            // Guard mirrors removeNewestFirst for belt-and-braces safety.
+            // Belt-and-braces only (this exact guard is not present in removeNewestFirst).
             if (typeof s.turnsRemaining !== 'number') continue;
             if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
             if (!best || s.appliedSeq > best.seq) best = { seq: s.appliedSeq, key, s };
