@@ -304,6 +304,17 @@ export type AbilityConfig =
            *  combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
            *  Absent → unbounded (fires on every qualifying trigger). */
           oncePerCombat?: boolean;
+          /** D-PR16: extra buffs granted ALONGSIDE the primary in the SAME application (one proc
+           *  roll → all of them). Each carries its own resolved effects + duration. Absent → the
+           *  single-buff path is unchanged. */
+          additionalBuffs?: Array<{
+              buffName: string;
+              parsedEffects: ParsedBuffEffects;
+              stacks: number;
+              isStackable: boolean;
+              maxStacks?: number;
+              duration: number;
+          }>;
       }
     | {
           type: 'debuff';

@@ -1223,6 +1223,35 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 duration,
             });
         }
+        // D-PR16: co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the
+        // SAME application as the primary (the single proc gate above already passed). Reuses
+        // the SAME recipients/gate; each extra carries its own duration. Absent → no-op loop.
+        for (const extra of cfg.additionalBuffs ?? []) {
+            const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+                payload: payloadFromConfig({
+                    buffName: extra.buffName,
+                    stacks: extra.stacks,
+                    parsedEffects: extra.parsedEffects,
+                }),
+                side: 'self',
+                sourceSlot: intent.sourceSlot,
+                conditions: gateConditions,
+                casterId: intent.ownerId,
+                recipients,
+                kind: 'timed',
+                duration: extra.duration,
+            };
+            for (const rid of recipients) {
+                ctx.statusEngine.applyTimedAbilityStatus(ctx.round, extraStatus, rid);
+                ctx.bus.emit({
+                    type: 'buff-applied',
+                    actorId: rid,
+                    round: ctx.round,
+                    buffName: extra.buffName,
+                    duration: extra.duration,
+                });
+            }
+        }
         return;
     }
 

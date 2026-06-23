@@ -357,17 +357,39 @@ function mkHealAmp(
 // effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
 // and logged but has no combat effect until that fold exists.
 // D-PR8: generalised with optional `opts` for conditions + procChance (Battlecry call is byte-identical).
-function mkNamedBuffGrant(
+// D-PR16: `alsoGrantBuffNames` (Task 5) lets one ability co-grant extra named buffs ALONGSIDE
+// the primary in the SAME application (one proc roll → all of them; Last Stand's Barrier + Block
+// Debuff). Each extra resolves its own effects/stackability from BUFFS and inherits `duration`.
+// Absent/empty → the `additionalBuffs` field is omitted → the single-buff path is byte-identical.
+// Exported for the co-grant registry-shape test.
+export function mkNamedBuffGrant(
     buffName: string,
     target: 'self' | 'ally' | 'all-allies' | 'adjacent-allies',
     trigger: AbilityTrigger,
     duration: number | undefined,
-    opts?: { conditions?: Condition[]; procChance?: number }
+    opts?: { conditions?: Condition[]; procChance?: number; alsoGrantBuffNames?: string[] }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
     if (!buff) return undefined;
     const { stackable, maxStacks } = isStackable(buff.description);
+    const additionalBuffs = (opts?.alsoGrantBuffNames ?? [])
+        .map((n) => {
+            const b = BUFFS.find((x) => x.name === n);
+            if (!b) return undefined;
+            const { stackable: extraStackable, maxStacks: extraMaxStacks } = isStackable(
+                b.description
+            );
+            return {
+                buffName: n,
+                parsedEffects: parseBuffEffects(b.name, b.description),
+                stacks: 1,
+                isStackable: extraStackable,
+                maxStacks: extraMaxStacks,
+                duration,
+            };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== undefined);
     return {
         type: 'buff',
         target,
@@ -382,6 +404,7 @@ function mkNamedBuffGrant(
             isStackable: stackable,
             maxStacks,
             duration,
+            ...(additionalBuffs.length ? { additionalBuffs } : {}),
         },
         autoFilled: true,
     };
