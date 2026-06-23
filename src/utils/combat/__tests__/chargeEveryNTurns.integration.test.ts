@@ -49,6 +49,18 @@ const activeDamageAbility = (id = 'dmg'): Ability => ({
     config: { type: 'damage', multiplier: 100 },
 });
 
+/** A CAST-PATH every-n-turns SELF charge ability (trigger: 'on-cast'), placed on the active slot
+ *  so it routes through gateFiringAbilities → chargeGainFromSkill (the cast path), NOT the
+ *  reactive end-of-turn drain. Models the asymmetry under test. */
+const castEveryNTurnsChargeAbility = (period: number, amount: number, id = 'castEnt'): Ability => ({
+    id,
+    type: 'charge',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [{ subject: 'every-n-turns', derivable: true, period, offset: 0 }],
+    config: { type: 'charge', amount },
+});
+
 const baseInput = (overrides: Partial<DPSSimulationInput> = {}): DPSSimulationInput => ({
     attack: 10000,
     crit: 0,
@@ -174,5 +186,52 @@ describe('every-n-turns(2) end-of-turn charge proc — Phase 0 Task 5 integratio
         expect(result.rounds[0].charges).toBe(1); // turn 1: advance only
         expect(result.rounds[1].charges).toBe(2); // turn 2: advance only (2%3≠0)
         expect(result.rounds[2].charges).toBe(4); // turn 3: advance 2→3, proc +1 → 4
+    });
+
+    it('CAST-PATH every-n-turns(2) on-cast self charge fires on even turns (symmetry with reactive)', () => {
+        // The every-n-turns SELF charge ability lives on the ACTIVE slot with trigger 'on-cast',
+        // so it flows through the CAST path (gateFiringAbilities → chargeGainFromSkill) rather than
+        // the reactive end-of-turn drain. The cast-path condition context is built by
+        // buildRoundContext in runPlayerTurn; pre-fix it does NOT carry turnsTaken (defaults 0),
+        // so the every-n-turns gate's `t <= 0` guard always rejects and the proc never banks.
+        //
+        // Active + charged slots: hasChargedSkill=true → advanceChargeCadence adds +1/turn (no reset
+        // before round 4 since charges never reach 8). The cast-path proc adds +1 on even turns.
+        //
+        // Post-fix derivation (chargeCount=8, startCharged=false, startCharges=0):
+        //   Round 1 (turn 1): advance 0→1; proc? 1%2≠0 → no.  charges=1.
+        //   Round 2 (turn 2): advance 1→2; proc? 2%2=0 → +1.  charges=3.
+        //   Round 3 (turn 3): advance 3→4; proc? 3%2≠0 → no.  charges=4.
+        //   Round 4 (turn 4): advance 4→5; proc? 4%2=0 → +1.  charges=6.
+        //
+        // Pre-fix (cast-path turnsTaken always 0 → gate rejects → ability dropped by
+        // gateFiringAbilities → proc never fires):
+        //   Round 2 charges = 2 (not 3) → the KEY assertion below fails pre-fix.
+        const shipSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        activeDamageAbility('a'),
+                        castEveryNTurnsChargeAbility(2, 1, 'castEnt'),
+                    ],
+                },
+                { slot: 'charged', abilities: [activeDamageAbility('c')] },
+            ],
+        };
+
+        const result = simulateDPS(
+            baseInput({
+                chargeCount: 8,
+                shipSkills,
+                rounds: 4,
+            })
+        );
+
+        expect(result.rounds[0].charges).toBe(1); // turn 1 (odd): advance only
+        // KEY ASSERTION: pre-fix this is 2 (cast-path turnsTaken=0 → proc never fires).
+        expect(result.rounds[1].charges).toBe(3); // turn 2 (even): advance 1→2, cast proc +1 → 3
+        expect(result.rounds[2].charges).toBe(4); // turn 3 (odd): advance 3→4, no proc
+        expect(result.rounds[3].charges).toBe(6); // turn 4 (even): advance 4→5, cast proc +1 → 6
     });
 });

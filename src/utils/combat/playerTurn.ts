@@ -1252,6 +1252,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
+        // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
+        // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.
+        turnsTaken: actor.turnsTaken,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
