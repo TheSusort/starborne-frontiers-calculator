@@ -552,7 +552,7 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
                 conditions: [selfDebuffGate],
                 config: {
                     type: 'cleanse' as const,
-                    count: 0,
+                    count: 0, // inert in reduce-duration mode (required by the cleanse config type)
                     mode: 'reduce-duration' as const,
                     durationTurns: 1,
                 },

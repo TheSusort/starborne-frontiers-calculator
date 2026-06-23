@@ -515,7 +515,7 @@ describe('equipmentCoverage — implants', () => {
         expect(abs[1].id).toBe('equip-implant-WARPSTRIKE-WARPSTRIKE-piece-1');
     });
 
-    // D-PR16: REACTIVE_WARD — 1 ability for common/uncommon/epic/legendary; 0 for rare
+    // Reactive cleanse PR: REACTIVE_WARD — 1 ability for common/uncommon/epic/legendary; 0 for rare
     it('REACTIVE_WARD produces 1 ability for common/uncommon/epic/legendary, 0 for rare (no rare variant)', () => {
         expect(implantAbilityCount('REACTIVE_WARD', 'common')).toBe(1);
         expect(implantAbilityCount('REACTIVE_WARD', 'uncommon')).toBe(1);
