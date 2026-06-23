@@ -4415,24 +4415,90 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
         }
     );
 
-    // ── Case 3: Cloaking + Ambush synergy — BLOCKED (see report) ─────────────────
+    // ── Case 3: Cloaking + Ambush synergy ────────────────────────────────────────
     //
-    // The spec'd case 3 (Cloaking supplies Stealth → Ambush's `{subject:'self-buff',
-    // buffName:'Stealth'}` gate satisfies → Crit Power Up III is granted to the carrier) is NOT
-    // realizable with the current engine, so no test is written for it (a passing assertion would
-    // be a tautology / would pass even with Cloaking broken). Root cause, empirically confirmed:
+    // Cloaking supplies the 'Stealth' self-buff (ability-sourced, payload-carrying) → Ambush's
+    // start-of-round gate `{subject:'self-buff', buffName:'Stealth', derivable:true}` is satisfied
+    // and Ambush grants 'Crit Power Up III' to the carrier. The Ambush gate is evaluated at drain
+    // time via buildDrainContext → buildActorConditionContext; with `includeAbilitySelfNames:true`
+    // the drain-time `selfBuffNames` now includes ability-sourced timed self statuses (Cloaking's
+    // Stealth), so the gate sees it. This is the behaviour the triggers.ts fix unlocks.
     //
-    //   The Ambush gate is evaluated at start-of-round DRAIN time via buildActorConditionContext
-    //   (triggers.ts buildDrainContext), whose `selfBuffNames` are SNAPSHOT-ONLY
-    //   (`includeAbilitySelfNames` is FALSE for all owners at drain). Cloaking's Stealth is granted
-    //   via mkNamedBuffGrant (type 'buff') → it is registered through registerAbilityStatuses as an
-    //   ABILITY-SOURCED timed status, which snapshot().activeSelfBuffs EXCLUDES. So the gate's
-    //   `selfBuffNames` never contains 'Stealth' (evaluateConditions self-buff reads ctx.selfBuffNames),
-    //   even though the TARGETING reader isStealthed() DOES see it (selfBuffNamesForOwners aggregates
-    //   ability statuses — which is why cases 1/2/4 work). This visibility asymmetry means Ambush
-    //   never fires from Cloaking-supplied Stealth. (Compounding: at round-1 drain Ambush executes
-    //   before Cloaking grants Stealth in the same pass; and the player-side Stealth window is round 1
-    //   only — so even a snapshot-visible buff would not survive to a later round's gate.)
-    //   Verified by a throwaway run: with Ambush procChance forced to 1 over many rounds, zero
-    //   'Crit Power Up III' buff-applied events are emitted; only the single round-1 'Stealth' event.
+    // Legendary AMBUSH implant on the same carrier as the CLOAKING set. We override ONLY the built
+    // Ambush ability's `procChance` to 1 for determinism (the established REACTIVE_WARD/LAST_STAND
+    // device) — every other field (gate, buffName, trigger) comes straight from the registry.
+    it(
+        'Cloaking + Ambush synergy: Cloaking-supplied Stealth satisfies Ambush’s self-buff gate ' +
+            '→ Ambush grants Crit Power Up III to the carrier while Stealth is active',
+        () => {
+            const ambushPiece = makePiece({
+                id: 'ambush-1',
+                slot: 'implant_major',
+                rarity: 'legendary',
+                setBonus: 'AMBUSH',
+            });
+            const ship = makeShip({
+                equipment: { weapon: 'cloak-1', hull: 'cloak-2' },
+                implants: { implant_major: 'ambush-1' },
+            });
+            const getGearPiece = makeGetGearPiece({
+                'cloak-1': cloakPieceA,
+                'cloak-2': cloakPieceB,
+                'ambush-1': ambushPiece,
+            });
+            const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+            const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+            expect(passive).toBeDefined();
+            // Pre-conditions: both the Cloaking set ability and the Ambush implant ability landed
+            // in the passive slot.
+            const cloak = passive!.abilities.find((a) => a.id === 'equip-set-CLOAKING');
+            expect(cloak).toBeDefined();
+            const ambush = passive!.abilities.find((a) => a.id.startsWith('equip-implant-AMBUSH'));
+            expect(ambush).toBeDefined();
+            // Sanity: Ambush is the start-of-round self-buff grant gated on self-buff/Stealth.
+            expect(ambush!.trigger).toBe('start-of-round');
+            expect(ambush!.config.type).toBe('buff');
+            if (ambush!.config.type === 'buff') {
+                expect(ambush!.config.buffName).toBe('Crit Power Up III');
+            }
+            expect(
+                ambush!.conditions.some(
+                    (c) => c.subject === 'self-buff' && c.buffName === 'Stealth'
+                )
+            ).toBe(true);
+
+            // Force determinism WITHOUT leaving the registry path: mutate only procChance.
+            const determinizedAmbush: Ability = { ...ambush!, procChance: 1 };
+            const otherPassives = passive!.abilities.filter(
+                (a) => !a.id.startsWith('equip-implant-AMBUSH')
+            );
+
+            const input = CLOAK_BASE({
+                shipSkills: {
+                    slots: [
+                        basicAttack(),
+                        { slot: 'passive', abilities: [...otherPassives, determinizedAmbush] },
+                    ],
+                },
+            });
+
+            // Collect 'Crit Power Up III' buff-applied events (Ambush firing on the carrier).
+            const bus = createEventBus();
+            const ambushFires: Array<{ actorId: string; round: number }> = [];
+            bus.on('buff-applied', (e) => {
+                if (e.buffName === 'Crit Power Up III')
+                    ambushFires.push({ actorId: e.actorId, round: e.round });
+            });
+            runCombat({ ...input, bus });
+
+            // Ambush fires on the carrier. Empirically observed: a SINGLE fire at round 1 — the
+            // player-side Stealth window is round 1 only (Cloaking grants Stealth at the round-1
+            // start-of-round, and the Ambush start-of-round drain in that same round sees it via
+            // the ability-sourced self-buff inclusion; it expires before round 2's gate per the
+            // project_buff_duration_decrement_timing quirk seen in case 1).
+            expect(ambushFires.length).toBeGreaterThan(0);
+            expect(ambushFires.every((f) => f.actorId === 'attacker')).toBe(true);
+            expect(ambushFires.some((f) => f.round === 1)).toBe(true);
+        }
+    );
 });
