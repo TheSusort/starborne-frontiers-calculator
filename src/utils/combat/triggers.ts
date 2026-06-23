@@ -402,7 +402,10 @@ export function registerReactiveListeners(args: {
                             if (e.damage === undefined || !maxHp || e.damage <= fracGate * maxHp)
                                 return;
                         }
-                        enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
+                        enqueue({
+                            ...intent,
+                            eventCtx: { counterTargetId: e.attackerId, didCrit: e.didCrit },
+                        });
                     });
                     break;
                 case 'on-debuffed':
@@ -1502,15 +1505,20 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'cleanse') {
+        // (reduce-duration mode is added in a later task; remove-mode only for now.)
+        // remove mode — keep the !ctx.healing return BEFORE the proc gate (gate-desync rule;
+        // see passesProcChanceGate doc).
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        if (!passesProcChanceGate(intent, ctx)) return;
         // ctx.playerIds is the SAME-SIDE ally id order (sideCtx.recipientIds) — side-correct for
         // both player and enemy reactive drains. ctx.statusEngine is the live store. Mirrors the
         // reactive heal branch's recipient resolution: an 'ally'-target cleanse prefers the
         // eventCtx.damagedAllyId (an ally-damage reaction cleanses THAT ally) over the heal target;
         // 'all-allies' fans out to every same-side id; self → the owner.
         const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);
+        const count = intent.eventCtx?.didCrit && cfg.critCount != null ? cfg.critCount : cfg.count;
         let removed = 0;
-        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, cfg.count);
+        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, count);
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
         return;
