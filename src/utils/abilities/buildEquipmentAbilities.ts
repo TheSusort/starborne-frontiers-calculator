@@ -289,6 +289,14 @@ const LOCKDOWN_PROC: Record<string, number> = {
     legendary: 0.16,
 };
 const TENACITY_PROC: Record<string, number> = { rare: 0.1, epic: 0.12, legendary: 0.16 };
+// D-PR16: Last Stand — when this unit becomes the last one standing, X% chance to gain Barrier
+// AND Block Debuff (self) for 1 turn. All four rarities are uniform per the source data.
+const LAST_STAND_PROC: Record<string, number> = {
+    uncommon: 0.18,
+    rare: 0.21,
+    epic: 0.26,
+    legendary: 0.32,
+};
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -771,6 +779,18 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         });
         if (!base) return undefined;
         return { ...base, requireIncomingDamageFracOfMaxHp: 0.25 };
+    },
+    // D-PR16: Last Stand — when this unit becomes the last one standing, X% chance to gain
+    // Barrier AND Block Debuff (self) for 1 turn. Rides on-ally-destroyed gated on last-standing
+    // (fires on the ally death that leaves the owner sole survivor); both buffs on ONE proc roll.
+    LAST_STAND: (rarity) => {
+        const procChance = LAST_STAND_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Barrier', 'self', 'on-ally-destroyed', 1, {
+            procChance,
+            conditions: [{ subject: 'last-standing', derivable: true }],
+            alsoGrantBuffNames: ['Block Debuff'],
+        });
     },
 };
 
