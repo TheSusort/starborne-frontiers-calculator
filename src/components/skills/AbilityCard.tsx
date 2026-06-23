@@ -131,6 +131,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-crit', label: 'On critical hit' },
     { value: 'on-attacked', label: 'When attacked' },
     { value: 'on-debuffed', label: 'On debuffed (self)' },
+    { value: 'on-debuff-resisted', label: 'On debuff resisted (self)' },
     { value: 'on-ally-attacked', label: 'When an ally is attacked' },
     { value: 'on-ally-destroyed', label: 'On ally destroyed' },
     { value: 'on-destroyed', label: 'On destroyed' },

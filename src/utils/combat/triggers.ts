@@ -401,6 +401,15 @@ export function registerReactiveListeners(args: {
                         if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'on-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
+                        // unit that resisted (either side: cast-side, reactive-side, and the
+                        // D-PR15 Block-Debuff auto-resist all emit it). all-allies recipient
+                        // routing happens in the buff executor.
+                        if (e.targetId === ownerId) enqueue(intent);
+                    });
+                    break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT

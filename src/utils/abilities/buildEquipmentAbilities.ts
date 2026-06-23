@@ -281,6 +281,13 @@ const FIREWALL_PROC: Record<string, number> = {
     epic: 0.12,
     legendary: 0.15,
 };
+const LOCKDOWN_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -719,6 +726,15 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         const procChance = FIREWALL_PROC[rarity];
         if (procChance === undefined) return undefined;
         return mkNamedBuffGrant('Block Debuff', 'self', 'on-debuffed', 1, { procChance });
+    },
+    // D-PR16: Lockdown — when resisting a debuff, X% chance to grant Buff Protection to
+    // all allies for 1 turn.
+    LOCKDOWN: (rarity) => {
+        const procChance = LOCKDOWN_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Buff Protection', 'all-allies', 'on-debuff-resisted', 1, {
+            procChance,
+        });
     },
 };
 

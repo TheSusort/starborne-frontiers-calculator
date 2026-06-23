@@ -89,7 +89,11 @@ export type AbilityTrigger =
     // D-PR16 Firewall: fires when THIS unit receives a timed debuff (rides the existing
     // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
     // (separate `dot-applied` event) — matches "when debuffed".
-    | 'on-debuffed';
+    | 'on-debuffed'
+    // D-PR16 Lockdown: fires when THIS unit resists an incoming debuff (rides the existing
+    // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
+    // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
+    | 'on-debuff-resisted';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -129,6 +133,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-own-repair-to-ally',
     // D-PR16 Firewall: self-scoped reaction to receiving a timed debuff.
     'on-debuffed',
+    // D-PR16 Lockdown: self-scoped reaction to RESISTING an incoming debuff.
+    'on-debuff-resisted',
 ]);
 
 export type ConditionSubject =
