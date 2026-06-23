@@ -82,6 +82,10 @@ export type AbilityTrigger =
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
     | 'on-charged-cast'
+    // Warpstrike: owner dealt direct damage on its turn. Rides the aggregate
+    // ability-performed event emitted once per damage-dealing turn (runPlayerTurn
+    // emits exactly one; positional path emits none — engine.ts ~2887).
+    | 'on-deal-damage'
     // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
     // event with a non-self recipient). Used by the Font of Power implant (grants the
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
@@ -135,6 +139,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuffed',
     // D-PR16 Lockdown: self-scoped reaction to RESISTING an incoming debuff.
     'on-debuff-resisted',
+    // Warpstrike: owner dealt direct damage on its turn.
+    'on-deal-damage',
 ]);
 
 export type ConditionSubject =

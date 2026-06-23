@@ -3418,3 +3418,186 @@ describe('C2b-1: purge partition guard (on-cast stays cast, on-enemy-purged goes
         expect(castIds).not.toContain('pop1');
     });
 });
+
+// ----------------------------------------------------------------------
+// on-deal-damage live trigger: unit-level tests for the pure listener.
+// Models the Warpstrike implant: owner reduces a self-debuff's duration
+// when it deals direct damage on its own turn.
+//
+// The listener rides the aggregate `ability-performed` event emitted once
+// per damage-dealing turn (runPlayerTurn emits exactly one; positional path
+// emits none — engine.ts ~2887). No once-per-turn guard is needed.
+// The while-debuffed condition is enforced at drain (gateConditions), NOT here.
+// ----------------------------------------------------------------------
+describe('on-deal-damage live trigger', () => {
+    // Minimal on-deal-damage ability (Warpstrike shape): a cleanse that
+    // reduces the duration of the oldest self-debuff when the owner deals damage.
+    const onDealDamageAbility = (): Ability =>
+        ab({
+            type: 'cleanse',
+            target: 'self',
+            trigger: 'on-deal-damage',
+            config: {
+                type: 'cleanse',
+                mode: 'reduce-duration',
+                count: 1,
+            },
+        });
+
+    // Helper: wire up the bus, register the owner's listeners, emit an
+    // `ability-performed` event, and return the collected intents.
+    function emitAbilityPerformed(
+        perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[],
+        event: Extract<CombatEvent, { type: 'ability-performed' }>
+    ): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner,
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit(event);
+        return intents;
+    }
+
+    it('enqueues when actorId === ownerId AND damage > 0', () => {
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const intents = emitAbilityPerformed([{ ownerId: 'warpstrike', reactiveAbilities: [ra] }], {
+            type: 'ability-performed',
+            actorId: 'warpstrike',
+            targetId: 'enemy',
+            round: 1,
+            abilityType: 'damage',
+            damage: 5000,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('warpstrike');
+        expect(intents[0].ability.trigger).toBe('on-deal-damage');
+    });
+
+    it('does NOT enqueue when actorId !== ownerId (another actor dealing damage)', () => {
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const intents = emitAbilityPerformed([{ ownerId: 'warpstrike', reactiveAbilities: [ra] }], {
+            type: 'ability-performed',
+            actorId: 'other-ship',
+            targetId: 'enemy',
+            round: 1,
+            abilityType: 'damage',
+            damage: 5000,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('does NOT enqueue when damage is 0', () => {
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const intents = emitAbilityPerformed([{ ownerId: 'warpstrike', reactiveAbilities: [ra] }], {
+            type: 'ability-performed',
+            actorId: 'warpstrike',
+            targetId: 'enemy',
+            round: 1,
+            abilityType: 'damage',
+            damage: 0,
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('does NOT enqueue when damage is undefined (non-damage ability event)', () => {
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const intents = emitAbilityPerformed([{ ownerId: 'warpstrike', reactiveAbilities: [ra] }], {
+            type: 'ability-performed',
+            actorId: 'warpstrike',
+            targetId: 'enemy',
+            round: 1,
+            abilityType: 'buff',
+            // damage omitted — optional field, should default via ?? 0
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('fires exactly once per turn regardless of hit count (aggregate event model)', () => {
+        // runPlayerTurn emits ONE ability-performed per turn. Multi-hit and AoE are
+        // already aggregated — this test confirms the listener enqueues exactly once.
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'warpstrike', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        // Emit ONE aggregate event (as the engine does for a multi-hit turn).
+        bus.emit({
+            type: 'ability-performed',
+            actorId: 'warpstrike',
+            targetId: 'enemy',
+            round: 2,
+            abilityType: 'damage',
+            damage: 12000,
+        });
+        expect(intents).toHaveLength(1);
+    });
+
+    it('fires only the matching owner when multiple owners are registered', () => {
+        const ra: ReactiveAbility = {
+            ability: onDealDamageAbility(),
+            sourceSlot: 'passive',
+        };
+        const raOther: ReactiveAbility = {
+            ability: { ...onDealDamageAbility(), id: 'other-dd' },
+            sourceSlot: 'passive',
+        };
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                { ownerId: 'warpstrike', reactiveAbilities: [ra] },
+                { ownerId: 'bystander', reactiveAbilities: [raOther] },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'ability-performed',
+            actorId: 'warpstrike',
+            targetId: 'enemy',
+            round: 1,
+            abilityType: 'damage',
+            damage: 8000,
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].ownerId).toBe('warpstrike');
+    });
+
+    it('on-deal-damage is in LIVE_TRIGGERS (partitions as reactive)', () => {
+        expect(LIVE_TRIGGERS.has('on-deal-damage')).toBe(true);
+        const { reactiveAbilities } = partitionReactiveAbilities({
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [onDealDamageAbility()],
+                },
+            ],
+        });
+        expect(reactiveAbilities).toHaveLength(1);
+        expect(reactiveAbilities[0].ability.trigger).toBe('on-deal-damage');
+    });
+});
