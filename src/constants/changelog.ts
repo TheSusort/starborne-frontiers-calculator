@@ -26,6 +26,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Bulwark implants now apply Provoke to an enemy that damages a nearby ally, and Doomsayer implants apply Concentrate Fire to the strongest enemy at the end of the round.',
     "Combat simulator now models two control primitives: Block Debuff (a unit immune to debuffs auto-resists every incoming debuff — timed, persistent, control such as Stasis or Disable, and damage-over-time — shown in the log as resisted) and Buff Protection (a unit's buffs can no longer be stripped by enemy purge). These back upcoming implant effects.",
     'Combat simulator now models four reactive defensive-control implants: Firewall (when the carrier is debuffed, a chance to gain Block Debuff so it briefly auto-resists incoming debuffs), Lockdown (when the carrier resists a debuff, grants the team Buff Protection so their buffs can no longer be purged), Tenacity (when the carrier takes a hit over 25% of its max HP, grants the team Buff Protection), and Last Stand (when the carrier becomes the last unit standing, grants itself Barrier and Block Debuff).',
+    "Combat simulator now models two cleanse-related implants: Reactive Ward (when the carrier is directly hit, a chance to cleanse one of its own debuffs — two if the hit was a critical) and the second half of Warpstrike (when the carrier deals direct damage while debuffed, it shortens one of its own debuffs by a turn). Chance-based procs are modeled at their true average frequency.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
