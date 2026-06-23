@@ -288,6 +288,7 @@ const LOCKDOWN_PROC: Record<string, number> = {
     epic: 0.12,
     legendary: 0.16,
 };
+const TENACITY_PROC: Record<string, number> = { rare: 0.1, epic: 0.12, legendary: 0.16 };
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -735,6 +736,18 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         return mkNamedBuffGrant('Buff Protection', 'all-allies', 'on-debuff-resisted', 1, {
             procChance,
         });
+    },
+    // D-PR16: Tenacity — upon directly receiving damage > 25% of max HP, X% chance to grant
+    // Buff Protection to all allies for 2 turns. Models the per-ATTACK aggregate (the
+    // `attacked` event excludes DoT/bomb → "directly receiving").
+    TENACITY: (rarity) => {
+        const procChance = TENACITY_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        const base = mkNamedBuffGrant('Buff Protection', 'all-allies', 'on-attacked', 2, {
+            procChance,
+        });
+        if (!base) return undefined;
+        return { ...base, requireIncomingDamageFracOfMaxHp: 0.25 };
     },
 };
 

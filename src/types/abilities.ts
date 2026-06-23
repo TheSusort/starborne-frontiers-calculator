@@ -451,6 +451,10 @@ export interface Ability {
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →
      *  any ally (existing behavior). */
     requireDamagedAllyAdjacent?: boolean;
+    /** D-PR16 Tenacity: gate an `on-attacked` reaction on the per-attack aggregate damage
+     *  exceeding this fraction of the owner's effective max HP (e.g. 0.25). Absent → no gate
+     *  (byte-identical for every existing on-attacked ability). */
+    requireIncomingDamageFracOfMaxHp?: number;
     /** Probabilistic proc gate for equipment-sourced reactive abilities ("N% chance to …").
      *  A value in (0,1) means the ability fires at that rate via a combat-lifetime per-(owner,
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)

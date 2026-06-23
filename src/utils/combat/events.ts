@@ -28,11 +28,13 @@ import { DoTType } from '../../types/calculator';
  *    application moment so reactions (Defiant's shield-on-Stasis, on-stasis-applied) can fire.
  */
 export type CombatEvent =
-    | { type: 'round-started'; round: number }
-    | /** Fires once per round at the round TAIL, AFTER all turns + the post-round death drain.
+    | {
+          type: 'round-started';
+          round: number;
+      } /** Fires once per round at the round TAIL, AFTER all turns + the post-round death drain.
      *  Mirror of `round-started`. Drains the end-of-round reactive queue (Rhodium's
      *  end-of-round purge). Carries only the round number. */
-    { type: 'round-ended'; round: number }
+    | { type: 'round-ended'; round: number }
     | { type: 'turn-started'; actorId: string; round: number }
     | { type: 'turn-ended'; actorId: string; round: number }
     | {
@@ -156,7 +158,13 @@ export type CombatEvent =
      *  DIRECT hit (vs a DoT-tick batch, which has no single killer → byDirectDamage:false,
      *  killerId undefined). Optional — only Faust's on-destroyed purge reads them; all other
      *  listeners ignore them (backward-compatible). */
-    | { type: 'ship-destroyed'; actorId: string; round: number; killerId?: string; byDirectDamage?: boolean }
+    | {
+          type: 'ship-destroyed';
+          actorId: string;
+          round: number;
+          killerId?: string;
+          byDirectDamage?: boolean;
+      }
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | { type: 'cheat-death-activated'; actorId: string; round: number }
@@ -176,6 +184,11 @@ export type CombatEvent =
           attackerId: string;
           round: number;
           didCrit?: boolean;
+          /** D-PR16: per-ATTACK aggregate direct damage dealt this turn (identical across the
+           *  turn's per-hit events — per-hit damage is not tracked, same approximation as
+           *  Bloodthirst's triggerDamage). Present only when a damage aggregate is in scope.
+           *  Tenacity's >25%-max-HP filter reads this. */
+          damage?: number;
       };
 
 export type CombatEventType = CombatEvent['type'];

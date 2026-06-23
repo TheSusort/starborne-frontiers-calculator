@@ -106,7 +106,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + LOCKDOWN + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_WISH + LOCKDOWN + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -149,6 +149,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'SECOND_WIND',
             'SHADOWGUARD',
             'SPEARHEAD',
+            'TENACITY',
             'VIVACIOUS_REPAIR',
         ]);
     });
@@ -204,9 +205,11 @@ describe('equipmentCoverage — implants', () => {
     // D-PR14: BULWARK, DOOMSAYER added (Provoke / Concentrate Fire debuff grants).
     // D-PR16: FIREWALL added (on-debuffed → self Block Debuff grant).
     // D-PR16: LOCKDOWN added (on-debuff-resisted → all-ally Buff Protection grant).
+    // D-PR16: TENACITY added (on-attacked >25%-max-HP → all-ally Buff Protection grant).
     const implementedImplants = new Set([
         'FIREWALL',
         'LOCKDOWN',
+        'TENACITY',
         'BLOODTHIRST',
         'INTRUSION',
         'ARCANE_SIEGE',

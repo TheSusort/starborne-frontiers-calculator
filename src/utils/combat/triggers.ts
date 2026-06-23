@@ -238,8 +238,11 @@ export function registerReactiveListeners(args: {
      *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
      *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
+    /** D-PR16: owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
+     *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
+    maxHpOf?: (ownerId: string) => number;
 }): void {
-    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor, maxHpOf } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
     // self-scoped triggers). For the player registration (opposing = enemy-side) this
     // is byte-identical to the old pattern.
@@ -390,6 +393,12 @@ export function registerReactiveListeners(args: {
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
+                        const fracGate = ra.ability.requireIncomingDamageFracOfMaxHp;
+                        if (fracGate !== undefined) {
+                            const maxHp = maxHpOf?.(ownerId);
+                            if (e.damage === undefined || !maxHp || e.damage <= fracGate * maxHp)
+                                return;
+                        }
                         enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
                     });
                     break;

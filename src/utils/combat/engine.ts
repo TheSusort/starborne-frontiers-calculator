@@ -2040,6 +2040,9 @@ export function runCombat(input: CombatEngineInput): {
         roleOf: (id) => roleByActorId.get(id),
         adjacentAllyIdsFor: (ownerId: string) =>
             bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
+        // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
+        // id-keyed and side-agnostic, so the same closure serves the enemy registration below.
+        maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
     });
 
     // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
@@ -2066,6 +2069,8 @@ export function runCombat(input: CombatEngineInput): {
             roleOf: (id) => roleByActorId.get(id),
             adjacentAllyIdsFor: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
+            // D-PR16: same id-keyed effective-max-HP closure as the player registration.
+            maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
         });
     }
 
@@ -4516,6 +4521,7 @@ export function runCombat(input: CombatEngineInput): {
                                     attackerId: actor.id,
                                     round: r,
                                     ...(hitCrit ? { didCrit: true } : {}),
+                                    ...(damage > 0 ? { damage } : {}),
                                 });
                             }
                         }
