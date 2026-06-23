@@ -102,7 +102,7 @@ In `src/utils/combat/triggers.ts` `registerReactiveListeners`, add a `case` next
                     break;
 ```
 
-Also add `'on-debuffed'` to the `REACTIVE_ABILITY_TYPES`/`LIVE_TRIGGERS` membership ONLY if required for the listener to be registered — check how `on-attacked` is gated into `registerReactiveListeners` (search `LIVE_TRIGGERS` in `triggers.ts`/`abilityStatusGating.ts`). Add it wherever `on-attacked` appears so the partition treats it as a reactive (not on-cast) trigger.
+**REQUIRED:** add `'on-debuffed'` to `LIVE_TRIGGERS` in `src/types/abilities.ts` (line ~110, alongside `'on-attacked'`). `triggers.ts:123` does `if (!LIVE_TRIGGERS.has(ability.trigger)) return false;` — a trigger absent from this set is never classified reactive, so the new `switch` case is unreachable and the applier silently does nothing. Do NOT touch `REACTIVE_ABILITY_TYPES` (the ability `type` is `'buff'`, already present).
 
 - [ ] **Step 6: Add the registry entry + proc map**
 
@@ -206,7 +206,7 @@ In `triggers.ts` `registerReactiveListeners`:
                     break;
 ```
 
-Add `'on-debuff-resisted'` to the same reactive-trigger membership list as in Task 1 Step 5.
+**REQUIRED:** add `'on-debuff-resisted'` to `LIVE_TRIGGERS` in `src/types/abilities.ts` (alongside `'on-attacked'`), same as Task 1 Step 5 — without it the listener case is unreachable and Lockdown silently does nothing.
 
 - [ ] **Step 6: Registry entry + proc map**
 
@@ -349,7 +349,7 @@ In `engine.ts`, both `registerReactiveListeners(...)` call sites (player + enemy
         },
 ```
 
-Use whatever roster map + effective-stats helper is already in engine scope (mirror how `highestAttackInRoster` resolves `effectiveStatsOf(...).attack`). If `effectiveStatsOf` exposes max HP under a different key, use that. Add to BOTH call sites (same closure is fine — it's side-agnostic by id).
+The engine's existing idiom for effective max HP is `lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? <base HP for id>` (see engine.ts ~1834 / the `triggers.ts:1378` pattern `ownerCtx?.effectiveMaxHp ?? owner.hp`) — prefer that over re-deriving via `effectiveStatsOf(...)`. Whichever source you use, add to BOTH `registerReactiveListeners` call sites (same closure is fine — it's side-agnostic by id).
 
 - [ ] **Step 8: Registry entry + proc map**
 
@@ -623,7 +623,7 @@ In `triggers.ts`, in the `cfg.type === 'buff'` branch, AFTER the existing per-re
         }
 ```
 
-(Verify `payloadFromConfig` accepts a `{ type:'buff', buffName, parsedEffects, stacks, isStackable, maxStacks, duration }` shape — it consumes the primary `buffCfg` of that shape today. The co-buffs intentionally skip the `attackFlatPctOfCaster` pin — Block Debuff/Barrier carry no such sentinel.)
+(`payloadFromConfig` reads only `{ buffName, stacks, parsedEffects, application? }` from its argument — spreading `{ type:'buff', ...extra }` type-checks (variable spread bypasses excess-property checks) and yields the correct payload. The co-buffs intentionally skip the `attackFlatPctOfCaster` pin — Block Debuff/Barrier carry no such sentinel.)
 
 - [ ] **Step 6: Run tests + tsc + lint.**
 
