@@ -41,7 +41,7 @@ import { Ship } from '../../types/ship';
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
-const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
+const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | undefined>> = {
     LEECH: () => ({
         type: 'heal',
         target: 'self',
@@ -881,6 +881,7 @@ export function buildEquipmentAbilities(
         if (!builder) continue;
 
         const partial = builder();
+        if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     }
 
