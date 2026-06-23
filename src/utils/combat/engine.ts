@@ -387,6 +387,9 @@ export interface EnemyActorInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
@@ -484,6 +487,7 @@ export function buildEnemyPlayerActorRuntime(
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         doesntBreakStasis: e.doesntBreakStasis,
+        chargeLossImmune: e.chargeLossImmune,
         affinity: e.affinity,
     });
 
@@ -813,6 +817,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
      *  positional target selection AND the Task 8b positional apply at the team damage site. */
     target?: ParsedTarget;
@@ -912,6 +919,9 @@ export interface CombatEngineInput {
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
         doesntBreakStasis?: boolean;
+        /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+         *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+        chargeLossImmune?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
         /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
@@ -930,6 +940,9 @@ export interface CombatEngineInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
      *  target selection AND the Task 8b positional apply at the focus damage site. */
     target?: ParsedTarget;
@@ -1220,6 +1233,7 @@ export function runCombat(input: CombatEngineInput): {
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         doesntBreakStasis: input.doesntBreakStasis,
+        chargeLossImmune: input.chargeLossImmune,
         affinity: input.affinity,
     });
     const enemy = createActor({
@@ -1294,6 +1308,7 @@ export function runCombat(input: CombatEngineInput): {
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             doesntBreakStasis: t.doesntBreakStasis,
+            chargeLossImmune: t.chargeLossImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,

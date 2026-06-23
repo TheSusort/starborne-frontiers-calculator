@@ -1468,6 +1468,14 @@ export function parseDoesntBreakStasis(text: string | null | undefined): boolean
     return DOESNT_BREAK_STASIS_RE.test(normalised);
 }
 
+/** True iff this skill text declares the unit is immune to charge loss effects (Lev). */
+const CHARGE_LOSS_IMMUNE_RE = /\bimmune to charge[- ]?loss\b/i;
+export function parseChargeLossImmune(text: string | null | undefined): boolean {
+    // No apostrophe-normalisation (unlike parseDoesntBreakStasis): the matched phrase
+    // "immune to charge loss" contains no apostrophe, so curly/straight quotes can't affect it.
+    return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
+}
+
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
 export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
     return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
@@ -2136,9 +2144,7 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
  * Faust, Iridium, etc.) will produce matches here. The active/charged slot-gate in
  * buildShipAbilities (Task 3) is what prevents those from being emitted as abilities.
  */
-export function parsePurge(
-    text: string | null | undefined
-): {
+export function parsePurge(text: string | null | undefined): {
     count: number | 'all';
     target: 'enemy' | 'all-enemies';
     explicitTarget: boolean;
@@ -2176,7 +2182,12 @@ export function parsePurge(
             scaleMatch && typeof count === 'number'
                 ? { stat: 'critDamage' as const, per: parseInt(scaleMatch[1], 10) }
                 : undefined;
-        results.push({ count, target, explicitTarget: true, ...(countScaling ? { countScaling } : {}) });
+        results.push({
+            count,
+            target,
+            explicitTarget: true,
+            ...(countScaling ? { countScaling } : {}),
+        });
     }
     return results;
 }

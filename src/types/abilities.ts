@@ -506,4 +506,8 @@ export interface ShipSkills {
      *  (Akula / Tygr). Threaded onto CombatActor.doesntBreakStasis by the engine adapter
      *  and gated at the break-mark site (§4.5 Akula exception). */
     doesntBreakStasis?: boolean;
+    /** True when the ship's passive text declares immunity to charge loss effects (Lev).
+     *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
+     *  charge removal is a no-op against actors with this flag set. */
+    chargeLossImmune?: boolean;
 }
