@@ -238,8 +238,11 @@ export function registerReactiveListeners(args: {
      *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
      *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
+    /** D-PR16: owner effective max HP resolver — gates Tenacity's incoming-damage-fraction
+     *  filter. Optional: absent → the filter is skipped (no Tenacity in scope). */
+    maxHpOf?: (ownerId: string) => number;
 }): void {
-    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor } = args;
+    const { bus, perOwner, enqueue, isOpposing, roleOf, adjacentAllyIdsFor, maxHpOf } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
     // self-scoped triggers). For the player registration (opposing = enemy-side) this
     // is byte-identical to the old pattern.
@@ -390,7 +393,30 @@ export function registerReactiveListeners(args: {
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
+                        const fracGate = ra.ability.requireIncomingDamageFracOfMaxHp;
+                        if (fracGate !== undefined) {
+                            const maxHp = maxHpOf?.(ownerId);
+                            if (e.damage === undefined || !maxHp || e.damage <= fracGate * maxHp)
+                                return;
+                        }
                         enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
+                    });
+                    break;
+                case 'on-debuffed':
+                    bus.on('debuff-applied', (e) => {
+                        // Self-scoped: fires when THIS owner receives a timed debuff. Mirrors
+                        // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
+                        // this event) → Firewall does not fire on DoT application, by design.
+                        if (e.targetId === ownerId) enqueue(intent);
+                    });
+                    break;
+                case 'on-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
+                        // unit that resisted (either side: cast-side, reactive-side, and the
+                        // D-PR15 Block-Debuff auto-resist all emit it). all-allies recipient
+                        // routing happens in the buff executor.
+                        if (e.targetId === ownerId) enqueue(intent);
                     });
                     break;
                 case 'on-ally-attacked':
@@ -652,6 +678,9 @@ export interface IntentExecContext {
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
+    /** D-PR16: id of the sole living actor on the drain owner's side (recomputed each drain),
+     *  or undefined when !=1 actor is alive. Drives the `last-standing` gate (Last Stand). */
+    lastStandingId?: string;
     /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
     /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
@@ -717,6 +746,9 @@ export function buildActorConditionContext(
         /** Owner took the round's first real turn. Default false. Populated by
          *  buildDrainContext (D-PR14). */
         firstActivator?: boolean;
+        /** Owner is the sole living actor on its side. Default false. Populated by
+         *  buildDrainContext (D-PR16). */
+        lastStanding?: boolean;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -745,6 +777,7 @@ export function buildActorConditionContext(
         isLowestSpeedAlly: shared.isLowestSpeedAlly,
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
+        lastStanding: shared.lastStanding,
     });
 }
 
@@ -782,6 +815,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // D-PR14: live first-activator gate (Doomsayer). Default false → DPS / no-delegate
         // paths read "not first" ⇒ not met and stay byte-identical.
         firstActivator: ctx.firstActivatorId === ownerId,
+        // D-PR16: live last-standing gate (Last Stand). lastStandingId is undefined unless EXACTLY
+        // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met and
+        // stay byte-identical.
+        lastStanding: ctx.lastStandingId === ownerId,
     });
 }
 
@@ -1186,6 +1223,38 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 duration,
             });
         }
+        // D-PR16: co-granted buffs (Last Stand's Barrier + Block Debuff) — applied in the
+        // SAME application as the primary (the single proc gate above already passed). Reuses
+        // the SAME recipients/gate; each extra carries its own duration. Absent → no-op loop.
+        // NOTE: extras use their raw parsedEffects and do NOT receive the `attackFlatPctOfCaster`
+        // pin applied to the primary above — fine for the current attack-less control buffs
+        // (Barrier/Block Debuff); a future attack-scaled co-buff would need pin handling here.
+        for (const extra of cfg.additionalBuffs ?? []) {
+            const extraStatus: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+                payload: payloadFromConfig({
+                    buffName: extra.buffName,
+                    stacks: extra.stacks,
+                    parsedEffects: extra.parsedEffects,
+                }),
+                side: 'self',
+                sourceSlot: intent.sourceSlot,
+                conditions: gateConditions,
+                casterId: intent.ownerId,
+                recipients,
+                kind: 'timed',
+                duration: extra.duration,
+            };
+            for (const rid of recipients) {
+                ctx.statusEngine.applyTimedAbilityStatus(ctx.round, extraStatus, rid);
+                ctx.bus.emit({
+                    type: 'buff-applied',
+                    actorId: rid,
+                    round: ctx.round,
+                    buffName: extra.buffName,
+                    duration: extra.duration,
+                });
+            }
+        }
         return;
     }
 
@@ -1224,7 +1293,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 ? ctx.enemyWithHighestAttack?.(intent.ownerId)
                 : intent.eventCtx?.counterTargetId;
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
-        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined) return;
+        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
+            return;
         // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists every
         // incoming timed debuff. Gate immunity into the landing condition so the EXISTING resist
         // `else` handles it (no duplicated resist code). `&&` short-circuits when not immune →

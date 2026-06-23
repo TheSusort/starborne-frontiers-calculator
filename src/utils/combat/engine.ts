@@ -1042,6 +1042,8 @@ interface ReactiveSideCtx {
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
     /** D-PR14: id of the round's first real activator (live value at drain-build time). */
     firstActivatorId?: string;
+    /** D-PR16: id of the sole living actor on this side, recomputed each drain (Last Stand). */
+    lastStandingId?: string;
     /** D-PR14 Bulwark: per-round once-per-(owner,ability) consume set (shared across both sides). */
     oncePerRoundConsumed?: Set<string>;
     /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
@@ -2040,6 +2042,9 @@ export function runCombat(input: CombatEngineInput): {
         roleOf: (id) => roleByActorId.get(id),
         adjacentAllyIdsFor: (ownerId: string) =>
             bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
+        // D-PR16: owner effective max HP (live ctx ?? base HP) — gates Tenacity's >25% filter.
+        // id-keyed and side-agnostic, so the same closure serves the enemy registration below.
+        maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
     });
 
     // Enemy-side reactive registration (enemy-team PR1). A SEPARATE intent queue + a second
@@ -2066,6 +2071,8 @@ export function runCombat(input: CombatEngineInput): {
             roleOf: (id) => roleByActorId.get(id),
             adjacentAllyIdsFor: (ownerId: string) =>
                 bySide(isEnemySide(ownerId) ? 'enemy' : 'player').adjacentAllyIdsFor(ownerId),
+            // D-PR16: same id-keyed effective-max-HP closure as the player registration.
+            maxHpOf: (ownerId: string) => recipientMaxHp(ownerId),
         });
     }
 
@@ -3420,6 +3427,7 @@ export function runCombat(input: CombatEngineInput): {
                         // inert today — only consumed by the next task's executor branch.
                         enemyWithHighestAttack: sideCtx.enemyWithHighestAttack,
                         firstActivatorId: sideCtx.firstActivatorId,
+                        lastStandingId: sideCtx.lastStandingId,
                         oncePerRoundConsumed: sideCtx.oncePerRoundConsumed,
                         // D-PR8: live not-hit-this-round gate (Alacrity). hitThisRound is a single
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
@@ -3466,6 +3474,14 @@ export function runCombat(input: CombatEngineInput): {
                 (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
             );
 
+        // D-PR16: the id of the sole living actor in a roster, or undefined if !=1 alive.
+        // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
+        // reflects deaths recorded before the reactive drain.
+        const soleSurvivorOf = (roster: CombatActor[]): string | undefined => {
+            const living = roster.filter((a) => a.destroyedRound === undefined);
+            return living.length === 1 ? living[0].id : undefined;
+        };
+
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
         // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
         const drainIntents = (): void =>
@@ -3478,6 +3494,7 @@ export function runCombat(input: CombatEngineInput): {
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
                 firstActivatorId,
+                lastStandingId: soleSurvivorOf(allPlayerActors),
                 oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
             });
@@ -3503,6 +3520,7 @@ export function runCombat(input: CombatEngineInput): {
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
                 firstActivatorId,
+                lastStandingId: soleSurvivorOf(enemyAttackerActors),
                 oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
             });
@@ -4516,6 +4534,7 @@ export function runCombat(input: CombatEngineInput): {
                                     attackerId: actor.id,
                                     round: r,
                                     ...(hitCrit ? { didCrit: true } : {}),
+                                    ...(damage > 0 ? { damage } : {}),
                                 });
                             }
                         }

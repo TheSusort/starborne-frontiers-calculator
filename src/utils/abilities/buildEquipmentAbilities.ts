@@ -274,6 +274,29 @@ const DOOMSAYER_PROC: Record<string, number> = {
     epic: 0.12,
     legendary: 0.16,
 };
+// D-PR16: Firewall — when debuffed, X% chance to gain Block Debuff (self) for 1 turn.
+const FIREWALL_PROC: Record<string, number> = {
+    uncommon: 0.08,
+    rare: 0.1,
+    epic: 0.12,
+    legendary: 0.15,
+};
+const LOCKDOWN_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+const TENACITY_PROC: Record<string, number> = { rare: 0.1, epic: 0.12, legendary: 0.16 };
+// D-PR16: Last Stand — when this unit becomes the last one standing, X% chance to gain Barrier
+// AND Block Debuff (self) for 1 turn. All four rarities are uniform per the source data.
+const LAST_STAND_PROC: Record<string, number> = {
+    uncommon: 0.18,
+    rare: 0.21,
+    epic: 0.26,
+    legendary: 0.32,
+};
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -342,17 +365,39 @@ function mkHealAmp(
 // effect the engine does not yet fold (self-side incoming-damage buffs) — the status is applied
 // and logged but has no combat effect until that fold exists.
 // D-PR8: generalised with optional `opts` for conditions + procChance (Battlecry call is byte-identical).
-function mkNamedBuffGrant(
+// D-PR16: `alsoGrantBuffNames` (Task 5) lets one ability co-grant extra named buffs ALONGSIDE
+// the primary in the SAME application (one proc roll → all of them; Last Stand's Barrier + Block
+// Debuff). Each extra resolves its own effects/stackability from BUFFS and inherits `duration`.
+// Absent/empty → the `additionalBuffs` field is omitted → the single-buff path is byte-identical.
+// Exported for the co-grant registry-shape test.
+export function mkNamedBuffGrant(
     buffName: string,
     target: 'self' | 'ally' | 'all-allies' | 'adjacent-allies',
     trigger: AbilityTrigger,
     duration: number | undefined,
-    opts?: { conditions?: Condition[]; procChance?: number }
+    opts?: { conditions?: Condition[]; procChance?: number; alsoGrantBuffNames?: string[] }
 ): Omit<Ability, 'id'> | undefined {
     if (duration === undefined) return undefined;
     const buff = BUFFS.find((b) => b.name === buffName);
     if (!buff) return undefined;
     const { stackable, maxStacks } = isStackable(buff.description);
+    const additionalBuffs = (opts?.alsoGrantBuffNames ?? [])
+        .map((n) => {
+            const b = BUFFS.find((x) => x.name === n);
+            if (!b) return undefined;
+            const { stackable: extraStackable, maxStacks: extraMaxStacks } = isStackable(
+                b.description
+            );
+            return {
+                buffName: n,
+                parsedEffects: parseBuffEffects(b.name, b.description),
+                stacks: 1,
+                isStackable: extraStackable,
+                maxStacks: extraMaxStacks,
+                duration,
+            };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== undefined);
     return {
         type: 'buff',
         target,
@@ -367,6 +412,7 @@ function mkNamedBuffGrant(
             isStackable: stackable,
             maxStacks,
             duration,
+            ...(additionalBuffs.length ? { additionalBuffs } : {}),
         },
         autoFilled: true,
     };
@@ -705,6 +751,45 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             procChance,
             target: 'enemy-highest-attack',
             conditions: [{ subject: 'first-activator', derivable: true }],
+        });
+    },
+    // D-PR16: Firewall — when debuffed, X% chance to gain Block Debuff (self) for 1 turn.
+    FIREWALL: (rarity) => {
+        const procChance = FIREWALL_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Block Debuff', 'self', 'on-debuffed', 1, { procChance });
+    },
+    // D-PR16: Lockdown — when resisting a debuff, X% chance to grant Buff Protection to
+    // all allies for 1 turn.
+    LOCKDOWN: (rarity) => {
+        const procChance = LOCKDOWN_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Buff Protection', 'all-allies', 'on-debuff-resisted', 1, {
+            procChance,
+        });
+    },
+    // D-PR16: Tenacity — upon directly receiving damage > 25% of max HP, X% chance to grant
+    // Buff Protection to all allies for 2 turns. Models the per-ATTACK aggregate (the
+    // `attacked` event excludes DoT/bomb → "directly receiving").
+    TENACITY: (rarity) => {
+        const procChance = TENACITY_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        const base = mkNamedBuffGrant('Buff Protection', 'all-allies', 'on-attacked', 2, {
+            procChance,
+        });
+        if (!base) return undefined;
+        return { ...base, requireIncomingDamageFracOfMaxHp: 0.25 };
+    },
+    // D-PR16: Last Stand — when this unit becomes the last one standing, X% chance to gain
+    // Barrier AND Block Debuff (self) for 1 turn. Rides on-ally-destroyed gated on last-standing
+    // (fires on the ally death that leaves the owner sole survivor); both buffs on ONE proc roll.
+    LAST_STAND: (rarity) => {
+        const procChance = LAST_STAND_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Barrier', 'self', 'on-ally-destroyed', 1, {
+            procChance,
+            conditions: [{ subject: 'last-standing', derivable: true }],
+            alsoGrantBuffNames: ['Block Debuff'],
         });
     },
 };

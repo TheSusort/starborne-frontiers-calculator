@@ -37,7 +37,7 @@ export type AbilityTarget =
     | 'all-enemies'
     | 'enemy-most-buffs'
     | 'enemy-highest-attack'; // D-PR14 Doomsayer: living opposing actor with the greatest
-    //                           live effective attack (global selector, resolved at drain).
+//                           live effective attack (global selector, resolved at drain).
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -85,7 +85,15 @@ export type AbilityTrigger =
     // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
     // event with a non-self recipient). Used by the Font of Power implant (grants the
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
-    | 'on-own-repair-to-ally';
+    | 'on-own-repair-to-ally'
+    // D-PR16 Firewall: fires when THIS unit receives a timed debuff (rides the existing
+    // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
+    // (separate `dot-applied` event) — matches "when debuffed".
+    | 'on-debuffed'
+    // D-PR16 Lockdown: fires when THIS unit resists an incoming debuff (rides the existing
+    // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
+    // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
+    | 'on-debuff-resisted';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -123,6 +131,10 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-charged-cast',
     // Font of Power: buff grant to allies the owner repairs.
     'on-own-repair-to-ally',
+    // D-PR16 Firewall: self-scoped reaction to receiving a timed debuff.
+    'on-debuffed',
+    // D-PR16 Lockdown: self-scoped reaction to RESISTING an incoming debuff.
+    'on-debuff-resisted',
 ]);
 
 export type ConditionSubject =
@@ -170,8 +182,13 @@ export type ConditionSubject =
     // attacks do not count). Live-derived (ConditionContext.wasHitThisRound); defaults false
     // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
     | 'not-hit-this-round'
-    | 'first-activator'; // D-PR14 Doomsayer: this owner was the first actor to take a REAL
+    | 'first-activator' // D-PR14 Doomsayer: this owner was the first actor to take a REAL
     //                      (non-Stasis/Disable-skipped) turn this round.
+    // D-PR16: binary gate — this owner is the SOLE living actor on its own side. Live-derived by
+    // the engine each drain (ConditionContext.isLastStanding); defaults false (DPS / not-alone).
+    // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
+    // Infrastructure for the Last Stand implant (wired in a later task).
+    | 'last-standing';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -287,6 +304,17 @@ export type AbilityConfig =
            *  combat-lifetime Set keyed `${ownerId}:${abilityId}` in IntentExecContext.
            *  Absent → unbounded (fires on every qualifying trigger). */
           oncePerCombat?: boolean;
+          /** D-PR16: extra buffs granted ALONGSIDE the primary in the SAME application (one proc
+           *  roll → all of them). Each carries its own resolved effects + duration. Absent → the
+           *  single-buff path is unchanged. */
+          additionalBuffs?: Array<{
+              buffName: string;
+              parsedEffects: ParsedBuffEffects;
+              stacks: number;
+              isStackable: boolean;
+              maxStacks?: number;
+              duration: number;
+          }>;
       }
     | {
           type: 'debuff';
@@ -439,6 +467,10 @@ export interface Ability {
      *  Filtered in the listener via registerReactiveListeners' adjacentAllyIdsFor. Absent →
      *  any ally (existing behavior). */
     requireDamagedAllyAdjacent?: boolean;
+    /** D-PR16 Tenacity: gate an `on-attacked` reaction on the per-attack aggregate damage
+     *  exceeding this fraction of the owner's effective max HP (e.g. 0.25). Absent → no gate
+     *  (byte-identical for every existing on-attacked ability). */
+    requireIncomingDamageFracOfMaxHp?: number;
     /** Probabilistic proc gate for equipment-sourced reactive abilities ("N% chance to …").
      *  A value in (0,1) means the ability fires at that rate via a combat-lifetime per-(owner,
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)

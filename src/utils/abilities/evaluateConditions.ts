@@ -35,6 +35,9 @@ export interface ConditionContext {
     /** D-PR14: this owner took the round's first real turn. Live-derived by the engine;
      *  defaults false. Used by the Doomsayer implant. */
     firstActivator?: boolean;
+    /** D-PR16: this owner is the SOLE living actor on its own side. Live-derived by the engine
+     *  each drain; defaults false. Infrastructure for the Last Stand implant. */
+    isLastStanding?: boolean;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -90,6 +93,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.wasHitThisRound ? 0 : 1;
         case 'first-activator':
             return ctx.firstActivator ? 1 : 0;
+        case 'last-standing':
+            return ctx.isLastStanding ? 1 : 0;
         default:
             return 0;
     }

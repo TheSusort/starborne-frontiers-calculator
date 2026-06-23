@@ -303,7 +303,7 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
         expect(round0['player-team']).toBe(5000);
     });
 
-    it('`attacked` events carry an attacker + anchor victim but NO damage amount', () => {
+    it('`attacked` events carry an attacker, anchor victim, AND the per-attack aggregate damage', () => {
         idc = 0;
         const { events } = run(
             battle({
@@ -320,8 +320,11 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
         // Anchor victims only: enemy attackers struck players (the anchor `tgt`).
         expect(attacked.every((e) => ENEMY_IDS.has(e.attackerId))).toBe(true);
         expect(attacked.every((e) => PLAYER_IDS.has(e.targetId))).toBe(true);
-        // CONTRACT PIN: `attacked` carries NO numeric damage field — it is not a damage source.
-        expect(attacked.every((e) => !('damage' in e))).toBe(true);
+        // CONTRACT (D-PR16): `attacked` now carries the per-ATTACK aggregate damage (5000 here,
+        // enemyAttack with the victim's defence 0) so Tenacity's >25%-max-HP filter can read it.
+        // Added via conditional spread → present only when damage > 0 (healing-mode 0-damage
+        // events stay byte-identical).
+        expect(attacked.every((e) => e.damage === 5000)).toBe(true);
     });
 
     it('ship-destroyed fires for BOTH sides when HP is low enough', () => {
