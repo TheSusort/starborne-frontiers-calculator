@@ -7,6 +7,11 @@ import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
+// Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
+// import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
+// top-level evaluation), so there is no initialization-order hazard.
+// eslint-disable-next-line import/no-cycle
+import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -1220,9 +1225,15 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 : intent.eventCtx?.counterTargetId;
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
         if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined) return;
+        // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists every
+        // incoming timed debuff. Gate immunity into the landing condition so the EXISTING resist
+        // `else` handles it (no duplicated resist code). `&&` short-circuits when not immune →
+        // byte-identical to the original `landsTimedEnemyApplication`-only condition.
+        const debuffTargetId = counterTargetId ?? ctx.enemy.id;
+        const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
-        if (owner.landsTimedEnemyApplication(cfg.application)) {
+        if (!blockedByImmunity && owner.landsTimedEnemyApplication(cfg.application)) {
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
             // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({
@@ -1254,6 +1265,19 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'dot') {
         if (cfg.stacks <= 0 || cfg.tier <= 0) return;
+        // Block Debuff (D-PR15 Task 7): an immune target auto-resists this reactive DoT — block
+        // it AND emit a resist event (block path ONLY; a normal landing failure below stays
+        // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
+        // zero-stack/tier DoT doesn't surface a spurious resist.
+        if (targetCarriesBlockDebuff(ctx.statusEngine, ctx.enemy.id)) {
+            emitBlockDebuffResist(
+                ctx.bus,
+                ctx.enemy.id,
+                ctx.round,
+                dotResistLabel(cfg.dotType, cfg.tier)
+            );
+            return;
+        }
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
         // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate). Reads the
         // LIVE per-target chance (A2 Task 4, set each turn by runPlayerTurn); `?? 1` is a neutral

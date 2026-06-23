@@ -3,6 +3,7 @@ import { Condition, SkillSlot } from '../../types/abilities';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
+import { isBuffProtection } from './buffProtectionBuffs';
 
 export interface ActiveBuff {
     buffName: string;
@@ -990,8 +991,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
      *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
      *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
-    const purge = (actorId: string, count: number | 'all'): number =>
-        removeNewestFirst(actorId, 'buffs', count);
+    const purge = (actorId: string, count: number | 'all'): number => {
+        // Holder-state guard: a unit carrying Buff Protection cannot have its buffs purged.
+        // Purge-only — `cleanse` (removeNewestFirst(_, 'debuffs', _)) does NOT call this.
+        const selfBuffNames = new Set<string>();
+        for (const ab of snapshot(actorId).activeSelfBuffs) {
+            if (ab.stacks === undefined || ab.stacks > 0) selfBuffNames.add(ab.buffName);
+        }
+        for (const s of timedAbilityStatuses('self', actorId)) selfBuffNames.add(s.active.buffName);
+        // NOTE: deliberately omits the aura/accum channel (`activeAbilityStatuses('self', …)`) that
+        // `selfBuffNamesForOwners` also reads — Buff Protection is only ever granted as a TIMED buff,
+        // so the timed + scheduled channels cover every real grant. Revisit if an aura grant appears.
+        if ([...selfBuffNames].some(isBuffProtection)) return 0;
+        return removeNewestFirst(actorId, 'buffs', count);
+    };
 
     // --- Ability-status API (Task 6) ---
 
