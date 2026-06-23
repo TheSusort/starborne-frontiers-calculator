@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
+import { createStatusEngine, DEFAULT_ENEMY_TARGET, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { ConditionContext } from '../../abilities/evaluateConditions';
 
@@ -1422,6 +1422,134 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(defaultActive.find((s) => s.payload.buffName === 'TankAura')).toBeUndefined();
         });
     });
+});
+
+describe('reduceNewestDebuffDuration', () => {
+    // Timed enemy-side debuff fixture.
+    const timedEnemyStatus = (
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
+    });
+
+    it('reduces the newest-applied debuff by `turns`, leaves others untouched', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // Apply debuff A first (seq lower), then debuff B (seq higher → newest).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        const a = timed.find((s) => s.payload.buffName === 'Armor Break');
+        const b = timed.find((s) => s.payload.buffName === 'Defense Down');
+        expect(a?.active.turnsRemaining).toBe(3); // untouched
+        expect(b?.active.turnsRemaining).toBe(2); // reduced by 1
+    });
+
+    it('removes a debuff whose duration is reduced to exactly 0', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 1));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(1);
+        expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+    });
+
+    it('removes a debuff whose duration is reduced below 0 (turns > remaining)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 2));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 2);
+
+        expect(result).toBe(1);
+        expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+    });
+
+    it('skips UNREMOVABLE_STATUSES and returns 0 when that is the only debuff', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(0);
+        // The debuff must be untouched.
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(timed).toHaveLength(1);
+        expect(timed[0].active.turnsRemaining).toBe(3);
+    });
+
+    it('skips the newest UNREMOVABLE debuff and reduces the newest REMOVABLE one instead', () => {
+        // Scenario: actor has two timed debuffs — a removable one applied first, then an
+        // unremovable one (Acidic Decay, a real UNREMOVABLE_STATUSES member) applied second
+        // (higher appliedSeq = technically "newer"). The function must skip the unremovable
+        // entry and reduce the removable one, proving the skip logic executes on reachable state.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // Apply removable debuff first (lower seq).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+        // Apply unremovable debuff second (higher seq — it IS the "newest" by sequence).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        // Should have found a target (the removable Defense Down).
+        expect(result).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        const removable = timed.find((s) => s.payload.buffName === 'Defense Down');
+        const unremovable = timed.find((s) => s.payload.buffName === 'Acidic Decay');
+        // Removable was reduced.
+        expect(removable?.active.turnsRemaining).toBe(2);
+        // Unremovable was skipped — completely untouched.
+        expect(unremovable?.active.turnsRemaining).toBe(3);
+    });
+
+    it('returns 0 for an unknown actor id without throwing', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+
+        // A throw would fail the test; a wrong return value fails the assertion.
+        expect(eng.reduceNewestDebuffDuration('no-such-actor', 1)).toBe(0);
+    });
+
+    it.each([0, -1, NaN, Infinity, 1.5])(
+        'rejects a non-positive / non-finite / fractional turns (%s) → returns 0, debuff untouched',
+        (turns) => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+            // 1.5 truncates to 1 → it WOULD reduce; assert the guard rejects only <= 0 / non-finite
+            // and that a fractional value is floored (truncated) rather than corrupting state.
+            const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, turns);
+            const remaining = eng
+                .timedAbilityStatuses('enemy')
+                .find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining;
+
+            if (turns === 1.5) {
+                // Math.trunc(1.5) = 1 → a normal one-turn reduction.
+                expect(result).toBe(1);
+                expect(remaining).toBe(2);
+            } else {
+                // 0 / negative / NaN / Infinity rejected — no mutation, no false success.
+                expect(result).toBe(0);
+                expect(remaining).toBe(3);
+            }
+        }
+    );
 });
 
 describe('clearRemovable', () => {

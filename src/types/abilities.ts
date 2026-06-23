@@ -82,6 +82,10 @@ export type AbilityTrigger =
     // event's slot discriminator). Self-scoped: the listener matches actorId === ownerId
     // && slot === 'charged'. Used by the Spearhead implant (all-allies Attack Up grant).
     | 'on-charged-cast'
+    // Warpstrike: owner dealt direct damage on its turn. Rides the aggregate
+    // ability-performed event emitted once per damage-dealing turn (runPlayerTurn
+    // emits exactly one; positional path emits none — engine.ts ~2887).
+    | 'on-deal-damage'
     // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
     // event with a non-self recipient). Used by the Font of Power implant (grants the
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
@@ -135,6 +139,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuffed',
     // D-PR16 Lockdown: self-scoped reaction to RESISTING an incoming debuff.
     'on-debuff-resisted',
+    // Warpstrike: owner dealt direct damage on its turn.
+    'on-deal-damage',
 ]);
 
 export type ConditionSubject =
@@ -380,6 +386,14 @@ export type AbilityConfig =
            *  used today (Amartya: "purges 1 buff … for every 50% crit power").
            *  Absent → static `count`. cleanse never sets this. */
           countScaling?: { stat: 'critDamage'; per: number };
+          /** Reactive Ward: debuffs to cleanse when the triggering hit was a crit (else `count`).
+           *  Read from intent.eventCtx.didCrit by the reactive cleanse executor. cleanse-only. */
+          critCount?: number;
+          /** 'remove' (default) deletes whole debuffs (cleanse); 'reduce-duration' shaves
+           *  `durationTurns` off the newest debuff (Warpstrike). cleanse-only. */
+          mode?: 'remove' | 'reduce-duration';
+          /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
+          durationTurns?: number;
       }
     | {
           type: 'control';

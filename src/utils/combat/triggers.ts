@@ -107,6 +107,9 @@ export interface Intent {
          *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
          *  triggering hit's damage rather than the owner's max HP. */
         triggerDamage?: number;
+        /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
+         *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
+        didCrit?: boolean;
         /** The actor ids of the allies repaired by an on-own-repair-to-ally event
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
          *  exactly these recipients (Font of Power -> repaired allies). */
@@ -274,6 +277,19 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
+                case 'on-deal-damage':
+                    bus.on('ability-performed', (e) => {
+                        // Warpstrike duration-reduction: fires on the OWNER's own damage-dealing
+                        // turn. runPlayerTurn emits exactly ONE aggregate ability-performed per
+                        // turn (positional path emits none — engine.ts ~2887), so this is
+                        // once-per-turn for single-hit, multi-hit, and AoE alike — no
+                        // once-per-turn guard needed. The while-debuffed requirement is an
+                        // ability condition (self-debuff), enforced at drain via gateConditions.
+                        if (e.actorId !== ownerId) return;
+                        if ((e.damage ?? 0) <= 0) return;
+                        enqueue(intent);
+                    });
+                    break;
                 case 'on-charged-cast':
                     bus.on('skill-fired', (e) => {
                         // Self-scoped: THIS owner performed its CHARGED skill. The skill-fired
@@ -399,7 +415,10 @@ export function registerReactiveListeners(args: {
                             if (e.damage === undefined || !maxHp || e.damage <= fracGate * maxHp)
                                 return;
                         }
-                        enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
+                        enqueue({
+                            ...intent,
+                            eventCtx: { counterTargetId: e.attackerId, didCrit: e.didCrit },
+                        });
                     });
                     break;
                 case 'on-debuffed':
@@ -1499,15 +1518,38 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'cleanse') {
+        const mode = cfg.mode ?? 'remove';
+        if (mode === 'reduce-duration') {
+            // No shipped duration-reduction ability sets procChance (deterministic), so the gate
+            // is pass-through and never advances — safe to consult regardless of healing mode.
+            if (!passesProcChanceGate(intent, ctx)) return;
+            // Pure status mutation — does NOT require healing mode. self-target → [ownerId].
+            // Falls back to ownerId when healing is absent (e.g. Warpstrike in non-healing sim).
+            const fallback = ctx.healing?.targetId ?? intent.ownerId;
+            const recipients = reactiveRecipients(intent, ctx, fallback);
+            let affected = 0;
+            for (const rid of recipients)
+                affected += ctx.statusEngine.reduceNewestDebuffDuration(
+                    rid,
+                    cfg.durationTurns ?? 1
+                );
+            ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
+            return;
+        }
+        // remove mode — keep the !ctx.healing return BEFORE the proc gate (gate-desync rule;
+        // see passesProcChanceGate doc). If reordered, a healing-mode-off pass would consume a
+        // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
+        if (!passesProcChanceGate(intent, ctx)) return;
         // ctx.playerIds is the SAME-SIDE ally id order (sideCtx.recipientIds) — side-correct for
         // both player and enemy reactive drains. ctx.statusEngine is the live store. Mirrors the
         // reactive heal branch's recipient resolution: an 'ally'-target cleanse prefers the
         // eventCtx.damagedAllyId (an ally-damage reaction cleanses THAT ally) over the heal target;
         // 'all-allies' fans out to every same-side id; self → the owner.
         const recipients = reactiveRecipients(intent, ctx, ctx.healing.targetId);
+        const count = intent.eventCtx?.didCrit && cfg.critCount != null ? cfg.critCount : cfg.count;
         let removed = 0;
-        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, cfg.count);
+        for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, count);
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
         return;

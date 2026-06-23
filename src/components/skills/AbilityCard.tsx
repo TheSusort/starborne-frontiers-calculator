@@ -129,6 +129,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'start-of-turn', label: 'Start of own turn' },
     { value: 'start-of-round', label: 'Start of round' },
     { value: 'on-crit', label: 'On critical hit' },
+    { value: 'on-deal-damage', label: 'On dealing direct damage' },
     { value: 'on-attacked', label: 'When attacked' },
     { value: 'on-debuffed', label: 'On debuffed (self)' },
     { value: 'on-debuff-resisted', label: 'On debuff resisted (self)' },

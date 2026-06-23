@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { executeIntent, Intent, IntentExecContext } from '../triggers';
+import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
+import { makeRateGate } from '../../calculators/rateAccumulator';
+import type { CombatActor } from '../state';
 
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
 
@@ -129,5 +133,311 @@ describe('C1 Task 4: reactive-path cleanse removes debuffs (player-side)', () =>
             0
         );
         expect(totalCleanse).toBe(2);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Task 3: reactive cleanse honors procChance + crit-count (Reactive Ward executor)
+//
+// These tests drive executeIntent directly (no full runCombat) to isolate the
+// cleanse executor branch. Pattern mirrors reactiveDamageProcGate.test.ts.
+// ---------------------------------------------------------------------------
+
+const OWNER_ID = 'owner1';
+// For 'self'-target cleanse, reactiveRecipients returns [ownerId]; seed debuffs on OWNER_ID.
+const TARGET_ID = OWNER_ID;
+
+// A minimal timed enemy debuff seeded into the status engine (enemy-side, per-victim).
+const mkTimed = (
+    buffName: string,
+    duration = 3
+): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+    kind: 'timed',
+    side: 'enemy',
+    sourceSlot: 'active',
+    conditions: [],
+    duration,
+    payload: { buffName, stacks: 1, parsedEffects: {} },
+});
+
+/** Build a reactive cleanse Intent for the test owner. */
+function makeCleanseIntent(opts: {
+    count?: number;
+    critCount?: number;
+    procChance?: number;
+    didCrit?: boolean;
+}): Intent {
+    return {
+        ownerId: OWNER_ID,
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-cleanse-ab',
+            type: 'cleanse',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            ...(opts.procChance !== undefined ? { procChance: opts.procChance } : {}),
+            config: {
+                type: 'cleanse',
+                count: opts.count ?? 1,
+                ...(opts.critCount !== undefined ? { critCount: opts.critCount } : {}),
+            },
+        },
+        ...(opts.didCrit !== undefined ? { eventCtx: { didCrit: opts.didCrit } } : {}),
+    } as unknown as Intent;
+}
+
+/**
+ * Build a minimal IntentExecContext for the cleanse branch.
+ *
+ * The cleanse branch reads:
+ *   - ctx.healing  → must be truthy to not short-circuit
+ *   - ctx.statusEngine  → for cleanse() calls
+ *   - ctx.procChanceGates  → provided when testing the gate
+ *
+ * `healing.targetId` is the recipient to cleanse (TARGET_ID, same as owner for 'self').
+ * `healing.credit` is the spy tracking cleanseCount credits.
+ */
+function makeCtx(opts?: {
+    procChanceGates?: Map<string, ReturnType<typeof makeRateGate>>;
+    creditSpy?: ReturnType<typeof vi.fn>;
+    statusEngine?: ReturnType<typeof createStatusEngine>;
+}): IntentExecContext {
+    const bus = createEventBus();
+    const se = opts?.statusEngine ?? createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+    const creditSpy = opts?.creditSpy ?? vi.fn();
+
+    return {
+        round: 1,
+        enemy: { id: 'enemy1', currentHp: 100000 } as CombatActor,
+        enemyId: 'enemy1',
+        statusEngine: se,
+        bus,
+        corrosionEntries: [],
+        infernoEntries: [],
+        pendingBombs: [],
+        runtimes: new Map([
+            [
+                OWNER_ID,
+                {
+                    actor: { id: OWNER_ID, chargeCount: 0, charges: 0 } as unknown as CombatActor,
+                    attack: 10000,
+                    defence: 0,
+                    hp: 10000,
+                    healModifier: 0,
+                    selfDotModifier: 0,
+                    defensePenetrationBuff: 0,
+                    affinityDamageModifier: 0,
+                    affinityCritCap: 100,
+                    affinityCritPenalty: 0,
+                    affinityDisadvantage: false,
+                    selfBuffLookup: new Map(),
+                    enemyDebuffLookup: new Map(),
+                } as never,
+            ],
+        ]),
+        grantAllyCharges: () => {},
+        grantExtraAction: () => {},
+        playerIds: [OWNER_ID],
+        lastTurnCtxByActor: new Map(),
+        enemyHp: 100000,
+        cumulativeDamage: 0,
+        recordResisted: () => {},
+        procChanceGates: opts?.procChanceGates,
+        // Minimal healing ctx: targetId = TARGET_ID (same as owner for 'self'),
+        // credit is the spy, stubs for unused methods.
+        healing: {
+            targetId: TARGET_ID,
+            credit: creditSpy,
+            recipientMaxHp: () => 10000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => undefined,
+            applyHealToTarget: () => ({ consumed: 0, overheal: 0 }),
+            grantShieldToTarget: () => {},
+            playerIds: [OWNER_ID],
+            enemyIds: [],
+            recipientActor: () => undefined,
+        },
+    } as unknown as IntentExecContext;
+}
+
+/** Seed `count` distinct debuffs onto TARGET_ID in the given status engine. */
+function seedDebuffs(se: ReturnType<typeof createStatusEngine>, count: number): void {
+    se.beginRound(1);
+    for (let i = 0; i < count; i++) {
+        se.applyTimedAbilityStatus(1, mkTimed(`Debuff-${i}`), 'attacker', TARGET_ID);
+    }
+}
+
+/** Build a reactive reduce-duration Intent for the test owner. */
+function makeReduceDurationIntent(opts: { durationTurns?: number; procChance?: number }): Intent {
+    return {
+        ownerId: OWNER_ID,
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-reduce-dur-ab',
+            type: 'cleanse',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            ...(opts.procChance !== undefined ? { procChance: opts.procChance } : {}),
+            config: {
+                type: 'cleanse',
+                mode: 'reduce-duration',
+                count: 1, // unused in reduce-duration mode but required by type
+                ...(opts.durationTurns !== undefined ? { durationTurns: opts.durationTurns } : {}),
+            },
+        },
+    } as unknown as Intent;
+}
+
+describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
+    it('F. reduce-duration: newest debuff loses 1 turn; older debuff unchanged; credits cleanseCount:1', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        // Seed two debuffs in sequence: Debuff-0 first (older, seq=1), Debuff-1 second (newer, seq=2).
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+        executeIntent(intent, ctx);
+
+        // Credit should be called with cleanseCount = 1 (one debuff had its duration reduced).
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
+
+        // Inspect remaining durations via timedAbilityStatuses('enemy', ownerId, targetId).
+        // TARGET_ID = OWNER_ID so both arguments are the same string.
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
+
+        // Debuff-1 is the newest (higher appliedSeq) → its duration was reduced by 1 (5→4).
+        expect(byName.get('Debuff-1')).toBe(4);
+        // Debuff-0 is older → unchanged (still 3).
+        expect(byName.get('Debuff-0')).toBe(3);
+    });
+
+    it('G. reduce-duration without healing ctx: still reduces debuff, no throw, no credit attempted', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-X', 4), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        // Remove healing ctx entirely.
+        (ctx as unknown as Record<string, unknown>).healing = undefined;
+
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+        // Must not throw even without healing.
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+
+        // The debuff duration must have been reduced (4 → 3).
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const debuffX = statuses.find((s) => s.active.buffName === 'Debuff-X');
+        expect(debuffX?.active.turnsRemaining).toBe(3);
+
+        // No credit should be called (ctx.healing is absent).
+        expect(creditSpy).not.toHaveBeenCalled();
+    });
+
+    it('H. reduce-duration with no eligible debuff: affected 0, no throw, credit 0 when healing present', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // No debuffs seeded — actor is clean.
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+        // affected = 0, so credit called with 0.
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 0);
+    });
+});
+
+describe('Task 3: reactive cleanse executor — procChance + crit-count', () => {
+    it('A. remove-mode, no procChance: cleanses cfg.count debuffs (preserved behavior)', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        seedDebuffs(se, 3);
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeCleanseIntent({ count: 2 });
+        executeIntent(intent, ctx);
+        // Should have removed 2 debuffs and credited that count.
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 2);
+    });
+
+    it('B. didCrit=true + critCount=2: cleanses critCount (2), not count (1)', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        seedDebuffs(se, 3);
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeCleanseIntent({ count: 1, critCount: 2, didCrit: true });
+        executeIntent(intent, ctx);
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 2);
+    });
+
+    it('C. didCrit=false + critCount=2: cleanses count (1), NOT critCount (2)', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        seedDebuffs(se, 3);
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeCleanseIntent({ count: 1, critCount: 2, didCrit: false });
+        executeIntent(intent, ctx);
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
+    });
+
+    it('D. procChance gate does NOT fire: cleanses 0, credit not called', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        seedDebuffs(se, 3);
+        const creditSpy = vi.fn();
+        // A gate with procChance 0.5 over the makeRateGate accumulator: fires on calls 2,4,6...
+        // Drive the gate 1 time first (call 1 = no fire), then our executeIntent is call 2 (fires).
+        // To get a non-fire: pre-drain the gate so the NEXT call is a fire, then test the FIRST call.
+        // Actually: gate fires on calls where floor(n*rate) > floor((n-1)*rate).
+        // rate=0.5: fires on even calls (2,4,6,...), not odd calls (1,3,5,...).
+        // So call 1 → no fire. We just call executeIntent once (first call = odd = no fire).
+        const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
+        const intent = makeCleanseIntent({ count: 1, procChance: 0.5 });
+        const ctx = makeCtx({ statusEngine: se, creditSpy, procChanceGates });
+        executeIntent(intent, ctx);
+        // Call 1 with rate 0.5: floor(1*0.5)=0 > floor(0*0.5)=0 → false → gate rejects.
+        expect(creditSpy).not.toHaveBeenCalled();
+    });
+
+    it('E. ctx.healing undefined: returns early (no throw, no cleanse, gate NOT consumed)', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        seedDebuffs(se, 2);
+        const creditSpy = vi.fn();
+        // Use a shared gate map with a procChance so we can verify gate is not consumed.
+        const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
+        const intent = makeCleanseIntent({ count: 1, procChance: 0.5 });
+        const ctx = makeCtx({ statusEngine: se, creditSpy, procChanceGates });
+        // Remove the healing ctx to simulate non-healing mode.
+        (ctx as unknown as Record<string, unknown>).healing = undefined;
+
+        // Should not throw.
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+        // Should not credit anything.
+        expect(creditSpy).not.toHaveBeenCalled();
+        // Gate should NOT have been touched: re-run WITH healing and expect it fires on call 2
+        // (even-call fire), confirming call 1 was never consumed.
+        // If the early-return was correct (before gate), gate call 1 is still unused.
+        // Restore healing and call again (this is call 1 to the gate — should NOT fire).
+        (ctx as unknown as Record<string, unknown>).healing = {
+            targetId: TARGET_ID,
+            credit: creditSpy,
+            recipientMaxHp: () => 10000,
+            recipientIncomingHealPct: () => 0,
+            applierMaxHp: () => undefined,
+            applyHealToTarget: () => ({ consumed: 0, overheal: 0 }),
+            grantShieldToTarget: () => {},
+            playerIds: [OWNER_ID],
+            enemyIds: [],
+            recipientActor: () => undefined,
+        };
+        executeIntent(intent, ctx);
+        // This is still call 1 to the gate (early-return did NOT consume it) → should not fire.
+        expect(creditSpy).not.toHaveBeenCalled();
     });
 });
