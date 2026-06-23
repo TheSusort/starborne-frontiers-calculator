@@ -674,6 +674,9 @@ export interface IntentExecContext {
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
      *  not-yet-hit → "not hit" ⇒ met), keeping existing drain gating byte-identical. */
     wasHitThisRoundFor?: (ownerId: string) => boolean;
+    /** The owner's current own-turn counter (CombatActor.turnsTaken). Engine-populated;
+     *  absent in DPS mode → defaults 0 (every-n-turns inert). */
+    turnsTakenFor?: (ownerId: string) => number;
     /** Credit reactive direct damage to the owner's round damage map against the shared
      *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
@@ -757,6 +760,9 @@ export function buildActorConditionContext(
         /** Owner is the sole living actor on its side. Default false. Populated by
          *  buildDrainContext (D-PR16). */
         lastStanding?: boolean;
+        /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
+         *  Populated by buildDrainContext (Phase 0 Task 4). */
+        turnsTaken?: number;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -786,6 +792,7 @@ export function buildActorConditionContext(
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
+        turnsTaken: shared.turnsTaken,
     });
 }
 
@@ -827,6 +834,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met and
         // stay byte-identical.
         lastStanding: ctx.lastStandingId === ownerId,
+        // Phase 0 Task 4: every-n-turns gate (Chrono Reaver). Default 0 → DPS / no-delegate
+        // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
+        // periods at turn 0, so every-n-turns is never met).
+        turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
     });
 }
 
