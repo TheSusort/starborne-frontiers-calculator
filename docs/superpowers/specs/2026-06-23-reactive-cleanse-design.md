@@ -67,7 +67,7 @@ Reactive `cleanse` executor branch (`triggers.ts` ~1407):
   ```
   bus.on('ability-performed', (e) => {
       if (e.actorId !== ownerId) return;
-      if (!(e.damage > 0)) return;   // "directly damaging an enemy"
+      if ((e.damage ?? 0) <= 0) return;   // "directly damaging an enemy" (damage is optional → ?? 0)
       enqueue(intent);
   });
   ```
