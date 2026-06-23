@@ -107,7 +107,7 @@ New `AbilityTrigger` values (`on-debuffed`, `on-debuff-resisted`) and the `last-
 - `src/utils/combat/triggers.ts` — three new listener arms (`on-debuffed`, `on-debuff-resisted` self-scoped; Tenacity damage filter on the `on-attacked` arm); `cfg.type === 'buff'` co-grant loop; `last-standing` thread through `buildDrainContext`.
 - `src/utils/combat/engine.ts` — `attacked` emission += aggregate `damage`; `isLastStandingFor` delegate on the IntentExecContext (both drain seams, side-bound); thread through `ReactiveSideCtx` if needed (D-PR14 lesson — not just the drain literals).
 - `src/utils/combat/roundContext.ts` / condition-context builders — `isLastStanding` plumbing.
-- `src/utils/abilities/abilityStatusGating.ts` — `LIVE_SUBJECTS += 'last-standing'`.
+- `src/utils/combat/abilityStatusGating.ts` — `LIVE_SUBJECTS += 'last-standing'`.
 - `src/utils/combat/evaluateCondition` (wherever it lives) — `last-standing` case.
 - `src/utils/abilities/buildEquipmentAbilities.ts` — `mkNamedBuffGrant` `alsoGrantBuffNames` opt; four registry entries.
 - Editor stubs + `equipmentCoverage.test.ts`.
