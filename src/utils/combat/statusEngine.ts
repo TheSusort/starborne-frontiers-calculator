@@ -162,6 +162,11 @@ export interface StatusEngine {
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
      *  the number actually removed. Unknown id → no-op (returns 0). */
     cleanse(actorId: string, count: number | 'all'): number;
+    /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
+     *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only timed debuffs are
+     *  eligible; 'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with
+     *  cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
+    reduceNewestDebuffDuration(actorId: string, turns: number): number;
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
@@ -988,6 +993,26 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const cleanse = (actorId: string, count: number | 'all'): number =>
         removeNewestFirst(actorId, 'debuffs', count);
 
+    /** Reduce the duration of ONE timed debuff on `actorId` by `turns`, newest-applied first
+     *  (highest appliedSeq). Reduced to <= 0 → removed (expired). Only the per-victim timed
+     *  enemy store is visited — accumulating/persistent maps have no finite duration. Skips
+     *  'recurring'/'permanent' sentinels and UNREMOVABLE_STATUSES (consistent with cleanse).
+     *  Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
+    const reduceNewestDebuffDuration = (actorId: string, turns: number): number => {
+        const timedMap = enemyMaps.get(actorId);
+        if (!timedMap) return 0;
+        let best: { seq: number; key: string; s: BuffState } | undefined;
+        for (const [key, s] of timedMap) {
+            if (typeof s.turnsRemaining !== 'number') continue;
+            if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            if (!best || s.appliedSeq > best.seq) best = { seq: s.appliedSeq, key, s };
+        }
+        if (!best) return 0;
+        best.s.turnsRemaining -= turns;
+        if (best.s.turnsRemaining <= 0) timedMap.delete(best.key);
+        return 1;
+    };
+
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first
      *  (see removeNewestFirst). `'all'` removes every removable buff. Respects
      *  UNREMOVABLE_STATUSES + 'permanent'; returns count removed. Unknown id → no-op (returns 0). */
@@ -1215,6 +1240,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         clearRemovable,
         removeTimedEnemyStatus,
         cleanse,
+        reduceNewestDebuffDuration,
         purge,
         registerAbilityStatuses,
         applyTimedAbilityStatus,

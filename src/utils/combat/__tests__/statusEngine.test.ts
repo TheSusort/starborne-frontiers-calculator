@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
+import { createStatusEngine, DEFAULT_ENEMY_TARGET, RegisteredAbilityStatus } from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { ConditionContext } from '../../abilities/evaluateConditions';
 
@@ -1421,6 +1421,109 @@ describe('per-target debuff stores (Task 1)', () => {
             const defaultActive = eng.activeAbilityStatuses('enemy', () => baseCtx);
             expect(defaultActive.find((s) => s.payload.buffName === 'TankAura')).toBeUndefined();
         });
+    });
+});
+
+describe('reduceNewestDebuffDuration', () => {
+    // Timed enemy-side debuff fixture.
+    const timedEnemyStatus = (
+        buffName: string,
+        duration: number
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName, stacks: 1, parsedEffects: { defense: -5 } },
+    });
+
+    it('reduces the newest-applied debuff by `turns`, leaves others untouched', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // Apply debuff A first (seq lower), then debuff B (seq higher → newest).
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Armor Break', 3));
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 3));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(1);
+        const timed = eng.timedAbilityStatuses('enemy');
+        const a = timed.find((s) => s.payload.buffName === 'Armor Break');
+        const b = timed.find((s) => s.payload.buffName === 'Defense Down');
+        expect(a?.active.turnsRemaining).toBe(3); // untouched
+        expect(b?.active.turnsRemaining).toBe(2); // reduced by 1
+    });
+
+    it('removes a debuff whose duration is reduced to exactly 0', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 1));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(1);
+        expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+    });
+
+    it('removes a debuff whose duration is reduced below 0 (turns > remaining)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Defense Down', 2));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 2);
+
+        expect(result).toBe(1);
+        expect(eng.timedAbilityStatuses('enemy')).toHaveLength(0);
+    });
+
+    it('skips UNREMOVABLE_STATUSES and returns 0 when that is the only debuff', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // 'Acidic Decay' is a real member of UNREMOVABLE_STATUSES.
+        eng.applyTimedAbilityStatus(1, timedEnemyStatus('Acidic Decay', 3));
+
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+
+        expect(result).toBe(0);
+        // The debuff must be untouched.
+        const timed = eng.timedAbilityStatuses('enemy');
+        expect(timed).toHaveLength(1);
+        expect(timed[0].active.turnsRemaining).toBe(3);
+    });
+
+    it('skips a non-numeric (recurring) duration and returns 0', () => {
+        // We cannot inject a 'recurring' duration via applyTimedAbilityStatus (duration is
+        // guaranteed numeric). Use a persistent-stacking debuff — its turnsRemaining sentinel
+        // is 'permanent', which is also non-numeric and must be skipped.
+        const persistentShred = (): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+            kind: 'timed',
+            side: 'enemy',
+            sourceSlot: 'active',
+            conditions: [],
+            duration: 2, // ignored — name routes to the persistent map
+            payload: {
+                buffName: 'Defense Shred',
+                stacks: 1,
+                parsedEffects: { defense: -2 },
+                application: 'inflict',
+            },
+        });
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, persistentShred());
+
+        // The 'permanent' sentinel must be skipped.
+        const result = eng.reduceNewestDebuffDuration(DEFAULT_ENEMY_TARGET, 1);
+        expect(result).toBe(0);
+    });
+
+    it('returns 0 for an unknown actor id without throwing', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+
+        expect(() => eng.reduceNewestDebuffDuration('no-such-actor', 1)).not.toThrow();
+        expect(eng.reduceNewestDebuffDuration('no-such-actor', 1)).toBe(0);
     });
 });
 
