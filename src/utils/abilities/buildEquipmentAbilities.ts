@@ -274,6 +274,13 @@ const DOOMSAYER_PROC: Record<string, number> = {
     epic: 0.12,
     legendary: 0.16,
 };
+// D-PR16: Firewall — when debuffed, X% chance to gain Block Debuff (self) for 1 turn.
+const FIREWALL_PROC: Record<string, number> = {
+    uncommon: 0.08,
+    rare: 0.1,
+    epic: 0.12,
+    legendary: 0.15,
+};
 
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
@@ -706,6 +713,12 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             target: 'enemy-highest-attack',
             conditions: [{ subject: 'first-activator', derivable: true }],
         });
+    },
+    // D-PR16: Firewall — when debuffed, X% chance to gain Block Debuff (self) for 1 turn.
+    FIREWALL: (rarity) => {
+        const procChance = FIREWALL_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Block Debuff', 'self', 'on-debuffed', 1, { procChance });
     },
 };
 

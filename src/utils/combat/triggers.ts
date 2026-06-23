@@ -393,6 +393,14 @@ export function registerReactiveListeners(args: {
                         enqueue({ ...intent, eventCtx: { counterTargetId: e.attackerId } });
                     });
                     break;
+                case 'on-debuffed':
+                    bus.on('debuff-applied', (e) => {
+                        // Self-scoped: fires when THIS owner receives a timed debuff. Mirrors
+                        // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
+                        // this event) → Firewall does not fire on DoT application, by design.
+                        if (e.targetId === ownerId) enqueue(intent);
+                    });
+                    break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
@@ -1224,7 +1232,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 ? ctx.enemyWithHighestAttack?.(intent.ownerId)
                 : intent.eventCtx?.counterTargetId;
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
-        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined) return;
+        if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
+            return;
         // Block Debuff fold (D-PR15 Task 5): a target carrying Block Debuff auto-resists every
         // incoming timed debuff. Gate immunity into the landing condition so the EXISTING resist
         // `else` handles it (no duplicated resist code). `&&` short-circuits when not immune →

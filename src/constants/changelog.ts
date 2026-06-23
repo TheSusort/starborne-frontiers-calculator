@@ -24,7 +24,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models the Fortifying Shroud implant — a chance each turn to grant adjacent allies a Defense Up buff.',
     "Combat simulator: the Disable control now skips the affected ship's turn and locks out its reactions, so effects that apply Disable — like the Martyrdom implant and Disable-inflicting skills — now take effect in the simulation.",
     'Combat simulator: Bulwark implants now apply Provoke to an enemy that damages a nearby ally, and Doomsayer implants apply Concentrate Fire to the strongest enemy at the end of the round.',
-    'Combat simulator now models two control primitives: Block Debuff (a unit immune to debuffs auto-resists every incoming debuff — timed, persistent, control such as Stasis or Disable, and damage-over-time — shown in the log as resisted) and Buff Protection (a unit\'s buffs can no longer be stripped by enemy purge). These back upcoming implant effects.',
+    "Combat simulator now models two control primitives: Block Debuff (a unit immune to debuffs auto-resists every incoming debuff — timed, persistent, control such as Stasis or Disable, and damage-over-time — shown in the log as resisted) and Buff Protection (a unit's buffs can no longer be stripped by enemy purge). These back upcoming implant effects.",
+    'Combat simulator now models the Firewall implant — when the carrier is debuffed, a chance to gain Block Debuff for 1 turn, making it briefly immune to incoming debuffs.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

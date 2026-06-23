@@ -37,7 +37,7 @@ export type AbilityTarget =
     | 'all-enemies'
     | 'enemy-most-buffs'
     | 'enemy-highest-attack'; // D-PR14 Doomsayer: living opposing actor with the greatest
-    //                           live effective attack (global selector, resolved at drain).
+//                           live effective attack (global selector, resolved at drain).
 
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
@@ -85,7 +85,11 @@ export type AbilityTrigger =
     // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
     // event with a non-self recipient). Used by the Font of Power implant (grants the
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
-    | 'on-own-repair-to-ally';
+    | 'on-own-repair-to-ally'
+    // D-PR16 Firewall: fires when THIS unit receives a timed debuff (rides the existing
+    // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
+    // (separate `dot-applied` event) — matches "when debuffed".
+    | 'on-debuffed';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -123,6 +127,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-charged-cast',
     // Font of Power: buff grant to allies the owner repairs.
     'on-own-repair-to-ally',
+    // D-PR16 Firewall: self-scoped reaction to receiving a timed debuff.
+    'on-debuffed',
 ]);
 
 export type ConditionSubject =
@@ -171,7 +177,7 @@ export type ConditionSubject =
     // (DPS / not-yet-hit → "not hit" ⇒ met). Used by the Alacrity implant.
     | 'not-hit-this-round'
     | 'first-activator'; // D-PR14 Doomsayer: this owner was the first actor to take a REAL
-    //                      (non-Stasis/Disable-skipped) turn this round.
+//                      (non-Stasis/Disable-skipped) turn this round.
 
 export interface Condition {
     subject: ConditionSubject;
