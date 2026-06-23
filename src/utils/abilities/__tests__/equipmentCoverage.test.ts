@@ -174,7 +174,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
 // Gear-set coverage: one assertion per set
 // ---------------------------------------------------------------------------
 
-const IMPLEMENTED_SETS = new Set(['LEECH', 'HARDENED', 'CLOAKING']);
+const IMPLEMENTED_SETS = new Set(['LEECH', 'CLOAKING', 'HARDENED']);
 
 describe('equipmentCoverage — gear sets', () => {
     it('LEECH produces exactly 1 ability (the standing leech)', () => {
