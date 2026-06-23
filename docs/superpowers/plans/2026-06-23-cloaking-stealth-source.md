@@ -322,6 +322,33 @@ git commit -m "test(combat): engine integration for Cloaking start-of-combat Ste
 
 ---
 
+## Task 5b: Engine fix — drain-gate self-buff visibility (lights up Ambush)
+
+**Added 2026-06-23 (scope expansion, user-chosen).** During Task 5, cases 1/2/4 (untargetability, once-only, enemy mirror) passed, but the Cloaking→Ambush synergy (case 3) was found infeasible: Ambush's `self-buff:'Stealth'` gate is evaluated at drain time via `buildDrainContext`, whose `selfBuffNames` exclude ability-sourced statuses (Cloaking's Stealth is one). The targeting filter and D-PR3 conditions read a different aggregator (`selfBuffNamesForOwners`) and already see it. Fix = include ability-sourced self-buffs at drain time. Empirically verified zero golden/.snap churn (full suite 3122 green with the flip). See the spec's "Engine fix" section.
+
+**Files:**
+- Modify: `src/utils/combat/triggers.ts` (`buildDrainContext` ~line 812; doc comments ~724-730 and ~808-811)
+- Test: `src/utils/combat/__tests__/equipmentAbilities.integration.test.ts` (the Cloaking+Ambush case 3, replacing the documented-gap comment block Task 5 left in its place)
+
+- [ ] **Step 1: Write the failing test (case 3).** In the `Cloaking integration` describe block, add the Cloaking+Ambush synergy test the Task 5 implementer scoped (a ship with `setBonus:'CLOAKING'` gear pieces + an `setBonus:'AMBUSH'` legendary implant piece, built through `buildShipAbilitiesWithEquipment`, with Ambush's built ability `procChance` overridden to 1 for determinism). Assert Ambush's buff (`Crit Power Up III`) IS granted to the carrier while Stealth is active, on the empirically-observed round. Remove the case-3 "documented gap" comment block.
+
+- [ ] **Step 2: Run it, expect FAIL.** Run: `npx vitest run src/utils/combat/__tests__/equipmentAbilities.integration.test.ts -t Ambush` — expected FAIL (Ambush never fires: gate can't see Stealth).
+
+- [ ] **Step 3: Apply the fix.** In `buildDrainContext` (`triggers.ts` ~812), pass `includeAbilitySelfNames: true` in the options object to `buildActorConditionContext`. Update the two doc comments (~724-730 the `includeAbilitySelfNames` paragraph's "drain path leaves it false" sentence; ~808-811 the "stays FALSE for ALL owners at drain time" paragraph) to state that ability-sourced self-buffs ARE now included at drain time (the prior snapshot-only behavior was a latent gap, empirically golden-neutral — verified zero `.snap` drift across the full suite), and that the symmetric `landedEnemyDebuffCount`/enemy-debuff undercount is deliberately NOT changed (still golden-sensitive, out of scope).
+
+- [ ] **Step 4: Run case 3, expect PASS.** Run: `npx vitest run src/utils/combat/__tests__/equipmentAbilities.integration.test.ts -t Ambush` — expected PASS (Ambush now fires). If it still fails, the intra-drain ordering or the player-side round-1-only Stealth window is the cause — report back rather than forcing it.
+
+- [ ] **Step 5: Full suite — verify ZERO golden/.snap drift.** Run: `npx vitest run` (all green) and `git status --porcelain '*.snap'` (empty). If any `.snap` moved, STOP and investigate — do NOT `vitest -u`.
+
+- [ ] **Step 6: tsc + lint + commit.**
+```bash
+npx tsc --noEmit && npm run lint
+git add src/utils/combat/triggers.ts src/utils/combat/__tests__/equipmentAbilities.integration.test.ts
+git commit -m "feat(combat): drain gates see ability-sourced self-buffs (lights up Ambush via Cloaking Stealth)"
+```
+
+---
+
 ## Task 6: Changelog + skill audit + final verification
 
 **Files:**

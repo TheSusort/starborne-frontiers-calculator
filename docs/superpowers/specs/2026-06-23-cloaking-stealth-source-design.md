@@ -74,6 +74,23 @@ Set-count gating is already generic: `buildEquipmentAbilities` only emits a set 
 
 `'Stealth'` already exists in `buffs.ts:157` (`description: 'Remains untargetable unless no targets without stealth are available.'`). It carries **no stat effects** — it is a targeting/condition buff. `isStealthed` (`engine.ts:2216`) and the targeting filter read it purely by **name** (`selfBuffNamesForOwners(...).includes('Stealth')`). Granting it therefore produces no stat-fold change — only the targeting filter, the `self-stealth`/`incoming-crit-by-stealthed` conditions, and the Ambush gate respond.
 
+## Engine fix: drain-gate self-buff visibility (scope addition, 2026-06-23)
+
+**Discovered during implementation; user chose to fix it in this PR.**
+
+The three dormant consumers split into two visibility classes:
+
+- **Targeting filter + D-PR3 `self-stealth` / `incoming-crit-by-stealthed`** read self-buff names via `selfBuffNamesForOwners` / `isStealthed`, which aggregate **both** the snapshot channel *and* ability-sourced timed statuses. These see Cloaking's Stealth and work with no further change.
+- **D-PR8 Ambush's `self-buff` gate** is evaluated at drain time via `buildDrainContext` → `buildActorConditionContext`, whose `selfBuffNames` come from `snapshot().activeSelfBuffs` **only** unless `includeAbilitySelfNames` is true — and `buildDrainContext` deliberately passes it `false`. Cloaking grants Stealth as an ability-sourced (payload-carrying) timed status, which the snapshot excludes. So Ambush's gate never sees it.
+
+`start-of-round` abilities (both Ambush and Cloaking) enqueue intents (`triggers.ts:374`) that are drained through `executeIntent`, whose single gate check is `buildDrainContext` (`triggers.ts:1156`) — so flipping the flag there is the correct and sufficient lever.
+
+**Fix:** set `includeAbilitySelfNames: true` in `buildDrainContext`. The `self-buff` ConditionSubject is the *only* subject reading `selfBuffNames`, and `'Stealth'` (via Cloaking) is the only buff name that is exclusively ability-sourced today — so the flip is semantically a no-op for every existing fixture. **Empirically verified zero churn:** with the flip, the full suite (3122 tests / 222 files) passes with **no `.snap` drift**. The "golden-locked" doc comments at `triggers.ts:~724-730` / `~808-811` describe a latent gap, not a depended-upon invariant; they will be corrected.
+
+**Scope boundary:** only the self-buff side is touched. The symmetric `landedEnemyDebuffCount` undercount (`triggers.ts:~732-740`, no `includeAbilityEnemyNames` analogue) is **explicitly left untouched** — it is genuinely golden-sensitive and out of scope.
+
+**Intra-drain ordering note:** at round-1 drain, Cloaking's grant intent must execute before Ambush's gate check for Ambush to fire in round 1 (player-side Stealth expires by round 2). The merge order puts the gear-set (Cloaking) ability before the implant (Ambush) ability, so this holds — but the integration test confirms it empirically (fails without the flip, passes with it) rather than relying on the ordering assumption.
+
 ## Golden safety
 
 Expect **ZERO golden / `.snap` drift**, consistent with every prior D PR:
