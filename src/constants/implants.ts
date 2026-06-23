@@ -2209,7 +2209,7 @@ export const IMPLANTS: Record<string, ImplantData> = {
                     { name: 'attack', value: 244, type: 'flat' },
                 ],
                 description:
-                    'When this unit is at 25% or less HP, there is a 26% chance to grant Buff Protection to all allies for 1 turn.',
+                    'When this unit becomes the last one standing, there is a 26% chance to gain Barrier and Block Debuff for 1 turn.',
             },
         ],
         imageKey: 'laststand-Photoroom',
