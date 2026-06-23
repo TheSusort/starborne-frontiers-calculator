@@ -380,6 +380,14 @@ export type AbilityConfig =
            *  used today (Amartya: "purges 1 buff … for every 50% crit power").
            *  Absent → static `count`. cleanse never sets this. */
           countScaling?: { stat: 'critDamage'; per: number };
+          /** Reactive Ward: debuffs to cleanse when the triggering hit was a crit (else `count`).
+           *  Read from intent.eventCtx.didCrit by the reactive cleanse executor. cleanse-only. */
+          critCount?: number;
+          /** 'remove' (default) deletes whole debuffs (cleanse); 'reduce-duration' shaves
+           *  `durationTurns` off the newest debuff (Warpstrike). cleanse-only. */
+          mode?: 'remove' | 'reduce-duration';
+          /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
+          durationTurns?: number;
       }
     | {
           type: 'control';

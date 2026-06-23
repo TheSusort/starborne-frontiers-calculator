@@ -107,6 +107,9 @@ export interface Intent {
          *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
          *  triggering hit's damage rather than the owner's max HP. */
         triggerDamage?: number;
+        /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
+         *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
+        didCrit?: boolean;
         /** The actor ids of the allies repaired by an on-own-repair-to-ally event
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
          *  exactly these recipients (Font of Power -> repaired allies). */
