@@ -1505,7 +1505,24 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'cleanse') {
-        // (reduce-duration mode is added in a later task; remove-mode only for now.)
+        const mode = cfg.mode ?? 'remove';
+        if (mode === 'reduce-duration') {
+            // No shipped duration-reduction ability sets procChance (deterministic), so the gate
+            // is pass-through and never advances — safe to consult regardless of healing mode.
+            if (!passesProcChanceGate(intent, ctx)) return;
+            // Pure status mutation — does NOT require healing mode. self-target → [ownerId].
+            // Falls back to ownerId when healing is absent (e.g. Warpstrike in non-healing sim).
+            const fallback = ctx.healing?.targetId ?? intent.ownerId;
+            const recipients = reactiveRecipients(intent, ctx, fallback);
+            let affected = 0;
+            for (const rid of recipients)
+                affected += ctx.statusEngine.reduceNewestDebuffDuration(
+                    rid,
+                    cfg.durationTurns ?? 1
+                );
+            ctx.healing?.credit(intent.ownerId, 'cleanseCount', affected);
+            return;
+        }
         // remove mode — keep the !ctx.healing return BEFORE the proc gate (gate-desync rule;
         // see passesProcChanceGate doc). If reordered, a healing-mode-off pass would consume a
         // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.

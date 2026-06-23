@@ -269,6 +269,92 @@ function seedDebuffs(se: ReturnType<typeof createStatusEngine>, count: number): 
     }
 }
 
+/** Build a reactive reduce-duration Intent for the test owner. */
+function makeReduceDurationIntent(opts: { durationTurns?: number; procChance?: number }): Intent {
+    return {
+        ownerId: OWNER_ID,
+        sourceSlot: 'passive',
+        ability: {
+            id: 'reactive-reduce-dur-ab',
+            type: 'cleanse',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            ...(opts.procChance !== undefined ? { procChance: opts.procChance } : {}),
+            config: {
+                type: 'cleanse',
+                mode: 'reduce-duration',
+                count: 1, // unused in reduce-duration mode but required by type
+                ...(opts.durationTurns !== undefined ? { durationTurns: opts.durationTurns } : {}),
+            },
+        },
+    } as unknown as Intent;
+}
+
+describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
+    it('F. reduce-duration: newest debuff loses 1 turn; older debuff unchanged; credits cleanseCount:1', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        // Seed two debuffs in sequence: Debuff-0 first (older, seq=1), Debuff-1 second (newer, seq=2).
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-0', 3), 'attacker', TARGET_ID);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-1', 5), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+        executeIntent(intent, ctx);
+
+        // Credit should be called with cleanseCount = 1 (one debuff had its duration reduced).
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 1);
+
+        // Inspect remaining durations via timedAbilityStatuses('enemy', ownerId, targetId).
+        // TARGET_ID = OWNER_ID so both arguments are the same string.
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const byName = new Map(statuses.map((s) => [s.active.buffName, s.active.turnsRemaining]));
+
+        // Debuff-1 is the newest (higher appliedSeq) → its duration was reduced by 1 (5→4).
+        expect(byName.get('Debuff-1')).toBe(4);
+        // Debuff-0 is older → unchanged (still 3).
+        expect(byName.get('Debuff-0')).toBe(3);
+    });
+
+    it('G. reduce-duration without healing ctx: still reduces debuff, no throw, no credit attempted', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        se.applyTimedAbilityStatus(1, mkTimed('Debuff-X', 4), 'attacker', TARGET_ID);
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        // Remove healing ctx entirely.
+        (ctx as unknown as Record<string, unknown>).healing = undefined;
+
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+        // Must not throw even without healing.
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+
+        // The debuff duration must have been reduced (4 → 3).
+        const statuses = se.timedAbilityStatuses('enemy', OWNER_ID, TARGET_ID);
+        const debuffX = statuses.find((s) => s.active.buffName === 'Debuff-X');
+        expect(debuffX?.active.turnsRemaining).toBe(3);
+
+        // No credit should be called (ctx.healing is absent).
+        expect(creditSpy).not.toHaveBeenCalled();
+    });
+
+    it('H. reduce-duration with no eligible debuff: affected 0, no throw, credit 0 when healing present', () => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // No debuffs seeded — actor is clean.
+
+        const creditSpy = vi.fn();
+        const ctx = makeCtx({ statusEngine: se, creditSpy });
+        const intent = makeReduceDurationIntent({ durationTurns: 1 });
+
+        expect(() => executeIntent(intent, ctx)).not.toThrow();
+        // affected = 0, so credit called with 0.
+        expect(creditSpy).toHaveBeenCalledWith(OWNER_ID, 'cleanseCount', 0);
+    });
+});
+
 describe('Task 3: reactive cleanse executor — procChance + crit-count', () => {
     it('A. remove-mode, no procChance: cleanses cfg.count debuffs (preserved behavior)', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
