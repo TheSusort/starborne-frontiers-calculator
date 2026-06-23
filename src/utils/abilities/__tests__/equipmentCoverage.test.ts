@@ -185,6 +185,10 @@ describe('equipmentCoverage — gear sets', () => {
         expect(gearSetAbilityCount('HARDENED')).toBe(1);
     });
 
+    it('CLOAKING produces exactly 1 ability (the Stealth grant)', () => {
+        expect(gearSetAbilityCount('CLOAKING')).toBe(1);
+    });
+
     it('CLOAKING produces a once-per-combat 2-turn Stealth self-buff on start-of-round', () => {
         const minPieces = GEAR_SETS['CLOAKING']?.minPieces ?? 2;
         const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
