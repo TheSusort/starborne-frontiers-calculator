@@ -100,13 +100,26 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
     return buildEquipmentAbilities(ship, (gearId) => pieceMap[gearId]).length;
 }
 
+/**
+ * Build a minimal ship equipping one implant piece (at the given rarity) and
+ * return the built abilities produced by buildEquipmentAbilities (for shape assertions).
+ */
+function implantAbilities(implantKey: string, rarity: string) {
+    const id = `${implantKey}-piece`;
+    const pieceMap: Record<string, GearPiece> = {
+        [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
+    };
+    const ship = makeShip({ implants: { implant_major: id } });
+    return buildEquipmentAbilities(ship, (gearId) => pieceMap[gearId]);
+}
+
 // ---------------------------------------------------------------------------
 // Regression guard: implemented effect names must equal exactly this set.
 // Update deliberately when new effects are added.
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -147,6 +160,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'LAST_WISH',
             'LOCKDOWN',
             'MENACE',
+            'REACTIVE_WARD',
             'SECOND_WIND',
             'SHADOWGUARD',
             'SPEARHEAD',
@@ -208,6 +222,8 @@ describe('equipmentCoverage — implants', () => {
     // D-PR16: LOCKDOWN added (on-debuff-resisted → all-ally Buff Protection grant).
     // D-PR16: TENACITY added (on-attacked >25%-max-HP → all-ally Buff Protection grant).
     // D-PR16: LAST_STAND added (on-ally-destroyed + last-standing → self Barrier + Block Debuff co-grant).
+    // Reactive cleanse PR: REACTIVE_WARD added (reactive cleanse on-attacked, crit-count branch).
+    //         WARPSTRIKE gains a second ability (reduce-duration cleanse on-deal-damage).
     const implementedImplants = new Set([
         'FIREWALL',
         'LOCKDOWN',
@@ -241,6 +257,7 @@ describe('equipmentCoverage — implants', () => {
         'FORTIFYING_SHROUD',
         'BULWARK',
         'DOOMSAYER',
+        'REACTIVE_WARD',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -257,10 +274,10 @@ describe('equipmentCoverage — implants', () => {
         }
     });
 
-    it('WARPSTRIKE produces 1 ability per rarity (outgoingDamage modifier gated on self-debuff)', () => {
+    it('WARPSTRIKE produces 2 abilities per rarity (outgoingDamage modifier + reduce-duration cleanse, gated on self-debuff)', () => {
         const variants = IMPLANTS['WARPSTRIKE'].variants;
         for (const v of variants) {
-            expect(implantAbilityCount('WARPSTRIKE', v.rarity)).toBe(1);
+            expect(implantAbilityCount('WARPSTRIKE', v.rarity)).toBe(2);
         }
     });
 
@@ -460,6 +477,74 @@ describe('equipmentCoverage — implants', () => {
             expect(implantAbilityCount('DOOMSAYER', v.rarity)).toBe(
                 SUPPORTED.has(v.rarity) ? 1 : 0
             );
+        }
+    });
+
+    // D-PR16: WARPSTRIKE shape — two abilities, correct trigger + config each
+    it('WARPSTRIKE ability[0] is the outgoingDamage modifier (on-cast, self-debuff condition)', () => {
+        const abs = implantAbilities('WARPSTRIKE', 'legendary');
+        expect(abs).toHaveLength(2);
+        const mod = abs[0];
+        expect(mod.type).toBe('modifier');
+        expect(mod.trigger).toBe('on-cast');
+        expect(mod.config).toMatchObject({ type: 'modifier', channel: 'outgoingDamage' });
+        // self-debuff condition must be present
+        expect(mod.conditions.some((c) => c.subject === 'self-debuff')).toBe(true);
+    });
+
+    it('WARPSTRIKE ability[1] is the reduce-duration cleanse (on-deal-damage, self-debuff condition, durationTurns 1)', () => {
+        const abs = implantAbilities('WARPSTRIKE', 'legendary');
+        expect(abs).toHaveLength(2);
+        const cleanse = abs[1];
+        expect(cleanse.type).toBe('cleanse');
+        expect(cleanse.trigger).toBe('on-deal-damage');
+        expect(cleanse.config).toMatchObject({
+            type: 'cleanse',
+            mode: 'reduce-duration',
+            durationTurns: 1,
+        });
+        // self-debuff condition must be present
+        expect(cleanse.conditions.some((c) => c.subject === 'self-debuff')).toBe(true);
+        // deterministic — no procChance
+        expect(cleanse.procChance).toBeUndefined();
+    });
+
+    it('WARPSTRIKE ids are suffixed with -0 / -1 (multi-ability builder indexing)', () => {
+        const abs = implantAbilities('WARPSTRIKE', 'common');
+        expect(abs[0].id).toBe('equip-implant-WARPSTRIKE-WARPSTRIKE-piece-0');
+        expect(abs[1].id).toBe('equip-implant-WARPSTRIKE-WARPSTRIKE-piece-1');
+    });
+
+    // D-PR16: REACTIVE_WARD — 1 ability for common/uncommon/epic/legendary; 0 for rare
+    it('REACTIVE_WARD produces 1 ability for common/uncommon/epic/legendary, 0 for rare (no rare variant)', () => {
+        expect(implantAbilityCount('REACTIVE_WARD', 'common')).toBe(1);
+        expect(implantAbilityCount('REACTIVE_WARD', 'uncommon')).toBe(1);
+        expect(implantAbilityCount('REACTIVE_WARD', 'rare')).toBe(0);
+        expect(implantAbilityCount('REACTIVE_WARD', 'epic')).toBe(1);
+        expect(implantAbilityCount('REACTIVE_WARD', 'legendary')).toBe(1);
+    });
+
+    it('REACTIVE_WARD ability shape: trigger on-attacked, cleanse mode remove, count 1, critCount 2, correct procChance per rarity', () => {
+        const PROC: Record<string, number> = {
+            common: 0.05,
+            uncommon: 0.07,
+            epic: 0.12,
+            legendary: 0.16,
+        };
+        for (const [rarity, expectedPc] of Object.entries(PROC)) {
+            const abs = implantAbilities('REACTIVE_WARD', rarity);
+            expect(abs).toHaveLength(1);
+            const ab = abs[0];
+            expect(ab.type).toBe('cleanse');
+            expect(ab.trigger).toBe('on-attacked');
+            expect(ab.target).toBe('self');
+            expect(ab.procChance).toBeCloseTo(expectedPc);
+            expect(ab.config).toMatchObject({
+                type: 'cleanse',
+                count: 1,
+                critCount: 2,
+                mode: 'remove',
+            });
         }
     });
 

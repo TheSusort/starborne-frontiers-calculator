@@ -74,7 +74,9 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'>>> = {
 // Each entry maps an implant name to a per-rarity builder.  A builder returns
 // an Ability (minus `id`) or undefined when the rarity is unsupported.
 
-type ImplantAbilityBuilder = (rarity: string) => Omit<Ability, 'id'> | undefined;
+type ImplantAbilityBuilder = (
+    rarity: string
+) => Omit<Ability, 'id'> | Omit<Ability, 'id'>[] | undefined;
 
 const BLOODTHIRST_HEAL_PCT: Record<string, number> = {
     uncommon: 12,
@@ -298,6 +300,15 @@ const LAST_STAND_PROC: Record<string, number> = {
     legendary: 0.32,
 };
 
+// D-PR16: Reactive Ward — X% chance, when directly damaged, to cleanse 1 debuff (2 if crit).
+// No rare variant exists in implants.ts.
+const REACTIVE_WARD_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -507,26 +518,60 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
-    // Warpstrike (damage half only): +X% outgoing direct damage while self-debuffed. Flat
-    // value + a >=1 self-debuff gate (NOT scaling — scaledBonus uses the raw debuff count and
-    // would over-apply for multiple debuffs). The "reduce a random debuff's duration by 1
-    // turn" half is DEFERRED (self-debuff-mitigation / cleanse-family).
+    // Warpstrike: +X% outgoing direct damage while self-debuffed (damage half), AND reduces
+    // a random active debuff's duration by 1 turn on each damage-dealing turn (duration-reduction
+    // half). Both halves are gated on the same self-debuff condition (>=1 debuff required).
+    // Returns an array so the consumer stamps distinct ids (-0 / -1) for each half.
     WARPSTRIKE: (rarity) => {
         const value = WARPSTRIKE_PCT[rarity];
         if (value === undefined) return undefined;
-        return {
-            type: 'modifier',
-            target: 'self',
-            trigger: 'on-cast',
-            conditions: [
-                {
-                    subject: 'self-debuff',
-                    derivable: true,
-                    countComparator: 'gte',
-                    countThreshold: 1,
+        const selfDebuffGate = {
+            subject: 'self-debuff' as const,
+            derivable: true,
+            countComparator: 'gte' as const,
+            countThreshold: 1,
+        };
+        return [
+            {
+                type: 'modifier' as const,
+                target: 'self' as const,
+                trigger: 'on-cast' as const,
+                conditions: [selfDebuffGate],
+                config: {
+                    type: 'modifier' as const,
+                    channel: 'outgoingDamage' as const,
+                    value,
+                    isMultiplicative: false,
                 },
-            ],
-            config: { type: 'modifier', channel: 'outgoingDamage', value, isMultiplicative: false },
+                autoFilled: true,
+            },
+            {
+                type: 'cleanse' as const,
+                target: 'self' as const,
+                trigger: 'on-deal-damage' as const,
+                conditions: [selfDebuffGate],
+                config: {
+                    type: 'cleanse' as const,
+                    count: 0,
+                    mode: 'reduce-duration' as const,
+                    durationTurns: 1,
+                },
+                autoFilled: true,
+            },
+        ];
+    },
+    // Reactive Ward: X% chance, when directly damaged, to cleanse 1 debuff (2 if the hit was
+    // a critical). No rare variant exists in implants.ts.
+    REACTIVE_WARD: (rarity) => {
+        const pc = REACTIVE_WARD_PROC[rarity];
+        if (pc === undefined) return undefined;
+        return {
+            type: 'cleanse' as const,
+            target: 'self' as const,
+            trigger: 'on-attacked' as const,
+            conditions: [],
+            procChance: pc,
+            config: { type: 'cleanse' as const, count: 1, critCount: 2, mode: 'remove' as const },
             autoFilled: true,
         };
     },
@@ -853,14 +898,24 @@ export function buildEquipmentAbilities(
             // Try the per-implant builder first (handles cases the text parser can't).
             const builder = IMPLANT_ABILITIES[implantName];
             if (builder) {
-                const partial = builder(piece.rarity);
-                if (!partial) continue;
-                abilities.push({
-                    ...partial,
-                    // Suffix the unique gear-piece id so two copies of the same implant get
-                    // distinct ability ids — the proc-rate gate keys on (owner, ability.id),
-                    // so a shared id would collapse independent procs into one gate.
-                    id: `equip-implant-${implantName}-${gearId}`,
+                const res = builder(piece.rarity);
+                if (!res) continue;
+                const partials = Array.isArray(res) ? res : [res];
+                partials.forEach((partial, i) => {
+                    abilities.push({
+                        ...partial,
+                        // For single-ability implants, preserve the original id byte-exactly
+                        // (suffix the unique gear-piece id so two copies of the same implant
+                        // get distinct ability ids — the proc-rate gate keys on
+                        // (owner, ability.id), so a shared id would collapse independent
+                        // procs into one gate).
+                        // For multi-ability implants (e.g. Warpstrike), append an index
+                        // suffix so the two halves also get distinct ids.
+                        id:
+                            partials.length === 1
+                                ? `equip-implant-${implantName}-${gearId}`
+                                : `equip-implant-${implantName}-${gearId}-${i}`,
+                    });
                 });
                 continue;
             }
