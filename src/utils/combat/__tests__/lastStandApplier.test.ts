@@ -13,11 +13,14 @@
  * the proc gate — so the proc accumulator only advances on the single qualifying (sole-survivor)
  * event. A fresh rate accumulator at the registry's 0.32 rate does NOT fire on its first event, so
  * the single last-standing event cannot drive a real-rate proc deterministically. We therefore
- * inject the ability with `procChance: 1` (every other field — trigger, target, the `last-standing`
- * condition, the 'Barrier' buff name + `alsoGrantBuffNames: ['Block Debuff']`, 1-turn duration —
- * matches the registry exactly, buildEquipmentAbilities.ts LAST_STAND). This is the same determinism
- * device the sibling integration suites use (cfProvokeAppliers forces procChance: 1). The registry's
- * exact per-rarity proc table + ability shape are covered by equipmentCoverage.test.ts.
+ * resolve the ability from the REAL registry (legendary implant via buildShipAbilitiesWithEquipment)
+ * and override ONLY `procChance` to 1 — every other field (trigger, target, the `last-standing`
+ * condition, the 'Barrier' buff name + co-granted 'Block Debuff', 1-turn duration) is exactly what
+ * buildEquipmentAbilities.ts LAST_STAND produced. This is the same determinism device the sibling
+ * integration suites use (cfProvokeAppliers forces procChance: 1), but routed through the real entry
+ * so a registry typo in any load-bearing field fails a test here. A registry-shape assertion below
+ * additionally pins the exact field values; the per-rarity proc table is covered by
+ * equipmentCoverage.test.ts.
  *
  * Cases:
  *  - GRANT (headline): a 2-actor player team; the carrier becomes sole survivor when the OTHER ally
@@ -33,41 +36,75 @@ import { createEventBus } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import { Ship } from '../../../types/ship';
+import { GearPiece } from '../../../types/gear';
+import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // ---------------------------------------------------------------------------
-// Shared ability shapes (match the registry, procChance forced to 1)
+// Real-registry resolution of the LAST_STAND ability (procChance forced to 1)
 // ---------------------------------------------------------------------------
+//
+// The headline + enemy-mirror cases drive the REAL registry entry end-to-end: we equip a
+// legendary Last Stand implant via a stubbed `getGearPiece` + `setBonus='LAST_STAND'`,
+// `buildShipAbilitiesWithEquipment` merges the reactive buff-grant into the passive slot, and
+// we override ONLY `procChance` to 1 on the resolved ability (so the single sole-survivor event
+// fires deterministically — see header note). Every other field — trigger, target, the
+// `last-standing` condition, the 'Barrier' buff name + co-granted 'Block Debuff', 1-turn duration
+// — is exactly what the registry produced. A registry typo in any of those fields now fails a test.
 
-/** Last Stand: on-ally-destroyed self Barrier (1 turn) + co-granted Block Debuff (1 turn), gated on
- *  `last-standing`. proc forced to 1 → the single sole-survivor event reliably grants both buffs. */
-const lastStandAbility: Ability = {
-    id: 'equip-implant-LAST_STAND',
-    type: 'buff',
-    target: 'self',
-    trigger: 'on-ally-destroyed',
-    conditions: [{ subject: 'last-standing', derivable: true }],
-    procChance: 1, // >= 1 → passesProcChanceGate is unconditional (deterministic)
-    config: {
-        type: 'buff',
-        buffName: 'Barrier',
-        parsedEffects: {},
-        stacks: 1,
-        isStackable: false,
-        duration: 1,
-        additionalBuffs: [
-            {
-                buffName: 'Block Debuff',
-                parsedEffects: {},
-                stacks: 1,
-                isStackable: false,
-                duration: 1,
-            },
-        ],
-    } as Ability['config'],
-    autoFilled: true,
-};
+function makeShip(over: Partial<Ship>): Ship {
+    return {
+        id: 'test-ship',
+        name: 'Test Ship',
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {},
+        implants: {},
+        refits: [],
+        ...over,
+    } as Ship;
+}
+
+function makePiece(over: Partial<GearPiece>): GearPiece {
+    return {
+        id: 'piece-1',
+        slot: 'implant_major',
+        level: 16,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: null,
+        subStats: [],
+        setBonus: null,
+        ...over,
+    } as GearPiece;
+}
+
+/**
+ * Resolve the Last Stand passive ability from the REAL registry (legendary implant), then return a
+ * copy with `procChance` forced to 1 so the single qualifying sole-survivor event fires
+ * deterministically. Every other field is left exactly as the registry produced it.
+ */
+function buildLastStandAbility(): Ability {
+    const ship = makeShip({ implants: { implant_major: 'laststand-legendary' } });
+    const getGearPiece = (id: string): GearPiece | undefined =>
+        id === 'laststand-legendary'
+            ? makePiece({ id, slot: 'implant_major', rarity: 'legendary', setBonus: 'LAST_STAND' })
+            : undefined;
+    const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+    const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+    const resolved = passive?.abilities.find((a) => a.id.startsWith('equip-implant-LAST_STAND'));
+    if (!resolved) {
+        throw new Error('LAST_STAND ability was not produced by the registry');
+    }
+    return { ...resolved, procChance: 1 };
+}
+
+/** The real registry's LAST_STAND ability with procChance forced to 1 (deterministic). */
+const lastStandAbility: Ability = buildLastStandAbility();
 
 /** A 100% / 1-hit basic attack active slot (for a killing actor). */
 const basicAttack = (): ShipSkills['slots'][number] => ({
@@ -277,5 +314,34 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
 
         expect(buffAppliedOn(input, 'Barrier', 'enemy-carrier')).toBeGreaterThan(0);
         expect(buffAppliedOn(input, 'Block Debuff', 'enemy-carrier')).toBeGreaterThan(0);
+    });
+
+    it('registry shape: the real LAST_STAND entry has the exact load-bearing fields', () => {
+        // Resolve the ability straight from the registry (NO procChance override) and pin every
+        // load-bearing field. A typo in trigger/condition/target/buffName/co-grant/duration fails here.
+        const ship = makeShip({ implants: { implant_major: 'laststand-legendary' } });
+        const getGearPiece = (id: string): GearPiece | undefined =>
+            id === 'laststand-legendary'
+                ? makePiece({
+                      id,
+                      slot: 'implant_major',
+                      rarity: 'legendary',
+                      setBonus: 'LAST_STAND',
+                  })
+                : undefined;
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        const ability = passive?.abilities.find((a) => a.id.startsWith('equip-implant-LAST_STAND'));
+
+        expect(ability).toBeDefined();
+        expect(ability!.trigger).toBe('on-ally-destroyed');
+        expect(ability!.target).toBe('self');
+        expect(ability!.conditions?.[0]?.subject).toBe('last-standing');
+        expect((ability!.procChance ?? 0) > 0 && (ability!.procChance ?? 1) < 1).toBe(true);
+
+        const config = ability!.config as Extract<Ability['config'], { type: 'buff' }>;
+        expect(config.buffName).toBe('Barrier');
+        expect(config.duration).toBe(1);
+        expect(config.additionalBuffs?.[0]?.buffName).toBe('Block Debuff');
     });
 });
