@@ -158,7 +158,7 @@ describe('buildShipAbilities', () => {
         ).toBe(true);
     });
 
-    it('Provider charged: damage + extend-dot (charge removal is ignored)', () => {
+    it('Provider charged: damage + extend-dot (charge removal now also emitted — see Phase 1 Task 3 block)', () => {
         const s = ship({
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
             chargeSkillText:
@@ -3308,5 +3308,124 @@ describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff, not 
         // (parseControlInflict is Stasis-only; Disable must not be claimed by it).
         const control = active!.abilities.find((a) => a.type === 'control');
         expect(control).toBeUndefined();
+    });
+});
+
+// ── Phase 1 Task 3: enemy-target charge-removal abilities ─────────────────────────────────
+// parseChargeRemoval (Task 2) is already wired into skillTextParser.ts. This block verifies
+// that buildShipAbilities orchestrates it and emits target:'enemy' charge abilities.
+
+describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)', () => {
+    it('Opal charged: on-cast removal of 2 charges from the enemy', () => {
+        // Opal's real charge skill text (from docs/ship-skills.csv).
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.',
+            chargeSkillCharge: 3,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const charged = slot(slots, 'charged')!;
+        expect(charged).toBeDefined();
+
+        expect(charged.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'charge',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'charge', amount: 2 },
+            })
+        );
+    });
+
+    it('Demolisher passive: bomb-detonation removal of 2 charges from the enemy', () => {
+        // Demolisher's real passive text (from docs/ship-skills.csv).
+        const s = ship({
+            firstPassiveSkillText:
+                "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill.",
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        expect(passive).toBeDefined();
+
+        expect(passive.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'charge',
+                target: 'enemy',
+                trigger: 'on-bomb-detonated',
+                config: { type: 'charge', amount: 2 },
+            })
+        );
+    });
+
+    it('Zosimos passive: BOTH self gain (on-enemy-repaired) AND enemy removal (every 2nd repair)', () => {
+        // Zosimos's real passive text includes both a self charge gain and an enemy charge removal.
+        const s = ship({
+            firstPassiveSkillText:
+                "When an enemy repairs, this unit gains a charge to its charged skill. Additionally, this unit decreases that enemy's charge by one for every second repair they perform.",
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        expect(passive).toBeDefined();
+
+        const chargeAbilities = passive.abilities.filter((a) => a.type === 'charge');
+        // Must emit BOTH a self gain and an enemy removal.
+        expect(chargeAbilities).toEqual(
+            expect.arrayContaining([
+                // self gain on-enemy-repaired (existing parseChargeGain path)
+                expect.objectContaining({
+                    target: 'self',
+                    trigger: 'on-enemy-repaired',
+                }),
+                // enemy removal on-enemy-repaired every 2nd repair (new parseChargeRemoval path)
+                expect.objectContaining({
+                    target: 'enemy',
+                    trigger: 'on-enemy-repaired',
+                    everyNthEvent: 2,
+                    config: { type: 'charge', amount: 1 },
+                }),
+            ])
+        );
+    });
+
+    it('Provider charged: removal of 1 charge from the enemy on-cast (previously ignored)', () => {
+        // Provider's charge skill text already existed in the test at line ~161 with a comment
+        // saying "charge removal is ignored". Now that the orchestrator wires parseChargeRemoval,
+        // the removal MUST be emitted. The existing test still passes (it only asserts damage +
+        // extend-dot exist); this complementary test locks the removal contract.
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>200% damage</unit-damage>, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.',
+            chargeSkillCharge: 3,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const charged = slot(slots, 'charged')!;
+
+        expect(charged.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'charge',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'charge', amount: 1 },
+            })
+        );
+    });
+
+    it('does not emit a removal ability for a pure charge-gain ship', () => {
+        // Negative test: a ship whose only charge-related text is a self gain must not produce
+        // any enemy-targeted charge ability.
+        const s = ship({
+            firstPassiveSkillText: 'This Unit adds 1 charge to its Charged Skill.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        const enemyCharges = (passive?.abilities ?? []).filter(
+            (a) => a.type === 'charge' && a.target === 'enemy'
+        );
+        expect(enemyCharges).toHaveLength(0);
     });
 });

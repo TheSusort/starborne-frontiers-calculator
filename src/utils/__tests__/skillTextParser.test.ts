@@ -39,6 +39,7 @@ import {
     statusEffectCondition,
     detectIgnoresForcedTargeting,
     parseDoesntBreakStasis,
+    parseChargeRemoval,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -3195,7 +3196,12 @@ describe('parsePurge', () => {
     });
     it('parses "purges 1 buff from all enemies" (Amartya)', () => {
         expect(parsePurge('purges 1 buff from all enemies for every 50% crit power')).toEqual([
-            { count: 1, target: 'all-enemies', explicitTarget: true, countScaling: { stat: 'critDamage', per: 50 } },
+            {
+                count: 1,
+                target: 'all-enemies',
+                explicitTarget: true,
+                countScaling: { stat: 'critDamage', per: 50 },
+            },
         ]);
     });
     it('parses "purges a buff from an enemy" (Sefuba p2 / Lodolite p3)', () => {
@@ -3579,5 +3585,75 @@ describe('target-repaired-this-round (Nayra)', () => {
         expect(
             detectRepairedThisRoundCondition(activeText, activeText.search(/purge/i))
         ).toBeUndefined();
+    });
+});
+
+describe('parseChargeRemoval', () => {
+    it('on-cast removal — Opal (amount 2)', () => {
+        expect(
+            parseChargeRemoval(
+                'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.'
+            )
+        ).toEqual({ amount: 2, trigger: 'on-cast' });
+    });
+
+    it('on-cast removal — Provider (amount 1)', () => {
+        expect(
+            parseChargeRemoval(
+                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+            )
+        ).toEqual({ amount: 1, trigger: 'on-cast' });
+    });
+
+    it('on-cast removal — Sefuba charged (amount 2)', () => {
+        expect(
+            parseChargeRemoval('This Unit deals 200% damage and removes 2 charges from the enemy.')
+        ).toEqual({ amount: 2, trigger: 'on-cast' });
+    });
+
+    it('bomb-detonated removal — Demolisher passive (amount 2)', () => {
+        expect(
+            parseChargeRemoval(
+                "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill."
+            )
+        ).toEqual({ amount: 2, trigger: 'on-bomb-detonated' });
+    });
+
+    it('bomb-detonated removal — Demolisher charged (ignores adjacent-damage clause)', () => {
+        expect(
+            parseChargeRemoval(
+                "When a Bomb explodes on an enemy, this Unit removes 2 charges from the enemy's Charged Skill and deals 100% of the Bomb's damage to all adjacent enemies."
+            )
+        ).toEqual({ amount: 2, trigger: 'on-bomb-detonated' });
+    });
+
+    it('every-2nd-repair removal — Zosimos (amount 1, everyNthEvent 2)', () => {
+        expect(
+            parseChargeRemoval(
+                "When an enemy repairs, this unit gains a charge to its charged skill. Additionally, this unit decreases that enemy's charge by one for every second repair they perform."
+            )
+        ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
+    });
+
+    it('coexists with a gain in the same text — Thresh-style', () => {
+        const text =
+            "If the target is a Defender, this Unit removes 1 charge from the enemy and adds 1 charge to this Unit's Charged Skill.";
+        expect(parseChargeRemoval(text)).toEqual({ amount: 1, trigger: 'on-cast' });
+    });
+
+    it('returns null for a pure gain (no removal clause)', () => {
+        expect(parseChargeRemoval('This Unit adds 1 charge to its Charged Skill.')).toBeNull();
+    });
+
+    it('returns null for charge-loss immunity text (not a removal)', () => {
+        expect(parseChargeRemoval('This Unit is immune to charge loss effects.')).toBeNull();
+    });
+
+    it('tolerates a curly apostrophe in "enemy’s charge"', () => {
+        expect(
+            parseChargeRemoval(
+                'When an enemy repairs, this unit gains a charge. Additionally, this unit decreases that enemy’s charge by one for every second repair they perform.'
+            )
+        ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
     });
 });

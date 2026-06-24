@@ -170,6 +170,7 @@ function makePurgeCtx(removedCount: number): {
         ]),
         grantAllyCharges: () => {},
         removeEnemyCharges: () => {},
+        removeChargesFrom: () => {},
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),

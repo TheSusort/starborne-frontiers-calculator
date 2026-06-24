@@ -33,8 +33,32 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import type { IntentExecContext } from '../triggers';
+import type { CombatActor } from '../state';
+import { createEventBus, type CombatEvent } from '../events';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+// ─── Direct-charge harness ────────────────────────────────────────────────────────
+// The integration tests above infer enemy charge state INDIRECTLY (via incoming damage).
+// The Phase-1 cases below assert the post-event enemy `charges` DIRECTLY by tapping the
+// engine's live actor roster (`__testTapActors`) and reading the mutated CombatActor after
+// the run. The tap hands out the SAME objects the engine mutates in place, so reading
+// `actor.charges` post-run observes the final value.
+const runAndTap = (input: CombatEngineInput): CombatActor[] => {
+    let captured: CombatActor[] = [];
+    runCombat({ ...input, __testTapActors: (actors) => (captured = actors) });
+    return captured;
+};
+/** runAndTap with a forced round count — the on-cast cases read after a SINGLE player cast
+ *  (numRounds 1), otherwise the player would re-cast the removal every round and stack drops. */
+const runAndTapRounds = (input: CombatEngineInput, numRounds: number): CombatActor[] =>
+    runAndTap({ ...input, numRounds });
+const chargesOf = (actors: CombatActor[], id: string): number => {
+    const a = actors.find((x) => x.id === id);
+    if (!a) throw new Error(`no actor '${id}' in tapped roster`);
+    return a.charges;
+};
 
 // ─── Ability fixtures ───────────────────────────────────────────────────────────
 
@@ -233,4 +257,156 @@ describe('enemy charge removal — cast path (on-cast all-enemies)', () => {
 
         expect(totalIncoming(removalVsImmune)).toBe(totalIncoming(selfControl));
     });
+});
+
+// ─── Phase 1: direct post-event charge assertions ────────────────────────────────
+//
+// These mirror the parsed charge-removal ABILITIES the orchestrator emits (Task 3):
+//   { type:'charge', target:'enemy', trigger, config:{ amount }, everyNthEvent? }
+// and assert the enemy's `charges` directly after the run (via the actor tap).
+//
+// The charge-HOLDER enemy below carries a chargeCount (so it is a valid removal target —
+// removeEnemyCharges skips chargeCount-0 actors) but has NO charged-damage slot, so the
+// engine derives hasChargedSkill === false. With hasChargedSkill false, advanceChargeCadence
+// is a no-op on the enemy's own turn — its `charges` are NOT re-banked, so the seeded value
+// minus the removal is exactly observable. (It still acts each turn via its active slot.)
+
+const chargeHolder = (opts: {
+    chargeCount: number;
+    seeded: number; // charges to seed via startCharged (charges == chargeCount when true)
+    chargeLossImmune?: boolean;
+}): EnemyAttacker => ({
+    id: 'e-holder',
+    stats: { attack: 1, crit: 0, critDamage: 0, speed: 40 },
+    chargeCount: opts.chargeCount,
+    // startCharged seeds charges = chargeCount. We pick chargeCount === seeded so the
+    // holder starts with exactly `seeded` charges and (no charged-damage slot →
+    // hasChargedSkill false) never re-banks.
+    startCharged: opts.seeded === opts.chargeCount && opts.seeded > 0,
+    ...(opts.chargeLossImmune ? { chargeLossImmune: true } : {}),
+    shipSkills: {
+        // active-only: a tiny basic attack. No charged slot → hasChargedSkill false → cadence
+        // never advances the holder's charges.
+        slots: [{ slot: 'active', abilities: [enemyDamage(1, 'eh-a')] }],
+    } as ShipSkills,
+});
+
+describe('enemy charge removal — direct post-event charges (on-cast, Opal-style)', () => {
+    it('case 1: on-cast removal amount 2 against a 3-charge enemy → charges === 1', () => {
+        // Opal-style: the player casts an on-cast enemy-targeted charge removal (amount 2).
+        // The holder is seeded charges 3 and never re-banks → after ONE cast: 3 − 2 === 1.
+        // numRounds 1 — a multi-round run would re-cast each round and stack the drop to 0.
+        const actors = runAndTapRounds(
+            buildInput(
+                chargeAbility(2, 'enemy', 'on-cast', 'p-opal'),
+                chargeHolder({ chargeCount: 3, seeded: 3 })
+            ),
+            1
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(1);
+    });
+
+    it('case 2: immunity no-op — chargeLossImmune holder keeps its 3 charges', () => {
+        // Same removal, but the holder is chargeLossImmune → removeEnemyCharges skips it → 3.
+        const actors = runAndTap(
+            buildInput(
+                chargeAbility(2, 'enemy', 'on-cast', 'p-opal-imm'),
+                chargeHolder({ chargeCount: 3, seeded: 3, chargeLossImmune: true })
+            )
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(3);
+    });
+
+    it('case 3: floor at 0 — removal amount 2 against a 1-charge enemy → charges === 0', () => {
+        // Holder seeded chargeCount 1, charges 1; removal 2 floors: max(0, 1 − 2) === 0.
+        const actors = runAndTapRounds(
+            buildInput(
+                chargeAbility(2, 'enemy', 'on-cast', 'p-opal-floor'),
+                chargeHolder({ chargeCount: 1, seeded: 1 })
+            ),
+            1
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(0);
+    });
+});
+
+// ─── Case 4: bomb-driven removal (Demolisher-style) ───────────────────────────────
+//
+// A player ship that applies a Bomb DoT (active slot) AND carries an on-bomb-detonated
+// enemy-targeted charge removal (amount 2). When the bomb detonates (bomb-detonated event,
+// actorId 'attacker'), the reactive executor routes the removal through removeEnemyCharges
+// (bulk all-opposing) → the holder's charges drop by 2.
+
+describe('enemy charge removal — bomb-driven (Demolisher-style, on-bomb-detonated)', () => {
+    const bombRemovalSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyDamage(50, 'p-bomb-hit'),
+                    {
+                        id: 'p-bomb-dot',
+                        type: 'dot',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'dot', dotType: 'bomb', tier: 10, stacks: 2, duration: 2 },
+                    },
+                ],
+            },
+            {
+                slot: 'passive',
+                abilities: [chargeAbility(2, 'enemy', 'on-bomb-detonated', 'p-demolisher')],
+            },
+        ],
+    });
+
+    it('case 4: a bomb detonation drops the enemy holder’s charges by 2 (bulk all-opposing)', () => {
+        const input: CombatEngineInput = {
+            ...buildInput(
+                // The under-test ability slot from buildInput is unused (we override shipSkills).
+                chargeAbility(0, 'self', 'on-cast', 'p-unused'),
+                chargeHolder({ chargeCount: 5, seeded: 5 })
+            ),
+            shipSkills: bombRemovalSkills(),
+            // Bomb applied round 1 (countdown 2) detonates on the enemy turn of round 2. A
+            // 2-round run yields EXACTLY one detonation (the round-2 re-application would burst
+            // in round 3, outside the window) → a single, deterministic removal.
+            numRounds: 2,
+        };
+
+        // One run: a real bus records bomb-detonated events AND the actor tap captures the
+        // mutated roster. Asserting BOTH on the same run proves the detonation drove the drop.
+        const bus = createEventBus();
+        const detonations: CombatEvent[] = [];
+        bus.on('bomb-detonated', (e) => detonations.push(e));
+        let captured: CombatActor[] = [];
+        runCombat({ ...input, bus, __testTapActors: (actors) => (captured = actors) });
+
+        expect(detonations.length).toBe(1); // exactly one bomb detonation in the window
+        expect(detonations[0].type === 'bomb-detonated' && detonations[0].actorId).toBe('attacker');
+        // Seeded 5; ONE detonation removes 2 (bulk all-opposing) → 3. The holder never re-banks
+        // (no charged-damage slot → hasChargedSkill false).
+        expect(chargesOf(captured, 'e-holder')).toBe(3);
+    });
+});
+
+// ─── Type shape assertions ───────────────────────────────────────────────────────
+
+it('IntentExecContext exposes removeChargesFrom (single-target removal)', () => {
+    const fn: IntentExecContext['removeChargesFrom'] = (_targetId: string, _amount: number) => {};
+    expect(typeof fn).toBe('function');
+});
+
+it('Ability accepts everyNthEvent (every-Nth-event gate)', () => {
+    const a: Ability = {
+        id: 't',
+        type: 'charge',
+        target: 'enemy',
+        trigger: 'on-enemy-repaired',
+        conditions: [],
+        everyNthEvent: 2,
+        config: { type: 'charge', amount: 1 },
+    };
+    expect(a.everyNthEvent).toBe(2);
 });

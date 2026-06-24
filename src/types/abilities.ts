@@ -503,6 +503,12 @@ export interface Ability {
      *  ability) RateGate (deterministic accumulator, like crit/landing). Absent or out of (0,1)
      *  → fires on every qualifying trigger. */
     procChance?: number;
+    /** Reactive event-frequency gate: fire this ability only every Nth qualifying trigger
+     *  event, counted per SOURCE (the triggering actor). N=2 → every second event. Gated
+     *  executor-side via IntentExecContext.repairCountBySource, keyed
+     *  `${ownerId}:${abilityId}:${repairerId}`. Currently only the charge branch on
+     *  `on-enemy-repaired` honors it (Zosimos "every second repair"). Absent → fires every event. */
+    everyNthEvent?: number;
     scaling?: ScalingRule;
     config: AbilityConfig;
     autoFilled?: boolean;

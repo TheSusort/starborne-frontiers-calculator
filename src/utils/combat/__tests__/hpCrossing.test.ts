@@ -452,6 +452,7 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
             runtimes: new Map([['tank', runtime('tank')]]),
             grantAllyCharges: () => {},
             removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
             grantExtraAction: () => {},
             playerIds: ['tank'],
             lastTurnCtxByActor: new Map(),

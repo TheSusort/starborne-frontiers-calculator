@@ -335,6 +335,7 @@ function makeMostBuffsCtx(enemyWithMostBuffs?: (ownerId: string) => string | und
         ]),
         grantAllyCharges: () => {},
         removeEnemyCharges: () => {},
+        removeChargesFrom: () => {},
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),

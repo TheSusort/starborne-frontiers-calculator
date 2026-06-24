@@ -1048,6 +1048,9 @@ interface ReactiveSideCtx {
     /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
      *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). */
     removeEnemyCharges: (amount: number) => void;
+    /** Single-target charge removal for this drain side — bySide(side).removeChargesFrom, which
+     *  subtracts from ONE actor by id (floored at 0, immune actors skipped). */
+    removeChargesFrom: (targetId: string, amount: number) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
@@ -1780,6 +1783,11 @@ export function runCombat(input: CombatEngineInput): {
          *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
          *  THIS side's context (never pre-flipped). */
         removeEnemyCharges: (amount: number) => void;
+        /** Single-target charge removal: subtract `amount` from ONE actor by id (floored at 0,
+         *  chargeLossImmune / chargeCount-0 actors skipped). Used for "decrease THAT enemy's
+         *  charge" (Zosimos), routed by eventCtx.repairerId. Does NOT require the opposing-side
+         *  filter — the caller passes a known-opposing id. */
+        removeChargesFrom: (targetId: string, amount: number) => void;
         /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
          *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
@@ -1810,6 +1818,14 @@ export function runCombat(input: CombatEngineInput): {
                     if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
                     a.charges = Math.max(0, a.charges - amount);
                 }
+            },
+            // Single-target charge removal: subtract from ONE opposing actor (floored at 0,
+            // immune actors skipped). Used for "decrease THAT enemy's charge" (Zosimos), routed
+            // by eventCtx.repairerId. Mirror of removeEnemyCharges but one actor, not all.
+            removeChargesFrom: (targetId: string, amount: number): void => {
+                const a = allActorsById.get(targetId);
+                if (!a || a.chargeCount <= 0 || a.chargeLossImmune) return;
+                a.charges = Math.max(0, a.charges - amount);
             },
             lowestSpeedIds: (): Set<string> => {
                 if (actors.length === 0) return new Set<string>();
@@ -1926,6 +1942,10 @@ export function runCombat(input: CombatEngineInput): {
     // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
     // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
     const oncePerCombatFired = new Set<string>();
+    // Combat-lifetime per-(owner, ability, source) event counter for everyNthEvent gates.
+    // Keyed `${ownerId}:${abilityId}:${repairerId}`; incremented on every qualifying enqueue-drain
+    // and used to trigger removal only on the Nth event (e.g. Zosimos "every second repair").
+    const repairCountBySource = new Map<string, number>();
     // Combat-lifetime proc-chance gates for equipment reactive procs (D-PR1). Keyed
     // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
     // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
@@ -3171,6 +3191,7 @@ export function runCombat(input: CombatEngineInput): {
                 round: r,
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
                 removeEnemyCharges: bySide(a.side).removeEnemyCharges,
+                removeChargesFrom: bySide(a.side).removeChargesFrom,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
                 selfHpPct: maxHp > 0 ? (100 * Math.max(0, a.currentHp)) / maxHp : 100,
@@ -3392,6 +3413,7 @@ export function runCombat(input: CombatEngineInput): {
                         runtimes: sideCtx.runtimes,
                         grantAllyCharges: sideCtx.grantAllyCharges,
                         removeEnemyCharges: sideCtx.removeEnemyCharges,
+                        removeChargesFrom: sideCtx.removeChargesFrom,
                         grantExtraAction,
                         playerIds: sideCtx.recipientIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
@@ -3442,6 +3464,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Combat-lifetime per-(owner, ability, source) event counter for
+                        // everyNthEvent gates (Zosimos "every second repair → remove charge").
+                        repairCountBySource,
                         // Combat-lifetime proc-chance gates (D-PR1): equipment reactive procs
                         // that carry a procChance fire at their stated rate via this accumulator.
                         procChanceGates,
@@ -3529,6 +3554,7 @@ export function runCombat(input: CombatEngineInput): {
                 isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('player').grantAllyCharges,
                 removeEnemyCharges: bySide('player').removeEnemyCharges,
+                removeChargesFrom: bySide('player').removeChargesFrom,
                 selfHpPctFor: bySide('player').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
@@ -3556,6 +3582,7 @@ export function runCombat(input: CombatEngineInput): {
                 isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
                 removeEnemyCharges: bySide('enemy').removeEnemyCharges,
+                removeChargesFrom: bySide('enemy').removeChargesFrom,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
