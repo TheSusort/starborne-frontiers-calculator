@@ -188,9 +188,7 @@ describe('repair-driven enemy charge removal — every-2nd-repair (Zosimos-style
         const enemyA = repairingEnemy('e-rep-a', { chargeCount: 4, speed: 60 });
         // Enemy B: chargeCount 1 + startCharged + a charged-DAMAGE slot → round 1 it fires the
         // charged skill (charges 1 ≥ chargeCount 1, hasChargedSkill true) and banks to 0; round 2
-        // (charges 0 < 1) it falls to the ACTIVE self-heal = its ONE repair. Seeded charges read
-        // back via the tap reflect the cadence (1 → 0 after the round-1 burst), so we assert B is
-        // NOT drained by checking it never dips BELOW its post-burst cadence value.
+        // (charges 0 < 1) it falls to the ACTIVE self-heal = its ONE repair, and banks back to 1.
         const enemyB: EnemyAttacker = {
             id: 'e-rep-b',
             stats: { attack: 1, crit: 0, critDamage: 0, hp: 1_000_000, speed: 30 },
@@ -230,15 +228,17 @@ describe('repair-driven enemy charge removal — every-2nd-repair (Zosimos-style
 
         const actors = runAndTap(buildZosimosInput([enemyA, enemyB], 2));
 
-        // A repaired twice → drained once on its 2nd repair: 4 → 3.
+        // A repaired twice → drained once on its 2nd repair: 4 → 3. This is the wrong-key guard:
+        // proves the every-2nd-repair gate DOES drain when the same repairer hits the count.
         expect(chargesOf(actors, 'e-rep-a')).toBe(3);
         // B repaired ONCE (round 2 only) → B's own counter is 1, never the Nth → B NOT drained.
-        // B's charges reflect ONLY its own charged-cadence (round 1 burst: 1 → 0; round 2 active
-        // heal, no re-bank since charges 0 < chargeCount 1 → banks to 1). Crucially: NO removal
-        // ever subtracted from B — its value is pure cadence, never floored by a drain.
-        // The independence signal: B is NOT at a drained value (which from its cadence path it
-        // could never reach below 0 anyway) — we assert it equals its undrained cadence outcome.
-        const bUndrainedCadence = runAndTap(buildZosimosInput([enemyB], 2)); // B alone, no A repairs
-        expect(chargesOf(actors, 'e-rep-b')).toBe(chargesOf(bUndrainedCadence, 'e-rep-b'));
+        // B's value is pure charged-cadence arithmetic, untouched by any removal:
+        //   round 1: charges 1 ≥ chargeCount 1 → fires charged burst, banks down to 0
+        //   round 2: charges 0 < 1 → falls to the ACTIVE self-heal (its one repair), banks to 1
+        // So B ends at 1. Crucially this 1 is reached WITHOUT any drain: A's two repairs advance
+        // A's counter, NOT B's, because the executor keys the counter per-repairer
+        // (`${owner}:${ability}:${repairerId}`). Direct assertion (no reference run) — B is
+        // untouched by A's drain.
+        expect(chargesOf(actors, 'e-rep-b')).toBe(1);
     });
 });
