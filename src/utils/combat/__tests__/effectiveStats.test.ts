@@ -535,6 +535,61 @@ describe('effectiveDamageStatsOf — four-layer fold characterization', () => {
     });
 });
 
+describe('effectiveDamageStatsOf — dotDamage modifier folds into selfDotDamageModifier', () => {
+    const base = {
+        attack: 2000,
+        defence: 500,
+        crit: 15,
+        critDamage: 150,
+        hp: 10000,
+        defensePenetration: 10,
+        defensePenetrationBuff: 5,
+    };
+
+    it('a dotDamage modifier ability raises selfDotDamageModifier (feeds dotMult)', () => {
+        const scheduledTotals = calculateBuffTotals(toSimBuffs([]));
+
+        const modifierAbilities: Ability[] = [
+            {
+                id: 'decimation',
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [],
+                config: {
+                    type: 'modifier',
+                    channel: 'dotDamage',
+                    value: 30,
+                    isMultiplicative: false,
+                },
+            },
+        ];
+
+        const modifierCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 0,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+
+        const dmg = effectiveDamageStatsOf({
+            base,
+            scheduledTotals,
+            abilitySelfEffects: [],
+            modifierAbilities,
+            modifierCtx,
+        });
+
+        expect(dmg.selfDotDamageModifier).toBe(30);
+    });
+});
+
 describe('liveDebuffLandingChance — reproduces the static landing formula with no buffs (holistic review #3)', () => {
     // The OLD static formula every adapter baked at its input boundary:
     //   clamp(hacking * (1 + affinityDamageModifier/100) - security, 0, 100) / 100
