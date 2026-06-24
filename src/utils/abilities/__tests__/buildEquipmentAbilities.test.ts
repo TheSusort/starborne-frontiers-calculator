@@ -792,7 +792,7 @@ describe('Decimation gear set', () => {
         for (let i = 0; i < pieces; i++) {
             const id = `dec-${i}`;
             equipment[slots[i]] = id;
-            map[id] = makePiece({ id, slot: slots[i] as GearPiece['slot'], setBonus: 'DECIMATION' });
+            map[id] = makePiece({ id, slot: slots[i], setBonus: 'DECIMATION' });
         }
         return { ship: makeShip({ equipment }), getGearPiece: (id: string) => map[id] };
     }
@@ -827,7 +827,7 @@ describe('Burner gear set', () => {
         slots.forEach((slot, i) => {
             const id = `burn-${i}`;
             equipment[slot] = id;
-            map[id] = makePiece({ id, slot: slot as GearPiece['slot'], setBonus: 'BURNER' });
+            map[id] = makePiece({ id, slot: slot, setBonus: 'BURNER' });
         });
         const abilities = buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]);
         const burner = abilities.find((a) => a.id === 'equip-set-BURNER');
@@ -848,7 +848,7 @@ describe('Burner gear set', () => {
         ['weapon', 'hull', 'generator'].forEach((slot, i) => {
             const id = `burn-${i}`;
             equipment[slot] = id;
-            map[id] = makePiece({ id, slot: slot as GearPiece['slot'], setBonus: 'BURNER' });
+            map[id] = makePiece({ id, slot: slot, setBonus: 'BURNER' });
         });
         const abilities = buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]);
         expect(abilities.find((a) => a.id === 'equip-set-BURNER')).toBeUndefined();
