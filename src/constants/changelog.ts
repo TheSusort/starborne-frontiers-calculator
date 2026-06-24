@@ -33,6 +33,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator now models Cobalt's passive — at the start of each of its turns while at full HP, Cobalt gains a bonus charge toward its charged skill.",
     "Combat simulator: ships now react when an enemy uses its charged skill — Curator purges that enemy's buffs (and at higher refits also blocks it from gaining new buffs), and FrontLine counter-attacks for damage and gains a shield once per round.",
     'Combat simulator now models Block Buff — a unit affected by Block Buff can no longer gain new buffs while it lasts.',
+    'Combat & DPS simulators now model two damage-over-time gear sets: Burner (applies Inferno for 2 turns when the ship attacks) and Decimation (+10% DoT damage per equipped set, up to +30%). Decimation now boosts your ship’s Inferno and Corrosion ticks in both the combat simulator and the DPS calculator.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

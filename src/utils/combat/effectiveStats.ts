@@ -211,7 +211,7 @@ export function effectiveDamageStatsOf(args: {
             base.defensePenetrationBuff +
             mod.defensePenetration +
             dotPen.defensePenetrationBuff,
-        selfDotDamageModifier: dotPen.dotDamageModifier,
+        selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,
         totals,
     };
 }

@@ -41,7 +41,9 @@ import { Ship } from '../../types/ship';
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
-const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | undefined>> = {
+const GEAR_SET_ABILITIES: Partial<
+    Record<string, (count: number) => Omit<Ability, 'id'> | undefined>
+> = {
     LEECH: () => ({
         type: 'heal',
         target: 'self',
@@ -72,6 +74,41 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | und
     // self-stealth / incoming-crit-by-stealthed conditions, and the D-PR8 Ambush gate.
     CLOAKING: () =>
         mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
+    // Decimation (2pc set): +10% DoT damage per complete set, max 3 sets (6 pieces) = +30%.
+    // Standing passive → modeled as a dotDamage modifier that folds into dotMult via
+    // effectiveDamageStatsOf.selfDotDamageModifier (engine + DPS calc both honor it).
+    DECIMATION: (count) => {
+        const minPieces = GEAR_SETS.DECIMATION?.minPieces ?? 2;
+        const sets = Math.floor(count / minPieces); // 1/2/3 at 2/4/6 pieces
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'modifier',
+                channel: 'dotDamage',
+                value: sets * 10,
+                isMultiplicative: false,
+            },
+            autoFilled: true,
+        };
+    },
+    // Burner (4pc set): applies Inferno 1 (tier 15) for 2 turns when the ship attacks.
+    // `on-cast` is NOT a LIVE_TRIGGER — passive-slot on-cast DoTs are never applied by the
+    // engine (the cast path only gathers DoTs from the FIRED skill, and the reactive executor
+    // only runs for LIVE_TRIGGERS). So Burner rides `on-deal-damage` (a LIVE_TRIGGER that fires
+    // once per turn the owner deals direct damage), draining through the reactive DoT executor
+    // (triggers.ts) which pushes the inferno entry to the attack target (ctx.enemy.id) with
+    // sourceId = owner. Re-applies each attacking turn (refreshes the 2-turn duration).
+    BURNER: () => ({
+        type: 'dot',
+        target: 'enemy',
+        trigger: 'on-deal-damage',
+        conditions: [],
+        config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
+        autoFilled: true,
+    }),
 };
 
 // ---------------------------------------------------------------------------
@@ -905,7 +942,7 @@ export function buildEquipmentAbilities(
         const builder = GEAR_SET_ABILITIES[setName];
         if (!builder) continue;
 
-        const partial = builder();
+        const partial = builder(count);
         if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     }

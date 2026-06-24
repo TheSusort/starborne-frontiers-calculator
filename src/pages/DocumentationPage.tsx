@@ -3103,7 +3103,12 @@ const DocumentationPage: React.FC = () => {
                                     manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
                                     (grants a bonus charge to the carrier&apos;s charged skill every
                                     2nd turn at legendary rarity or every 3rd turn at epic; units in
-                                    Stasis bank no charge on skipped turns). More implant and
+                                    Stasis bank no charge on skipped turns). Two damage-over-time
+                                    gear sets are also modeled: <strong>Burner</strong> (applies
+                                    Inferno for 2 turns when the ship attacks) and{' '}
+                                    <strong>Decimation</strong> (+10% DoT damage per equipped set,
+                                    up to +30%, boosting your Inferno and Corrosion ticks in both
+                                    the combat simulator and the DPS calculator). More implant and
                                     gear-set effects will be added in future updates.
                                 </p>
                             </div>
