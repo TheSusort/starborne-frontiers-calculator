@@ -49,25 +49,35 @@ are already folded into combat stats; this PR adds **only** the special effects 
 **Behaviour:** when the equipped ship casts (attacks), apply Inferno 1 (tier 15), 1 stack,
 2 turns, to the cast target.
 
-**Model:** a reactive `dot` ability in `GEAR_SET_ABILITIES`:
+**Model:** a reactive `dot` ability in `GEAR_SET_ABILITIES`, trigger **`on-deal-damage`**:
 
 ```
 BURNER: () => ({
     type: 'dot',
     target: 'enemy',
-    trigger: 'on-cast',
+    trigger: 'on-deal-damage',
     conditions: [],
     config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
     autoFilled: true,
 })
 ```
 
-- Rides the **existing** reactive DoT executor (`triggers.ts` ~1398) — pushes an inferno
-  entry (`sourceId = owner`) and emits `dot-applied` to `ctx.enemy.id`. No new application path.
+- **Trigger correction (found during implementation):** `on-cast` does NOT work for a
+  passive-slot DoT. The cast path only gathers DoTs from the *fired* skill
+  (`dotsFromSkill(gatedSkill)`, playerTurn.ts:1262) — never the passive slot — and `on-cast`
+  is not a `LIVE_TRIGGER`, so the reactive executor never fires it either. (Leech, also an
+  `on-cast` gear-set ability, only works because it has a *dedicated* engine scan,
+  `procStandingLeeches`.) Burner therefore uses **`on-deal-damage`** — a `LIVE_TRIGGER` that
+  fires once per turn the owner deals direct damage (added in the reactive-cleanse PR; the
+  Warpstrike precedent). Faithful to "applies Inferno when it attacks" and golden-safe
+  (no fixture equips Burner).
+- Rides the **existing** reactive DoT executor (`triggers.ts` ~1388) — pushes an inferno
+  entry (`sourceId = owner`) and emits `dot-applied` to `ctx.enemy.id` (the attack target).
+  No new application path.
 - The entry ticks with the **applier's** snapshotted `dotMult`/`effectiveAttack`, so a
   Burner + Decimation ship's inferno is Decimation-boosted automatically.
-- Single target (the cast target), per the design decision. AoE-footprint application is
-  explicitly out of scope.
+- Single target (the attack target), per the design decision. Re-applies each attacking turn
+  (refreshes the 2-turn duration). AoE-footprint application is explicitly out of scope.
 
 ## Effect 2 — Decimation
 
