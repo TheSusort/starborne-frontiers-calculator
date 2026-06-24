@@ -8,6 +8,7 @@ export interface ModifierTotals {
     crit: number;
     critDamage: number;
     outgoingDamage: number;
+    dotDamage: number;
     defence: number;
     defensePenetration: number;
     hp: number;
@@ -28,6 +29,7 @@ export function modifierTotalsFromAbilities(
         crit: 0,
         critDamage: 0,
         outgoingDamage: 0,
+        dotDamage: 0,
         defence: 0,
         defensePenetration: 0,
         hp: 0,
@@ -59,6 +61,9 @@ export function modifierTotalsFromAbilities(
                 break;
             case 'outgoingDamage':
                 totals.outgoingDamage += amount;
+                break;
+            case 'dotDamage':
+                totals.dotDamage += amount;
                 break;
             case 'defense':
                 totals.defence += amount;

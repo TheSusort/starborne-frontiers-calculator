@@ -302,6 +302,7 @@ export type ModifierChannel =
     | 'crit'
     | 'critDamage'
     | 'outgoingDamage'
+    | 'dotDamage'
     | 'outgoingHeal'
     | 'incomingDamage';
 

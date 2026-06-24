@@ -86,6 +86,7 @@ describe('modifierTotalsFromAbilities', () => {
         crit: 0,
         critDamage: 0,
         outgoingDamage: 0,
+        dotDamage: 0,
         defence: 0,
         defensePenetration: 0,
         hp: 0,
@@ -183,6 +184,23 @@ describe('modifierTotalsFromAbilities', () => {
                 })
             )
         ).toEqual({ ...zero, defensePenetration: 45 });
+    });
+});
+
+describe('modifierTotalsFromAbilities — dotDamage channel', () => {
+    it('sums a dotDamage modifier into ModifierTotals.dotDamage', () => {
+        const ability: Ability = {
+            id: 'decimation-x',
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'modifier', channel: 'dotDamage', value: 20, isMultiplicative: false },
+        };
+        const totals = modifierTotalsFromAbilities([ability], makeConditionContext({}));
+        expect(totals.dotDamage).toBe(20);
+        expect(totals.outgoingDamage).toBe(0);
+        expect(totals.attack).toBe(0);
     });
 });
 
