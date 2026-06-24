@@ -689,7 +689,9 @@ export interface IntentExecContext {
     oncePerCombatFired?: Set<string>;
     /** Per-(owner, ability, source) event counter for `everyNthEvent` gates. Combat-lifetime,
      *  keyed `${ownerId}:${abilityId}:${repairerId}`. Engine-populated; absent in DPS/unit mode
-     *  → an everyNthEvent ability never fires (no counter to advance). */
+     *  → an everyNthEvent ability never fires (no counter to advance).
+     *  Shared across both drain sides (like oncePerCombatFired); the per-(owner,ability,repairer)
+     *  key makes cross-side collisions impossible by construction. */
     repairCountBySource?: Map<string, number>;
     /** Combat-lifetime per-ability proc-chance gates (e.g. Bloodthirst's 12% chance).
      *  Keyed `${ownerId}:${abilityId}`; the RateGate accumulates across all rounds and all
