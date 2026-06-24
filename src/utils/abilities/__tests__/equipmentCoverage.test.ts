@@ -19,6 +19,7 @@
  * D-PR9 added ally-wide / new-trigger buff grants (SPEARHEAD, FONT_OF_POWER).
  * D-PR11 added adjacent-ally buff grant (FORTIFYING_SHROUD).
  * D-PR14 added Provoke/Concentrate Fire debuff grants (BULWARK, DOOMSAYER).
+ * Gear-set DoT pair added BURNER (on-cast Inferno) + DECIMATION (dotDamage modifier) gear sets.
  *
  * Assertions are plain `expect` calls — no snapshot files.
  */
@@ -119,12 +120,12 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
         );
-        expect(implementedSets).toEqual(['LEECH', 'CLOAKING', 'HARDENED']);
+        expect(implementedSets).toEqual(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
 
         // Implants with an ability builder (check each implant with a rarity that exists)
         const implementedImplants = Object.keys(IMPLANTS).filter((key) => {
@@ -175,9 +176,17 @@ describe('equipmentCoverage — implemented effects registry', () => {
 // Gear-set coverage: one assertion per set
 // ---------------------------------------------------------------------------
 
-const IMPLEMENTED_SETS = new Set(['LEECH', 'CLOAKING', 'HARDENED']);
+const IMPLEMENTED_SETS = new Set(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
 
 describe('equipmentCoverage — gear sets', () => {
+    it('BURNER produces exactly 1 ability (the on-cast inferno)', () => {
+        expect(gearSetAbilityCount('BURNER')).toBe(1);
+    });
+
+    it('DECIMATION produces exactly 1 ability (the dotDamage modifier)', () => {
+        expect(gearSetAbilityCount('DECIMATION')).toBe(1);
+    });
+
     it('LEECH produces exactly 1 ability (the standing leech)', () => {
         expect(gearSetAbilityCount('LEECH')).toBe(1);
     });
