@@ -372,6 +372,16 @@ const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
 const PER_BUFF_CHARGE_RE =
     /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
 
+// "removes N charges from the enemy" (on-cast/bomb) OR Zosimos's "decreases that enemy's charge"
+// (decreases by one, no captured number → default amount 1). The [''] character class tolerates
+// both a straight apostrophe (U+0027) and a curly right single quotation mark (U+2019) in
+// "enemy's".
+const REMOVE_CHARGE_RE =
+    /\bremoves?\s+(\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy[''']s charge\b/i;
+
+// "every second repair" — qualifies the Zosimos removal as an every-Nth-event gate.
+const EVERY_SECOND_REPAIR_RE = /every second repair/i;
+
 // "when (an/another) ally inflicts|applies a debuff" — a teammate applies a debuff (Provider).
 // A team-dependent trigger: manual (non-derivable) since the single-ship sim has no allies.
 const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
@@ -1474,6 +1484,40 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
     // No apostrophe-normalisation (unlike parseDoesntBreakStasis): the matched phrase
     // "immune to charge loss" contains no apostrophe, so curly/straight quotes can't affect it.
     return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
+}
+
+/**
+ * Parses an enemy-targeted charge removal from skill text. Returns
+ * `{ amount, trigger, everyNthEvent? }` or null if no removal clause is found.
+ *
+ * Triggers:
+ *  - `'on-bomb-detonated'` — the removal fires when a bomb explodes (Demolisher).
+ *  - `'on-enemy-repaired'` with `everyNthEvent: 2` — fires every 2nd enemy repair (Zosimos).
+ *  - `'on-cast'` — default (Opal, Provider, Sefuba, Thresh).
+ *
+ * Does NOT modify `parseChargeGain`; the two coexist on texts that carry both a gain and a
+ * removal (e.g. Thresh, Zosimos).
+ */
+export function parseChargeRemoval(
+    text: string | null | undefined
+): { amount: number; trigger: AbilityTrigger; everyNthEvent?: number } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text);
+    const m = REMOVE_CHARGE_RE.exec(plain);
+    if (!m) return null;
+    // m[1] is the captured count from the "removes N charges" alternation; the
+    // "decreases that enemy's charge" alternation has no capture → amount 1 ("by one").
+    const raw = (m[1] ?? '').toLowerCase();
+    const amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+    if (!amount || isNaN(amount)) return null;
+
+    if (ENEMY_REPAIRS_RE.test(plain) && EVERY_SECOND_REPAIR_RE.test(plain)) {
+        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2 };
+    }
+    if (BOMB_DETONATE_RE.test(plain)) {
+        return { amount, trigger: 'on-bomb-detonated' };
+    }
+    return { amount, trigger: 'on-cast' };
 }
 
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
