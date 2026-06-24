@@ -54,6 +54,7 @@ import {
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     parseChargeRemoval,
+    REMOVE_CHARGE_RE,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
@@ -1200,11 +1201,9 @@ function abilitiesFromText(
     // gate is NOT a condition — it lives on the ability's everyNthEvent field.
     const chargeRemoval = parseChargeRemoval(text);
     if (chargeRemoval) {
-        // Position-only heuristic for within-slot ordering; mirrors REMOVE_CHARGE_RE
-        // (skillTextParser.ts) so the sort point matches the clause the parser actually matched.
-        const removalPos = text.search(
-            /\bremoves?\s+(?:\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy/i
-        );
+        // Position-only heuristic for within-slot ordering; uses the canonical REMOVE_CHARGE_RE
+        // from skillTextParser.ts so the sort point matches the exact clause the parser matched.
+        const removalPos = text.search(REMOVE_CHARGE_RE);
         out.push({
             ability: {
                 id: nextId(),

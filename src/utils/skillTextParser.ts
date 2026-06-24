@@ -376,7 +376,7 @@ const PER_BUFF_CHARGE_RE =
 // (decreases by one, no captured number → default amount 1). Curly apostrophes (U+2018/U+2019)
 // are normalised to straight (U+0027) by parseChargeRemoval before this regex runs, so only a
 // plain straight apostrophe is needed here.
-const REMOVE_CHARGE_RE =
+export const REMOVE_CHARGE_RE =
     /\bremoves?\s+(\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy's charge\b/i;
 
 // "every second repair" — qualifies the Zosimos removal as an every-Nth-event gate.
