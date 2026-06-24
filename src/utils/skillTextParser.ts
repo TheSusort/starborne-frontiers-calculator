@@ -373,11 +373,11 @@ const PER_BUFF_CHARGE_RE =
     /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
 
 // "removes N charges from the enemy" (on-cast/bomb) OR Zosimos's "decreases that enemy's charge"
-// (decreases by one, no captured number → default amount 1). The [''] character class tolerates
-// both a straight apostrophe (U+0027) and a curly right single quotation mark (U+2019) in
-// "enemy's".
+// (decreases by one, no captured number → default amount 1). Curly apostrophes (U+2018/U+2019)
+// are normalised to straight (U+0027) by parseChargeRemoval before this regex runs, so only a
+// plain straight apostrophe is needed here.
 const REMOVE_CHARGE_RE =
-    /\bremoves?\s+(\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy[''']s charge\b/i;
+    /\bremoves?\s+(\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy's charge\b/i;
 
 // "every second repair" — qualifies the Zosimos removal as an every-Nth-event gate.
 const EVERY_SECOND_REPAIR_RE = /every second repair/i;
@@ -1502,7 +1502,10 @@ export function parseChargeRemoval(
     text: string | null | undefined
 ): { amount: number; trigger: AbilityTrigger; everyNthEvent?: number } | null {
     if (!text) return null;
-    const plain = stripUnitTags(text);
+    // Normalise curly single quotes (U+2018 left, U+2019 right) to straight (U+0027) so that
+    // ship-data using typographic apostrophes ("enemy’s") matches the regex reliably.
+    // Using explicit unicode escapes so no editor can silently normalise the characters.
+    const plain = stripUnitTags(text).replace(/[‘’]/g, '\x27');
     const m = REMOVE_CHARGE_RE.exec(plain);
     if (!m) return null;
     // m[1] is the captured count from the "removes N charges" alternation; the

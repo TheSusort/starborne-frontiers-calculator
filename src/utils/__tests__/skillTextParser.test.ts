@@ -3648,4 +3648,12 @@ describe('parseChargeRemoval', () => {
     it('returns null for charge-loss immunity text (not a removal)', () => {
         expect(parseChargeRemoval('This Unit is immune to charge loss effects.')).toBeNull();
     });
+
+    it('tolerates a curly apostrophe in "enemy’s charge"', () => {
+        expect(
+            parseChargeRemoval(
+                'When an enemy repairs, this unit gains a charge. Additionally, this unit decreases that enemy’s charge by one for every second repair they perform.'
+            )
+        ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
+    });
 });
