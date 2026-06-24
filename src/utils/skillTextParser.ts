@@ -1647,8 +1647,9 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
             // ENEMY's charged-cast damage (wrong). The reactive-damage executor approximates
             // FrontLine's dealt damage as effectiveAttack * damagePct% (no enemy-defence
             // mitigation, no crit). 30% of that = effectiveAttack * 0.24, so we model the shield
-            // as basis:'attack' with pct = round(shieldPct * damagePct / 100) = round(30*80/100) =
-            // 24 — keeping shield and damage on the same un-mitigated basis.
+            // as basis:'attack' with pct = shieldPct * damagePct / 100 = 30*80/100 = 24 — keeping
+            // shield and damage on the same un-mitigated basis. Kept exact (no round) so a
+            // fractional source percentage isn't silently truncated.
             out.push({
                 id: '',
                 type: 'shield',
@@ -1658,7 +1659,7 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
                 config: {
                     type: 'shield',
                     basis: 'attack',
-                    pct: Math.round((shieldPct * damagePct) / 100),
+                    pct: (shieldPct * damagePct) / 100,
                 },
                 oncePerRound,
                 autoFilled: true,

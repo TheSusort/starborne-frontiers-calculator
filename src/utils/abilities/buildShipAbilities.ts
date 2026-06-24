@@ -1236,7 +1236,9 @@ function abilitiesFromText(
     const enemyChargedCastReactions = parseEnemyChargedCastReaction(text);
     if (enemyChargedCastReactions) {
         const reactionPos = text.search(
-            /when\s+an?\s+enemy\s+uses\s+(?:its|their)\s+charged\s+skill/i
+            // Tolerate a <unit-skill>-wrapped "charged skill" (raw text is unstripped here) so a
+            // tagged phrase still anchors the reaction at its trigger clause instead of MAX_POS.
+            /when\s+an?\s+enemy\s+uses\s+(?:its|their)\s+(?:<unit-skill>\s*)?charged\s+skill(?:\s*<\/unit-skill>)?/i
         );
         for (const ability of enemyChargedCastReactions) {
             out.push({

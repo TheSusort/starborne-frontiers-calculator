@@ -34,16 +34,16 @@ case 'on-enemy-charged-cast':
         // registration's isOpposing = enemy side; enemy registration's = player side.
         // Capture the casting enemy's id so the reaction targets THAT enemy.
         if (isOpposing(e.actorId) && e.slot === 'charged')
-            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, chargedCasterId: e.actorId } });
+            enqueue({ ...intent, eventCtx: { ...intent.eventCtx, counterTargetId: e.actorId } });
     });
     break;
 ```
 
 - Add `'on-enemy-charged-cast'` to the `AbilityTrigger` union and to `LIVE_TRIGGERS` (load-bearing: `isReactiveAbility` gates on membership).
-- Add `Intent.eventCtx.chargedCasterId?: string` (mirrors `repairerId`).
+- As-built: reuse the existing `Intent.eventCtx.counterTargetId` field to carry the casting enemy's id (no new field — zero executor change), rather than adding a separate `chargedCasterId`.
 - `registerReactiveListeners` already receives a per-call `isOpposing` predicate (bySide PR2) and is registered for BOTH sides, so the trigger is symmetric by construction. The historical player-centric reactive-routing gap does not apply to this listener-style trigger.
 
-The reaction effect executors (purge, debuff, damage, shield) must target the casting enemy. Thread `eventCtx.chargedCasterId` to the executor target resolution the same way `counterTargetId` / `repairerId` are threaded: when present, the reaction's enemy-target resolves to `chargedCasterId` rather than the default enemy target. Self-effects on the reactor (FrontLine's Shield) resolve to the owner as usual.
+The reaction effect executors (purge, debuff, damage, shield) must target the casting enemy. As-built, the casting enemy's id rides the existing `eventCtx.counterTargetId` field (already threaded into the purge/debuff executor target resolution like `repairerId`): when present, the reaction's enemy-target resolves to `counterTargetId` rather than the default enemy target — so no executor change is needed. Self-effects on the reactor (FrontLine's Shield) resolve to the owner as usual.
 
 ## Piece 2 — Parser → reaction abilities
 
@@ -118,6 +118,6 @@ Engine goldens:
 ## Risks
 
 - **New opposing-scoped trigger** — genuinely new surface, but low risk: `registerReactiveListeners` is already team-agnostic and the trigger is a structural mirror of `on-enemy-repaired`.
-- **Targeting "that enemy"** — the reaction must hit the casting enemy, not the default enemy target; threading `chargedCasterId` through `eventCtx` to the executor target resolution is the critical wiring (mirror `counterTargetId`/`repairerId`).
+- **Targeting "that enemy"** — the reaction must hit the casting enemy, not the default enemy target; as-built this reuses the existing `eventCtx.counterTargetId` field (already threaded into executor target resolution like `repairerId`), so no new wiring is needed.
 - **Block Buff seam completeness** — guarding only the timed apply seams is a deliberate scope; aura/start-of-combat exclusions are documented limitations, not bugs.
 ```
