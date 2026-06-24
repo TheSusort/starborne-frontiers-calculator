@@ -386,6 +386,12 @@ const EVERY_SECOND_REPAIR_RE = /every second repair/i;
 // A team-dependent trigger: manual (non-derivable) since the single-ship sim has no allies.
 const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
 
+// Cobalt: "adds N charge ... at the start of the turn if it is at full HP" — a periodic
+// self-charge gated on full HP. The two halves are detected together so the start-of-turn
+// trigger and the hp-threshold gate ride as a pair.
+const START_OF_TURN_CHARGE_RE = /\bat the start of (?:the|its|each|every)\s+turn\b/i;
+const AT_FULL_HP_RE = /\bat full (?:hp|health)\b/i; // reused phrasing (cf. classifier ~line 647)
+
 function classifyChargeCondition(
     text: string // already tag-stripped, any case
 ): { condition: ConditionalCondition; derivable: boolean; requiredEnemyType?: EnemyBaseClass } {
@@ -1574,6 +1580,28 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     }
     if (low.includes('inflict') && low.includes('debuff')) {
         return { amount, condition: 'always', derivable: true, trigger: 'on-debuff-inflicted' };
+    }
+
+    // Phase 3 (Cobalt): start-of-turn self-charge gated on full HP. Placed after the
+    // inflict/repair reactive branches (those event triggers win if a text somehow carries
+    // both; no corpus ship does). condition 'always' is a placeholder — the real gate is in
+    // `conditions`.
+    if (START_OF_TURN_CHARGE_RE.test(low) && AT_FULL_HP_RE.test(low)) {
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            trigger: 'start-of-turn',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'above',
+                    hpPercent: 99,
+                    hpSubject: 'self',
+                },
+            ],
+        };
     }
 
     const { condition, derivable, requiredEnemyType } = classifyChargeCondition(plain);

@@ -3729,15 +3729,24 @@ export function runCombat(input: CombatEngineInput): {
                 // (turn-ended) reactive drains — which run later — read the correct N. 1-based
                 // (turnsTaken=1 on the first own turn) matches the evaluator's `t % period === offset`.
                 //
-                // STASIS/DISABLE (deferred to Phase 2 / Chrono Reaver): this increment is
-                // UNCONDITIONAL — it bumps even on a turn the actor skips under Stasis/Disable,
-                // unlike advanceChargeCadence (~4172/4233) which is gated behind !isTurnBlocked.
-                // Keeping it monotonic is deliberate: turn-ended (~4595) and the reactive drains
-                // (~4567) fire on skipped turns too, so freezing the counter on a skip would let an
-                // every-n-turns gate spuriously re-fire against the frozen value. Fully suppressing
-                // the every-n-turns proc on a skipped turn (so a stasised unit banks no periodic
-                // charge, matching advanceChargeCadence) is Phase 2 work and will get its own
-                // stasis golden when Chrono Reaver attaches the first every-n-turns ability.
+                // STASIS/DISABLE: this increment is UNCONDITIONAL — it bumps even on a turn the
+                // actor skips under Stasis/Disable, unlike advanceChargeCadence (~4249/4314) which
+                // is gated behind !isTurnBlocked. Keeping it monotonic is DELIBERATE: turn-ended
+                // (~4595) and the reactive drains (~4567) fire on skipped turns too, so freezing the
+                // counter on a skip would let an every-n-turns gate spuriously re-fire against the
+                // frozen value — instead the cadence loses the skipped tick and resumes on the
+                // original residue (the next own-turn that satisfies `t % period === offset`).
+                //
+                // The every-n-turns periodic proc IS already fully suppressed on a turn-blocked turn
+                // — NO gating is needed HERE. A periodic charge (e.g. Chrono Reaver's `end-of-turn`
+                // charge) is a REACTIVE intent carrying intent.ownerId; on a blocked owner's turn the
+                // §4.4 reactive-intent drain filter (~3403: `if (isTurnBlocked(intent.ownerId)) continue;`)
+                // DROPS it before executeIntent applies the charge. So a stasised/disabled unit banks
+                // NO periodic charge, matching the +1/turn baseline. Golden: chronoReaverCharge.integration.test.ts
+                // ("stasis suppression"). NOTE: the suppression relies on the owner being STILL
+                // turn-blocked at the drain pass — for a 1-turn block the Post-Turn decrement (~4651)
+                // can clear the block before the deferred end-of-turn intent drains, so that golden
+                // uses a ≥2-turn block spanning a proc turn.
                 // The dummy-sink enemy is also bumped here; harmless (no every-n-turns ability on it).
                 actor.turnsTaken += 1;
 

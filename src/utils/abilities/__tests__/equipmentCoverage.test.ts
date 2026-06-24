@@ -119,7 +119,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -135,6 +135,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
         expect(implementedImplants).toEqual([
             'MARTYRDOM',
             'ARCANE_SIEGE',
+            'CHRONO_REAVER',
             'HYPERION_GAZE',
             'INTRUSION',
             'NEBULA_NULLIFIER',
@@ -255,6 +256,7 @@ describe('equipmentCoverage — implants', () => {
     // D-PR16: LAST_STAND added (on-ally-destroyed + last-standing → self Barrier + Block Debuff co-grant).
     // Reactive cleanse PR: REACTIVE_WARD added (reactive cleanse on-attacked, crit-count branch).
     //         WARPSTRIKE gains a second ability (reduce-duration cleanse on-deal-damage).
+    // Phase 2-3: CHRONO_REAVER added (end-of-turn periodic self-charge; epic=every 3rd, legendary=every 2nd).
     const implementedImplants = new Set([
         'FIREWALL',
         'LOCKDOWN',
@@ -263,6 +265,7 @@ describe('equipmentCoverage — implants', () => {
         'BLOODTHIRST',
         'INTRUSION',
         'ARCANE_SIEGE',
+        'CHRONO_REAVER',
         'WARPSTRIKE',
         'VOIDSHADE',
         'NEBULA_NULLIFIER',
@@ -303,6 +306,13 @@ describe('equipmentCoverage — implants', () => {
         for (const v of variants) {
             expect(implantAbilityCount('ARCANE_SIEGE', v.rarity)).toBe(1);
         }
+    });
+
+    // Phase 2-3: periodic self-charge (end-of-turn + every-n-turns gate)
+    it('CHRONO_REAVER produces 1 ability for epic + legendary (periodic self-charge); 0 for other rarities', () => {
+        // Only epic and legendary variants exist in implants.ts — no common/uncommon/rare.
+        expect(implantAbilityCount('CHRONO_REAVER', 'epic')).toBe(1);
+        expect(implantAbilityCount('CHRONO_REAVER', 'legendary')).toBe(1);
     });
 
     it('WARPSTRIKE produces 2 abilities per rarity (outgoingDamage modifier + reduce-duration cleanse, gated on self-debuff)', () => {

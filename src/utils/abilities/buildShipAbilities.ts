@@ -1169,23 +1169,29 @@ function abilitiesFromText(
         // condition. parseChargeGain's own trigger (inflict-driven) takes precedence when present.
         const allyCritChargeTrigger = detectAllyCritTrigger(text, chargePos);
         const reactiveTrigger = charge.trigger ?? allyCritChargeTrigger;
+        // Phase 3: an explicit conditions array (start-of-turn + full-HP, Cobalt) carries BOTH a
+        // trigger and a gate, overriding the "trigger ⇒ no condition" rule used by the inflict/repair
+        // reactive gains (whose trigger IS the gate).
+        const conditions = charge.conditions
+            ? charge.conditions
+            : reactiveTrigger
+              ? []
+              : [
+                    toCondition(
+                        charge.condition,
+                        charge.derivable,
+                        charge.manualCount,
+                        charge.requiredEnemyType,
+                        text
+                    ),
+                ];
         out.push({
             ability: {
                 id: nextId(),
                 type: 'charge',
                 target: 'self',
                 trigger: reactiveTrigger ?? 'on-cast',
-                conditions: reactiveTrigger
-                    ? []
-                    : [
-                          toCondition(
-                              charge.condition,
-                              charge.derivable,
-                              charge.manualCount,
-                              charge.requiredEnemyType,
-                              text
-                          ),
-                      ],
+                conditions,
                 config: { type: 'charge', amount: charge.amount },
                 autoFilled: true,
             },
