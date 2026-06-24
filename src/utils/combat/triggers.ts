@@ -114,6 +114,10 @@ export interface Intent {
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
          *  exactly these recipients (Font of Power -> repaired allies). */
         repairedAllyIds?: string[];
+        /** The repairing actor's id (heal-performed.casterId), captured by the on-enemy-repaired
+         *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
+         *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). */
+        repairerId?: string;
     };
 }
 

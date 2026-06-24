@@ -234,3 +234,18 @@ describe('enemy charge removal — cast path (on-cast all-enemies)', () => {
         expect(totalIncoming(removalVsImmune)).toBe(totalIncoming(selfControl));
     });
 });
+
+// ─── Type shape assertions ───────────────────────────────────────────────────────
+
+it('Ability accepts everyNthEvent (every-Nth-event gate)', () => {
+    const a: Ability = {
+        id: 't',
+        type: 'charge',
+        target: 'enemy',
+        trigger: 'on-enemy-repaired',
+        conditions: [],
+        everyNthEvent: 2,
+        config: { type: 'charge', amount: 1 },
+    };
+    expect(a.everyNthEvent).toBe(2);
+});
