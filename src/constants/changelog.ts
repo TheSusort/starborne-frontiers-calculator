@@ -31,6 +31,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim now models enemy charge removal — ships like Opal, Provider, Sefuba (on cast), Demolisher (when a bomb explodes), and Zosimos (every second enemy repair) now drain the enemy's Charged Skill, with charge-loss-immune ships unaffected.",
     "Combat simulator now models the Chrono Reaver implant — it grants a bonus charge to the carrier's charged skill every 2nd turn (legendary) or every 3rd turn (epic). Units in Stasis bank no charge on skipped turns.",
     "Combat simulator now models Cobalt's passive — at the start of each of its turns while at full HP, Cobalt gains a bonus charge toward its charged skill.",
+    'Combat & DPS simulators now model two damage-over-time gear sets: Burner (applies Inferno for 2 turns when the ship attacks) and Decimation (+10% DoT damage per equipped set, up to +30%). Decimation now boosts your ship’s Inferno and Corrosion ticks in both the combat simulator and the DPS calculator.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
