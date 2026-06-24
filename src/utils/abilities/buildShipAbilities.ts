@@ -54,6 +54,7 @@ import {
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     parseChargeRemoval,
+    parseEnemyChargedCastReaction,
     REMOVE_CHARGE_RE,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
@@ -1225,6 +1226,26 @@ function abilitiesFromText(
             },
             pos: removalPos >= 0 ? removalPos : MAX_POS,
         });
+    }
+
+    // Phase 4 (Curator / FrontLine): reaction to an ENEMY casting its charged skill. The
+    // parser returns full Ability objects with placeholder ids on the on-enemy-charged-cast
+    // trigger (purge + optional Block-Buff inflict); reassign each a fresh nextId() so the
+    // purge and the Block-Buff debuff get DISTINCT, stable ids. Positioned at the reaction's
+    // trigger phrase so within-slot text order is preserved.
+    const enemyChargedCastReactions = parseEnemyChargedCastReaction(text);
+    if (enemyChargedCastReactions) {
+        const reactionPos = text.search(
+            // Tolerate a <unit-skill>-wrapped "charged skill" (raw text is unstripped here) so a
+            // tagged phrase still anchors the reaction at its trigger clause instead of MAX_POS.
+            /when\s+an?\s+enemy\s+uses\s+(?:its|their)\s+(?:<unit-skill>\s*)?charged\s+skill(?:\s*<\/unit-skill>)?/i
+        );
+        for (const ability of enemyChargedCastReactions) {
+            out.push({
+                ability: { ...ability, id: nextId() },
+                pos: reactionPos >= 0 ? reactionPos : MAX_POS,
+            });
+        }
     }
 
     // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
