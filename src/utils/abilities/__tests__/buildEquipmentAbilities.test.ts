@@ -781,6 +781,41 @@ describe('Fortifying Shroud implant', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// Decimation gear set (2pc): +10% DoT damage per complete set, as a dotDamage modifier
+// ---------------------------------------------------------------------------
+describe('Decimation gear set', () => {
+    function shipWithDecimation(pieces: number) {
+        const equipment: Record<string, string> = {};
+        const map: Record<string, GearPiece> = {};
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'];
+        for (let i = 0; i < pieces; i++) {
+            const id = `dec-${i}`;
+            equipment[slots[i]] = id;
+            map[id] = makePiece({ id, slot: slots[i] as GearPiece['slot'], setBonus: 'DECIMATION' });
+        }
+        return { ship: makeShip({ equipment }), getGearPiece: (id: string) => map[id] };
+    }
+    it('emits a dotDamage modifier scaling 10% per complete 2pc set', () => {
+        for (const [pieces, expected] of [[2, 10], [4, 20], [6, 30]] as const) {
+            const { ship, getGearPiece } = shipWithDecimation(pieces);
+            const abilities = buildEquipmentAbilities(ship, getGearPiece);
+            const dec = abilities.find((a) => a.id === 'equip-set-DECIMATION');
+            expect(dec?.type).toBe('modifier');
+            expect(dec?.config).toMatchObject({
+                type: 'modifier',
+                channel: 'dotDamage',
+                value: expected,
+            });
+        }
+    });
+    it('emits nothing below minPieces (1 piece)', () => {
+        const { ship, getGearPiece } = shipWithDecimation(1);
+        const abilities = buildEquipmentAbilities(ship, getGearPiece);
+        expect(abilities.find((a) => a.id === 'equip-set-DECIMATION')).toBeUndefined();
+    });
+});
+
 describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat attack = caster attack)', () => {
     it('exists in the buff corpus as a buff', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');

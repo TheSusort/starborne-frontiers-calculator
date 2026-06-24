@@ -41,7 +41,9 @@ import { Ship } from '../../types/ship';
 // Gear-set ability registry (D-PR1: Leech; D-PR3: Hardened)
 // ---------------------------------------------------------------------------
 
-const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | undefined>> = {
+const GEAR_SET_ABILITIES: Partial<
+    Record<string, (count: number) => Omit<Ability, 'id'> | undefined>
+> = {
     LEECH: () => ({
         type: 'heal',
         target: 'self',
@@ -72,6 +74,26 @@ const GEAR_SET_ABILITIES: Partial<Record<string, () => Omit<Ability, 'id'> | und
     // self-stealth / incoming-crit-by-stealthed conditions, and the D-PR8 Ambush gate.
     CLOAKING: () =>
         mkNamedBuffGrant('Stealth', 'self', 'start-of-round', 2, { oncePerCombat: true }),
+    // Decimation (2pc set): +10% DoT damage per complete set, max 3 sets (6 pieces) = +30%.
+    // Standing passive → modeled as a dotDamage modifier that folds into dotMult via
+    // effectiveDamageStatsOf.selfDotDamageModifier (engine + DPS calc both honor it).
+    DECIMATION: (count) => {
+        const minPieces = GEAR_SETS.DECIMATION?.minPieces ?? 2;
+        const sets = Math.floor(count / minPieces); // 1/2/3 at 2/4/6 pieces
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'modifier',
+                channel: 'dotDamage',
+                value: sets * 10,
+                isMultiplicative: false,
+            },
+            autoFilled: true,
+        };
+    },
 };
 
 // ---------------------------------------------------------------------------
@@ -905,7 +927,7 @@ export function buildEquipmentAbilities(
         const builder = GEAR_SET_ABILITIES[setName];
         if (!builder) continue;
 
-        const partial = builder();
+        const partial = builder(count);
         if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     }
