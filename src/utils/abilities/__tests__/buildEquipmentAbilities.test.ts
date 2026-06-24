@@ -816,6 +816,45 @@ describe('Decimation gear set', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// Burner gear set (4pc): applies Inferno 1 (tier 15) for 2 turns on cast
+// ---------------------------------------------------------------------------
+describe('Burner gear set', () => {
+    it('emits an on-cast inferno DoT (tier 15, 1 stack, 2 turns) at 4 pieces', () => {
+        const equipment: Record<string, string> = {};
+        const map: Record<string, GearPiece> = {};
+        const slots = ['weapon', 'hull', 'generator', 'sensor'];
+        slots.forEach((slot, i) => {
+            const id = `burn-${i}`;
+            equipment[slot] = id;
+            map[id] = makePiece({ id, slot: slot as GearPiece['slot'], setBonus: 'BURNER' });
+        });
+        const abilities = buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]);
+        const burner = abilities.find((a) => a.id === 'equip-set-BURNER');
+        expect(burner?.type).toBe('dot');
+        expect(burner?.trigger).toBe('on-cast');
+        expect(burner?.target).toBe('enemy');
+        expect(burner?.config).toMatchObject({
+            type: 'dot',
+            dotType: 'inferno',
+            tier: 15,
+            stacks: 1,
+            duration: 2,
+        });
+    });
+    it('emits nothing below minPieces (3 pieces, needs 4)', () => {
+        const equipment: Record<string, string> = {};
+        const map: Record<string, GearPiece> = {};
+        ['weapon', 'hull', 'generator'].forEach((slot, i) => {
+            const id = `burn-${i}`;
+            equipment[slot] = id;
+            map[id] = makePiece({ id, slot: slot as GearPiece['slot'], setBonus: 'BURNER' });
+        });
+        const abilities = buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]);
+        expect(abilities.find((a) => a.id === 'equip-set-BURNER')).toBeUndefined();
+    });
+});
+
 describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat attack = caster attack)', () => {
     it('exists in the buff corpus as a buff', () => {
         const buff = BUFFS.find((b) => b.name === 'Power Infused Nanobots');
