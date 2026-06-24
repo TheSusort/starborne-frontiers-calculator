@@ -33,6 +33,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import type { IntentExecContext } from '../triggers';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -236,6 +237,11 @@ describe('enemy charge removal — cast path (on-cast all-enemies)', () => {
 });
 
 // ─── Type shape assertions ───────────────────────────────────────────────────────
+
+it('IntentExecContext exposes removeChargesFrom (single-target removal)', () => {
+    const fn: IntentExecContext['removeChargesFrom'] = (_targetId: string, _amount: number) => {};
+    expect(typeof fn).toBe('function');
+});
 
 it('Ability accepts everyNthEvent (every-Nth-event gate)', () => {
     const a: Ability = {

@@ -640,6 +640,10 @@ export interface IntentExecContext {
      *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
      *  and chargeCount-0 actors. The closure flips to the opposing side internally. */
     removeEnemyCharges: (amount: number) => void;
+    /** Delegate for single-target charge removal — the engine's own `removeChargesFrom` closure.
+     *  Subtracts from ONE actor by id (floored at 0), skipping chargeLossImmune / chargeCount-0
+     *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId. */
+    removeChargesFrom: (targetId: string, amount: number) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next

@@ -84,6 +84,7 @@ const buildCtx = (
         runtimes,
         grantAllyCharges: () => {},
         removeEnemyCharges: () => {},
+        removeChargesFrom: () => {},
         grantExtraAction: () => {},
         playerIds,
         lastTurnCtxByActor: new Map(),

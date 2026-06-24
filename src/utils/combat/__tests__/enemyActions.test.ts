@@ -176,6 +176,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             ]),
             grantAllyCharges: () => {},
             removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
             grantExtraAction: () => {},
             playerIds: ['grif'],
             lastTurnCtxByActor: new Map(),
