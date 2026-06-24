@@ -94,13 +94,17 @@ const GEAR_SET_ABILITIES: Partial<
             autoFilled: true,
         };
     },
-    // Burner (4pc set): applies Inferno 1 (tier 15) for 2 turns on cast. Reactive on-cast
-    // dot ability — rides the existing reactive DoT executor (triggers.ts), pushing an
-    // inferno entry to the cast target with sourceId = owner.
+    // Burner (4pc set): applies Inferno 1 (tier 15) for 2 turns when the ship attacks.
+    // `on-cast` is NOT a LIVE_TRIGGER — passive-slot on-cast DoTs are never applied by the
+    // engine (the cast path only gathers DoTs from the FIRED skill, and the reactive executor
+    // only runs for LIVE_TRIGGERS). So Burner rides `on-deal-damage` (a LIVE_TRIGGER that fires
+    // once per turn the owner deals direct damage), draining through the reactive DoT executor
+    // (triggers.ts) which pushes the inferno entry to the attack target (ctx.enemy.id) with
+    // sourceId = owner. Re-applies each attacking turn (refreshes the 2-turn duration).
     BURNER: () => ({
         type: 'dot',
         target: 'enemy',
-        trigger: 'on-cast',
+        trigger: 'on-deal-damage',
         conditions: [],
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
         autoFilled: true,

@@ -820,7 +820,7 @@ describe('Decimation gear set', () => {
 // Burner gear set (4pc): applies Inferno 1 (tier 15) for 2 turns on cast
 // ---------------------------------------------------------------------------
 describe('Burner gear set', () => {
-    it('emits an on-cast inferno DoT (tier 15, 1 stack, 2 turns) at 4 pieces', () => {
+    it('emits an on-deal-damage inferno DoT (tier 15, 1 stack, 2 turns) at 4 pieces', () => {
         const equipment: Record<string, string> = {};
         const map: Record<string, GearPiece> = {};
         const slots = ['weapon', 'hull', 'generator', 'sensor'];
@@ -832,7 +832,7 @@ describe('Burner gear set', () => {
         const abilities = buildEquipmentAbilities(makeShip({ equipment }), (id) => map[id]);
         const burner = abilities.find((a) => a.id === 'equip-set-BURNER');
         expect(burner?.type).toBe('dot');
-        expect(burner?.trigger).toBe('on-cast');
+        expect(burner?.trigger).toBe('on-deal-damage');
         expect(burner?.target).toBe('enemy');
         expect(burner?.config).toMatchObject({
             type: 'dot',
