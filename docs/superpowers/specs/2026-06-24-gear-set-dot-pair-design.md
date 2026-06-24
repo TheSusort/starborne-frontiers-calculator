@@ -83,10 +83,12 @@ Changes:
 1. **`types/abilities.ts`** — add `'dotDamage'` to `ModifierChannel`.
 2. **`applyAbilities.ts`** — add `dotDamage: number` to `ModifierTotals`; sum the
    `'dotDamage'` channel in `modifierTotalsFromAbilities` (mirrors the existing channel cases).
-3. **`effectiveStats.ts`** — in `effectiveDamageStatsOf`, include `mod.dotDamage` in the
-   returned `selfDotDamageModifier` (line 214: `dotPen.dotDamageModifier + mod.dotDamage`).
-   This is the single fold point — `dotMult` already consumes `dmgStats.selfDotDamageModifier`,
-   so both the engine cast path and reactive-DoT ticks pick it up with no further wiring.
+3. **`effectiveStats.ts`** — in `effectiveDamageStatsOf`, change the returned
+   `selfDotDamageModifier` (line 214) **from** `dotPen.dotDamageModifier` **to**
+   `dotPen.dotDamageModifier + mod.dotDamage` (`mod = modifierTotalsFromAbilities(...)` is
+   already in scope at line 184). This is the single engine fold point — `dotMult` already
+   consumes `dmgStats.selfDotDamageModifier`, so both the engine cast path and reactive-DoT
+   ticks pick it up with no further wiring.
 4. **`buildEquipmentAbilities.ts`** — Decimation builder emits
    `{ type:'modifier', target:'self', trigger:'on-cast', conditions:[],
      config:{ type:'modifier', channel:'dotDamage', value: completeSets*10, isMultiplicative:false } }`.
@@ -100,14 +102,18 @@ already holds `count` (pieces) and `minPieces`; pass `count`, and Decimation com
 ## DPS calculator wiring
 
 Decimation affects DoT damage → DPS, so the DPS calculator must honor it. `dpsSimulator.ts`
-computes its own `dotMult` from `toDotAndPenModifiers(...).dotDamageModifier` (self-buffs only)
-and does **not** route through `effectiveDamageStatsOf`. The plan must thread the
-`dotDamage` modifier channel into `dpsSimulator`'s `selfDotModifier` so the DPS page reflects
-Decimation. `buildShipAbilitiesWithEquipment` is already wired into `DPSCalculatorPage` (D-PR2),
-so the Decimation `modifier` ability is already present in the DPS ability set — only the
-fold into the DPS `dotMult` needs adding. The exact seam is a plan-level detail; if it proves
-larger than a small additive change, it may be peeled to a follow-up (the engine fold is the
-primary deliverable).
+(line ~241) derives its `selfDotModifier` **solely** from `toDotAndPenModifiers(selfBuffs, [])`
+and never calls `modifierTotalsFromAbilities` on the self side, so the value is **not** sitting
+in an existing variable the way it is on the engine side. Honoring Decimation in the DPS path
+therefore requires the DPS simulator to actually **run** `modifierTotalsFromAbilities` over the
+passive abilities (or otherwise extract the `dotDamage` channel) and add it into `selfDotModifier`
+— a bit more than a one-token change to an existing sum.
+
+`buildShipAbilitiesWithEquipment` is already wired into `DPSCalculatorPage` (verified: it is
+passed as `shipSkills` at `DPSCalculatorPage.tsx:73`), so the Decimation `modifier` ability is
+already present in the DPS ability set — only the fold into the DPS `dotMult` needs adding. The
+exact seam is a plan-level detail; if it proves larger than a small additive change, it may be
+peeled to a follow-up (the engine fold is the primary deliverable).
 
 ## Out of scope / explicitly deferred
 
@@ -138,6 +144,8 @@ primary deliverable).
 - Full suite green; `npm run lint`, `tsc` clean; `npm run audit:skills` unchanged.
 - **ZERO golden / `.snap` drift** — confirm no combat fixture equips Burner or Decimation
   (grep fixtures for the set names). If any does, the change is no longer byte-identical and
-  the goldens must be re-derived deliberately, not `-u`'d.
+  the goldens must be re-derived deliberately, not `-u`'d. Note: grepping `BURNER`/`DECIMATION`
+  turns up **non-combat** hits in the autogear `fastScoring`/`fastPotential` scoring fixtures —
+  those are scoring-only and do not touch combat goldens; don't be alarmed by them.
 - DPS-calc numbers: byte-identical for ships without Decimation; correctly increased for ships
   with it (manual spot-check + the DPS wiring test).
