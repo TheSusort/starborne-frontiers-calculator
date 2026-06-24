@@ -38,6 +38,9 @@ export interface ConditionContext {
     /** D-PR16: this owner is the SOLE living actor on its own side. Live-derived by the engine
      *  each drain; defaults false. Infrastructure for the Last Stand implant. */
     isLastStanding?: boolean;
+    /** The condition owner's own-turn counter (CombatActor.turnsTaken). Live-derived by
+     *  the engine drain context; defaults 0 (DPS / no-delegate → period>=2 never met). */
+    turnsTaken?: number;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -95,6 +98,16 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.firstActivator ? 1 : 0;
         case 'last-standing':
             return ctx.isLastStanding ? 1 : 0;
+        case 'every-n-turns': {
+            const period = cond.period ?? 1;
+            const offset = cond.offset ?? 0;
+            const t = ctx.turnsTaken ?? 0;
+            // Require period >= 1, a residue within [0, period-1], and at least one turn taken.
+            // An out-of-range offset (>= period, or negative — JS signed modulo never yields it)
+            // can never match, so reject it explicitly rather than evaluating to silent-never.
+            if (period <= 0 || offset < 0 || offset >= period || t <= 0) return 0;
+            return t % period === offset ? 1 : 0;
+        }
         default:
             return 0;
     }

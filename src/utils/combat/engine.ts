@@ -387,6 +387,9 @@ export interface EnemyActorInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this enemy (positional plumbing — set but not yet consumed). */
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
@@ -484,6 +487,7 @@ export function buildEnemyPlayerActorRuntime(
         position: e.position,
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         doesntBreakStasis: e.doesntBreakStasis,
+        chargeLossImmune: e.chargeLossImmune,
         affinity: e.affinity,
     });
 
@@ -813,6 +817,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
      *  positional target selection AND the Task 8b positional apply at the team damage site. */
     target?: ParsedTarget;
@@ -912,6 +919,9 @@ export interface CombatEngineInput {
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
         doesntBreakStasis?: boolean;
+        /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+         *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+        chargeLossImmune?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker (positional plumbing — set but not yet consumed). */
         target?: ParsedTarget;
         /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
@@ -930,6 +940,9 @@ export interface CombatEngineInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
+     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+    chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
      *  target selection AND the Task 8b positional apply at the focus damage site. */
     target?: ParsedTarget;
@@ -1032,6 +1045,9 @@ interface ReactiveSideCtx {
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
     grantAllyCharges: (amount: number) => void;
+    /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
+     *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). */
+    removeEnemyCharges: (amount: number) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
@@ -1220,6 +1236,7 @@ export function runCombat(input: CombatEngineInput): {
         position: input.position,
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         doesntBreakStasis: input.doesntBreakStasis,
+        chargeLossImmune: input.chargeLossImmune,
         affinity: input.affinity,
     });
     const enemy = createActor({
@@ -1294,6 +1311,7 @@ export function runCombat(input: CombatEngineInput): {
             position: t.position,
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             doesntBreakStasis: t.doesntBreakStasis,
+            chargeLossImmune: t.chargeLossImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
@@ -1757,6 +1775,11 @@ export function runCombat(input: CombatEngineInput): {
         /** Bump every same-side actor's charges by `amount` (capped at each actor's own
          *  chargeCount; chargeCount 0 skipped — no charge skill to bank). */
         grantAllyCharges: (amount: number) => void;
+        /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
+         *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
+         *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
+         *  THIS side's context (never pre-flipped). */
+        removeEnemyCharges: (amount: number) => void;
         /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
          *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
@@ -1777,6 +1800,15 @@ export function runCombat(input: CombatEngineInput): {
                 for (const a of actors) {
                     if (a.chargeCount <= 0) continue;
                     a.charges = Math.min(a.charges + amount, a.chargeCount);
+                }
+            },
+            // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
+            // skipping immune actors and those with no charged skill. Mirror of grantAllyCharges
+            // but on the opposing side, and subtractive.
+            removeEnemyCharges: (amount: number): void => {
+                for (const a of actorsBySide(side === 'player' ? 'enemy' : 'player')) {
+                    if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
+                    a.charges = Math.max(0, a.charges - amount);
                 }
             },
             lowestSpeedIds: (): Set<string> => {
@@ -3138,6 +3170,7 @@ export function runCombat(input: CombatEngineInput): {
                 bus,
                 round: r,
                 grantAllyCharges: bySide(a.side).grantAllyCharges,
+                removeEnemyCharges: bySide(a.side).removeEnemyCharges,
                 healing: healingCtx,
                 ...(tb.healEventOnly ? { healEventOnly: true } : {}),
                 selfHpPct: maxHp > 0 ? (100 * Math.max(0, a.currentHp)) / maxHp : 100,
@@ -3358,6 +3391,7 @@ export function runCombat(input: CombatEngineInput): {
                         pendingBombs,
                         runtimes: sideCtx.runtimes,
                         grantAllyCharges: sideCtx.grantAllyCharges,
+                        removeEnemyCharges: sideCtx.removeEnemyCharges,
                         grantExtraAction,
                         playerIds: sideCtx.recipientIds,
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
@@ -3433,6 +3467,10 @@ export function runCombat(input: CombatEngineInput): {
                         // combat-wide Set, so the SAME closure serves both sides (team-agnostic) —
                         // no per-side sideCtx field needed (unlike isLowestSpeedAllyFor).
                         wasHitThisRoundFor: (ownerId) => hitThisRound.has(ownerId),
+                        // Phase 0 Task 5: live per-actor own-turn counter (Chrono Reaver /
+                        // every-n-turns). allActorsById covers both sides in a single combat-wide
+                        // map — no per-side sideCtx field needed (mirrors wasHitThisRoundFor).
+                        turnsTakenFor: (ownerId) => allActorsById.get(ownerId)?.turnsTaken ?? 0,
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
@@ -3490,6 +3528,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: playerIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('player').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('player').grantAllyCharges,
+                removeEnemyCharges: bySide('player').removeEnemyCharges,
                 selfHpPctFor: bySide('player').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(enemyAttackerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
@@ -3516,6 +3555,7 @@ export function runCombat(input: CombatEngineInput): {
                 recipientIds: enemyAttackerActorIds,
                 isLowestSpeedAllyFor: (ownerId) => bySide('enemy').lowestSpeedIds().has(ownerId),
                 grantAllyCharges: bySide('enemy').grantAllyCharges,
+                removeEnemyCharges: bySide('enemy').removeEnemyCharges,
                 selfHpPctFor: bySide('enemy').selfHpPctFor,
                 enemyWithMostBuffs: () => mostBuffsAmong(allPlayerActors),
                 enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
@@ -3657,6 +3697,22 @@ export function runCombat(input: CombatEngineInput): {
                 actingActorId = actor.id;
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
+                // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
+                // can evaluate the live N. Incremented AFTER turn-started so end-of-turn
+                // (turn-ended) reactive drains — which run later — read the correct N. 1-based
+                // (turnsTaken=1 on the first own turn) matches the evaluator's `t % period === offset`.
+                //
+                // STASIS/DISABLE (deferred to Phase 2 / Chrono Reaver): this increment is
+                // UNCONDITIONAL — it bumps even on a turn the actor skips under Stasis/Disable,
+                // unlike advanceChargeCadence (~4172/4233) which is gated behind !isTurnBlocked.
+                // Keeping it monotonic is deliberate: turn-ended (~4595) and the reactive drains
+                // (~4567) fire on skipped turns too, so freezing the counter on a skip would let an
+                // every-n-turns gate spuriously re-fire against the frozen value. Fully suppressing
+                // the every-n-turns proc on a skipped turn (so a stasised unit banks no periodic
+                // charge, matching advanceChargeCadence) is Phase 2 work and will get its own
+                // stasis golden when Chrono Reaver attaches the first every-n-turns ability.
+                // The dummy-sink enemy is also bumped here; harmless (no every-n-turns ability on it).
+                actor.turnsTaken += 1;
 
                 // Task 11b: tick the HEAL TARGET's own enemy-applied DoTs at ITS turn-start
                 // (mirroring the dummy enemy's DoT-tick timing — DoTs tick at the afflicted ship's
@@ -4582,6 +4638,9 @@ export function runCombat(input: CombatEngineInput): {
                 }
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
+                // Drain intents enqueued by end-of-turn triggers before the next actor acts.
+                drainIntents();
+                drainEnemyIntents();
             }
         } finally {
             // The turn loop is closed: no live queue remains. The reset lives in `finally` so it

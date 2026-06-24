@@ -2767,6 +2767,35 @@ describe('buildShipAbilities doesntBreakStasis', () => {
     });
 });
 
+// ── Phase 0 Task 6: chargeLossImmune ──────────────────────────────────────────────────────
+
+describe('buildShipAbilities chargeLossImmune', () => {
+    it('Lev: chargeLossImmune=true when passive text says "immune to charge loss effects"', () => {
+        // Lev's refit-active passive text carries the immunity clause.
+        const s = ship({
+            firstPassiveSkillText:
+                "This Unit is immune to charge loss effects. This Unit's crit rate and crit power are increased 20%.",
+        });
+        const result = buildShipAbilities(s);
+        expect(result.chargeLossImmune).toBe(true);
+    });
+
+    it('chargeLossImmune=true for hyphenated form "charge-loss"', () => {
+        const s = ship({ firstPassiveSkillText: 'This Unit is immune to charge-loss effects.' });
+        const result = buildShipAbilities(s);
+        expect(result.chargeLossImmune).toBe(true);
+    });
+
+    it('unrelated ship: chargeLossImmune is absent (falsy) when no immunity clause', () => {
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit deals 180% damage and inflicts Corrosion for 2 turns.',
+        });
+        const result = buildShipAbilities(s);
+        expect(result.chargeLossImmune).toBeFalsy();
+    });
+});
+
 // C2b-1 T5: Sefuba and Salvation reactive heal triggers + Sefuba chain purge.
 // RAW strings from docs/ship-skills.csv.
 describe('buildShipAbilities — on-enemy-purged and on-ally-purged heal triggers (T5)', () => {

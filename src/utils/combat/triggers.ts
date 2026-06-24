@@ -382,6 +382,14 @@ export function registerReactiveListeners(args: {
                         if (e.actorId === ownerId) enqueue(intent);
                     });
                     break;
+                case 'end-of-turn':
+                    bus.on('turn-ended', (e) => {
+                        // Self-scoped: THIS owner's own turn ended. turn-ended fires once per
+                        // actor (engine.ts), so the ownerId guard scopes it per owner — mirror
+                        // of start-of-turn (which rides turn-started).
+                        if (e.actorId === ownerId) enqueue(intent);
+                    });
+                    break;
                 case 'end-of-round':
                     // Global, like start-of-round: every round-ended enqueues this owner's intent
                     // (Rhodium's end-of-round purge). Gating handled in the executor.
@@ -623,6 +631,11 @@ export interface IntentExecContext {
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
      *  already iterates `allPlayerActors` with the correct chargeCount guard. */
     grantAllyCharges: (amount: number) => void;
+    /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
+     *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
+     *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
+     *  and chargeCount-0 actors. The closure flips to the opposing side internally. */
+    removeEnemyCharges: (amount: number) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
@@ -685,6 +698,9 @@ export interface IntentExecContext {
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
      *  not-yet-hit → "not hit" ⇒ met), keeping existing drain gating byte-identical. */
     wasHitThisRoundFor?: (ownerId: string) => boolean;
+    /** The owner's current own-turn counter (CombatActor.turnsTaken). Engine-populated;
+     *  absent in DPS mode → defaults 0 (every-n-turns inert). */
+    turnsTakenFor?: (ownerId: string) => number;
     /** Credit reactive direct damage to the owner's round damage map against the shared
      *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
@@ -771,6 +787,9 @@ export function buildActorConditionContext(
         /** Owner is the sole living actor on its side. Default false. Populated by
          *  buildDrainContext (D-PR16). */
         lastStanding?: boolean;
+        /** Owner's own-turn counter (CombatActor.turnsTaken). Default 0 (DPS-assumption).
+         *  Populated by buildDrainContext (Phase 0 Task 4). */
+        turnsTaken?: number;
     }
 ) {
     const snap = statusEngine.snapshot(ownerId);
@@ -800,6 +819,7 @@ export function buildActorConditionContext(
         wasHitThisRound: shared.wasHitThisRound,
         firstActivator: shared.firstActivator,
         lastStanding: shared.lastStanding,
+        turnsTaken: shared.turnsTaken,
     });
 }
 
@@ -847,6 +867,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met and
         // stay byte-identical.
         lastStanding: ctx.lastStandingId === ownerId,
+        // Phase 0 Task 4: every-n-turns gate (Chrono Reaver). Default 0 → DPS / no-delegate
+        // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
+        // periods at turn 0, so every-n-turns is never met).
+        turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
     });
 }
 
@@ -1165,6 +1189,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
+        // Enemy-targeted charge removal (Task 7): enemy/all-enemies SUBTRACTS from every opposing
+        // actor (floored at 0, immune actors skipped). Routed BEFORE the ally/self handling.
+        // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched here
+        // and fall through to the owner-only gain below. Unreachable for parsed charge abilities today.
+        if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
+            ctx.removeEnemyCharges(cfg.amount);
+            return;
+        }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {

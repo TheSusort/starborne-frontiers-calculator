@@ -629,6 +629,7 @@ export function simulateBattle(
             pattern: plan.targeting?.pattern,
             // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
+            chargeLossImmune: plan.shipSkills.chargeLossImmune,
             walk: {
                 shipSkills: plan.shipSkills,
                 stats: toWalkStats(plan.stats),
@@ -656,6 +657,7 @@ export function simulateBattle(
                 // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
                 // engine input so the break-mark gate reads the flag from the CombatActor.
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
+                chargeLossImmune: plan.shipSkills.chargeLossImmune,
                 affinityDamageModifier: aff.damageModifier,
                 affinityCritCap: aff.critCap,
                 affinityCritPenalty: aff.critPenalty,
@@ -713,6 +715,7 @@ export function simulateBattle(
         pattern: focus.targeting?.pattern,
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
+        chargeLossImmune: focus.shipSkills.chargeLossImmune,
         // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
         // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
         healTargetId: focus.id,

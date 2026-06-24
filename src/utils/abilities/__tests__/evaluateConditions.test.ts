@@ -420,6 +420,44 @@ describe('not-hit-this-round condition', () => {
     });
 });
 
+describe('every-n-turns condition', () => {
+    const cond = (period: number, offset?: number) =>
+        ({ subject: 'every-n-turns', derivable: true, period, offset }) as const;
+
+    it('period 2 (offset 0) is met on even turn counts', () => {
+        expect(evaluateCondition(cond(2), makeConditionContext({ turnsTaken: 2 }))).toBe(1);
+        expect(evaluateCondition(cond(2), makeConditionContext({ turnsTaken: 4 }))).toBe(1);
+        expect(evaluateCondition(cond(2), makeConditionContext({ turnsTaken: 1 }))).toBe(0);
+        expect(evaluateCondition(cond(2), makeConditionContext({ turnsTaken: 3 }))).toBe(0);
+    });
+
+    it('period 3 is met on turns 3,6 only', () => {
+        expect(evaluateCondition(cond(3), makeConditionContext({ turnsTaken: 3 }))).toBe(1);
+        expect(evaluateCondition(cond(3), makeConditionContext({ turnsTaken: 6 }))).toBe(1);
+        expect(evaluateCondition(cond(3), makeConditionContext({ turnsTaken: 2 }))).toBe(0);
+    });
+
+    it('turn 0 (no turn taken yet) never procs', () => {
+        // turnsTaken defaults to 0; the impl guards t <= 0 so "every Nth turn" requires
+        // at least one turn taken.
+        expect(evaluateCondition(cond(2), makeConditionContext({}))).toBe(0);
+        expect(evaluateCondition(cond(1), makeConditionContext({ turnsTaken: 0 }))).toBe(0);
+    });
+
+    it('non-zero offset shifts the residue class', () => {
+        // period 3, offset 1 → turns 1, 4, 7 …
+        expect(evaluateCondition(cond(3, 1), makeConditionContext({ turnsTaken: 1 }))).toBe(1);
+        expect(evaluateCondition(cond(3, 1), makeConditionContext({ turnsTaken: 4 }))).toBe(1);
+        expect(evaluateCondition(cond(3, 1), makeConditionContext({ turnsTaken: 3 }))).toBe(0);
+        expect(evaluateCondition(cond(3, 1), makeConditionContext({ turnsTaken: 6 }))).toBe(0);
+    });
+
+    it('out-of-range offset (>= period) never procs', () => {
+        expect(evaluateCondition(cond(2, 2), makeConditionContext({ turnsTaken: 2 }))).toBe(0);
+        expect(evaluateCondition(cond(2, 2), makeConditionContext({ turnsTaken: 4 }))).toBe(0);
+    });
+});
+
 describe('lowest-speed-ally', () => {
     it('returns 1 when isLowestSpeedAlly is true', () => {
         const ctx = buildRoundContext({

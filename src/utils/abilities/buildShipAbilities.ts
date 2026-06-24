@@ -52,6 +52,7 @@ import {
     detectAllyCritTrigger,
     parseNoCrit,
     parseDoesntBreakStasis,
+    parseChargeLossImmune,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
@@ -1649,5 +1650,11 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         parseDoesntBreakStasis(row.text)
     );
 
-    return { slots, ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}) };
+    const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
+
+    return {
+        slots,
+        ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
+        ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
+    };
 }

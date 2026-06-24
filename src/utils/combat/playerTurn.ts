@@ -242,6 +242,13 @@ export interface PlayerTurnArgs {
      *  so statusEngine/standalone callers without a team need not supply it — when absent the
      *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
     grantAllyCharges?: (amount: number) => void;
+    /** Remove `amount` charges from every OPPOSING-side actor (Task 7 enemy-target charge
+     *  removal). Supplied by the engine, which loops the opposing side flooring each actor at 0
+     *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
+     *  charge step for enemy/all-enemies-targeted charge abilities. Optional so standalone callers
+     *  without an opposing roster need not supply it — when absent enemy-target removal is a no-op
+     *  (a self-only run never has enemy-targeted charge abilities). */
+    removeEnemyCharges?: (amount: number) => void;
     /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
@@ -470,18 +477,34 @@ function chargeGainFromSkill(args: {
     gatedSkill: Skill | undefined;
     ctxFor: Map<string, ConditionContext>;
     fallbackCtx: ConditionContext;
-    /** Which charge abilities to sum (Task 5 ally routing):
-     *  - 'own'  → self-targeted (and anything not ally/all-allies) → bumps the caster only.
-     *  - 'ally' → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
+    /** Which charge abilities to sum (Task 5 ally routing; Task 7 enemy routing):
+     *  - 'own'   → self-targeted (and anything not ally/all-allies/enemy/all-enemies) → bumps the
+     *    caster only.
+     *  - 'ally'  → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
+     *  - 'enemy' → enemy/all-enemies-targeted → REMOVES from every opposing actor (via
+     *    removeEnemyCharges). Positive amount; the engine subtracts.
      *  For attacker-only runs the 'ally' total still routes through grantAllyCharges, which
      *  loops the sole attacker → identical net charge to the pre-Task-5 single 'own' sum. */
-    targetFilter: 'own' | 'ally';
+    targetFilter: 'own' | 'ally' | 'enemy';
 }): number {
     let gain = 0;
     for (const ability of chargeAbilitiesFromSkill(args.gatedSkill)) {
         if (ability.config.type !== 'charge') continue;
         const isAlly = ability.target === 'ally' || ability.target === 'all-allies';
-        if (args.targetFilter === 'ally' ? !isAlly : isAlly) continue;
+        const isEnemy = ability.target === 'enemy' || ability.target === 'all-enemies';
+        // 'own' sums everything that is neither ally- nor enemy-targeted; the other filters
+        // sum only their matching target class.
+        // NOTE: only 'enemy'/'all-enemies' count as enemy here; the selector enemy-targets
+        // ('enemy-most-buffs'/'enemy-highest-attack') fall into 'own'. Harmless today — the
+        // skill parser never emits a selector target for type:'charge' — but if charge ever
+        // uses one, add it to the enemy match (and to the reactive branch in triggers.ts).
+        const matches =
+            args.targetFilter === 'ally'
+                ? isAlly
+                : args.targetFilter === 'enemy'
+                  ? isEnemy
+                  : !isAlly && !isEnemy;
+        if (!matches) continue;
         const primary = ability.conditions[0];
         const scale =
             !primary || primary.countComparator != null
@@ -644,6 +667,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         bus,
         round: r,
         grantAllyCharges,
+        removeEnemyCharges,
         selfHpPct: selfHpPctArg = 100,
         targetHpPct: targetHpPctArg = 100,
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
@@ -908,6 +932,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        turnsTaken: actor.turnsTaken,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1055,6 +1080,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        turnsTaken: actor.turnsTaken,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -1124,6 +1150,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
+        turnsTaken: actor.turnsTaken,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [
@@ -1228,6 +1255,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
+        // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
+        // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.
+        turnsTaken: actor.turnsTaken,
     });
 
     // Hard gate: payload abilities whose conditions fail contribute nothing this
@@ -1338,6 +1369,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 targetFilter: 'ally',
             });
         if (allyCharges > 0) grantAllyCharges(allyCharges);
+    }
+
+    // ENEMY charge removal (Task 7): enemy/all-enemies-targeted charge abilities REMOVE charges
+    // from every opposing actor (floored at 0, immune actors skipped). Sourced from the FIRING
+    // skill + the always-active passive slot, both pre-gated; summed as a positive amount and
+    // passed to removeEnemyCharges (the engine subtracts). Same active/charged sequence point as
+    // own/ally gains. The engine supplies removeEnemyCharges (per-actor floor loop on the opposing
+    // side); absent (standalone callers without an opposing roster) → no-op.
+    if ((action === 'active' || action === 'charged') && removeEnemyCharges) {
+        const enemyChargeRemoval =
+            chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'enemy' }) +
+            chargeGainFromSkill({
+                gatedSkill: gatedPassive,
+                ctxFor: passiveCtxFor,
+                fallbackCtx: ctx,
+                targetFilter: 'enemy',
+            });
+        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval);
     }
 
     // Extra-action grants (game-verified: a full extra turn; the engine re-inserts

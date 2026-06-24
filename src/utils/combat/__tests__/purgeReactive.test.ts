@@ -39,7 +39,7 @@ function makeCtx(playerIds = ['p1', 'p2', 'p3']): Pick<IntentExecContext, 'playe
     return { playerIds } as IntentExecContext;
 }
 
-describe("C2b-1 T2: reactiveRecipients helper", () => {
+describe('C2b-1 T2: reactiveRecipients helper', () => {
     it("target:'ally' + damagedAllyId → returns damagedAllyId", () => {
         const intent = makeIntent('ally', 'owner1', 'a2');
         const ctx = makeCtx();
@@ -121,10 +121,22 @@ function makePurgeIntent(opts?: {
 function makePurgeCtx(removedCount: number): {
     ctx: IntentExecContext;
     purgedCalls: Array<[string, number | 'all']>;
-    emitted: Array<{ type: string; casterId?: string; targetId?: string; count?: number; round?: number }>;
+    emitted: Array<{
+        type: string;
+        casterId?: string;
+        targetId?: string;
+        count?: number;
+        round?: number;
+    }>;
 } {
     const purgedCalls: Array<[string, number | 'all']> = [];
-    const emitted: Array<{ type: string; casterId?: string; targetId?: string; count?: number; round?: number }> = [];
+    const emitted: Array<{
+        type: string;
+        casterId?: string;
+        targetId?: string;
+        count?: number;
+        round?: number;
+    }> = [];
 
     const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
     const purgeSpy = vi.spyOn(se, 'purge').mockImplementation((actorId, count) => {
@@ -157,6 +169,7 @@ function makePurgeCtx(removedCount: number): {
             ],
         ]),
         grantAllyCharges: () => {},
+        removeEnemyCharges: () => {},
         grantExtraAction: () => {},
         playerIds: ['caster1'],
         lastTurnCtxByActor: new Map(),

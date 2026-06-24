@@ -44,6 +44,9 @@ export function buildRoundContext(state: {
     firstActivator?: boolean;
     /** True when the acting unit is the sole living actor on its side. Default false. */
     lastStanding?: boolean;
+    /** The condition owner's own-turn counter. Default 0 (DPS-assumption: inert for
+     *  period>=2 conditions). Populated live by the engine drain context. */
+    turnsTaken?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -69,6 +72,7 @@ export function buildRoundContext(state: {
         wasHitThisRound: state.wasHitThisRound ?? false,
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,
+        turnsTaken: state.turnsTaken ?? 0,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
     };
 }

@@ -91,6 +91,8 @@ function buildHarness({ base, selfBuffs }: BuildHarnessOptions) {
         infernoEntries: [],
         pendingBombs: [],
         pendingAccumulators: [],
+        turnsTaken: 0,
+        chargeLossImmune: false,
     };
 
     return { statusEngine: eng, selfBuffLookup, actor };
@@ -193,6 +195,8 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
             infernoEntries: [],
             pendingBombs: [],
             pendingAccumulators: [],
+            turnsTaken: 0,
+            chargeLossImmune: false,
         };
 
         const emptyLookup = new Map<string, SelectedGameBuff[]>();
@@ -234,6 +238,8 @@ describe('effectiveStatsOf — characterization vs piecemeal formulas', () => {
             infernoEntries: [],
             pendingBombs: [],
             pendingAccumulators: [],
+            turnsTaken: 0,
+            chargeLossImmune: false,
         };
 
         const emptyLookup = new Map<string, SelectedGameBuff[]>();
@@ -569,6 +575,8 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
             infernoEntries: [],
             pendingBombs: [],
             pendingAccumulators: [],
+            turnsTaken: 0,
+            chargeLossImmune: false,
         });
         return {
             eng,
@@ -623,6 +631,8 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
             infernoEntries: [],
             pendingBombs: [],
             pendingAccumulators: [],
+            turnsTaken: 0,
+            chargeLossImmune: false,
         });
         return { eng, attacker: mkActor('attacker'), defender: mkActor('enemy') };
     };
@@ -663,6 +673,8 @@ describe('liveDebuffLandingChance — reproduces the static landing formula with
             infernoEntries: [],
             pendingBombs: [],
             pendingAccumulators: [],
+            turnsTaken: 0,
+            chargeLossImmune: false,
         });
         const live = liveDebuffLandingChance(
             eng,

@@ -50,6 +50,9 @@ export type AbilityTrigger =
     | 'start-of-round'
     | 'start-of-turn' // Fortifying Shroud: fires at the OWNER's own turn-start (rides the
     // per-actor turn-started event; self-scoped on actorId === ownerId)
+    | 'end-of-turn' // Fires at the OWNER's own turn-END (rides the existing per-actor
+    // `turn-ended` event, self-scoped on actorId === ownerId). Mirror of `start-of-turn`.
+    // Used by Chrono Reaver (end-of-turn + every-n-turns charge gain).
     | 'end-of-round' // Rhodium end-of-round purge — C2b-2
     | 'on-crit'
     | 'on-debuff-inflicted'
@@ -110,6 +113,7 @@ export type AbilityTrigger =
 export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'start-of-round',
     'start-of-turn',
+    'end-of-turn',
     'end-of-round', // Rhodium end-of-round purge — C2b-2
     'on-crit',
     'on-debuff-inflicted',
@@ -194,7 +198,11 @@ export type ConditionSubject =
     // the engine each drain (ConditionContext.isLastStanding); defaults false (DPS / not-alone).
     // derivable:true — a derivable:false condition would always be met (evaluateConditions.ts:30).
     // Infrastructure for the Last Stand implant (wired in a later task).
-    | 'last-standing';
+    | 'last-standing'
+    // Binary periodic gate: met when the owner's own-turn counter satisfies
+    // turnsTaken % period === (offset ?? 0). period/offset live on Condition.
+    // Used by Chrono Reaver (every other/third turn). Always derivable:true.
+    | 'every-n-turns';
 
 export interface Condition {
     subject: ConditionSubject;
@@ -219,6 +227,11 @@ export interface Condition {
     // (conditionsMet) only; per-count scaling (scaledBonus) always uses the raw count.
     countComparator?: 'gte' | 'lte' | 'eq';
     countThreshold?: number;
+    /** For 'every-n-turns': the modulo period (e.g. 2 = every other turn). */
+    period?: number;
+    /** For 'every-n-turns': the residue to match, in [0, period-1] (default 0). E.g.
+     *  period 3 + offset 1 → turns 1, 4, 7, …. Out-of-range values never match. */
+    offset?: number;
 }
 
 /** Gate for a victim-side incoming-effect ability (D-PR3). Evaluated against an
@@ -507,4 +520,8 @@ export interface ShipSkills {
      *  (Akula / Tygr). Threaded onto CombatActor.doesntBreakStasis by the engine adapter
      *  and gated at the break-mark site (§4.5 Akula exception). */
     doesntBreakStasis?: boolean;
+    /** True when the ship's passive text declares immunity to charge loss effects (Lev).
+     *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
+     *  charge removal is a no-op against actors with this flag set. */
+    chargeLossImmune?: boolean;
 }
