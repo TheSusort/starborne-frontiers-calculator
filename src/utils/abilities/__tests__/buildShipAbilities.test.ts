@@ -3413,4 +3413,19 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
             })
         );
     });
+
+    it('does not emit a removal ability for a pure charge-gain ship', () => {
+        // Negative test: a ship whose only charge-related text is a self gain must not produce
+        // any enemy-targeted charge ability.
+        const s = ship({
+            firstPassiveSkillText: 'This Unit adds 1 charge to its Charged Skill.',
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        const enemyCharges = (passive?.abilities ?? []).filter(
+            (a) => a.type === 'charge' && a.target === 'enemy'
+        );
+        expect(enemyCharges).toHaveLength(0);
+    });
 });

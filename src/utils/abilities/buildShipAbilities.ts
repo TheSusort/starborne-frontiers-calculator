@@ -1200,7 +1200,11 @@ function abilitiesFromText(
     // gate is NOT a condition — it lives on the ability's everyNthEvent field.
     const chargeRemoval = parseChargeRemoval(text);
     if (chargeRemoval) {
-        const removalPos = text.search(/removes?\s+\d|removes?\s+a|decreases?\s+that enemy/i);
+        // Position-only heuristic for within-slot ordering; mirrors REMOVE_CHARGE_RE
+        // (skillTextParser.ts) so the sort point matches the clause the parser actually matched.
+        const removalPos = text.search(
+            /\bremoves?\s+(?:\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy/i
+        );
         out.push({
             ability: {
                 id: nextId(),
