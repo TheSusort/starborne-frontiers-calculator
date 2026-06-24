@@ -53,6 +53,7 @@ import {
     parseNoCrit,
     parseDoesntBreakStasis,
     parseChargeLossImmune,
+    parseChargeRemoval,
     parseAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
@@ -1188,6 +1189,32 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: chargePos >= 0 ? chargePos : MAX_POS,
+        });
+    }
+
+    // Phase 1 Task 3: enemy-targeted charge removal (Opal, Provider, Sefuba, Demolisher, Zosimos,
+    // Thresh). parseChargeRemoval returns the trigger and everyNthEvent when relevant; this block
+    // coexists with the gain block above — texts carrying both (e.g. Zosimos) emit two charge
+    // abilities. Reactive triggers (on-bomb-detonated / on-enemy-repaired) carry no conditions;
+    // on-cast removal also has no condition gate (it fires with the skill). The every-Nth-event
+    // gate is NOT a condition — it lives on the ability's everyNthEvent field.
+    const chargeRemoval = parseChargeRemoval(text);
+    if (chargeRemoval) {
+        const removalPos = text.search(/removes?\s+\d|removes?\s+a|decreases?\s+that enemy/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'charge',
+                target: 'enemy',
+                trigger: chargeRemoval.trigger,
+                conditions: [],
+                config: { type: 'charge', amount: chargeRemoval.amount },
+                ...(chargeRemoval.everyNthEvent
+                    ? { everyNthEvent: chargeRemoval.everyNthEvent }
+                    : {}),
+                autoFilled: true,
+            },
+            pos: removalPos >= 0 ? removalPos : MAX_POS,
         });
     }
 
