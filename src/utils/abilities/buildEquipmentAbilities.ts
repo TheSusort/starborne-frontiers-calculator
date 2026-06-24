@@ -850,6 +850,24 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             alsoGrantBuffNames: ['Block Debuff'],
         });
     },
+    // Chrono Reaver: periodic self-charge. Epic = every 3rd own turn, Legendary = every 2nd.
+    // Rides end-of-turn (turn-ended) + the every-n-turns gate on the live turnsTaken counter
+    // (offset 0 → procs when turnsTaken % period === 0, i.e. the actor's Nth own turn). The
+    // proc is dropped for a turn-blocked owner by the §4.4 reactive-suppression filter
+    // (engine.ts ~3403), so a stasised/disabled unit banks no periodic charge.
+    // Only epic/legendary variants exist (implants.ts) — other rarities emit nothing.
+    CHRONO_REAVER: (rarity) => {
+        const period = rarity === 'legendary' ? 2 : rarity === 'epic' ? 3 : undefined;
+        if (period === undefined) return undefined;
+        return {
+            type: 'charge',
+            target: 'self',
+            trigger: 'end-of-turn',
+            conditions: [{ subject: 'every-n-turns', derivable: true, period, offset: 0 }],
+            config: { type: 'charge', amount: 1 },
+            autoFilled: true,
+        };
+    },
 };
 
 // ---------------------------------------------------------------------------

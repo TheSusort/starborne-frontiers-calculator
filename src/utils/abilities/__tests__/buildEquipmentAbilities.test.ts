@@ -798,3 +798,46 @@ describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat at
         expect(effects.attackFlat).toBeUndefined();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Chrono Reaver implant (periodic self-charge, end-of-turn)
+// ---------------------------------------------------------------------------
+describe('Chrono Reaver implant', () => {
+    it('legendary → charge/self/end-of-turn, every-n-turns period 2, offset 0', () => {
+        const abilities = buildForImplant('CHRONO_REAVER', 'legendary');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('charge');
+        expect(ab.target).toBe('self');
+        expect(ab.trigger).toBe('end-of-turn');
+        expect(ab.conditions).toEqual([
+            { subject: 'every-n-turns', derivable: true, period: 2, offset: 0 },
+        ]);
+        expect(ab.config).toEqual({ type: 'charge', amount: 1 });
+        expect(ab.autoFilled).toBe(true);
+    });
+
+    it('epic → period 3', () => {
+        const abilities = buildForImplant('CHRONO_REAVER', 'epic');
+        expect(abilities).toHaveLength(1);
+        const ab = abilities[0];
+        expect(ab.type).toBe('charge');
+        expect(ab.trigger).toBe('end-of-turn');
+        expect(ab.conditions).toEqual([
+            { subject: 'every-n-turns', derivable: true, period: 3, offset: 0 },
+        ]);
+        expect(ab.config).toEqual({ type: 'charge', amount: 1 });
+    });
+
+    it('common → no ability (only epic + legendary variants exist)', () => {
+        expect(buildForImplant('CHRONO_REAVER', 'common')).toEqual([]);
+    });
+
+    it('uncommon → no ability', () => {
+        expect(buildForImplant('CHRONO_REAVER', 'uncommon')).toEqual([]);
+    });
+
+    it('rare → no ability', () => {
+        expect(buildForImplant('CHRONO_REAVER', 'rare')).toEqual([]);
+    });
+});

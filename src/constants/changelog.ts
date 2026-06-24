@@ -29,6 +29,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models two cleanse-related implants: Reactive Ward (when the carrier is directly hit, a chance to cleanse one of its own debuffs — two if the hit was a critical) and the second half of Warpstrike (when the carrier deals direct damage while debuffed, it shortens one of its own debuffs by a turn). Chance-based procs are modeled at their true average frequency.',
     'Combat simulator now models the Cloaking gear set: at the start of combat the equipped ship gains Stealth for 2 turns, becoming untargetable while any un-stealthed target is available. This also activates effects that key off being stealthed — the Ambush implant and stealth-based incoming-damage reduction now trigger when the ship is cloaked.',
     "Combat sim now models enemy charge removal — ships like Opal, Provider, Sefuba (on cast), Demolisher (when a bomb explodes), and Zosimos (every second enemy repair) now drain the enemy's Charged Skill, with charge-loss-immune ships unaffected.",
+    "Combat simulator now models the Chrono Reaver implant — it grants a bonus charge to the carrier's charged skill every 2nd turn (legendary) or every 3rd turn (epic). Units in Stasis bank no charge on skipped turns.",
+    "Combat simulator now models Cobalt's passive — at the start of each of its turns while at full HP, Cobalt gains a bonus charge toward its charged skill.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

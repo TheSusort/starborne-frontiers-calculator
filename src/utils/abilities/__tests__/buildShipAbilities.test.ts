@@ -85,6 +85,34 @@ describe('buildShipAbilities', () => {
         expect(charge!.conditions[0]).toMatchObject({ subject: 'always', derivable: true });
     });
 
+    it('Cobalt passive: start-of-turn self-charge gated by full HP (Phase 3)', () => {
+        // Build abilities from Cobalt's first-passive text; find the charge ability.
+        // R0 passive (refits: []) so firstPassiveSkillText is the active row.
+        const chargeAbilityFrom = (text: string): Ability | undefined => {
+            const s = ship({ refits: [], firstPassiveSkillText: text, chargeSkillCharge: 4 });
+            const passive = slot(buildShipAbilities(s).slots, 'passive');
+            return abilityOfType(passive?.abilities ?? [], 'charge');
+        };
+
+        const charge = chargeAbilityFrom(
+            'This Unit adds 1 charge to its charged skill at the start of the turn if it is at full HP.'
+        );
+        expect(charge).toMatchObject({
+            type: 'charge',
+            target: 'self',
+            trigger: 'start-of-turn',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    hpComparator: 'above',
+                    hpPercent: 99,
+                    hpSubject: 'self',
+                },
+            ],
+            config: { type: 'charge', amount: 1 },
+        });
+    });
+
     it('Panguan active: damage(145) with conditional scaling (perUnit 30) attached to base', () => {
         const s = ship({
             activeSkillText:

@@ -127,6 +127,7 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
 const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-cast', label: 'On cast (default)' },
     { value: 'start-of-turn', label: 'Start of own turn' },
+    { value: 'end-of-turn', label: 'End of own turn' },
     { value: 'start-of-round', label: 'Start of round' },
     { value: 'on-crit', label: 'On critical hit' },
     { value: 'on-deal-damage', label: 'On dealing direct damage' },

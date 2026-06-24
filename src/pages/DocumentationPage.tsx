@@ -3096,8 +3096,12 @@ const DocumentationPage: React.FC = () => {
                                     (stronger repairs on allies with less HP than the healer), and{' '}
                                     <strong>Vivacious Repair</strong> (chance to double a repair on
                                     an ally below 25% HP), and <strong>Exuberance</strong> (chance
-                                    to increase the amount of a repair this unit receives). More
-                                    implant and gear-set effects will be added in future updates.
+                                    to increase the amount of a repair this unit receives). Charge
+                                    manipulation is also modeled: <strong>Chrono Reaver</strong>{' '}
+                                    (grants a bonus charge to the carrier&apos;s charged skill every
+                                    2nd turn at legendary rarity or every 3rd turn at epic; units in
+                                    Stasis bank no charge on skipped turns). More implant and
+                                    gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

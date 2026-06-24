@@ -1,6 +1,6 @@
 import type { ShipTypeName } from '../constants/shipTypes';
 import { AffinityName } from './ship';
-import type { ShipSkills } from './abilities';
+import type { Condition, ShipSkills } from './abilities';
 
 export type StackTrigger = 'per-round' | 'per-active' | 'per-charge';
 
@@ -42,7 +42,18 @@ export interface ChargeGain {
     // Reactive event the charge gain fires on (set for inflict-driven charge gains).
     // When present, the gain is per-event (+amount each fire) rather than a per-standing
     // count condition, and `condition` is 'always'.
-    trigger?: 'on-debuff-inflicted' | 'on-ally-debuff-inflicted' | 'on-enemy-repaired';
+    // start-of-turn is a periodic self-charge (Cobalt) that ALSO carries a gate via
+    // `conditions` below — unlike the inflict/repair triggers, which fire per-event
+    // with no gate.
+    trigger?:
+        | 'on-debuff-inflicted'
+        | 'on-ally-debuff-inflicted'
+        | 'on-enemy-repaired'
+        | 'start-of-turn';
+    // Explicit gate conditions applied alongside `trigger` (start-of-turn + full-HP, Cobalt).
+    // When present, buildShipAbilities uses these verbatim instead of deriving a single
+    // condition from `condition`, and they coexist with a (non-reactive-event) trigger.
+    conditions?: Condition[];
 }
 
 export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {

@@ -1178,14 +1178,51 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses full-HP self gain as always-true — Cobalt', () => {
+    it('parses start-of-turn full-HP self gain as start-of-turn + hp-threshold gate — Cobalt 1st passive', () => {
         const text =
             'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of the turn if it is at full HP.';
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'always',
             derivable: true,
+            trigger: 'start-of-turn',
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'above',
+                    hpPercent: 99,
+                    hpSubject: 'self',
+                },
+            ],
         });
+    });
+
+    it('parses start-of-turn full-HP self gain (with separate buff clause) — Cobalt 2nd passive', () => {
+        const text =
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill and gains <unit-aid>Out. Damage Up II</unit-aid> for 1 turn at the start of the turn if it is at full HP.';
+        expect(parseChargeGain(text)).toMatchObject({
+            amount: 1,
+            trigger: 'start-of-turn',
+            conditions: [{ subject: 'hp-threshold' }],
+        });
+    });
+
+    it('parses "each turn" phrasing as start-of-turn trigger (widened regex)', () => {
+        const text =
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill at the start of each turn if it is at full HP.';
+        expect(parseChargeGain(text)).toMatchObject({
+            amount: 1,
+            trigger: 'start-of-turn',
+            conditions: [{ subject: 'hp-threshold' }],
+        });
+    });
+
+    it('leaves a plain unconditional self-charge unchanged (no trigger) — regression', () => {
+        const result = parseChargeGain(
+            'This Unit <unit-aid>adds 1 charge</unit-aid> to its charged skill.'
+        );
+        expect(result?.trigger).toBeUndefined();
     });
 
     it('parses enemy-buff threshold gain (manual) — Nuqtu', () => {
