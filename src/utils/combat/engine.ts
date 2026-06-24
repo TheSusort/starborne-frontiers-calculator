@@ -4638,6 +4638,9 @@ export function runCombat(input: CombatEngineInput): {
                 }
 
                 bus.emit({ type: 'turn-ended', actorId: actor.id, round: r });
+                // Drain intents enqueued by end-of-turn triggers before the next actor acts.
+                drainIntents();
+                drainEnemyIntents();
             }
         } finally {
             // The turn loop is closed: no live queue remains. The reset lives in `finally` so it

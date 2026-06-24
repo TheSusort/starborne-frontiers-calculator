@@ -932,6 +932,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        turnsTaken: actor.turnsTaken,
     });
 
     // §4.5 Direct-damage Stasis break (B3 Task 2). Fires AFTER scheduled debuffs (sourceFired)
@@ -1079,6 +1080,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
+        turnsTaken: actor.turnsTaken,
     });
     for (const status of timedSelfBySlot) {
         if (status.sourceSlot !== action) continue;
@@ -1148,6 +1150,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyBuffNames: enemyBuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
+        turnsTaken: actor.turnsTaken,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     const modifierAbilities = [

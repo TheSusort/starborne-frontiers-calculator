@@ -362,7 +362,7 @@ Mirror the `doesntBreakStasis` derivation at buildShipAbilities.ts:1648-1652 —
 
 ```bash
 npm run lint
-git add src/types/ship.ts src/utils/abilities/buildShipAbilities.ts src/utils/calculators/battleSimulator.ts src/utils/combat/engine.ts src/utils/abilities/__tests__/
+git add src/types/abilities.ts src/utils/abilities/buildShipAbilities.ts src/utils/calculators/battleSimulator.ts src/utils/combat/engine.ts src/utils/abilities/__tests__/
 git commit -m "feat(combat): derive chargeLossImmune from skill text"
 ```
 
