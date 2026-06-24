@@ -51,7 +51,7 @@ are already folded into combat stats; this PR adds **only** the special effects 
 
 **Model:** a reactive `dot` ability in `GEAR_SET_ABILITIES`, trigger **`on-deal-damage`**:
 
-```
+```typescript
 BURNER: () => ({
     type: 'dot',
     target: 'enemy',

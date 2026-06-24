@@ -141,6 +141,7 @@ const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
     { value: 'on-enemy-destroyed', label: 'On enemy destroyed' },
     { value: 'on-enemy-repaired', label: 'When an enemy repairs' },
     { value: 'on-enemy-cleansed', label: 'When an enemy cleanses a debuff' },
+    { value: 'on-enemy-charged-cast', label: 'When an enemy uses their charged skill' },
     { value: 'on-cheat-death-activated', label: 'When Cheat Death activates' },
     { value: 'on-debuff-inflicted', label: 'After inflicting a debuff' },
     { value: 'on-ally-debuff-inflicted', label: 'After an ally inflicts a debuff' },

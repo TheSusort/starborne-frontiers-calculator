@@ -89,6 +89,10 @@ export type AbilityTrigger =
     // ability-performed event emitted once per damage-dealing turn (runPlayerTurn
     // emits exactly one; positional path emits none — engine.ts ~2887).
     | 'on-deal-damage'
+    | 'on-enemy-charged-cast' // Phase 4: opposing-scoped reaction to an ENEMY casting its
+    // charged skill (Curator purge/Block-Buff, FrontLine damage+shield). Mirror of
+    // on-charged-cast but gated isOpposing(actorId). Reuses eventCtx.counterTargetId to
+    // route the reaction onto the casting enemy.
     // Fired when the owner applies repair to at least one OTHER ally (own heal-performed
     // event with a non-self recipient). Used by the Font of Power implant (grants the
     // repaired allies a buff). Distinct from on-ally-critically-repaired (no crit filter).
@@ -137,6 +141,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-purged',
     // Spearhead: all-allies buff grant after the owner's charged skill.
     'on-charged-cast',
+    // Phase 4: opposing-scoped mirror — reaction to an ENEMY's charged cast.
+    'on-enemy-charged-cast',
     // Font of Power: buff grant to allies the owner repairs.
     'on-own-repair-to-ally',
     // D-PR16 Firewall: self-scoped reaction to receiving a timed debuff.

@@ -36,6 +36,7 @@ import {
 import { CombatEventBus } from './events';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
+import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
@@ -1094,6 +1095,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
         for (const rid of status.recipients ?? [actor.id]) {
+            // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
+            // single-ally grants, and all-allies grants (each recipient guarded independently);
+            // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
+            if (recipientCarriesBlockBuff(statusEngine, rid)) continue;
             statusEngine.applyTimedAbilityStatus(r, status, rid);
             bus.emit({
                 type: 'buff-applied',

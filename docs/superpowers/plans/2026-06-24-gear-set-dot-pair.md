@@ -494,7 +494,7 @@ git commit -m "test(combat): DPS calc honors Decimation via shared engine fold"
 
 - [ ] **Step 2: Changelog.** Add to `UNRELEASED_CHANGES` (plain English, user-facing):
 
-```
+```text
 'Combat sim now models the Burner gear set (applies Inferno 1 for 2 turns on attack) and the Decimation gear set (+10% DoT damage per set).',
 ```
 

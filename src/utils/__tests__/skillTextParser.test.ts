@@ -40,6 +40,7 @@ import {
     detectIgnoresForcedTargeting,
     parseDoesntBreakStasis,
     parseChargeRemoval,
+    parseEnemyChargedCastReaction,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -3692,5 +3693,170 @@ describe('parseChargeRemoval', () => {
                 'When an enemy repairs, this unit gains a charge. Additionally, this unit decreases that enemy’s charge by one for every second repair they perform.'
             )
         ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
+    });
+});
+
+describe('parseEnemyChargedCastReaction (Curator enemy-charged-cast reaction)', () => {
+    // Curator R0 (firstPassiveSkillText): purge only.
+    it('R0 → a single purge ability (count 1) on on-enemy-charged-cast / enemy', () => {
+        const abilities = parseEnemyChargedCastReaction(
+            'When an enemy uses their charged skill, this unit purges 1 buffs from that enemy.'
+        );
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(1);
+        const purge = abilities![0];
+        expect(purge.type).toBe('purge');
+        expect(purge.trigger).toBe('on-enemy-charged-cast');
+        expect(purge.target).toBe('enemy');
+        expect(purge.config).toMatchObject({ type: 'purge', count: 1 });
+    });
+
+    // Curator R2 (secondPassiveSkillText): purge 1 + Block Buff for 1 turn.
+    it('R2 → purge (count 1) + Block Buff debuff (duration 1, inflict)', () => {
+        const abilities = parseEnemyChargedCastReaction(
+            'When an enemy uses their charged skill, this unit purges 1 buffs from that enemy, and inflicts Block Buff for 1 turns.'
+        );
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(2);
+
+        const purge = abilities!.find((a) => a.type === 'purge')!;
+        expect(purge).toBeDefined();
+        expect(purge.trigger).toBe('on-enemy-charged-cast');
+        expect(purge.target).toBe('enemy');
+        expect(purge.config).toMatchObject({ type: 'purge', count: 1 });
+
+        const debuff = abilities!.find((a) => a.type === 'debuff')!;
+        expect(debuff).toBeDefined();
+        expect(debuff.trigger).toBe('on-enemy-charged-cast');
+        expect(debuff.target).toBe('enemy');
+        expect(debuff.config).toMatchObject({
+            type: 'debuff',
+            buffName: 'Block Buff',
+            duration: 1,
+            application: 'inflict',
+        });
+    });
+
+    // Curator R4 (thirdPassiveSkillText): purge 2 + Block Buff for 2 turns.
+    it('R4 → purge (count 2) + Block Buff debuff (duration 2, inflict)', () => {
+        const abilities = parseEnemyChargedCastReaction(
+            'When an enemy uses their charged skill, this unit purges 2 buffs from that enemy, and inflicts Block Buff for 2 turns.'
+        );
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(2);
+
+        const purge = abilities!.find((a) => a.type === 'purge')!;
+        expect(purge.config).toMatchObject({ type: 'purge', count: 2 });
+
+        const debuff = abilities!.find((a) => a.type === 'debuff')!;
+        expect(debuff.config).toMatchObject({
+            type: 'debuff',
+            buffName: 'Block Buff',
+            duration: 2,
+            application: 'inflict',
+        });
+    });
+
+    it('strips unit tags and a Shield-Penetration preamble (real game-data form)', () => {
+        const abilities = parseEnemyChargedCastReaction(
+            '<unit-aid>Shield Penetration</unit-aid> increased.<br /><br />When an enemy uses their <unit-skill>charged skill</unit-skill>, this unit purges 2 buffs from that enemy, and inflicts Block Buff for 2 turns.'
+        );
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(2);
+        expect(abilities!.find((a) => a.type === 'purge')!.config).toMatchObject({ count: 2 });
+        expect(abilities!.find((a) => a.type === 'debuff')!.config).toMatchObject({
+            buffName: 'Block Buff',
+            duration: 2,
+        });
+    });
+
+    it('returns null for text without the enemy-charged-cast trigger phrase', () => {
+        expect(
+            parseEnemyChargedCastReaction('This unit purges 1 buffs from that enemy.')
+        ).toBeNull();
+        expect(parseEnemyChargedCastReaction('')).toBeNull();
+        expect(parseEnemyChargedCastReaction(null)).toBeNull();
+    });
+
+    // FrontLine R2 (Task 6): reactive damage + shield, once per round. The shield is modelled
+    // as basis:'attack', pct:24 (= round(30 * 80 / 100)) -- see the parser comment for the
+    // derivation (shield kept on the same un-mitigated basis as the 80% reactive damage).
+    const FRONTLINE_R2 =
+        'When an enemy uses their charged skill, it deals 80% and gains a Shield equal to 30% of the damage dealt, once per round.';
+
+    it('FrontLine -> exactly TWO abilities (damage + shield), both once-per-round', () => {
+        const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2);
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(2);
+        expect(abilities!.every((a) => a.trigger === 'on-enemy-charged-cast')).toBe(true);
+        expect(abilities!.every((a) => a.oncePerRound === true)).toBe(true);
+    });
+
+    it('FrontLine damage ability: enemy target, multiplier 80, hits 1', () => {
+        const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2)!;
+        const damage = abilities.find((a) => a.type === 'damage')!;
+        expect(damage).toBeDefined();
+        expect(damage.target).toBe('enemy');
+        expect(damage.config).toMatchObject({ type: 'damage', multiplier: 80, hits: 1 });
+    });
+
+    it('FrontLine shield ability: self target, basis attack, pct 24', () => {
+        const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2)!;
+        const shield = abilities.find((a) => a.type === 'shield')!;
+        expect(shield).toBeDefined();
+        expect(shield.target).toBe('self');
+        expect(shield.config).toMatchObject({ type: 'shield', basis: 'attack', pct: 24 });
+    });
+
+    // Cross-ship isolation (Task 5 follow-up): FrontLine text yields NO purge, NO debuff.
+    it('FrontLine text yields NO purge and NO Block Buff debuff', () => {
+        const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2)!;
+        expect(abilities.some((a) => a.type === 'purge')).toBe(false);
+        expect(abilities.some((a) => a.type === 'debuff')).toBe(false);
+    });
+
+    // Curator-style text (purge + Block Buff, NO deals/shield) yields NO damage, NO shield,
+    // and the purge/debuff abilities are NOT once-per-round (Curator clauses are unbounded).
+    it('Curator text yields NO damage/shield and NO oncePerRound on purge/debuff', () => {
+        const abilities = parseEnemyChargedCastReaction(
+            'When an enemy uses their charged skill, this unit purges 2 buffs from that enemy, and inflicts Block Buff for 2 turns.'
+        )!;
+        expect(abilities.some((a) => a.type === 'damage')).toBe(false);
+        expect(abilities.some((a) => a.type === 'shield')).toBe(false);
+        expect(abilities.every((a) => a.oncePerRound === undefined)).toBe(true);
+    });
+
+    // Boundary (Task 5 reviewer request): trigger gate passes but NEITHER Curator nor
+    // FrontLine effect clauses are present -> null.
+    it('returns null when the trigger fires but no effect clause matches', () => {
+        expect(
+            parseEnemyChargedCastReaction(
+                'When an enemy uses their charged skill, nothing relevant happens here.'
+            )
+        ).toBeNull();
+    });
+
+    // Real-corpus lock (Task 7): FrontLine's VERBATIM second-passive text from docs/ship-skills.csv
+    // — full <unit-damage> tags AND the "Shield equal to 25% of its Max HP at the start of combat"
+    // preamble (which must NOT be mistaken for the reaction's shield). Mirrors the Curator real-data
+    // test (Task 5): exercises tag stripping + preamble exclusion on the genuine game string.
+    it('FrontLine VERBATIM CSV second-passive text → exactly the damage(80)+shield(attack,24) pair', () => {
+        const FRONTLINE_R2_VERBATIM =
+            'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+        const abilities = parseEnemyChargedCastReaction(FRONTLINE_R2_VERBATIM);
+        expect(abilities).not.toBeNull();
+        expect(abilities).toHaveLength(2);
+        expect(abilities!.every((a) => a.trigger === 'on-enemy-charged-cast')).toBe(true);
+        expect(abilities!.every((a) => a.oncePerRound === true)).toBe(true);
+
+        const damage = abilities!.find((a) => a.type === 'damage')!;
+        expect(damage.target).toBe('enemy');
+        expect(damage.config).toMatchObject({ type: 'damage', multiplier: 80, hits: 1 });
+
+        const shield = abilities!.find((a) => a.type === 'shield')!;
+        // basis:'attack', pct:24 (= round(30 × 80 / 100)) — the reaction's 30%-of-damage shield,
+        // NOT the 25%-of-Max-HP start-of-combat preamble (which the parser correctly excludes here).
+        expect(shield.target).toBe('self');
+        expect(shield.config).toMatchObject({ type: 'shield', basis: 'attack', pct: 24 });
     });
 });

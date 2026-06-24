@@ -112,7 +112,6 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     affinityCritPenalty: 0,
     defence: 2000,
     hp: 10_000,
-    healTargetId: 'attacker',
     ...overrides,
 });
 
@@ -227,7 +226,8 @@ function runWithInfernoCapture(input: CombatEngineInput): {
         if (e.dotType === 'inferno') infernoTick += e.damage;
     });
     bus.on('dot-applied', (e) => {
-        if (e.dotType === 'inferno') infernoApplied.push({ sourceId: e.sourceId, targetId: e.targetId });
+        if (e.dotType === 'inferno')
+            infernoApplied.push({ sourceId: e.sourceId, targetId: e.targetId });
     });
     runCombat({ ...input, bus });
     return { infernoTick, infernoApplied };
@@ -245,7 +245,13 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
         expect(burner.passiveAbilityIds).toContain('equip-set-BURNER');
 
         const { infernoTick, infernoApplied } = runWithInfernoCapture(
-            BASE({ numRounds: 5, attack: 5000, crit: 0, critDamage: 0, shipSkills: burner.shipSkills })
+            BASE({
+                numRounds: 5,
+                attack: 5000,
+                crit: 0,
+                critDamage: 0,
+                shipSkills: burner.shipSkills,
+            })
         );
 
         // Burner fires once per attacking turn → at least one inferno application, attributed to
@@ -306,7 +312,7 @@ describe('Gear-set DoT pair — Burner applies Inferno on attack (real registry)
 // ---------------------------------------------------------------------------
 
 describe('Gear-set DoT pair — composition (Burner + Decimation)', () => {
-    it("Burner+Decimation inferno total = Burner-only control × 1.10 (shared dotMult fold)", () => {
+    it('Burner+Decimation inferno total = Burner-only control × 1.10 (shared dotMult fold)', () => {
         // Control: 4 BURNER only (no Decimation) — Burner's reactive inferno, dotMult 1.0.
         const burnerOnly = skillsWithActive(plainAttack, BURNER_4PC);
         // Boosted: identical 4 BURNER + 2 DECIMATION (1 set → +10% DoT damage) via the REAL registry.

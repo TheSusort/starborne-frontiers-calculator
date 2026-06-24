@@ -12,6 +12,8 @@ import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './bu
 // top-level evaluation), so there is no initialization-order hazard.
 // eslint-disable-next-line import/no-cycle
 import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
+// eslint-disable-next-line import/no-cycle
+import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEventBus } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -301,6 +303,20 @@ export function registerReactiveListeners(args: {
                         // enemy actors run the same turn path and emit skill-fired too; the
                         // ownerId guard self-scopes per registered owner. One enqueue per cast.
                         if (e.actorId === ownerId && e.slot === 'charged') enqueue(intent);
+                    });
+                    break;
+                case 'on-enemy-charged-cast':
+                    bus.on('skill-fired', (e) => {
+                        // Opposing-scoped mirror of on-charged-cast. Team-agnostic: player
+                        // registration's isOpposing = enemy side; enemy registration's = player
+                        // side. Capture the casting enemy as the reaction target via the existing
+                        // counterTargetId field so the purge/debuff executors route onto THAT
+                        // enemy (zero executor change). Self-effects (FrontLine shield) ignore it.
+                        if (isOpposing(e.actorId) && e.slot === 'charged')
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, counterTargetId: e.actorId },
+                            });
                     });
                     break;
                 case 'on-debuff-inflicted':
@@ -1139,6 +1155,21 @@ function passesProcChanceGate(intent: Intent, ctx: IntentExecContext): boolean {
     return !gate || gate(pc);
 }
 
+/** D-PR14 once-per-round gate, shared by the damage/heal/shield executors (the debuff branch
+ *  keeps its own inline split — its check must precede the stateful procChance gate to stay
+ *  byte-identical for Bulwark). Returns false if this (owner, ability) already fired its
+ *  once-per-round effect this round; otherwise marks it consumed and returns true. Pass-through
+ *  (always true, no marking) when the ability is not oncePerRound. Call AFTER passesProcChanceGate
+ *  in the damage/heal/shield branches (those have no procChance users today, so ordering is moot,
+ *  but keep the proc gate first for consistency). */
+function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean {
+    if (!intent.ability.oncePerRound) return true;
+    const onceKey = `${intent.ownerId}:${intent.ability.id}`;
+    if (ctx.oncePerRoundConsumed?.has(onceKey)) return false;
+    ctx.oncePerRoundConsumed?.add(onceKey);
+    return true;
+}
+
 /**
  * Execute one drained follow-up intent against the engine context. Dispatches on
  * the ability's config type (the ONLY state mutator in the trigger machinery):
@@ -1304,6 +1335,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             duration,
         };
         for (const rid of recipients) {
+            if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, rid);
             ctx.bus.emit({
                 type: 'buff-applied',
@@ -1335,6 +1367,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 duration: extra.duration,
             };
             for (const rid of recipients) {
+                if (recipientCarriesBlockBuff(ctx.statusEngine, rid)) continue; // Block Buff: silent skip
                 ctx.statusEngine.applyTimedAbilityStatus(ctx.round, extraStatus, rid);
                 ctx.bus.emit({
                     type: 'buff-applied',
@@ -1501,6 +1534,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
             ctx.oncePerCombatFired?.add(key);
         }
         if (!passesProcChanceGate(intent, ctx)) return;
+        if (!passesOncePerRoundGate(intent, ctx)) return;
         // Reactive heals NEVER crit (no draw at drain time — deterministic, documented
         // approximation) and use the OWNER's last-turn ctx stats; before the owner's first
         // turn, fall back to runtime base stats. The heal fold otherwise MIRRORS the cast
@@ -1628,6 +1662,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
 
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
+        if (!passesOncePerRoundGate(intent, ctx)) return;
         // Reactive direct-damage proc (Grif's on-enemy-cleansed "75% Damage that cannot
         // critically hit"). Bomb-style fold from the owner's last-turn ctx: effectiveAttack
         // × (multiplier/100) × hits × affinityMult, NO enemy-defense mitigation (documented

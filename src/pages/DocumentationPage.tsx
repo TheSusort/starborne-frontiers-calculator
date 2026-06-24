@@ -2410,9 +2410,12 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
                                         Skill effects that react to combat events — crit-triggered
                                         debuff inflictions, charge gains on inflicting a debuff,
-                                        start-of-round self-buffs, and reactions when an ally lands
-                                        a DoT with a critical hit (e.g. Crocus inflicting Corrosion)
-                                        — now fire from real combat events rather than being
+                                        start-of-round self-buffs, reactions when an ally lands a
+                                        DoT with a critical hit (e.g. Crocus inflicting Corrosion),
+                                        and reactions when an enemy uses its charged skill (e.g.
+                                        Curator purging that enemy&apos;s buffs, FrontLine
+                                        counter-attacking for damage and a shield once per round) —
+                                        now fire from real combat events rather than being
                                         approximated as always-on conditions. The{' '}
                                         <span className="text-primary">Trigger</span> field in each
                                         ability&apos;s editor controls which event activates it.
@@ -3103,9 +3106,9 @@ const DocumentationPage: React.FC = () => {
                                     Stasis bank no charge on skipped turns). Two damage-over-time
                                     gear sets are also modeled: <strong>Burner</strong> (applies
                                     Inferno for 2 turns when the ship attacks) and{' '}
-                                    <strong>Decimation</strong> (+10% DoT damage per equipped set, up
-                                    to +30%, boosting your Inferno and Corrosion ticks in both the
-                                    combat simulator and the DPS calculator). More implant and
+                                    <strong>Decimation</strong> (+10% DoT damage per equipped set,
+                                    up to +30%, boosting your Inferno and Corrosion ticks in both
+                                    the combat simulator and the DPS calculator). More implant and
                                     gear-set effects will be added in future updates.
                                 </p>
                             </div>
