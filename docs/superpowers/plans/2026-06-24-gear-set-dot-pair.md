@@ -30,8 +30,13 @@
   `modifierAbilities = [...firing, ...passive]` (playerTurn.ts:1129) — passive slot holds equipment abilities.
 - **Fold point:** `src/utils/combat/effectiveStats.ts:214` `selfDotDamageModifier: dotPen.dotDamageModifier`.
 - **Inferno tier scale:** `src/types/calculator.ts:84` — Inferno 1/2/3 = tier 15/30/45 → **Burner = tier 15**.
-- **Gear-set activation loop:** `buildEquipmentAbilities.ts:825-834` — has `count` (pieces) and
-  `minPieces` in scope; builder is currently `() => Omit<Ability,'id'>`.
+- **Gear-set activation loop:** `buildEquipmentAbilities.ts:883-893` — has `count` (pieces) and
+  `minPieces` in scope; the registry type (line 44) is currently
+  `Partial<Record<string, () => Omit<Ability, 'id'> | undefined>>` (the `| undefined` is for
+  CLOAKING, whose `mkNamedBuffGrant` can return undefined). The call site guards with
+  `const partial = builder(); if (!partial) continue;` — **preserve that guard.**
+- **DECIMATION has no `minPieces` field** in `gearSets.ts` — it relies on the loop's `?? 2`
+  default (2pc set). The Decimation builder uses the same `?? 2` fallback.
 
 ---
 
@@ -185,8 +190,8 @@ git commit -m "feat(combat): fold dotDamage modifier into selfDotDamageModifier 
 ## Task 3: Widen gear-set builder signature + Decimation registry entry
 
 **Files:**
-- Modify: `src/utils/abilities/buildEquipmentAbilities.ts` (`GEAR_SET_ABILITIES` type ~`:849`,
-  the `DECIMATION` entry, and the call site `:832`)
+- Modify: `src/utils/abilities/buildEquipmentAbilities.ts` (`GEAR_SET_ABILITIES` type at line 44,
+  the `DECIMATION` entry in the registry, and the call site at lines 890-892)
 - Test: `src/utils/abilities/__tests__/buildEquipmentAbilities.test.ts`
 
 - [ ] **Step 1: Write the failing test** — add to `buildEquipmentAbilities.test.ts` (reuse its
@@ -230,16 +235,18 @@ Run: `npx vitest run src/utils/abilities/__tests__/buildEquipmentAbilities.test.
 Expected: FAIL — no `equip-set-DECIMATION` ability emitted.
 
 - [ ] **Step 3: Widen the builder type + call site.** In `buildEquipmentAbilities.ts`:
-  - Change the registry type from
-    `Partial<Record<string, () => Omit<Ability, 'id'>>>` to
-    `Partial<Record<string, (count: number) => Omit<Ability, 'id'>>>`.
-  - At the call site (line ~832), pass `count`:
+  - Change the registry type (line 44) **from**
+    `Partial<Record<string, () => Omit<Ability, 'id'> | undefined>>` **to**
+    `Partial<Record<string, (count: number) => Omit<Ability, 'id'> | undefined>>`
+    (keep the `| undefined` — CLOAKING returns undefined).
+  - At the call site (lines 890-892), pass `count` and **keep the existing `if (!partial) continue;` guard**:
     ```typescript
         const partial = builder(count);
+        if (!partial) continue;
         abilities.push({ id: `equip-set-${setName}`, ...partial });
     ```
-  - (Existing `LEECH`/`HARDENED` builders take no param — JS ignores the extra arg, byte-identical.
-    Optionally give them `(_count)` signatures for lint cleanliness if ESLint flags arity.)
+  - (Existing `LEECH`/`HARDENED`/`CLOAKING` builders take no param — JS ignores the extra arg,
+    byte-identical. Optionally give them `(_count)` signatures for lint cleanliness if ESLint flags arity.)
 
 - [ ] **Step 4: Add the DECIMATION entry** to `GEAR_SET_ABILITIES` (after `HARDENED`):
 
