@@ -531,10 +531,14 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-enemy-repaired':
                     bus.on('heal-performed', (e) => {
-                        // Opposing-scoped: any opposing-side actor's repair. For the player
-                        // call: dummy wall + enemy attackers. For the enemy call: any player
-                        // actor. One enqueue per qualifying cast — Zosimos banks a charge.
-                        if (isOpposing(e.casterId)) enqueue(intent);
+                        // Opposing-scoped. Capture the repairer id so the charge branch can (a)
+                        // count repairs per source for an everyNthEvent gate and (b) target THAT
+                        // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
+                        if (isOpposing(e.casterId))
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, repairerId: e.casterId },
+                            });
                     });
                     break;
                 case 'on-enemy-cleansed':
@@ -683,6 +687,10 @@ export interface IntentExecContext {
      *  fire and is skipped on every later fire — Yazid's on-cheat-death-activated 60% repair
      *  fires at most ONCE per combat. Absent in unit tests that exercise unbounded follow-ups. */
     oncePerCombatFired?: Set<string>;
+    /** Per-(owner, ability, source) event counter for `everyNthEvent` gates. Combat-lifetime,
+     *  keyed `${ownerId}:${abilityId}:${repairerId}`. Engine-populated; absent in DPS/unit mode
+     *  → an everyNthEvent ability never fires (no counter to advance). */
+    repairCountBySource?: Map<string, number>;
     /** Combat-lifetime per-ability proc-chance gates (e.g. Bloodthirst's 12% chance).
      *  Keyed `${ownerId}:${abilityId}`; the RateGate accumulates across all rounds and all
      *  reactive fires of the same ability so the proc lands at its true frequency. */
@@ -1197,11 +1205,23 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
-        // Enemy-targeted charge removal (Task 7): enemy/all-enemies SUBTRACTS from every opposing
-        // actor (floored at 0, immune actors skipped). Routed BEFORE the ally/self handling.
-        // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched here
-        // and fall through to the owner-only gain below. Unreachable for parsed charge abilities today.
         if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
+            // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
+            // repairer); only act on the Nth event. Requires a repairer id and the counter map.
+            if (intent.ability.everyNthEvent) {
+                const repairerId = intent.eventCtx?.repairerId;
+                if (!repairerId || !ctx.repairCountBySource) return;
+                const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
+                const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
+                ctx.repairCountBySource.set(key, n);
+                if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
+                ctx.removeChargesFrom(repairerId, cfg.amount); // "that enemy" only
+                return;
+            }
+            // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
+            // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
+            // here and fall through to the owner-only gain below. Unreachable for parsed charge
+            // abilities today.
             ctx.removeEnemyCharges(cfg.amount);
             return;
         }

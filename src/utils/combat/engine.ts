@@ -1942,6 +1942,10 @@ export function runCombat(input: CombatEngineInput): {
     // repair — Yazid's on-cheat-death-activated 60% repair — fires at most once per battle even
     // across rounds. Threaded into executeIntent's ctx; the executor checks/sets it.
     const oncePerCombatFired = new Set<string>();
+    // Combat-lifetime per-(owner, ability, source) event counter for everyNthEvent gates.
+    // Keyed `${ownerId}:${abilityId}:${repairerId}`; incremented on every qualifying enqueue-drain
+    // and used to trigger removal only on the Nth event (e.g. Zosimos "every second repair").
+    const repairCountBySource = new Map<string, number>();
     // Combat-lifetime proc-chance gates for equipment reactive procs (D-PR1). Keyed
     // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
     // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
@@ -3460,6 +3464,9 @@ export function runCombat(input: CombatEngineInput): {
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
+                        // Combat-lifetime per-(owner, ability, source) event counter for
+                        // everyNthEvent gates (Zosimos "every second repair → remove charge").
+                        repairCountBySource,
                         // Combat-lifetime proc-chance gates (D-PR1): equipment reactive procs
                         // that carry a procChance fire at their stated rate via this accumulator.
                         procChanceGates,
