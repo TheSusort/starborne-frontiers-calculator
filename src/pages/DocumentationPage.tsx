@@ -2410,9 +2410,12 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">Reactive Triggers:</span>{' '}
                                         Skill effects that react to combat events — crit-triggered
                                         debuff inflictions, charge gains on inflicting a debuff,
-                                        start-of-round self-buffs, and reactions when an ally lands
-                                        a DoT with a critical hit (e.g. Crocus inflicting Corrosion)
-                                        — now fire from real combat events rather than being
+                                        start-of-round self-buffs, reactions when an ally lands a
+                                        DoT with a critical hit (e.g. Crocus inflicting Corrosion),
+                                        and reactions when an enemy uses its charged skill (e.g.
+                                        Curator purging that enemy&apos;s buffs, FrontLine
+                                        counter-attacking for damage and a shield once per round) —
+                                        now fire from real combat events rather than being
                                         approximated as always-on conditions. The{' '}
                                         <span className="text-primary">Trigger</span> field in each
                                         ability&apos;s editor controls which event activates it.

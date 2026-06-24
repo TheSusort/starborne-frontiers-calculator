@@ -10,7 +10,13 @@ import {
     EnemyBaseClass,
     DoTType,
 } from '../types/calculator';
-import { AbilityTrigger, Condition, ConditionSubject, ControlEffect } from '../types/abilities';
+import {
+    Ability,
+    AbilityTrigger,
+    Condition,
+    ConditionSubject,
+    ControlEffect,
+} from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
@@ -1527,6 +1533,140 @@ export function parseChargeRemoval(
         return { amount, trigger: 'on-bomb-detonated' };
     }
     return { amount, trigger: 'on-cast' };
+}
+
+// Phase 4 (Curator / FrontLine): reaction to an ENEMY casting its charged skill.
+// "When an enemy uses their charged skill, this unit purges N buffs from that enemy[,
+//  and inflicts Block Buff for M turns]." The trigger phrase gates the whole reaction;
+// the purge + Block-Buff clauses are parsed independently so refits that add the
+// Block-Buff clause (R2/R4) emit the extra debuff while R0 emits purge alone.
+const ENEMY_USES_CHARGED_RE = /\bwhen\s+an?\s+enemy\s+uses\s+(?:its|their)\s+charged\s+skill\b/i;
+const ECC_PURGE_RE = /\bpurges?\s+(\d+|a|an)\s+buffs?\b/i;
+const ECC_BLOCK_BUFF_RE = /\binflicts?\s+block\s+buff\s+for\s+(\d+)\s+turns?\b/i;
+// FrontLine (Task 6): a reactive damage + shield clause on the same enemy-charged-cast trigger.
+//   "...it deals 80% and gains a Shield equal to 30% of the damage dealt, once per round."
+// "deals N%" -> reactive damage multiplier; "Shield equal to M% of the damage dealt" -> a shield
+// scaled off FrontLine's OWN reactive damage; "once per round" -> the per-round gate.
+const ECC_DAMAGE_RE = /\bdeals?\s+(\d+(?:\.\d+)?)\s*%/i;
+const ECC_SHIELD_OF_DAMAGE_RE =
+    /\bshield\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:the\s+)?damage\s+dealt/i;
+const ECC_ONCE_PER_ROUND_RE = /\bonce\s+per\s+round\b/i;
+
+/**
+ * Parses the "when an enemy uses their charged skill" reaction (Phase 4). Emits full
+ * `Ability` objects on the `on-enemy-charged-cast` trigger, targeting `'enemy'` (the
+ * engine routes them to the firing enemy via `eventCtx.counterTargetId`). Returns null
+ * when the trigger phrase is absent.
+ *
+ * Curator clauses handled here:
+ *  - purge N buffs (always present in the corpus) → `{ type:'purge', count }`.
+ *  - optional "inflicts Block Buff for M turns" (R2/R4) → a full `debuff` ability
+ *    (`buffName:'Block Buff'`, `application:'inflict'`).
+ *
+ * Returned abilities carry a placeholder `id` ('') — `buildShipAbilities` reassigns
+ * stable, distinct ids via `nextId()` when it consumes them (mirroring how the other
+ * reaction parsers' data gets built into `Ability` objects there).
+ *
+ * FrontLine's damage + shield once-per-round reaction (Task 6) extends this function.
+ */
+export function parseEnemyChargedCastReaction(text: string | null | undefined): Ability[] | null {
+    if (!text) return null;
+    // Mirror parseChargeRemoval: strip <unit-*> tags and normalise curly apostrophes
+    // (U+2018/U+2019 → ASCII) so typographic game-data forms match the ASCII regexes.
+    const plain = stripUnitTags(text).replace(/[‘’]/g, '\x27');
+    if (!ENEMY_USES_CHARGED_RE.test(plain)) return null;
+
+    // NOTE: the effect-clause regexes below assume the relevant clauses live within the
+    // trigger sentence. The current corpus carries ONLY Curator (purge / Block Buff) and
+    // FrontLine (deals / shield) with this trigger — neither ship has an unrelated
+    // "purge"/"deals"/"shield" clause elsewhere — so unscoped matching is safe today.
+    const out: Ability[] = [];
+
+    const purge = ECC_PURGE_RE.exec(plain);
+    if (purge) {
+        const raw = purge[1].toLowerCase();
+        const count = raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+        if (count && !isNaN(count)) {
+            out.push({
+                id: '',
+                type: 'purge',
+                target: 'enemy',
+                trigger: 'on-enemy-charged-cast',
+                conditions: [],
+                config: { type: 'purge', count },
+                autoFilled: true,
+            });
+        }
+    }
+
+    const block = ECC_BLOCK_BUFF_RE.exec(plain);
+    if (block) {
+        const duration = parseInt(block[1], 10);
+        if (duration && !isNaN(duration)) {
+            out.push({
+                id: '',
+                type: 'debuff',
+                target: 'enemy',
+                trigger: 'on-enemy-charged-cast',
+                conditions: [],
+                config: {
+                    type: 'debuff',
+                    buffName: 'Block Buff',
+                    parsedEffects: {},
+                    stacks: 1,
+                    isStackable: false,
+                    duration,
+                    application: 'inflict',
+                },
+                autoFilled: true,
+            });
+        }
+    }
+
+    // FrontLine: reactive damage + a shield scaled off THAT damage, both once per round.
+    const dmgM = ECC_DAMAGE_RE.exec(plain);
+    const shieldM = ECC_SHIELD_OF_DAMAGE_RE.exec(plain);
+    if (dmgM && shieldM) {
+        const damagePct = parseFloat(dmgM[1]);
+        const shieldPct = parseFloat(shieldM[1]);
+        if (damagePct && !isNaN(damagePct) && shieldPct && !isNaN(shieldPct)) {
+            const oncePerRound = ECC_ONCE_PER_ROUND_RE.test(plain);
+            out.push({
+                id: '',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-enemy-charged-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: damagePct, hits: 1 },
+                oncePerRound,
+                autoFilled: true,
+            });
+            // Shield basis derivation: the text says "30% of the damage dealt", referring to
+            // FrontLine's OWN 80% reactive damage. The reactive-shield executor's
+            // basis:'damage-dealt' reads eventCtx.triggerDamage, which on THIS trigger is the
+            // ENEMY's charged-cast damage (wrong). The reactive-damage executor approximates
+            // FrontLine's dealt damage as effectiveAttack * damagePct% (no enemy-defence
+            // mitigation, no crit). 30% of that = effectiveAttack * 0.24, so we model the shield
+            // as basis:'attack' with pct = round(shieldPct * damagePct / 100) = round(30*80/100) =
+            // 24 — keeping shield and damage on the same un-mitigated basis.
+            out.push({
+                id: '',
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-enemy-charged-cast',
+                conditions: [],
+                config: {
+                    type: 'shield',
+                    basis: 'attack',
+                    pct: Math.round((shieldPct * damagePct) / 100),
+                },
+                oncePerRound,
+                autoFilled: true,
+            });
+        }
+    }
+
+    return out.length ? out : null;
 }
 
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */

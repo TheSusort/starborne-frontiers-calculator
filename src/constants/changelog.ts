@@ -31,6 +31,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim now models enemy charge removal — ships like Opal, Provider, Sefuba (on cast), Demolisher (when a bomb explodes), and Zosimos (every second enemy repair) now drain the enemy's Charged Skill, with charge-loss-immune ships unaffected.",
     "Combat simulator now models the Chrono Reaver implant — it grants a bonus charge to the carrier's charged skill every 2nd turn (legendary) or every 3rd turn (epic). Units in Stasis bank no charge on skipped turns.",
     "Combat simulator now models Cobalt's passive — at the start of each of its turns while at full HP, Cobalt gains a bonus charge toward its charged skill.",
+    "Combat simulator: ships now react when an enemy uses its charged skill — Curator purges that enemy's buffs (and at higher refits also blocks it from gaining new buffs), and FrontLine counter-attacks for damage and gains a shield once per round.",
+    'Combat simulator now models Block Buff — a unit affected by Block Buff can no longer gain new buffs while it lasts.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
