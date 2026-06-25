@@ -1942,7 +1942,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
                 // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
                 // (on-shield-applied). No recipient gained pool → no event. Mirrors the
-                // heal-performed emit below.
+                // heal-performed emit below. NOTE: enemy event-only shields `continue` above
+                // (healEventOnly) before reaching here, so they never emit — consistent with the
+                // engine not modeling enemy-side shield pools.
                 if (shieldRecipientIds.length > 0) {
                     bus.emit({
                         type: 'shield-applied',
