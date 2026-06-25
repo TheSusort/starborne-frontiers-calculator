@@ -54,6 +54,7 @@ import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
+import { shieldAbsorb } from './shieldAbsorb';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
@@ -2645,7 +2646,14 @@ export function runCombat(input: CombatEngineInput): {
             // wrappers pass { killerId: actingActorId, byDirectDamage: true }; the DoT-tick batch
             // passes { byDirectDamage: false } (no single killer). No consumer reads these yet
             // (Faust, Task 6), so production stays byte-identical.
-            cause?: { killerId?: string; byDirectDamage?: boolean }
+            cause?: {
+                killerId?: string;
+                byDirectDamage?: boolean;
+                /** Acting attacker's effective shield penetration % (direct portion only). Default 0. */
+                shieldPenetrationPct?: number;
+                /** Portion of `rawDamage` that is bomb/detonation damage — drains shield in FULL, no pen. Default 0. */
+                bombPortion?: number;
+            }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
             // becomes mutable so the block step can shave it; everything downstream (addIncoming,
@@ -2742,10 +2750,15 @@ export function runCombat(input: CombatEngineInput): {
                 return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
             }
             const shieldBefore = victim.shieldPool;
-            const absorbed = Math.min(victim.shieldPool, damage);
+            const { absorbed, hpDamage } = shieldAbsorb({
+                damage,
+                shieldPool: victim.shieldPool,
+                isDot: cause?.byDirectDamage === false,
+                penPct: cause?.shieldPenetrationPct ?? 0,
+                bombPortion: cause?.bombPortion ?? 0,
+            });
             victim.shieldPool -= absorbed;
             sink.addShieldAbsorbed(absorbed, victim.id);
-            const hpDamage = damage - absorbed;
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
