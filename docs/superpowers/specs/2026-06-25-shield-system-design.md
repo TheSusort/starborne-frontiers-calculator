@@ -138,24 +138,40 @@ synthetic fixture equips them). Each source: registry entry + `equipmentCoverage
 mutation-resistant integration test through the real `buildShipAbilitiesWithEquipment` path, per the
 established D-PR convention.
 
-#### Reactive shield magnitude — two new bases (shared H3 foundation)
+#### Shared foundation (verified against code 2026-06-25)
 
-The reactive shield executor (`triggers.ts:~1610`) already computes `raw = basisValue × pct/100`
-(FrontLine is precedent for a shield scaled off a runtime amount). Adaptive Plating and Abundant
-Renewal each scale off a **triggering-event magnitude**, so H3 adds two basis types that read that
-magnitude from the reactive context:
-
-- `damage-taken` — the HP+shield damage of the triggering `on-attacked` hit (Adaptive Plating).
-- `overheal-amount` — the clipped overheal of the triggering `on-own-repair-to-ally` event
-  (Abundant Renewal). Overheal is already captured at the heal-apply site (`applyHealToTarget`
-  returns `{consumed, overheal}`).
+- **Reactive shield per-recipient routing (the key enabler).** The reactive heal/shield executor
+  (`triggers.ts:1614-1617`) only lands a pool when `rid === ctx.healing.targetId`, so a reactive
+  shield to a `self`/`ally` recipient who isn't the focus grants *nothing* today. Fix: route
+  per-recipient via `ctx.healing.recipientActor(rid)` (the member already exists; the cast path at
+  `playerTurn.ts:1907-1910` already does exactly this). This single change lights up **all** new
+  reactive shield sources (the `start-of-turn` self gear set, Adaptive Plating self-shield, Abundant
+  Renewal ally-shield). Golden risk: existing reactive shields (FrontLine, Defiant) granted only
+  when owner==focus before; expect byte-identical (synthetic fixtures run owner==focus) but audit.
+- **Reactive shield magnitude — two bases.** Adaptive Plating and Abundant Renewal each scale off a
+  **triggering-event magnitude**, read from the reactive `eventCtx`:
+  - `damage-taken` (Adaptive Plating) — reuse the existing `damage-taken` basis string. The reactive
+    executor doesn't special-case it (falls to maxHP), so add a `damage-taken` arm to the
+    `nonTargetHpBasis` ternary (`triggers.ts:1561-1572`) reading `eventCtx.triggerDamage`, and stamp
+    `triggerDamage: e.damage` in the `on-attacked` listener (`triggers.ts:448`). Safe from the
+    `damage-taken` leech collector: `on-attacked` is a LIVE trigger → `partitionReactiveAbilities`
+    strips it from `castSkills` before the leech scan (`engine.ts:2214-2233`), so no double-apply.
+  - `overheal` (Abundant Renewal) — a NEW basis string added to the `heal|shield` config union
+    (`abilities.ts:384`). Requires: an `overheal` accumulator in the cast heal loop
+    (`playerTurn.ts:1868-1890`), a new `overheal?: number` field on the `heal-performed` event
+    (`events.ts:98-105`) attached at emit (`playerTurn.ts:1936`), threaded into the
+    `on-own-repair-to-ally` listener `eventCtx` (`triggers.ts:369-382`), and an `overheal` arm in the
+    reactive basis ternary. Granted to the over-repaired ally (the focus heal target, the only actor
+    that accrues overheal in-sim).
 
 #### H2 — Shield gear set
 
 `gearSets.ts:SHIELD` ("Generate 4% shield each turn") → a new `GEAR_SET_ABILITIES.SHIELD` entry: a
-`start-of-turn`, `self`, **shield-config** grant (`type:'shield'`, `basis:'self-max-hp'`, `pct:4`)
-→ `floor(0.04 × maxHP)` each owner turn. Follows the Fortifying Shroud `start-of-turn` registry
-shape but emits a shield config (not a named buff). No proc, no gate.
+`start-of-turn`, `self`, **shield-config** grant (`type:'shield'`, `basis:'hp'`, `pct:4`) →
+`0.04 × maxHP` each owner turn (`basis:'hp'` = caster max HP; there is no `self-max-hp` basis). A
+hand-written Ability literal (no shield-builder helper exists), modeled on the inline LEECH/HARDENED
+gear-set entries. No proc, no gate. As a `start-of-turn` (LIVE) trigger it partitions to the reactive
+path and lands via the per-recipient routing fix above.
 
 #### H3 — Reactive shield implants
 
