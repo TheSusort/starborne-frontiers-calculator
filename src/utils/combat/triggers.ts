@@ -128,6 +128,11 @@ export interface Intent {
          *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
          *  amount rather than the owner's max HP (Abundant Renewal). */
         overhealAmount?: number;
+        /** The recipients of an `on-shield-applied` event (shield-applied.recipientIds — the
+         *  actors whose pool grew). The reaction's buff/effect targets EXACTLY these, mirroring
+         *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
+         *  rather than the owner/whole team (Resonating Fury — buff every recipient of the cast). */
+        shieldRecipientIds?: string[];
     };
 }
 
@@ -388,6 +393,25 @@ export function registerReactiveListeners(args: {
                                 ...intent.eventCtx,
                                 repairedAllyIds: repaired,
                                 overhealAmount: e.overheal ?? 0,
+                            },
+                        });
+                    });
+                    break;
+                case 'on-shield-applied':
+                    bus.on('shield-applied', (e) => {
+                        // Granter-scoped (H3.6 keys the event on the acting granter): THIS owner
+                        // applied a shield (Resonating Fury). One enqueue per CAST -> one proc-gate
+                        // roll; the grant fans out to every recipient whose pool grew via
+                        // eventCtx.shieldRecipientIds (mirrors on-own-repair-to-ally/repairedAllyIds).
+                        // An empty recipient list (no pool grew) emits no event by construction, but
+                        // guard defensively so a 0-recipient event never enqueues a no-op intent.
+                        if (e.granterId !== ownerId) return;
+                        if (e.recipientIds.length === 0) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                shieldRecipientIds: e.recipientIds,
                             },
                         });
                     });
@@ -1310,16 +1334,26 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // ally/all-allies → every player id (the FIXED playerIds order). The status carries
         // casterId = ownerId so its gate evaluates against the caster's ctx even when it
         // lives on another recipient.
+        const isAllyTarget =
+            intent.ability.target === 'ally' || intent.ability.target === 'all-allies';
         const recipients: string[] =
             intent.ability.target === 'adjacent-allies'
                 ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
-                : intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
-                  ? intent.eventCtx.repairedAllyIds
-                  : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
-                    ? [intent.eventCtx.damagedAllyId]
-                    : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
-                      ? ctx.playerIds
-                      : [intent.ownerId];
+                : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
+                  // grant out to EXACTLY the recipients of the triggering shield cast — the same
+                  // event-derived recipient routing as repairedAllyIds (Font of Power), keyed on
+                  // eventCtx.shieldRecipientIds. The recipients are same-side by construction (a
+                  // shield to oneself or an ally), so the granter itself appears here iff it
+                  // self-shielded — no extra ally filtering needed.
+                  isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
+                  ? intent.eventCtx.shieldRecipientIds
+                  : intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
+                    ? intent.eventCtx.repairedAllyIds
+                    : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                      ? [intent.eventCtx.damagedAllyId]
+                      : isAllyTarget
+                        ? ctx.playerIds
+                        : [intent.ownerId];
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
         // CASTER's effective attack at grant time (the same last-turn ctx value that
