@@ -2854,17 +2854,34 @@ export function runCombat(input: CombatEngineInput): {
                 intakeFor(victimId).barrierAbsorbed += amount;
             },
         };
+        // H1 T4: the effective shield penetration % of an attacker, resolved from its static
+        // ActorStats.shieldPenetration (threaded in Tasks 1-2). Defaults to 0 for an unknown id
+        // or an attacker that never set the stat → byte-identical for fixtures without pen.
+        const attackerShieldPenOf = (id?: string): number =>
+            (id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0;
         const applyIncomingToTarget = (
             damage: number,
             victim: CombatActor = healTarget!,
             // C2b-2 T5: defaults to the DIRECT-damage attribution (the acting actor landed this
             // hit). The DoT-tick batch caller overrides with { byDirectDamage: false } — a DoT
             // batch is an aggregate of multiple appliers with NO single killer.
-            cause: { killerId?: string; byDirectDamage?: boolean } = {
+            // H1 T4: callers may also pass a `bombPortion` — the detonation slice of `damage`
+            // that drains the shield in FULL (no penetration).
+            cause: { killerId?: string; byDirectDamage?: boolean; bombPortion?: number } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
             }
-        ): VictimDamageOutcome => applyVictimDamage(damage, victim, playerSink, cause);
+        ): VictimDamageOutcome =>
+            applyVictimDamage(damage, victim, playerSink, {
+                ...cause,
+                // H1 T4: direct hits respect the ACTING attacker's shield penetration; DoT
+                // batches (byDirectDamage:false) force pen 0 and bypass the shield entirely.
+                shieldPenetrationPct:
+                    cause.byDirectDamage === false
+                        ? 0
+                        : attackerShieldPenOf(cause.killerId ?? actingActorId),
+                bombPortion: cause.bombPortion ?? 0,
+            });
         // Player→enemy intake (E1 — symmetric incoming surface). The symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path AND now records
@@ -2890,9 +2907,12 @@ export function runCombat(input: CombatEngineInput): {
             enemyVictim: CombatActor
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
+            // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
+            // they respect the acting attacker's shield penetration with bombPortion 0 (default).
             applyVictimDamage(damage, enemyVictim, enemySink, {
                 killerId: actingActorId,
                 byDirectDamage: true,
+                shieldPenetrationPct: attackerShieldPenOf(actingActorId),
             });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
@@ -4309,6 +4329,11 @@ export function runCombat(input: CombatEngineInput): {
                         // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                         // scoped inside the else block below; this flag carries its roundCrit out.
                         let enemyTurnDidCrit = false;
+                        // H1 T4: the detonation slice of `damage` (enemyTurn.detonationDamage),
+                        // hoisted out of the else block so the post-else apply call can pass it as
+                        // `bombPortion` (the bomb portion drains the shield in FULL, no penetration).
+                        // Stays 0 on the dead-target path and for any bare enemy with no detonate().
+                        let enemyDetonationDamage = 0;
                         // Hoisted for per-hit `attacked` emission (Phase 4c Task 3): populated from
                         // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
                         // path and on the manual flat-enemy path (which has no hitCrits to surface).
@@ -4393,6 +4418,8 @@ export function runCombat(input: CombatEngineInput): {
                             // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
                             // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
                             damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                            // H1 T4: hoist the detonation slice for the post-else apply (bombPortion).
+                            enemyDetonationDamage = enemyTurn.detonationDamage;
                             // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
                             enemyTurnDidCrit = enemyTurn.roundCrit;
                             // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
@@ -4555,7 +4582,15 @@ export function runCombat(input: CombatEngineInput): {
                             } else {
                                 ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
                                     damage,
-                                    tgt
+                                    tgt,
+                                    {
+                                        // H1 T4: `damage` = directDamage + detonationDamage (above).
+                                        // The detonation slice drains the shield in FULL (no pen);
+                                        // only the direct slice respects the attacker's penetration.
+                                        killerId: actingActorId,
+                                        byDirectDamage: true,
+                                        bombPortion: enemyDetonationDamage,
+                                    }
                                 ));
                                 // §4.5: the non-positional firing hit is DIRECT-channel. The Stasis
                                 // break already fired via onHitBreakStasis inside runPlayerTurn
