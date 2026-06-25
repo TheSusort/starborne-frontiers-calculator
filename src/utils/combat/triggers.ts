@@ -445,7 +445,11 @@ export function registerReactiveListeners(args: {
                         }
                         enqueue({
                             ...intent,
-                            eventCtx: { counterTargetId: e.attackerId, didCrit: e.didCrit },
+                            eventCtx: {
+                                counterTargetId: e.attackerId,
+                                didCrit: e.didCrit,
+                                triggerDamage: e.damage,
+                            },
                         });
                     });
                     break;
@@ -1563,11 +1567,13 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 ? (ownerCtx?.effectiveAttack ?? owner.attack)
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
-                  : cfg.basis === 'damage-dealt'
-                    ? // Reactive damage-dealt (e.g. Bloodthirst on-crit): scale off the triggering
-                      // hit's damage captured in eventCtx.triggerDamage. Falls back to 0 when no
-                      // triggering damage is present (non-crit path or missing context) — a
-                      // damage-dealt reactive heal with no damage context heals nothing.
+                  : cfg.basis === 'damage-dealt' || cfg.basis === 'damage-taken'
+                    ? // Reactive damage-dealt (e.g. Bloodthirst on-crit) / damage-taken (e.g.
+                      // Adaptive Plating on-attacked): scale off the triggering hit's damage
+                      // captured in eventCtx.triggerDamage — the damage DEALT for damage-dealt,
+                      // the damage TAKEN (the on-attacked hit's e.damage) for damage-taken. Falls
+                      // back to 0 when no triggering damage is present (non-crit path or missing
+                      // context) — a damage-scaled reactive with no damage context grants nothing.
                       (intent.eventCtx?.triggerDamage ?? 0)
                     : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
