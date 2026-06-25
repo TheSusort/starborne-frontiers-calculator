@@ -109,6 +109,17 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
         autoFilled: true,
     }),
+    // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP.
+    // start-of-turn is a LIVE trigger → partitions to the reactive path; lands via the per-recipient
+    // routing fix (H2/H3 Task 0.1). basis 'hp' = caster max HP.
+    SHIELD: () => ({
+        type: 'shield',
+        target: 'self',
+        trigger: 'start-of-turn',
+        conditions: [],
+        config: { type: 'shield', pct: 4, basis: 'hp' },
+        autoFilled: true,
+    }),
 };
 
 // ---------------------------------------------------------------------------
