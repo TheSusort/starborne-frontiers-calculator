@@ -169,20 +169,27 @@ All percent values below are **percentages applied as `× value/100`** (e.g. `da
 - **Abundant Renewal** (`on-own-repair-to-ally`, **ally overheals only** per text "when
   overrepairing an ally"): shield to the **healed ally** = `(pct/100) × overheal-amount`. Rarity:
   {epic 20, legendary 30}. No proc roll (deterministic), no per-round cap.
-- **Resonating Fury** (new `on-shield-applied` trigger): grants **Crit Power Up 3** (existing named
-  buff) to self for 1 turn. `procChance` {common .05, uncommon .07, rare .09, epic .12,
+- **Resonating Fury** (new `on-shield-applied` trigger): on proc, grants **Crit Power Up 3**
+  (existing named buff, 1 turn) to **the recipient of the triggering shield** — i.e. the buff
+  follows the shield, NOT the carrier (user decision 2026-06-25). A self-shield buffs self; an
+  ally-shield buffs that ally. `procChance` {common .05, uncommon .07, rare .09, epic .12,
   legendary .16}, rolled **per shield-application event** with **NO `oncePerRound` cap** — the game
   text omits the "once per round" clause that Adaptive Plating carries, so it may proc repeatedly in
-  a round across multiple shield grants.
+  a round. Because `grantShieldToTarget` fires once per recipient, a multi-ally shield grant emits
+  one event (and one independent proc roll) per recipient, each buffing only that recipient.
 
 #### New `on-shield-applied` trigger
 
-Emitted from `grantShieldToTarget` (the single grant chokepoint), keyed on the **granter** (acting
-actor), **only when `actualGranted > 0`** (a fully-capped 0-grant does not proc). Per user decision,
-this fires for **any shield the carrier applies**: skill casts, the H2 gear-set start-of-turn grant,
-Abundant Renewal, and Adaptive Plating's own self-grant. Requires threading a `granterId` into
-`grantShieldToTarget` (currently recipient-only). No shield→shield chain exists (Resonating Fury
-grants a buff, not a shield), so there is no re-trigger / infinite-loop risk; the executor's existing
+Emitted from `grantShieldToTarget` (the single grant chokepoint), **only when `actualGranted > 0`**
+(a fully-capped 0-grant does not proc). The event carries **both** the **granter** (acting actor —
+the key the carrier's Resonating Fury listens on) and the **recipient** (the actor whose shield pool
+grew — Resonating Fury's buff target). Per user decision, this fires for **any shield the carrier
+applies**: skill casts, the H2 gear-set start-of-turn grant, Abundant Renewal, and Adaptive
+Plating's own self-grant. Requires threading a `granterId` into `grantShieldToTarget` (today
+`(raw, victim)` — recipient-only); the listener ownership keys on `granterId` while the reactive
+effect targets the event's recipient (a "shield-recipient" target resolution, distinct from the
+usual self/ally/all-allies target types). No shield→shield chain exists (Resonating Fury grants a
+buff, not a shield), so there is no re-trigger / infinite-loop risk; the executor's existing
 heal/shield no-re-emit guard still applies.
 
 ## Components / boundaries
