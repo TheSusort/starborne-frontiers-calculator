@@ -5091,7 +5091,7 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
         } as ShipSkills,
     });
 
-    it('a Abundant-Renewal healer over-repairing the heal target grants that ally a 0.30 × overheal shield', () => {
+    it('an Abundant-Renewal healer over-repairing the heal target grants that ally a 0.30 × overheal shield', () => {
         // ── Real resolution+merge path (build→merge): legendary Abundant Renewal implant ──────
         const ship = makeShip({ implants: { implant_ultimate: 'ar-legendary' } });
         const getGearPiece = makeGetGearPiece({ 'ar-legendary': abundantRenewalPiece });
