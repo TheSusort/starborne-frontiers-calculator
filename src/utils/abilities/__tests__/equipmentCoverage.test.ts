@@ -125,7 +125,14 @@ describe('equipmentCoverage — implemented effects registry', () => {
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
         );
-        expect(implementedSets).toEqual(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
+        expect(implementedSets).toEqual([
+            'BURNER',
+            'DECIMATION',
+            'LEECH',
+            'SHIELD',
+            'CLOAKING',
+            'HARDENED',
+        ]);
 
         // Implants with an ability builder (check each implant with a rarity that exists)
         const implementedImplants = Object.keys(IMPLANTS).filter((key) => {
@@ -176,7 +183,14 @@ describe('equipmentCoverage — implemented effects registry', () => {
 // Gear-set coverage: one assertion per set
 // ---------------------------------------------------------------------------
 
-const IMPLEMENTED_SETS = new Set(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
+const IMPLEMENTED_SETS = new Set([
+    'BURNER',
+    'DECIMATION',
+    'LEECH',
+    'CLOAKING',
+    'HARDENED',
+    'SHIELD',
+]);
 
 describe('equipmentCoverage — gear sets', () => {
     it('BURNER produces exactly 1 ability (the on-cast inferno)', () => {
@@ -224,6 +238,34 @@ describe('equipmentCoverage — gear sets', () => {
         expect(cloak!.config.duration).toBe(2);
         // @ts-expect-error buff config
         expect(cloak!.config.oncePerCombat).toBe(true);
+    });
+
+    it('SHIELD produces exactly 1 ability (the start-of-turn self shield)', () => {
+        expect(gearSetAbilityCount('SHIELD')).toBe(1);
+    });
+
+    it('SHIELD produces a start-of-turn self shield of 4% caster max HP', () => {
+        const minPieces = GEAR_SETS['SHIELD']?.minPieces ?? 2;
+        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const equipment: Record<string, string> = {};
+        const pieceMap: Record<string, GearPiece> = {};
+        for (let i = 0; i < minPieces; i++) {
+            const id = `SHIELD-piece-${i}`;
+            equipment[slots[i % slots.length]] = id;
+            pieceMap[id] = makePiece({ id, slot: slots[i % slots.length], setBonus: 'SHIELD' });
+        }
+        const ship = makeShip({ equipment });
+        const abilities = buildEquipmentAbilities(ship, (id) => pieceMap[id]);
+        const sh = abilities.find((a) => a.id === 'equip-set-SHIELD');
+        expect(sh).toBeDefined();
+        expect(sh!.type).toBe('shield');
+        expect(sh!.target).toBe('self');
+        expect(sh!.trigger).toBe('start-of-turn');
+        expect(sh!.config.type).toBe('shield');
+        // @ts-expect-error shield config
+        expect(sh!.config.pct).toBe(4);
+        // @ts-expect-error shield config
+        expect(sh!.config.basis).toBe('hp');
     });
 
     const unimplementedSets = Object.keys(GEAR_SETS).filter((k) => !IMPLEMENTED_SETS.has(k));
