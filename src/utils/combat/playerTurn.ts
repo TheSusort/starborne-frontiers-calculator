@@ -1700,7 +1700,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
-            basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken',
+            basis:
+                | 'hp'
+                | 'attack'
+                | 'defense'
+                | 'target-hp'
+                | 'damage-dealt'
+                | 'damage-taken'
+                | 'overheal',
             rid: string
         ): number => {
             switch (basis) {
@@ -1721,6 +1728,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 case 'damage-taken':
                     throw new Error(
                         'basisValue: damage-taken must not reach the cast path (slot-partition guard owns it)'
+                    );
+                // 'overheal' is a reactive-only basis (on-own-repair-to-ally; Abundant Renewal):
+                // the clipped over-repair is known only at drain time via eventCtx.overhealAmount,
+                // so it never reaches the cast path.
+                case 'overheal':
+                    throw new Error(
+                        'basisValue: overheal must not reach the cast path (reactive-only basis)'
                     );
                 case 'hp':
                 default:
@@ -1829,6 +1843,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const healTargets: string[] = [];
         let healCritCount = 0;
         let healRawSum = 0;
+        // H3.3: summed clipped excess (overheal) across this cast's repairs on the heal target.
+        // Carried on heal-performed.overheal for an `overheal`-basis reactive shield (Abundant Renewal).
+        let overhealSum = 0;
         let cleansePerformedCount = 0;
 
         for (const ability of healAbilities) {
@@ -1884,6 +1901,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);
                         healing.credit(actor.id, 'effectiveHeal', consumed);
                         healing.credit(actor.id, 'overheal', overheal);
+                        overhealSum += overheal;
                     }
                     healTargets.push(rid);
                     healRawSum += raw;
@@ -1940,6 +1958,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 round: r,
                 amount: healRawSum,
                 ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+                ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
             });
         }
 

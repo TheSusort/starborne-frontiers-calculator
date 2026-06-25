@@ -124,6 +124,10 @@ export interface Intent {
          *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
          *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). */
         repairerId?: string;
+        /** The clipped overheal (heal-performed.overheal) carried from an own-repair-to-ally
+         *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
+         *  amount rather than the owner's max HP (Abundant Renewal). */
+        overhealAmount?: number;
     };
 }
 
@@ -380,7 +384,11 @@ export function registerReactiveListeners(args: {
                         if (repaired.length === 0) return;
                         enqueue({
                             ...intent,
-                            eventCtx: { ...intent.eventCtx, repairedAllyIds: repaired },
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                repairedAllyIds: repaired,
+                                overhealAmount: e.overheal ?? 0,
+                            },
                         });
                     });
                     break;
@@ -1579,7 +1587,13 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                       // back to 0 when no triggering damage is present (non-crit path or missing
                       // context) — a damage-scaled reactive with no damage context grants nothing.
                       (intent.eventCtx?.triggerDamage ?? 0)
-                    : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+                    : cfg.basis === 'overheal'
+                      ? // Reactive overheal (Abundant Renewal on-own-repair-to-ally): scale off the
+                        // clipped over-repair captured in eventCtx.overhealAmount by the listener.
+                        // Falls back to 0 when no overheal context is present — an overheal-scaled
+                        // reactive with no over-repair grants nothing.
+                        (intent.eventCtx?.overhealAmount ?? 0)
+                      : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every

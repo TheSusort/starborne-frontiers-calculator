@@ -380,8 +380,18 @@ export type AbilityConfig =
            *  basis: 'damage-dealt' (X% of damage this actor deals — cast rider on
            *  active/charged slots, standing leech on the passive slot) /
            *  'damage-taken' (X% of an enemy attack's damage on this actor; passive
-           *  slot, procs only while the actor is the heal target). */
-          basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken';
+           *  slot, procs only while the actor is the heal target) / 'overheal'
+           *  (X% of an over-repair's CLIPPED EXCESS — heal raw minus the HP actually
+           *  consumed — on the over-repaired ally; reactive shield on
+           *  on-own-repair-to-ally; Abundant Renewal). */
+          basis:
+              | 'hp'
+              | 'attack'
+              | 'defense'
+              | 'target-hp'
+              | 'damage-dealt'
+              | 'damage-taken'
+              | 'overheal';
           /** Pallas/Tithonus: "repair cannot critically hit". Shields never crit regardless. */
           noCrit?: boolean;
           /** Passive-slot 'damage-dealt' only: which credited damage procs the leech.
