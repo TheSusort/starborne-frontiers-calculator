@@ -380,6 +380,18 @@ const REACTIVE_WARD_PROC: Record<string, number> = {
     legendary: 0.16,
 };
 
+// H3.8: Resonating Fury — when applying a shield, X% chance to grant Crit Power Up III for 1 turn
+// to the shield recipients. The in-game text reads "Crit Power Up 3"; "3" is the canonical
+// "III" tier (the Ambush implant carries the same in-game buff and resolves it as the BUFFS
+// entry 'Crit Power Up III'). ONE proc roll per cast, NO oncePerRound cap.
+const RESONATING_FURY_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -951,6 +963,17 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             procChance,
             conditions: [{ subject: 'last-standing', derivable: true }],
             alsoGrantBuffNames: ['Block Debuff'],
+        });
+    },
+    // H3.8: Resonating Fury — when applying a shield, X% chance to grant Crit Power Up III for 1
+    // turn to the SHIELD RECIPIENTS of the cast (the buff follows the shield, not the carrier).
+    // Rides `on-shield-applied`; target 'all-allies' routes through the H3.7 listener to EXACTLY
+    // eventCtx.shieldRecipientIds (not every ally). ONE proc roll per cast, no oncePerRound cap.
+    RESONATING_FURY: (rarity) => {
+        const procChance = RESONATING_FURY_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Crit Power Up III', 'all-allies', 'on-shield-applied', 1, {
+            procChance,
         });
     },
     // Chrono Reaver: periodic self-charge. Epic = every 3rd own turn, Legendary = every 2nd.

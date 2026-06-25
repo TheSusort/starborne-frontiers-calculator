@@ -5164,3 +5164,366 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
         expect(focus?.shieldPool ?? 0).toBe(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.8: Resonating Fury implant — Crit Power Up III to shield recipients
+// ---------------------------------------------------------------------------
+//
+// Resonating Fury (legendary) resolves through the registry
+// (IMPLANT_ABILITIES.RESONATING_FURY, H3.8) into a reactive ability:
+//   { type:'buff', target:'all-allies', trigger:'on-shield-applied', procChance:0.16,
+//     config:{ type:'buff', buffName:'Crit Power Up III', duration:1 } }
+// 'on-shield-applied' is a LIVE trigger → it partitions into reactiveAbilities. When the carrier
+// applies a shield (its OWN cast, or a reactive shield off another implant/gear set), H3.6 emits
+// ONE `shield-applied` event keyed on the granter listing the recipients whose pool grew. The
+// H3.7 listener (granter-scoped) threads recipientIds into eventCtx.shieldRecipientIds; the buff
+// executor's 'all-allies' routing fans the grant to EXACTLY those recipients (NOT every ally).
+//
+// Forcing the proc DETERMINISTICALLY: the per-(owner,ability) RateGate accumulates +procChance per
+// qualifying event and fires when it crosses 1. The established device (Ambush/REACTIVE_WARD/Last
+// Stand integration tests) is to mutate ONLY the built ability's `procChance` to 1 — every other
+// field (trigger, buffName, target, duration) comes straight from the registry, so the test still
+// bites if the registry entry breaks. We capture RF firing via 'buff-applied' events filtered to
+// the buff name, exactly as the Ambush integration test does.
+//
+// In-game the implant text reads "Crit Power Up 3"; "3" is the canonical "III" tier — the only
+// matching BUFFS entry is 'Crit Power Up III' (the Ambush implant carries the same in-game buff and
+// the registry resolves both to 'Crit Power Up III'). The buff value, not the literal "3", is what
+// matters.
+
+const resonatingFuryPiece = makePiece({
+    id: 'rf-legendary',
+    slot: 'implant_major',
+    rarity: 'legendary',
+    setBonus: 'RESONATING_FURY',
+});
+
+const RF_BUFF = 'Crit Power Up III';
+
+/**
+ * Build the focus's ship skills with a legendary Resonating Fury merged into the passive slot via
+ * the REAL build→merge path, plus the supplied active. The built RF ability is determinized
+ * (procChance → 1) so every qualifying shield cast fires; all other fields come from the registry.
+ */
+function buildRfShipSkills(active: Ability) {
+    const ship = makeShip({ implants: { implant_major: 'rf-legendary' } });
+    const getGearPiece = makeGetGearPiece({ 'rf-legendary': resonatingFuryPiece });
+    const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+    const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+    expect(passive).toBeDefined();
+
+    const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+    expect(rf).toBeDefined();
+    // Sanity: the registry entry is the on-shield-applied all-allies Crit Power Up III grant.
+    expect(rf!.type).toBe('buff');
+    expect(rf!.target).toBe('all-allies');
+    expect(rf!.trigger).toBe('on-shield-applied');
+    expect(rf!.procChance).toBeCloseTo(0.16);
+    if (rf!.config.type === 'buff') {
+        expect(rf!.config.buffName).toBe(RF_BUFF);
+        expect(rf!.config.duration).toBe(1);
+    }
+
+    // Determinize: mutate ONLY procChance (the established Ambush/REACTIVE_WARD device).
+    const determinizedRf: Ability = { ...rf!, procChance: 1 };
+    const otherPassives = passive!.abilities.filter(
+        (a) => !a.id.startsWith('equip-implant-RESONATING_FURY')
+    );
+    const shipSkills: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: [active] },
+            { slot: 'passive', abilities: [...otherPassives, determinizedRf] },
+        ],
+    };
+    return shipSkills;
+}
+
+/** Collect RF_BUFF buff-applied events (actorId + round) across a run driven by `input`. */
+function collectRfFires(input: CombatEngineInput): Array<{ actorId: string; round: number }> {
+    const bus = createEventBus();
+    const out: Array<{ actorId: string; round: number }> = [];
+    bus.on('buff-applied', (e) => {
+        if (e.buffName === RF_BUFF) out.push({ actorId: e.actorId, round: e.round });
+    });
+    runCombat({ ...input, bus });
+    return out;
+}
+
+describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shield recipients', () => {
+    /** A team ally that does nothing — just exists to be a shield recipient. */
+    const passiveAlly = (id: string, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 1, // slow → the focus acts first and casts the shield
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    // ── Test 1: the carrier casts a shield → the recipients get Crit Power Up III ───────────
+    it('shield cast → Crit Power Up III lands on every recipient of that cast (one proc roll)', () => {
+        // Focus 'attacker' carries Resonating Fury and casts an `all-allies` shield as its active.
+        // The cast shields the focus + both allies → ONE shield-applied event listing all three →
+        // RF (forced proc) grants Crit Power Up III to all three recipients from that single cast.
+        const shieldActive: Ability = {
+            id: 'rf-shield-cast',
+            type: 'shield',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 25, basis: 'hp' },
+        };
+        const shipSkills = buildRfShipSkills(shieldActive);
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 10_000,
+                speed: 100, // focus acts first → casts the shield before allies
+                enemyHp: 1_000_000_000,
+                shipSkills,
+                teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
+            })
+        );
+
+        // Crit Power Up III landed on all three shield recipients (focus + both allies), and the
+        // grants are confined to round 1 (the single cast). Recipients are the shield recipients,
+        // not "every ally" by coincidence — here all three allies are recipients, so the next test
+        // pins the routing with a SELF-only shield.
+        const recipients = new Set(fires.map((f) => f.actorId));
+        expect(recipients).toEqual(new Set(['attacker', 'rf-ally-1', 'rf-ally-2']));
+        expect(fires.every((f) => f.round === 1)).toBe(true);
+    });
+
+    // ── Test 1b: SELF-only shield → buff lands on the granter ONLY (recipient routing, not team) ─
+    it('self-only shield cast → Crit Power Up III lands on the granter ONLY, not the idle allies', () => {
+        // The focus shields ITSELF only → recipientIds === [focus]. RF's all-allies grant must route
+        // to EXACTLY that recipient (shieldRecipientIds), proving it does NOT fan to every ally.
+        const selfShieldActive: Ability = {
+            id: 'rf-self-shield',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 25, basis: 'hp' },
+        };
+        const shipSkills = buildRfShipSkills(selfShieldActive);
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 10_000,
+                speed: 100,
+                enemyHp: 1_000_000_000,
+                shipSkills,
+                teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
+            })
+        );
+
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
+
+    // ── Test 2 (KEY): reactive → reactive hop ───────────────────────────────────────────────
+    // The focus carries BOTH a legendary Adaptive Plating (on-attacked self shield) AND Resonating
+    // Fury. An enemy directly hits the focus → Adaptive Plating grants a self-shield → H3.6 emits a
+    // `shield-applied` event → RF (forced proc) reacts to it and grants Crit Power Up III to the
+    // shield recipient (the focus). This proves the reactive→reactive hop: a reactive shield re-emits
+    // an event that drives ANOTHER reactive ability, with the second intent enqueued mid-drain and
+    // drained by the same multi-generation `while (queue.length > 0)` loop in drainQueue.
+    it('reactive→reactive hop: Adaptive-Plating self-shield re-fires Resonating Fury onto the carrier', () => {
+        // Build both implants through the real registry; Adaptive Plating in implant_minor so both
+        // resolve. (The build path keys implants by slot; AP determinism comes from its own proc gate
+        // — to make the AP shield reliably land we force AP's procChance to 1 too.)
+        const adaptivePiece = makePiece({
+            id: 'rf-ap-legendary',
+            slot: 'implant_minor',
+            rarity: 'legendary',
+            setBonus: 'ADAPTIVE_PLATING',
+        });
+        const ship = makeShip({
+            implants: { implant_major: 'rf-legendary', implant_minor: 'rf-ap-legendary' },
+        });
+        const getGearPiece = makeGetGearPiece({
+            'rf-legendary': resonatingFuryPiece,
+            'rf-ap-legendary': adaptivePiece,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+
+        const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+        const ap = passive!.abilities.find((a) =>
+            a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+        );
+        expect(rf).toBeDefined();
+        expect(ap).toBeDefined();
+        expect(ap!.trigger).toBe('on-attacked');
+        expect(rf!.trigger).toBe('on-shield-applied');
+
+        // Force BOTH procs to 1 so the chain is deterministic: AP self-shields on the hit, RF reacts
+        // to the resulting shield-applied. Everything else stays from the registry.
+        const determinizedRf: Ability = { ...rf!, procChance: 1 };
+        const determinizedAp: Ability = { ...ap!, procChance: 1 };
+        const otherPassives = passive!.abilities.filter(
+            (a) =>
+                !a.id.startsWith('equip-implant-RESONATING_FURY') &&
+                !a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+        );
+        // A no-op active keeps the round cadence; the focus deals no damage itself.
+        const noopActive: Ability = {
+            id: 'rf-noop-active',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        };
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                { slot: 'passive', abilities: [...otherPassives, determinizedAp, determinizedRf] },
+            ],
+        };
+
+        // An enemy that directly hits the focus each round → drives Adaptive Plating's on-attacked.
+        const enemyHitter = () => ({
+            id: 'rf-enemy',
+            stats: {
+                attack: 1_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 1, // acts before the (slower) focus so the hit lands at round top
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'rf-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        });
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 3,
+                hp: 100_000_000, // huge → focus survives; the AP shield never caps out
+                defence: 0,
+                speed: 1, // focus acts AFTER the enemy hit so AP fires at round top
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                shipSkills,
+                enemyAttackers: [enemyHitter()],
+            })
+        );
+
+        // THE HOP: AP's reactive self-shield re-emitted shield-applied, RF reacted, and Crit Power Up
+        // III landed on the carrier (the shield recipient). If drainQueue did NOT process intents
+        // enqueued mid-drain, this would be empty.
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
+
+    // ── Test 3: Shield gear set (start-of-turn self shield) + RF ─────────────────────────────
+    it('Shield gear set start-of-turn self-shield re-fires Resonating Fury onto the carrier', () => {
+        // Focus carries the SHIELD gear set (start-of-turn self shield) + Resonating Fury, both via
+        // the real build path. Each turn the gear set self-shields → shield-applied → RF (forced
+        // proc) grants Crit Power Up III to the self (the shield recipient).
+        const ship = makeShip({
+            equipment: { weapon: 'rf-shield-1', hull: 'rf-shield-2' },
+            implants: { implant_major: 'rf-legendary' },
+        });
+        const shieldPieceA2 = makePiece({ id: 'rf-shield-1', slot: 'weapon', setBonus: 'SHIELD' });
+        const shieldPieceB2 = makePiece({ id: 'rf-shield-2', slot: 'hull', setBonus: 'SHIELD' });
+        const getGearPiece = makeGetGearPiece({
+            'rf-legendary': resonatingFuryPiece,
+            'rf-shield-1': shieldPieceA2,
+            'rf-shield-2': shieldPieceB2,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+
+        const setShield = passive!.abilities.find((a) => a.id === 'equip-set-SHIELD');
+        const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+        expect(setShield).toBeDefined();
+        expect(setShield!.trigger).toBe('start-of-turn');
+        expect(rf).toBeDefined();
+
+        const determinizedRf: Ability = { ...rf!, procChance: 1 };
+        const otherPassives = passive!.abilities.filter(
+            (a) => !a.id.startsWith('equip-implant-RESONATING_FURY')
+        );
+        const noopActive: Ability = {
+            id: 'rf-noop-active',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        };
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                { slot: 'passive', abilities: [...otherPassives, determinizedRf] },
+            ],
+        };
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 3,
+                hp: 100_000_000,
+                speed: 100,
+                enemyHp: 1_000_000_000,
+                shipSkills,
+            })
+        );
+
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
+});
