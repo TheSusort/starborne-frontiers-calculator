@@ -1636,6 +1636,10 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
+        // NOTE (Abundant Renewal / overheal shields): this heal/shield path does NOT consult
+        // eventCtx.repairedAllyIds — it resolves to healing.targetId, which IS the over-repaired
+        // ally because the engine repairs exactly one target today. If 4d multi-target repair
+        // lands, route overheal shields to the repaired ally explicitly here.
         const recipients = reactiveRecipients(intent, ctx, healing.targetId);
         // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied per
         // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
