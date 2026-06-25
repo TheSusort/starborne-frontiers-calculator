@@ -127,11 +127,9 @@ describe('H1 Task 6 — perActorShield on RoundData', () => {
             TANK({
                 numRounds: 2,
                 enemyAttackers: [manualEnemy('atk1', 3000)],
-                // Shield only fires when fully charged on round 1; gate further casts off by
-                // making the ability a one-shot via startCharged-less default is not enough, so
-                // instead rely on the active skill re-firing each round but the pool already
-                // being at the cap (100% of HP) — a re-grant adds 0 (post-cap delta), so round 2
-                // granted is 0 from the cap, and the drain is the per-round signal we assert.
+                // The 100%-of-HP self-shield re-fires each round; round 2's re-grant only tops the
+                // drained pool back toward the cap (post-cap delta), so `granted` is this round's
+                // top-up, never cumulative with round 1 — that's what this test pins.
                 shipSkills: healSkills([selfShield(100)]),
             })
         );
