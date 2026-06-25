@@ -105,9 +105,13 @@ export interface Intent {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
-        /** The damage dealt by the triggering event (ability-performed.damage), used by a
-         *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
-         *  triggering hit's damage rather than the owner's max HP. */
+        /** The damage of the triggering event, used by a reactive heal/shield to scale off
+         *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
+         *  (ability-performed.damage — damage the owner DEALT, e.g. Bloodthirst) and
+         *  `basis:'damage-taken'` (attacked.damage — damage the owner TOOK, e.g. Adaptive
+         *  Plating). NOTE: attacked.damage is the per-attack aggregate and on-attacked fires
+         *  once per hit, so a non-oncePerRound damage-taken reactive would grant N times for
+         *  an N-hit attack; Adaptive Plating's oncePerRound gate caps it to one grant/round. */
         triggerDamage?: number;
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
