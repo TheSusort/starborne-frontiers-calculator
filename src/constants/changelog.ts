@@ -35,6 +35,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: ships now react when an enemy uses its charged skill — Curator purges that enemy's buffs (and at higher refits also blocks it from gaining new buffs), and FrontLine counter-attacks for damage and gains a shield once per round.",
     'Combat simulator now models Block Buff — a unit affected by Block Buff can no longer gain new buffs while it lasts.',
     'Combat & DPS simulators now model two damage-over-time gear sets: Burner (applies Inferno for 2 turns when the ship attacks) and Decimation (+10% DoT damage per equipped set, up to +30%). Decimation now boosts your ship’s Inferno and Corrosion ticks in both the combat simulator and the DPS calculator.',
+    'Combat simulator now models four shield sources: the Shield gear set grants the equipped ship a shield each turn (4% of its max HP), the Adaptive Plating implant grants the ship a shield from the damage it takes (once per round), the Abundant Renewal implant turns over-healing on an ally into a shield for that ally, and the Resonating Fury implant gives a chance to grant Crit Power Up to allies it shields.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
