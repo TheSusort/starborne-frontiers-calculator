@@ -102,6 +102,11 @@ export type CombatEvent =
           round: number;
           amount: number;
           critHits?: number;
+          /** Summed CLIPPED EXCESS of this cast's repair on the heal target (heal raw minus
+           *  the HP actually consumed). Present only when > 0. Consumed by the
+           *  on-own-repair-to-ally listener to scale an `overheal`-basis reactive shield
+           *  (Abundant Renewal); ignored by every other heal-performed listener. */
+          overheal?: number;
       }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
      *  number of debuffs actually removed (player-side) or the nominal cfg.count
