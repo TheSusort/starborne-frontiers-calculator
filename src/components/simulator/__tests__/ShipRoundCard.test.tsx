@@ -51,4 +51,23 @@ describe('ShipRoundCard', () => {
         );
         expect(container).toBeEmptyDOMElement();
     });
+
+    it('renders "Shield granted" and "Current shield" StatCards with formatted values', () => {
+        const stateWithShield: ShipRoundState = {
+            ...state,
+            shieldGranted: 4500,
+            currentShieldPool: 3200,
+        };
+        const roundWithShield: BattleRound = {
+            round: 5,
+            ships: [stateWithShield],
+            events: [],
+            turnOrder: [],
+        };
+        render(<ShipRoundCard actorId="attacker" round={roundWithShield} roster={roster} />);
+        expect(screen.getByText('Shield granted')).toBeInTheDocument();
+        expect(screen.getByText('4,500')).toBeInTheDocument();
+        expect(screen.getByText('Current shield')).toBeInTheDocument();
+        expect(screen.getByText('3,200')).toBeInTheDocument();
+    });
 });

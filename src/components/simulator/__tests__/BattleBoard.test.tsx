@@ -42,4 +42,13 @@ describe('BattleBoard', () => {
         render(<BattleBoard title="Your Team" overlays={overlays} onPinShip={vi.fn()} />);
         expect(screen.getAllByRole('gridcell')).toHaveLength(12);
     });
+
+    it('renders the shield badge when effect is "shield"', () => {
+        const shieldOverlays: Partial<Record<Position, CellOverlay>> = {
+            T1: overlay({ actorId: 'attacker', name: 'Nova', effect: 'shield' }),
+        };
+        render(<BattleBoard title="Your Team" overlays={shieldOverlays} onPinShip={vi.fn()} />);
+        expect(screen.getByLabelText('shield absorbed')).toBeInTheDocument();
+        expect(screen.getByText('shield')).toBeInTheDocument();
+    });
 });
