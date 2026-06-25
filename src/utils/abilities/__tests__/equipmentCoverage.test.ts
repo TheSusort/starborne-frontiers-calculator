@@ -152,6 +152,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
+            'ADAPTIVE_PLATING',
             'ALACRITY',
             'AMBUSH',
             'BATTLECRY',
@@ -309,6 +310,7 @@ describe('equipmentCoverage — implants', () => {
     //         WARPSTRIKE gains a second ability (reduce-duration cleanse on-deal-damage).
     // Phase 2-3: CHRONO_REAVER added (end-of-turn periodic self-charge; epic=every 3rd, legendary=every 2nd).
     const implementedImplants = new Set([
+        'ADAPTIVE_PLATING',
         'FIREWALL',
         'LOCKDOWN',
         'TENACITY',
@@ -638,6 +640,30 @@ describe('equipmentCoverage — implants', () => {
                 mode: 'remove',
             });
         }
+    });
+
+    // H3.2: Adaptive Plating — reactive once-per-round shield off the damage taken.
+    it('ADAPTIVE_PLATING produces 1 ability for uncommon/epic/legendary, 0 otherwise (no common/rare variant)', () => {
+        expect(implantAbilityCount('ADAPTIVE_PLATING', 'common')).toBe(0);
+        expect(implantAbilityCount('ADAPTIVE_PLATING', 'rare')).toBe(0);
+        const SUPPORTED = new Set(['uncommon', 'epic', 'legendary']);
+        for (const v of IMPLANTS['ADAPTIVE_PLATING'].variants) {
+            expect(implantAbilityCount('ADAPTIVE_PLATING', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    it('ADAPTIVE_PLATING (legendary) shape: on-attacked self shield, procChance 0.19, oncePerRound, damage-taken 42%', () => {
+        const abs = implantAbilities('ADAPTIVE_PLATING', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('shield');
+        expect(ab.target).toBe('self');
+        expect(ab.trigger).toBe('on-attacked');
+        expect(ab.procChance).toBeCloseTo(0.19);
+        expect(ab.oncePerRound).toBe(true);
+        expect(ab.config).toMatchObject({ type: 'shield', pct: 42, basis: 'damage-taken' });
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));

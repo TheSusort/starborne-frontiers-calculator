@@ -4765,3 +4765,207 @@ describe('H2.2 integration — Shield gear set grants 4% maxHP shield pool (full
         expect(carrier?.shieldPool).toBeCloseTo(EXPECTED_POOL, 6);
     });
 });
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.2: Adaptive Plating implant — once-per-round shield off the damage taken
+// ---------------------------------------------------------------------------
+//
+// Adaptive Plating (legendary) resolves through the registry (IMPLANT_ABILITIES.ADAPTIVE_PLATING,
+// H3.2) into a reactive ability:
+//   { type:'shield', target:'self', trigger:'on-attacked', procChance:0.19, oncePerRound:true,
+//     config:{ type:'shield', pct:42, basis:'damage-taken' } }
+// 'on-attacked' is a LIVE trigger → it partitions into reactiveAbilities and fires when the carrier
+// is directly hit. basis 'damage-taken' scales the grant off the triggering hit's damage
+// (eventCtx.triggerDamage, threaded by the on-attacked listener in H3.1), landing the pool on the
+// carrier via the per-recipient routing (Phase 0.1).
+//
+// THE KEY INVARIANT (oncePerRound cap): the `attacked` event's `damage` is the per-attack AGGREGATE
+// and on-attacked fires ONCE PER HIT. So for an N-hit attack the on-attacked listener enqueues N
+// shield intents, EACH carrying triggerDamage === the full aggregate. WITHOUT oncePerRound this would
+// grant up to N times per round (one per proc-passing hit). Adaptive Plating's oncePerRound gate must
+// cap it to EXACTLY ONE grant per round.
+//
+// Determinism of the proc: the per-(owner,ability) RateGate accumulates +0.19 per qualifying hit and
+// fires when the accumulator crosses 1. With an 11-hit attack per round (11 × 0.19 = 2.09) the proc
+// gate would pass TWICE within a single round (it crosses 1 at hit ~6 and again at hit ~11) — so the
+// oncePerRound gate (not the proc gate) is the BINDING constraint that caps the round to one grant.
+// We read each round's post-cap `granted` (RoundData.perActorShield[carrier].granted) and assert it
+// is NEVER more than ONE share (0.42 × aggregate), and that at least one round actually fired.
+//
+// Pinning the damage taken D: enemy attack A=1000, multiplier 100%, hits=11, no defence/crit/pen on
+// either side → per-attack aggregate damage D = 1000 × 1.0 × 11 = 11_000. One grant = 0.42 × 11_000
+// = 4_620 (well under the carrier's max HP cap → no clamping).
+
+const adaptivePlatingPiece = makePiece({
+    id: 'ap-legendary',
+    slot: 'implant_major',
+    rarity: 'legendary',
+    setBonus: 'ADAPTIVE_PLATING',
+});
+
+describe('H3.2 integration — Adaptive Plating once-per-round shield off the damage taken', () => {
+    const CARRIER_HP = 100_000_000; // huge: carrier survives every round; shield never caps
+    const NUM_ROUNDS = 10;
+    const ENEMY_ATTACK = 1_000;
+    const ENEMY_HITS = 11; // 11 × 0.19 = 2.09 → proc would pass TWICE/round → oncePerRound is binding
+    const D = ENEMY_ATTACK * ENEMY_HITS; // per-attack aggregate damage taken = 11_000
+    const AP_PCT = 42; // legendary
+    const ONE_GRANT = (AP_PCT / 100) * D; // 4_620 — exactly ONE share
+
+    /** An enemy attacker that hits the carrier (the focus / heal target) with an 11-hit attack
+     *  each round. attack 1000, multiplier 100, no crit → aggregate damage taken = 11_000. */
+    const enemyHitter = () => ({
+        id: 'ap-enemy',
+        stats: {
+            attack: ENEMY_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            speed: 1, // acts before the (slower) carrier so the hit lands at round top
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'ap-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: {
+                                type: 'damage' as const,
+                                multiplier: 100,
+                                hits: ENEMY_HITS,
+                            },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    });
+
+    it(
+        'grants ≈ 0.42 × damageTaken when it fires, and AT MOST ONCE per round (oncePerRound caps ' +
+            'the 11-hit attack to a single grant)',
+        () => {
+            // Carrier = focus (the heal target) equipped with legendary Adaptive Plating via the
+            // real build→merge path. A no-op active keeps the round cadence; the passive slot
+            // carries the reactive Adaptive Plating shield.
+            const ship = makeShip({ implants: { implant_major: 'ap-legendary' } });
+            const getGearPiece = makeGetGearPiece({ 'ap-legendary': adaptivePlatingPiece });
+            const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+            // Pre-condition: the Adaptive Plating ability landed in the passive slot.
+            const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+            expect(passive).toBeDefined();
+            const ap = passive!.abilities.find((a) =>
+                a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+            );
+            expect(ap).toBeDefined();
+            expect(ap!.trigger).toBe('on-attacked');
+            expect(ap!.procChance).toBeCloseTo(0.19);
+            expect(ap!.oncePerRound).toBe(true);
+            expect(ap!.config).toMatchObject({ type: 'shield', pct: 42, basis: 'damage-taken' });
+
+            // Append a no-op active so the focus keeps the round cadence (deals no damage itself).
+            const noopActive: Ability = {
+                id: 'noop-active',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: 0 },
+            };
+            const shipSkills: ShipSkills = {
+                slots: [
+                    { slot: 'active', abilities: [noopActive] },
+                    ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+                ],
+            };
+
+            const result = runCombat(
+                BASE({
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    hp: CARRIER_HP,
+                    // No carrier defence → the enemy's 11-hit attack lands its full nominal
+                    // aggregate (1000 × 11 = 11_000) as the damage taken, so the grant pins to
+                    // 0.42 × 11_000 = 4_620 exactly (no mitigation arithmetic in the assertion).
+                    defence: 0,
+                    enemyHp: 1_000_000_000,
+                    healTargetId: 'attacker',
+                    shipSkills,
+                    enemyAttackers: [enemyHitter()],
+                })
+            );
+
+            // Per-round post-cap grant for the carrier (the heal target / focus).
+            const grantedPerRound = result.rounds.map(
+                (rd) => rd.perActorShield?.['attacker']?.granted ?? 0
+            );
+
+            // (1) THE CAP: no round ever grants more than ONE share. WITHOUT oncePerRound, the
+            // 11-hit attack would let the proc gate pass twice in a round → ~2 × ONE_GRANT.
+            for (const granted of grantedPerRound) {
+                expect(granted).toBeLessThanOrEqual(ONE_GRANT + 1e-6);
+            }
+
+            // (2) NON-VACUOUS: the proc actually fired at least once, and every firing round
+            // granted EXACTLY one share (≈ 0.42 × damage taken), proving both the damage-taken
+            // basis and the once-per-round cap.
+            const firingRounds = grantedPerRound.filter((g) => g > 0);
+            expect(firingRounds.length).toBeGreaterThan(0);
+            for (const granted of firingRounds) {
+                expect(granted).toBeCloseTo(ONE_GRANT, 6);
+            }
+
+            // (3) CONTROL — the cap is doing real work (oncePerRound is the BINDING constraint):
+            // an OTHERWISE-IDENTICAL ability WITHOUT oncePerRound, on the same 11-hit attack, lets
+            // the proc gate pass TWICE in a round → that round grants 2 × ONE_GRANT. This proves the
+            // 11-hit setup actually exercises the multi-grant path that oncePerRound suppresses above.
+            const noCapShield: Ability = {
+                id: 'equip-implant-ADAPTIVE_PLATING-nocap',
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                procChance: 0.19,
+                // oncePerRound deliberately OMITTED.
+                config: { type: 'shield', pct: AP_PCT, basis: 'damage-taken' },
+                autoFilled: true,
+            };
+            const noCapResult = runCombat(
+                BASE({
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    hp: CARRIER_HP,
+                    defence: 0,
+                    enemyHp: 1_000_000_000,
+                    healTargetId: 'attacker',
+                    shipSkills: {
+                        slots: [
+                            { slot: 'active', abilities: [noopActive] },
+                            { slot: 'passive', abilities: [noCapShield] },
+                        ],
+                    },
+                    enemyAttackers: [enemyHitter()],
+                })
+            );
+            const noCapGranted = noCapResult.rounds.map(
+                (rd) => rd.perActorShield?.['attacker']?.granted ?? 0
+            );
+            // At least one round grants MORE than a single share (the proc gate passed ≥ 2× that
+            // round) — the exact scenario the real ability's oncePerRound gate caps to one above.
+            expect(noCapGranted.some((g) => g > ONE_GRANT + 1e-6)).toBe(true);
+        }
+    );
+});
