@@ -71,11 +71,12 @@ export interface ShipRoundState {
      * amount).
      */
     healingReceived: number;
-    /**
-     * Shield absorption. The `heal-performed` payload carries no shield channel flag
-     * (just { casterId, targets[], amount }), so this is always 0 for PR1.
-     */
+    /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
     shieldsAbsorbed: number;
+    /** Shield pool granted to this actor this round (post-cap delta). */
+    shieldGranted: number;
+    /** Remaining shield pool at end of this round. */
+    currentShieldPool: number;
     /** End-of-round HP%, from maxHp - cumulative damageTaken. */
     hpPct: number;
     alive: boolean;
@@ -166,10 +167,14 @@ export const ASSEMBLED_EVENT_TYPES = [
 export function assembleBattleResult(args: {
     events: CombatEvent[];
     perRoundPerTarget: Record<number, Record<string, number>>;
+    perRoundPerShield?: Record<
+        number,
+        Record<string, { granted: number; absorbed: number; pool: number }>
+    >;
     roster: RosterEntry[];
     numRounds: number;
 }): BattleResult {
-    const { events, perRoundPerTarget, roster, numRounds } = args;
+    const { events, perRoundPerTarget, perRoundPerShield = {}, roster, numRounds } = args;
 
     // Round of first destruction per actor (earliest ship-destroyed).
     const destroyedAt = new Map<string, number>();
@@ -241,6 +246,7 @@ export function assembleBattleResult(args: {
 
         // Accumulate this round's per-victim taken damage into the running cumulative.
         const takenThisRound = perRoundPerTarget[round] ?? {};
+        const shieldThisRound = perRoundPerShield[round] ?? {};
 
         const ships: ShipRoundState[] = roster.map((entry) => {
             const taken = takenThisRound[entry.actorId] ?? 0;
@@ -250,6 +256,8 @@ export function assembleBattleResult(args: {
             const destroyRound = destroyedAt.get(entry.actorId);
             const alive = destroyRound === undefined || round < destroyRound;
 
+            const shield = shieldThisRound[entry.actorId];
+
             return {
                 actorId: entry.actorId,
                 side: entry.side,
@@ -257,7 +265,9 @@ export function assembleBattleResult(args: {
                 damageTaken: taken,
                 healingDone: healDone.get(entry.actorId) ?? 0,
                 healingReceived: healReceived.get(entry.actorId) ?? 0,
-                shieldsAbsorbed: 0,
+                shieldsAbsorbed: shield?.absorbed ?? 0,
+                shieldGranted: shield?.granted ?? 0,
+                currentShieldPool: shield?.pool ?? 0,
                 hpPct:
                     entry.maxHp > 0
                         ? clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp)
@@ -747,6 +757,16 @@ export function simulateBattle(
         perRoundPerTarget[rd.round] = rd.perTargetDamage ?? {};
     }
 
+    // Per-round per-actor shield accounting (H1 Task 8): parallel to perRoundPerTarget,
+    // built from rd.perActorShield (set only when non-empty — absent rounds map to {}).
+    const perRoundPerShield: Record<
+        number,
+        Record<string, { granted: number; absorbed: number; pool: number }>
+    > = {};
+    for (const rd of engineRounds) {
+        perRoundPerShield[rd.round] = rd.perActorShield ?? {};
+    }
+
     // Roster: every placed ship, with maxHp from its derived stats.
     const roster: RosterEntry[] = [
         ...playerPlans.map((plan) => ({
@@ -765,5 +785,11 @@ export function simulateBattle(
         })),
     ];
 
-    return assembleBattleResult({ events, perRoundPerTarget, roster, numRounds });
+    return assembleBattleResult({
+        events,
+        perRoundPerTarget,
+        perRoundPerShield,
+        roster,
+        numRounds,
+    });
 }

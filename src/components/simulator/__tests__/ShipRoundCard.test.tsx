@@ -19,6 +19,8 @@ const state: ShipRoundState = {
     healingDone: 0,
     healingReceived: 200,
     shieldsAbsorbed: 0,
+    shieldGranted: 0,
+    currentShieldPool: 0,
     hpPct: 65,
     alive: true,
     activeBuffs: ['Attack Up'],

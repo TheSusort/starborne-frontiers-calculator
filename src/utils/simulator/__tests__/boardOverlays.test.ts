@@ -9,6 +9,8 @@ const shipState = (over: Partial<ShipRoundState> & { actorId: string }): ShipRou
     healingDone: 0,
     healingReceived: 0,
     shieldsAbsorbed: 0,
+    shieldGranted: 0,
+    currentShieldPool: 0,
     hpPct: 100,
     alive: true,
     activeBuffs: [],

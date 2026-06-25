@@ -576,3 +576,91 @@ describe('assembleBattleResult — roster passthrough', () => {
         ]);
     });
 });
+
+describe('assembleBattleResult — shield fields (H1 Task 8)', () => {
+    // Scenario: 'attacker' is shielded (granted 10000) and takes a 3000 hit this round.
+    // The shield absorbs 3000 and the remaining pool is 7000.
+    // perRoundPerShield threads these values in; the ShipRoundState fields must reflect them.
+    it('populates shieldGranted, shieldsAbsorbed, and currentShieldPool from perRoundPerShield', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: { 1: { attacker: 3000 } },
+            perRoundPerShield: {
+                1: {
+                    attacker: { granted: 10000, absorbed: 3000, pool: 7000 },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        expect(ship.shieldGranted).toBe(10000);
+        expect(ship.shieldsAbsorbed).toBe(3000);
+        expect(ship.currentShieldPool).toBe(7000);
+    });
+
+    it('defaults all shield fields to 0 when perRoundPerShield is absent', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        expect(ship.shieldGranted).toBe(0);
+        expect(ship.shieldsAbsorbed).toBe(0);
+        expect(ship.currentShieldPool).toBe(0);
+    });
+
+    it("defaults all shield fields to 0 for an actor not present in that round's shield map", () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerShield: {
+                1: {
+                    'enemy-front': { granted: 5000, absorbed: 1000, pool: 4000 },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        // 'attacker' has no entry in round 1's shield map
+        const ship = find(result, 1, 'attacker');
+        expect(ship.shieldGranted).toBe(0);
+        expect(ship.shieldsAbsorbed).toBe(0);
+        expect(ship.currentShieldPool).toBe(0);
+
+        // 'enemy-front' has an entry
+        const enemy = find(result, 1, 'enemy-front');
+        expect(enemy.shieldGranted).toBe(5000);
+        expect(enemy.shieldsAbsorbed).toBe(1000);
+        expect(enemy.currentShieldPool).toBe(4000);
+    });
+
+    it('carries independent shield values across two rounds', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerShield: {
+                1: { attacker: { granted: 10000, absorbed: 3000, pool: 7000 } },
+                2: { attacker: { granted: 3000, absorbed: 3000, pool: 7000 } },
+            },
+            roster: roster(),
+            numRounds: 2,
+        });
+
+        const r1 = find(result, 1, 'attacker');
+        expect(r1.shieldGranted).toBe(10000);
+        expect(r1.shieldsAbsorbed).toBe(3000);
+        expect(r1.currentShieldPool).toBe(7000);
+
+        const r2 = find(result, 2, 'attacker');
+        // Round 2: only the top-up grant (3000), not the cumulative 13000
+        expect(r2.shieldGranted).toBe(3000);
+        expect(r2.shieldsAbsorbed).toBe(3000);
+        expect(r2.currentShieldPool).toBe(7000);
+    });
+});
