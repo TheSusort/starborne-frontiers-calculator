@@ -4726,7 +4726,7 @@ describe('H2.2 integration — Shield gear set grants 4% maxHP shield pool (full
                     critDamage: 0,
                     defensePenetration: 0,
                     shieldPenetration: 0,
-                    hacking: 175,
+                    hacking: 0,
                     defence: 0,
                     hp: ALLY_HP,
                 },
