@@ -1613,7 +1613,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 }
             } else {
                 ctx.healing.credit(intent.ownerId, 'shield', raw);
-                if (rid === ctx.healing.targetId) ctx.healing.grantShieldToTarget(raw);
+                const recipientActor = ctx.healing.recipientActor(rid);
+                if (recipientActor) ctx.healing.grantShieldToTarget(raw, recipientActor);
             }
         }
         // Deliberately NO heal-performed emission from the executor (a reactive heal must
