@@ -1892,6 +1892,12 @@ export function runCombat(input: CombatEngineInput): {
         }
         return h;
     };
+    // H1 Task 6: per-round shield-granted accumulator (recipient actor id → total shield
+    // actually added to its pool THIS round, post-cap delta). Mirrors `currentRoundHealing`'s
+    // lifecycle: declared once here, captured by grantShieldToTarget's live closure, and rebound
+    // fresh at the top of each round so it never accumulates across rounds. Surfaced as the
+    // `granted` half of RoundData.perActorShield at the post-round push.
+    let perActorShieldGranted = new Map<string, number>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -2060,7 +2066,16 @@ export function runCombat(input: CombatEngineInput): {
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
                   // persists (we never shrink an existing shield) — acceptable, as the cap is only
                   // enforced at grant time and a shield is additive, never HP-reducing.
+                  // Post-cap delta (Task 6): record the REAL increase, not `raw`. A grant that
+                  // exceeds the maxHP cap records only the portion that actually landed, so the
+                  // surfaced `granted` matches the pool growth the UI shows.
+                  const before = victim.shieldPool;
                   victim.shieldPool = Math.min(victim.shieldPool + raw, targetMaxHp);
+                  const actualGranted = victim.shieldPool - before;
+                  perActorShieldGranted.set(
+                      victim.id,
+                      (perActorShieldGranted.get(victim.id) ?? 0) + actualGranted
+                  );
               },
               playerIds,
               enemyIds: enemyRecipientIds,
@@ -3264,6 +3279,10 @@ export function runCombat(input: CombatEngineInput): {
             };
         };
 
+        // H1 Task 6: rebind the per-round shield-granted accumulator EVERY round (not gated on
+        // healTarget) so DPS-mode and team runs reset it too — grantShieldToTarget can fire in
+        // any mode, and a stale carry-over would over-report `granted`.
+        perActorShieldGranted = new Map<string, number>();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -4896,6 +4915,32 @@ export function runCombat(input: CombatEngineInput): {
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
                 : {}),
+            // perActorShield (H1 Task 6): per-actor shield accounting for THIS round, set only
+            // when at least one actor has a nonzero {granted, absorbed, pool}. Mirrors
+            // perTargetDamage's "absent when empty" rule so legacy/no-shield rounds stay
+            // byte-identical. granted = post-cap grant this round (perActorShieldGranted);
+            // absorbed = shield drained by incoming this round (perActorIncoming.shieldAbsorbed,
+            // a fresh per-round map like roundPerTargetDamage → already this-round, not cumulative);
+            // pool = the actor's live remaining shieldPool at end-of-round assembly.
+            ...(() => {
+                const ids = new Set<string>([
+                    ...perActorShieldGranted.keys(),
+                    ...perActorIncoming.keys(),
+                    ...allActors.filter((a) => a.shieldPool > 0).map((a) => a.id),
+                ]);
+                const perActorShield: Record<
+                    string,
+                    { granted: number; absorbed: number; pool: number }
+                > = {};
+                for (const id of ids) {
+                    const granted = perActorShieldGranted.get(id) ?? 0;
+                    const absorbed = perActorIncoming.get(id)?.shieldAbsorbed ?? 0;
+                    const pool = allActorsById.get(id)?.shieldPool ?? 0;
+                    if (granted === 0 && absorbed === 0 && pool === 0) continue;
+                    perActorShield[id] = { granted, absorbed, pool };
+                }
+                return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
+            })(),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
