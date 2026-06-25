@@ -424,6 +424,9 @@ interface DerivedCombatStats {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration (H1 Task 2). Optional — sourced from ship.baseStats / statOverrides.
+     *  Defaults to 0 at the actor-construction site. No production reader until H1 Task 4. */
+    shieldPenetration: number;
     hacking: number;
     /** Debuff-resist stat. Defaults to baseStats.security ?? 100 (the OLD landing-formula default). */
     security: number;
@@ -447,6 +450,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         crit: o.crit ?? b.crit ?? 0,
         critDamage: o.critDamage ?? b.critDamage ?? 0,
         defensePenetration: o.defensePenetration ?? b.defensePenetration ?? 0,
+        shieldPenetration: o.shieldPenetration ?? b.shieldPenetration ?? 0,
         hacking: o.hacking ?? b.hacking ?? 200,
         security: o.security ?? b.security ?? 100,
         defence: o.defence ?? b.defence ?? 0,
@@ -465,6 +469,7 @@ function toWalkStats(
     | 'crit'
     | 'critDamage'
     | 'defensePenetration'
+    | 'shieldPenetration'
     | 'hacking'
     | 'security'
     | 'defence'
@@ -476,6 +481,7 @@ function toWalkStats(
         crit: stats.crit,
         critDamage: stats.critDamage,
         defensePenetration: stats.defensePenetration,
+        shieldPenetration: stats.shieldPenetration,
         hacking: stats.hacking,
         security: stats.security,
         defence: stats.defence,
@@ -490,7 +496,15 @@ function toEnemyStats(
     stats: DerivedCombatStats
 ): Pick<
     DerivedCombatStats,
-    'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp' | 'hacking' | 'security'
+    | 'attack'
+    | 'crit'
+    | 'critDamage'
+    | 'speed'
+    | 'defence'
+    | 'hp'
+    | 'hacking'
+    | 'security'
+    | 'shieldPenetration'
 > {
     return {
         attack: stats.attack,
@@ -503,6 +517,7 @@ function toEnemyStats(
         // and ITS security when targeted, so the engine's live landing recompute has real inputs.
         hacking: stats.hacking,
         security: stats.security,
+        shieldPenetration: stats.shieldPenetration,
     };
 }
 
@@ -682,6 +697,7 @@ export function simulateBattle(
         crit: focus.stats.crit,
         critDamage: focus.stats.critDamage,
         defensePenetration: focus.stats.defensePenetration,
+        shieldPenetration: focus.stats.shieldPenetration,
         chargeCount: focus.chargeCount,
         shipSkills: focus.shipSkills,
         // The dummy player-offense enemy target (vestigial alongside the positioned roster):

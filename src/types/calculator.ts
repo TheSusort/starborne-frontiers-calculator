@@ -260,6 +260,9 @@ export interface CombatStatBlock {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration (H1 Task 2). Optional — base for ActorStats.shieldPenetration on walked
+     *  actors. No production reader until H1 Task 4 wires the apply path. */
+    shieldPenetration?: number;
     /** `hacking` required since A1a; `security` optional for back-compat with actor configs predating A2.
      *  REQUIRED (not optional) deliberately: every CombatStatBlock producer (DPS team-actor walk,
      *  battle-sim placement plan, healer stats) supplies a real hacking value, so this type stays a

@@ -26,6 +26,9 @@ export interface DPSSimulationInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration for the focus attacker (H1 Task 2). Optional — threaded onto the
+     *  attacker actor's stats.shieldPenetration. No production reader until H1 Task 4. */
+    shieldPenetration?: number;
     // Flat damage fields are only read by the flatInputToAbilities fallback (when
     // `shipSkills` is omitted). Callers that pass `shipSkills` (the DPS page) skip them.
     activeMultiplier?: number;
@@ -260,6 +263,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
+        shieldPenetration: input.shieldPenetration,
         chargeCount,
         shipSkills,
         enemyDefense,

@@ -17,6 +17,9 @@ export interface HealerStats {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration (H1 Task 2). Optional — threaded onto the focus (healer) actor's
+     *  stats.shieldPenetration. No production reader until H1 Task 4. */
+    shieldPenetration?: number;
     healModifier: number;
     hacking: number;
     speed: number;
@@ -24,7 +27,15 @@ export interface HealerStats {
 
 export interface EnemyAttackerInput {
     id: string;
-    stats: { attack: number; crit: number; critDamage: number; speed: number };
+    stats: {
+        attack: number;
+        crit: number;
+        critDamage: number;
+        speed: number;
+        /** Shield penetration (H1 Task 2). Optional — threaded onto the engine enemy actor's
+         *  stats.shieldPenetration. No production reader until H1 Task 4. */
+        shieldPenetration?: number;
+    };
     chargeCount: number;
     startCharged: boolean;
     /** Full kit walk. Absent → one synthesized basic attack per turn. */
@@ -208,6 +219,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         crit: healer.crit,
         critDamage: healer.critDamage,
         defensePenetration: healer.defensePenetration,
+        shieldPenetration: healer.shieldPenetration,
         chargeCount,
         shipSkills,
         enemyDefense: ENEMY_DEFENSE,

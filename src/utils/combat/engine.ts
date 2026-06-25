@@ -370,6 +370,9 @@ export interface EnemyActorInput {
         /** Base security (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.security
          *  (base for effectiveStatsOf.security). No production reader until landing lands (A2 Task 4). */
         security?: number;
+        /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+         *  stats.shieldPenetration. No production reader until H1 Task 4 wires the apply path. */
+        shieldPenetration?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -475,7 +478,7 @@ export function buildEnemyPlayerActorRuntime(
             crit: e.stats.crit,
             critDamage: e.stats.critDamage,
             defensePenetration: 0,
-            shieldPenetration: 0,
+            shieldPenetration: e.stats.shieldPenetration ?? 0,
             defence: e.stats.defence ?? 0,
             hp: e.stats.hp ?? 0,
             speed: e.stats.speed,
@@ -834,6 +837,9 @@ export interface CombatEngineInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration for the focus attacker (H1 Task 2). Optional — defaults to 0 at the
+     *  actor-construction site. No production reader until H1 Task 4 wires the apply path. */
+    shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
     enemyDefense: number;
@@ -903,6 +909,9 @@ export interface CombatEngineInput {
             hacking?: number;
             /** Base security (A2 Task 2). Optional — base for effectiveStatsOf.security; unread until A2 Task 4. */
             security?: number;
+            /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+             *  stats.shieldPenetration. No production reader until H1 Task 4. */
+            shieldPenetration?: number;
         };
         chargeCount: number;
         startCharged: boolean;
@@ -1229,7 +1238,7 @@ export function runCombat(input: CombatEngineInput): {
             crit,
             critDamage,
             defensePenetration,
-            shieldPenetration: 0,
+            shieldPenetration: input.shieldPenetration ?? 0,
             defence,
             hp,
             speed: speed ?? 100,
@@ -1297,7 +1306,7 @@ export function runCombat(input: CombatEngineInput): {
                       crit: t.walk.stats.crit,
                       critDamage: t.walk.stats.critDamage,
                       defensePenetration: t.walk.stats.defensePenetration,
-                      shieldPenetration: 0,
+                      shieldPenetration: t.walk.stats.shieldPenetration ?? 0,
                       defence: t.walk.stats.defence,
                       hp: t.walk.stats.hp,
                       speed: t.speed,
