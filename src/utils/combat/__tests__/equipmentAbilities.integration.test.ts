@@ -4969,3 +4969,198 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
         }
     );
 });
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.4: Abundant Renewal implant — overheal→shield to the over-repaired ally
+// ---------------------------------------------------------------------------
+//
+// Abundant Renewal (legendary) resolves through the registry (IMPLANT_ABILITIES.ABUNDANT_RENEWAL,
+// H3.4) into a DETERMINISTIC reactive ability (no procChance, no oncePerRound):
+//   { type:'shield', target:'ally', trigger:'on-own-repair-to-ally',
+//     config:{ type:'shield', pct:30, basis:'overheal' } }
+// 'on-own-repair-to-ally' is a LIVE trigger → it partitions into reactiveAbilities and fires when
+// the carrier (owner) repairs >= 1 NON-self ally. basis 'overheal' scales the grant off the CLIPPED
+// over-repair (eventCtx.overhealAmount, threaded from heal-performed.overheal by the listener in
+// H3.3). target 'ally' → reactiveRecipients falls back to healing.targetId (the over-repaired ally),
+// so the pool lands on that ally via the per-recipient routing (Phase 0.1).
+//
+// FULL build→sim path (not just the registry):
+//   - The FOCUS actor ('attacker') is the HEALER/carrier — Abundant Renewal merged into its passive
+//     slot via buildShipAbilitiesWithEquipment, plus a hand-built active ally-repair (basis 'hp',
+//     noCrit). It is slow → acts AFTER the enemy each round.
+//   - The over-repaired ally is the heal target ('tank', a team actor set as healTargetId).
+//   - A fast enemy attacker drops the tank to a KNOWN currentHp BEFORE the healer casts, so the
+//     repair clips to a KNOWN overheal.
+//
+// Pinning the overheal exactly (1 round, no folds):
+//   - healer effectiveMaxHp (hp) = 10_000; repair pct 50, basis 'hp', healModifier 0, noCrit →
+//     raw R = 10_000 × 50/100 = 5_000.
+//   - tank maxHp = 10_000; enemy deals G = 2_000 (attack 2000 × mult 100, no defence/crit) →
+//     tank currentHp = 8_000 BEFORE the heal.
+//   - consumed = min(R, maxHp − currentHp) = min(5_000, 2_000) = 2_000;
+//     overheal = R − consumed = 5_000 − 2_000 = 3_000.
+//   - shield granted to the tank = 0.30 × overheal = 0.30 × 3_000 = 900 (well under the tank's max
+//     HP cap → no clamping).
+
+const abundantRenewalPiece = makePiece({
+    id: 'ar-legendary',
+    slot: 'implant_ultimate',
+    rarity: 'legendary',
+    setBonus: 'ABUNDANT_RENEWAL',
+});
+
+describe('H3.4 integration — Abundant Renewal grants overheal→shield to the over-repaired ally (full build→sim path)', () => {
+    const HEALER_HP = 10_000;
+    const TANK_HP = 10_000;
+    const REPAIR_PCT = 50; // raw R = HEALER_HP × 50% = 5_000 (basis 'hp', noCrit, healModifier 0)
+    const RAW_REPAIR = HEALER_HP * (REPAIR_PCT / 100); // 5_000
+    const GAP = 2_000; // enemy damage to the tank before the healer casts
+    const EXPECTED_OVERHEAL = RAW_REPAIR - GAP; // 3_000 (R clips the 2_000 gap, overheals by 3_000)
+    const AR_PCT = 30; // legendary
+    const EXPECTED_SHIELD = (AR_PCT / 100) * EXPECTED_OVERHEAL; // 900
+
+    /** The healer's active repair, targeting an ally (routes to the heal target 'tank').
+     *  basis 'hp' + noCrit so raw = healer effectiveMaxHp × pct with no crit/heal-modifier folds. */
+    const repairAlly: Ability = {
+        id: 'ar-repair-ally',
+        type: 'heal',
+        target: 'ally',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal', pct: REPAIR_PCT, basis: 'hp', noCrit: true },
+    };
+
+    /** Team-actor heal target (the tank). Inert skills — it just receives the heal + the enemy hit. */
+    const tankActor = (speed: number): TeamActorEngineInput => ({
+        id: 'tank',
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: TANK_HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    /** A fast enemy attacker that deals exactly GAP to the heal target ('tank') each round.
+     *  attack === GAP, multiplier 100, no crit/defence → damage taken = GAP. */
+    const enemyHitter = () => ({
+        id: 'ar-enemy',
+        stats: {
+            attack: GAP,
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000, // acts BEFORE the (slow) healer so the gap exists at cast time
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'ar-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    });
+
+    it('a Abundant-Renewal healer over-repairing the heal target grants that ally a 0.30 × overheal shield', () => {
+        // ── Real resolution+merge path (build→merge): legendary Abundant Renewal implant ──────
+        const ship = makeShip({ implants: { implant_ultimate: 'ar-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'ar-legendary': abundantRenewalPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+        // Pre-condition: the Abundant Renewal ability landed in the passive slot via the build path.
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const ar = passive!.abilities.find((a) =>
+            a.id.startsWith('equip-implant-ABUNDANT_RENEWAL')
+        );
+        expect(ar).toBeDefined();
+        expect(ar!.type).toBe('shield');
+        expect(ar!.target).toBe('ally');
+        expect(ar!.trigger).toBe('on-own-repair-to-ally');
+        expect(ar!.procChance).toBeUndefined(); // deterministic — no proc gate
+        expect(ar!.config).toMatchObject({ type: 'shield', pct: 30, basis: 'overheal' });
+
+        // Healer ship skills: active ally-repair + the merged Abundant Renewal passive.
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [repairAlly] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+
+        // LIVE references — read the tank's shieldPool AFTER the run settles.
+        let captured: CombatActor[] = [];
+        const result = runCombat(
+            BASE({
+                // Focus 'attacker' is the HEALER: slow (acts after the enemy hit), full HP itself,
+                // basis-'hp' repair scales off ITS max HP (10_000).
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                healModifier: 0,
+                numRounds: 1,
+                hp: HEALER_HP,
+                speed: 10, // healer is slow → enemy + tank act first
+                enemyHp: 1_000_000_000,
+                healTargetId: 'tank', // the over-repaired ally is a team actor, NOT the focus
+                teamActors: [tankActor(20)], // tank acts before the healer (inert)
+                shipSkills,
+                enemyAttackers: [enemyHitter()],
+                __testTapActors: (actors) => {
+                    captured = actors;
+                },
+            })
+        );
+
+        // ── Pin the overheal: heal-performed.overheal credited to the healer must equal 3_000 ──
+        // The focus 'attacker' is the applier (creditId), so its overheal bucket carries the clip.
+        expect(result.healing).toBeDefined();
+        expect(sumHeal(result, 'overheal', 'attacker')).toBeCloseTo(EXPECTED_OVERHEAL, 6);
+
+        // ── The H3.4 assertion: the over-repaired ally (the tank) accrued 0.30 × overheal ───────
+        // Read both the post-cap per-round `granted` AND the live tank pool — they must agree.
+        const tankGranted = result.rounds.reduce(
+            (sum, rd) => sum + (rd.perActorShield?.['tank']?.granted ?? 0),
+            0
+        );
+        expect(tankGranted).toBeCloseTo(EXPECTED_SHIELD, 6);
+
+        const tank = captured.find((a) => a.id === 'tank');
+        expect(tank?.shieldPool).toBeGreaterThan(0);
+        expect(tank?.shieldPool).toBeCloseTo(EXPECTED_SHIELD, 6);
+
+        // Non-vacuous / routing: the healer (carrier) is NOT the over-repaired ally → no pool on it.
+        const focus = captured.find((a) => a.id === 'attacker');
+        expect(focus?.shieldPool ?? 0).toBe(0);
+    });
+});

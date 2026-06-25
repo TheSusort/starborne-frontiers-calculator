@@ -257,6 +257,12 @@ const ADAPTIVE_PLATING_PROC: Record<string, number> = {
 };
 const ADAPTIVE_PLATING_PCT: Record<string, number> = { uncommon: 21, epic: 34, legendary: 42 };
 
+// H3.4: Abundant Renewal — when over-repairing an ally, grant that ally a Shield equal to X% of
+// the OVER-repaired amount. DETERMINISTIC (no procChance) and no per-round cap. Only epic/legendary
+// variants exist. basis 'overheal' scales off the clipped over-repair (eventCtx.overhealAmount,
+// threaded by the on-own-repair-to-ally listener in H3.3).
+const ABUNDANT_RENEWAL_PCT: Record<string, number> = { epic: 20, legendary: 30 };
+
 // D-PR5: Second Wind reactive self-heal on crit-received value table
 const SECOND_WIND_PROC: Record<string, number> = {
     uncommon: 0.07,
@@ -714,6 +720,24 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             conditions: [],
             procChance: pc,
             config: { type: 'heal', pct: 10, basis: 'hp' },
+            autoFilled: true,
+        };
+    },
+    // H3.4: Abundant Renewal — when over-repairing an ally, grant the over-repaired ally a Shield
+    // equal to X% of the OVER-repaired amount. DETERMINISTIC (no procChance) and no per-round cap.
+    // Rides `on-own-repair-to-ally` (Font of Power precedent); target 'ally' → the reactive
+    // recipients resolve to the over-repaired ally (falls back to healing.targetId — the engine
+    // only repairs the heal target). basis 'overheal' scales off eventCtx.overhealAmount (H3.3).
+    // No common/uncommon/rare variants.
+    ABUNDANT_RENEWAL: (rarity) => {
+        const pct = ABUNDANT_RENEWAL_PCT[rarity];
+        if (pct === undefined) return undefined;
+        return {
+            type: 'shield',
+            target: 'ally',
+            trigger: 'on-own-repair-to-ally',
+            conditions: [],
+            config: { type: 'shield', pct, basis: 'overheal' },
             autoFilled: true,
         };
     },
