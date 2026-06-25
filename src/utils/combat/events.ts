@@ -108,6 +108,18 @@ export type CombatEvent =
            *  (Abundant Renewal); ignored by every other heal-performed listener. */
           overheal?: number;
       }
+    /** A shield-application cast resolved (one event per cast, not per recipient).
+     *  `granterId` is the acting actor that applied the shield(s) (Resonating Fury
+     *  listens on this); `recipientIds` are the recipients whose pool actually grew
+     *  (actualGranted > 0) — RF's buff targets; `amount` is the total shield actually
+     *  granted this cast (post-cap). */
+    | {
+          type: 'shield-applied';
+          granterId: string; // the acting actor that applied the shield(s) (Resonating Fury listens on this)
+          recipientIds: string[]; // recipients whose pool actually grew (actualGranted > 0) — RF's buff targets
+          round: number;
+          amount: number; // total shield actually granted this cast (post-cap)
+      }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
      *  number of debuffs actually removed (player-side) or the nominal cfg.count
      *  (enemy-side, event-only path). Asymmetry: player-side performs REAL removal
