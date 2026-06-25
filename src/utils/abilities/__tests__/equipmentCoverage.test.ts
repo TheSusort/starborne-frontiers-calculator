@@ -172,6 +172,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'LOCKDOWN',
             'MENACE',
             'REACTIVE_WARD',
+            'RESONATING_FURY',
             'SECOND_WIND',
             'SHADOWGUARD',
             'SPEARHEAD',
@@ -347,6 +348,7 @@ describe('equipmentCoverage — implants', () => {
         'BULWARK',
         'DOOMSAYER',
         'REACTIVE_WARD',
+        'RESONATING_FURY',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -692,6 +694,40 @@ describe('equipmentCoverage — implants', () => {
         expect(ab.procChance).toBeCloseTo(0.19);
         expect(ab.oncePerRound).toBe(true);
         expect(ab.config).toMatchObject({ type: 'shield', pct: 42, basis: 'damage-taken' });
+    });
+
+    // H3.8: Resonating Fury — on-shield-applied buff grant to shield recipients.
+    it('RESONATING_FURY produces 1 ability per rarity (all 5 rarities present)', () => {
+        const variants = IMPLANTS['RESONATING_FURY'].variants;
+        // Common/uncommon/rare/epic/legendary all defined.
+        expect(variants.map((v) => v.rarity).sort()).toEqual([
+            'common',
+            'epic',
+            'legendary',
+            'rare',
+            'uncommon',
+        ]);
+        for (const v of variants) {
+            expect(implantAbilityCount('RESONATING_FURY', v.rarity)).toBe(1);
+        }
+    });
+
+    it('RESONATING_FURY (legendary) shape: on-shield-applied all-allies Crit Power Up III buff, duration 1, procChance 0.16', () => {
+        const abs = implantAbilities('RESONATING_FURY', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('buff');
+        // target 'all-allies' routes to eventCtx.shieldRecipientIds via the H3.7 listener.
+        expect(ab.target).toBe('all-allies');
+        expect(ab.trigger).toBe('on-shield-applied');
+        expect(ab.procChance).toBeCloseTo(0.16);
+        // No per-round cap — one proc roll per cast.
+        expect(ab.oncePerRound).toBeFalsy();
+        expect(ab.config).toMatchObject({
+            type: 'buff',
+            buffName: 'Crit Power Up III',
+            duration: 1,
+        });
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));
