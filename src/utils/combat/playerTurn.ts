@@ -111,9 +111,10 @@ export interface HealingRuntimeCtx {
         victim?: CombatActor
     ) => { consumed: number; overheal: number };
     /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
-     *  Dead victim → no-op. `victim` defaults to the heal target (E2 T1: optional per-victim
-     *  override for positional AoE leech). */
-    grantShieldToTarget: (raw: number, victim?: CombatActor) => void;
+     *  Dead victim → no-op (returns 0). `victim` defaults to the heal target (E2 T1: optional
+     *  per-victim override for positional AoE leech). Returns the REAL pool growth (post-cap
+     *  delta) so the caller can build a shield-applied event (H3.6). */
+    grantShieldToTarget: (raw: number, victim?: CombatActor) => number;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
     /** Fixed enemy-attacker-id order for an ENEMY caster's all-allies routing (E5). */
@@ -1916,6 +1917,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
                 const recipients = recipientsFor(ability.target);
+                // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
+                // per cast (NOT per recipient) carrying only recipients that actually gained pool.
+                const shieldRecipientIds: string[] = [];
+                let shieldGrantedSum = 0;
                 for (const rid of recipients) {
                     const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                     healing.credit(actor.id, 'shield', raw);
@@ -1927,8 +1932,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // (mirrors the heal-recipient handling for an unwalked legacy team actor).
                     const recipientActor = healing.recipientActor(rid);
                     if (recipientActor) {
-                        healing.grantShieldToTarget(raw, recipientActor);
+                        const granted = healing.grantShieldToTarget(raw, recipientActor);
+                        if (granted > 0) {
+                            shieldRecipientIds.push(rid);
+                            shieldGrantedSum += granted;
+                        }
                     }
+                }
+                // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
+                // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
+                // (on-shield-applied). No recipient gained pool → no event. Mirrors the
+                // heal-performed emit below.
+                if (shieldRecipientIds.length > 0) {
+                    bus.emit({
+                        type: 'shield-applied',
+                        granterId: actor.id,
+                        recipientIds: shieldRecipientIds,
+                        round: r,
+                        amount: shieldGrantedSum,
+                    });
                 }
             } else if (cfg.type === 'cleanse') {
                 // Real removal is player-side only (recipientsFor returns player ids; enemy-side

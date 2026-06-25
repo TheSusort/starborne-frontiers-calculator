@@ -1599,6 +1599,10 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
         const recipients = reactiveRecipients(intent, ctx, healing.targetId);
+        // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied per
+        // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
+        const shieldRecipientIds: string[] = [];
+        let shieldGrantedSum = 0;
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1640,12 +1644,33 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 // H2/H3 foundation: route per-recipient (mirrors the cast path in
                 // playerTurn.ts); an unresolvable recipient is credited but not pool-applied.
                 const recipientActor = ctx.healing.recipientActor(rid);
-                if (recipientActor) ctx.healing.grantShieldToTarget(raw, recipientActor);
+                if (recipientActor) {
+                    const granted = ctx.healing.grantShieldToTarget(raw, recipientActor);
+                    if (granted > 0) {
+                        shieldRecipientIds.push(rid);
+                        shieldGrantedSum += granted;
+                    }
+                }
             }
         }
         // Deliberately NO heal-performed emission from the executor (a reactive heal must
         // not re-trigger heal listeners — chain guard; mirrors the drain-time no-crit-outcome
         // conventions). heal/shield therefore never chain.
+        //
+        // H3.6: shield IS the one exception — we DO emit shield-applied here (ONE per reactive
+        // shield, keyed on the owner, listing only recipients whose pool grew). This is
+        // intentional, NOT the deliberate no-heal-performed re-emit above: shield-applied drives
+        // Resonating Fury, which grants a BUFF (not a shield), so it cannot chain back into
+        // another shield-applied. No recipient gained pool → no event.
+        if (cfg.type === 'shield' && shieldRecipientIds.length > 0) {
+            ctx.bus.emit({
+                type: 'shield-applied',
+                granterId: intent.ownerId,
+                recipientIds: shieldRecipientIds,
+                round: ctx.round,
+                amount: shieldGrantedSum,
+            });
+        }
         return;
     }
 
