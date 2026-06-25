@@ -142,6 +142,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
         });
         expect(implementedImplants).toEqual([
             'MARTYRDOM',
+            'ABUNDANT_RENEWAL',
             'ARCANE_SIEGE',
             'CHRONO_REAVER',
             'HYPERION_GAZE',
@@ -310,6 +311,7 @@ describe('equipmentCoverage — implants', () => {
     //         WARPSTRIKE gains a second ability (reduce-duration cleanse on-deal-damage).
     // Phase 2-3: CHRONO_REAVER added (end-of-turn periodic self-charge; epic=every 3rd, legendary=every 2nd).
     const implementedImplants = new Set([
+        'ABUNDANT_RENEWAL',
         'ADAPTIVE_PLATING',
         'FIREWALL',
         'LOCKDOWN',
@@ -640,6 +642,32 @@ describe('equipmentCoverage — implants', () => {
                 mode: 'remove',
             });
         }
+    });
+
+    // H3.4: Abundant Renewal — deterministic overheal→shield to the over-repaired ally.
+    it('ABUNDANT_RENEWAL produces 1 ability for epic/legendary, 0 otherwise (no common/uncommon/rare variant)', () => {
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'common')).toBe(0);
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'uncommon')).toBe(0);
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'rare')).toBe(0);
+        const SUPPORTED = new Set(['epic', 'legendary']);
+        for (const v of IMPLANTS['ABUNDANT_RENEWAL'].variants) {
+            expect(implantAbilityCount('ABUNDANT_RENEWAL', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    it('ABUNDANT_RENEWAL (legendary) shape: on-own-repair-to-ally shield to ally, basis overheal 30%, deterministic', () => {
+        const abs = implantAbilities('ABUNDANT_RENEWAL', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('shield');
+        expect(ab.target).toBe('ally');
+        expect(ab.trigger).toBe('on-own-repair-to-ally');
+        // Deterministic — no proc chance and no once-per-round cap.
+        expect(ab.procChance).toBeUndefined();
+        expect(ab.oncePerRound).toBeFalsy();
+        expect(ab.config).toMatchObject({ type: 'shield', pct: 30, basis: 'overheal' });
     });
 
     // H3.2: Adaptive Plating — reactive once-per-round shield off the damage taken.
