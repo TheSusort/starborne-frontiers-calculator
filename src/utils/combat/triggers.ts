@@ -1347,7 +1347,11 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                   // self-shielded — no extra ally filtering needed.
                   isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
                   ? intent.eventCtx.shieldRecipientIds
-                  : intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
+                  : // NOTE: repairedAllyIds/damagedAllyId stay scoped to target === 'ally'
+                    // (NOT isAllyTarget) on purpose — only shield routing accepts all-allies.
+                    // Do not "harmonize" these to isAllyTarget; it would broaden Font of Power /
+                    // on-ally-attacked recipients and drift goldens.
+                    intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
                     ? intent.eventCtx.repairedAllyIds
                     : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
                       ? [intent.eventCtx.damagedAllyId]
