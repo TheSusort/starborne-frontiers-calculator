@@ -2424,6 +2424,22 @@ const DocumentationPage: React.FC = () => {
                                         the existing manual-condition behavior.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Shields:</span> Shields build
+                                        an untimed absorption pool on the holder, capped at its max
+                                        HP, that soaks incoming damage before HP is touched and does
+                                        not expire on its own. Ships that grant shields to allies
+                                        protect every targeted ally. Shield penetration lets an
+                                        attack punch through a portion of the shield: that
+                                        percentage of a direct hit bypasses the pool and lands
+                                        straight on HP, while the rest drains the shield first.
+                                        Damage-over-time effects (Inferno and Corrosion) bypass
+                                        shields entirely and always hit HP, and bombs drain the
+                                        shield in full. A live shield also powers shield-conditional
+                                        effects such as the Arcane Siege implant. The per-round ship
+                                        overview shows each ship&apos;s shield granted, absorbed,
+                                        and current shield pool for the round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Team Ships:</span> Pick a
                                         ship into any of the four team slots and its real skills are
                                         parsed and simulated — the same full ability editor as the
