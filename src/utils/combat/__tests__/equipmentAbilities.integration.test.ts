@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
@@ -4661,4 +4662,106 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
             expect(boosted).toBeCloseTo(baseline * (1 + ARCANE_SIEGE_EPIC_PCT / 100), 6);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// H2 Task H2.2: Shield gear set — accrues a 4% maxHP shield pool via full build→sim path
+// ---------------------------------------------------------------------------
+//
+// The Shield gear set ("Generate 4% shield each turn") resolves through the registry
+// (GEAR_SET_ABILITIES.SHIELD, H2.1) into an ability:
+//   { type:'shield', target:'self', trigger:'start-of-turn', config:{ type:'shield', pct:4, basis:'hp' } }
+// id `equip-set-SHIELD`. trigger 'start-of-turn' is a LIVE trigger → it partitions into
+// reactiveAbilities and fires via the reactive executor on the carrier's OWN turn, landing the
+// pool on the carrier via the per-recipient routing (Phase 0.1).
+//
+// This test exercises the FULL build→engine path, not just the registry:
+//   1. Equip a ship with the minimum SHIELD-set pieces (2; default minPieces).
+//   2. buildShipAbilitiesWithEquipment merges `equip-set-SHIELD` into the passive slot.
+//      (pre-condition assertion mirrors the LEECH test).
+//   3. Feed those built skills to a NON-focus team ally so its start-of-turn fires within
+//      round 1; read its live shieldPool via __testTapActors after the run settles.
+//
+// grantShieldToTarget does NOT floor: it adds raw and caps at maxHp, with raw = maxHp × 4/100.
+// Ally maxHp = 50_000 → pool = 0.04 × 50_000 = 2_000 exactly (well under the maxHp cap).
+
+const shieldPieceA = makePiece({ id: 'shield-1', slot: 'weapon', setBonus: 'SHIELD' });
+const shieldPieceB = makePiece({ id: 'shield-2', slot: 'hull', setBonus: 'SHIELD' });
+
+describe('H2.2 integration — Shield gear set grants 4% maxHP shield pool (full build→sim path)', () => {
+    it('a Shield-equipped acting ship accrues shieldPool = 0.04 × maxHp after its turn', () => {
+        const ALLY_HP = 50_000;
+        const SHIELD_PCT = 4; // GEAR_SETS.SHIELD stat value
+        const EXPECTED_POOL = (SHIELD_PCT / 100) * ALLY_HP; // 2_000, NOT floored
+
+        // ── 1+2: real resolution+merge path (build→merge) with 2 SHIELD-set pieces ──────────
+        const ship = makeShip({ equipment: { weapon: 'shield-1', hull: 'shield-2' } });
+        const getGearPiece = makeGetGearPiece({
+            'shield-1': shieldPieceA,
+            'shield-2': shieldPieceB,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+        // Pre-condition: the SHIELD set ability landed in the passive slot via the build path.
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const shieldAbility = passive!.abilities.find((a) => a.id === 'equip-set-SHIELD');
+        expect(shieldAbility).toBeDefined();
+        expect(shieldAbility!.trigger).toBe('start-of-turn');
+        expect(shieldAbility!.config).toMatchObject({ type: 'shield', pct: 4, basis: 'hp' });
+
+        // ── 3: feed the BUILT skills to a non-focus team ally; it acts within round 1 ────────
+        const teamActors: TeamActorInput[] = [
+            {
+                id: 'shield-carrier',
+                speed: 200, // acts before the focus so its start-of-turn fires within round 1
+                selfBuffs: [],
+                enemyDebuffs: [],
+                chargeCount: 0,
+                startCharged: false,
+                shipSkills: baseSkills,
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    shieldPenetration: 0,
+                    hacking: 175,
+                    defence: 0,
+                    hp: ALLY_HP,
+                },
+            },
+        ];
+        const engineTeam = deriveTeamEngineActors(teamActors, undefined);
+
+        // LIVE references — read shieldPool AFTER the run settles.
+        let captured: CombatActor[] = [];
+        runCombat(
+            BASE({
+                // Focus is inert: no damage, IS the heal target, NOT the shield carrier.
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 40_000,
+                enemyHp: 1_000_000_000,
+                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                teamActors: engineTeam,
+                __testTapActors: (actors) => {
+                    captured = actors;
+                },
+            })
+        );
+
+        const focus = captured.find((a) => a.id === 'attacker');
+        const carrier = captured.find((a) => a.id === 'shield-carrier');
+
+        // Sanity / non-vacuous: the inert focus casts nothing and owns no shield → pool stays 0.
+        expect(focus?.shieldPool ?? 0).toBe(0);
+
+        // The H2 assertion: the Shield-set carrier accrued a 4%-of-maxHP pool on its turn.
+        // Exact (grantShieldToTarget does not floor; raw = maxHp × 4/100, well below the cap).
+        expect(carrier?.shieldPool).toBeGreaterThan(0);
+        expect(carrier?.shieldPool).toBeCloseTo(EXPECTED_POOL, 6);
+    });
 });
