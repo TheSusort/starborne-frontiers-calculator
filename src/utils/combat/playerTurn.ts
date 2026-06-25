@@ -1874,6 +1874,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
+                        // overheal intentionally NOT accumulated here — enemy-side reactive
+                        // overheal (overheal-basis shields) is a deferred gap; H3.3 surfaces
+                        // overheal only on the player heal path above.
                         healTargets.push(rid);
                         healRawSum += raw;
                     }
