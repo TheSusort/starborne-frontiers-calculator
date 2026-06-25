@@ -1613,6 +1613,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 }
             } else {
                 ctx.healing.credit(intent.ownerId, 'shield', raw);
+                // H2/H3 foundation: route per-recipient (mirrors the cast path in
+                // playerTurn.ts); an unresolvable recipient is credited but not pool-applied.
                 const recipientActor = ctx.healing.recipientActor(rid);
                 if (recipientActor) ctx.healing.grantShieldToTarget(raw, recipientActor);
             }
