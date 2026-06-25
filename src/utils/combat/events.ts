@@ -109,16 +109,17 @@ export type CombatEvent =
           overheal?: number;
       }
     /** A shield-application cast resolved (one event per cast, not per recipient).
-     *  `granterId` is the acting actor that applied the shield(s) (Resonating Fury
-     *  listens on this); `recipientIds` are the recipients whose pool actually grew
-     *  (actualGranted > 0) — RF's buff targets; `amount` is the total shield actually
-     *  granted this cast (post-cap). */
+     *  `granterId` is the acting actor that applied the shield(s) — named granter (not
+     *  caster) because Resonating Fury is granter-scoped and listens on this;
+     *  `recipientIds` are the recipients whose pool actually grew (actualGranted > 0) —
+     *  RF's buff targets; `amount` is the total shield actually granted this cast
+     *  (post-cap). */
     | {
           type: 'shield-applied';
-          granterId: string; // the acting actor that applied the shield(s) (Resonating Fury listens on this)
-          recipientIds: string[]; // recipients whose pool actually grew (actualGranted > 0) — RF's buff targets
+          granterId: string;
+          recipientIds: string[];
           round: number;
-          amount: number; // total shield actually granted this cast (post-cap)
+          amount: number;
       }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
      *  number of debuffs actually removed (player-side) or the nominal cfg.count
