@@ -29,10 +29,11 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { buildShipAbilitiesWithEquipment } from '../../abilities/buildShipAbilitiesWithEquipment';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
+import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
 import { makeConditionContext } from '../../abilities/__tests__/conditionContextFixture';
-import { SelectedGameBuff } from '../../../types/calculator';
+import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 
@@ -4499,6 +4500,165 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
             expect(ambushFires.length).toBeGreaterThan(0);
             expect(ambushFires.every((f) => f.actorId === 'attacker')).toBe(true);
             expect(ambushFires.some((f) => f.round === 1)).toBe(true);
+        }
+    );
+});
+
+// ---------------------------------------------------------------------------
+// H1 Task 10: Arcane Siege goes LIVE with a real in-sim shield
+// ---------------------------------------------------------------------------
+//
+// Arcane Siege grants +X% outgoing direct damage WHILE the carrier holds a shield
+// (registry: buildEquipmentAbilities.ts ~559 — a passive `modifier` ability on channel
+// 'outgoingDamage', gated on the derivable `self-shield` condition). The gate reads
+// `actor.shieldPool > 0` at the moment the carrier's per-turn modifier context is built
+// (playerTurn.ts ~1157, `selfShielded`). Before sub-project H, no in-sim shield source
+// existed, so `shieldPool` was always 0 → the gate never passed → Arcane Siege was DORMANT.
+// H1 makes shields reachable; this test proves the bonus now ACTIVATES.
+//
+// TIMING NOTE: the modifier context is built BEFORE the carrier executes its own cast, so a
+// shield the carrier grants itself ON its own turn would land too late to be seen by that
+// same turn's gate. To put the shield up BEFORE the measured attack, a FASTER team ally
+// (speed 200 > focus speed 100) casts an `all-allies` shield first within round 1 — exactly
+// the cross-actor grant proven by shieldGrantBattleSim.test.ts. By the time the focus acts,
+// its `shieldPool > 0` and the gate passes.
+//
+// Mutation-resistant control: BOTH runs are byte-identical (same Arcane-Siege-equipped focus,
+// same faster ally) EXCEPT the ally's active — a shield-granting cast (WITH) vs an inert
+// self-buff that never touches the focus (WITHOUT, so the focus's shieldPool stays 0). The
+// ONLY thing that differs is whether the carrier holds a shield, so the damage delta is
+// attributable solely to the Arcane Siege gate. This routes through the REAL registry
+// (buildShipAbilitiesWithEquipment + setBonus resolution), so the test bites if the gate or
+// the registry entry breaks. Deterministic stats (crit 0) keep the damage comparison clean.
+
+describe('H1 Task 10 integration — Arcane Siege activates with a live shield', () => {
+    const ATTACK = 10_000;
+    const ARCANE_SIEGE_EPIC_PCT = 15; // matches ARCANE_SIEGE_PCT.epic in buildEquipmentAbilities.ts
+
+    /** Single-hit 100% damage active for the Arcane Siege carrier (the focus / measured attacker). */
+    const dmgActiveAbility: Ability = {
+        id: 'dmg-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 100, hits: 1 },
+    };
+
+    /** Focus ship skills: damage active + Arcane Siege passive resolved through the REAL registry. */
+    function buildArcaneSiegeShipSkills(): ShipSkills {
+        const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
+        const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+
+        // Pre-condition: the Arcane Siege modifier ability landed in the passive slot.
+        const arcaneSiege = passive?.abilities.find((a) =>
+            a.id.startsWith('equip-implant-ARCANE_SIEGE')
+        );
+        expect(arcaneSiege).toBeDefined();
+
+        return {
+            slots: [
+                { slot: 'active', abilities: [dmgActiveAbility] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+    }
+
+    /** A faster team ally. `grantShield: true` → casts an all-allies shield (lands on the focus
+     *  before it acts); otherwise it casts an inert self-buff that never touches the focus. */
+    function shieldAlly(grantShield: boolean): TeamActorInput {
+        const allyActive: Ability = grantShield
+            ? {
+                  id: 'ally-shield',
+                  type: 'shield',
+                  target: 'all-allies',
+                  trigger: 'on-cast',
+                  conditions: [],
+                  config: { type: 'shield', pct: 25, basis: 'hp' },
+              }
+            : {
+                  // Control: a self-only buff. Acts in the same slot/cadence but grants NO shield
+                  // to the focus, so the focus's shieldPool stays 0 and the Arcane Siege gate fails.
+                  id: 'ally-noop-buff',
+                  type: 'buff',
+                  target: 'self',
+                  trigger: 'on-cast',
+                  conditions: [],
+                  config: {
+                      type: 'buff',
+                      buffName: 'Attack Up',
+                      parsedEffects: {},
+                      stacks: 1,
+                      isStackable: false,
+                      duration: 1,
+                  },
+              };
+        return {
+            id: 'shield-ally',
+            speed: 200, // faster than the focus (100) → acts first within round 1
+            selfBuffs: [],
+            enemyDebuffs: [],
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: { slots: [{ slot: 'active', abilities: [allyActive] }] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 50_000,
+            },
+        };
+    }
+
+    /** Base engine input: focus 'attacker' carries Arcane Siege, deals deterministic damage. */
+    const AS_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput =>
+        BASE({
+            attack: ATTACK,
+            crit: 0,
+            critDamage: 0,
+            numRounds: 1,
+            speed: 100, // slower than the shield ally → acts AFTER the shield lands
+            hp: 10_000,
+            shipSkills: buildArcaneSiegeShipSkills(),
+            ...overrides,
+        });
+
+    it(
+        'Arcane Siege boosts outgoing direct damage by exactly +15% (epic) when a faster ally ' +
+            'shields the carrier before it attacks; no boost without the shield',
+        () => {
+            // WITH shield: ally grants an all-allies shield → focus.shieldPool > 0 before it acts.
+            const withShield = runCombat(
+                AS_BASE({
+                    teamActors: deriveTeamEngineActors([shieldAlly(true)], undefined),
+                })
+            );
+
+            // WITHOUT shield: identical setup, but the ally casts an inert self-buff → the focus's
+            // shieldPool stays 0 → Arcane Siege gate fails → no outgoing-damage bonus.
+            const withoutShield = runCombat(
+                AS_BASE({
+                    teamActors: deriveTeamEngineActors([shieldAlly(false)], undefined),
+                })
+            );
+
+            const boosted = withShield.rawTotals.direct;
+            const baseline = withoutShield.rawTotals.direct;
+
+            // Sanity: the carrier actually dealt damage in both runs.
+            expect(baseline).toBeGreaterThan(0);
+
+            // The gate ACTIVATES with a live shield: boosted damage is strictly higher.
+            expect(boosted).toBeGreaterThan(baseline);
+
+            // And the delta is EXACTLY the Arcane Siege epic outgoingDamage% (+15%).
+            expect(boosted).toBeCloseTo(baseline * (1 + ARCANE_SIEGE_EPIC_PCT / 100), 6);
         }
     );
 });
