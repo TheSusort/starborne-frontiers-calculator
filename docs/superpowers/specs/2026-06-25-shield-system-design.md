@@ -170,27 +170,38 @@ All percent values below are **percentages applied as `× value/100`** (e.g. `da
   overrepairing an ally"): shield to the **healed ally** = `(pct/100) × overheal-amount`. Rarity:
   {epic 20, legendary 30}. No proc roll (deterministic), no per-round cap.
 - **Resonating Fury** (new `on-shield-applied` trigger): on proc, grants **Crit Power Up 3**
-  (existing named buff, 1 turn) to **the recipient of the triggering shield** — i.e. the buff
-  follows the shield, NOT the carrier (user decision 2026-06-25). A self-shield buffs self; an
-  ally-shield buffs that ally. `procChance` {common .05, uncommon .07, rare .09, epic .12,
-  legendary .16}, rolled **per shield-application event** with **NO `oncePerRound` cap** — the game
-  text omits the "once per round" clause that Adaptive Plating carries, so it may proc repeatedly in
-  a round. Because `grantShieldToTarget` fires once per recipient, a multi-ally shield grant emits
-  one event (and one independent proc roll) per recipient, each buffing only that recipient.
+  (existing named buff, 1 turn) to **every recipient of the triggering shield cast** — the buff
+  follows the shield, NOT (only) the carrier (user decision 2026-06-25). A multi-recipient shield
+  cast gets a **single proc roll**; on success **all** recipients that gained shield are buffed
+  (the caster included if it was among them). `procChance` {common .05, uncommon .07, rare .09,
+  epic .12, legendary .16}, rolled **once per shield-application cast** with **NO `oncePerRound`
+  cap** — the game text omits the "once per round" clause that Adaptive Plating carries, so it may
+  proc on multiple separate casts within a round.
 
 #### New `on-shield-applied` trigger
 
-Emitted from `grantShieldToTarget` (the single grant chokepoint), **only when `actualGranted > 0`**
-(a fully-capped 0-grant does not proc). The event carries **both** the **granter** (acting actor —
-the key the carrier's Resonating Fury listens on) and the **recipient** (the actor whose shield pool
-grew — Resonating Fury's buff target). Per user decision, this fires for **any shield the carrier
-applies**: skill casts, the H2 gear-set start-of-turn grant, Abundant Renewal, and Adaptive
-Plating's own self-grant. Requires threading a `granterId` into `grantShieldToTarget` (today
-`(raw, victim)` — recipient-only); the listener ownership keys on `granterId` while the reactive
-effect targets the event's recipient (a "shield-recipient" target resolution, distinct from the
-usual self/ally/all-allies target types). No shield→shield chain exists (Resonating Fury grants a
-buff, not a shield), so there is no re-trigger / infinite-loop risk; the executor's existing
-heal/shield no-re-emit guard still applies.
+Emitted **once per shield-application cast** (NOT once per recipient — so a single cast yields a
+single Resonating Fury proc roll). `grantShieldToTarget` is per-recipient and already accumulates
+`actualGranted`; each grant **site** (skill-cast multi-recipient loop ~engine.ts:2415, single-target
+casts ~2339/2475, the standing/passive grant ~4686, the H2 gear-set start-of-turn grant, and the
+reactive shield executor in triggers.ts ~1610) collects the recipients that gained shield
+(`actualGranted > 0`) and emits **one** `on-shield-applied` carrying the **granter** (acting actor —
+the key the carrier's Resonating Fury listens on) and the **recipient set** (Resonating Fury's buff
+targets). Sites that grant to a single recipient emit a one-element set; if no recipient gained
+shield, no event fires. Per user decision, this covers **any shield the carrier applies**: skill
+casts, the gear-set start-of-turn grant, Abundant Renewal, and Adaptive Plating's own self-grant.
+Requires threading a `granterId` (today `grantShieldToTarget` is `(raw, victim)` — recipient-only).
+The listener ownership keys on `granterId`; the reactive effect targets the event's recipient set (a
+"shield-recipient" target resolution, distinct from the usual self/ally/all-allies target types).
+
+**Reactive→reactive hop:** because Abundant Renewal and Adaptive Plating grant shields from inside
+the reactive executor, their grants must also emit `on-shield-applied` so a carrier holding both
+(e.g. Adaptive Plating + Resonating Fury) procs RF off its own reactive shield — consistent with the
+"any grant by carrier" decision. This is a single safe hop: RF emits a **buff**, not a shield, so it
+produces no further `on-shield-applied` and cannot recurse. No shield→shield chain exists, so there
+is no infinite-loop risk; the executor's existing heal/shield no-re-emit guard (which only suppresses
+heal/shield re-triggering heal/shield) is unaffected. The plan must confirm the engine's reactive
+dispatch permits this one cross-type hop (emit `on-shield-applied` from within a reactive grant).
 
 ## Components / boundaries
 
