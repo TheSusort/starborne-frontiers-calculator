@@ -47,6 +47,26 @@ This sub-project lights up:
 Barrier (full immunity) and Cheat-Death interception remain strictly **in front of** the shield
 step, unchanged.
 
+**Implementation note — bombs are not a separate apply call.** At the aggregate enemy/focus turn
+sites, detonation damage is *summed into* the direct-damage total before it reaches the absorb step
+(`engine.ts:4368` `damage = directDamage + detonationDamage`; detonation is credited via the
+`'detonation'` channel / `creditDetonation`). So the absorb step cannot key off a single discrete
+`damageKind`. The robust model is a **blended shield-eligible amount** computed at the apply site
+from the two portions that arrive there:
+
+```
+shieldEligible = directPortion × (1 − pen/100) + bombPortion        // DoT excluded entirely
+absorbed       = min(shieldPool, shieldEligible)
+hpDamage       = (directPortion + bombPortion) − absorbed
+```
+
+In practice: the **aggregate path** (enemy → tank, focus → dummy) must thread the bomb portion
+separately from the direct portion to the absorb step (today they are pre-summed); the **positional
+per-hit path** is all direct (per-hit pen split; per-victim bomb attribution is the E5-deferred
+item, so positional bombs stay out of the pen split for now); the **DoT batch** (`byDirectDamage:false`)
+bypasses the shield wholesale. The DoT-vs-not split still rides `cause.byDirectDamage`; the
+direct-vs-bomb split rides the separated portions, not a flag.
+
 ## Existing machinery (grounding, verified 2026-06-25)
 
 - `CombatActor.shieldPool` — `state.ts:108`, init 0 (`state.ts:167`). Drains before HP; capped
@@ -77,20 +97,28 @@ step, unchanged.
 
 **The load-bearing, golden-churning PR.** Everything else is additive on top.
 
-1. **Damage-kind aware absorb.** Thread `damageKind: 'direct' | 'bomb' | 'dot'` and the attacker's
-   effective `shieldPenetration` into `applyVictimDamage`. Implement the matrix above. `damageKind`
-   derives from `cause.byDirectDamage` plus a bomb discriminator (tag the bomb-detonation apply
-   path distinctly from direct hits). Note `hpDamage = D − absorbed` holds for direct and bomb;
-   only `absorbed`'s ceiling differs.
+1. **Blended shield-eligible absorb.** Implement the matrix above via the blended-eligibility model
+   (see "Implementation note" under the matrix). The DoT-vs-direct/bomb split rides the existing
+   `cause.byDirectDamage` flag (DoT bypasses wholesale). For non-DoT damage, thread the **direct
+   portion** and **bomb (detonation) portion** separately to the absorb step plus the attacker's
+   effective `shieldPenetration`, and compute
+   `shieldEligible = directPortion × (1 − pen/100) + bombPortion`. The first planning step is to
+   locate where the aggregate `damage` is assembled from `directDamage + detonationDamage`
+   (`engine.ts:~4368` enemy turn; check the focus/team sites ~3983/4134 and the focus detonation
+   emit ~4727 too) and carry the two portions to the apply site instead of the pre-summed total.
+   `hpDamage = totalNonDot − absorbed` throughout.
 2. **Attacker penetration plumbing.** Read the acting actor's effective `shieldPenetration` and pass
    it to the apply site for direct hits (both the focus/team aggregate path and the enemy-attack
    path). Static today (not buff-folded — same status as hacking/security pre-backbone; folding is
    out of scope, documented).
 3. **DoT bypass.** Route Inferno/Corrosion ticks around the shield drain (`absorbed = 0`). This is
    the behavior fix that contributes to healing-golden churn.
-4. **All-actor grant.** Verify the battle-sim cast path grants shields to whichever ally a shield
-   ability targets (absorb already works for any actor; grant defaults to heal target). Wire the
-   `healing`/shield ctx into `simulateBattle`'s `runCombat` if not already present.
+4. **All-actor grant (verify-then-wire).** First confirm the current state: does the battle-sim
+   cast path (`simulateBattle` → `runCombat`) already pass a `healing`/shield ctx so a shield
+   ability grants to whichever ally it targets? The absorb side already works for any actor; only
+   the grant path may be heal-target-defaulted. If grants already reach all actors, this task is a
+   confirming test; if not, wire the ctx. Scope here is contingent on that finding — flag it during
+   planning before committing.
 5. **Surfacing.** Populate `ShipRoundState.shieldsAbsorbed` from the engine per-victim
    `addShieldAbsorbed` sink; add `shieldGranted` and `currentShieldPool` to `ShipRoundState`,
    threaded from engine round-assembly; render the two new StatCards in `ShipRoundCard`; add a
