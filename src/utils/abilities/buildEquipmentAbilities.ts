@@ -247,6 +247,16 @@ const GIANT_SLAYER_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// H3.2: Adaptive Plating — when directly damaged, X% chance to gain a Shield equal to Y% of
+// the damage taken, once per round. No common/rare variants. The `damage-taken` basis scales
+// off the triggering hit (eventCtx.triggerDamage, threaded by the on-attacked listener in H3.1).
+const ADAPTIVE_PLATING_PROC: Record<string, number> = {
+    uncommon: 0.12,
+    epic: 0.16,
+    legendary: 0.19,
+};
+const ADAPTIVE_PLATING_PCT: Record<string, number> = { uncommon: 21, epic: 34, legendary: 42 };
+
 // D-PR5: Second Wind reactive self-heal on crit-received value table
 const SECOND_WIND_PROC: Record<string, number> = {
     uncommon: 0.07,
@@ -704,6 +714,27 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             conditions: [],
             procChance: pc,
             config: { type: 'heal', pct: 10, basis: 'hp' },
+            autoFilled: true,
+        };
+    },
+    // H3.2: Adaptive Plating — when directly damaged, X% chance to gain a Shield equal to Y% of
+    // the damage taken, limited to once per round. `on-attacked` is the "directly damaged" trigger
+    // (DoTs route through dot-applied, never on-attacked). basis 'damage-taken' scales off the
+    // triggering hit's damage (eventCtx.triggerDamage, H3.1). oncePerRound caps the grant to ONE per
+    // round — the `attacked` event's damage is the per-attack aggregate and on-attacked fires once
+    // per hit, so without the gate an N-hit attack would grant N times. No common/rare variants.
+    ADAPTIVE_PLATING: (rarity) => {
+        const procChance = ADAPTIVE_PLATING_PROC[rarity];
+        const pct = ADAPTIVE_PLATING_PCT[rarity];
+        if (procChance === undefined || pct === undefined) return undefined;
+        return {
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            procChance,
+            oncePerRound: true,
+            config: { type: 'shield', pct, basis: 'damage-taken' },
             autoFilled: true,
         };
     },
