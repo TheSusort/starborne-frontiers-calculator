@@ -17,6 +17,7 @@ const baseStats: ActorStats = {
     crit: 50,
     critDamage: 150,
     defensePenetration: 0,
+    shieldPenetration: 0,
     defence: 5000,
     hp: 20000,
     speed: 0,
@@ -93,12 +94,46 @@ describe('createActor', () => {
     });
 });
 
+describe('createActor shieldPenetration (H1 Task 1)', () => {
+    const baseStatsWithPen: ActorStats = {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defensePenetration: 0,
+        shieldPenetration: 0,
+        defence: 0,
+        hp: 1,
+        speed: 50,
+    };
+
+    it('carries shieldPenetration when supplied', () => {
+        const a = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...baseStatsWithPen, shieldPenetration: 25 },
+        });
+        expect(a.stats.shieldPenetration).toBe(25);
+    });
+
+    it('defaults shieldPenetration to 0 when not supplied', () => {
+        const a = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'attacker',
+            stats: baseStatsWithPen,
+        });
+        expect(a.stats.shieldPenetration).toBe(0);
+    });
+});
+
 describe('createActor indestructible flag', () => {
     const baseStats = {
         attack: 0,
         crit: 0,
         critDamage: 0,
         defensePenetration: 0,
+        shieldPenetration: 0,
         defence: 0,
         hp: 100,
         speed: 50,
@@ -214,6 +249,7 @@ describe('buildTurnQueue', () => {
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
+                shieldPenetration: 0,
                 defence: 0,
                 hp: 1,
                 speed,

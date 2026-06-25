@@ -81,6 +81,10 @@ export interface ActorStats {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Fraction of the target's shield pool bypassed before absorption (0–100 range,
+     *  matches defensePenetration units). Read at the damage-apply site in later tasks.
+     *  Static — no buff folding; defaults to 0 for all existing actors and fixtures. */
+    shieldPenetration: number;
     defence: number;
     hp: number;
     speed: number;
