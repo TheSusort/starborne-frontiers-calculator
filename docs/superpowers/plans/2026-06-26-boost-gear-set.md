@@ -68,8 +68,9 @@ Add to `buildEquipmentAbilities.test.ts`. The file already has a `buildForGearSe
 ```typescript
 describe('buildEquipmentAbilities — Boost set', () => {
     it('emits a buff-duration-extension ability (turns 1) at ≥4 BOOST pieces', () => {
-        const { ship, getGearPiece } = buildForGearSet('BOOST'); // minPieces = 4
-        const abilities = buildEquipmentAbilities(ship, getGearPiece);
+        // buildForGearSet returns Ability[] directly (it calls buildEquipmentAbilities internally
+        // on a ship equipping minPieces of the set) — confirm its exact return shape in the file.
+        const abilities = buildForGearSet('BOOST'); // minPieces = 4
         const boost = abilities.find((a) => a.id === 'equip-set-BOOST');
         expect(boost).toBeDefined();
         expect(boost!.config).toEqual({ type: 'buff-duration-extension', turns: 1 });
