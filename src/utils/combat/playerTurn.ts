@@ -1898,8 +1898,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 for (const rid of recipients) {
                     const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                     healing.credit(actor.id, 'shield', raw);
-                    if (rid === healing.targetId) {
-                        healing.grantShieldToTarget(raw);
+                    // H1 Task 5: route the pool to EACH targeted ally's own actor (mirrors the
+                    // event-only heal branch's recipientActor routing) — not just the heal
+                    // target. The absorb side already works per-actor, so an `all-allies`/`ally`
+                    // shield must land a `shieldPool` on every targeted ally, not only the focus.
+                    // A recipient with no resolvable runtime actor is credited but not pool-applied
+                    // (mirrors the heal-recipient handling for an unwalked legacy team actor).
+                    const recipientActor = healing.recipientActor(rid);
+                    if (recipientActor) {
+                        healing.grantShieldToTarget(raw, recipientActor);
                     }
                 }
             } else if (cfg.type === 'cleanse') {

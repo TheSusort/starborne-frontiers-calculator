@@ -59,6 +59,7 @@ const enemyVictim = (id: string, hp: number): CombatActor =>
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
+            shieldPenetration: 0,
             defence: 0,
             hp,
             speed: 50,

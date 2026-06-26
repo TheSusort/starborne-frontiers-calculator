@@ -24,8 +24,8 @@ export interface CellOverlay {
     alive: boolean;
     buffs: string[];
     debuffs: string[];
-    /** This-round visual cue: 'damage' if the ship took damage, else 'heal' if it was healed. */
-    effect?: 'damage' | 'heal';
+    /** This-round visual cue: 'damage' if the ship took damage, 'heal' if healed, 'shield' if shield absorbed. Damage/heal win over shield when co-occurring. */
+    effect?: 'damage' | 'heal' | 'shield';
 }
 
 /**
@@ -46,7 +46,13 @@ export function overlaysForRound(
         if (!state) continue;
 
         const effect: CellOverlay['effect'] =
-            state.damageTaken > 0 ? 'damage' : state.healingReceived > 0 ? 'heal' : undefined;
+            state.damageTaken > 0
+                ? 'damage'
+                : state.healingReceived > 0
+                  ? 'heal'
+                  : state.shieldsAbsorbed > 0
+                    ? 'shield'
+                    : undefined;
 
         overlays[entry.position] = {
             actorId: entry.actorId,

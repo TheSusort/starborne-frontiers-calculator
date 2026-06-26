@@ -9,6 +9,8 @@ const shipState = (over: Partial<ShipRoundState> & { actorId: string }): ShipRou
     healingDone: 0,
     healingReceived: 0,
     shieldsAbsorbed: 0,
+    shieldGranted: 0,
+    currentShieldPool: 0,
     hpPct: 100,
     alive: true,
     activeBuffs: [],
@@ -91,6 +93,50 @@ describe('overlaysForRound', () => {
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBeUndefined();
+    });
+
+    it('uses effect "shield" when shieldsAbsorbed > 0 and no damage or heal', () => {
+        const round: BattleRound = {
+            round: 7,
+            ships: [shipState({ actorId: 'attacker', side: 'player', shieldsAbsorbed: 300 })],
+            events: [],
+            turnOrder: [],
+        };
+        expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('shield');
+    });
+
+    it('prefers "damage" over "shield" when both occurred', () => {
+        const round: BattleRound = {
+            round: 8,
+            ships: [
+                shipState({
+                    actorId: 'attacker',
+                    side: 'player',
+                    damageTaken: 100,
+                    shieldsAbsorbed: 300,
+                }),
+            ],
+            events: [],
+            turnOrder: [],
+        };
+        expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('damage');
+    });
+
+    it('prefers "heal" over "shield" when both occurred', () => {
+        const round: BattleRound = {
+            round: 9,
+            ships: [
+                shipState({
+                    actorId: 'attacker',
+                    side: 'player',
+                    healingReceived: 200,
+                    shieldsAbsorbed: 300,
+                }),
+            ],
+            events: [],
+            turnOrder: [],
+        };
+        expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('heal');
     });
 
     it('carries buffs and debuffs from the ship state', () => {

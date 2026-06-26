@@ -71,11 +71,12 @@ export interface ShipRoundState {
      * amount).
      */
     healingReceived: number;
-    /**
-     * Shield absorption. The `heal-performed` payload carries no shield channel flag
-     * (just { casterId, targets[], amount }), so this is always 0 for PR1.
-     */
+    /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
     shieldsAbsorbed: number;
+    /** Shield pool granted to this actor this round (post-cap delta). */
+    shieldGranted: number;
+    /** Remaining shield pool at end of this round. */
+    currentShieldPool: number;
     /** End-of-round HP%, from maxHp - cumulative damageTaken. */
     hpPct: number;
     alive: boolean;
@@ -166,10 +167,14 @@ export const ASSEMBLED_EVENT_TYPES = [
 export function assembleBattleResult(args: {
     events: CombatEvent[];
     perRoundPerTarget: Record<number, Record<string, number>>;
+    perRoundPerShield?: Record<
+        number,
+        Record<string, { granted: number; absorbed: number; pool: number }>
+    >;
     roster: RosterEntry[];
     numRounds: number;
 }): BattleResult {
-    const { events, perRoundPerTarget, roster, numRounds } = args;
+    const { events, perRoundPerTarget, perRoundPerShield = {}, roster, numRounds } = args;
 
     // Round of first destruction per actor (earliest ship-destroyed).
     const destroyedAt = new Map<string, number>();
@@ -241,6 +246,7 @@ export function assembleBattleResult(args: {
 
         // Accumulate this round's per-victim taken damage into the running cumulative.
         const takenThisRound = perRoundPerTarget[round] ?? {};
+        const shieldThisRound = perRoundPerShield[round] ?? {};
 
         const ships: ShipRoundState[] = roster.map((entry) => {
             const taken = takenThisRound[entry.actorId] ?? 0;
@@ -250,6 +256,8 @@ export function assembleBattleResult(args: {
             const destroyRound = destroyedAt.get(entry.actorId);
             const alive = destroyRound === undefined || round < destroyRound;
 
+            const shield = shieldThisRound[entry.actorId];
+
             return {
                 actorId: entry.actorId,
                 side: entry.side,
@@ -257,7 +265,9 @@ export function assembleBattleResult(args: {
                 damageTaken: taken,
                 healingDone: healDone.get(entry.actorId) ?? 0,
                 healingReceived: healReceived.get(entry.actorId) ?? 0,
-                shieldsAbsorbed: 0,
+                shieldsAbsorbed: shield?.absorbed ?? 0,
+                shieldGranted: shield?.granted ?? 0,
+                currentShieldPool: shield?.pool ?? 0,
                 hpPct:
                     entry.maxHp > 0
                         ? clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp)
@@ -424,6 +434,9 @@ interface DerivedCombatStats {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration (H1 Task 2). Optional — sourced from ship.baseStats / statOverrides.
+     *  Defaults to 0 at the actor-construction site. No production reader until H1 Task 4. */
+    shieldPenetration: number;
     hacking: number;
     /** Debuff-resist stat. Defaults to baseStats.security ?? 100 (the OLD landing-formula default). */
     security: number;
@@ -447,6 +460,7 @@ function resolveStats(p: BattlePlacement): DerivedCombatStats {
         crit: o.crit ?? b.crit ?? 0,
         critDamage: o.critDamage ?? b.critDamage ?? 0,
         defensePenetration: o.defensePenetration ?? b.defensePenetration ?? 0,
+        shieldPenetration: o.shieldPenetration ?? b.shieldPenetration ?? 0,
         hacking: o.hacking ?? b.hacking ?? 200,
         security: o.security ?? b.security ?? 100,
         defence: o.defence ?? b.defence ?? 0,
@@ -465,6 +479,7 @@ function toWalkStats(
     | 'crit'
     | 'critDamage'
     | 'defensePenetration'
+    | 'shieldPenetration'
     | 'hacking'
     | 'security'
     | 'defence'
@@ -476,6 +491,7 @@ function toWalkStats(
         crit: stats.crit,
         critDamage: stats.critDamage,
         defensePenetration: stats.defensePenetration,
+        shieldPenetration: stats.shieldPenetration,
         hacking: stats.hacking,
         security: stats.security,
         defence: stats.defence,
@@ -490,7 +506,15 @@ function toEnemyStats(
     stats: DerivedCombatStats
 ): Pick<
     DerivedCombatStats,
-    'attack' | 'crit' | 'critDamage' | 'speed' | 'defence' | 'hp' | 'hacking' | 'security'
+    | 'attack'
+    | 'crit'
+    | 'critDamage'
+    | 'speed'
+    | 'defence'
+    | 'hp'
+    | 'hacking'
+    | 'security'
+    | 'shieldPenetration'
 > {
     return {
         attack: stats.attack,
@@ -503,6 +527,7 @@ function toEnemyStats(
         // and ITS security when targeted, so the engine's live landing recompute has real inputs.
         hacking: stats.hacking,
         security: stats.security,
+        shieldPenetration: stats.shieldPenetration,
     };
 }
 
@@ -682,6 +707,7 @@ export function simulateBattle(
         crit: focus.stats.crit,
         critDamage: focus.stats.critDamage,
         defensePenetration: focus.stats.defensePenetration,
+        shieldPenetration: focus.stats.shieldPenetration,
         chargeCount: focus.chargeCount,
         shipSkills: focus.shipSkills,
         // The dummy player-offense enemy target (vestigial alongside the positioned roster):
@@ -731,6 +757,16 @@ export function simulateBattle(
         perRoundPerTarget[rd.round] = rd.perTargetDamage ?? {};
     }
 
+    // Per-round per-actor shield accounting (H1 Task 8): parallel to perRoundPerTarget,
+    // built from rd.perActorShield (set only when non-empty — absent rounds map to {}).
+    const perRoundPerShield: Record<
+        number,
+        Record<string, { granted: number; absorbed: number; pool: number }>
+    > = {};
+    for (const rd of engineRounds) {
+        perRoundPerShield[rd.round] = rd.perActorShield ?? {};
+    }
+
     // Roster: every placed ship, with maxHp from its derived stats.
     const roster: RosterEntry[] = [
         ...playerPlans.map((plan) => ({
@@ -749,5 +785,11 @@ export function simulateBattle(
         })),
     ];
 
-    return assembleBattleResult({ events, perRoundPerTarget, roster, numRounds });
+    return assembleBattleResult({
+        events,
+        perRoundPerTarget,
+        perRoundPerShield,
+        roster,
+        numRounds,
+    });
 }

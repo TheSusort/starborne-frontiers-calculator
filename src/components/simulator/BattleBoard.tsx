@@ -93,6 +93,14 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                                                 +heal
                                             </span>
                                         )}
+                                        {overlay.effect === 'shield' && (
+                                            <span
+                                                className="text-[10px] text-blue-400 shrink-0"
+                                                aria-label="shield absorbed"
+                                            >
+                                                shield
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="mt-1 h-1.5 w-full bg-dark-border rounded overflow-hidden">
                                         <div

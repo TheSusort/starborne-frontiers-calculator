@@ -1025,6 +1025,7 @@ describe('recordDestroyed helper (shared all-actor ship-destroyed)', () => {
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
+                shieldPenetration: 0,
                 defence: 0,
                 hp: 1000,
                 speed: 0,

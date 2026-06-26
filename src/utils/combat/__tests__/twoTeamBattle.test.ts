@@ -1130,3 +1130,99 @@ describe('E1 — symmetric incoming surface: player→enemy hits record per-vict
         expect(playerBucketRounds.length).toBeGreaterThan(0);
     });
 });
+
+// ===========================================================================
+// H1 Task 8 follow-up: end-to-end `simulateBattle` shield-field extraction loop.
+//
+// The existing Task 8 tests (battleAssemble.test.ts) cover `assembleBattleResult`
+// with INJECTED `perRoundPerShield` data — they do NOT exercise the extraction loop
+// in battleSimulator.ts (lines 760-768) that reads `rd.perActorShield ?? {}` from
+// live engine rounds and passes it to the assembler. This suite drives the REAL
+// `simulateBattle` (placement-based entry point) with a ship that grants itself a
+// shield and then takes a hit, proving the engine → sim extraction → assembler path
+// end-to-end.
+//
+// Setup:
+//   player[0] (focus 'attacker') — self-shield active skill, speed 200, large HP pool.
+//     Speed 200 > enemy speed 1 so the focus acts FIRST each round: it casts a shield,
+//     and then the enemy fires into the already-shielded target. The shield covers 25%
+//     of the focus's 40 000 HP = 10 000 HP of absorption. The enemy hits for 5 000
+//     (attack 5 000 vs defence 0) which is less than the shield pool → shieldsAbsorbed > 0.
+//   enemy[0] (e1) — basic-damage active, speed 1, immortal HP.
+//
+// Assertions on result.rounds[r].ships for the shielded ship:
+//   shieldGranted  > 0  (the grant fires and the extraction loop picked it up)
+//   currentShieldPool > 0  (the pool persists after absorbing partial damage)
+//   shieldsAbsorbed > 0  (the enemy hit while shielded → absorption > 0)
+// ===========================================================================
+
+describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction loop', () => {
+    it('shieldGranted / currentShieldPool / shieldsAbsorbed are all > 0 on the focus ship when it self-shields before taking a hit', () => {
+        // The focus ship grants itself a shield equal to 25% of its Max HP each round.
+        // Speed 200 ensures it acts BEFORE the enemy (speed 1) so the shield is in place
+        // when the incoming hit arrives in the same round.
+        const SHIELD_HP = 40_000;
+        const ENEMY_ATTACK = 5_000; // < 25% of 40k (= 10k) so pool survives after the hit
+
+        const shieldedFocus = makeShip('shielded', 'ShieldFocus', {
+            activeTarget: 'front',
+            activePattern: 'Pattern-Base',
+            // Skill-text-parser converts this to: type:'shield', pct:25, basis:'hp', target:'self'.
+            activeSkillText: 'This Unit gains a Shield equal to 25% of its Max HP.',
+            type: 'Attacker',
+        });
+
+        const result = simulateBattle({
+            playerTeam: [
+                {
+                    ship: shieldedFocus,
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: SHIELD_HP,
+                        speed: 200, // acts before the enemy every round
+                    },
+                },
+            ],
+            enemyTeam: [
+                placement(
+                    makeShip('e1', 'Attacker', {
+                        activeTarget: 'front',
+                        activePattern: 'Pattern-Base',
+                    }),
+                    'M4',
+                    ENEMY_ATTACK,
+                    1_000_000_000 // immortal — keeps firing all rounds
+                ),
+            ],
+            rounds: 3,
+        });
+
+        // The focus player's actorId is the reserved 'attacker' (player[0] maps to FOCUS_ID).
+        const FOCUS_ACTOR_ID = 'attacker';
+
+        // --- shieldGranted > 0 in at least one round (grant fires + extraction loop read it) ---
+        const grantedRounds = result.rounds.filter(
+            (r) => (r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)?.shieldGranted ?? 0) > 0
+        );
+        expect(grantedRounds.length).toBeGreaterThan(0);
+
+        // --- currentShieldPool > 0 in at least one round (pool persists after partial absorption) ---
+        const poolRounds = result.rounds.filter(
+            (r) => (r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)?.currentShieldPool ?? 0) > 0
+        );
+        expect(poolRounds.length).toBeGreaterThan(0);
+
+        // --- shieldsAbsorbed > 0: the enemy hit the focus while it was shielded ---
+        // Enemy attack (5 000) < shield pool (~10 000) so the hit is fully absorbed by the shield.
+        const absorbedRounds = result.rounds.filter(
+            (r) => (r.ships.find((s) => s.actorId === FOCUS_ACTOR_ID)?.shieldsAbsorbed ?? 0) > 0
+        );
+        expect(absorbedRounds.length).toBeGreaterThan(0);
+    });
+});

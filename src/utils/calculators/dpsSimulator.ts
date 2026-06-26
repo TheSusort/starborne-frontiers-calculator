@@ -26,6 +26,9 @@ export interface DPSSimulationInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration for the focus attacker (H1 Task 2). Optional — threaded onto the
+     *  attacker actor's stats.shieldPenetration. No production reader until H1 Task 4. */
+    shieldPenetration?: number;
     // Flat damage fields are only read by the flatInputToAbilities fallback (when
     // `shipSkills` is omitted). Callers that pass `shipSkills` (the DPS page) skip them.
     activeMultiplier?: number;
@@ -124,6 +127,13 @@ export interface RoundData {
      *  one-directional output. Populated ONLY by the positional apply path (gated on positions +
      *  pattern); absent in non-positional runs. */
     perTargetDamage?: Record<string, number>;
+    /** Per-actor shield accounting for THIS round (H1 Task 6), keyed by actor id. For each actor:
+     *  `granted` = total shield actually added to its pool this round (post-cap delta);
+     *  `absorbed` = shield drained by incoming damage this round; `pool` = its live remaining
+     *  shieldPool at end-of-round. Set ONLY when at least one actor has a nonzero entry — absent
+     *  on shield-free rounds (legacy RoundData shape preserved, goldens byte-identical). Consumed
+     *  by the battle simulator surfacing (Task 8). */
+    perActorShield?: Record<string, { granted: number; absorbed: number; pool: number }>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
@@ -260,6 +270,7 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         crit,
         critDamage,
         defensePenetration,
+        shieldPenetration: input.shieldPenetration,
         chargeCount,
         shipSkills,
         enemyDefense,

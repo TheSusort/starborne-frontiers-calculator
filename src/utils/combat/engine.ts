@@ -54,6 +54,7 @@ import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
+import { shieldAbsorb } from './shieldAbsorb';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
@@ -370,6 +371,9 @@ export interface EnemyActorInput {
         /** Base security (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.security
          *  (base for effectiveStatsOf.security). No production reader until landing lands (A2 Task 4). */
         security?: number;
+        /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+         *  stats.shieldPenetration. No production reader until H1 Task 4 wires the apply path. */
+        shieldPenetration?: number;
     };
     chargeCount: number;
     startCharged: boolean;
@@ -475,6 +479,7 @@ export function buildEnemyPlayerActorRuntime(
             crit: e.stats.crit,
             critDamage: e.stats.critDamage,
             defensePenetration: 0,
+            shieldPenetration: e.stats.shieldPenetration ?? 0,
             defence: e.stats.defence ?? 0,
             hp: e.stats.hp ?? 0,
             speed: e.stats.speed,
@@ -833,6 +838,9 @@ export interface CombatEngineInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
+    /** Shield penetration for the focus attacker (H1 Task 2). Optional — defaults to 0 at the
+     *  actor-construction site. No production reader until H1 Task 4 wires the apply path. */
+    shieldPenetration?: number;
     chargeCount: number;
     shipSkills: ShipSkills;
     enemyDefense: number;
@@ -902,6 +910,9 @@ export interface CombatEngineInput {
             hacking?: number;
             /** Base security (A2 Task 2). Optional — base for effectiveStatsOf.security; unread until A2 Task 4. */
             security?: number;
+            /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+             *  stats.shieldPenetration. No production reader until H1 Task 4. */
+            shieldPenetration?: number;
         };
         chargeCount: number;
         startCharged: boolean;
@@ -1228,6 +1239,7 @@ export function runCombat(input: CombatEngineInput): {
             crit,
             critDamage,
             defensePenetration,
+            shieldPenetration: input.shieldPenetration ?? 0,
             defence,
             hp,
             speed: speed ?? 100,
@@ -1252,6 +1264,7 @@ export function runCombat(input: CombatEngineInput): {
             crit: 0,
             critDamage: 0,
             defensePenetration: 0,
+            shieldPenetration: 0,
             defence: enemyDefense,
             hp: enemyHp,
             speed: enemySpeed ?? 50,
@@ -1294,6 +1307,7 @@ export function runCombat(input: CombatEngineInput): {
                       crit: t.walk.stats.crit,
                       critDamage: t.walk.stats.critDamage,
                       defensePenetration: t.walk.stats.defensePenetration,
+                      shieldPenetration: t.walk.stats.shieldPenetration ?? 0,
                       defence: t.walk.stats.defence,
                       hp: t.walk.stats.hp,
                       speed: t.speed,
@@ -1305,6 +1319,7 @@ export function runCombat(input: CombatEngineInput): {
                       crit: 0,
                       critDamage: 0,
                       defensePenetration: 0,
+                      shieldPenetration: 0,
                       defence: 0,
                       hp: 1,
                       speed: t.speed,
@@ -1877,6 +1892,12 @@ export function runCombat(input: CombatEngineInput): {
         }
         return h;
     };
+    // H1 Task 6: per-round shield-granted accumulator (recipient actor id → total shield
+    // actually added to its pool THIS round, post-cap delta). Mirrors `currentRoundHealing`'s
+    // lifecycle: declared once here, captured by grantShieldToTarget's live closure, and rebound
+    // fresh at the top of each round so it never accumulates across rounds. Surfaced as the
+    // `granted` half of RoundData.perActorShield at the post-round push.
+    let perActorShieldGranted = new Map<string, number>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -2045,7 +2066,16 @@ export function runCombat(input: CombatEngineInput): {
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
                   // persists (we never shrink an existing shield) — acceptable, as the cap is only
                   // enforced at grant time and a shield is additive, never HP-reducing.
+                  // Post-cap delta (Task 6): record the REAL increase, not `raw`. A grant that
+                  // exceeds the maxHP cap records only the portion that actually landed, so the
+                  // surfaced `granted` matches the pool growth the UI shows.
+                  const before = victim.shieldPool;
                   victim.shieldPool = Math.min(victim.shieldPool + raw, targetMaxHp);
+                  const actualGranted = victim.shieldPool - before;
+                  perActorShieldGranted.set(
+                      victim.id,
+                      (perActorShieldGranted.get(victim.id) ?? 0) + actualGranted
+                  );
               },
               playerIds,
               enemyIds: enemyRecipientIds,
@@ -2631,7 +2661,14 @@ export function runCombat(input: CombatEngineInput): {
             // wrappers pass { killerId: actingActorId, byDirectDamage: true }; the DoT-tick batch
             // passes { byDirectDamage: false } (no single killer). No consumer reads these yet
             // (Faust, Task 6), so production stays byte-identical.
-            cause?: { killerId?: string; byDirectDamage?: boolean }
+            cause?: {
+                killerId?: string;
+                byDirectDamage?: boolean;
+                /** Acting attacker's effective shield penetration % (direct portion only). Default 0. */
+                shieldPenetrationPct?: number;
+                /** Portion of `rawDamage` that is bomb/detonation damage — drains shield in FULL, no pen. Default 0. */
+                bombPortion?: number;
+            }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
             // becomes mutable so the block step can shave it; everything downstream (addIncoming,
@@ -2728,10 +2765,15 @@ export function runCombat(input: CombatEngineInput): {
                 return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
             }
             const shieldBefore = victim.shieldPool;
-            const absorbed = Math.min(victim.shieldPool, damage);
+            const { absorbed, hpDamage } = shieldAbsorb({
+                damage,
+                shieldPool: victim.shieldPool,
+                isDot: cause?.byDirectDamage === false,
+                penPct: cause?.shieldPenetrationPct ?? 0,
+                bombPortion: cause?.bombPortion ?? 0,
+            });
             victim.shieldPool -= absorbed;
             sink.addShieldAbsorbed(absorbed, victim.id);
-            const hpDamage = damage - absorbed;
             victim.currentHp = Math.max(0, victim.currentHp - hpDamage);
             // At the lethal moment, intercept once per combat: a carrier of a CHEAT_DEATH_BUFFS
             // buff survives at 1 HP instead of dying. The buff is 'recurring' (always-active), so
@@ -2827,17 +2869,34 @@ export function runCombat(input: CombatEngineInput): {
                 intakeFor(victimId).barrierAbsorbed += amount;
             },
         };
+        // H1 T4: the effective shield penetration % of an attacker, resolved from its static
+        // ActorStats.shieldPenetration (threaded in Tasks 1-2). Defaults to 0 for an unknown id
+        // or an attacker that never set the stat → byte-identical for fixtures without pen.
+        const attackerShieldPenOf = (id?: string): number =>
+            (id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0;
         const applyIncomingToTarget = (
             damage: number,
             victim: CombatActor = healTarget!,
             // C2b-2 T5: defaults to the DIRECT-damage attribution (the acting actor landed this
             // hit). The DoT-tick batch caller overrides with { byDirectDamage: false } — a DoT
             // batch is an aggregate of multiple appliers with NO single killer.
-            cause: { killerId?: string; byDirectDamage?: boolean } = {
+            // H1 T4: callers may also pass a `bombPortion` — the detonation slice of `damage`
+            // that drains the shield in FULL (no penetration).
+            cause: { killerId?: string; byDirectDamage?: boolean; bombPortion?: number } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
             }
-        ): VictimDamageOutcome => applyVictimDamage(damage, victim, playerSink, cause);
+        ): VictimDamageOutcome =>
+            applyVictimDamage(damage, victim, playerSink, {
+                ...cause,
+                // H1 T4: direct hits respect the ACTING attacker's shield penetration; DoT
+                // batches (byDirectDamage:false) force pen 0 and bypass the shield entirely.
+                shieldPenetrationPct:
+                    cause.byDirectDamage === false
+                        ? 0
+                        : attackerShieldPenOf(cause.killerId ?? actingActorId),
+                bombPortion: cause.bombPortion ?? 0,
+            });
         // Player→enemy intake (E1 — symmetric incoming surface). The symmetric THIN wrapper over
         // applyVictimDamage for the direction where a PLAYER attacks an ENEMY victim. The enemy
         // victim runs the FULL HP/shield/Barrier/Cheat-Death/recordDestroyed path AND now records
@@ -2863,9 +2922,12 @@ export function runCombat(input: CombatEngineInput): {
             enemyVictim: CombatActor
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
+            // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
+            // they respect the acting attacker's shield penetration with bombPortion 0 (default).
             applyVictimDamage(damage, enemyVictim, enemySink, {
                 killerId: actingActorId,
                 byDirectDamage: true,
+                shieldPenetrationPct: attackerShieldPenOf(actingActorId),
             });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
@@ -3217,6 +3279,10 @@ export function runCombat(input: CombatEngineInput): {
             };
         };
 
+        // H1 Task 6: rebind the per-round shield-granted accumulator EVERY round (not gated on
+        // healTarget) so DPS-mode and team runs reset it too — grantShieldToTarget can fire in
+        // any mode, and a stale carry-over would over-report `granted`.
+        perActorShieldGranted = new Map<string, number>();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -4282,6 +4348,11 @@ export function runCombat(input: CombatEngineInput): {
                         // Hoisted for use in the post-else `attacked` emit (Task 8): enemyTurn is
                         // scoped inside the else block below; this flag carries its roundCrit out.
                         let enemyTurnDidCrit = false;
+                        // H1 T4: the detonation slice of `damage` (enemyTurn.detonationDamage),
+                        // hoisted out of the else block so the post-else apply call can pass it as
+                        // `bombPortion` (the bomb portion drains the shield in FULL, no penetration).
+                        // Stays 0 on the dead-target path and for any bare enemy with no detonate().
+                        let enemyDetonationDamage = 0;
                         // Hoisted for per-hit `attacked` emission (Phase 4c Task 3): populated from
                         // enemyTurn.hitCrits in the ship-backed branch; stays [] on the dead-target
                         // path and on the manual flat-enemy path (which has no hitCrits to surface).
@@ -4366,6 +4437,8 @@ export function runCombat(input: CombatEngineInput): {
                             // re-add). detonationDamage is the player-turn detonate() portion (0 for a bare
                             // enemy). Credit it as INCOMING damage to the tank — NOT a player damage row.
                             damage = enemyTurn.directDamage + enemyTurn.detonationDamage;
+                            // H1 T4: hoist the detonation slice for the post-else apply (bombPortion).
+                            enemyDetonationDamage = enemyTurn.detonationDamage;
                             // Hoist roundCrit into the outer scope for the `attacked` emit (Task 8).
                             enemyTurnDidCrit = enemyTurn.roundCrit;
                             // Hoist per-hit crit array for the per-hit `attacked` emit (Phase 4c Task 3).
@@ -4528,7 +4601,15 @@ export function runCombat(input: CombatEngineInput): {
                             } else {
                                 ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
                                     damage,
-                                    tgt
+                                    tgt,
+                                    {
+                                        // H1 T4: `damage` = directDamage + detonationDamage (above).
+                                        // The detonation slice drains the shield in FULL (no pen);
+                                        // only the direct slice respects the attacker's penetration.
+                                        killerId: actingActorId,
+                                        byDirectDamage: true,
+                                        bombPortion: enemyDetonationDamage,
+                                    }
                                 ));
                                 // §4.5: the non-positional firing hit is DIRECT-channel. The Stasis
                                 // break already fired via onHitBreakStasis inside runPlayerTurn
@@ -4834,6 +4915,32 @@ export function runCombat(input: CombatEngineInput): {
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
                 : {}),
+            // perActorShield (H1 Task 6): per-actor shield accounting for THIS round, set only
+            // when at least one actor has a nonzero {granted, absorbed, pool}. Mirrors
+            // perTargetDamage's "absent when empty" rule so legacy/no-shield rounds stay
+            // byte-identical. granted = post-cap grant this round (perActorShieldGranted);
+            // absorbed = shield drained by incoming this round (perActorIncoming.shieldAbsorbed,
+            // a fresh per-round map like roundPerTargetDamage → already this-round, not cumulative);
+            // pool = the actor's live remaining shieldPool at end-of-round assembly.
+            ...(() => {
+                const ids = new Set<string>([
+                    ...perActorShieldGranted.keys(),
+                    ...perActorIncoming.keys(),
+                    ...allActors.filter((a) => a.shieldPool > 0).map((a) => a.id),
+                ]);
+                const perActorShield: Record<
+                    string,
+                    { granted: number; absorbed: number; pool: number }
+                > = {};
+                for (const id of ids) {
+                    const granted = perActorShieldGranted.get(id) ?? 0;
+                    const absorbed = perActorIncoming.get(id)?.shieldAbsorbed ?? 0;
+                    const pool = allActorsById.get(id)?.shieldPool ?? 0;
+                    if (granted === 0 && absorbed === 0 && pool === 0) continue;
+                    perActorShield[id] = { granted, absorbed, pool };
+                }
+                return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
+            })(),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,
