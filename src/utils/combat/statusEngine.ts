@@ -648,6 +648,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (typeof buff.skillDuration !== 'number') return;
         const { familyKey, tier } = deriveFamilyKey(buff.buffName);
         // Boost: +N turns on a buff the caster APPLIES, self-side only (debuffs land enemy-side).
+        // The `&& casterId` is defensive: scheduled buffs always carry a concrete firing sourceId.
         const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
         const duration = buff.skillDuration + extension;
         const existing = map.get(familyKey);

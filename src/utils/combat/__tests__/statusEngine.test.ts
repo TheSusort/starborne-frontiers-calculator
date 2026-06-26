@@ -1723,6 +1723,35 @@ describe('buffDurationExtensionFor (Boost)', () => {
         expect(active[0].active.turnsRemaining).toBe(3);
     });
 
+    it('scheduled family rule: extended duration is used in the win check (3 > existing 2 → lands at 3)', () => {
+        // Scheduled-path mirror of the ability-path family-rule test above. Both buffs store
+        // under the 'attacker' carrier (scheduled self-buffs always route there); the family
+        // win-check must use the EXTENDED 3, not the un-extended base 2.
+        const plainBuff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+        const boosterBuff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+            teamSources: [
+                { sourceId: 'plain', selfBuffs: [plainBuff], enemyDebuffs: [] },
+                { sourceId: 'booster', selfBuffs: [boosterBuff], enemyDebuffs: [] },
+            ],
+        });
+        eng.beginRound(1);
+        // Pre-existing same-family entry at base duration 2, applied by a non-wearer → 2.
+        eng.sourceFired('plain', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up II', turnsRemaining: 2 },
+        ]);
+        // Wearer re-fires the SAME family at base duration 2 → extended to 3, 3 > 2 → wins.
+        // (An un-extended 2 > 2 would NOT win — this guards the scheduled dual-write.)
+        eng.sourceFired('booster', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up II', turnsRemaining: 3 },
+        ]);
+    });
+
     it('scheduled self-buff: gated on the FIRING sourceId, not the attacker carrier', () => {
         const boosterBuff = makeBuff('Attack Up', { skillSource: 'active', skillDuration: 2 });
         const eng = createStatusEngine({
