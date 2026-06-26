@@ -815,14 +815,14 @@ describe('equipmentCoverage — implants', () => {
         }
     });
 
-    // Task 1.5: Voidfire Catalyst — detonationDamage modifier half.
-    // rare/legendary are splash-only → no detonation ability (builder returns undefined).
-    it('VOIDFIRE_CATALYST produces 1 ability for common/uncommon/epic (detonationDamage modifier), 0 for rare/legendary (splash-only)', () => {
-        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'common')).toBe(1);
-        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'uncommon')).toBe(1);
-        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'rare')).toBe(0);
-        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'epic')).toBe(1);
-        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'legendary')).toBe(0);
+    // Tasks 1.5 + 3.3: Voidfire Catalyst — detonationDamage + bombSplashDamage modifier halves.
+    // rare/legendary have no detonation half → 1 ability (bombSplashDamage only).
+    it('VOIDFIRE_CATALYST produces 2 abilities for common/uncommon/epic (detonationDamage + bombSplashDamage), 1 for rare/legendary (bombSplashDamage only)', () => {
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'common')).toBe(2);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'uncommon')).toBe(2);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'rare')).toBe(1);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'epic')).toBe(2);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'legendary')).toBe(1);
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));

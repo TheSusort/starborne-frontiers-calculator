@@ -5780,30 +5780,22 @@ describe('Lifeline (incoming-shield-grant)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 1.5: Voidfire Catalyst implant — detonationDamage modifier (registry fold)
+// Tasks 1.5 + 3.3: Voidfire Catalyst implant — detonationDamage + bombSplashDamage modifiers
 // ---------------------------------------------------------------------------
 //
-// Voidfire Catalyst is an ultimate implant whose description states:
-//   common:    2% more detonation damage (+ 4% splash — later phase)
-//   uncommon:  4% more detonation damage (+ 8% splash — later phase)
-//   rare:      splash-only (24%) — no detonation half → builder returns undefined
-//   epic:      8% more detonation damage (+ 16% splash — later phase)
-//   legendary: splash-only (40%) — no detonation half → builder returns undefined
-//
-// This phase wires ONLY the detonationDamage modifier half (rare/legendary → no ability).
-// The test exercises the REAL registry through buildEquipmentAbilities and asserts:
-//   (a) common  → 1 modifier ability with channel 'detonationDamage', value 2
-//   (b) uncommon→ 1 modifier ability with channel 'detonationDamage', value 4
-//   (c) epic    → 1 modifier ability with channel 'detonationDamage', value 8
-//   (d) rare    → NO detonationDamage ability in the output (builder returns undefined)
-//   (e) legendary → NO detonationDamage ability in the output (builder returns undefined)
+// Voidfire Catalyst is an ultimate implant. Both halves are now wired:
+//   common:    detonationDamage 2 + bombSplashDamage 4    → 2 abilities
+//   uncommon:  detonationDamage 4 + bombSplashDamage 8    → 2 abilities
+//   rare:      bombSplashDamage 24 only (no detonation)   → 1 ability
+//   epic:      detonationDamage 8 + bombSplashDamage 16   → 2 abilities
+//   legendary: bombSplashDamage 40 only (no detonation)   → 1 ability
 
-describe('Task 1.5 — Voidfire Catalyst: detonationDamage modifier (registry fold)', () => {
+describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDamage modifiers', () => {
     /**
      * Build an implant piece with setBonus 'VOIDFIRE_CATALYST' at the given rarity
      * and return the abilities produced by buildEquipmentAbilities.
      */
-    function voidirefireAbilities(rarity: GearPiece['rarity']) {
+    function voidfireAbilities(rarity: GearPiece['rarity']) {
         const id = `voidfire-${rarity}`;
         const piece = makePiece({
             id,
@@ -5826,21 +5818,40 @@ describe('Task 1.5 — Voidfire Catalyst: detonationDamage modifier (registry fo
         );
     }
 
-    it('common → 1 ability; modifier channel detonationDamage, value 2', () => {
-        const abilities = voidirefireAbilities('common');
+    /** Extract the first modifier ability with channel 'bombSplashDamage', if any. */
+    function findSplashAbility(abilities: ReturnType<typeof buildEquipmentAbilities>) {
+        return abilities.find(
+            (a) =>
+                a.type === 'modifier' &&
+                'channel' in a.config &&
+                (a.config as { channel: string }).channel === 'bombSplashDamage'
+        );
+    }
+
+    it('common → 2 abilities: detonationDamage value 2 AND bombSplashDamage value 4', () => {
+        const abilities = voidfireAbilities('common');
+        expect(abilities).toHaveLength(2);
         const det = findDetAbility(abilities);
         expect(det).toBeDefined();
-        expect(det!.type).toBe('modifier');
         expect(det!.config).toMatchObject({
             type: 'modifier',
             channel: 'detonationDamage',
             value: 2,
             isMultiplicative: false,
         });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 4,
+            isMultiplicative: false,
+        });
     });
 
-    it('uncommon → 1 ability; modifier channel detonationDamage, value 4', () => {
-        const abilities = voidirefireAbilities('uncommon');
+    it('uncommon → 2 abilities: detonationDamage value 4 AND bombSplashDamage value 8', () => {
+        const abilities = voidfireAbilities('uncommon');
+        expect(abilities).toHaveLength(2);
         const det = findDetAbility(abilities);
         expect(det).toBeDefined();
         expect(det!.config).toMatchObject({
@@ -5849,10 +5860,19 @@ describe('Task 1.5 — Voidfire Catalyst: detonationDamage modifier (registry fo
             value: 4,
             isMultiplicative: false,
         });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 8,
+            isMultiplicative: false,
+        });
     });
 
-    it('epic → 1 ability; modifier channel detonationDamage, value 8', () => {
-        const abilities = voidirefireAbilities('epic');
+    it('epic → 2 abilities: detonationDamage value 8 AND bombSplashDamage value 16', () => {
+        const abilities = voidfireAbilities('epic');
+        expect(abilities).toHaveLength(2);
         const det = findDetAbility(abilities);
         expect(det).toBeDefined();
         expect(det!.config).toMatchObject({
@@ -5861,17 +5881,43 @@ describe('Task 1.5 — Voidfire Catalyst: detonationDamage modifier (registry fo
             value: 8,
             isMultiplicative: false,
         });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 16,
+            isMultiplicative: false,
+        });
     });
 
-    it('rare → NO detonationDamage ability (splash-only rarity, builder returns undefined)', () => {
-        const abilities = voidirefireAbilities('rare');
+    it('rare → 1 ability: bombSplashDamage value 24, NO detonationDamage', () => {
+        const abilities = voidfireAbilities('rare');
+        expect(abilities).toHaveLength(1);
         const det = findDetAbility(abilities);
         expect(det).toBeUndefined();
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 24,
+            isMultiplicative: false,
+        });
     });
 
-    it('legendary → NO detonationDamage ability (splash-only rarity, builder returns undefined)', () => {
-        const abilities = voidirefireAbilities('legendary');
+    it('legendary → 1 ability: bombSplashDamage value 40, NO detonationDamage', () => {
+        const abilities = voidfireAbilities('legendary');
+        expect(abilities).toHaveLength(1);
         const det = findDetAbility(abilities);
         expect(det).toBeUndefined();
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 40,
+            isMultiplicative: false,
+        });
     });
 });

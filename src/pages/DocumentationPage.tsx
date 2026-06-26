@@ -3144,8 +3144,9 @@ const DocumentationPage: React.FC = () => {
                                     Stealth when directly hit). The{' '}
                                     <strong>Voidfire Catalyst</strong> implant is also modeled: it
                                     increases detonation damage (bomb bursts, Inferno detonations,
-                                    and Corrosion detonations) by a percentage based on rarity. More
-                                    implant and gear-set effects will be added in future updates.
+                                    and Corrosion detonations) and bomb splash damage by a
+                                    percentage based on rarity. More implant and gear-set effects
+                                    will be added in future updates.
                                 </p>
                             </div>
                         </div>
