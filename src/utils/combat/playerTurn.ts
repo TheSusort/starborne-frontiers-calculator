@@ -594,6 +594,7 @@ function applyNewDoTs(args: {
     effectiveAttack: number;
     affinityMult: number;
     detonationDamageModifier: number;
+    splashModifier: number;
     sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
@@ -627,6 +628,7 @@ function applyNewDoTs(args: {
                 sourceId: args.sourceId,
                 affinityMult: args.affinityMult,
                 detonationDamageModifier: args.detonationDamageModifier,
+                splashModifier: args.splashModifier,
             });
             args.emitDotApplied('bomb', dot.stacks);
         }
@@ -1535,6 +1537,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 effectiveAttack,
                 affinityMult,
                 detonationDamageModifier: dmgStats.detonationDamageModifier,
+                splashModifier: dmgStats.bombSplashModifier,
                 sourceId: actor.id,
                 corrosionEntries,
                 infernoEntries,

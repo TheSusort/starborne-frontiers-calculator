@@ -1565,6 +1565,8 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 // does not carry the owner's live detonation modifier; documented approximation —
                 // no shipped reactive bomb applier also wears Voidfire.
                 detonationDamageModifier: 0,
+                // Same approximation: reactive ctx does not carry the live splash modifier.
+                splashModifier: 0,
             });
         }
         // Discrete infliction event — sourceId = the owner so the application is chainable

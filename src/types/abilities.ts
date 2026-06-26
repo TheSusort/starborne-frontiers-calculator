@@ -321,6 +321,7 @@ export type ModifierChannel =
     | 'outgoingDamage'
     | 'dotDamage'
     | 'detonationDamage'
+    | 'bombSplashDamage'
     | 'outgoingHeal'
     | 'incomingDamage';
 

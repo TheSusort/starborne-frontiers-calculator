@@ -10,6 +10,7 @@ export interface ModifierTotals {
     outgoingDamage: number;
     dotDamage: number;
     detonationDamage: number;
+    bombSplashDamage: number;
     defence: number;
     defensePenetration: number;
     hp: number;
@@ -32,6 +33,7 @@ export function modifierTotalsFromAbilities(
         outgoingDamage: 0,
         dotDamage: 0,
         detonationDamage: 0,
+        bombSplashDamage: 0,
         defence: 0,
         defensePenetration: 0,
         hp: 0,
@@ -69,6 +71,9 @@ export function modifierTotalsFromAbilities(
                 break;
             case 'detonationDamage':
                 totals.detonationDamage += amount;
+                break;
+            case 'bombSplashDamage':
+                totals.bombSplashDamage += amount;
                 break;
             case 'defense':
                 totals.defence += amount;

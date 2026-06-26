@@ -125,6 +125,7 @@ const expectedBomb: PendingBomb = {
     sourceId: 'attacker',
     affinityMult: 1,
     detonationDamageModifier: 0,
+    splashModifier: 0,
 };
 const EXPECTED_SPLASH = splashDamageForBomb(expectedBomb); // 10000
 
@@ -200,6 +201,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             sourceId: 'enemy-b',
             affinityMult: 1,
             detonationDamageModifier: 0,
+            splashModifier: 0,
         };
         const expectedBSplash = splashDamageForBomb(bBomb); // 125
 
@@ -290,6 +292,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             sourceId: 'attacker',
             affinityMult: 1.5, // non-neutral — must not change splash
             detonationDamageModifier: 0,
+            splashModifier: 0,
         };
         const bomb2: PendingBomb = {
             countdown: 3,
@@ -299,6 +302,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             sourceId: 'attacker',
             affinityMult: 1,
             detonationDamageModifier: 0,
+            splashModifier: 0,
         };
         const expectedPerAlly = splashDamageForBomb(bomb1) + splashDamageForBomb(bomb2); // 250 + 1500 = 1750
 
@@ -354,6 +358,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
             sourceId: 'enemy-dead-applier',
             affinityMult: 1,
             detonationDamageModifier: 0,
+            splashModifier: 0,
         };
         const expectedDeadApplierSplash = splashDamageForBomb(deadApplierBomb); // 10000
 
@@ -446,5 +451,56 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         expect(round.perActorSplash).toBeUndefined();
         // enemy-mid took no damage at all (outside the base footprint, no splash fired).
         expect(round.perTargetDamage?.['enemy-mid']).toBeUndefined();
+    });
+
+    // ─── (g) splashModifier: 50 gives 1.5× splash ────────────────────────────
+    // A pre-seeded bomb with splashModifier=50 must produce 1.5× the baseline splash.
+    // Uses __testTapActors to inject the bomb directly onto the carrier, isolating the
+    // splashModifier field. Mirrors case (e) structurally.
+    it('(g) splashModifier: 50 on a pre-seeded bomb gives 1.5× the baseline splash', () => {
+        idc = 0;
+        const baselineBomb: PendingBomb = {
+            countdown: 3,
+            damagePerStack: 5000 * (BOMB_TIER / 100), // 10000
+            stacks: BOMB_STACKS,
+            tier: BOMB_TIER,
+            sourceId: 'enemy-carrier',
+            affinityMult: 1,
+            detonationDamageModifier: 0,
+            splashModifier: 50,
+        };
+        const expectedSplash = splashDamageForBomb(baselineBomb, 50); // 10000 × 1.5 = 15000
+
+        const input = BASE({
+            // Damage-only skill: the direct hit kills the carrier; no bomb from the skill.
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemyAttackers: [
+                enemyAt('enemy-carrier', 'M4', 5000),
+                enemyAt('enemy-mid', 'M3', 1_000_000_000),
+            ],
+            __testTapActors: (actors) => {
+                const carrier = actors.find((a) => a.id === 'enemy-carrier');
+                if (carrier) carrier.pendingBombs.push(baselineBomb);
+            },
+        });
+
+        const result = runCombat(input);
+        const round = result.rounds[0];
+
+        // The splash must be 1.5× the default (splashModifier flows through to the helper).
+        expect(round.perActorSplash?.['enemy-mid']).toBe(expectedSplash);
     });
 });

@@ -15,6 +15,7 @@ function makeBomb(overrides: Partial<PendingBomb> = {}): PendingBomb {
         sourceId: 'src-1',
         affinityMult: 1.3, // intentionally ≠ 1 — must NOT affect splash math
         detonationDamageModifier: 0,
+        splashModifier: 0,
         ...overrides,
     };
 }

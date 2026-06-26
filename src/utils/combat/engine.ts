@@ -2941,7 +2941,7 @@ export function runCombat(input: CombatEngineInput): {
                             if (!ally || ally.destroyedRound !== undefined) continue;
                             const splashSink = ally.side === 'player' ? playerSink : enemySink;
                             for (const bomb of bombs) {
-                                const splash = splashDamageForBomb(bomb);
+                                const splash = splashDamageForBomb(bomb, bomb.splashModifier);
                                 if (splash <= 0) continue;
                                 applyVictimDamage(splash, ally, splashSink, {
                                     killerId: bomb.sourceId,

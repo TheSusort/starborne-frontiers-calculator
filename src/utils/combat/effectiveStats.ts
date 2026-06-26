@@ -154,6 +154,8 @@ export interface EffectiveDamageStats {
     selfDotDamageModifier: number;
     /** mod.detonationDamage — outgoing detonation-burst multiplier delta (percentage points). */
     detonationDamageModifier: number;
+    /** mod.bombSplashDamage — outgoing bomb-splash multiplier delta (percentage points). */
+    bombSplashModifier: number;
     /** Full summed buff totals (layers 1+2+3+4) — exposes outgoingDamage/heal channels for the turn loop. */
     totals: ReturnType<typeof calculateBuffTotals>;
 }
@@ -215,6 +217,7 @@ export function effectiveDamageStatsOf(args: {
             dotPen.defensePenetrationBuff,
         selfDotDamageModifier: dotPen.dotDamageModifier + mod.dotDamage,
         detonationDamageModifier: mod.detonationDamage,
+        bombSplashModifier: mod.bombSplashDamage,
         totals,
     };
 }

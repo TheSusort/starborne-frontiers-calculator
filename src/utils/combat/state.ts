@@ -66,6 +66,9 @@ export interface PendingBomb {
     /** The applier's detonation-damage modifier (%), snapshotted at application like affinityMult.
      *  Scales the timed-expiry burst in processBombs and (later) skill detonation. Default 0. */
     detonationDamageModifier: number;
+    /** The applier's bomb-splash-damage modifier (%), snapshotted at application like
+     *  affinityMult/detonationDamageModifier. Scales splash-on-death. Default 0. */
+    splashModifier: number;
 }
 
 // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it
