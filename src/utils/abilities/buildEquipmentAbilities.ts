@@ -263,6 +263,16 @@ const ADAPTIVE_PLATING_PCT: Record<string, number> = { uncommon: 21, epic: 34, l
 // threaded by the on-own-repair-to-ally listener in H3.3).
 const ABUNDANT_RENEWAL_PCT: Record<string, number> = { epic: 20, legendary: 30 };
 
+// Lifeline: once-per-battle, when a direct hit would drop HP below 30%, gain a shield equal to
+// FLAT + 100% of this unit's attack (capped at max HP). Per-rarity = the flat component only.
+const LIFELINE_FLAT: Record<string, number> = {
+    common: 4000,
+    uncommon: 6000,
+    rare: 8000,
+    epic: 10000,
+    legendary: 12000,
+};
+
 // D-PR5: Second Wind reactive self-heal on crit-received value table
 const SECOND_WIND_PROC: Record<string, number> = {
     uncommon: 0.07,
@@ -771,6 +781,27 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             procChance,
             oncePerRound: true,
             config: { type: 'shield', pct, basis: 'damage-taken' },
+            autoFilled: true,
+        };
+    },
+    // Lifeline: PRE-hit threshold shield (incoming-shield-grant). Consumed victim-side in
+    // applyVictimDamage, NOT via the reactive executor — the trigger/target wrapper is nominal
+    // (mirrors SHADOWGUARD's incoming-block). All five rarities present.
+    LIFELINE: (rarity) => {
+        const flatAmount = LIFELINE_FLAT[rarity];
+        if (flatAmount === undefined) return undefined;
+        return {
+            type: 'incoming-shield-grant',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-shield-grant',
+                hpThresholdPct: 30,
+                flatAmount,
+                attackPct: 100,
+                oncePerCombat: true,
+            },
             autoFilled: true,
         };
     },
