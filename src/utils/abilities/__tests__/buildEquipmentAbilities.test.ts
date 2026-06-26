@@ -797,7 +797,11 @@ describe('Decimation gear set', () => {
         return { ship: makeShip({ equipment }), getGearPiece: (id: string) => map[id] };
     }
     it('emits a dotDamage modifier scaling 10% per complete 2pc set', () => {
-        for (const [pieces, expected] of [[2, 10], [4, 20], [6, 30]] as const) {
+        for (const [pieces, expected] of [
+            [2, 10],
+            [4, 20],
+            [6, 30],
+        ] as const) {
             const { ship, getGearPiece } = shipWithDecimation(pieces);
             const abilities = buildEquipmentAbilities(ship, getGearPiece);
             const dec = abilities.find((a) => a.id === 'equip-set-DECIMATION');
@@ -870,6 +874,32 @@ describe('Power Infused Nanobots buff (D-PR9 + D-PR10 — Font of Power, flat at
         expect(effects.attackFlatPctOfCaster).toBe(100);
         expect(effects.attack).toBeUndefined();
         expect(effects.attackFlat).toBeUndefined();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Boost gear set (4pc): every buff the wearer applies lasts +1 turn
+// ---------------------------------------------------------------------------
+describe('buildEquipmentAbilities — Boost set', () => {
+    it('emits an equip-set-BOOST ability with buff-duration-extension config at 4 pieces', () => {
+        const abilities = buildForGearSet('BOOST');
+        const ab = abilities.find((a) => a.id === 'equip-set-BOOST');
+        expect(ab).toBeDefined();
+        expect(ab!.type).toBe('modifier');
+        expect(ab!.config).toEqual({ type: 'buff-duration-extension', turns: 1 });
+    });
+
+    it('emits nothing when only 3 BOOST pieces are equipped (minPieces is 4)', () => {
+        const slots = ['weapon', 'hull', 'sensor'] as const;
+        const equipment: Record<string, string> = {};
+        const pieceMap: Record<string, GearPiece> = {};
+        for (let i = 0; i < 3; i++) {
+            const id = `BOOST-${i}`;
+            equipment[slots[i]] = id;
+            pieceMap[id] = makePiece({ id, slot: slots[i], setBonus: 'BOOST' });
+        }
+        const abilities = buildEquipmentAbilities(makeShip({ equipment }), (g) => pieceMap[g]);
+        expect(abilities.find((a) => a.id === 'equip-set-BOOST')).toBeUndefined();
     });
 });
 

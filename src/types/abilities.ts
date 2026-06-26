@@ -509,6 +509,14 @@ export type AbilityConfig =
           type: 'damage-reflection';
           /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
           pct: number;
+      }
+    // Boost gear set: caster-side +1-turn extension on every buff the wearer applies.
+    // No-op marker config (mirrors damage-reflection) — read by the engine when building
+    // the per-owner extension map, NEVER executed by the ability fold.
+    | {
+          type: 'buff-duration-extension';
+          /** Extra turns added to buffs this wearer applies (Boost = 1). */
+          turns: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate
