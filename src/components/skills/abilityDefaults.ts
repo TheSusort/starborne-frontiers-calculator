@@ -66,6 +66,14 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
                 blockPct: 1,
                 oncePerRound: false,
             };
+        case 'incoming-shield-grant':
+            return {
+                type: 'incoming-shield-grant',
+                hpThresholdPct: 30,
+                flatAmount: 0,
+                attackPct: 100,
+                oncePerCombat: true,
+            };
         case 'outgoing-amplification':
             return {
                 type: 'outgoing-amplification',
@@ -99,6 +107,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     control: 'enemy',
     'incoming-reduction': 'self',
     'incoming-block': 'self',
+    'incoming-shield-grant': 'self',
     'outgoing-amplification': 'self',
     'heal-amplification': 'self',
     'incoming-heal-amplification': 'self',

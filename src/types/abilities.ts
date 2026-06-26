@@ -22,6 +22,7 @@ export type AbilityType =
     | 'control'
     | 'incoming-reduction'
     | 'incoming-block'
+    | 'incoming-shield-grant'
     | 'outgoing-amplification'
     | 'heal-amplification'
     | 'incoming-heal-amplification';
@@ -455,6 +456,19 @@ export type AbilityConfig =
           /** 0..1 fraction of the hit blocked (1.0 = full block). */
           blockPct: number;
           oncePerRound: boolean;
+      }
+    | {
+          /** Lifeline: a PRE-hit threshold shield. When a pure direct hit would cross the
+           *  carrier's HP below `hpThresholdPct`% of max HP, grant `flatAmount` + `attackPct`%
+           *  of the carrier's own effective attack to the shield pool (capped at max HP) BEFORE
+           *  the hit's absorb step — so the rest of the same hit drains shield→HP per the H1 pen
+           *  rules (the unit can still die). Victim-side / self-scoped; consumed in
+           *  applyVictimDamage, NOT via the reactive executor. Once per battle. */
+          type: 'incoming-shield-grant';
+          hpThresholdPct: number;
+          flatAmount: number;
+          attackPct: number;
+          oncePerCombat: boolean;
       }
     // D-PR4 attacker-side outgoing-damage amplification (folded at the per-hit seam before victim apply).
     | {
