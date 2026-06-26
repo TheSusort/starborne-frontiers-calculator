@@ -41,6 +41,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models the Revenge gear set: the wearer deals increasing damage as its HP drops, up to +25% near death.',
     'Combat simulator now models the Smokescreen implant: a chance to gain Stealth when directly hit.',
     'Voidfire Catalyst implant now increases detonation damage (bomb, Inferno, and Corrosion bursts).',
+    "Combat simulator now models bomb splash-on-death: when a ship is destroyed while still carrying un-detonated bombs, each adjacent ally takes a share of every bomb's damage (25% at tier 1, 50% at tier 2, 75% at tier 3). This is positional, so it only applies in battles with board positions.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
