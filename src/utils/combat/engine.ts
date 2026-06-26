@@ -2937,24 +2937,40 @@ export function runCombat(input: CombatEngineInput): {
             // turn/wrapper layer), so reflection neither re-triggers reactions nor ping-pongs.
             //
             // GUARDS (any → skip): a reflected application (no ping-pong); no net HP damage; a DoT
-            // tick (byDirectDamage === false); a bomb portion (bombs full-drain, no reflect); the
-            // victim has no damage-reflection ability. Fully inert (no helper calls) for every
-            // fixture without REFLECT equipment → byte-identical.
+            // tick (byDirectDamage === false); the victim has no damage-reflection ability. Fully
+            // inert (no helper calls) for every fixture without REFLECT equipment → byte-identical.
+            //
+            // MIXED DIRECT + DETONATE HIT: a single apply can carry damage = directDamage +
+            // detonationDamage with byDirectDamage:true AND bombPortion > 0 (a cast that both lands a
+            // direct hit and detonates a bomb in the same hit — see the enemy-aggregate apply site).
+            // The bomb portion never reflects (bombs full-drain, no reflect); the direct portion does.
+            // We split the net HP damage proportionally by the RAW direct fraction of the post-block
+            // total (`damage`). This is an intentional approximation: shieldAbsorb mixes the direct
+            // and bomb slices into a single hpDamage, so we cannot recover the exact direct HP loss —
+            // we apportion it by raw fraction. Pure-direct (bombPortion 0) → fraction 1 → full
+            // hpDamage (byte-identical to the pre-split behavior). Pure-bomb (bombPortion === total)
+            // → fraction 0 → basis 0 → skip (no reflect).
             //
             // KILLING-BLOW NOTE: no guard on victim.destroyedRound — if the hit that killed the
             // wearer also triggers reflection, the thorns still fire (hit landed before death).
             // The attacker.destroyedRound guard below prevents posthumous reflection TO an
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
-            if (
-                !cause?.isReflected &&
-                hpDamage > 0 &&
-                cause?.byDirectDamage !== false &&
-                (cause?.bombPortion ?? 0) === 0
-            ) {
-                const reflectAbilities = incomingAbilitiesOf(victim.id).filter(
-                    (a) => a.config.type === 'damage-reflection'
-                );
+            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
+                // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
+                // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
+                // bombPortion === total → directFraction 0 → basis 0 → skipped below.
+                const totalRaw = damage;
+                const bombPortion = cause?.bombPortion ?? 0;
+                const directFraction =
+                    totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
+                const reflectBasis = hpDamage * directFraction;
+                const reflectAbilities =
+                    reflectBasis > 0
+                        ? incomingAbilitiesOf(victim.id).filter(
+                              (a) => a.config.type === 'damage-reflection'
+                          )
+                        : [];
                 if (reflectAbilities.length > 0) {
                     const reflectPct = reflectAbilities.reduce(
                         (sum, a) =>
@@ -2997,7 +3013,8 @@ export function runCombat(input: CombatEngineInput): {
                         );
                         const reflected = reflectedDamageForHit({
                             reflectPct,
-                            netHpDamage: hpDamage,
+                            // Direct slice only — the bomb portion of a mixed hit never reflects.
+                            netHpDamage: reflectBasis,
                             affinityDamageModifier,
                             attackerDefenceReductionPct,
                             attackerIncomingReductionPct,

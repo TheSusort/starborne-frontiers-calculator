@@ -388,8 +388,94 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
         );
         expect(bombApplied).toBe(true);
-        // The enemy attacker took ZERO reflected damage — the bombPortion guard fired.
+        // The enemy attacker took ZERO reflected damage — the pure-bomb hit reflects nothing
+        // (directFraction === 0 → reflect basis 0).
         expect(totalDamageTaken(result, foe)).toBe(0);
+    });
+
+    it('(h) a MIXED direct + detonate hit reflects the DIRECT slice only — positive but less than a pure-direct hit of the same total', () => {
+        // The fix: a single apply can carry damage = directDamage + detonationDamage with
+        // byDirectDamage:true AND bombPortion > 0 (a cast that lands a direct hit AND detonates a
+        // bomb in the same hit). The OLD guard (bombPortion > 0 → skip) suppressed reflection
+        // entirely. The NEW behavior reflects the direct slice only (netHpDamage × directFraction).
+        //
+        // Enemy skill: deals 100% direct damage AND inflicts+detonates Bomb II in the same cast.
+        // Round 1: direct hit lands; detonate fires on an empty queue (0 detonation); bomb queued.
+        // Round 2+: the cast lands BOTH a direct hit and a real detonation → bombPortion > 0 →
+        // mixed hit. The wearer reflects ONLY the direct slice back at the enemy.
+        const pieces = reflectPieces();
+        const getGearPiece = getGearPieceFor(pieces);
+
+        const mixedEnemy = makeAttacker('foe', 'Foe', 'antimatter');
+        (mixedEnemy as { activeSkillText?: string }).activeSkillText =
+            'This Unit deals <unit-damage>100% damage</unit-damage>, inflicts <unit-skill>Bomb II</unit-skill> for 2 turns, detonates Bomb effects with 100% of their power.';
+
+        const buildBattle = (enemy: Ship) =>
+            simulateBattle(
+                {
+                    playerTeam: [
+                        place(makeTank('wearer', 'Wearer', 'thermal', pieces), 'M4', {
+                            attack: 5000,
+                            hp: 1_000_000,
+                        }),
+                    ],
+                    enemyTeam: [
+                        place(enemy, 'M4', {
+                            attack: 10_000,
+                            hp: 1_000_000,
+                        }),
+                    ],
+                    rounds: 4,
+                },
+                getGearPiece
+            );
+
+        const mixed = buildBattle(mixedEnemy);
+        const foeMixed = enemyId(mixed);
+
+        // The bomb DID land (mixed scenario is non-trivial: a bomb detonates on the wearer).
+        const bombApplied = mixed.rounds.some((round) =>
+            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        );
+        expect(bombApplied).toBe(true);
+
+        // CORE OF THE FIX: the mixed hit reflects a POSITIVE amount (direct slice no longer
+        // suppressed). Reflected damage surfaces as the enemy attacker's damageTaken.
+        const mixedReflected = totalDamageTaken(mixed, foeMixed);
+        expect(mixedReflected).toBeGreaterThan(0);
+
+        // Control: a PURE-DIRECT enemy whose single direct hit deals the SAME total damage the
+        // mixed enemy delivers (direct + bomb). The mixed enemy's bomb is 100% of a Bomb-II-tier
+        // hit at 10_000 attack; a pure-direct enemy at the same attack landing only its direct hit
+        // delivers LESS total than direct+bomb, but reflects on the FULL net HP (no bomb slice
+        // excluded). To make the inequality clean, give the pure-direct control DOUBLE attack so
+        // its single direct hit lands MORE total damage than the mixed enemy's direct+bomb sum —
+        // yet it reflects on the full direct hit. The mixed enemy reflects only its (smaller)
+        // direct slice, so mixedReflected < pure-direct reflected.
+        const pureDirectEnemy = makeAttacker('foe', 'Foe', 'antimatter');
+        const pureDirect = simulateBattle(
+            {
+                playerTeam: [
+                    place(makeTank('wearer', 'Wearer', 'thermal', pieces), 'M4', {
+                        attack: 5000,
+                        hp: 1_000_000,
+                    }),
+                ],
+                enemyTeam: [
+                    place(pureDirectEnemy, 'M4', {
+                        attack: 20_000,
+                        hp: 1_000_000,
+                    }),
+                ],
+                rounds: 4,
+            },
+            getGearPiece
+        );
+        const foePure = enemyId(pureDirect);
+        const pureReflected = totalDamageTaken(pureDirect, foePure);
+        // The pure-direct hit (full net HP reflected, larger attack) reflects MORE than the mixed
+        // hit's direct slice (bomb portion excluded).
+        expect(pureReflected).toBeGreaterThan(mixedReflected);
     });
 });
 
