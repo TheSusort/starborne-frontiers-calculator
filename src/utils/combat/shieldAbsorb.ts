@@ -18,9 +18,13 @@ export function shieldAbsorb(args: {
 }): { absorbed: number; hpDamage: number } {
     const { damage, shieldPool, isDot, penPct, bombPortion } = args;
     if (isDot) return { absorbed: 0, hpDamage: damage }; // bypass
+    // Clamp pen to its 0..100 contract: out-of-range stat values would otherwise
+    // make the direct portion negative (pen > 100) and overstate HP damage.
+    const clampedPenPct = Math.max(0, Math.min(100, penPct));
+    const pool = Math.max(0, shieldPool);
     const bomb = Math.max(0, Math.min(bombPortion, damage));
     const directPortion = damage - bomb;
-    const shieldEligible = directPortion * (1 - penPct / 100) + bomb;
-    const absorbed = Math.min(shieldPool, shieldEligible);
+    const shieldEligible = directPortion * (1 - clampedPenPct / 100) + bomb;
+    const absorbed = Math.min(pool, shieldEligible);
     return { absorbed, hpDamage: damage - absorbed };
 }

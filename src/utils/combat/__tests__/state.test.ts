@@ -116,15 +116,10 @@ describe('createActor shieldPenetration (H1 Task 1)', () => {
         expect(a.stats.shieldPenetration).toBe(25);
     });
 
-    it('defaults shieldPenetration to 0 when not supplied', () => {
-        const a = createActor({
-            id: 'x',
-            side: 'player',
-            kind: 'attacker',
-            stats: baseStatsWithPen,
-        });
-        expect(a.stats.shieldPenetration).toBe(0);
-    });
+    // The "default to 0 when omitted" path lives at the adapter boundary
+    // (engine actor builders' `?? 0`), not in createActor — which requires the
+    // field and copies it through. That defaulting is covered by
+    // shieldPenetration.test.ts ('… defaults shieldPenetration to 0 when omitted').
 });
 
 describe('createActor indestructible flag', () => {
