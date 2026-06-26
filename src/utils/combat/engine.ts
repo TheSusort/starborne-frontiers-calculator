@@ -701,7 +701,11 @@ function processBombs(args: {
         args.pendingBombs[i].countdown -= 1;
         if (args.pendingBombs[i].countdown <= 0) {
             const bomb = args.pendingBombs[i];
-            const burstDamage = bomb.stacks * bomb.damagePerStack * bomb.affinityMult;
+            const burstDamage =
+                bomb.stacks *
+                bomb.damagePerStack *
+                bomb.affinityMult *
+                (1 + bomb.detonationDamageModifier / 100);
             args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
             args.creditDetonation(bomb.sourceId, burstDamage);
             args.pendingBombs.splice(i, 1);

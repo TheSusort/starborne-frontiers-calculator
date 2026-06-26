@@ -63,6 +63,9 @@ export interface PendingBomb {
     /** Affinity multiplier snapshotted at application from the applier's affinity matchup,
      *  so the burst on detonation uses the APPLIER's affinity, not the focus actor's. */
     affinityMult: number;
+    /** The applier's detonation-damage modifier (%), snapshotted at application like affinityMult.
+     *  Scales the timed-expiry burst in processBombs and (later) skill detonation. Default 0. */
+    detonationDamageModifier: number;
 }
 
 // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy each round it

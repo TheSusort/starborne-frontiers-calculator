@@ -741,6 +741,107 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         }
     });
 
+    // Case 5b: bomb with detonationDamageModifier=100 timed-detonates for 2× the baseline.
+    // Validates that processBombs scales the burst by (1 + detonationDamageModifier/100).
+    it('timed bomb detonation scales by detonationDamageModifier: modifier 100 doubles the burst', () => {
+        // A ship skill that applies a Bomb DoT with countdown 2 on the active slot.
+        // The passive slot carries a modifier ability with channel 'detonationDamage', value 100
+        // (a +100% detonation damage multiplier → burst should be 2× the baseline).
+        // Baseline run: same skills but no passive modifier → burst at 1×.
+        // Modified run: passive modifier 100 → burst at 2×.
+        // At default speeds: attacker acts round 1 (bomb applied), enemy acts round 1 (countdown
+        // decrements to 1), attacker acts round 2 (charged slot, no new bomb), enemy acts round 2
+        // (countdown → 0 → detonates). We compare the bomb-detonated damage between the two runs.
+        const bombSkillsBase = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'bomb',
+                                tier: 10,
+                                stacks: 2,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+            ],
+        });
+
+        const bombSkillsWithModifier = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'bomb',
+                                tier: 10,
+                                stacks: 2,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 280 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'modifier',
+                                channel: 'detonationDamage',
+                                value: 100,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { events: baseEvents } = collect(
+            baseInput({ shipSkills: bombSkillsBase(), numRounds: 4 })
+        );
+        const { events: modEvents } = collect(
+            baseInput({ shipSkills: bombSkillsWithModifier(), numRounds: 4 })
+        );
+
+        const baseBurst = baseEvents
+            .filter((e) => e.type === 'bomb-detonated')
+            .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
+        const modBurst = modEvents
+            .filter((e) => e.type === 'bomb-detonated')
+            .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
+
+        // With modifier 0: burst = stacks × damagePerStack × affinityMult × (1 + 0/100) = baseBurst
+        // With modifier 100: burst = stacks × damagePerStack × affinityMult × (1 + 100/100) = 2 × baseBurst
+        expect(baseBurst).toBeGreaterThan(0);
+        expect(modBurst).toBe(baseBurst * 2);
+    });
+
     // Case 6: a team actor's landed timed debuff emits debuff-applied with sourceId = team
     // actor id, on every application round (not just the first).
     it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId on every application round", () => {

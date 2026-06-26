@@ -1561,6 +1561,10 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 tier: cfg.tier,
                 sourceId: intent.ownerId,
                 affinityMult: ownerCtx.affinityMult,
+                // Reactive-applied bombs default the detonation modifier to 0: the reactive ctx
+                // does not carry the owner's live detonation modifier; documented approximation —
+                // no shipped reactive bomb applier also wears Voidfire.
+                detonationDamageModifier: 0,
             });
         }
         // Discrete infliction event — sourceId = the owner so the application is chainable
