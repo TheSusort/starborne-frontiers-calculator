@@ -97,7 +97,7 @@ In `src/utils/abilities/evaluateConditions.ts`, add a case in `evaluateCondition
 ```typescript
 // at 60% missing HP → +15pp; at full HP → 0; capped at +25.
 ```
-Assert it is built (1 ability, modifier/outgoingDamage, scaling perUnit 0.25 cap 25, condition self-hp-missing-pct).
+Assert it is built (1 ability, modifier/outgoingDamage, scaling perUnit 0.25 cap 25, condition self-hp-missing-pct). For gear-set shape assertions, `gearSetAbilityCount` returns only a count — build inline and `find(a => a.id === 'equip-set-REVENGE')` (mirror the CLOAKING/SHIELD shape tests at equipmentCoverage.test.ts:220-273). REFLECT's id is `equip-set-REFLECT`.
 
 - [ ] **Step 6: Run, verify fails** (no builder yet).
 
@@ -280,7 +280,7 @@ Add editor stubs wherever the `AbilityConfig` union is exhaustively switched (mi
         autoFilled: true,
     }),
 ```
-NOTE: confirm `type`/`trigger` values that make the ability land in the **passive** slot and survive `buildShipAbilitiesWithEquipment`'s merge (mirror how HARDENED's `incoming-reduction` is built — it is collected from the passive slot regardless of trigger). Match HARDENED's `type`/`trigger` exactly.
+NOTE: `buildShipAbilitiesWithEquipment` pushes ALL equipment abilities into the passive slot unconditionally, and the engine collection loop keys purely on `config.type` — so the top-level `type`/`trigger` shown above do NOT affect collection (any values are fine; `'modifier'`/`'on-cast'` are placeholders). The id will be `equip-set-REFLECT`.
 
 - [ ] **Step 5: Extend the engine collection filter** (`engine.ts` ~2255) to include the new config type:
 ```typescript
