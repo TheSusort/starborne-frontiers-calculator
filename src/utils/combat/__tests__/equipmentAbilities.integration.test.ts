@@ -5527,3 +5527,253 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
         expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Lifeline (incoming-shield-grant) — once-per-battle PRE-hit threshold shield
+// ---------------------------------------------------------------------------
+//
+// Lifeline (legendary) resolves through the registry (IMPLANT_ABILITIES.LIFELINE) into a
+// nominal-trigger ability:
+//   { type:'incoming-shield-grant', target:'self', trigger:'on-cast',
+//     config:{ type:'incoming-shield-grant', hpThresholdPct:30, flatAmount:12000,
+//              attackPct:100, oncePerCombat:true } }
+// It is NOT routed via the reactive executor; it is consumed victim-side in applyVictimDamage
+// (engine.ts ~2784). When a PURE direct hit (byDirectDamage && no bomb portion) would carry the
+// carrier from >=30% to <30% of max HP, the engine grants flatAmount + 100%·attack to the shield
+// pool (capped at max HP) BEFORE the hit's absorb step, so the rest of THAT hit drains shield→HP.
+// The unit can still die. Once per battle, keyed `${victimId}:${abilityId}` in thresholdShieldFired.
+//
+// Concrete setup pinned across all three cases (no mitigation arithmetic):
+//   carrier maxHp 10000, attack 2000, legendary Lifeline → grant = 12000 + 2000 = 14000,
+//   capped to maxHp 10000. Threshold T = 30% × 10000 = 3000. Carrier starts at full HP (100%).
+//   Enemy hits are pure single-hit direct attacks (no crit/defence/pen on either side), carrier
+//   is slow (speed 1) so the enemy hits land at the top of each round, before the carrier acts.
+//   The grant surfaces on the H1 per-round accumulator: RoundData.perActorShield['attacker'].granted.
+const lifelinePiece = makePiece({
+    id: 'lifeline-legendary',
+    slot: 'implant_major',
+    rarity: 'legendary',
+    setBonus: 'LIFELINE',
+});
+
+describe('Lifeline (incoming-shield-grant)', () => {
+    /** No-op active for the carrier (focus) — deals no damage, just keeps the round cadence. */
+    const noopActive: Ability = {
+        id: 'noop-active',
+        type: 'damage',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage', multiplier: 0 },
+    };
+
+    /** Build the carrier's ship skills via the REAL registry: no-op active + the Lifeline passive.
+     *  Returns both the ShipSkills and the resolved ability id so callers can assert the registry
+     *  shape landed (pre-condition). */
+    function buildLifelineCarrier(): { shipSkills: ShipSkills; lifelineId: string } {
+        const ship = makeShip({ implants: { implant_major: 'lifeline-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'lifeline-legendary': lifelinePiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const lifeline = passive!.abilities.find((a) => a.id.startsWith('equip-implant-LIFELINE'));
+        // Pre-condition: the Lifeline ability resolved through the registry with the spec shape.
+        expect(lifeline).toBeDefined();
+        expect(lifeline!.config).toMatchObject({
+            type: 'incoming-shield-grant',
+            hpThresholdPct: 30,
+            flatAmount: 12000,
+            attackPct: 100,
+            oncePerCombat: true,
+        });
+        return {
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [noopActive] },
+                    ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+                ],
+            },
+            lifelineId: lifeline!.id,
+        };
+    }
+
+    /** Carrier WITHOUT Lifeline (control) — just the no-op active. */
+    const carrierNoLifeline: ShipSkills = {
+        slots: [{ slot: 'active', abilities: [noopActive] }],
+    };
+
+    /** A fast enemy that lands ONE pure direct hit of `dmg` on the carrier each round.
+     *  attack = dmg, multiplier 100, single hit, no crit → per-round direct damage taken = dmg. */
+    function directHitter(dmg: number) {
+        return {
+            id: 'lifeline-enemy',
+            stats: {
+                attack: dmg,
+                crit: 0,
+                critDamage: 0,
+                speed: 1000, // acts before the slow (speed 1) carrier
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'lifeline-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+    }
+
+    /** Base engine input for the carrier ('attacker'): healing mode, maxHp 10000, attack 2000,
+     *  slow so the enemy hit lands first. No mitigation so damage taken == nominal hit. */
+    const LIFELINE_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput =>
+        BASE({
+            attack: 2000, // → Lifeline grant = 12000 + 100%·2000 = 14000 (capped to maxHp)
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 10_000,
+            speed: 1,
+            enemyHp: 1_000_000_000,
+            healTargetId: 'attacker',
+            ...overrides,
+        });
+
+    /** Sum the carrier's per-round granted-shield surface across the whole battle. */
+    function totalGranted(result: ReturnType<typeof runCombat>): number {
+        return result.rounds.reduce(
+            (sum, rd) => sum + (rd.perActorShield?.['attacker']?.granted ?? 0),
+            0
+        );
+    }
+
+    /** Did the carrier ('attacker') die? Read the heal target's destroyed round. */
+    function carrierDied(result: ReturnType<typeof runCombat>): boolean {
+        return result.healing?.destroyedRound !== undefined;
+    }
+
+    // ── Case 1: crossing grants a shield that soaks the remainder ─────────────────
+    //
+    // Per-hit 4000 over 3 rounds. maxHp 10000, T = 3000.
+    //   R1: HP 10000 → 6000 (pool 0, no crossing; 6000 >= 3000).
+    //   R2: HP 6000, would-be 6000 − 4000 = 2000 < 3000, currentHp 6000 >= 3000 → CROSS.
+    //       Grant 14000 capped to 10000 → pool 10000 (before absorb). Absorb 4000 → pool 6000,
+    //       HP stays 6000.
+    //   R3: HP 6000, pool 6000. The 4000 hit is fully absorbed (would-be HP 6000, no crossing,
+    //       and already fired) → pool 2000, HP 6000. Carrier SURVIVES all three rounds.
+    // Control (no Lifeline): R1 6000, R2 2000, R3 2000 − 4000 → DEAD at round 3.
+    it(
+        'Case 1: a direct hit crossing below 30% grants a maxHP-capped shield that soaks the ' +
+            'remainder — the carrier SURVIVES a hit that kills the no-Lifeline control',
+        () => {
+            const { shipSkills } = buildLifelineCarrier();
+            const result = runCombat(
+                LIFELINE_BASE({
+                    numRounds: 3,
+                    shipSkills,
+                    enemyAttackers: [directHitter(4000)],
+                })
+            );
+
+            // The carrier survived the full battle.
+            expect(carrierDied(result)).toBe(false);
+
+            // EXACTLY one capped grant fired across the battle: pool jumped from 0 to maxHp 10000.
+            expect(totalGranted(result)).toBeCloseTo(10_000, 6);
+
+            // The grant landed on the carrier's pool and it still carries shield at end of battle
+            // (proving the pool soaked hits that would otherwise have hit HP).
+            const lastRound = result.rounds[result.rounds.length - 1];
+            expect(lastRound.perActorShield?.['attacker']?.pool).toBeGreaterThan(0);
+
+            // CONTROL — identical setup WITHOUT Lifeline: the carrier takes the same hits to HP
+            // with no shield and DIES at round 3. This is the divergence Lifeline prevents above.
+            const controlResult = runCombat(
+                LIFELINE_BASE({
+                    numRounds: 3,
+                    shipSkills: carrierNoLifeline,
+                    enemyAttackers: [directHitter(4000)],
+                })
+            );
+            expect(carrierDied(controlResult)).toBe(true);
+            // The control never granted any shield (no Lifeline).
+            expect(totalGranted(controlResult)).toBeCloseTo(0, 6);
+        }
+    );
+
+    // ── Case 2: Lifeline is NOT a death-save ──────────────────────────────────────
+    //
+    // A single overwhelming direct hit. maxHp 10000, full HP, T = 3000.
+    //   Provisional (pool 0): hpDamage 25000, would-be 10000 − 25000 < 3000, currentHp 10000 >=
+    //   3000 → CROSS → grant 14000 capped to 10000 → pool 10000. Total soak capacity = pool 10000
+    //   + HP 10000 = 20000 < 25000 → absorb 10000, remaining 15000 to HP → HP 0. Carrier DESTROYED.
+    it(
+        'Case 2: a hit exceeding (shield grant + remaining HP) still DESTROYS the carrier — ' +
+            'Lifeline is not a death-save',
+        () => {
+            const { shipSkills } = buildLifelineCarrier();
+            const result = runCombat(
+                LIFELINE_BASE({
+                    numRounds: 1,
+                    shipSkills,
+                    enemyAttackers: [directHitter(25_000)],
+                })
+            );
+
+            // The shield DID fire (the crossing condition was met) — non-vacuous: this is a
+            // genuine Lifeline grant, not "the hit just missed the threshold".
+            expect(totalGranted(result)).toBeCloseTo(10_000, 6);
+
+            // …yet the carrier still died: 25000 overwhelmed pool 10000 + HP 10000.
+            expect(carrierDied(result)).toBe(true);
+        }
+    );
+
+    // ── Case 3: once per battle ───────────────────────────────────────────────────
+    //
+    // Per-hit 4000 over 5 rounds. maxHp 10000, attack 2000, T = 3000.
+    //   R1: HP 10000 → 6000 (pool 0).
+    //   R2: HP 6000, would-be 2000 < 3000 → CROSS → GRANT #1 (capped 10000) → pool 10000;
+    //       absorb 4000 → pool 6000, HP 6000.
+    //   R3: HP 6000, pool 6000 → fully absorbs 4000 → pool 2000, HP 6000 (no crossing).
+    //   R4: HP 6000, pool 2000 → absorb 2000, hpDmg 2000 → pool 0, HP 4000 (would-be 4000, no cross).
+    //   R5: HP 4000, pool 0 → would-be 0 < 3000, currentHp 4000 >= 3000 → a SECOND qualifying
+    //       crossing, but Lifeline ALREADY FIRED → NO new grant → HP → 0, carrier DIES.
+    // If once-per-battle were broken, R5 would re-grant (pool → 10000) and the carrier would
+    // SURVIVE — so the carrier's death at R5 + total granted == one grant is the non-vacuous proof.
+    it(
+        'Case 3: two qualifying direct crossings across the battle grant the shield only ONCE — ' +
+            'the second qualifying hit gets no grant and the carrier dies',
+        () => {
+            const { shipSkills } = buildLifelineCarrier();
+            const result = runCombat(
+                LIFELINE_BASE({
+                    numRounds: 5,
+                    shipSkills,
+                    enemyAttackers: [directHitter(4000)],
+                })
+            );
+
+            // Exactly ONE grant across the entire battle (the R2 capped grant of 10000). A second
+            // grant at R5 would double this to 20000.
+            expect(totalGranted(result)).toBeCloseTo(10_000, 6);
+
+            // The carrier dies at R5: the second qualifying crossing produced NO shield. With a
+            // second grant the carrier would have survived — this asserts the once-per-battle gate.
+            expect(carrierDied(result)).toBe(true);
+        }
+    );
+});
