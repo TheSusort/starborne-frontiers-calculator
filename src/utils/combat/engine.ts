@@ -55,6 +55,7 @@ import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
 import { shieldAbsorb } from './shieldAbsorb';
+import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
@@ -1933,6 +1934,9 @@ export function runCombat(input: CombatEngineInput): {
     // its id lands here and a SECOND lethal hit destroys it normally even though the recurring
     // buff is still in the snapshot. Declared OUTSIDE the round loop → persists across rounds.
     const cheatDeathConsumed = new Set<string>();
+    // Lifeline (incoming-shield-grant): once-per-BATTLE fired flags, keyed `${victimId}:${abilityId}`.
+    // Combat-lifetime (NOT reset per round) — the shield grant occurs at most once per combat.
+    const thresholdShieldFired = new Set<string>();
     // Display-only (Phase 4c): a spent Cheat Death keeps reappearing in the displayed buff list
     // for two reasons, depending on how it was granted. (1) Passive/aura grants (Tycho) are
     // re-derived from the persistent aura store every round and clearRemovable leaves auras
@@ -2248,7 +2252,11 @@ export function runCombat(input: CombatEngineInput): {
         for (const slot of rt.castSkills.slots) {
             if (slot.slot !== 'passive') continue;
             for (const a of slot.abilities) {
-                if (a.config.type === 'incoming-reduction' || a.config.type === 'incoming-block') {
+                if (
+                    a.config.type === 'incoming-reduction' ||
+                    a.config.type === 'incoming-block' ||
+                    a.config.type === 'incoming-shield-grant'
+                ) {
                     incoming.push(a);
                 }
             }
@@ -2773,6 +2781,53 @@ export function runCombat(input: CombatEngineInput): {
                 return { shieldBefore: victim.shieldPool, hpDamage: 0, barriered: true };
             }
             const shieldBefore = victim.shieldPool;
+            // Lifeline (incoming-shield-grant): a PRE-hit threshold shield. When a PURE direct hit
+            // (no DoT, no bomb portion) would cross this victim's HP below the configured % of max HP,
+            // grant flat + %-of-attack to the pool BEFORE absorbing, so the rest of THIS hit drains
+            // shield→HP per the H1 pen rules (the unit can still die). Once per battle. Fully inert
+            // (no provisional absorb, no helper call) when the victim carries no such ability →
+            // byte-identical for every existing fixture.
+            const thresholdShieldAbilities = incomingAbilitiesOf(victim.id).filter(
+                (a) => a.config.type === 'incoming-shield-grant'
+            );
+            if (thresholdShieldAbilities.length > 0) {
+                // Provisional absorb against the CURRENT pool → the HP damage the hit would deal pre-Lifeline.
+                const provisional = shieldAbsorb({
+                    damage,
+                    shieldPool: victim.shieldPool,
+                    isDot: cause?.byDirectDamage === false,
+                    penPct: cause?.shieldPenetrationPct ?? 0,
+                    bombPortion: cause?.bombPortion ?? 0,
+                });
+                const grant = thresholdShieldForHit({
+                    abilities: thresholdShieldAbilities,
+                    currentHp: victim.currentHp,
+                    maxHp,
+                    provisionalHpDamage: provisional.hpDamage,
+                    effectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, victim).attack,
+                    isDirect: cause?.byDirectDamage === true && (cause?.bombPortion ?? 0) === 0,
+                    alreadyFired: (abilityId) =>
+                        thresholdShieldFired.has(`${victim.id}:${abilityId}`),
+                });
+                if (grant) {
+                    // Only ever ADD shield — never shrink a pre-hit pool that already
+                    // sits above the current effective max HP (e.g. an HP-down debuff
+                    // lowered maxHp after the pool was granted). Clamping the sum alone
+                    // would make `granted` negative and could turn a survivable hit lethal.
+                    const newPool =
+                        shieldBefore >= maxHp
+                            ? shieldBefore
+                            : Math.min(maxHp, shieldBefore + grant.grant);
+                    const granted = Math.max(0, newPool - shieldBefore);
+                    victim.shieldPool = newPool;
+                    thresholdShieldFired.add(`${victim.id}:${grant.abilityId}`);
+                    // Surface the real pool growth on the H1 granted accumulator (StatCard).
+                    perActorShieldGranted.set(
+                        victim.id,
+                        (perActorShieldGranted.get(victim.id) ?? 0) + granted
+                    );
+                }
+            }
             const { absorbed, hpDamage } = shieldAbsorb({
                 damage,
                 shieldPool: victim.shieldPool,

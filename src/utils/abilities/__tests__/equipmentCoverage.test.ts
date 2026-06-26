@@ -120,7 +120,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -147,6 +147,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'CHRONO_REAVER',
             'HYPERION_GAZE',
             'INTRUSION',
+            'LIFELINE',
             'NEBULA_NULLIFIER',
             'NOURISHMENT',
             'SYNAPTIC_RESONANCE',
@@ -314,6 +315,7 @@ describe('equipmentCoverage — implants', () => {
     const implementedImplants = new Set([
         'ABUNDANT_RENEWAL',
         'ADAPTIVE_PLATING',
+        'LIFELINE',
         'FIREWALL',
         'LOCKDOWN',
         'TENACITY',
@@ -728,6 +730,28 @@ describe('equipmentCoverage — implants', () => {
             buffName: 'Crit Power Up III',
             duration: 1,
         });
+    });
+
+    // Lifeline: PRE-hit threshold shield (incoming-shield-grant), all five rarities.
+    it('LIFELINE produces 1 ability per rarity (incoming-shield-grant, flat by rarity, 100% attack, threshold 30, once per battle)', () => {
+        const flat: Record<string, number> = {
+            common: 4000,
+            uncommon: 6000,
+            rare: 8000,
+            epic: 10000,
+            legendary: 12000,
+        };
+        for (const v of IMPLANTS['LIFELINE'].variants) {
+            expect(implantAbilityCount('LIFELINE', v.rarity)).toBe(1);
+            const abs = implantAbilities('LIFELINE', v.rarity);
+            expect(abs[0].config).toMatchObject({
+                type: 'incoming-shield-grant',
+                hpThresholdPct: 30,
+                flatAmount: flat[v.rarity],
+                attackPct: 100,
+                oncePerCombat: true,
+            });
+        }
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));

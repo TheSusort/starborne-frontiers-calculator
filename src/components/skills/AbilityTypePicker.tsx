@@ -26,6 +26,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     control: 'Control',
     'incoming-reduction': 'Incoming Reduction',
     'incoming-block': 'Incoming Block',
+    'incoming-shield-grant': 'Incoming Shield Grant',
     'outgoing-amplification': 'Outgoing Amplification',
     'heal-amplification': 'Heal Amplification',
     'incoming-heal-amplification': 'Incoming Heal Amplification',
