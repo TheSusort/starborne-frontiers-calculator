@@ -87,6 +87,7 @@ describe('modifierTotalsFromAbilities', () => {
         critDamage: 0,
         outgoingDamage: 0,
         dotDamage: 0,
+        detonationDamage: 0,
         defence: 0,
         defensePenetration: 0,
         hp: 0,
@@ -199,6 +200,29 @@ describe('modifierTotalsFromAbilities — dotDamage channel', () => {
         };
         const totals = modifierTotalsFromAbilities([ability], makeConditionContext({}));
         expect(totals.dotDamage).toBe(20);
+        expect(totals.outgoingDamage).toBe(0);
+        expect(totals.attack).toBe(0);
+    });
+});
+
+describe('modifierTotalsFromAbilities — detonationDamage channel', () => {
+    it('sums a detonationDamage modifier into ModifierTotals.detonationDamage', () => {
+        const ability: Ability = {
+            id: 'voidfire-x',
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'modifier',
+                channel: 'detonationDamage',
+                value: 8,
+                isMultiplicative: false,
+            },
+        };
+        const totals = modifierTotalsFromAbilities([ability], makeConditionContext({}));
+        expect(totals.detonationDamage).toBe(8);
+        expect(totals.dotDamage).toBe(0);
         expect(totals.outgoingDamage).toBe(0);
         expect(totals.attack).toBe(0);
     });
