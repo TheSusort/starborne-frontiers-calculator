@@ -9,8 +9,12 @@ export function splashPctForTier(tier: number): number {
 /** Splash damage one pending bomb deals to ONE adjacent ally when the carrier dies.
  *  = stacks × damagePerStack × splashPct/100 × (1 + splashModifierPct/100). No affinity
  *  (bombs/DoTs are not affinity-scaled). `splashModifierPct` is the applier's Voidfire
- *  bonus (wired in a later phase); defaults to 0. */
-export function splashDamageForBomb(bomb: PendingBomb, splashModifierPct = 0): number {
+ *  bonus, snapshotted on the bomb at application; defaults to the bomb's own
+ *  `splashModifier` so callers can't silently undercount by omitting it. */
+export function splashDamageForBomb(
+    bomb: PendingBomb,
+    splashModifierPct = bomb.splashModifier
+): number {
     return (
         bomb.stacks *
         bomb.damagePerStack *
