@@ -65,6 +65,7 @@ import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
+import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 import {
     HealingRuntimeCtx,
     PlayerActorRuntime,
@@ -1423,6 +1424,17 @@ export function runCombat(input: CombatEngineInput): {
             ? !affinityDisadvantage
             : debuffLandingGate(attackerRuntime.liveDebuffLandingChance ?? 1);
 
+    // Boost gear set: per-owner buff-duration extension. Built from the RAW ShipSkills (which
+    // already carry the BOOST passive merged by buildShipAbilitiesWithEquipment at the page
+    // level) BEFORE the status engine is constructed — the runtime-derived ability maps
+    // (incomingAbilitiesById etc.) aren't built until much later (~2257). Covers all actors
+    // team-agnostically: attacker + walked team allies + enemy attackers.
+    const buffDurationExtensionByOwner = buildBuffDurationExtensionByOwner([
+        { id: 'attacker', shipSkills: input.shipSkills },
+        ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
+        ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
+    ]);
+
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
         selfBuffs,
@@ -1434,6 +1446,7 @@ export function runCombat(input: CombatEngineInput): {
             enemyDebuffs: t.enemyDebuffs,
         })),
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
+        buffDurationExtensionFor: (casterId) => buffDurationExtensionByOwner.get(casterId) ?? 0,
     });
 
     // TEST-ONLY: expose the live status engine so a test can read settled self/enemy state after
