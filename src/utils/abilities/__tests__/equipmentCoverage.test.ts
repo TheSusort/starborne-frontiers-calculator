@@ -122,7 +122,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED + REVENGE (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BURNER + DECIMATION + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -131,6 +131,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'BURNER',
             'DECIMATION',
             'LEECH',
+            'REFLECT',
             'REVENGE',
             'SHIELD',
             'CLOAKING',
@@ -195,6 +196,7 @@ const IMPLEMENTED_SETS = new Set([
     'BURNER',
     'DECIMATION',
     'LEECH',
+    'REFLECT',
     'REVENGE',
     'CLOAKING',
     'HARDENED',
@@ -216,6 +218,30 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('HARDENED produces exactly 1 ability (incoming-reduction)', () => {
         expect(gearSetAbilityCount('HARDENED')).toBe(1);
+    });
+
+    it('REFLECT produces exactly 1 ability (the damage-reflection config)', () => {
+        expect(gearSetAbilityCount('REFLECT')).toBe(1);
+    });
+
+    it('REFLECT produces an ability with id equip-set-REFLECT, config.type damage-reflection, config.pct 10', () => {
+        const minPieces = GEAR_SETS['REFLECT']?.minPieces ?? 2;
+        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const equipment: Record<string, string> = {};
+        const pieceMap: Record<string, GearPiece> = {};
+        for (let i = 0; i < minPieces; i++) {
+            const id = `REFLECT-piece-${i}`;
+            const slot = slots[i % slots.length];
+            equipment[slot] = id;
+            pieceMap[id] = makePiece({ id, slot, setBonus: 'REFLECT' });
+        }
+        const ship = makeShip({ equipment });
+        const abilities = buildEquipmentAbilities(ship, (id) => pieceMap[id]);
+        const reflect = abilities.find((a) => a.id === 'equip-set-REFLECT');
+        expect(reflect).toBeDefined();
+        expect(reflect!.config.type).toBe('damage-reflection');
+        // @ts-expect-error damage-reflection config
+        expect(reflect!.config.pct).toBe(10);
     });
 
     it('REVENGE produces 1 ability (outgoingDamage modifier scaling on missing HP)', () => {

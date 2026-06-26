@@ -2255,7 +2255,8 @@ export function runCombat(input: CombatEngineInput): {
                 if (
                     a.config.type === 'incoming-reduction' ||
                     a.config.type === 'incoming-block' ||
-                    a.config.type === 'incoming-shield-grant'
+                    a.config.type === 'incoming-shield-grant' ||
+                    a.config.type === 'damage-reflection'
                 ) {
                     incoming.push(a);
                 }

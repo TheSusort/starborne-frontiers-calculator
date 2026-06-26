@@ -109,6 +109,18 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
         autoFilled: true,
     }),
+    // Reflect (2pc set): reflect 10% of each direct hit back to the attacker (thorns).
+    // Victim-side passive — collected into incomingAbilitiesById by config.type; apply seam
+    // wired in Task 5. Top-level type:'modifier' is a placeholder (the engine keys on
+    // config.type:'damage-reflection', not the top-level type).
+    REFLECT: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage-reflection', pct: 10 },
+        autoFilled: true,
+    }),
     // Revenge (2pc set): "Increase damage by +25% * lost HP%". Missing-HP-scaled outgoing damage
     // modifier: value 0 + scaling (perUnit 0.25 of missing HP %, cap +25pp). At full HP evaluates
     // to 0 → inert in DPS mode (which always runs at full HP). At 0 HP → capped +25pp.

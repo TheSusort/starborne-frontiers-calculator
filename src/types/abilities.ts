@@ -500,6 +500,13 @@ export type AbilityConfig =
           ampPct: number;
           /** Proc chance in (0,1). Rolled once per repair received. */
           procChance: number;
+      }
+    // Reflect gear set (thorns): reflect `pct`% of each direct hit back to the attacker.
+    // Victim-side passive — collected into incomingAbilitiesById. Apply seam wired in Task 5.
+    | {
+          type: 'damage-reflection';
+          /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
+          pct: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate
