@@ -106,6 +106,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Revenge',
         stats: [],
         iconUrl: '/images/gear-sets/revenge.webp',
+        description: 'Increase damage by +25% * lost HP%',
         color: '#5c0a14',
     },
     SHIELD: {

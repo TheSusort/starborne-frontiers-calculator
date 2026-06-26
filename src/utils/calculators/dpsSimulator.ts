@@ -134,6 +134,12 @@ export interface RoundData {
      *  on shield-free rounds (legacy RoundData shape preserved, goldens byte-identical). Consumed
      *  by the battle simulator surfacing (Task 8). */
     perActorShield?: Record<string, { granted: number; absorbed: number; pool: number }>;
+    /** Per-actor reflected-thorns damage dealt back to it THIS round (Reflect gear set), keyed by
+     *  the ATTACKER's actor id. Set ONLY when at least one actor took reflected damage — absent on
+     *  reflection-free rounds (legacy RoundData shape preserved, goldens byte-identical). The
+     *  reflected amount also surfaces automatically as the attacker's incoming damage (via the
+     *  intake sink); this map is the dedicated attribution for surfacing. */
+    perActorReflected?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;

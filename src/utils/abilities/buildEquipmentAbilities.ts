@@ -4,9 +4,9 @@
  * Turns a ship's equipped gear sets + implants into a list of Ability objects
  * that the combat engine can consume.
  *
- * Gear-set abilities are resolved via GEAR_SET_ABILITIES (currently: Leech).
- * Implant abilities are resolved via IMPLANT_ABILITIES (currently: Bloodthirst,
- * Intrusion, Arcane Siege, Warpstrike).
+ * Gear-set abilities are resolved via GEAR_SET_ABILITIES (see the registry below
+ * for the current set). Implant abilities are resolved via IMPLANT_ABILITIES (see
+ * the registry below for the current set).
  *
  * D-PR1 approach (registry, not text-parsing): effect values are baked from the
  * source data in implants.ts / gearSets.ts per the registries above. A variant's
@@ -107,6 +107,30 @@ const GEAR_SET_ABILITIES: Partial<
         trigger: 'on-deal-damage',
         conditions: [],
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
+        autoFilled: true,
+    }),
+    // Reflect (2pc set): reflect 10% of each direct hit back to the attacker (thorns).
+    // Victim-side passive — collected into incomingAbilitiesById by config.type; apply seam
+    // wired in Task 5. Top-level type:'modifier' is a placeholder (the engine keys on
+    // config.type:'damage-reflection', not the top-level type).
+    REFLECT: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'damage-reflection', pct: 10 },
+        autoFilled: true,
+    }),
+    // Revenge (2pc set): "Increase damage by +25% * lost HP%". Missing-HP-scaled outgoing damage
+    // modifier: value 0 + scaling (perUnit 0.25 of missing HP %, cap +25pp). At full HP evaluates
+    // to 0 → inert in DPS mode (which always runs at full HP). At 0 HP → capped +25pp.
+    REVENGE: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [{ subject: 'self-hp-missing-pct', derivable: true }],
+        scaling: { conditionIndex: 0, perUnit: 0.25, cap: 25 },
+        config: { type: 'modifier', channel: 'outgoingDamage', value: 0, isMultiplicative: false },
         autoFilled: true,
     }),
     // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP.
@@ -297,6 +321,13 @@ const BATTLECRY_DURATION: Record<string, number> = { common: 1, rare: 2, epic: 2
 const MARTYRDOM_DURATION: Record<string, number> = { rare: 1, legendary: 2 };
 
 // D-PR8: reactive self-buff implant value tables
+// Smokescreen: when directly damaged, X% chance to gain Stealth for 1 turn.
+// Only rare/epic/legendary variants exist.
+const SMOKESCREEN_PROC: Record<string, number> = {
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
 // Ambush: start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
 const AMBUSH_PROC: Record<string, number> = {
     common: 0.05,
@@ -883,6 +914,14 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
     // the killer + logged. Killer routing comes from the on-destroyed listener.
     MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
+    // D-PR8: Smokescreen — when directly damaged, X% chance to gain Stealth for 1 turn.
+    // Rides `on-attacked` (direct hits only — DoTs route through dot-applied, never on-attacked).
+    // Plain %-proc, no oncePerRound cap. Only rare/epic/legendary variants exist.
+    SMOKESCREEN: (rarity) => {
+        const procChance = SMOKESCREEN_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Stealth', 'self', 'on-attacked', 1, { procChance });
+    },
     // D-PR8: Ambush — start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
     // Gate is self-buff/Stealth (NOT self-stealth — that's an IncomingCondition). DORMANT until a
     // stealth source exists in the sim (Cloaking / sub-project H); entry + gate are correct now.

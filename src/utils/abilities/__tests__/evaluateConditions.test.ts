@@ -391,6 +391,19 @@ describe('target-repaired-this-round condition', () => {
     });
 });
 
+describe('self-hp-missing-pct condition', () => {
+    it('self-hp-missing-pct returns 100 - selfHpPct', () => {
+        const ctx = makeConditionContext({ selfHpPct: 40 });
+        expect(evaluateCondition({ subject: 'self-hp-missing-pct', derivable: true }, ctx)).toBe(
+            60
+        );
+    });
+    it('self-hp-missing-pct is 0 at full HP', () => {
+        const ctx = makeConditionContext({ selfHpPct: 100 });
+        expect(evaluateCondition({ subject: 'self-hp-missing-pct', derivable: true }, ctx)).toBe(0);
+    });
+});
+
 describe('self-shield condition', () => {
     it('evaluates to 1 when selfShielded is true', () => {
         expect(

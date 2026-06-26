@@ -12,6 +12,8 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
+import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
     type ExtraActionGrant,
     selectFiringSkill,
@@ -50,6 +52,7 @@ import {
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
+import { reflectedDamageForHit } from './damageReflection';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
@@ -1899,6 +1902,12 @@ export function runCombat(input: CombatEngineInput): {
     // fresh at the top of each round so it never accumulates across rounds. Surfaced as the
     // `granted` half of RoundData.perActorShield at the post-round push.
     let perActorShieldGranted = new Map<string, number>();
+    // Reflect gear set (Task 5): per-round reflected-thorns accumulator (ATTACKER actor id →
+    // total reflected damage dealt back to it THIS round). Mirrors perActorShieldGranted's
+    // lifecycle — declared once, written by the reflection block inside applyVictimDamage, and
+    // rebound fresh each round so it never accumulates across rounds. Surfaced both as the
+    // attacker's incoming (automatic via the sink) AND on RoundData.perActorReflected.
+    let perActorReflected = new Map<string, number>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -2255,7 +2264,8 @@ export function runCombat(input: CombatEngineInput): {
                 if (
                     a.config.type === 'incoming-reduction' ||
                     a.config.type === 'incoming-block' ||
-                    a.config.type === 'incoming-shield-grant'
+                    a.config.type === 'incoming-shield-grant' ||
+                    a.config.type === 'damage-reflection'
                 ) {
                     incoming.push(a);
                 }
@@ -2684,6 +2694,9 @@ export function runCombat(input: CombatEngineInput): {
                 shieldPenetrationPct?: number;
                 /** Portion of `rawDamage` that is bomb/detonation damage — drains shield in FULL, no pen. Default 0. */
                 bombPortion?: number;
+                /** True when THIS application is itself reflected thorns (Reflect gear set). The
+                 *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
+                isReflected?: boolean;
             }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
@@ -2913,6 +2926,127 @@ export function runCombat(input: CombatEngineInput): {
             if (cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)) {
                 hitThisRound.add(victim.id);
             }
+            // Reflect gear set (Task 5): thorns. When a Reflect wearer takes a DIRECT hit that
+            // dealt net HP damage, reflect Σpct% of that net HP damage back at the attacker —
+            // mitigated by the attacker's affinity matchup (wearer is the source of the reflected
+            // hit), defence, and incoming-reduction. Applied via a RECURSIVE applyVictimDamage with
+            // isReflected:true so it (a) drains the attacker's shield→HP per the H1 rules, (b) runs
+            // its own death handling (a reflected kill records the destroy + fires on-death FOR
+            // FREE — recordDestroyed above), and (c) does NOT itself reflect (the isReflected guard
+            // below skips). applyVictimDamage emits NO attacked/reaction events (those live in the
+            // turn/wrapper layer), so reflection neither re-triggers reactions nor ping-pongs.
+            //
+            // GUARDS (any → skip): a reflected application (no ping-pong); no net HP damage; a DoT
+            // tick (byDirectDamage === false); the victim has no damage-reflection ability. Fully
+            // inert (no helper calls) for every fixture without REFLECT equipment → byte-identical.
+            //
+            // MIXED DIRECT + DETONATE HIT: a single apply can carry damage = directDamage +
+            // detonationDamage with byDirectDamage:true AND bombPortion > 0 (a cast that both lands a
+            // direct hit and detonates a bomb in the same hit — see the enemy-aggregate apply site).
+            // The bomb portion never reflects (bombs full-drain, no reflect); the direct portion does.
+            // We split the net HP damage proportionally by the RAW direct fraction of the post-block
+            // total (`damage`). This is an intentional approximation: shieldAbsorb mixes the direct
+            // and bomb slices into a single hpDamage, so we cannot recover the exact direct HP loss —
+            // we apportion it by raw fraction. Pure-direct (bombPortion 0) → fraction 1 → full
+            // hpDamage (byte-identical to the pre-split behavior). Pure-bomb (bombPortion === total)
+            // → fraction 0 → basis 0 → skip (no reflect).
+            //
+            // KILLING-BLOW NOTE: no guard on victim.destroyedRound — if the hit that killed the
+            // wearer also triggers reflection, the thorns still fire (hit landed before death).
+            // The attacker.destroyedRound guard below prevents posthumous reflection TO an
+            // already-dead attacker, but the WEARER dying on the same hit is intentional and
+            // covered by test case (e).
+            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
+                // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
+                // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
+                // bombPortion === total → directFraction 0 → basis 0 → skipped below.
+                const totalRaw = damage;
+                const bombPortion = cause?.bombPortion ?? 0;
+                const directFraction =
+                    totalRaw > 0 ? Math.max(0, (totalRaw - bombPortion) / totalRaw) : 0;
+                const reflectBasis = hpDamage * directFraction;
+                const reflectAbilities =
+                    reflectBasis > 0
+                        ? incomingAbilitiesOf(victim.id).filter(
+                              (a) => a.config.type === 'damage-reflection'
+                          )
+                        : [];
+                if (reflectAbilities.length > 0) {
+                    const reflectPct = reflectAbilities.reduce(
+                        (sum, a) =>
+                            sum + (a.config.type === 'damage-reflection' ? a.config.pct : 0),
+                        0
+                    );
+                    const attacker = allActorsById.get(cause?.killerId ?? '');
+                    // Skip a missing attacker, self-damage (victim === attacker), and an
+                    // already-destroyed attacker (no posthumous reflection).
+                    if (
+                        attacker &&
+                        attacker.id !== victim.id &&
+                        attacker.destroyedRound === undefined
+                    ) {
+                        // The WEARER (victim) is the source of the reflected hit → affinity is
+                        // resolved wearer→attacker (computeAffinityModifiers(victim, attacker)).
+                        const affinityDamageModifier = computeAffinityModifiers(
+                            victim.affinity,
+                            attacker.affinity
+                        ).damageModifier;
+                        const attackerDefence = effectiveStatsOf(
+                            statusEngine,
+                            selfBuffLookup,
+                            attacker
+                        ).defence;
+                        const attackerDefenceReductionPct =
+                            attackerDefence > 0 ? calculateDamageReduction(attackerDefence) : 0;
+                        // Attacker's incoming-reduction against the reflected (direct) hit. Minimal
+                        // ctx: no crit/stealth, direct scope (dotType undefined). Returns 0 for an
+                        // attacker with no incoming-reduction ability → matches the duel-fit default.
+                        const attackerIncomingReductionPct = incomingReductionForHit(
+                            incomingAbilitiesOf(attacker.id),
+                            {
+                                didCrit: false,
+                                attackerStealthed: false,
+                                victimStealthed: false,
+                                victimStasised: false,
+                                hitIndexThisRound: 0,
+                            }
+                        );
+                        const reflected = reflectedDamageForHit({
+                            reflectPct,
+                            // Direct slice only — the bomb portion of a mixed hit never reflects.
+                            netHpDamage: reflectBasis,
+                            affinityDamageModifier,
+                            attackerDefenceReductionPct,
+                            attackerIncomingReductionPct,
+                        });
+                        if (reflected > 0) {
+                            // Side-matched sink so the attacker's incoming accumulates into the
+                            // unified perActorIncoming/intakeFor map under its own id.
+                            const reflectSink = attacker.side === 'player' ? playerSink : enemySink;
+                            applyVictimDamage(reflected, attacker, reflectSink, {
+                                killerId: victim.id,
+                                byDirectDamage: true,
+                                isReflected: true,
+                                shieldPenetrationPct: 0,
+                                bombPortion: 0,
+                            });
+                            perActorReflected.set(
+                                attacker.id,
+                                (perActorReflected.get(attacker.id) ?? 0) + reflected
+                            );
+                            // Surface the reflected hit as the attacker's per-victim incoming so it
+                            // flows into RoundData.perTargetDamage → the attacker's damageTaken /
+                            // hpPct (mirrors how a normal direct hit's emitHit accumulates). Without
+                            // this, reflected damage would mutate the attacker's live HP but never
+                            // appear on the reconstructed HP curve.
+                            roundPerTargetDamage.set(
+                                attacker.id,
+                                (roundPerTargetDamage.get(attacker.id) ?? 0) + reflected
+                            );
+                        }
+                    }
+                }
+            }
             return { shieldBefore, hpDamage, barriered: false };
         };
         // Legacy healing-mode player intake — a THIN wrapper over applyVictimDamage. The sink
@@ -2945,7 +3079,12 @@ export function runCombat(input: CombatEngineInput): {
             // batch is an aggregate of multiple appliers with NO single killer.
             // H1 T4: callers may also pass a `bombPortion` — the detonation slice of `damage`
             // that drains the shield in FULL (no penetration).
-            cause: { killerId?: string; byDirectDamage?: boolean; bombPortion?: number } = {
+            cause: {
+                killerId?: string;
+                byDirectDamage?: boolean;
+                bombPortion?: number;
+                isReflected?: boolean;
+            } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
             }
@@ -3346,6 +3485,9 @@ export function runCombat(input: CombatEngineInput): {
         // healTarget) so DPS-mode and team runs reset it too — grantShieldToTarget can fire in
         // any mode, and a stale carry-over would over-report `granted`.
         perActorShieldGranted = new Map<string, number>();
+        // Reflect gear set (Task 5): rebind the per-round reflected-thorns accumulator EVERY round
+        // (mirrors perActorShieldGranted), so a stale carry-over never over-reports reflected damage.
+        perActorReflected = new Map<string, number>();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -5004,6 +5146,13 @@ export function runCombat(input: CombatEngineInput): {
                 }
                 return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
             })(),
+            // perActorReflected (Reflect gear set, Task 5): per-attacker reflected-thorns damage
+            // dealt back THIS round. Mirrors perActorShield's "absent when empty" rule so legacy /
+            // no-reflect rounds stay byte-identical (perActorReflected is empty unless a Reflect
+            // wearer took a direct hit this round).
+            ...(perActorReflected.size > 0
+                ? { perActorReflected: Object.fromEntries(perActorReflected) }
+                : {}),
             activeCorrosionStacks: totalStacks(corrosionEntries),
             activeInfernoStacks: totalStacks(infernoEntries),
             activeBombCount: pendingBombs.length,

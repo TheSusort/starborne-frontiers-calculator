@@ -179,6 +179,10 @@ export type ConditionSubject =
     // cap 40. Distinct from 'hp-threshold', which is a binary above/below gate.
     | 'enemy-hp-pct'
     | 'enemy-hp-missing-pct'
+    // SELF variant: 100 - selfHpPct. Used by the Revenge gear set ("Increase damage by
+    // +25% * lost HP%") — perUnit 0.25, cap 25. At full HP evaluates to 0 → inert in
+    // DPS mode.
+    | 'self-hp-missing-pct'
     | 'ally-inflicts-debuff'
     | 'ally-critically-repaired'
     | 'ally-crit-dot'
@@ -496,6 +500,13 @@ export type AbilityConfig =
           ampPct: number;
           /** Proc chance in (0,1). Rolled once per repair received. */
           procChance: number;
+      }
+    // Reflect gear set (thorns): reflect `pct`% of each direct hit back to the attacker.
+    // Victim-side passive — collected into incomingAbilitiesById. Apply seam wired in Task 5.
+    | {
+          type: 'damage-reflection';
+          /** Percentage of incoming direct damage reflected back to the attacker (e.g. 10). */
+          pct: number;
       };
 
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate
