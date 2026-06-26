@@ -109,6 +109,18 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
         autoFilled: true,
     }),
+    // Revenge (2pc set): "Increase damage by +25% * lost HP%". Missing-HP-scaled outgoing damage
+    // modifier: value 0 + scaling (perUnit 0.25 of missing HP %, cap +25pp). At full HP evaluates
+    // to 0 → inert in DPS mode (which always runs at full HP). At 0 HP → capped +25pp.
+    REVENGE: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [{ subject: 'self-hp-missing-pct', derivable: true }],
+        scaling: { conditionIndex: 0, perUnit: 0.25, cap: 25 },
+        config: { type: 'modifier', channel: 'outgoingDamage', value: 0, isMultiplicative: false },
+        autoFilled: true,
+    }),
     // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP.
     // start-of-turn is a LIVE trigger → partitions to the reactive path; lands via the per-recipient
     // routing fix (H2/H3 Task 0.1). basis 'hp' = caster max HP.

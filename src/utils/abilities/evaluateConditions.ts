@@ -86,6 +86,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyHpPct;
         case 'enemy-hp-missing-pct':
             return 100 - ctx.enemyHpPct;
+        case 'self-hp-missing-pct':
+            return 100 - ctx.selfHpPct;
         case 'lowest-speed-ally':
             return ctx.isLowestSpeedAlly ? 1 : 0;
         case 'target-repaired-this-round':

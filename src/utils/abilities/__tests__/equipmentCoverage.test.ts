@@ -120,7 +120,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BURNER + DECIMATION + LEECH + CLOAKING + HARDENED + REVENGE (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -129,6 +129,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'BURNER',
             'DECIMATION',
             'LEECH',
+            'REVENGE',
             'SHIELD',
             'CLOAKING',
             'HARDENED',
@@ -191,6 +192,7 @@ const IMPLEMENTED_SETS = new Set([
     'BURNER',
     'DECIMATION',
     'LEECH',
+    'REVENGE',
     'CLOAKING',
     'HARDENED',
     'SHIELD',
@@ -211,6 +213,10 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('HARDENED produces exactly 1 ability (incoming-reduction)', () => {
         expect(gearSetAbilityCount('HARDENED')).toBe(1);
+    });
+
+    it('REVENGE produces 1 ability (outgoingDamage modifier scaling on missing HP)', () => {
+        expect(gearSetAbilityCount('REVENGE')).toBe(1);
     });
 
     it('CLOAKING produces exactly 1 ability (the Stealth grant)', () => {

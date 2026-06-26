@@ -179,6 +179,10 @@ export type ConditionSubject =
     // cap 40. Distinct from 'hp-threshold', which is a binary above/below gate.
     | 'enemy-hp-pct'
     | 'enemy-hp-missing-pct'
+    // SELF variant: 100 - selfHpPct. Used by the Revenge gear set ("Increase damage by
+    // +25% * lost HP%") — perUnit 0.25, cap 25. At full HP evaluates to 0 → inert in
+    // DPS mode.
+    | 'self-hp-missing-pct'
     | 'ally-inflicts-debuff'
     | 'ally-critically-repaired'
     | 'ally-crit-dot'
