@@ -36,6 +36,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models Block Buff — a unit affected by Block Buff can no longer gain new buffs while it lasts.',
     'Combat & DPS simulators now model two damage-over-time gear sets: Burner (applies Inferno for 2 turns when the ship attacks) and Decimation (+10% DoT damage per equipped set, up to +30%). Decimation now boosts your ship’s Inferno and Corrosion ticks in both the combat simulator and the DPS calculator.',
     'Combat simulator now models four shield sources: the Shield gear set grants the equipped ship a shield each turn (4% of its max HP), the Adaptive Plating implant grants the ship a shield from the damage it takes (once per round), the Abundant Renewal implant turns over-healing on an ally into a shield for that ally, and the Resonating Fury implant gives a chance to grant Crit Power Up to allies it shields.',
+    'Combat simulator now models the Lifeline implant: when a direct hit would drop a ship below 30% HP, it gains a shield (a flat amount plus 100% of its attack, capped at max HP) before the hit lands, so the rest of the hit drains shield then HP — once per battle.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
