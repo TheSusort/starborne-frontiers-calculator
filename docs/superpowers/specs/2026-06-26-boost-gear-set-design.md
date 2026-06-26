@@ -38,7 +38,7 @@ Timed self-side buffs get their `turnsRemaining` written in exactly two places i
 
 **`upsertBuff` needs a signature change.** Its closure is `(buff, side)` today and scheduled self-buffs are deliberately routed to the `'attacker'` *carrier* owner regardless of `sourceId`. The caster (the ship whose Boost membership matters) is the firing `sourceId`, available in `sourceFired` at the call site but not inside `upsertBuff`. Thread `sourceId` (or the resolved extension turns) into `upsertBuff` as a new parameter, and gate on the **firing source**, not the `'attacker'` carrier the buff is stored under — these differ for team-actor casts. Confirm there are no other `upsertBuff(..., 'self')` callers where the caster would be wrong/unavailable.
 
-At each seam, before writing `turnsRemaining = <duration>`, add `extensionFor(casterId)` (0 or 1 turn). Gated so the +1 only applies to:
+At each seam, before writing `turnsRemaining = <duration>`, add `buffDurationExtensionFor(casterId)` (0 or 1 turn). Gated so the +1 only applies to:
 
 - **self-side** statuses (`side === 'self'`) — excludes enemy debuffs;
 - **finite-duration** entries — the persistent-stacking early-return (`PERSISTENT_STACKING_BUFFS.has(...)`, statusEngine.ts ~639 / ~1114) and permanent/recurring kinds (seeded via separate sentinel paths that never reach the numeric writes) already return before the numeric duration write, so they are untouched without extra guards. *(Verified: the only two numeric `turnsRemaining` writes are `upsertBuff` ~649 and `applyTimedAbilityStatus` ~1138, both after these early-returns.)*
