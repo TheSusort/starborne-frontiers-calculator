@@ -33,15 +33,19 @@ Timed self-side buffs get their `turnsRemaining` written in exactly two places i
 
 | Seam | Buff kind | Caster identity available |
 |---|---|---|
-| `upsertBuff(buff, 'self')`, called inside `sourceFired(sourceId, slot, round)` | scheduled ship-skill self-buffs | `sourceId` (the firing source = caster) |
+| `upsertBuff(buff, 'self')`, called inside `sourceFired(sourceId, slot, round)` (~711) | scheduled ship-skill self-buffs | `sourceId` (the firing source = caster) — **at the call site, NOT in the closure** (see below) |
 | `applyTimedAbilityStatus(round, status, recipientId)` | ability-granted buffs (self + ally targets, including reactive grants) | `status.casterId` (the registering owner = caster) |
+
+**`upsertBuff` needs a signature change.** Its closure is `(buff, side)` today and scheduled self-buffs are deliberately routed to the `'attacker'` *carrier* owner regardless of `sourceId`. The caster (the ship whose Boost membership matters) is the firing `sourceId`, available in `sourceFired` at the call site but not inside `upsertBuff`. Thread `sourceId` (or the resolved extension turns) into `upsertBuff` as a new parameter, and gate on the **firing source**, not the `'attacker'` carrier the buff is stored under — these differ for team-actor casts. Confirm there are no other `upsertBuff(..., 'self')` callers where the caster would be wrong/unavailable.
 
 At each seam, before writing `turnsRemaining = <duration>`, add `extensionFor(casterId)` (0 or 1 turn). Gated so the +1 only applies to:
 
 - **self-side** statuses (`side === 'self'`) — excludes enemy debuffs;
-- **finite-duration** entries — the persistent-stacking early-return (`PERSISTENT_STACKING_BUFFS.has(...)`) and permanent/recurring kinds already return before the numeric duration write, so they are untouched without extra guards.
+- **finite-duration** entries — the persistent-stacking early-return (`PERSISTENT_STACKING_BUFFS.has(...)`, statusEngine.ts ~639 / ~1114) and permanent/recurring kinds (seeded via separate sentinel paths that never reach the numeric writes) already return before the numeric duration write, so they are untouched without extra guards. *(Verified: the only two numeric `turnsRemaining` writes are `upsertBuff` ~649 and `applyTimedAbilityStatus` ~1138, both after these early-returns.)*
 
-The family-rule comparison (`familyApplicationWins(existing, tier, duration)`) operates on the *extended* duration, which is correct: a Boost-extended buff legitimately wins over a shorter same-family application.
+**Compute the extended duration ONCE and use it in BOTH the family-rule check and the store.** Each seam references the duration twice — `familyApplicationWins(existing, tier, <dur>)` AND `turnsRemaining: <dur>` (upsertBuff ~646/~649; applyTimedAbilityStatus ~1135/~1138). The +1 MUST feed the comparison too, not only the stored value: otherwise a Boost re-cast of an N-turn buff against an existing `turnsRemaining === N` fails the `> N` win-check and silently drops the extension. Compute `const dur = baseDuration + extension;` before the win-check and use `dur` in both spots.
+
+**`casterId` fail-safe.** Read sites already default a missing `casterId` to `'attacker'`. In production `casterId` is reliably stamped (`engine.ts` registration `casterId: ownerId`; reactive grants `casterId: intent.ownerId`), so real ally-targeted/reactive self-buffs carry the wearer id. Use `buffDurationExtensionFor(status.casterId ?? 'attacker')` so an undefined caster (unit-test fixtures only) fails safe to the attacker's membership rather than throwing — `'attacker'` is not a Boost wearer in any byte-identical fixture, so this returns 0.
 
 ### 3.2 How the wearer-set reaches the status engine (Approach A — registry + collected map)
 
@@ -49,17 +53,22 @@ Consistent with the REFLECT precedent (a config type the ability fold ignores, r
 
 1. **Registry entry** — `GEAR_SET_ABILITIES.BOOST` in `buildEquipmentAbilities.ts` emits an `Ability` with a new no-op config `{ type: 'buff-duration-extension', turns: 1 }`. Top-level `type: 'modifier'` is a placeholder (the engine keys on `config.type`, exactly as REFLECT does with `damage-reflection`). Gated by the existing `minPieces` check (4) in `buildEquipmentAbilities`.
 2. **New `AbilityConfig` variant** — `buff-duration-extension` added to the `AbilityConfig` union in `types/abilities.ts` (`{ type: 'buff-duration-extension'; turns: number }`).
-3. **Engine collection** — where the engine already builds per-owner ability maps (`incomingAbilitiesById`, `outgoingAbilitiesById`), also collect a `buffDurationExtensionByOwner: Map<string, number>` (owner id → max extension turns). Owners with no Boost ability are absent (lookup → 0).
-4. **Thread into the status engine** — add `buffDurationExtensionFor?: (casterId: string) => number` to `StatusEngineInput` (returns extra turns, default 0). The engine passes a lookup backed by the map; the DPS path passes the same lookup built from its team actors.
-5. The config type is **inert in the ability fold** — it is purely a marker the engine reads at collection time, never executed by the ability executor.
+3. **Engine collection** — build a `buffDurationExtensionByOwner: Map<string, number>` (owner id → max extension turns; absent → 0). Owners with no Boost ability are absent (lookup → 0).
+4. **Thread into the status engine** — add `buffDurationExtensionFor?: (casterId: string) => number` to `StatusEngineInput` (returns extra turns, default 0). The engine passes a lookup backed by the map.
+
+   **ORDERING (blocker — must be handled explicitly):** `createStatusEngine(...)` is constructed **early** in `engine.ts` (~1422), but the existing per-owner ability maps (`incomingAbilitiesById` / `outgoingAbilitiesById`) are built **much later** (~2257–2315) from the assembled runtimes. So a lookup passed into `createStatusEngine` **cannot** close over a map that doesn't exist yet at line ~1422. The seams (`sourceFired` / `applyTimedAbilityStatus`) only fire at turn time (after ~2539), so two resolutions are viable — the plan must pick one and test it:
+   - **(a) Hoist a minimal BOOST scan before ~1422.** Boost membership needs only the equipped-set counts per actor (not the full runtime), so a small `buildBoostWearerSet(actors, getGearPiece)` can run before construction and back the lookup directly. *(Preferred — simplest, no mutable-ref aliasing.)*
+   - **(b) Closure over a mutable ref** populated before the first turn (alongside the existing `ByOwner` collection at ~2300). Requires a test asserting the lookup is live by the first `sourceFired`.
+5. The config type is **inert in the ability fold** — it is purely a marker read at collection time, never executed by the ability executor. *(If resolution (a) is chosen, the registry ability is optional — the BOOST scan could read set counts directly. Keeping the registry entry is still preferred for coverage-tracker consistency and a single source of the "+1 turns" value; the plan decides.)*
 
 ### 3.3 DPS calculator
 
-No separate effect wiring needed. `simulateDPS` → `runCombat` uses the same status engine and already builds equipment abilities via `buildShipAbilitiesWithEquipment`. A self-buffing attacker wearing Boost gets longer self-buff uptime → higher DPS, which is correct. The only requirement is that the DPS construction path threads the same `buffDurationExtensionFor` lookup into its status-engine input (built from the same team-actor gear it already reads). This must be verified during implementation, not assumed.
+No separate DPS wiring needed. `simulateDPS` (`dpsSimulator.ts` ~274) calls `runCombat`, and the DPS path does **not** construct its own `StatusEngineInput` — it routes through the single `createStatusEngine` in `engine.ts`. So threading the lookup once into the engine's status-engine input covers the DPS path automatically (confirmed: one `createStatusEngine` call site). A self-buffing attacker wearing Boost gets longer self-buff uptime → higher DPS, which is correct. **No separate DPS construction file is touched** (§7 corrected accordingly).
 
 ## 4. Surfacing & editor
 
 - **Ability editor** — no stub needed. The editor's exhaustiveness switches key on `AbilityType` (top-level `type`), not `config.type`, with a permissive default — same as REFLECT's `damage-reflection`. Confirm during implementation.
+- **Pre-existing presence indicator** — `src/components/simulation/statLines/BoostSetStatus.tsx` already renders "Boost Set: Active/Inactive" from `simulation.activeSets?.includes('BOOST')`. It is purely cosmetic and does NOT model the duration effect. The new combat modeling is independent of it — no change needed there, and there is no double-count (the component reads set presence, not buff durations).
 - **Coverage tracker** — add `BOOST` to the implemented gear-set set in `equipmentCoverage.test.ts`.
 - **Changelog** — add a plain-English `UNRELEASED_CHANGES` entry (`src/constants/changelog.ts`).
 - **DocumentationPage** — note Boost is now modeled in the combat + DPS simulators.
@@ -85,10 +94,9 @@ Note: this is unrelated to the separate "universal decrement-timing" bug (a glob
 ## 7. Files touched (anticipated)
 
 - `src/types/abilities.ts` — new `buff-duration-extension` `AbilityConfig` variant.
-- `src/utils/abilities/buildEquipmentAbilities.ts` — `GEAR_SET_ABILITIES.BOOST` entry.
-- `src/utils/combat/statusEngine.ts` — `StatusEngineInput.buffDurationExtensionFor?`; +1 at the two seams.
-- `src/utils/combat/engine.ts` — collect `buffDurationExtensionByOwner`; thread the lookup into the status-engine input.
-- DPS construction path (`engine.ts` / `dpsSimulator.ts` as needed) — thread the same lookup.
+- `src/utils/abilities/buildEquipmentAbilities.ts` — `GEAR_SET_ABILITIES.BOOST` entry (registry; kept for coverage-tracker consistency even if resolution (a) reads set counts directly).
+- `src/utils/combat/statusEngine.ts` — `StatusEngineInput.buffDurationExtensionFor?`; `upsertBuff` signature gains the firing-source/extension param; +1 (computed once, used in both the family-check and the store) at the two seams.
+- `src/utils/combat/engine.ts` — build `buffDurationExtensionByOwner` (hoisted before `createStatusEngine` ~1422 per §3.2 resolution (a), or mutable-ref per (b)); thread the lookup into the status-engine input. **No DPS file is touched — DPS routes through this same construction.**
 - `src/utils/abilities/__tests__/equipmentCoverage.test.ts` — add BOOST.
 - New test files for the unit + integration + DPS cases above.
 - `src/constants/changelog.ts`, `src/pages/DocumentationPage.tsx`.
