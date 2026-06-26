@@ -48,6 +48,18 @@ describe('thresholdShieldForHit', () => {
         expect(r).toBeNull();
     });
 
+    it('fires when pre-hit HP sits exactly on the threshold (>= is inclusive)', () => {
+        // currentHp 3000 (exactly 30%), hit drops it to 2999 (< 30%) => crossing
+        const r = thresholdShieldForHit({ ...base, currentHp: 3000, provisionalHpDamage: 1 });
+        expect(r).not.toBeNull();
+    });
+
+    it('does not fire when the hit lands HP exactly on the threshold (< is exclusive)', () => {
+        // currentHp 5000 -> 3000 (exactly 30%): "at" 30% has not "crossed below"
+        const r = thresholdShieldForHit({ ...base, currentHp: 5000, provisionalHpDamage: 2000 });
+        expect(r).toBeNull();
+    });
+
     it('does not fire for non-direct damage (DoT / bomb)', () => {
         const r = thresholdShieldForHit({
             ...base,
