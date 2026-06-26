@@ -220,13 +220,13 @@ export const IMPLANTS: Record<string, ImplantData> = {
                 rarity: 'common',
                 stats: [],
                 description:
-                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 4000 plus 100% of this unit's attack stat. This can occur once per battle",
+                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 4000 plus 100% of this unit's attack stat (capped at max HP). This can occur once per battle.",
             },
             {
                 rarity: 'uncommon',
                 stats: [],
                 description:
-                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 6000 plus 100% of this unit's attack stat. This can occur once per battle",
+                    "When direct damage would cause HP to drop below 30%, gain a shield equal to 6000 plus 100% of this unit's attack stat (capped at max HP). This can occur once per battle.",
             },
             {
                 rarity: 'rare',

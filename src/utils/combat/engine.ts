@@ -2810,8 +2810,15 @@ export function runCombat(input: CombatEngineInput): {
                         thresholdShieldFired.has(`${victim.id}:${abilityId}`),
                 });
                 if (grant) {
-                    const newPool = Math.min(maxHp, shieldBefore + grant.grant);
-                    const granted = newPool - shieldBefore;
+                    // Only ever ADD shield — never shrink a pre-hit pool that already
+                    // sits above the current effective max HP (e.g. an HP-down debuff
+                    // lowered maxHp after the pool was granted). Clamping the sum alone
+                    // would make `granted` negative and could turn a survivable hit lethal.
+                    const newPool =
+                        shieldBefore >= maxHp
+                            ? shieldBefore
+                            : Math.min(maxHp, shieldBefore + grant.grant);
+                    const granted = Math.max(0, newPool - shieldBefore);
                     victim.shieldPool = newPool;
                     thresholdShieldFired.add(`${victim.id}:${grant.abilityId}`);
                     // Surface the real pool growth on the H1 granted accumulator (StatCard).
