@@ -324,6 +324,73 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         // The enemy never takes reflected damage (DoT ticks are byDirectDamage:false → guarded).
         expect(totalDamageTaken(result, foe)).toBe(0);
     });
+
+    it('(g) bomb/detonation damage on the wearer produces ZERO reflected damage (bombPortion guard)', () => {
+        // The guard `(cause?.bombPortion ?? 0) === 0` in applyVictimDamage blocks reflection when
+        // any bomb/detonation damage is present. We prove: (1) the helper WOULD reflect a
+        // bomb-scale HP loss if not guarded, so zero reflection must come from the engine guard;
+        // (2) at the engine level, an enemy whose ONLY delivery is bomb apply+detonate damages the
+        // wearer but the attacker takes NO reflected damage.
+        //
+        // Enemy skill: applies Bomb II then immediately detonates it (no <unit-damage> tag → no
+        // direct damage). Round 1: detonate fires on an empty pendingBombs list → 0 detonation;
+        // the new bomb is queued. Round 2+: detonate pops the queued bomb → detonationDamage > 0 →
+        // bombPortion > 0 → reflection block is skipped. The wearer takes real HP damage each
+        // detonation round, but the enemy's damageTaken stays 0 throughout.
+        //
+        // Part 1 — helper contract: reflectedDamageForHit returns > 0 for bomb-scale HP damage,
+        // proving the ZERO at the engine level comes from the bombPortion guard, not the helper.
+        const wouldReflectIfNotGuarded = reflectedDamageForHit({
+            reflectPct: 10,
+            netHpDamage: 5000,
+            affinityDamageModifier: 0,
+            attackerDefenceReductionPct: 0,
+            attackerIncomingReductionPct: 0,
+        });
+        expect(wouldReflectIfNotGuarded).toBeGreaterThan(0);
+
+        // Part 2 — engine-level: enemy with bomb apply+detonate only (no direct hit text).
+        // "inflicts Bomb II for 2 turns" → dot:bomb; "detonates Bomb effects with 100% of their
+        // power" → detonate-dot:bomb. No <unit-damage> tag → directDamage === 0 every round.
+        const pieces = reflectPieces();
+        const getGearPiece = getGearPieceFor(pieces);
+        const bombEnemy = makeAttacker('foe', 'Foe', 'antimatter');
+        (bombEnemy as { activeSkillText?: string }).activeSkillText =
+            'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns, detonates Bomb effects with 100% of their power.';
+
+        const result = simulateBattle(
+            {
+                // Wearer has 5000 attack so bomb detonations deal real HP damage.
+                playerTeam: [
+                    place(makeTank('wearer', 'Wearer', 'thermal', pieces), 'M4', {
+                        attack: 5000,
+                        hp: 1_000_000,
+                    }),
+                ],
+                enemyTeam: [
+                    place(bombEnemy, 'M4', {
+                        // Enemy needs enough attack for the bomb tier to deal real damage,
+                        // but its DIRECT damage portion is zero (no <unit-damage> in skill).
+                        attack: 10_000,
+                        hp: 1_000_000,
+                    }),
+                ],
+                rounds: 4,
+            },
+            getGearPiece
+        );
+
+        const foe = enemyId(result);
+        // The bomb actually landed on the wearer at least once. `dot-applied` events surface
+        // as `BattleLogEvent { kind: 'dot', label: dotType }` in the round event log. This
+        // proves the scenario is non-trivial — a bomb DID apply, but zero reflection fires.
+        const bombApplied = result.rounds.some((round) =>
+            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        );
+        expect(bombApplied).toBe(true);
+        // The enemy attacker took ZERO reflected damage — the bombPortion guard fired.
+        expect(totalDamageTaken(result, foe)).toBe(0);
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -2940,6 +2940,12 @@ export function runCombat(input: CombatEngineInput): {
             // tick (byDirectDamage === false); a bomb portion (bombs full-drain, no reflect); the
             // victim has no damage-reflection ability. Fully inert (no helper calls) for every
             // fixture without REFLECT equipment → byte-identical.
+            //
+            // KILLING-BLOW NOTE: no guard on victim.destroyedRound — if the hit that killed the
+            // wearer also triggers reflection, the thorns still fire (hit landed before death).
+            // The attacker.destroyedRound guard below prevents posthumous reflection TO an
+            // already-dead attacker, but the WEARER dying on the same hit is intentional and
+            // covered by test case (e).
             if (
                 !cause?.isReflected &&
                 hpDamage > 0 &&
