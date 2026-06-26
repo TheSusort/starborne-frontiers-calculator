@@ -309,6 +309,13 @@ const BATTLECRY_DURATION: Record<string, number> = { common: 1, rare: 2, epic: 2
 const MARTYRDOM_DURATION: Record<string, number> = { rare: 1, legendary: 2 };
 
 // D-PR8: reactive self-buff implant value tables
+// Smokescreen: when directly damaged, X% chance to gain Stealth for 1 turn.
+// Only rare/epic/legendary variants exist.
+const SMOKESCREEN_PROC: Record<string, number> = {
+    rare: 0.09,
+    epic: 0.12,
+    legendary: 0.16,
+};
 // Ambush: start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
 const AMBUSH_PROC: Record<string, number> = {
     common: 0.05,
@@ -895,6 +902,14 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
     // the killer + logged. Killer routing comes from the on-destroyed listener.
     MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
+    // D-PR8: Smokescreen — when directly damaged, X% chance to gain Stealth for 1 turn.
+    // Rides `on-attacked` (direct hits only — DoTs route through dot-applied, never on-attacked).
+    // Plain %-proc, no oncePerRound cap. Only rare/epic/legendary variants exist.
+    SMOKESCREEN: (rarity) => {
+        const procChance = SMOKESCREEN_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Stealth', 'self', 'on-attacked', 1, { procChance });
+    },
     // D-PR8: Ambush — start-of-round, if Stealthed, X% chance to gain Crit Power Up III for 1 turn.
     // Gate is self-buff/Stealth (NOT self-stealth — that's an IncomingCondition). DORMANT until a
     // stealth source exists in the sim (Cloaking / sub-project H); entry + gate are correct now.
