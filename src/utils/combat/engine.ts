@@ -2916,8 +2916,9 @@ export function runCombat(input: CombatEngineInput): {
                     recordDestroyed(victim, r, bus, cause?.killerId, cause?.byDirectDamage);
                     // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
                     // tier-scaled fraction (tier/4%: 100→25,200→50,300→75) of each bomb's damage to
-                    // its LIVING same-side adjacent allies (positional only — adjacentAllyIdsFor
-                    // returns [] without board positions, so non-positional sims are byte-identical).
+                    // its LIVING same-side adjacent allies (positional only — victim.position gate
+                    // enforces this; adjacentAllyIds has an all-allies fallback and does NOT
+                    // self-gate, so the position check here is the sole non-positional guard).
                     // NO affinity (bombs aren't affinity-scaled). Bomb-like: full shield drain, no
                     // penetration (bombPortion = full). Credited to the bomb applier (sourceId).
                     // Chains: a splash that kills an adjacent bombed ally re-enters this same
@@ -2925,7 +2926,11 @@ export function runCombat(input: CombatEngineInput): {
                     // (each ship dies once; bombs consumed up-front). Guarded against double-fire on a
                     // second hit to a corpse by (a) the wasAliveBeforeThisCall check and (b) consuming
                     // the bombs before splashing.
-                    if (wasAliveBeforeThisCall && victim.pendingBombs.length > 0) {
+                    if (
+                        wasAliveBeforeThisCall &&
+                        victim.position !== undefined &&
+                        victim.pendingBombs.length > 0
+                    ) {
                         const bombs = victim.pendingBombs;
                         victim.pendingBombs = []; // consume up-front so a chain re-entry / corpse re-hit won't re-splash
                         const allyIds = bySide(

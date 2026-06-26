@@ -150,9 +150,13 @@ Reuses the **Reflect** recursive-`applyVictimDamage` pattern at the shared death
 - **Chaining:** a splash that kills an adjacent bombed ally re-enters the same `applyVictimDamage` death
   branch → its splash fires recursively. Finite: each ship dies once and its bombs are consumed.
 - **Consume:** clear `victim.pendingBombs` after splashing (so they cannot also time-detonate).
-- **Non-positional safety:** `adjacentAllyIds` returns `[]` without positions → no splash → all
-  non-positional goldens (DPS, healing, single-target sims) stay byte-identical. Only positional sims
-  with a bombed death + a living same-side neighbour change.
+- **Non-positional safety (code-enforced):** the splash block is gated on the dying victim having a
+  board `position` (positional-only by construction). NOTE: `adjacentAllyIds` does NOT self-gate — it
+  has an all-living-same-side *fallback* when positions are absent, so relying on it returning `[]`
+  would be a latent trap (a future change wiring per-actor bombs onto team actors would splash to ALL
+  same-side allies non-positionally). The explicit `victim.position` gate makes "positional-only"
+  enforced by code, keeping all non-positional goldens (DPS, healing, single-target sims)
+  byte-identical. Only positional sims with a bombed death + a living same-side neighbour change.
 - **Surfacing:** a `perActorSplash` map (reset/round, mirroring Reflect's `perActorReflected`) folded
   into `roundPerTargetDamage` so splash shows on the victim's HP curve; `RoundData.perActorSplash?`
   plumbed (no StatCard yet — reserved).

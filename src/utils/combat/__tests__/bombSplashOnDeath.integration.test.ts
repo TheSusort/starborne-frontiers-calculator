@@ -183,4 +183,268 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
         // enemy-mid took no damage (outside the footprint, and the front survived → no splash).
         expect(round.perTargetDamage?.['enemy-mid']).toBeUndefined();
     });
+
+    // ─── (b) Chain reaction ───────────────────────────────────────────────────
+    // A (M4) dies to direct hit → splashes B (M3, pre-seeded bombs, low HP) → B dies
+    // from splash → B's bombs splash C (M2, high HP, adjacent to B but NOT to A).
+    // The chain terminates naturally: each ship's bombs are consumed up-front.
+    it('(b) chain reaction: A dies → splashes B → B dies → splashes C', () => {
+        idc = 0;
+        // A's bomb splash: 2 × (5000 × (200/100)) × 0.50 = 10000 (same as EXPECTED_SPLASH).
+        // B's pre-seeded bomb: tier=100, stacks=1, damagePerStack=500 → splash = 1×500×0.25=125.
+        const bBomb: PendingBomb = {
+            countdown: 3,
+            damagePerStack: 500,
+            stacks: 1,
+            tier: 100,
+            sourceId: 'enemy-b',
+            affinityMult: 1,
+            detonationDamageModifier: 0,
+        };
+        const expectedBSplash = splashDamageForBomb(bBomb); // 125
+
+        // C has huge HP → survives B's splash.
+        const input = BASE({
+            enemyAttackers: [
+                enemyAt('enemy-a', 'M4', 5000), // dies to 5000 direct hit
+                enemyAt('enemy-b', 'M3', 50), // dies to A's 10000 splash (HP 50 < 10000)
+                enemyAt('enemy-c', 'M2', 1_000_000_000), // adjacent to B, survives B's splash
+            ],
+            __testTapActors: (actors) => {
+                // Pre-seed B's pending bomb so it splashes when B dies.
+                const b = actors.find((a) => a.id === 'enemy-b');
+                if (b) b.pendingBombs.push(bBomb);
+            },
+        });
+
+        const result = runCombat(input);
+        const round = result.rounds[0];
+
+        // A → B splash fired (A's bomb).
+        expect(round.perActorSplash?.['enemy-b']).toBe(EXPECTED_SPLASH);
+        // B → C splash fired (B's bomb; chain worked).
+        expect(round.perActorSplash?.['enemy-c']).toBe(expectedBSplash);
+        // C is alive (didn't die from B's small splash).
+        expect(round.perActorSplash?.['enemy-a']).toBeUndefined(); // A was the first to die
+    });
+
+    // ─── (c) Non-positional no-op ─────────────────────────────────────────────
+    // No ships have board positions. A ship has pendingBombs and dies.
+    // The victim.position gate (Task 1) must prevent any splash.
+    it('(c) non-positional: dying bombed ship with no position produces no splash', () => {
+        idc = 0;
+        // Override BASE to remove all positions. The focus attacker fires and kills the dummy
+        // enemy (via the skill), which has no position. The bomb is applied to it. On death,
+        // victim.position === undefined → splash gate blocks.
+        const noPositionInput: CombatEngineInput = {
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [bombAndStrike()] },
+            enemyDefense: 0,
+            enemyHp: 5000, // dies to first hit → bomb is pending at death
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            // NO position on the attacker, and NO enemyAttackers (no positions at all).
+        };
+
+        const result = runCombat(noPositionInput);
+        const round = result.rounds[0];
+
+        // No splash: victim.position was undefined → gate blocked.
+        expect(round.perActorSplash).toBeUndefined();
+    });
+
+    // ─── (d) Multi-bomb / multi-ally ─────────────────────────────────────────
+    // A dying ship has TWO pending bombs (tiers 100 and 300) and TWO living adjacent allies.
+    // Each ally takes the SUM of both bombs' splash. One bomb carries a non-neutral affinityMult
+    // (1.5) — the splash formula must ignore it (no-affinity proof, end-to-end).
+    it('(d) multi-bomb + multi-ally: each ally takes sum of all bombs; affinityMult is ignored', () => {
+        idc = 0;
+        // Carrier at M4 (dies to direct hit). Adjacent allies at M3 and B4.
+        // M4 (q=2,r=1); M3 (q=1,r=1) Δ=(-1,0) ✓ adjacent.
+        // B4 (q=2,r=2); M4 Δ=(0,1) ✓ adjacent.
+        // Bomb 1: tier=100, stacks=1, damagePerStack=1000, affinityMult=1.5 (must NOT affect splash).
+        //   splash = 1×1000×0.25 = 250.
+        // Bomb 2: tier=300, stacks=1, damagePerStack=2000, affinityMult=1 (neutral).
+        //   splash = 1×2000×0.75 = 1500.
+        // Expected per-ally: 250 + 1500 = 1750.
+        const bomb1: PendingBomb = {
+            countdown: 3,
+            damagePerStack: 1000,
+            stacks: 1,
+            tier: 100,
+            sourceId: 'attacker',
+            affinityMult: 1.5, // non-neutral — must not change splash
+            detonationDamageModifier: 0,
+        };
+        const bomb2: PendingBomb = {
+            countdown: 3,
+            damagePerStack: 2000,
+            stacks: 1,
+            tier: 300,
+            sourceId: 'attacker',
+            affinityMult: 1,
+            detonationDamageModifier: 0,
+        };
+        const expectedPerAlly = splashDamageForBomb(bomb1) + splashDamageForBomb(bomb2); // 250 + 1500 = 1750
+
+        // Use a skill-free carrier to isolate the pre-seeded bombs (no bomb from the skill).
+        const isolatedInput = BASE({
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemyAttackers: [
+                enemyAt('enemy-carrier', 'M4', 5000),
+                enemyAt('enemy-ally1', 'M3', 1_000_000_000),
+                enemyAt('enemy-ally2', 'B4', 1_000_000_000),
+            ],
+            __testTapActors: (actors) => {
+                const carrier = actors.find((a) => a.id === 'enemy-carrier');
+                if (carrier) {
+                    carrier.pendingBombs.push(bomb1, bomb2);
+                }
+            },
+        });
+
+        const result = runCombat(isolatedInput);
+        const round = result.rounds[0];
+
+        expect(round.perActorSplash?.['enemy-ally1']).toBe(expectedPerAlly);
+        expect(round.perActorSplash?.['enemy-ally2']).toBe(expectedPerAlly);
+    });
+
+    // ─── (e) Dead applier still splashes ─────────────────────────────────────
+    // The bomb's sourceId refers to an actor that is already destroyed (destroyedRound set)
+    // when the carrier dies. The splash must still fire (no applier-liveness check).
+    it('(e) dead applier: splash fires even when the bomb sourceId actor is already destroyed', () => {
+        idc = 0;
+        // Carrier at M4, ally at M3. Carrier has a pre-seeded bomb whose sourceId is
+        // 'enemy-dead-applier', a separate enemy actor that is already marked destroyed
+        // (destroyedRound set before rounds start via __testTapActors).
+        const deadApplierBomb: PendingBomb = {
+            countdown: 3,
+            damagePerStack: 5000 * (BOMB_TIER / 100), // same math as EXPECTED_SPLASH
+            stacks: BOMB_STACKS,
+            tier: BOMB_TIER,
+            sourceId: 'enemy-dead-applier',
+            affinityMult: 1,
+            detonationDamageModifier: 0,
+        };
+        const expectedDeadApplierSplash = splashDamageForBomb(deadApplierBomb); // 10000
+
+        const input = BASE({
+            // Use a damage-only skill (no bomb from skill) so only the pre-seeded bomb fires.
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            ab({
+                                type: 'damage',
+                                target: 'enemy',
+                                config: { type: 'damage', multiplier: 100 },
+                            }),
+                        ],
+                    },
+                ],
+            },
+            enemyAttackers: [
+                enemyAt('enemy-carrier', 'M4', 5000),
+                enemyAt('enemy-mid', 'M3', 1_000_000_000),
+                // The applier is part of the roster but at a non-adjacent position and pre-marked dead.
+                enemyAt('enemy-dead-applier', 'M1', 1_000_000_000),
+            ],
+            __testTapActors: (actors) => {
+                const carrier = actors.find((a) => a.id === 'enemy-carrier');
+                if (carrier) carrier.pendingBombs.push(deadApplierBomb);
+                // Mark the applier as already destroyed before rounds start.
+                const applier = actors.find((a) => a.id === 'enemy-dead-applier');
+                if (applier) applier.destroyedRound = 0;
+            },
+        });
+
+        const result = runCombat(input);
+        const round = result.rounds[0];
+
+        // Splash fired despite the applier being dead.
+        expect(round.perActorSplash?.['enemy-mid']).toBe(expectedDeadApplierSplash);
+    });
+
+    // ─── (f) Cheat-death survivor does NOT splash ─────────────────────────────
+    // An enemy with pendingBombs takes a lethal hit but has a recurring Cheat-Death aura
+    // (registered via a passive self-buff ability). The engine intercepts the death, sets
+    // HP to 1 — the ship never enters the splash branch → no splash fires.
+    it('(f) cheat-death save: fatal hit intercepted → ship survives → no splash', () => {
+        idc = 0;
+        // Front enemy (M4) HP 5000 → lethal 5000 hit. Has Cheat Death aura via passive ability.
+        // Mid ally at M3 (adjacent). If splash fired, ally would take EXPECTED_SPLASH; it must not.
+        const cheatDeathAuraAbility = ab({
+            type: 'buff',
+            target: 'self',
+            trigger: 'on-cast', // trigger unused for aura; aura is always-active
+            config: {
+                type: 'buff',
+                buffName: 'Cheat Death',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                duration: 'recurring', // recurring → registered as aura, always active
+            },
+        });
+        const cheatDeathEnemy: NonNullable<CombatEngineInput['enemyAttackers']>[number] = {
+            id: 'enemy-cheat-death',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 5000, speed: 1 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            // Passive slot → castPathCheatDeath = false → registered as aura
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'passive',
+                        abilities: [cheatDeathAuraAbility],
+                    },
+                ],
+            },
+        };
+        const input = BASE({
+            enemyAttackers: [
+                cheatDeathEnemy,
+                enemyAt('enemy-mid', 'M3', 1_000_000_000), // adjacent ally — MUST take no splash
+            ],
+        });
+
+        const result = runCombat(input);
+        const round = result.rounds[0];
+
+        // Cheat Death intercepted → no splash → enemy-mid is unharmed by splash.
+        expect(round.perActorSplash).toBeUndefined();
+        // enemy-mid took no damage at all (outside the base footprint, no splash fired).
+        expect(round.perTargetDamage?.['enemy-mid']).toBeUndefined();
+    });
 });
