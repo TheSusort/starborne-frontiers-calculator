@@ -63,13 +63,12 @@
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `buildEquipmentAbilities.test.ts` (follow the existing REFLECT test block ~ near other gear-set tests; reuse the file's existing `makePiece` / ship-builder helpers — match how REFLECT/SHIELD tests construct a ship with N set pieces):
+Add to `buildEquipmentAbilities.test.ts`. The file already has a `buildForGearSet(setKey)` helper (~197) that builds a ship equipping exactly `GEAR_SETS[setKey].minPieces` pieces + the matching `getGearPiece` — use it directly for the **pass** case (it gives 4 BOOST pieces). It has NO count parameter, so for the **fail** case hand-roll a 3-piece map using the same `makePiece` + inline `(g) => pieceMap[g]` lookup that `buildForGearSet`'s body uses (read it to copy the exact shape).
 
 ```typescript
 describe('buildEquipmentAbilities — Boost set', () => {
-    it('emits a buff-duration-extension ability (turns 1) when ≥4 BOOST pieces are equipped', () => {
-        // Build a ship with 4 BOOST gear pieces (copy the REFLECT test's piece-construction).
-        const { ship, getGearPiece } = buildShipWithSet('BOOST', 4); // use the file's existing helper pattern
+    it('emits a buff-duration-extension ability (turns 1) at ≥4 BOOST pieces', () => {
+        const { ship, getGearPiece } = buildForGearSet('BOOST'); // minPieces = 4
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
         const boost = abilities.find((a) => a.id === 'equip-set-BOOST');
         expect(boost).toBeDefined();
@@ -77,15 +76,25 @@ describe('buildEquipmentAbilities — Boost set', () => {
         expect(boost!.type).toBe('modifier'); // placeholder, like REFLECT
     });
 
-    it('emits nothing when only 3 BOOST pieces are equipped (minPieces 4)', () => {
-        const { ship, getGearPiece } = buildShipWithSet('BOOST', 3);
-        const abilities = buildEquipmentAbilities(ship, getGearPiece);
+    it('emits nothing with only 3 BOOST pieces (minPieces 4)', () => {
+        // Hand-roll 3 pieces (buildForGearSet has no count param). Copy makePiece + the
+        // inline getGearPiece lookup from buildForGearSet's body.
+        const pieceMap: Record<string, GearPiece> = {};
+        const slots = ['weapon', 'hull', 'generator'] as const; // any 3 distinct slots
+        const equipment: Record<string, string> = {};
+        slots.forEach((slot, i) => {
+            const id = `BOOST-piece-${i}`;
+            pieceMap[id] = makePiece({ id, slot, setBonus: 'BOOST' });
+            equipment[slot] = id;
+        });
+        const ship = { /* minimal Ship with `equipment` — copy from buildForGearSet */ } as Ship;
+        const abilities = buildEquipmentAbilities(ship, (g: string) => pieceMap[g]);
         expect(abilities.find((a) => a.id === 'equip-set-BOOST')).toBeUndefined();
     });
 });
 ```
 
-> NOTE: there is no `buildShipWithSet` helper in the file — replicate exactly how the REFLECT/SHIELD `it(...)` blocks build a ship (they loop `minPieces` slots calling `makePiece({ id, slot, setBonus })` into an `equipment` map + a `getGearPiece` lookup). Use 4 pieces for the pass case, 3 for the fail case.
+> Read `buildForGearSet` and `makePiece` in the file first and mirror their exact `Ship`/`equipment`/slot construction — the snippet above is a sketch, not literal.
 
 - [ ] **Step 2: Run the test, verify it fails**
 
@@ -428,7 +437,7 @@ Immediately before `const statusEngine = createStatusEngine({` (~1422), insert:
     // team-agnostically: attacker + walked team allies + enemy attackers.
     const buffDurationExtensionByOwner = buildBuffDurationExtensionByOwner([
         { id: 'attacker', shipSkills: input.shipSkills },
-        ...teamActors.map((t) => ({ id: t.id, shipSkills: t.shipSkills })),
+        ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
         ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
     ]);
 ```
@@ -439,7 +448,11 @@ Add the import at the top of `engine.ts` (near the other `src/utils/combat` impo
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
 ```
 
-> VERIFY while implementing: `input.shipSkills` is the RAW attacker skills (the local `shipSkills` binding is rebound to the partitioned cast-only subset at ~1227, but `input.shipSkills` still holds the full skills with the passive slot). `teamActors` (normalized ~1204) and `input.enemyAttackers` each expose `{ id, shipSkills }`. Confirm the `shipSkills` field names on the team/enemy actor types (`t.shipSkills`, `e.shipSkills`); adjust if the walked-actor type names it differently.
+> **FIELD NAMES (verified — get these exactly right):**
+> - **Attacker:** `input.shipSkills` is the RAW attacker skills with the passive slot intact. The local `shipSkills` binding is rebound to the partitioned cast-only subset at ~1227, but `input.shipSkills` is untouched, and gear-set abilities are merged into the *passive* slot (which `partitionReactiveAbilities` does not strip). Correct as written.
+> - **Team allies:** team-actor ship skills live at **`t.walk?.shipSkills`**, NOT `t.shipSkills`. `teamActors = normalizeTeamActorsToWalked(input.teamActors)` (`engine.ts:1204`) returns `TeamActorEngineInput[]` whose merged skills are on the `walk` bundle (`teamActorWalk.ts:28` synthesizes `walk.shipSkills` for every normalized actor — buff-only actors get `buildEmptyShipSkills()`). A top-level `t.shipSkills` is `undefined` in the combat-sim production path (`battleSimulator.ts` sets only `walk.shipSkills`) → using it would silently kill the ally-buff feature in the simulator. **Use `t.walk?.shipSkills`.**
+> - **Enemies:** `e.shipSkills` is correct — `enemyAttackers[].shipSkills?` is a top-level field on that input type (`engine.ts:923`).
+> The `buildBuffDurationExtensionByOwner` helper already accepts `ShipSkills | undefined`, so undefined entries are harmless (map omits them).
 
 - [ ] **Step 2: Pass the lookup into `createStatusEngine`**
 
@@ -529,7 +542,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Update the coverage tracker test**
 
-In `equipmentCoverage.test.ts`: add `'BOOST'` to the `implementedSets` `.toEqual([...])` array (~130, keep alphabetical/decl order consistent with the file) and to the `IMPLEMENTED_SETS` `new Set([...])` (~195). Update the long `it('exactly { ... } are currently implemented')` title string to include BOOST.
+In `equipmentCoverage.test.ts`, three edits:
+- The `implementedSets` `.toEqual([...])` array (~130) is built from `Object.keys(GEAR_SETS).filter(...)` and the assertion is **order-sensitive (declaration order, not alphabetical)**. `BOOST` is the FIRST key in `GEAR_SETS` (`gearSets.ts:56`, before `BURNER`), so insert `'BOOST'` as the **first** element of the array — do NOT append or alphabetize. The existing order is BURNER, DECIMATION, LEECH, REFLECT, REVENGE, SHIELD, CLOAKING, HARDENED.
+- The `IMPLEMENTED_SETS` `new Set([...])` (~195) is order-insensitive — add `'BOOST'` anywhere.
+- Update the long `it('exactly { ... } are currently implemented')` title string (~125) to include BOOST.
 
 - [ ] **Step 2: Run the coverage test**
 
