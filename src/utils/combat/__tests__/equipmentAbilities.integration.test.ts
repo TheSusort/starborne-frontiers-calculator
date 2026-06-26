@@ -5743,6 +5743,7 @@ describe('Lifeline (incoming-shield-grant)', () => {
     );
 
     // ── Case 3: once per battle ───────────────────────────────────────────────────
+
     //
     // Per-hit 4000 over 5 rounds. maxHp 10000, attack 2000, T = 3000.
     //   R1: HP 10000 → 6000 (pool 0).
@@ -5776,4 +5777,147 @@ describe('Lifeline (incoming-shield-grant)', () => {
             expect(carrierDied(result)).toBe(true);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// Tasks 1.5 + 3.3: Voidfire Catalyst implant — detonationDamage + bombSplashDamage modifiers
+// ---------------------------------------------------------------------------
+//
+// Voidfire Catalyst is an ultimate implant. Both halves are now wired:
+//   common:    detonationDamage 2 + bombSplashDamage 4    → 2 abilities
+//   uncommon:  detonationDamage 4 + bombSplashDamage 8    → 2 abilities
+//   rare:      bombSplashDamage 24 only (no detonation)   → 1 ability
+//   epic:      detonationDamage 8 + bombSplashDamage 16   → 2 abilities
+//   legendary: bombSplashDamage 40 only (no detonation)   → 1 ability
+
+describe('Tasks 1.5 + 3.3 — Voidfire Catalyst: detonationDamage + bombSplashDamage modifiers', () => {
+    /**
+     * Build an implant piece with setBonus 'VOIDFIRE_CATALYST' at the given rarity
+     * and return the abilities produced by buildEquipmentAbilities.
+     */
+    function voidfireAbilities(rarity: GearPiece['rarity']) {
+        const id = `voidfire-${rarity}`;
+        const piece = makePiece({
+            id,
+            slot: 'implant_major',
+            rarity,
+            setBonus: 'VOIDFIRE_CATALYST',
+        });
+        const ship = makeShip({ implants: { implant_major: id } });
+        const getGearPiece = makeGetGearPiece({ [id]: piece });
+        return buildEquipmentAbilities(ship, getGearPiece);
+    }
+
+    /** Extract the first modifier ability with channel 'detonationDamage', if any. */
+    function findDetAbility(abilities: ReturnType<typeof buildEquipmentAbilities>) {
+        return abilities.find(
+            (a) =>
+                a.type === 'modifier' &&
+                'channel' in a.config &&
+                (a.config as { channel: string }).channel === 'detonationDamage'
+        );
+    }
+
+    /** Extract the first modifier ability with channel 'bombSplashDamage', if any. */
+    function findSplashAbility(abilities: ReturnType<typeof buildEquipmentAbilities>) {
+        return abilities.find(
+            (a) =>
+                a.type === 'modifier' &&
+                'channel' in a.config &&
+                (a.config as { channel: string }).channel === 'bombSplashDamage'
+        );
+    }
+
+    it('common → 2 abilities: detonationDamage value 2 AND bombSplashDamage value 4', () => {
+        const abilities = voidfireAbilities('common');
+        expect(abilities).toHaveLength(2);
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 2,
+            isMultiplicative: false,
+        });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 4,
+            isMultiplicative: false,
+        });
+    });
+
+    it('uncommon → 2 abilities: detonationDamage value 4 AND bombSplashDamage value 8', () => {
+        const abilities = voidfireAbilities('uncommon');
+        expect(abilities).toHaveLength(2);
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 4,
+            isMultiplicative: false,
+        });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 8,
+            isMultiplicative: false,
+        });
+    });
+
+    it('epic → 2 abilities: detonationDamage value 8 AND bombSplashDamage value 16', () => {
+        const abilities = voidfireAbilities('epic');
+        expect(abilities).toHaveLength(2);
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 8,
+            isMultiplicative: false,
+        });
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 16,
+            isMultiplicative: false,
+        });
+    });
+
+    it('rare → 1 ability: bombSplashDamage value 24, NO detonationDamage', () => {
+        const abilities = voidfireAbilities('rare');
+        expect(abilities).toHaveLength(1);
+        const det = findDetAbility(abilities);
+        expect(det).toBeUndefined();
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 24,
+            isMultiplicative: false,
+        });
+    });
+
+    it('legendary → 1 ability: bombSplashDamage value 40, NO detonationDamage', () => {
+        const abilities = voidfireAbilities('legendary');
+        expect(abilities).toHaveLength(1);
+        const det = findDetAbility(abilities);
+        expect(det).toBeUndefined();
+        const splash = findSplashAbility(abilities);
+        expect(splash).toBeDefined();
+        expect(splash!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'bombSplashDamage',
+            value: 40,
+            isMultiplicative: false,
+        });
+    });
 });

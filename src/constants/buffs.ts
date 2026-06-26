@@ -459,12 +459,14 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Bomb I',
-        description: '100% Attack',
+        description:
+            'Deals 100% Damage upon expiration. If this ship is destroyed before expiring it instead deals 25% damage to all adjacent ships. Detonation damage bypasses defense.',
         type: 'debuff',
     },
     {
         name: 'Bomb II',
-        description: '200% Attack',
+        description:
+            'Deals 200% Damage upon expiration. If this ship is destroyed before expiring it instead deals 50% damage to all adjacent ships. Detonation damage bypasses defense.',
         type: 'debuff',
     },
     {
@@ -595,7 +597,8 @@ export const BUFFS: Buff[] = [
     },
     {
         name: 'Bomb III',
-        description: '300% Attack',
+        description:
+            'Deals 300% Damage upon expiration. If this ship is destroyed before expiring it instead deals 75% damage to all adjacent ships. Detonation damage bypasses defense.',
         type: 'debuff',
     },
     {

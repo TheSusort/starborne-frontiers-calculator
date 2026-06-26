@@ -80,6 +80,8 @@ const MODIFIER_CHANNEL_OPTIONS: { value: ModifierChannel; label: string }[] = [
     { value: 'critDamage', label: 'Crit Damage' },
     { value: 'outgoingDamage', label: 'Outgoing Damage' },
     { value: 'dotDamage', label: 'DoT Damage' },
+    { value: 'detonationDamage', label: 'Detonation Damage' },
+    { value: 'bombSplashDamage', label: 'Bomb Splash Damage' },
     { value: 'outgoingHeal', label: 'Outgoing Heal' },
     { value: 'incomingDamage', label: 'Incoming Damage' },
 ];

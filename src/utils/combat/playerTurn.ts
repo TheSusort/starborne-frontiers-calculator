@@ -529,6 +529,7 @@ function detonate(args: {
     enemyHp: number;
     dotMult: number;
     affinityMult: number;
+    detonationMult: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -546,7 +547,8 @@ function detonate(args: {
                 ) *
                 args.dotMult *
                 args.affinityMult *
-                pct;
+                pct *
+                args.detonationMult;
             args.infernoEntries.length = 0;
         } else if (det.dotType === 'corrosion') {
             const baseHp = Math.min(args.enemyHp, 500_000);
@@ -557,18 +559,26 @@ function detonate(args: {
                 ) *
                 args.dotMult *
                 args.affinityMult *
-                pct;
+                pct *
+                args.detonationMult;
             args.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
             const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
-            // Each bomb bursts with the APPLIER's affinity matchup, snapshotted at
-            // application (PendingBomb.affinityMult) — NOT the detonating actor's. A
-            // team-applied bomb detonated by the attacker's skill keeps the team's
-            // modifier, mirroring processBombs' per-entry handling on the enemy turn.
-            // Identical for attacker-only runs (every entry carries the attacker's mult).
+            // Each bomb bursts with the APPLIER's affinity matchup AND the applier's
+            // detonation-damage modifier (Voidfire), both snapshotted at application
+            // (PendingBomb.affinityMult / .detonationDamageModifier) — NOT the detonating
+            // actor's. A team-applied bomb detonated by the attacker's skill keeps the
+            // team's modifiers, mirroring the per-entry burst on the enemy turn (engine.ts
+            // detonatePendingBombs). Identical for attacker-only runs (every entry carries
+            // the attacker's mult, equal to args.detonationMult).
             const payout =
                 args.pendingBombs.reduce(
-                    (sum, b) => sum + b.stacks * b.damagePerStack * b.affinityMult,
+                    (sum, b) =>
+                        sum +
+                        b.stacks *
+                            b.damagePerStack *
+                            b.affinityMult *
+                            (1 + b.detonationDamageModifier / 100),
                     0
                 ) * pct;
             if (payout > 0) {
@@ -588,6 +598,8 @@ function applyNewDoTs(args: {
     dotsConfig: DoTApplicationConfig;
     effectiveAttack: number;
     affinityMult: number;
+    detonationDamageModifier: number;
+    splashModifier: number;
     sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
@@ -620,6 +632,8 @@ function applyNewDoTs(args: {
                 tier: dot.tier,
                 sourceId: args.sourceId,
                 affinityMult: args.affinityMult,
+                detonationDamageModifier: args.detonationDamageModifier,
+                splashModifier: args.splashModifier,
             });
             args.emitDotApplied('bomb', dot.stacks);
         }
@@ -1489,6 +1503,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHp,
         dotMult,
         affinityMult,
+        detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
         corrosionEntries,
         infernoEntries,
         pendingBombs,
@@ -1526,6 +1541,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 dotsConfig,
                 effectiveAttack,
                 affinityMult,
+                detonationDamageModifier: dmgStats.detonationDamageModifier,
+                splashModifier: dmgStats.bombSplashModifier,
                 sourceId: actor.id,
                 corrosionEntries,
                 infernoEntries,

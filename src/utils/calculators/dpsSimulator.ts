@@ -140,6 +140,11 @@ export interface RoundData {
      *  reflected amount also surfaces automatically as the attacker's incoming damage (via the
      *  intake sink); this map is the dedicated attribution for surfacing. */
     perActorReflected?: Record<string, number>;
+    /** Bomb-splash-on-death: adjacent-ally actor id → total splash damage dealt to it THIS round
+     *  by dying bombed allies (positional only). Set ONLY when at least one ally took splash —
+     *  absent otherwise (non-positional / no-splash rounds keep the legacy RoundData shape,
+     *  goldens byte-identical). The splash is ALSO folded into perTargetDamage for that ally. */
+    perActorSplash?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;

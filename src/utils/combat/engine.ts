@@ -53,6 +53,7 @@ import {
 import type { AttackerDamageScalars } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
+import { splashDamageForBomb } from './bombSplash';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
@@ -701,7 +702,11 @@ function processBombs(args: {
         args.pendingBombs[i].countdown -= 1;
         if (args.pendingBombs[i].countdown <= 0) {
             const bomb = args.pendingBombs[i];
-            const burstDamage = bomb.stacks * bomb.damagePerStack * bomb.affinityMult;
+            const burstDamage =
+                bomb.stacks *
+                bomb.damagePerStack *
+                bomb.affinityMult *
+                (1 + bomb.detonationDamageModifier / 100);
             args.emitBombDetonated?.(bomb.sourceId, bomb.stacks, burstDamage);
             args.creditDetonation(bomb.sourceId, burstDamage);
             args.pendingBombs.splice(i, 1);
@@ -1908,6 +1913,12 @@ export function runCombat(input: CombatEngineInput): {
     // rebound fresh each round so it never accumulates across rounds. Surfaced both as the
     // attacker's incoming (automatic via the sink) AND on RoundData.perActorReflected.
     let perActorReflected = new Map<string, number>();
+    // Bomb-splash-on-death: per-round accumulator (adjacent-ally actor id → total splash damage
+    // dealt to it THIS round by dying bombed allies). Mirrors perActorShieldGranted's lifecycle
+    // (declared once, rebound fresh each round at ~3352, captured by the splash block in the death
+    // seam). Surfaced as RoundData.perActorSplash at the post-round push (absent when empty →
+    // non-positional / no-splash rounds stay byte-identical).
+    let perActorSplash = new Map<string, number>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -2870,6 +2881,10 @@ export function runCombat(input: CombatEngineInput): {
             // own id, covering every Cheat Death source.
             if (victim.currentHp <= 0) {
                 const targetId = victim.id;
+                // Captured BEFORE recordDestroyed (which sets destroyedRound): the death `else`
+                // can RE-ENTER on a corpse hit again (currentHp ≤ 0 → recordDestroyed idempotent),
+                // so this gate + the up-front bomb-consume below make the splash fire exactly once.
+                const wasAliveBeforeThisCall = victim.destroyedRound === undefined;
                 const carriesCheatDeath = selfBuffNamesForOwners(statusEngine, [targetId]).some(
                     (n) => CHEAT_DEATH_BUFFS.has(n)
                 );
@@ -2899,6 +2914,52 @@ export function runCombat(input: CombatEngineInput): {
                     // off the heal target's runtime `destroyedRound` field at the result site —
                     // no side-specific scalar write is needed here.
                     recordDestroyed(victim, r, bus, cause?.killerId, cause?.byDirectDamage);
+                    // Bomb-splash-on-death: a ship that dies with un-detonated bombs splashes a
+                    // tier-scaled fraction (tier/4%: 100→25,200→50,300→75) of each bomb's damage to
+                    // its LIVING same-side adjacent allies (positional only — victim.position gate
+                    // enforces this; adjacentAllyIds has an all-allies fallback and does NOT
+                    // self-gate, so the position check here is the sole non-positional guard).
+                    // NO affinity (bombs aren't affinity-scaled). Bomb-like: full shield drain, no
+                    // penetration (bombPortion = full). Credited to the bomb applier (sourceId).
+                    // Chains: a splash that kills an adjacent bombed ally re-enters this same
+                    // recordDestroyed else-branch for that ally, firing its splash — naturally finite
+                    // (each ship dies once; bombs consumed up-front). Guarded against double-fire on a
+                    // second hit to a corpse by (a) the wasAliveBeforeThisCall check and (b) consuming
+                    // the bombs before splashing.
+                    if (
+                        wasAliveBeforeThisCall &&
+                        victim.position !== undefined &&
+                        victim.pendingBombs.length > 0
+                    ) {
+                        const bombs = victim.pendingBombs;
+                        victim.pendingBombs = []; // consume up-front so a chain re-entry / corpse re-hit won't re-splash
+                        const allyIds = bySide(
+                            isEnemySide(victim.id) ? 'enemy' : 'player'
+                        ).adjacentAllyIdsFor(victim.id);
+                        for (const allyId of allyIds) {
+                            const ally = allActorsById.get(allyId);
+                            if (!ally || ally.destroyedRound !== undefined) continue;
+                            const splashSink = ally.side === 'player' ? playerSink : enemySink;
+                            for (const bomb of bombs) {
+                                const splash = splashDamageForBomb(bomb, bomb.splashModifier);
+                                if (splash <= 0) continue;
+                                applyVictimDamage(splash, ally, splashSink, {
+                                    killerId: bomb.sourceId,
+                                    byDirectDamage: true,
+                                    bombPortion: splash, // full bomb → full shield drain, no penetration
+                                    shieldPenetrationPct: 0,
+                                });
+                                perActorSplash.set(
+                                    ally.id,
+                                    (perActorSplash.get(ally.id) ?? 0) + splash
+                                );
+                                roundPerTargetDamage.set(
+                                    ally.id,
+                                    (roundPerTargetDamage.get(ally.id) ?? 0) + splash
+                                );
+                            }
+                        }
+                    }
                 }
             }
             // Tank-side hp-changed (Phase 4c PR 3): ONCE per HP-intake event — this closure
@@ -3488,6 +3549,9 @@ export function runCombat(input: CombatEngineInput): {
         // Reflect gear set (Task 5): rebind the per-round reflected-thorns accumulator EVERY round
         // (mirrors perActorShieldGranted), so a stale carry-over never over-reports reflected damage.
         perActorReflected = new Map<string, number>();
+        // Bomb-splash-on-death: rebind every round (like perActorShieldGranted) so a stale
+        // carry-over never over-reports splash. Written only by the death-seam splash block.
+        perActorSplash = new Map<string, number>();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -5119,6 +5183,11 @@ export function runCombat(input: CombatEngineInput): {
             // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
+                : {}),
+            // perActorSplash (bomb-splash-on-death): set ONLY when a dying bombed ally splashed
+            // adjacent allies this round (map non-empty). Absent otherwise → byte-identical.
+            ...(perActorSplash.size > 0
+                ? { perActorSplash: Object.fromEntries(perActorSplash) }
                 : {}),
             // perActorShield (H1 Task 6): per-actor shield accounting for THIS round, set only
             // when at least one actor has a nonzero {granted, absorbed, pool}. Mirrors
