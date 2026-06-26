@@ -5743,6 +5743,7 @@ describe('Lifeline (incoming-shield-grant)', () => {
     );
 
     // ── Case 3: once per battle ───────────────────────────────────────────────────
+
     //
     // Per-hit 4000 over 5 rounds. maxHp 10000, attack 2000, T = 3000.
     //   R1: HP 10000 → 6000 (pool 0).
@@ -5776,4 +5777,101 @@ describe('Lifeline (incoming-shield-grant)', () => {
             expect(carrierDied(result)).toBe(true);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// Task 1.5: Voidfire Catalyst implant — detonationDamage modifier (registry fold)
+// ---------------------------------------------------------------------------
+//
+// Voidfire Catalyst is an ultimate implant whose description states:
+//   common:    2% more detonation damage (+ 4% splash — later phase)
+//   uncommon:  4% more detonation damage (+ 8% splash — later phase)
+//   rare:      splash-only (24%) — no detonation half → builder returns undefined
+//   epic:      8% more detonation damage (+ 16% splash — later phase)
+//   legendary: splash-only (40%) — no detonation half → builder returns undefined
+//
+// This phase wires ONLY the detonationDamage modifier half (rare/legendary → no ability).
+// The test exercises the REAL registry through buildEquipmentAbilities and asserts:
+//   (a) common  → 1 modifier ability with channel 'detonationDamage', value 2
+//   (b) uncommon→ 1 modifier ability with channel 'detonationDamage', value 4
+//   (c) epic    → 1 modifier ability with channel 'detonationDamage', value 8
+//   (d) rare    → NO detonationDamage ability in the output (builder returns undefined)
+//   (e) legendary → NO detonationDamage ability in the output (builder returns undefined)
+
+describe('Task 1.5 — Voidfire Catalyst: detonationDamage modifier (registry fold)', () => {
+    /**
+     * Build an implant piece with setBonus 'VOIDFIRE_CATALYST' at the given rarity
+     * and return the abilities produced by buildEquipmentAbilities.
+     */
+    function voidirefireAbilities(rarity: GearPiece['rarity']) {
+        const id = `voidfire-${rarity}`;
+        const piece = makePiece({
+            id,
+            slot: 'implant_major',
+            rarity,
+            setBonus: 'VOIDFIRE_CATALYST',
+        });
+        const ship = makeShip({ implants: { implant_major: id } });
+        const getGearPiece = makeGetGearPiece({ [id]: piece });
+        return buildEquipmentAbilities(ship, getGearPiece);
+    }
+
+    /** Extract the first modifier ability with channel 'detonationDamage', if any. */
+    function findDetAbility(abilities: ReturnType<typeof buildEquipmentAbilities>) {
+        return abilities.find(
+            (a) =>
+                a.type === 'modifier' &&
+                'channel' in a.config &&
+                (a.config as { channel: string }).channel === 'detonationDamage'
+        );
+    }
+
+    it('common → 1 ability; modifier channel detonationDamage, value 2', () => {
+        const abilities = voidirefireAbilities('common');
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.type).toBe('modifier');
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 2,
+            isMultiplicative: false,
+        });
+    });
+
+    it('uncommon → 1 ability; modifier channel detonationDamage, value 4', () => {
+        const abilities = voidirefireAbilities('uncommon');
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 4,
+            isMultiplicative: false,
+        });
+    });
+
+    it('epic → 1 ability; modifier channel detonationDamage, value 8', () => {
+        const abilities = voidirefireAbilities('epic');
+        const det = findDetAbility(abilities);
+        expect(det).toBeDefined();
+        expect(det!.config).toMatchObject({
+            type: 'modifier',
+            channel: 'detonationDamage',
+            value: 8,
+            isMultiplicative: false,
+        });
+    });
+
+    it('rare → NO detonationDamage ability (splash-only rarity, builder returns undefined)', () => {
+        const abilities = voidirefireAbilities('rare');
+        const det = findDetAbility(abilities);
+        expect(det).toBeUndefined();
+    });
+
+    it('legendary → NO detonationDamage ability (splash-only rarity, builder returns undefined)', () => {
+        const abilities = voidirefireAbilities('legendary');
+        const det = findDetAbility(abilities);
+        expect(det).toBeUndefined();
+    });
 });

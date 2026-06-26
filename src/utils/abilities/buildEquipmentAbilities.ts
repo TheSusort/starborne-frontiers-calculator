@@ -433,6 +433,24 @@ const RESONATING_FURY_PROC: Record<string, number> = {
     legendary: 0.16,
 };
 
+// Task 1.5: Voidfire Catalyst — detonation + splash pct per rarity.
+// rare/legendary have no detonation half → undefined. Splash is wired in a later phase
+// (table defined here for reference; NOT emitted yet).
+const VOIDFIRE_DETONATION_PCT: Record<string, number | undefined> = {
+    common: 2,
+    uncommon: 4,
+    rare: undefined,
+    epic: 8,
+    legendary: undefined,
+};
+const _VOIDFIRE_SPLASH_PCT: Record<string, number> = {
+    common: 4,
+    uncommon: 8,
+    rare: 24,
+    epic: 16,
+    legendary: 40,
+};
+
 // D-PR6: incoming-heal-amplification implant value tables
 // No common rarity for Exuberance
 const EXUBERANCE_PROC: Record<string, number> = {
@@ -1045,6 +1063,25 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
         return mkNamedBuffGrant('Crit Power Up III', 'all-allies', 'on-shield-applied', 1, {
             procChance,
         });
+    },
+    // Voidfire Catalyst: +X% detonation damage (detonation half). Splash half added in a later phase
+    // (will expand this to return an array). rare/legendary have no detonation half → undefined here.
+    VOIDFIRE_CATALYST: (rarity) => {
+        const det = VOIDFIRE_DETONATION_PCT[rarity];
+        if (det === undefined) return undefined;
+        return {
+            type: 'modifier',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'modifier',
+                channel: 'detonationDamage',
+                value: det,
+                isMultiplicative: false,
+            },
+            autoFilled: true,
+        };
     },
     // Chrono Reaver: periodic self-charge. Epic = every 3rd own turn, Legendary = every 2nd.
     // Rides end-of-turn (turn-ended) + the every-n-turns gate on the live turnsTaken counter

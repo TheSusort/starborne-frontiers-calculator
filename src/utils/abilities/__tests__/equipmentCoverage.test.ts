@@ -122,7 +122,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 // ---------------------------------------------------------------------------
 
 describe('equipmentCoverage — implemented effects registry', () => {
-    it('exactly { BURNER + DECIMATION + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
+    it('exactly { BURNER + DECIMATION + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDFIRE_CATALYST + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
@@ -155,6 +155,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'NEBULA_NULLIFIER',
             'NOURISHMENT',
             'SYNAPTIC_RESONANCE',
+            'VOIDFIRE_CATALYST',
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
@@ -378,6 +379,7 @@ describe('equipmentCoverage — implants', () => {
         'BATTLECRY',
         'MARTYRDOM',
         'SYNAPTIC_RESONANCE',
+        'VOIDFIRE_CATALYST',
         'ALACRITY',
         'AMBUSH',
         'SPEARHEAD',
@@ -811,6 +813,16 @@ describe('equipmentCoverage — implants', () => {
                 oncePerCombat: true,
             });
         }
+    });
+
+    // Task 1.5: Voidfire Catalyst — detonationDamage modifier half.
+    // rare/legendary are splash-only → no detonation ability (builder returns undefined).
+    it('VOIDFIRE_CATALYST produces 1 ability for common/uncommon/epic (detonationDamage modifier), 0 for rare/legendary (splash-only)', () => {
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'common')).toBe(1);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'uncommon')).toBe(1);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'rare')).toBe(0);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'epic')).toBe(1);
+        expect(implantAbilityCount('VOIDFIRE_CATALYST', 'legendary')).toBe(0);
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));
