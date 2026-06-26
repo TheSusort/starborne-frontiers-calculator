@@ -40,6 +40,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator now models the Reflect gear set: the wearer reflects a portion of damage taken back at the attacker.',
     'Combat simulator now models the Revenge gear set: the wearer deals increasing damage as its HP drops, up to +25% near death.',
     'Combat simulator now models the Smokescreen implant: a chance to gain Stealth when directly hit.',
+    'Voidfire Catalyst implant now increases detonation damage (bomb, Inferno, and Corrosion bursts).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

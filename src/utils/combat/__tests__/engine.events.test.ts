@@ -952,6 +952,226 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         expect(modBurstSkill).toBeCloseTo(baseBurstSkill * 1.5, 5);
     });
 
+    // Case 5d: skill-triggered Inferno detonation scales by detonator's detonationDamageModifier.
+    // The DETONATING actor carries a passive modifier +50% detonation damage (value 50 → mult 1.5).
+    // Validates that the detonate() inferno branch scales by (1 + detonationDamageModifier/100).
+    it('skill-triggered inferno detonation scales by detonationDamageModifier: modifier 50 gives 1.5× burst', () => {
+        // Active slot: apply inferno DoT (tier 8, stacks 3, duration 3 — survives until charged fires).
+        // Charged slot: detonate inferno (powerPct 100).
+        // Passive slot (modifier run only): detonationDamage modifier +50 → mult 1.5.
+        // chargeCount 3, startCharged false → round 4 fires charged (detonate).
+        // Baseline: same layout without the passive modifier.
+        // Compare sum of dot-detonated damage across both runs.
+        const infernoSkillsBase = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 8,
+                                stacks: 3,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'inferno', powerPct: 100 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const infernoSkillsWithModifier = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 8,
+                                stacks: 3,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'inferno', powerPct: 100 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'modifier',
+                                channel: 'detonationDamage',
+                                value: 50,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { events: baseEvents } = collect(
+            baseInput({ shipSkills: infernoSkillsBase(), numRounds: 4 })
+        );
+        const { events: modEvents } = collect(
+            baseInput({ shipSkills: infernoSkillsWithModifier(), numRounds: 4 })
+        );
+
+        const baseBurst = baseEvents
+            .filter((e) => e.type === 'dot-detonated')
+            .reduce((sum, e) => sum + (e.type === 'dot-detonated' ? e.damage : 0), 0);
+        const modBurst = modEvents
+            .filter((e) => e.type === 'dot-detonated')
+            .reduce((sum, e) => sum + (e.type === 'dot-detonated' ? e.damage : 0), 0);
+
+        // With modifier 0: burst = baseline
+        // With modifier 50: burst = baseline × 1.5
+        expect(baseBurst).toBeGreaterThan(0);
+        expect(modBurst).toBeCloseTo(baseBurst * 1.5, 5);
+    });
+
+    // Case 5e: skill-triggered Corrosion detonation scales by detonator's detonationDamageModifier.
+    // The DETONATING actor carries a passive modifier +50% detonation damage (value 50 → mult 1.5).
+    // Validates that the detonate() corrosion branch scales by (1 + detonationDamageModifier/100).
+    it('skill-triggered corrosion detonation scales by detonationDamageModifier: modifier 50 gives 1.5× burst', () => {
+        // Active slot: apply corrosion DoT (tier 5, stacks 2, duration 3 — survives until charged fires).
+        // Charged slot: detonate corrosion (powerPct 100).
+        // Passive slot (modifier run only): detonationDamage modifier +50 → mult 1.5.
+        // chargeCount 3, startCharged false → round 4 fires charged (detonate).
+        // Baseline: same layout without the passive modifier.
+        // Compare sum of dot-detonated damage across both runs.
+        const corrosionSkillsBase = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'corrosion', powerPct: 100 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const corrosionSkillsWithModifier = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'corrosion',
+                                tier: 5,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'corrosion', powerPct: 100 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'modifier',
+                                channel: 'detonationDamage',
+                                value: 50,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { events: baseEvents } = collect(
+            baseInput({ shipSkills: corrosionSkillsBase(), numRounds: 4 })
+        );
+        const { events: modEvents } = collect(
+            baseInput({ shipSkills: corrosionSkillsWithModifier(), numRounds: 4 })
+        );
+
+        const baseBurst = baseEvents
+            .filter((e) => e.type === 'dot-detonated')
+            .reduce((sum, e) => sum + (e.type === 'dot-detonated' ? e.damage : 0), 0);
+        const modBurst = modEvents
+            .filter((e) => e.type === 'dot-detonated')
+            .reduce((sum, e) => sum + (e.type === 'dot-detonated' ? e.damage : 0), 0);
+
+        // With modifier 0: burst = baseline
+        // With modifier 50: burst = baseline × 1.5
+        expect(baseBurst).toBeGreaterThan(0);
+        expect(modBurst).toBeCloseTo(baseBurst * 1.5, 5);
+    });
+
     // Case 6: a team actor's landed timed debuff emits debuff-applied with sourceId = team
     // actor id, on every application round (not just the first).
     it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId on every application round", () => {
