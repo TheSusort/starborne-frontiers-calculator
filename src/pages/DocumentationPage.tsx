@@ -3135,8 +3135,14 @@ const DocumentationPage: React.FC = () => {
                                     Up to allies it shields), and <strong>Lifeline</strong> (when a
                                     direct hit would drop the ship below 30% HP, it gains a shield —
                                     a flat amount plus 100% of its attack, capped at max HP — before
-                                    the hit lands, once per battle). More implant and gear-set
-                                    effects will be added in future updates.
+                                    the hit lands, once per battle). Three more gear-set and implant
+                                    effects are also modeled: the <strong>Reflect</strong> gear set
+                                    (reflects a portion of each incoming hit back at the attacker),
+                                    the <strong>Revenge</strong> gear set (the wearer deals
+                                    increasing damage as its HP drops, up to +25% near death), and
+                                    the <strong>Smokescreen</strong> implant (a chance to gain
+                                    Stealth when directly hit). More implant and gear-set effects
+                                    will be added in future updates.
                                 </p>
                             </div>
                         </div>

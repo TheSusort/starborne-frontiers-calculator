@@ -4,9 +4,9 @@
  * Turns a ship's equipped gear sets + implants into a list of Ability objects
  * that the combat engine can consume.
  *
- * Gear-set abilities are resolved via GEAR_SET_ABILITIES (currently: Leech).
- * Implant abilities are resolved via IMPLANT_ABILITIES (currently: Bloodthirst,
- * Intrusion, Arcane Siege, Warpstrike).
+ * Gear-set abilities are resolved via GEAR_SET_ABILITIES (see the registry below
+ * for the current set). Implant abilities are resolved via IMPLANT_ABILITIES (see
+ * the registry below for the current set).
  *
  * D-PR1 approach (registry, not text-parsing): effect values are baked from the
  * source data in implants.ts / gearSets.ts per the registries above. A variant's
