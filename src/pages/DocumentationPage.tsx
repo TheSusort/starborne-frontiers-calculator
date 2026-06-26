@@ -3145,8 +3145,9 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Voidfire Catalyst</strong> implant is also modeled: it
                                     increases detonation damage (bomb bursts, Inferno detonations,
                                     and Corrosion detonations) and bomb splash damage by a
-                                    percentage based on rarity. More implant and gear-set effects
-                                    will be added in future updates.
+                                    percentage based on rarity — its rare and legendary variants
+                                    amplify bomb splash damage only. More implant and gear-set
+                                    effects will be added in future updates.
                                 </p>
                             </div>
                         </div>
