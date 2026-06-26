@@ -23,6 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
@@ -4661,4 +4662,868 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
             expect(boosted).toBeCloseTo(baseline * (1 + ARCANE_SIEGE_EPIC_PCT / 100), 6);
         }
     );
+});
+
+// ---------------------------------------------------------------------------
+// H2 Task H2.2: Shield gear set — accrues a 4% maxHP shield pool via full build→sim path
+// ---------------------------------------------------------------------------
+//
+// The Shield gear set ("Generate 4% shield each turn") resolves through the registry
+// (GEAR_SET_ABILITIES.SHIELD, H2.1) into an ability:
+//   { type:'shield', target:'self', trigger:'start-of-turn', config:{ type:'shield', pct:4, basis:'hp' } }
+// id `equip-set-SHIELD`. trigger 'start-of-turn' is a LIVE trigger → it partitions into
+// reactiveAbilities and fires via the reactive executor on the carrier's OWN turn, landing the
+// pool on the carrier via the per-recipient routing (Phase 0.1).
+//
+// This test exercises the FULL build→engine path, not just the registry:
+//   1. Equip a ship with the minimum SHIELD-set pieces (2; default minPieces).
+//   2. buildShipAbilitiesWithEquipment merges `equip-set-SHIELD` into the passive slot.
+//      (pre-condition assertion mirrors the LEECH test).
+//   3. Feed those built skills to a NON-focus team ally so its start-of-turn fires within
+//      round 1; read its live shieldPool via __testTapActors after the run settles.
+//
+// grantShieldToTarget does NOT floor: it adds raw and caps at maxHp, with raw = maxHp × 4/100.
+// Ally maxHp = 50_000 → pool = 0.04 × 50_000 = 2_000 exactly (well under the maxHp cap).
+
+const shieldPieceA = makePiece({ id: 'shield-1', slot: 'weapon', setBonus: 'SHIELD' });
+const shieldPieceB = makePiece({ id: 'shield-2', slot: 'hull', setBonus: 'SHIELD' });
+
+describe('H2.2 integration — Shield gear set grants 4% maxHP shield pool (full build→sim path)', () => {
+    it('a Shield-equipped acting ship accrues shieldPool = 0.04 × maxHp after its turn', () => {
+        const ALLY_HP = 50_000;
+        const SHIELD_PCT = 4; // GEAR_SETS.SHIELD stat value
+        const EXPECTED_POOL = (SHIELD_PCT / 100) * ALLY_HP; // 2_000, NOT floored
+
+        // ── 1+2: real resolution+merge path (build→merge) with 2 SHIELD-set pieces ──────────
+        const ship = makeShip({ equipment: { weapon: 'shield-1', hull: 'shield-2' } });
+        const getGearPiece = makeGetGearPiece({
+            'shield-1': shieldPieceA,
+            'shield-2': shieldPieceB,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+        // Pre-condition: the SHIELD set ability landed in the passive slot via the build path.
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const shieldAbility = passive!.abilities.find((a) => a.id === 'equip-set-SHIELD');
+        expect(shieldAbility).toBeDefined();
+        expect(shieldAbility!.trigger).toBe('start-of-turn');
+        expect(shieldAbility!.config).toMatchObject({ type: 'shield', pct: 4, basis: 'hp' });
+
+        // ── 3: feed the BUILT skills to a non-focus team ally; it acts within round 1 ────────
+        const teamActors: TeamActorInput[] = [
+            {
+                id: 'shield-carrier',
+                speed: 200, // acts before the focus so its start-of-turn fires within round 1
+                selfBuffs: [],
+                enemyDebuffs: [],
+                chargeCount: 0,
+                startCharged: false,
+                shipSkills: baseSkills,
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    shieldPenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: ALLY_HP,
+                },
+            },
+        ];
+        const engineTeam = deriveTeamEngineActors(teamActors, undefined);
+
+        // LIVE references — read shieldPool AFTER the run settles.
+        let captured: CombatActor[] = [];
+        runCombat(
+            BASE({
+                // Focus is inert: no damage, IS the heal target, NOT the shield carrier.
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 40_000,
+                enemyHp: 1_000_000_000,
+                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+                teamActors: engineTeam,
+                __testTapActors: (actors) => {
+                    captured = actors;
+                },
+            })
+        );
+
+        const focus = captured.find((a) => a.id === 'attacker');
+        const carrier = captured.find((a) => a.id === 'shield-carrier');
+
+        // Sanity / non-vacuous: the inert focus casts nothing and owns no shield → pool stays 0.
+        expect(focus?.shieldPool ?? 0).toBe(0);
+
+        // The H2 assertion: the Shield-set carrier accrued a 4%-of-maxHP pool on its turn.
+        // Exact (grantShieldToTarget does not floor; raw = maxHp × 4/100, well below the cap).
+        expect(carrier?.shieldPool).toBeGreaterThan(0);
+        expect(carrier?.shieldPool).toBeCloseTo(EXPECTED_POOL, 6);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.2: Adaptive Plating implant — once-per-round shield off the damage taken
+// ---------------------------------------------------------------------------
+//
+// Adaptive Plating (legendary) resolves through the registry (IMPLANT_ABILITIES.ADAPTIVE_PLATING,
+// H3.2) into a reactive ability:
+//   { type:'shield', target:'self', trigger:'on-attacked', procChance:0.19, oncePerRound:true,
+//     config:{ type:'shield', pct:42, basis:'damage-taken' } }
+// 'on-attacked' is a LIVE trigger → it partitions into reactiveAbilities and fires when the carrier
+// is directly hit. basis 'damage-taken' scales the grant off the triggering hit's damage
+// (eventCtx.triggerDamage, threaded by the on-attacked listener in H3.1), landing the pool on the
+// carrier via the per-recipient routing (Phase 0.1).
+//
+// THE KEY INVARIANT (oncePerRound cap): the `attacked` event's `damage` is the per-attack AGGREGATE
+// and on-attacked fires ONCE PER HIT. So for an N-hit attack the on-attacked listener enqueues N
+// shield intents, EACH carrying triggerDamage === the full aggregate. WITHOUT oncePerRound this would
+// grant up to N times per round (one per proc-passing hit). Adaptive Plating's oncePerRound gate must
+// cap it to EXACTLY ONE grant per round.
+//
+// Determinism of the proc: the per-(owner,ability) RateGate accumulates +0.19 per qualifying hit and
+// fires when the accumulator crosses 1. With an 11-hit attack per round (11 × 0.19 = 2.09) the proc
+// gate would pass TWICE within a single round (it crosses 1 at hit ~6 and again at hit ~11) — so the
+// oncePerRound gate (not the proc gate) is the BINDING constraint that caps the round to one grant.
+// We read each round's post-cap `granted` (RoundData.perActorShield[carrier].granted) and assert it
+// is NEVER more than ONE share (0.42 × aggregate), and that at least one round actually fired.
+//
+// Pinning the damage taken D: enemy attack A=1000, multiplier 100%, hits=11, no defence/crit/pen on
+// either side → per-attack aggregate damage D = 1000 × 1.0 × 11 = 11_000. One grant = 0.42 × 11_000
+// = 4_620 (well under the carrier's max HP cap → no clamping).
+
+const adaptivePlatingPiece = makePiece({
+    id: 'ap-legendary',
+    slot: 'implant_major',
+    rarity: 'legendary',
+    setBonus: 'ADAPTIVE_PLATING',
+});
+
+describe('H3.2 integration — Adaptive Plating once-per-round shield off the damage taken', () => {
+    const CARRIER_HP = 100_000_000; // huge: carrier survives every round; shield never caps
+    const NUM_ROUNDS = 10;
+    const ENEMY_ATTACK = 1_000;
+    const ENEMY_HITS = 11; // 11 × 0.19 = 2.09 → proc would pass TWICE/round → oncePerRound is binding
+    const D = ENEMY_ATTACK * ENEMY_HITS; // per-attack aggregate damage taken = 11_000
+    const AP_PCT = 42; // legendary
+    const ONE_GRANT = (AP_PCT / 100) * D; // 4_620 — exactly ONE share
+
+    /** An enemy attacker that hits the carrier (the focus / heal target) with an 11-hit attack
+     *  each round. attack 1000, multiplier 100, no crit → aggregate damage taken = 11_000. */
+    const enemyHitter = () => ({
+        id: 'ap-enemy',
+        stats: {
+            attack: ENEMY_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            speed: 1, // acts before the (slower) carrier so the hit lands at round top
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'ap-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: {
+                                type: 'damage' as const,
+                                multiplier: 100,
+                                hits: ENEMY_HITS,
+                            },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    });
+
+    it(
+        'grants ≈ 0.42 × damageTaken when it fires, and AT MOST ONCE per round (oncePerRound caps ' +
+            'the 11-hit attack to a single grant)',
+        () => {
+            // Carrier = focus (the heal target) equipped with legendary Adaptive Plating via the
+            // real build→merge path. A no-op active keeps the round cadence; the passive slot
+            // carries the reactive Adaptive Plating shield.
+            const ship = makeShip({ implants: { implant_major: 'ap-legendary' } });
+            const getGearPiece = makeGetGearPiece({ 'ap-legendary': adaptivePlatingPiece });
+            const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+            // Pre-condition: the Adaptive Plating ability landed in the passive slot.
+            const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+            expect(passive).toBeDefined();
+            const ap = passive!.abilities.find((a) =>
+                a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+            );
+            expect(ap).toBeDefined();
+            expect(ap!.trigger).toBe('on-attacked');
+            expect(ap!.procChance).toBeCloseTo(0.19);
+            expect(ap!.oncePerRound).toBe(true);
+            expect(ap!.config).toMatchObject({ type: 'shield', pct: 42, basis: 'damage-taken' });
+
+            // Append a no-op active so the focus keeps the round cadence (deals no damage itself).
+            const noopActive: Ability = {
+                id: 'noop-active',
+                type: 'damage',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'damage', multiplier: 0 },
+            };
+            const shipSkills: ShipSkills = {
+                slots: [
+                    { slot: 'active', abilities: [noopActive] },
+                    ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+                ],
+            };
+
+            const result = runCombat(
+                BASE({
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    hp: CARRIER_HP,
+                    // No carrier defence → the enemy's 11-hit attack lands its full nominal
+                    // aggregate (1000 × 11 = 11_000) as the damage taken, so the grant pins to
+                    // 0.42 × 11_000 = 4_620 exactly (no mitigation arithmetic in the assertion).
+                    defence: 0,
+                    enemyHp: 1_000_000_000,
+                    healTargetId: 'attacker',
+                    shipSkills,
+                    enemyAttackers: [enemyHitter()],
+                })
+            );
+
+            // Per-round post-cap grant for the carrier (the heal target / focus).
+            const grantedPerRound = result.rounds.map(
+                (rd) => rd.perActorShield?.['attacker']?.granted ?? 0
+            );
+
+            // (1) THE CAP: no round ever grants more than ONE share. WITHOUT oncePerRound, the
+            // 11-hit attack would let the proc gate pass twice in a round → ~2 × ONE_GRANT.
+            for (const granted of grantedPerRound) {
+                expect(granted).toBeLessThanOrEqual(ONE_GRANT + 1e-6);
+            }
+
+            // (2) NON-VACUOUS: the proc actually fired at least once, and every firing round
+            // granted EXACTLY one share (≈ 0.42 × damage taken), proving both the damage-taken
+            // basis and the once-per-round cap.
+            const firingRounds = grantedPerRound.filter((g) => g > 0);
+            expect(firingRounds.length).toBeGreaterThan(0);
+            for (const granted of firingRounds) {
+                expect(granted).toBeCloseTo(ONE_GRANT, 6);
+            }
+
+            // (3) CONTROL — the cap is doing real work (oncePerRound is the BINDING constraint):
+            // an OTHERWISE-IDENTICAL ability WITHOUT oncePerRound, on the same 11-hit attack, lets
+            // the proc gate pass TWICE in a round → that round grants 2 × ONE_GRANT. This proves the
+            // 11-hit setup actually exercises the multi-grant path that oncePerRound suppresses above.
+            const noCapShield: Ability = {
+                id: 'equip-implant-ADAPTIVE_PLATING-nocap',
+                type: 'shield',
+                target: 'self',
+                trigger: 'on-attacked',
+                conditions: [],
+                procChance: 0.19,
+                // oncePerRound deliberately OMITTED.
+                config: { type: 'shield', pct: AP_PCT, basis: 'damage-taken' },
+                autoFilled: true,
+            };
+            const noCapResult = runCombat(
+                BASE({
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    numRounds: NUM_ROUNDS,
+                    hp: CARRIER_HP,
+                    defence: 0,
+                    enemyHp: 1_000_000_000,
+                    healTargetId: 'attacker',
+                    shipSkills: {
+                        slots: [
+                            { slot: 'active', abilities: [noopActive] },
+                            { slot: 'passive', abilities: [noCapShield] },
+                        ],
+                    },
+                    enemyAttackers: [enemyHitter()],
+                })
+            );
+            const noCapGranted = noCapResult.rounds.map(
+                (rd) => rd.perActorShield?.['attacker']?.granted ?? 0
+            );
+            // At least one round grants MORE than a single share (the proc gate passed ≥ 2× that
+            // round) — the exact scenario the real ability's oncePerRound gate caps to one above.
+            expect(noCapGranted.some((g) => g > ONE_GRANT + 1e-6)).toBe(true);
+        }
+    );
+});
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.4: Abundant Renewal implant — overheal→shield to the over-repaired ally
+// ---------------------------------------------------------------------------
+//
+// Abundant Renewal (legendary) resolves through the registry (IMPLANT_ABILITIES.ABUNDANT_RENEWAL,
+// H3.4) into a DETERMINISTIC reactive ability (no procChance, no oncePerRound):
+//   { type:'shield', target:'ally', trigger:'on-own-repair-to-ally',
+//     config:{ type:'shield', pct:30, basis:'overheal' } }
+// 'on-own-repair-to-ally' is a LIVE trigger → it partitions into reactiveAbilities and fires when
+// the carrier (owner) repairs >= 1 NON-self ally. basis 'overheal' scales the grant off the CLIPPED
+// over-repair (eventCtx.overhealAmount, threaded from heal-performed.overheal by the listener in
+// H3.3). target 'ally' → reactiveRecipients falls back to healing.targetId (the over-repaired ally),
+// so the pool lands on that ally via the per-recipient routing (Phase 0.1).
+//
+// FULL build→sim path (not just the registry):
+//   - The FOCUS actor ('attacker') is the HEALER/carrier — Abundant Renewal merged into its passive
+//     slot via buildShipAbilitiesWithEquipment, plus a hand-built active ally-repair (basis 'hp',
+//     noCrit). It is slow → acts AFTER the enemy each round.
+//   - The over-repaired ally is the heal target ('tank', a team actor set as healTargetId).
+//   - A fast enemy attacker drops the tank to a KNOWN currentHp BEFORE the healer casts, so the
+//     repair clips to a KNOWN overheal.
+//
+// Pinning the overheal exactly (1 round, no folds):
+//   - healer effectiveMaxHp (hp) = 10_000; repair pct 50, basis 'hp', healModifier 0, noCrit →
+//     raw R = 10_000 × 50/100 = 5_000.
+//   - tank maxHp = 10_000; enemy deals G = 2_000 (attack 2000 × mult 100, no defence/crit) →
+//     tank currentHp = 8_000 BEFORE the heal.
+//   - consumed = min(R, maxHp − currentHp) = min(5_000, 2_000) = 2_000;
+//     overheal = R − consumed = 5_000 − 2_000 = 3_000.
+//   - shield granted to the tank = 0.30 × overheal = 0.30 × 3_000 = 900 (well under the tank's max
+//     HP cap → no clamping).
+
+const abundantRenewalPiece = makePiece({
+    id: 'ar-legendary',
+    slot: 'implant_ultimate',
+    rarity: 'legendary',
+    setBonus: 'ABUNDANT_RENEWAL',
+});
+
+describe('H3.4 integration — Abundant Renewal grants overheal→shield to the over-repaired ally (full build→sim path)', () => {
+    const HEALER_HP = 10_000;
+    const TANK_HP = 10_000;
+    const REPAIR_PCT = 50; // raw R = HEALER_HP × 50% = 5_000 (basis 'hp', noCrit, healModifier 0)
+    const RAW_REPAIR = HEALER_HP * (REPAIR_PCT / 100); // 5_000
+    const GAP = 2_000; // enemy damage to the tank before the healer casts
+    const EXPECTED_OVERHEAL = RAW_REPAIR - GAP; // 3_000 (R clips the 2_000 gap, overheals by 3_000)
+    const AR_PCT = 30; // legendary
+    const EXPECTED_SHIELD = (AR_PCT / 100) * EXPECTED_OVERHEAL; // 900
+
+    /** The healer's active repair, targeting an ally (routes to the heal target 'tank').
+     *  basis 'hp' + noCrit so raw = healer effectiveMaxHp × pct with no crit/heal-modifier folds. */
+    const repairAlly: Ability = {
+        id: 'ar-repair-ally',
+        type: 'heal',
+        target: 'ally',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'heal', pct: REPAIR_PCT, basis: 'hp', noCrit: true },
+    };
+
+    /** Team-actor heal target (the tank). Inert skills — it just receives the heal + the enemy hit. */
+    const tankActor = (speed: number): TeamActorEngineInput => ({
+        id: 'tank',
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: TANK_HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    /** A fast enemy attacker that deals exactly GAP to the heal target ('tank') each round.
+     *  attack === GAP, multiplier 100, no crit/defence → damage taken = GAP. */
+    const enemyHitter = () => ({
+        id: 'ar-enemy',
+        stats: {
+            attack: GAP,
+            crit: 0,
+            critDamage: 0,
+            speed: 1_000, // acts BEFORE the (slow) healer so the gap exists at cast time
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        {
+                            id: 'ar-enemy-hit',
+                            type: 'damage' as const,
+                            target: 'enemy' as const,
+                            trigger: 'on-cast' as const,
+                            conditions: [],
+                            config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    });
+
+    it('an Abundant-Renewal healer over-repairing the heal target grants that ally a 0.30 × overheal shield', () => {
+        // ── Real resolution+merge path (build→merge): legendary Abundant Renewal implant ──────
+        const ship = makeShip({ implants: { implant_ultimate: 'ar-legendary' } });
+        const getGearPiece = makeGetGearPiece({ 'ar-legendary': abundantRenewalPiece });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+
+        // Pre-condition: the Abundant Renewal ability landed in the passive slot via the build path.
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        const ar = passive!.abilities.find((a) =>
+            a.id.startsWith('equip-implant-ABUNDANT_RENEWAL')
+        );
+        expect(ar).toBeDefined();
+        expect(ar!.type).toBe('shield');
+        expect(ar!.target).toBe('ally');
+        expect(ar!.trigger).toBe('on-own-repair-to-ally');
+        expect(ar!.procChance).toBeUndefined(); // deterministic — no proc gate
+        expect(ar!.config).toMatchObject({ type: 'shield', pct: 30, basis: 'overheal' });
+
+        // Healer ship skills: active ally-repair + the merged Abundant Renewal passive.
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [repairAlly] },
+                ...(passive ? [{ slot: passive.slot, abilities: passive.abilities }] : []),
+            ],
+        };
+
+        // LIVE references — read the tank's shieldPool AFTER the run settles.
+        let captured: CombatActor[] = [];
+        const result = runCombat(
+            BASE({
+                // Focus 'attacker' is the HEALER: slow (acts after the enemy hit), full HP itself,
+                // basis-'hp' repair scales off ITS max HP (10_000).
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                healModifier: 0,
+                numRounds: 1,
+                hp: HEALER_HP,
+                speed: 10, // healer is slow → enemy + tank act first
+                enemyHp: 1_000_000_000,
+                healTargetId: 'tank', // the over-repaired ally is a team actor, NOT the focus
+                teamActors: [tankActor(20)], // tank acts before the healer (inert)
+                shipSkills,
+                enemyAttackers: [enemyHitter()],
+                __testTapActors: (actors) => {
+                    captured = actors;
+                },
+            })
+        );
+
+        // ── Pin the overheal: heal-performed.overheal credited to the healer must equal 3_000 ──
+        // The focus 'attacker' is the applier (creditId), so its overheal bucket carries the clip.
+        expect(result.healing).toBeDefined();
+        expect(sumHeal(result, 'overheal', 'attacker')).toBeCloseTo(EXPECTED_OVERHEAL, 6);
+
+        // ── The H3.4 assertion: the over-repaired ally (the tank) accrued 0.30 × overheal ───────
+        // Read both the post-cap per-round `granted` AND the live tank pool — they must agree.
+        const tankGranted = result.rounds.reduce(
+            (sum, rd) => sum + (rd.perActorShield?.['tank']?.granted ?? 0),
+            0
+        );
+        expect(tankGranted).toBeCloseTo(EXPECTED_SHIELD, 6);
+
+        const tank = captured.find((a) => a.id === 'tank');
+        expect(tank?.shieldPool).toBeGreaterThan(0);
+        expect(tank?.shieldPool).toBeCloseTo(EXPECTED_SHIELD, 6);
+
+        // Non-vacuous / routing: the healer (carrier) is NOT the over-repaired ally → no pool on it.
+        const focus = captured.find((a) => a.id === 'attacker');
+        expect(focus?.shieldPool ?? 0).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// H3 Task H3.8: Resonating Fury implant — Crit Power Up III to shield recipients
+// ---------------------------------------------------------------------------
+//
+// Resonating Fury (legendary) resolves through the registry
+// (IMPLANT_ABILITIES.RESONATING_FURY, H3.8) into a reactive ability:
+//   { type:'buff', target:'all-allies', trigger:'on-shield-applied', procChance:0.16,
+//     config:{ type:'buff', buffName:'Crit Power Up III', duration:1 } }
+// 'on-shield-applied' is a LIVE trigger → it partitions into reactiveAbilities. When the carrier
+// applies a shield (its OWN cast, or a reactive shield off another implant/gear set), H3.6 emits
+// ONE `shield-applied` event keyed on the granter listing the recipients whose pool grew. The
+// H3.7 listener (granter-scoped) threads recipientIds into eventCtx.shieldRecipientIds; the buff
+// executor's 'all-allies' routing fans the grant to EXACTLY those recipients (NOT every ally).
+//
+// Forcing the proc DETERMINISTICALLY: the per-(owner,ability) RateGate accumulates +procChance per
+// qualifying event and fires when it crosses 1. The established device (Ambush/REACTIVE_WARD/Last
+// Stand integration tests) is to mutate ONLY the built ability's `procChance` to 1 — every other
+// field (trigger, buffName, target, duration) comes straight from the registry, so the test still
+// bites if the registry entry breaks. We capture RF firing via 'buff-applied' events filtered to
+// the buff name, exactly as the Ambush integration test does.
+//
+// In-game the implant text reads "Crit Power Up 3"; "3" is the canonical "III" tier — the only
+// matching BUFFS entry is 'Crit Power Up III' (the Ambush implant carries the same in-game buff and
+// the registry resolves both to 'Crit Power Up III'). The buff value, not the literal "3", is what
+// matters.
+
+const resonatingFuryPiece = makePiece({
+    id: 'rf-legendary',
+    slot: 'implant_major',
+    rarity: 'legendary',
+    setBonus: 'RESONATING_FURY',
+});
+
+const RF_BUFF = 'Crit Power Up III';
+
+/**
+ * Build the focus's ship skills with a legendary Resonating Fury merged into the passive slot via
+ * the REAL build→merge path, plus the supplied active. The built RF ability is determinized
+ * (procChance → 1) so every qualifying shield cast fires; all other fields come from the registry.
+ */
+function buildRfShipSkills(active: Ability) {
+    const ship = makeShip({ implants: { implant_major: 'rf-legendary' } });
+    const getGearPiece = makeGetGearPiece({ 'rf-legendary': resonatingFuryPiece });
+    const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+    const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+    expect(passive).toBeDefined();
+
+    const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+    expect(rf).toBeDefined();
+    // Sanity: the registry entry is the on-shield-applied all-allies Crit Power Up III grant.
+    expect(rf!.type).toBe('buff');
+    expect(rf!.target).toBe('all-allies');
+    expect(rf!.trigger).toBe('on-shield-applied');
+    expect(rf!.procChance).toBeCloseTo(0.16);
+    if (rf!.config.type === 'buff') {
+        expect(rf!.config.buffName).toBe(RF_BUFF);
+        expect(rf!.config.duration).toBe(1);
+    }
+
+    // Determinize: mutate ONLY procChance (the established Ambush/REACTIVE_WARD device).
+    const determinizedRf: Ability = { ...rf!, procChance: 1 };
+    const otherPassives = passive!.abilities.filter(
+        (a) => !a.id.startsWith('equip-implant-RESONATING_FURY')
+    );
+    const shipSkills: ShipSkills = {
+        slots: [
+            { slot: 'active', abilities: [active] },
+            { slot: 'passive', abilities: [...otherPassives, determinizedRf] },
+        ],
+    };
+    return shipSkills;
+}
+
+/** Collect RF_BUFF buff-applied events (actorId + round) across a run driven by `input`. */
+function collectRfFires(input: CombatEngineInput): Array<{ actorId: string; round: number }> {
+    const bus = createEventBus();
+    const out: Array<{ actorId: string; round: number }> = [];
+    bus.on('buff-applied', (e) => {
+        if (e.buffName === RF_BUFF) out.push({ actorId: e.actorId, round: e.round });
+    });
+    runCombat({ ...input, bus });
+    return out;
+}
+
+describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shield recipients', () => {
+    /** A team ally that does nothing — just exists to be a shield recipient. */
+    const passiveAlly = (id: string, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 1, // slow → the focus acts first and casts the shield
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    // ── Test 1: the carrier casts a shield → the recipients get Crit Power Up III ───────────
+    it('shield cast → Crit Power Up III lands on every recipient of that cast (one proc roll)', () => {
+        // Focus 'attacker' carries Resonating Fury and casts an `all-allies` shield as its active.
+        // The cast shields the focus + both allies → ONE shield-applied event listing all three →
+        // RF (forced proc) grants Crit Power Up III to all three recipients from that single cast.
+        const shieldActive: Ability = {
+            id: 'rf-shield-cast',
+            type: 'shield',
+            target: 'all-allies',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 25, basis: 'hp' },
+        };
+        const shipSkills = buildRfShipSkills(shieldActive);
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 10_000,
+                speed: 100, // focus acts first → casts the shield before allies
+                enemyHp: 1_000_000_000,
+                shipSkills,
+                teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
+            })
+        );
+
+        // Crit Power Up III landed on all three shield recipients (focus + both allies), and the
+        // grants are confined to round 1 (the single cast). Recipients are the shield recipients,
+        // not "every ally" by coincidence — here all three allies are recipients, so the next test
+        // pins the routing with a SELF-only shield.
+        const recipients = new Set(fires.map((f) => f.actorId));
+        expect(recipients).toEqual(new Set(['attacker', 'rf-ally-1', 'rf-ally-2']));
+        expect(fires.every((f) => f.round === 1)).toBe(true);
+    });
+
+    // ── Test 1b: SELF-only shield → buff lands on the granter ONLY (recipient routing, not team) ─
+    it('self-only shield cast → Crit Power Up III lands on the granter ONLY, not the idle allies', () => {
+        // The focus shields ITSELF only → recipientIds === [focus]. RF's all-allies grant must route
+        // to EXACTLY that recipient (shieldRecipientIds), proving it does NOT fan to every ally.
+        const selfShieldActive: Ability = {
+            id: 'rf-self-shield',
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 25, basis: 'hp' },
+        };
+        const shipSkills = buildRfShipSkills(selfShieldActive);
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 1,
+                hp: 10_000,
+                speed: 100,
+                enemyHp: 1_000_000_000,
+                shipSkills,
+                teamActors: [passiveAlly('rf-ally-1', 10_000), passiveAlly('rf-ally-2', 10_000)],
+            })
+        );
+
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
+
+    // ── Test 2 (KEY): reactive → reactive hop ───────────────────────────────────────────────
+    // The focus carries BOTH a legendary Adaptive Plating (on-attacked self shield) AND Resonating
+    // Fury. An enemy directly hits the focus → Adaptive Plating grants a self-shield → H3.6 emits a
+    // `shield-applied` event → RF (forced proc) reacts to it and grants Crit Power Up III to the
+    // shield recipient (the focus). This proves the reactive→reactive hop: a reactive shield re-emits
+    // an event that drives ANOTHER reactive ability, with the second intent enqueued mid-drain and
+    // drained by the same multi-generation `while (queue.length > 0)` loop in drainQueue.
+    it('reactive→reactive hop: Adaptive-Plating self-shield re-fires Resonating Fury onto the carrier', () => {
+        // Build both implants through the real registry; Adaptive Plating in implant_minor so both
+        // resolve. (The build path keys implants by slot; AP determinism comes from its own proc gate
+        // — to make the AP shield reliably land we force AP's procChance to 1 too.)
+        const adaptivePiece = makePiece({
+            id: 'rf-ap-legendary',
+            slot: 'implant_minor',
+            rarity: 'legendary',
+            setBonus: 'ADAPTIVE_PLATING',
+        });
+        const ship = makeShip({
+            implants: { implant_major: 'rf-legendary', implant_minor: 'rf-ap-legendary' },
+        });
+        const getGearPiece = makeGetGearPiece({
+            'rf-legendary': resonatingFuryPiece,
+            'rf-ap-legendary': adaptivePiece,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+
+        const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+        const ap = passive!.abilities.find((a) =>
+            a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+        );
+        expect(rf).toBeDefined();
+        expect(ap).toBeDefined();
+        expect(ap!.trigger).toBe('on-attacked');
+        expect(rf!.trigger).toBe('on-shield-applied');
+
+        // Force BOTH procs to 1 so the chain is deterministic: AP self-shields on the hit, RF reacts
+        // to the resulting shield-applied. Everything else stays from the registry.
+        const determinizedRf: Ability = { ...rf!, procChance: 1 };
+        const determinizedAp: Ability = { ...ap!, procChance: 1 };
+        const otherPassives = passive!.abilities.filter(
+            (a) =>
+                !a.id.startsWith('equip-implant-RESONATING_FURY') &&
+                !a.id.startsWith('equip-implant-ADAPTIVE_PLATING')
+        );
+        // A no-op active keeps the round cadence; the focus deals no damage itself.
+        const noopActive: Ability = {
+            id: 'rf-noop-active',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        };
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                { slot: 'passive', abilities: [...otherPassives, determinizedAp, determinizedRf] },
+            ],
+        };
+
+        // An enemy that directly hits the focus each round → drives Adaptive Plating's on-attacked.
+        const enemyHitter = () => ({
+            id: 'rf-enemy',
+            stats: {
+                attack: 1_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 1, // acts before the (slower) focus so the hit lands at round top
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active' as const,
+                        abilities: [
+                            {
+                                id: 'rf-enemy-hit',
+                                type: 'damage' as const,
+                                target: 'enemy' as const,
+                                trigger: 'on-cast' as const,
+                                conditions: [],
+                                config: { type: 'damage' as const, multiplier: 100, hits: 1 },
+                            },
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        });
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 3,
+                hp: 100_000_000, // huge → focus survives; the AP shield never caps out
+                defence: 0,
+                speed: 1, // focus acts AFTER the enemy hit so AP fires at round top
+                enemyHp: 1_000_000_000,
+                healTargetId: 'attacker',
+                shipSkills,
+                enemyAttackers: [enemyHitter()],
+            })
+        );
+
+        // THE HOP: AP's reactive self-shield re-emitted shield-applied, RF reacted, and Crit Power Up
+        // III landed on the carrier (the shield recipient). If drainQueue did NOT process intents
+        // enqueued mid-drain, this would be empty.
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
+
+    // ── Test 3: Shield gear set (start-of-turn self shield) + RF ─────────────────────────────
+    it('Shield gear set start-of-turn self-shield re-fires Resonating Fury onto the carrier', () => {
+        // Focus carries the SHIELD gear set (start-of-turn self shield) + Resonating Fury, both via
+        // the real build path. Each turn the gear set self-shields → shield-applied → RF (forced
+        // proc) grants Crit Power Up III to the self (the shield recipient).
+        const ship = makeShip({
+            equipment: { weapon: 'rf-shield-1', hull: 'rf-shield-2' },
+            implants: { implant_major: 'rf-legendary' },
+        });
+        const shieldPieceA2 = makePiece({ id: 'rf-shield-1', slot: 'weapon', setBonus: 'SHIELD' });
+        const shieldPieceB2 = makePiece({ id: 'rf-shield-2', slot: 'hull', setBonus: 'SHIELD' });
+        const getGearPiece = makeGetGearPiece({
+            'rf-legendary': resonatingFuryPiece,
+            'rf-shield-1': shieldPieceA2,
+            'rf-shield-2': shieldPieceB2,
+        });
+        const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
+        const passive = baseSkills.slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+
+        const setShield = passive!.abilities.find((a) => a.id === 'equip-set-SHIELD');
+        const rf = passive!.abilities.find((a) => a.id.startsWith('equip-implant-RESONATING_FURY'));
+        expect(setShield).toBeDefined();
+        expect(setShield!.trigger).toBe('start-of-turn');
+        expect(rf).toBeDefined();
+
+        const determinizedRf: Ability = { ...rf!, procChance: 1 };
+        const otherPassives = passive!.abilities.filter(
+            (a) => !a.id.startsWith('equip-implant-RESONATING_FURY')
+        );
+        const noopActive: Ability = {
+            id: 'rf-noop-active',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        };
+        const shipSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [noopActive] },
+                { slot: 'passive', abilities: [...otherPassives, determinizedRf] },
+            ],
+        };
+
+        const fires = collectRfFires(
+            BASE({
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                numRounds: 3,
+                hp: 100_000_000,
+                speed: 100,
+                enemyHp: 1_000_000_000,
+                shipSkills,
+            })
+        );
+
+        expect(fires.length).toBeGreaterThan(0);
+        expect(fires.every((f) => f.actorId === 'attacker')).toBe(true);
+    });
 });

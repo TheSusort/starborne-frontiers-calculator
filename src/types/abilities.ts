@@ -104,7 +104,11 @@ export type AbilityTrigger =
     // D-PR16 Lockdown: fires when THIS unit resists an incoming debuff (rides the existing
     // `debuff-resisted` event, self-scoped on targetId === ownerId). Chains off D-PR15's
     // Block-Debuff auto-resist emission AND normal hacking/affinity resists.
-    | 'on-debuff-resisted';
+    | 'on-debuff-resisted'
+    // Fired once per shield-application CAST. Reaction is keyed on the granter (acting actor)
+    // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
+    // to everyone the carrier just shielded.
+    | 'on-shield-applied';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -151,6 +155,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuff-resisted',
     // Warpstrike: owner dealt direct damage on its turn.
     'on-deal-damage',
+    // Resonating Fury: granter-scoped reaction fired once per shield-application cast.
+    'on-shield-applied',
 ]);
 
 export type ConditionSubject =
@@ -380,8 +386,18 @@ export type AbilityConfig =
            *  basis: 'damage-dealt' (X% of damage this actor deals — cast rider on
            *  active/charged slots, standing leech on the passive slot) /
            *  'damage-taken' (X% of an enemy attack's damage on this actor; passive
-           *  slot, procs only while the actor is the heal target). */
-          basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken';
+           *  slot, procs only while the actor is the heal target) / 'overheal'
+           *  (X% of an over-repair's CLIPPED EXCESS — heal raw minus the HP actually
+           *  consumed — on the over-repaired ally; reactive shield on
+           *  on-own-repair-to-ally; Abundant Renewal). */
+          basis:
+              | 'hp'
+              | 'attack'
+              | 'defense'
+              | 'target-hp'
+              | 'damage-dealt'
+              | 'damage-taken'
+              | 'overheal';
           /** Pallas/Tithonus: "repair cannot critically hit". Shields never crit regardless. */
           noCrit?: boolean;
           /** Passive-slot 'damage-dealt' only: which credited damage procs the leech.

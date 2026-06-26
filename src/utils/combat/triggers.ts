@@ -105,9 +105,13 @@ export interface Intent {
         counterTargetId?: string;
         damagedAllyId?: string;
         fromPurgeEvent?: boolean;
-        /** The damage dealt by the triggering event (ability-performed.damage), used by a
-         *  reactive `basis:'damage-dealt'` heal/shield (e.g. Bloodthirst) to scale off the
-         *  triggering hit's damage rather than the owner's max HP. */
+        /** The damage of the triggering event, used by a reactive heal/shield to scale off
+         *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
+         *  (ability-performed.damage — damage the owner DEALT, e.g. Bloodthirst) and
+         *  `basis:'damage-taken'` (attacked.damage — damage the owner TOOK, e.g. Adaptive
+         *  Plating). NOTE: attacked.damage is the per-attack aggregate and on-attacked fires
+         *  once per hit, so a non-oncePerRound damage-taken reactive would grant N times for
+         *  an N-hit attack; Adaptive Plating's oncePerRound gate caps it to one grant/round. */
         triggerDamage?: number;
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
@@ -120,6 +124,15 @@ export interface Intent {
          *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
          *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). */
         repairerId?: string;
+        /** The clipped overheal (heal-performed.overheal) carried from an own-repair-to-ally
+         *  event, read by an `overheal`-basis reactive shield to scale off the over-repaired
+         *  amount rather than the owner's max HP (Abundant Renewal). */
+        overhealAmount?: number;
+        /** The recipients of an `on-shield-applied` event (shield-applied.recipientIds — the
+         *  actors whose pool grew). The reaction's buff/effect targets EXACTLY these, mirroring
+         *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
+         *  rather than the owner/whole team (Resonating Fury — buff every recipient of the cast). */
+        shieldRecipientIds?: string[];
     };
 }
 
@@ -376,7 +389,30 @@ export function registerReactiveListeners(args: {
                         if (repaired.length === 0) return;
                         enqueue({
                             ...intent,
-                            eventCtx: { ...intent.eventCtx, repairedAllyIds: repaired },
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                repairedAllyIds: repaired,
+                                overhealAmount: e.overheal ?? 0,
+                            },
+                        });
+                    });
+                    break;
+                case 'on-shield-applied':
+                    bus.on('shield-applied', (e) => {
+                        // Granter-scoped (H3.6 keys the event on the acting granter): THIS owner
+                        // applied a shield (Resonating Fury). One enqueue per CAST -> one proc-gate
+                        // roll; the grant fans out to every recipient whose pool grew via
+                        // eventCtx.shieldRecipientIds (mirrors on-own-repair-to-ally/repairedAllyIds).
+                        // An empty recipient list (no pool grew) emits no event by construction, but
+                        // guard defensively so a 0-recipient event never enqueues a no-op intent.
+                        if (e.granterId !== ownerId) return;
+                        if (e.recipientIds.length === 0) return;
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                shieldRecipientIds: e.recipientIds,
+                            },
                         });
                     });
                     break;
@@ -445,7 +481,11 @@ export function registerReactiveListeners(args: {
                         }
                         enqueue({
                             ...intent,
-                            eventCtx: { counterTargetId: e.attackerId, didCrit: e.didCrit },
+                            eventCtx: {
+                                counterTargetId: e.attackerId,
+                                didCrit: e.didCrit,
+                                triggerDamage: e.damage,
+                            },
                         });
                     });
                     break;
@@ -1294,16 +1334,30 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // ally/all-allies → every player id (the FIXED playerIds order). The status carries
         // casterId = ownerId so its gate evaluates against the caster's ctx even when it
         // lives on another recipient.
+        const isAllyTarget =
+            intent.ability.target === 'ally' || intent.ability.target === 'all-allies';
         const recipients: string[] =
             intent.ability.target === 'adjacent-allies'
                 ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
-                : intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
-                  ? intent.eventCtx.repairedAllyIds
-                  : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
-                    ? [intent.eventCtx.damagedAllyId]
-                    : intent.ability.target === 'ally' || intent.ability.target === 'all-allies'
-                      ? ctx.playerIds
-                      : [intent.ownerId];
+                : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
+                  // grant out to EXACTLY the recipients of the triggering shield cast — the same
+                  // event-derived recipient routing as repairedAllyIds (Font of Power), keyed on
+                  // eventCtx.shieldRecipientIds. The recipients are same-side by construction (a
+                  // shield to oneself or an ally), so the granter itself appears here iff it
+                  // self-shielded — no extra ally filtering needed.
+                  isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
+                  ? intent.eventCtx.shieldRecipientIds
+                  : // NOTE: repairedAllyIds/damagedAllyId stay scoped to target === 'ally'
+                    // (NOT isAllyTarget) on purpose — only shield routing accepts all-allies.
+                    // Do not "harmonize" these to isAllyTarget; it would broaden Font of Power /
+                    // on-ally-attacked recipients and drift goldens.
+                    intent.ability.target === 'ally' && intent.eventCtx?.repairedAllyIds?.length
+                    ? intent.eventCtx.repairedAllyIds
+                    : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
+                      ? [intent.eventCtx.damagedAllyId]
+                      : isAllyTarget
+                        ? ctx.playerIds
+                        : [intent.ownerId];
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
         // CASTER's effective attack at grant time (the same last-turn ctx value that
@@ -1563,18 +1617,34 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 ? (ownerCtx?.effectiveAttack ?? owner.attack)
                 : cfg.basis === 'defense'
                   ? (ownerCtx?.effectiveDefence ?? owner.defence)
-                  : cfg.basis === 'damage-dealt'
-                    ? // Reactive damage-dealt (e.g. Bloodthirst on-crit): scale off the triggering
-                      // hit's damage captured in eventCtx.triggerDamage. Falls back to 0 when no
-                      // triggering damage is present (non-crit path or missing context) — a
-                      // damage-dealt reactive heal with no damage context heals nothing.
+                  : cfg.basis === 'damage-dealt' || cfg.basis === 'damage-taken'
+                    ? // Reactive damage-dealt (e.g. Bloodthirst on-crit) / damage-taken (e.g.
+                      // Adaptive Plating on-attacked): scale off the triggering hit's damage
+                      // captured in eventCtx.triggerDamage — the damage DEALT for damage-dealt,
+                      // the damage TAKEN (the on-attacked hit's e.damage) for damage-taken. Falls
+                      // back to 0 when no triggering damage is present (non-crit path or missing
+                      // context) — a damage-scaled reactive with no damage context grants nothing.
                       (intent.eventCtx?.triggerDamage ?? 0)
-                    : (ownerCtx?.effectiveMaxHp ?? owner.hp);
+                    : cfg.basis === 'overheal'
+                      ? // Reactive overheal (Abundant Renewal on-own-repair-to-ally): scale off the
+                        // clipped over-repair captured in eventCtx.overhealAmount by the listener.
+                        // Falls back to 0 when no overheal context is present — an overheal-scaled
+                        // reactive with no over-repair grants nothing.
+                        (intent.eventCtx?.overhealAmount ?? 0)
+                      : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         // Recipients: an 'ally'-target heal prefers eventCtx.damagedAllyId (an ally-damage
         // reaction repairs THAT ally) over the healing target. Identical today — the engine
         // only ever attacks the heal target, so damagedAllyId === healing.targetId in every
         // healing-mode run — but the explicit routing locks the semantics for 4d multi-target.
+        // NOTE (Abundant Renewal / overheal shields): this heal/shield path does NOT consult
+        // eventCtx.repairedAllyIds — it resolves to healing.targetId, which IS the over-repaired
+        // ally because the engine repairs exactly one target today. If 4d multi-target repair
+        // lands, route overheal shields to the repaired ally explicitly here.
         const recipients = reactiveRecipients(intent, ctx, healing.targetId);
+        // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied per
+        // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
+        const shieldRecipientIds: string[] = [];
+        let shieldGrantedSum = 0;
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1613,12 +1683,36 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 }
             } else {
                 ctx.healing.credit(intent.ownerId, 'shield', raw);
-                if (rid === ctx.healing.targetId) ctx.healing.grantShieldToTarget(raw);
+                // H2/H3 foundation: route per-recipient (mirrors the cast path in
+                // playerTurn.ts); an unresolvable recipient is credited but not pool-applied.
+                const recipientActor = ctx.healing.recipientActor(rid);
+                if (recipientActor) {
+                    const granted = ctx.healing.grantShieldToTarget(raw, recipientActor);
+                    if (granted > 0) {
+                        shieldRecipientIds.push(rid);
+                        shieldGrantedSum += granted;
+                    }
+                }
             }
         }
         // Deliberately NO heal-performed emission from the executor (a reactive heal must
         // not re-trigger heal listeners — chain guard; mirrors the drain-time no-crit-outcome
         // conventions). heal/shield therefore never chain.
+        //
+        // H3.6: shield IS the one exception — we DO emit shield-applied here (ONE per reactive
+        // shield, keyed on the owner, listing only recipients whose pool grew). This is
+        // intentional, NOT the deliberate no-heal-performed re-emit above: shield-applied drives
+        // Resonating Fury, which grants a BUFF (not a shield), so it cannot chain back into
+        // another shield-applied. No recipient gained pool → no event.
+        if (cfg.type === 'shield' && shieldRecipientIds.length > 0) {
+            ctx.bus.emit({
+                type: 'shield-applied',
+                granterId: intent.ownerId,
+                recipientIds: shieldRecipientIds,
+                round: ctx.round,
+                amount: shieldGrantedSum,
+            });
+        }
         return;
     }
 

@@ -125,7 +125,14 @@ describe('equipmentCoverage — implemented effects registry', () => {
         const implementedSets = Object.keys(GEAR_SETS).filter(
             (key) => gearSetAbilityCount(key) > 0
         );
-        expect(implementedSets).toEqual(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
+        expect(implementedSets).toEqual([
+            'BURNER',
+            'DECIMATION',
+            'LEECH',
+            'SHIELD',
+            'CLOAKING',
+            'HARDENED',
+        ]);
 
         // Implants with an ability builder (check each implant with a rarity that exists)
         const implementedImplants = Object.keys(IMPLANTS).filter((key) => {
@@ -135,6 +142,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
         });
         expect(implementedImplants).toEqual([
             'MARTYRDOM',
+            'ABUNDANT_RENEWAL',
             'ARCANE_SIEGE',
             'CHRONO_REAVER',
             'HYPERION_GAZE',
@@ -145,6 +153,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'VOIDSHADE',
             'VORTEX_VEIL',
             'WARPSTRIKE',
+            'ADAPTIVE_PLATING',
             'ALACRITY',
             'AMBUSH',
             'BATTLECRY',
@@ -163,6 +172,7 @@ describe('equipmentCoverage — implemented effects registry', () => {
             'LOCKDOWN',
             'MENACE',
             'REACTIVE_WARD',
+            'RESONATING_FURY',
             'SECOND_WIND',
             'SHADOWGUARD',
             'SPEARHEAD',
@@ -176,7 +186,14 @@ describe('equipmentCoverage — implemented effects registry', () => {
 // Gear-set coverage: one assertion per set
 // ---------------------------------------------------------------------------
 
-const IMPLEMENTED_SETS = new Set(['BURNER', 'DECIMATION', 'LEECH', 'CLOAKING', 'HARDENED']);
+const IMPLEMENTED_SETS = new Set([
+    'BURNER',
+    'DECIMATION',
+    'LEECH',
+    'CLOAKING',
+    'HARDENED',
+    'SHIELD',
+]);
 
 describe('equipmentCoverage — gear sets', () => {
     it('BURNER produces exactly 1 ability (the on-cast inferno)', () => {
@@ -226,6 +243,34 @@ describe('equipmentCoverage — gear sets', () => {
         expect(cloak!.config.oncePerCombat).toBe(true);
     });
 
+    it('SHIELD produces exactly 1 ability (the start-of-turn self shield)', () => {
+        expect(gearSetAbilityCount('SHIELD')).toBe(1);
+    });
+
+    it('SHIELD produces a start-of-turn self shield of 4% caster max HP', () => {
+        const minPieces = GEAR_SETS['SHIELD']?.minPieces ?? 2;
+        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const equipment: Record<string, string> = {};
+        const pieceMap: Record<string, GearPiece> = {};
+        for (let i = 0; i < minPieces; i++) {
+            const id = `SHIELD-piece-${i}`;
+            equipment[slots[i % slots.length]] = id;
+            pieceMap[id] = makePiece({ id, slot: slots[i % slots.length], setBonus: 'SHIELD' });
+        }
+        const ship = makeShip({ equipment });
+        const abilities = buildEquipmentAbilities(ship, (id) => pieceMap[id]);
+        const sh = abilities.find((a) => a.id === 'equip-set-SHIELD');
+        expect(sh).toBeDefined();
+        expect(sh!.type).toBe('shield');
+        expect(sh!.target).toBe('self');
+        expect(sh!.trigger).toBe('start-of-turn');
+        expect(sh!.config.type).toBe('shield');
+        // @ts-expect-error shield config
+        expect(sh!.config.pct).toBe(4);
+        // @ts-expect-error shield config
+        expect(sh!.config.basis).toBe('hp');
+    });
+
     const unimplementedSets = Object.keys(GEAR_SETS).filter((k) => !IMPLEMENTED_SETS.has(k));
     for (const setKey of unimplementedSets) {
         it(`${setKey} produces 0 abilities (not yet implemented)`, () => {
@@ -267,6 +312,8 @@ describe('equipmentCoverage — implants', () => {
     //         WARPSTRIKE gains a second ability (reduce-duration cleanse on-deal-damage).
     // Phase 2-3: CHRONO_REAVER added (end-of-turn periodic self-charge; epic=every 3rd, legendary=every 2nd).
     const implementedImplants = new Set([
+        'ABUNDANT_RENEWAL',
+        'ADAPTIVE_PLATING',
         'FIREWALL',
         'LOCKDOWN',
         'TENACITY',
@@ -301,6 +348,7 @@ describe('equipmentCoverage — implants', () => {
         'BULWARK',
         'DOOMSAYER',
         'REACTIVE_WARD',
+        'RESONATING_FURY',
     ]);
 
     it('INTRUSION produces 1 ability per rarity (outgoingDamage modifier with scaling)', () => {
@@ -596,6 +644,90 @@ describe('equipmentCoverage — implants', () => {
                 mode: 'remove',
             });
         }
+    });
+
+    // H3.4: Abundant Renewal — deterministic overheal→shield to the over-repaired ally.
+    it('ABUNDANT_RENEWAL produces 1 ability for epic/legendary, 0 otherwise (no common/uncommon/rare variant)', () => {
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'common')).toBe(0);
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'uncommon')).toBe(0);
+        expect(implantAbilityCount('ABUNDANT_RENEWAL', 'rare')).toBe(0);
+        const SUPPORTED = new Set(['epic', 'legendary']);
+        for (const v of IMPLANTS['ABUNDANT_RENEWAL'].variants) {
+            expect(implantAbilityCount('ABUNDANT_RENEWAL', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    it('ABUNDANT_RENEWAL (legendary) shape: on-own-repair-to-ally shield to ally, basis overheal 30%, deterministic', () => {
+        const abs = implantAbilities('ABUNDANT_RENEWAL', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('shield');
+        expect(ab.target).toBe('ally');
+        expect(ab.trigger).toBe('on-own-repair-to-ally');
+        // Deterministic — no proc chance and no once-per-round cap.
+        expect(ab.procChance).toBeUndefined();
+        expect(ab.oncePerRound).toBeFalsy();
+        expect(ab.config).toMatchObject({ type: 'shield', pct: 30, basis: 'overheal' });
+    });
+
+    // H3.2: Adaptive Plating — reactive once-per-round shield off the damage taken.
+    it('ADAPTIVE_PLATING produces 1 ability for uncommon/epic/legendary, 0 otherwise (no common/rare variant)', () => {
+        expect(implantAbilityCount('ADAPTIVE_PLATING', 'common')).toBe(0);
+        expect(implantAbilityCount('ADAPTIVE_PLATING', 'rare')).toBe(0);
+        const SUPPORTED = new Set(['uncommon', 'epic', 'legendary']);
+        for (const v of IMPLANTS['ADAPTIVE_PLATING'].variants) {
+            expect(implantAbilityCount('ADAPTIVE_PLATING', v.rarity)).toBe(
+                SUPPORTED.has(v.rarity) ? 1 : 0
+            );
+        }
+    });
+
+    it('ADAPTIVE_PLATING (legendary) shape: on-attacked self shield, procChance 0.19, oncePerRound, damage-taken 42%', () => {
+        const abs = implantAbilities('ADAPTIVE_PLATING', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('shield');
+        expect(ab.target).toBe('self');
+        expect(ab.trigger).toBe('on-attacked');
+        expect(ab.procChance).toBeCloseTo(0.19);
+        expect(ab.oncePerRound).toBe(true);
+        expect(ab.config).toMatchObject({ type: 'shield', pct: 42, basis: 'damage-taken' });
+    });
+
+    // H3.8: Resonating Fury — on-shield-applied buff grant to shield recipients.
+    it('RESONATING_FURY produces 1 ability per rarity (all 5 rarities present)', () => {
+        const variants = IMPLANTS['RESONATING_FURY'].variants;
+        // Common/uncommon/rare/epic/legendary all defined.
+        expect(variants.map((v) => v.rarity).sort()).toEqual([
+            'common',
+            'epic',
+            'legendary',
+            'rare',
+            'uncommon',
+        ]);
+        for (const v of variants) {
+            expect(implantAbilityCount('RESONATING_FURY', v.rarity)).toBe(1);
+        }
+    });
+
+    it('RESONATING_FURY (legendary) shape: on-shield-applied all-allies Crit Power Up III buff, duration 1, procChance 0.16', () => {
+        const abs = implantAbilities('RESONATING_FURY', 'legendary');
+        expect(abs).toHaveLength(1);
+        const ab = abs[0];
+        expect(ab.type).toBe('buff');
+        // target 'all-allies' routes to eventCtx.shieldRecipientIds via the H3.7 listener.
+        expect(ab.target).toBe('all-allies');
+        expect(ab.trigger).toBe('on-shield-applied');
+        expect(ab.procChance).toBeCloseTo(0.16);
+        // No per-round cap — one proc roll per cast.
+        expect(ab.oncePerRound).toBeFalsy();
+        expect(ab.config).toMatchObject({
+            type: 'buff',
+            buffName: 'Crit Power Up III',
+            duration: 1,
+        });
     });
 
     const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));

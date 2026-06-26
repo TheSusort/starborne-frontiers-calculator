@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-25
 **Epic:** Combat-realism (`project_combat_realism_epic`). Sub-project H.
-**Status:** Approved design → ready for plan (H1 first PR).
+**Status:** H1 SHIPPED (PR #156). H2+H3 refined & approved 2026-06-25 → combined plan next (one PR).
 
 ## Goal
 
@@ -130,30 +130,104 @@ direct-vs-bomb split rides the separated portions, not a flag.
 shield), with documented per-scenario numeric justification; **never** blind `vitest -u`. New
 battle-sim integration tests for each matrix row + per-actor grant + surfacing fields.
 
-### H2 — Standing shield sources
+### H2 + H3 — combined PR (shield sources)
 
-**Shield gear set** = "generate 4% shield each turn" → a `start-of-turn` equipment ability granting
-`floor(0.04 × maxHP)` shield, via `GEAR_SET_ABILITIES` (the Cloaking start-of-round / Fortifying
-Shroud start-of-turn registry pattern). Byte-identical (no fixture equips it). Registry + coverage
-tracker + mutation-resistant integration test through `buildShipAbilitiesWithEquipment`.
+**H2 and H3 ship together in one PR** (user decision 2026-06-25), with H2 (gear set) and H3 (three
+implants + the new trigger) as ordered phases inside one plan. All sources are byte-identical (no
+synthetic fixture equips them). Each source: registry entry + `equipmentCoverage` guard +
+mutation-resistant integration test through the real `buildShipAbilitiesWithEquipment` path, per the
+established D-PR convention.
 
-### H3 — Reactive shield mechanics
+#### Shared foundation (verified against code 2026-06-25)
 
-- **Abundant Renewal** — overheal → shield (% of the over-repaired amount). Heals already clamp at
-  max HP; the clipped excess is the overheal signal. Needs an overheal hook at the heal-apply site.
-- **Adaptive Plating** — damage-taken → shield (% of damage taken, capped **once per round**).
-  Reuses the `oncePerRound` gate (D-PR3/D-PR16 precedent) + a damage-taken hook.
-- **Resonating Fury** — new `on-shield-applied` trigger emitted at the grant site; its effect rides
-  the existing reactive executor.
+- **Reactive shield per-recipient routing (the key enabler).** The reactive heal/shield executor
+  (`triggers.ts:1614-1617`) only lands a pool when `rid === ctx.healing.targetId`, so a reactive
+  shield to a `self`/`ally` recipient who isn't the focus grants *nothing* today. Fix: route
+  per-recipient via `ctx.healing.recipientActor(rid)` (the member already exists; the cast path at
+  `playerTurn.ts:1907-1910` already does exactly this). This single change lights up **all** new
+  reactive shield sources (the `start-of-turn` self gear set, Adaptive Plating self-shield, Abundant
+  Renewal ally-shield). Golden risk: existing reactive shields (FrontLine, Defiant) granted only
+  when owner==focus before; expect byte-identical (synthetic fixtures run owner==focus) but audit.
+- **Reactive shield magnitude — two bases.** Adaptive Plating and Abundant Renewal each scale off a
+  **triggering-event magnitude**, read from the reactive `eventCtx`:
+  - `damage-taken` (Adaptive Plating) — reuse the existing `damage-taken` basis string. The reactive
+    executor doesn't special-case it (falls to maxHP), so add a `damage-taken` arm to the
+    `nonTargetHpBasis` ternary (`triggers.ts:1561-1572`) reading `eventCtx.triggerDamage`, and stamp
+    `triggerDamage: e.damage` in the `on-attacked` listener (`triggers.ts:448`). Safe from the
+    `damage-taken` leech collector: `on-attacked` is a LIVE trigger → `partitionReactiveAbilities`
+    strips it from `castSkills` before the leech scan (`engine.ts:2214-2233`), so no double-apply.
+  - `overheal` (Abundant Renewal) — a NEW basis string added to the `heal|shield` config union
+    (`abilities.ts:384`). Requires: an `overheal` accumulator in the cast heal loop
+    (`playerTurn.ts:1868-1890`), a new `overheal?: number` field on the `heal-performed` event
+    (`events.ts:98-105`) attached at emit (`playerTurn.ts:1936`), threaded into the
+    `on-own-repair-to-ally` listener `eventCtx` (`triggers.ts:369-382`), and an `overheal` arm in the
+    reactive basis ternary. Granted to the over-repaired ally (the focus heal target, the only actor
+    that accrues overheal in-sim).
 
-All three byte-identical (no fixture equips them); registry + coverage + integration tests.
+#### H2 — Shield gear set
+
+`gearSets.ts:SHIELD` ("Generate 4% shield each turn") → a new `GEAR_SET_ABILITIES.SHIELD` entry: a
+`start-of-turn`, `self`, **shield-config** grant (`type:'shield'`, `basis:'hp'`, `pct:4`) →
+`0.04 × maxHP` each owner turn (`basis:'hp'` = caster max HP; there is no `self-max-hp` basis). A
+hand-written Ability literal (no shield-builder helper exists), modeled on the inline LEECH/HARDENED
+gear-set entries. No proc, no gate. As a `start-of-turn` (LIVE) trigger it partitions to the reactive
+path and lands via the per-recipient routing fix above.
+
+#### H3 — Reactive shield implants
+
+All percent values below are **percentages applied as `× value/100`** (e.g. `damagePct` 34 means
+34% of damage taken). `procChance` values are decimal probabilities (e.g. .16 = 16%).
+
+- **Adaptive Plating** (`on-attacked`, direct-only — DoTs already route through `dot-applied`):
+  self-shield = `(damagePct/100) × damage-taken`, **`oncePerRound: true`** (text: "limited to once
+  per round"; D-PR precedent). Rarity tables: `procChance` {uncommon .12, epic .16, legendary .19},
+  `damagePct` {uncommon 21, epic 34, legendary 42}.
+- **Abundant Renewal** (`on-own-repair-to-ally`, **ally overheals only** per text "when
+  overrepairing an ally"): shield to the **healed ally** = `(pct/100) × overheal-amount`. Rarity:
+  {epic 20, legendary 30}. No proc roll (deterministic), no per-round cap.
+- **Resonating Fury** (new `on-shield-applied` trigger): on proc, grants **Crit Power Up 3**
+  (existing named buff, 1 turn) to **every recipient of the triggering shield cast** — the buff
+  follows the shield, NOT (only) the carrier (user decision 2026-06-25). A multi-recipient shield
+  cast gets a **single proc roll**; on success **all** recipients that gained shield are buffed
+  (the caster included if it was among them). `procChance` {common .05, uncommon .07, rare .09,
+  epic .12, legendary .16}, rolled **once per shield-application cast** with **NO `oncePerRound`
+  cap** — the game text omits the "once per round" clause that Adaptive Plating carries, so it may
+  proc on multiple separate casts within a round.
+
+#### New `on-shield-applied` trigger
+
+Emitted **once per shield-application cast** (NOT once per recipient — so a single cast yields a
+single Resonating Fury proc roll). `grantShieldToTarget` is per-recipient and already accumulates
+`actualGranted`; each grant **site** (skill-cast multi-recipient loop ~engine.ts:2415, single-target
+casts ~2339/2475, the standing/passive grant ~4686, the H2 gear-set start-of-turn grant, and the
+reactive shield executor in triggers.ts ~1610) collects the recipients that gained shield
+(`actualGranted > 0`) and emits **one** `on-shield-applied` carrying the **granter** (acting actor —
+the key the carrier's Resonating Fury listens on) and the **recipient set** (Resonating Fury's buff
+targets). Sites that grant to a single recipient emit a one-element set; if no recipient gained
+shield, no event fires. Per user decision, this covers **any shield the carrier applies**: skill
+casts, the gear-set start-of-turn grant, Abundant Renewal, and Adaptive Plating's own self-grant.
+Requires threading a `granterId` (today `grantShieldToTarget` is `(raw, victim)` — recipient-only).
+The listener ownership keys on `granterId`; the reactive effect targets the event's recipient set (a
+"shield-recipient" target resolution, distinct from the usual self/ally/all-allies target types).
+
+**Reactive→reactive hop:** because Abundant Renewal and Adaptive Plating grant shields from inside
+the reactive executor, their grants must also emit `on-shield-applied` so a carrier holding both
+(e.g. Adaptive Plating + Resonating Fury) procs RF off its own reactive shield — consistent with the
+"any grant by carrier" decision. This is a single safe hop: RF emits a **buff**, not a shield, so it
+produces no further `on-shield-applied` and cannot recurse. No shield→shield chain exists, so there
+is no infinite-loop risk; the executor's existing heal/shield no-re-emit guard (which only suppresses
+heal/shield re-triggering heal/shield) is unaffected. The plan must confirm the engine's reactive
+dispatch permits this one cross-type hop (emit `on-shield-applied` from within a reactive grant).
 
 ## Components / boundaries
 
 - **`applyVictimDamage` absorb step** (engine) — the only place shield drains; gains damage-kind +
   pen awareness. Single chokepoint, independently testable via the apply path.
 - **`grantShieldToTarget`** (engine) — the only place shields are added; H3 emits
-  `on-shield-applied` from here. Unchanged signature.
+  `on-shield-applied` from here (only when post-cap `actualGranted > 0`). H3 adds a `granterId`
+  parameter (today `(raw, victim)`) so the event is keyed on the acting actor, not the recipient.
+  Cross-source note: a wearer with both the H2 Shield gear set and Resonating Fury will roll
+  Resonating Fury off the gear-set's own start-of-turn grant — an intended, tested interaction.
 - **Equipment-ability registry** (`buildEquipmentAbilities.ts`) — H2/H3 sources as data entries.
 - **`battleSimulator` adapter** — translates engine round data into `ShipRoundState` shield fields;
   the surfacing boundary. UI components consume `ShipRoundState` only.

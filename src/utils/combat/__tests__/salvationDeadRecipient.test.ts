@@ -56,7 +56,7 @@ const makeHealing = (
             const consumed = Math.min(raw, 500);
             return { consumed, overheal: raw - consumed };
         },
-        grantShieldToTarget: () => {},
+        grantShieldToTarget: () => 0,
         playerIds,
         // E5 fields (unused on this player-path double — present for type-correctness).
         enemyIds: [],

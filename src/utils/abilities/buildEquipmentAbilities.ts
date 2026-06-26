@@ -109,6 +109,17 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'dot', dotType: 'inferno', tier: 15, stacks: 1, duration: 2 },
         autoFilled: true,
     }),
+    // Shield gear set: "Generate 4% shield each turn" → start-of-turn self shield of 4% caster max HP.
+    // start-of-turn is a LIVE trigger → partitions to the reactive path; lands via the per-recipient
+    // routing fix (H2/H3 Task 0.1). basis 'hp' = caster max HP.
+    SHIELD: () => ({
+        type: 'shield',
+        target: 'self',
+        trigger: 'start-of-turn',
+        conditions: [],
+        config: { type: 'shield', pct: 4, basis: 'hp' },
+        autoFilled: true,
+    }),
 };
 
 // ---------------------------------------------------------------------------
@@ -236,6 +247,22 @@ const GIANT_SLAYER_PROC: Record<string, number> = {
     legendary: 0.2,
 };
 
+// H3.2: Adaptive Plating — when directly damaged, X% chance to gain a Shield equal to Y% of
+// the damage taken, once per round. No common/rare variants. The `damage-taken` basis scales
+// off the triggering hit (eventCtx.triggerDamage, threaded by the on-attacked listener in H3.1).
+const ADAPTIVE_PLATING_PROC: Record<string, number> = {
+    uncommon: 0.12,
+    epic: 0.16,
+    legendary: 0.19,
+};
+const ADAPTIVE_PLATING_PCT: Record<string, number> = { uncommon: 21, epic: 34, legendary: 42 };
+
+// H3.4: Abundant Renewal — when over-repairing an ally, grant that ally a Shield equal to X% of
+// the OVER-repaired amount. DETERMINISTIC (no procChance) and no per-round cap. Only epic/legendary
+// variants exist. basis 'overheal' scales off the clipped over-repair (eventCtx.overhealAmount,
+// threaded by the on-own-repair-to-ally listener in H3.3).
+const ABUNDANT_RENEWAL_PCT: Record<string, number> = { epic: 20, legendary: 30 };
+
 // D-PR5: Second Wind reactive self-heal on crit-received value table
 const SECOND_WIND_PROC: Record<string, number> = {
     uncommon: 0.07,
@@ -349,6 +376,18 @@ const LAST_STAND_PROC: Record<string, number> = {
 const REACTIVE_WARD_PROC: Record<string, number> = {
     common: 0.05,
     uncommon: 0.07,
+    epic: 0.12,
+    legendary: 0.16,
+};
+
+// H3.8: Resonating Fury — when applying a shield, X% chance to grant Crit Power Up III for 1 turn
+// to the shield recipients. The in-game text reads "Crit Power Up 3"; "3" is the canonical
+// "III" tier (the Ambush implant carries the same in-game buff and resolves it as the BUFFS
+// entry 'Crit Power Up III'). ONE proc roll per cast, NO oncePerRound cap.
+const RESONATING_FURY_PROC: Record<string, number> = {
+    common: 0.05,
+    uncommon: 0.07,
+    rare: 0.09,
     epic: 0.12,
     legendary: 0.16,
 };
@@ -696,6 +735,45 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             autoFilled: true,
         };
     },
+    // H3.4: Abundant Renewal — when over-repairing an ally, grant the over-repaired ally a Shield
+    // equal to X% of the OVER-repaired amount. DETERMINISTIC (no procChance) and no per-round cap.
+    // Rides `on-own-repair-to-ally` (Font of Power precedent); target 'ally' → the reactive
+    // recipients resolve to the over-repaired ally (falls back to healing.targetId — the engine
+    // only repairs the heal target). basis 'overheal' scales off eventCtx.overhealAmount (H3.3).
+    // No common/uncommon/rare variants.
+    ABUNDANT_RENEWAL: (rarity) => {
+        const pct = ABUNDANT_RENEWAL_PCT[rarity];
+        if (pct === undefined) return undefined;
+        return {
+            type: 'shield',
+            target: 'ally',
+            trigger: 'on-own-repair-to-ally',
+            conditions: [],
+            config: { type: 'shield', pct, basis: 'overheal' },
+            autoFilled: true,
+        };
+    },
+    // H3.2: Adaptive Plating — when directly damaged, X% chance to gain a Shield equal to Y% of
+    // the damage taken, limited to once per round. `on-attacked` is the "directly damaged" trigger
+    // (DoTs route through dot-applied, never on-attacked). basis 'damage-taken' scales off the
+    // triggering hit's damage (eventCtx.triggerDamage, H3.1). oncePerRound caps the grant to ONE per
+    // round — the `attacked` event's damage is the per-attack aggregate and on-attacked fires once
+    // per hit, so without the gate an N-hit attack would grant N times. No common/rare variants.
+    ADAPTIVE_PLATING: (rarity) => {
+        const procChance = ADAPTIVE_PLATING_PROC[rarity];
+        const pct = ADAPTIVE_PLATING_PCT[rarity];
+        if (procChance === undefined || pct === undefined) return undefined;
+        return {
+            type: 'shield',
+            target: 'self',
+            trigger: 'on-attacked',
+            conditions: [],
+            procChance,
+            oncePerRound: true,
+            config: { type: 'shield', pct, basis: 'damage-taken' },
+            autoFilled: true,
+        };
+    },
     // Shadowguard: X% chance to fully block a hit while stealthed (once per round).
     // Only uncommon/epic/legendary rarities.
     SHADOWGUARD: (rarity) => {
@@ -885,6 +963,17 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             procChance,
             conditions: [{ subject: 'last-standing', derivable: true }],
             alsoGrantBuffNames: ['Block Debuff'],
+        });
+    },
+    // H3.8: Resonating Fury — when applying a shield, X% chance to grant Crit Power Up III for 1
+    // turn to the SHIELD RECIPIENTS of the cast (the buff follows the shield, not the carrier).
+    // Rides `on-shield-applied`; target 'all-allies' routes through the H3.7 listener to EXACTLY
+    // eventCtx.shieldRecipientIds (not every ally). ONE proc roll per cast, no oncePerRound cap.
+    RESONATING_FURY: (rarity) => {
+        const procChance = RESONATING_FURY_PROC[rarity];
+        if (procChance === undefined) return undefined;
+        return mkNamedBuffGrant('Crit Power Up III', 'all-allies', 'on-shield-applied', 1, {
+            procChance,
         });
     },
     // Chrono Reaver: periodic self-charge. Epic = every 3rd own turn, Legendary = every 2nd.

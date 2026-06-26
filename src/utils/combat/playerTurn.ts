@@ -111,9 +111,10 @@ export interface HealingRuntimeCtx {
         victim?: CombatActor
     ) => { consumed: number; overheal: number };
     /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
-     *  Dead victim → no-op. `victim` defaults to the heal target (E2 T1: optional per-victim
-     *  override for positional AoE leech). */
-    grantShieldToTarget: (raw: number, victim?: CombatActor) => void;
+     *  Dead victim → no-op (returns 0). `victim` defaults to the heal target (E2 T1: optional
+     *  per-victim override for positional AoE leech). Returns the REAL pool growth (post-cap
+     *  delta) so the caller can build a shield-applied event (H3.6). */
+    grantShieldToTarget: (raw: number, victim?: CombatActor) => number;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
     /** Fixed enemy-attacker-id order for an ENEMY caster's all-allies routing (E5). */
@@ -1700,7 +1701,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (
-            basis: 'hp' | 'attack' | 'defense' | 'target-hp' | 'damage-dealt' | 'damage-taken',
+            basis:
+                | 'hp'
+                | 'attack'
+                | 'defense'
+                | 'target-hp'
+                | 'damage-dealt'
+                | 'damage-taken'
+                | 'overheal',
             rid: string
         ): number => {
             switch (basis) {
@@ -1721,6 +1729,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 case 'damage-taken':
                     throw new Error(
                         'basisValue: damage-taken must not reach the cast path (slot-partition guard owns it)'
+                    );
+                // 'overheal' is a reactive-only basis (on-own-repair-to-ally; Abundant Renewal):
+                // the clipped over-repair is known only at drain time via eventCtx.overhealAmount,
+                // so it never reaches the cast path.
+                case 'overheal':
+                    throw new Error(
+                        'basisValue: overheal must not reach the cast path (reactive-only basis)'
                     );
                 case 'hp':
                 default:
@@ -1829,6 +1844,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const healTargets: string[] = [];
         let healCritCount = 0;
         let healRawSum = 0;
+        // H3.3: summed clipped excess (overheal) across this cast's repairs on the heal target.
+        // Carried on heal-performed.overheal for an `overheal`-basis reactive shield (Abundant Renewal).
+        let overhealSum = 0;
         let cleansePerformedCount = 0;
 
         for (const ability of healAbilities) {
@@ -1857,6 +1875,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) healing.applyHealToTarget(raw, recipientActor);
+                        // overheal intentionally NOT accumulated here — enemy-side reactive
+                        // overheal (overheal-basis shields) is a deferred gap; H3.3 surfaces
+                        // overheal only on the player heal path above.
                         healTargets.push(rid);
                         healRawSum += raw;
                     }
@@ -1884,6 +1905,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);
                         healing.credit(actor.id, 'effectiveHeal', consumed);
                         healing.credit(actor.id, 'overheal', overheal);
+                        overhealSum += overheal;
                     }
                     healTargets.push(rid);
                     healRawSum += raw;
@@ -1895,6 +1917,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
                 const recipients = recipientsFor(ability.target);
+                // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
+                // per cast (NOT per recipient) carrying only recipients that actually gained pool.
+                const shieldRecipientIds: string[] = [];
+                let shieldGrantedSum = 0;
                 for (const rid of recipients) {
                     const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                     healing.credit(actor.id, 'shield', raw);
@@ -1906,8 +1932,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // (mirrors the heal-recipient handling for an unwalked legacy team actor).
                     const recipientActor = healing.recipientActor(rid);
                     if (recipientActor) {
-                        healing.grantShieldToTarget(raw, recipientActor);
+                        const granted = healing.grantShieldToTarget(raw, recipientActor);
+                        if (granted > 0) {
+                            shieldRecipientIds.push(rid);
+                            shieldGrantedSum += granted;
+                        }
                     }
+                }
+                // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
+                // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
+                // (on-shield-applied). No recipient gained pool → no event. Mirrors the
+                // heal-performed emit below. NOTE: enemy event-only shields `continue` above
+                // (healEventOnly) before reaching here, so they never emit — consistent with the
+                // engine not modeling enemy-side shield pools.
+                if (shieldRecipientIds.length > 0) {
+                    bus.emit({
+                        type: 'shield-applied',
+                        granterId: actor.id,
+                        recipientIds: shieldRecipientIds,
+                        round: r,
+                        amount: shieldGrantedSum,
+                    });
                 }
             } else if (cfg.type === 'cleanse') {
                 // Real removal is player-side only (recipientsFor returns player ids; enemy-side
@@ -1940,6 +1985,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 round: r,
                 amount: healRawSum,
                 ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+                ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
             });
         }
 

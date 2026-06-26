@@ -165,6 +165,11 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
             grantShieldToTarget: shieldSpy,
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
+            // Task 0.1: the reactive shield branch now routes per-recipient via recipientActor
+            // (target:'self' → recipient is OWNER_ID). Resolve it to a truthy actor so the
+            // per-recipient grant fires (mirrors the live HealingRuntimeCtx).
+            recipientActor: (id: string) =>
+                id === OWNER_ID ? ({ id: OWNER_ID } as unknown as CombatActor) : undefined,
         } as unknown as IntentExecContext['healing'];
 
         const ctx1 = makeCtx({ round: 1, oncePerRoundConsumed: consumed, healing });
@@ -190,6 +195,10 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
             grantShieldToTarget: shieldSpy,
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
+            // Task 0.1: resolve the self-recipient to a truthy actor so the per-recipient grant
+            // fires (mirrors the live HealingRuntimeCtx).
+            recipientActor: (id: string) =>
+                id === OWNER_ID ? ({ id: OWNER_ID } as unknown as CombatActor) : undefined,
         } as unknown as IntentExecContext['healing'];
 
         const ctx = makeCtx({ oncePerRoundConsumed: consumed, healing });

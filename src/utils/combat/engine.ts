@@ -2060,7 +2060,7 @@ export function runCombat(input: CombatEngineInput): {
                   return { consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw, victim = healTarget) => {
-                  if (victim.currentHp <= 0) return; // dead → no-op
+                  if (victim.currentHp <= 0) return 0; // dead → no-op
                   const targetMaxHp = recipientMaxHp(victim.id);
                   // Capped at the CURRENT effective max HP. Note: if a max-HP buff later expires
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
@@ -2076,6 +2076,10 @@ export function runCombat(input: CombatEngineInput): {
                       victim.id,
                       (perActorShieldGranted.get(victim.id) ?? 0) + actualGranted
                   );
+                  // H3.6: return the REAL pool growth so the cast path / reactive executor can
+                  // build the shield-applied event's recipientIds (granted > 0) + amount. Existing
+                  // callers ignore the return (non-breaking — call for effect only).
+                  return actualGranted;
               },
               playerIds,
               enemyIds: enemyRecipientIds,
@@ -2472,6 +2476,10 @@ export function runCombat(input: CombatEngineInput): {
                 healingCtx.credit(victim.id, 'overheal', overheal);
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
+                // H3.6: this engine standing-leech shield site intentionally does NOT emit
+                // shield-applied — it is per-recipient (no shield-application CAST to key on) and
+                // no H2/H3 source routes through it, so it is out of H3 scope. Emission lives only
+                // in the cast path (playerTurn.ts) and the reactive executor (triggers.ts).
                 healingCtx.grantShieldToTarget(raw, victim);
             }
         }

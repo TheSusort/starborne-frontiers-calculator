@@ -3124,8 +3124,16 @@ const DocumentationPage: React.FC = () => {
                                     Inferno for 2 turns when the ship attacks) and{' '}
                                     <strong>Decimation</strong> (+10% DoT damage per equipped set,
                                     up to +30%, boosting your Inferno and Corrosion ticks in both
-                                    the combat simulator and the DPS calculator). More implant and
-                                    gear-set effects will be added in future updates.
+                                    the combat simulator and the DPS calculator). Four shield
+                                    sources are also modeled: the <strong>Shield</strong> gear set
+                                    (grants the equipped ship a shield each turn, 4% of its max HP),{' '}
+                                    <strong>Adaptive Plating</strong> (grants the ship a shield from
+                                    the damage it takes, once per round),{' '}
+                                    <strong>Abundant Renewal</strong> (turns over-healing on an ally
+                                    into a shield for that ally), and{' '}
+                                    <strong>Resonating Fury</strong> (a chance to grant Crit Power
+                                    Up to allies it shields). More implant and gear-set effects will
+                                    be added in future updates.
                                 </p>
                             </div>
                         </div>
