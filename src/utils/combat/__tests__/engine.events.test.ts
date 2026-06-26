@@ -842,6 +842,116 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
         expect(modBurst).toBe(baseBurst * 2);
     });
 
+    // Case 5c: skill-triggered bomb detonation scales by detonator's detonationDamageModifier.
+    // The DETONATING actor carries a passive modifier +50% detonation damage (value 50 → mult 1.5).
+    // Validates that the skill-triggered detonate() path scales by (1 + detonationDamageModifier/100).
+    it('skill-triggered bomb detonation scales by detonationDamageModifier: modifier 50 gives 1.5× burst', () => {
+        // Active slot: apply bomb (tier 10, 2 stacks, duration 3 — survives until charged fires).
+        // Charged slot: detonate bomb (powerPct 100).
+        // Passive slot (modifier run only): detonationDamage modifier +50 → mult 1.5.
+        // chargeCount 3, startCharged false → round 4 fires charged (detonate).
+        // Baseline: same layout without the passive modifier.
+        // Compare sum of bomb-detonated damage across both runs.
+        const skillsBase = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'bomb',
+                                tier: 10,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const skillsWithModifier = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 120 } }),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'bomb',
+                                tier: 10,
+                                stacks: 2,
+                                duration: 3,
+                            },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        ab({
+                            type: 'detonate-dot',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
+                        }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'self',
+                            trigger: 'on-cast',
+                            config: {
+                                type: 'modifier',
+                                channel: 'detonationDamage',
+                                value: 50,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        });
+
+        const { events: baseEvents } = collect(
+            baseInput({ shipSkills: skillsBase(), numRounds: 4 })
+        );
+        const { events: modEvents } = collect(
+            baseInput({ shipSkills: skillsWithModifier(), numRounds: 4 })
+        );
+
+        const baseBurstSkill = baseEvents
+            .filter((e) => e.type === 'bomb-detonated')
+            .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
+        const modBurstSkill = modEvents
+            .filter((e) => e.type === 'bomb-detonated')
+            .reduce((sum, e) => sum + (e.type === 'bomb-detonated' ? e.damage : 0), 0);
+
+        // With modifier 0: burst = baseline
+        // With modifier 50: burst = baseline × 1.5
+        expect(baseBurstSkill).toBeGreaterThan(0);
+        expect(modBurstSkill).toBeCloseTo(baseBurstSkill * 1.5, 5);
+    });
+
     // Case 6: a team actor's landed timed debuff emits debuff-applied with sourceId = team
     // actor id, on every application round (not just the first).
     it("team actor's landed timed debuff emits debuff-applied with that actor's sourceId on every application round", () => {

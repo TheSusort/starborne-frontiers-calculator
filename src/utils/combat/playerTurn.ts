@@ -529,6 +529,7 @@ function detonate(args: {
     enemyHp: number;
     dotMult: number;
     affinityMult: number;
+    detonationMult: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -546,7 +547,8 @@ function detonate(args: {
                 ) *
                 args.dotMult *
                 args.affinityMult *
-                pct;
+                pct *
+                args.detonationMult;
             args.infernoEntries.length = 0;
         } else if (det.dotType === 'corrosion') {
             const baseHp = Math.min(args.enemyHp, 500_000);
@@ -557,7 +559,8 @@ function detonate(args: {
                 ) *
                 args.dotMult *
                 args.affinityMult *
-                pct;
+                pct *
+                args.detonationMult;
             args.corrosionEntries.length = 0;
         } else if (det.dotType === 'bomb') {
             const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
@@ -570,7 +573,9 @@ function detonate(args: {
                 args.pendingBombs.reduce(
                     (sum, b) => sum + b.stacks * b.damagePerStack * b.affinityMult,
                     0
-                ) * pct;
+                ) *
+                pct *
+                args.detonationMult;
             if (payout > 0) {
                 args.emitBombDetonated?.(totalStacks, payout);
             }
@@ -1491,6 +1496,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyHp,
         dotMult,
         affinityMult,
+        detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
         corrosionEntries,
         infernoEntries,
         pendingBombs,
