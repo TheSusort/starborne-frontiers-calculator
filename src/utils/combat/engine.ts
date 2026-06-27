@@ -64,6 +64,7 @@ import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
+import { emitAttacked } from './emitAttacked';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -5090,23 +5091,16 @@ export function runCombat(input: CombatEngineInput): {
                             // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
                             const shieldWasHit =
                                 !barriered && shieldBefore > 0 && hpDamage < damage;
-                            for (const hitCrit of hitOutcomes) {
-                                bus.emit({
-                                    type: 'attacked',
-                                    // The actor actually hit this turn (`tgt`). Legacy path:
-                                    // tgt === healTarget! → byte-identical. Positional path: the
-                                    // selected player actor.
-                                    targetId: tgt.id,
-                                    attackerId: actor.id,
-                                    round: r,
-                                    // `tgt` is the focus/primary victim today; covered-cell
-                                    // emission (future) would pass the real per-victim role.
-                                    isPrimaryTarget: true,
-                                    ...(shieldWasHit ? { shieldWasHit: true } : {}),
-                                    ...(hitCrit ? { didCrit: true } : {}),
-                                    ...(damage > 0 ? { damage } : {}),
-                                });
-                            }
+                            emitAttacked({
+                                bus,
+                                round: r,
+                                targetId: tgt.id,
+                                attackerId: actor.id,
+                                hitOutcomes,
+                                isPrimaryTarget: true,
+                                shieldWasHit,
+                                damage,
+                            });
                         }
                     } else {
                         // §4.5 Deferred break: consume any pending Stasis break (real-enemy skip).
