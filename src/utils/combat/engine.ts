@@ -55,7 +55,7 @@ import { victimHitDamage } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
-import { detonateContainers } from './detonation';
+import { detonateContainers, type DetonationRecipe } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
@@ -3658,13 +3658,16 @@ export function runCombat(input: CombatEngineInput): {
                 // returns a `positionalDetonation` recipe for the per-victim detonation loop below
                 // to apply. Conditional spread → non-positional turns omit the key → byte-identical.
                 //
-                // SCOPED TO THE FOCUS ATTACKER (PR1): only the focus-turn site consumes the recipe
-                // (the per-victim detonation loop). The walked-team and enemy-attacker sites have no
-                // such loop yet, so setting `positional` for them would skip their anchor detonation
-                // and silently DROP it (recipe ignored). Gating on focusActorId keeps team/enemy on
-                // their prior anchor-detonation path (byte-identical) until PR2/PR3 wire the loop to
-                // those sites symmetrically.
-                ...(a.id === focusActorId &&
+                // SCOPED TO THE FOCUS ATTACKER + ENEMY SIDE (PR1 + PR3): the focus-turn site (PR1)
+                // and now the enemy-attacker site (PR3) both consume the recipe via a per-victim
+                // detonation loop, so they get `positional: true` (runPlayerTurn SKIPS the anchor
+                // detonation and returns the recipe; detonationDamage stays 0 — the loop applies it
+                // per footprint victim). The WALKED-TEAM players (side 'player', id !== focusActorId)
+                // are the ONLY site without such a loop yet, so setting `positional` for them would
+                // skip their anchor detonation and silently DROP it (recipe ignored). They stay on
+                // the prior anchor-detonation path (byte-identical) until a future PR wires the loop
+                // to the walked-team site symmetrically.
+                ...((a.id === focusActorId || a.side === 'enemy') &&
                 aoePattern != null &&
                 aoeTarget != null &&
                 tgt.position != null
@@ -5035,6 +5038,13 @@ export function runCombat(input: CombatEngineInput): {
                             // dead-target path and whenever the enemy is non-positional → legacy single-apply.
                             let enemyPositional = false;
                             let enemyScalars: AttackerDamageScalars | undefined;
+                            // PR3: the per-victim detonation recipe for the enemy positional path,
+                            // hoisted out of the else block (enemyTurn is scoped inside it). When the
+                            // enemy fires a positional detonate skill, runPlayerTurn returns the recipe
+                            // (detonationDamage 0) and the per-victim loop at the enemy drivePositionalApply
+                            // site consumes it. Stays undefined on the dead-target path and for any bare
+                            // enemy with no detonate() → the loop never runs (byte-identical).
+                            let enemyPositionalDetonation: DetonationRecipe | undefined;
                             // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
                             // focus/team sites). Captured BEFORE runPlayerTurn so Stasis re-applied
                             // by the same attack's debuff ability is not inadvertently broken.
@@ -5128,6 +5138,10 @@ export function runCombat(input: CombatEngineInput): {
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;
                                 enemyScalars = enemyTurn.positionalScalars;
+                                // PR3: capture the per-victim detonation recipe (returned whenever
+                                // `positional: true` was set for this enemy turn — see the positional
+                                // hint gate). Consumed by the enemy-site per-victim detonation loop below.
+                                enemyPositionalDetonation = enemyTurn.positionalDetonation;
                                 // Record the enemy actor's round-scoped ctx (parity with player/team branches;
                                 // its own future DoT entries would tick with this ctx).
                                 lastTurnCtxByActor.set(actor.id, enemyTurn.turnCtx);
@@ -5246,20 +5260,20 @@ export function runCombat(input: CombatEngineInput): {
                                     // Phase-5 symmetric-accounting surface (the result still exposes a single
                                     // heal-target row today). Inert here regardless (no production caller
                                     // threads enemy position+pattern).
-                                    // DETONATION CAVEAT (E5 §4.3 — PEELED to a dedicated follow-up): only the
-                                    // firing hit (enemyScalars, the DIRECT channel) lands per-victim here. The
-                                    // aggregate `damage` also folds enemyTurn.detonationDamage, which the
-                                    // NON-positional branch already drains per-victim via
-                                    // applyIncomingToTarget(damage, tgt) → perActorIncoming (so non-positional
-                                    // detonation intake is ALREADY recorded). Only the POSITIONAL path leaves it
-                                    // unrouted — and routing it per-victim needs per-victim bomb attribution the
-                                    // engine does not track yet (detonation is a single turn-scalar, not
-                                    // per-target). E5 PEELED this per the spec's §5 pressure valve: it requires
-                                    // NEW tracking and has zero observable cost to defer (perActorIncoming is
-                                    // internal/unread by the UI, and no fixture threads enemy position+pattern
-                                    // WITH detonation → byte-identical today). A positional enemy-detonation
-                                    // model lands in the follow-up.
+                                    // DETONATION (E5 §4.3 — RESOLVED in PR3): the firing hit
+                                    // (enemyScalars, the DIRECT channel) lands per-victim here, and the
+                                    // per-victim skill-triggered detonation slice is routed by the loop
+                                    // below — each player footprint victim detonates its OWN containers
+                                    // against its OWN HP via playerSink (the mirror of the player→enemy
+                                    // block). detonationDamage is 0 on the positional path because the
+                                    // recipe (enemyPositionalDetonation) is consumed per-victim, not as
+                                    // a single turn-scalar — so it is no longer dropped.
                                     const tb = turnBindings(actor.side);
+                                    // PR3: collect EVERY player footprint victim hit by this enemy
+                                    // cast's firing damage (unique by id), so each can detonate its OWN
+                                    // containers after the firing hits land. Populated in the
+                                    // onVictimResolved hook below alongside the per-victim taken leech.
+                                    const detonationTargets = new Map<string, CombatActor>();
                                     drivePositionalApply({
                                         scalars: enemyScalars!,
                                         hitCrits: enemyHitCrits,
@@ -5276,6 +5290,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // requiresHpDamage gates — mirroring the non-positional block
                                         // below, per victim.
                                         onVictimResolved: (victim, dmg, outcome) => {
+                                            detonationTargets.set(victim.id, victim);
                                             procTakenLeechesPerVictim(victim, dmg, outcome);
                                             if (victim.id === tgt.id) {
                                                 positionalShieldCaptured = true;
@@ -5287,6 +5302,74 @@ export function runCombat(input: CombatEngineInput): {
                                             }
                                         },
                                     });
+                                    // PR3: enemy→player per-victim skill-triggered detonation
+                                    // (mirror of the player→enemy block, routed through playerSink).
+                                    // Each PLAYER victim hit by this enemy cast that is STILL ALIVE
+                                    // detonates its OWN containers (no role-scale). Bombs = full shield
+                                    // drain/no pen; inferno+corrosion BYPASS shield. Credited to the
+                                    // detonating enemy's per-round detonation tally + roundPerTargetDamage;
+                                    // NOT into cumulativeDamage (HP lands per-victim via applyVictimDamage).
+                                    if (
+                                        enemyPositionalDetonation &&
+                                        enemyPositionalDetonation.dets.length > 0
+                                    ) {
+                                        for (const victim of detonationTargets.values()) {
+                                            if (victim.currentHp <= 0) continue; // died to firing hit (already splashed)
+                                            const result = detonateContainers(
+                                                enemyPositionalDetonation,
+                                                {
+                                                    corrosionEntries: victim.corrosionEntries,
+                                                    infernoEntries: victim.infernoEntries,
+                                                    pendingBombs: victim.pendingBombs,
+                                                    victimHp: tb.victimMaxHpFor(victim),
+                                                }
+                                            );
+                                            if (result.bomb > 0) {
+                                                applyVictimDamage(result.bomb, victim, playerSink, {
+                                                    killerId: actor.id,
+                                                    byDirectDamage: true,
+                                                    bombPortion: result.bomb, // full shield drain, no pen
+                                                    shieldPenetrationPct: 0,
+                                                });
+                                                bus.emit({
+                                                    type: 'bomb-detonated',
+                                                    actorId: actor.id,
+                                                    round: r,
+                                                    stacks: result.bombStacks,
+                                                    damage: result.bomb,
+                                                });
+                                                roundPerTargetDamage.set(
+                                                    victim.id,
+                                                    (roundPerTargetDamage.get(victim.id) ?? 0) +
+                                                        result.bomb
+                                                );
+                                            }
+                                            const bypass = result.inferno + result.corrosion;
+                                            if (bypass > 0) {
+                                                applyVictimDamage(bypass, victim, playerSink, {
+                                                    byDirectDamage: false, // DoT → bypass shield
+                                                });
+                                                bus.emit({
+                                                    type: 'dot-detonated',
+                                                    targetId: victim.id,
+                                                    round: r,
+                                                    damage: bypass,
+                                                });
+                                                roundPerTargetDamage.set(
+                                                    victim.id,
+                                                    (roundPerTargetDamage.get(victim.id) ?? 0) +
+                                                        bypass
+                                                );
+                                            }
+                                            const dealt = result.bomb + bypass;
+                                            if (dealt > 0) {
+                                                perActorDetonation.set(
+                                                    actor.id,
+                                                    (perActorDetonation.get(actor.id) ?? 0) + dealt
+                                                );
+                                            }
+                                        }
+                                    }
                                 } else {
                                     ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
                                         damage,
