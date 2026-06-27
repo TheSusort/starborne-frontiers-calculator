@@ -3148,8 +3148,12 @@ const DocumentationPage: React.FC = () => {
                                     also modeled: it increases detonation damage (bomb bursts,
                                     Inferno detonations, and Corrosion detonations) and bomb splash
                                     damage by a percentage based on rarity — its rare and legendary
-                                    variants amplify bomb splash damage only. More implant and
-                                    gear-set effects will be added in future updates.
+                                    variants amplify bomb splash damage only. Counterattacks are now
+                                    modeled too: a ship with a &quot;when directly damaged&quot;
+                                    passive (such as <strong>Stalwart</strong>) retaliates against
+                                    the attacker for a share of its own attack — a full hit that can
+                                    crit and kill. More implant and gear-set effects will be added in
+                                    future updates.
                                 </p>
                             </div>
                         </div>
