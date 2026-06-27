@@ -3142,14 +3142,14 @@ const DocumentationPage: React.FC = () => {
                                     increasing damage as its HP drops, up to +25% near death), and
                                     the <strong>Smokescreen</strong> implant (a chance to gain
                                     Stealth when directly hit), and the <strong>Boost</strong> gear
-                                    set (every buff the wearer applies — to itself or allies — lasts
-                                    one extra turn, modeled in both the combat and DPS simulators).
-                                    The <strong>Voidfire Catalyst</strong> implant is also modeled:
-                                    it increases detonation damage (bomb bursts, Inferno detonations,
-                                    and Corrosion detonations) and bomb splash damage by a percentage
-                                    based on rarity — its rare and legendary variants amplify bomb
-                                    splash damage only. More implant and gear-set effects will be
-                                    added in future updates.
+                                    set (each timed buff the wearer applies — to itself or allies —
+                                    lasts one extra turn, modeled in both the combat and DPS
+                                    simulators). The <strong>Voidfire Catalyst</strong> implant is
+                                    also modeled: it increases detonation damage (bomb bursts,
+                                    Inferno detonations, and Corrosion detonations) and bomb splash
+                                    damage by a percentage based on rarity — its rare and legendary
+                                    variants amplify bomb splash damage only. More implant and
+                                    gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

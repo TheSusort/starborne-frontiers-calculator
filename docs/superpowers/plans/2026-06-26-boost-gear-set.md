@@ -557,8 +557,8 @@ Expected: PASS.
 
 Add to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` (plain English, match the existing entry voice):
 
-```
-'The combat and DPS simulators now model the Boost gear set: while a ship wears 4+ Boost pieces, every buff it applies — to itself or its allies — lasts one extra turn.'
+```typescript
+'The combat and DPS simulators now model the Boost gear set: while a ship wears 4+ Boost pieces, each timed buff it applies — to itself or its allies — lasts one extra turn.'
 ```
 
 - [ ] **Step 4: Docs**
