@@ -169,3 +169,88 @@ describe('G PR1 — Stalwart counterattack END-TO-END via the real registry', ()
         expect(counterRounds[0]).toBeCloseTo(BASE, 6);
     });
 });
+
+// ───────────────────────────────────────────────────────────────────────────
+// G PR2 — Nyxen shield-hit counterattack END-TO-END via the real registry.
+//
+// Nyxen's passive ("This Unit deals X% damage when its Shield is directly damaged.") parses to
+// an on-attacked `counter` with requireShieldHit:true. Nyxen's ACTIVE grants a self-shield
+// ("Shield equal to 15% of its Max HP"). Built together through the real registry and fed to
+// runCombat: the focus (speed 100) casts its active FIRST each round → a live shield; the
+// speed-50 enemy then lands a primary hit that DRAINS the shield → attacked.shieldWasHit:true →
+// the counter fires. The NEGATIVE control builds Nyxen with ONLY the passive (no active shield) →
+// no shield ever exists → shieldWasHit never true → NO counter.
+// ───────────────────────────────────────────────────────────────────────────
+
+const NYXEN_ACTIVE =
+    'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.';
+const NYXEN_P1 =
+    'This Unit deals <unit-damage>100% damage</unit-damage> when its Shield is directly damaged.';
+const NYXEN_P2 =
+    'This Unit deals <unit-damage>200% damage</unit-damage> when its Shield is directly damaged.';
+
+/** A Ship carrying Nyxen's active (self-shield) and a chosen passive (shield-hit counter),
+ *  verbatim from docs/ship-skills.csv, parsed through the real registry. */
+function nyxenShip(passiveText: string, withActiveShield = true): Ship {
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({} as any),
+        refits: [{}, {}, {}, {}],
+        ...(withActiveShield ? { activeSkillText: NYXEN_ACTIVE } : {}),
+        firstPassiveSkillText: passiveText,
+    } as Ship;
+}
+
+describe('G PR2 — Nyxen shield-hit counterattack END-TO-END via the real registry', () => {
+    it('parsing produces a real on-attacked counter with requireShieldHit (sanity: registry wiring)', () => {
+        const skills = buildShipAbilities(nyxenShip(NYXEN_P1));
+        const passive = skills.slots.find((s) => s.slot === 'passive');
+        const counter = passive?.abilities.find((a) => a.type === 'counter');
+        // Mutation guard: if the parser stops emitting a shield-hit counter, this fails before the run.
+        expect(counter).toMatchObject({
+            type: 'counter',
+            trigger: 'on-attacked',
+            config: { type: 'counter', multiplier: 100, requireShieldHit: true },
+        });
+        expect(
+            (counter?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+        ).toBeUndefined();
+    });
+
+    it('(P1 100%) the counter fires ONLY when the live shield is actually hit', () => {
+        // Focus speed 100 → casts its self-shield active BEFORE the speed-50 enemy hits, so the
+        // enemy's hit drains a LIVE shield → shieldWasHit:true → counter fires.
+        const shielded = buildShipAbilities(nyxenShip(NYXEN_P1, /* withActiveShield */ true));
+        const withShieldResult = runCombat(
+            counterBase(shielded, { speed: 100, enemyAttackers: [basicEnemy('foe', 3_000)] })
+        );
+        // Owner attack 10000 × 100% vs defence 0 / neutral affinity / no crit = 10000 per counter.
+        const fired = totalPerTargetDamage(withShieldResult, 'foe');
+        expect(fired).toBeGreaterThan(0);
+        for (const rd of withShieldResult.rounds) {
+            const dealt = rd.perTargetDamage?.['foe'] ?? 0;
+            if (dealt > 0) expect(dealt).toBeCloseTo(10_000, 6);
+        }
+
+        // NEGATIVE control: no active shield → the shield never exists → shieldWasHit never true →
+        // NO counter ever fires (the foe takes zero counter damage).
+        const noShield = buildShipAbilities(nyxenShip(NYXEN_P1, /* withActiveShield */ false));
+        const noShieldResult = runCombat(
+            counterBase(noShield, { speed: 100, enemyAttackers: [basicEnemy('foe', 3_000)] })
+        );
+        expect(totalPerTargetDamage(noShieldResult, 'foe')).toBe(0);
+    });
+
+    it('(P2 200%) the counter scales with the parsed multiplier (20000 per shield-hit counter)', () => {
+        const shielded = buildShipAbilities(nyxenShip(NYXEN_P2, /* withActiveShield */ true));
+        const result = runCombat(
+            counterBase(shielded, { speed: 100, enemyAttackers: [basicEnemy('foe', 3_000)] })
+        );
+        // Owner attack 10000 × 200% = 20000 per counter.
+        const counterRounds = result.rounds
+            .map((rd) => rd.perTargetDamage?.['foe'] ?? 0)
+            .filter((d) => d > 0);
+        expect(counterRounds.length).toBeGreaterThan(0);
+        for (const dealt of counterRounds) expect(dealt).toBeCloseTo(20_000, 6);
+    });
+});

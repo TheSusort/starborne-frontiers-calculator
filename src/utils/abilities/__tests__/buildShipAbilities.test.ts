@@ -1606,6 +1606,50 @@ describe('buildShipAbilities', () => {
             });
         });
 
+        // Combat G PR2: Nyxen's shield-hit counterattack passive — "This Unit deals X% damage
+        // when its Shield is directly damaged." — auto-produces a reactive `counter` ability
+        // (on-attacked, requireShieldHit) with NO requirePrimaryTarget.
+        it('Nyxen first passive (100%): emits an on-attacked counter with requireShieldHit and no primary-target requirement', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit deals <unit-damage>100% damage</unit-damage> when its Shield is directly damaged.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 100, requireShieldHit: true },
+            });
+            expect(
+                (counterAb?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+            ).toBeUndefined();
+            // Non-regression: no phantom on-cast plain damage left behind.
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+        });
+
+        it('Nyxen second passive (200%): emits an on-attacked counter with requireShieldHit', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'This Unit deals <unit-damage>200% damage</unit-damage> when its Shield is directly damaged.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 200, requireShieldHit: true },
+            });
+            expect(
+                (counterAb?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+            ).toBeUndefined();
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+        });
+
         it('false-positive guard: a "directly damaged" passive that HEALS does not produce a counter', () => {
             const s = ship({
                 firstPassiveSkillText:

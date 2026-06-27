@@ -303,6 +303,46 @@ describe('G PR1 — counter primary-target gate (executor level)', () => {
         expect(spy).toHaveBeenCalledTimes(1);
     });
 
+    // G PR2 — Nyxen shield-hit gate (executor level): requireShieldHit gates on
+    // eventCtx.shieldWasHit. The counter fires only when the triggering hit actually drained the
+    // owner's shield (> 0 absorbed).
+    it('requireShieldHit:true + shieldWasHit:true → fires', () => {
+        const spy = vi.fn();
+        executeIntent(
+            counterIntent(
+                { type: 'counter', multiplier: 100, requireShieldHit: true },
+                { counterTargetId: 'foe', shieldWasHit: true }
+            ),
+            makeCounterCtx(spy)
+        );
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 100, 1);
+    });
+
+    it('requireShieldHit:true + shieldWasHit false → does NOT fire', () => {
+        const spy = vi.fn();
+        executeIntent(
+            counterIntent(
+                { type: 'counter', multiplier: 100, requireShieldHit: true },
+                { counterTargetId: 'foe', shieldWasHit: false }
+            ),
+            makeCounterCtx(spy)
+        );
+        expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('requireShieldHit:true + shieldWasHit absent → does NOT fire', () => {
+        const spy = vi.fn();
+        executeIntent(
+            counterIntent(
+                { type: 'counter', multiplier: 100, requireShieldHit: true },
+                { counterTargetId: 'foe' }
+            ),
+            makeCounterCtx(spy)
+        );
+        expect(spy).not.toHaveBeenCalled();
+    });
+
     it('once-per-attack: a second intent with the same owner:ability key in the same turn is suppressed', () => {
         const spy = vi.fn();
         const ctx = makeCounterCtx(spy);

@@ -689,7 +689,8 @@ function abilitiesFromText(
     // on-cast base damage. Re-type that component to a `counter` ability (on-attacked,
     // requirePrimaryTarget) when the parsed counter multiplier matches the base damage the tag
     // carries. Heal/shield/reflect "directly damaged" consequences are not matched by
-    // parseCounterAbilities, so they keep their existing parse. PR2 (Nyxen/Centurion) is unhandled.
+    // parseCounterAbilities, so they keep their existing parse. PR2: Nyxen's shield-hit shape
+    // also rides this path (requireShieldHit). Centurion (adjacent-ally) is still unhandled.
     const counter = slot === 'passive' ? parseCounterAbilities(text) : null;
     if (mult > 0 && counter && counter.multiplier === mult) {
         const hits = parseHitCount(text);
@@ -705,6 +706,7 @@ function abilitiesFromText(
                     multiplier: mult,
                     ...(hits !== undefined ? { hits } : {}),
                     ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                    ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
                 },
                 autoFilled: true,
             },
