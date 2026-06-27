@@ -34,7 +34,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { CombatEventBus } from './events';
-import { detonateContainers } from './detonation';
+import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
@@ -157,6 +157,10 @@ export interface PlayerTurnResult {
      *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
      *  Present whenever a damage ability fired this cast (else undefined). */
     positionalScalars?: AttackerDamageScalars;
+    /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
+     *  `positional` arg was set (the engine then detonates each footprint victim's own containers
+     *  via detonateContainers). Absent for non-positional callers → byte-identical. */
+    positionalDetonation?: DetonationRecipe;
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
@@ -308,6 +312,11 @@ export interface PlayerTurnArgs {
      * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
      */
     aoeVictimIds?: string[];
+    /** Positional mode (per-victim detonation): when true, runPlayerTurn does NOT detonate the
+     *  anchor enemy's containers (no consume, no credit, no bomb-detonated emit) and instead
+     *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
+     *  detonationDamage is 0 in this mode. Absent/false → legacy anchor detonation (byte-identical). */
+    positional?: boolean;
     /** D-PR3: victim-side incoming %-reduction against the bound target.
      *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
      *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
@@ -665,6 +674,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         healEventOnly = false,
         onHitBreakStasis,
         aoeVictimIds,
+        positional,
     } = args;
 
     const {
@@ -1469,19 +1479,33 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // This is the player-turn portion; the caller folds it into the round
     // accumulator's detonationDamage with += (the enemy turn may have already
     // added bursts this round at a faster speed).
-    const detonationDamage = detonate({
-        gatedSkill,
-        effectiveAttack,
-        enemyHp,
-        dotMult,
-        affinityMult,
-        detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
-        corrosionEntries,
-        infernoEntries,
-        pendingBombs,
-        emitBombDetonated: (stacks, damage) =>
-            bus.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
-    });
+    let detonationDamage = 0;
+    let positionalDetonation: DetonationRecipe | undefined;
+    if (positional) {
+        // Positional: DO NOT detonate the anchor (no consume/credit/emit). Expose the recipe so the
+        // engine detonates each footprint victim's own containers. detonationDamage stays 0.
+        positionalDetonation = {
+            dets: detonationsFromSkill(gatedSkill),
+            effectiveAttack,
+            dotMult,
+            affinityMult,
+            detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
+        };
+    } else {
+        detonationDamage = detonate({
+            gatedSkill,
+            effectiveAttack,
+            enemyHp,
+            dotMult,
+            affinityMult,
+            detonationMult: 1 + dmgStats.detonationDamageModifier / 100,
+            corrosionEntries,
+            infernoEntries,
+            pendingBombs,
+            emitBombDetonated: (stacks, damage) =>
+                bus.emit({ type: 'bomb-detonated', actorId: actor.id, round: r, stacks, damage }),
+        });
+    }
 
     // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
     // Block Debuff (Task 6): when the turn target is immune, every cast-side DoT is
@@ -2081,6 +2105,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        ...(positionalDetonation ? { positionalDetonation } : {}),
         turnCtx,
     };
 }
