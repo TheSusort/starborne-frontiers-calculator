@@ -11,7 +11,7 @@
  * per-round `perActorDetonation` tally credited to the ENEMY attacker.
  *
  * Before PR3 the enemy positional path applied ONLY the firing hit per-victim and DROPPED the
- * detonation slice (the "DETONATION CAVEAT" at engine.ts:5249-5261).
+ * detonation slice (the resolved E5 §4.3 "DETONATION CAVEAT" in the enemy positional apply path).
  *
  * SEEDING: containers cannot be applied per-footprint-victim via abilities, so each PLAYER victim's
  * `pendingBombs` / `corrosionEntries` / `infernoEntries` is pre-seeded directly through the
@@ -320,7 +320,7 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
         expect(round.perActorDetonation?.['enemy-det']).toBe(100);
     });
 
-    it('the per-victim detonation does NOT touch the focus dummy enemy HP (no line-5432 double-count)', () => {
+    it('the per-victim detonation does NOT touch the focus dummy enemy HP (no cumulativeDamage double-count)', () => {
         idc = 0;
         // The focus dummy `enemy` (the player's notional target) must be untouched by the enemy's
         // per-victim detonation — the detonation lands on PLAYER victims via playerSink, never folded
