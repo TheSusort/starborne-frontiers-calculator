@@ -441,6 +441,71 @@ describe('per-positioned-player timed detonation (PR-B B2, enemy → player)', (
         });
     });
 
+    it('E5 symmetry: the same timed bomb bursts for identical damage + event on the player side and the enemy side', () => {
+        idc = 0;
+        // The SAME timed bomb (2 × 1000, countdown 2) is placed on a positioned PLAYER actor in one
+        // runCombat invocation and on a positioned ENEMY actor in a second invocation. Both burst on
+        // round 2. Crit 0 → exact integers. The only difference between the two runs is WHICH SIDE
+        // carries the bomb — everything else (board shape, countdown, params) is identical.
+        //
+        // Player side: bomb on 'attacker' (positioned at M4, HP 1e9). The focus actor receives no
+        // firing damage via perTargetDamage (its OWN firing hit is not self-inflicted), so in round 2
+        // perTargetDamage['attacker'] = 2000 (burst only).
+        //
+        // Enemy side: bomb on 'enemy-back' (positioned at M2, HP 1e9). M2 is OUTSIDE the Line-
+        // Range-1 footprint anchored at M4 (which covers M4 and M3 only), so it receives no firing
+        // damage. In round 2 perTargetDamage['enemy-back'] = 2000 (burst only).
+        //
+        // Both bomb-detonated events must carry identical stacks (2) and damage (2000).
+
+        // --- PLAYER side ---
+        const playerRun = collect(
+            POSITIONAL_BASE({
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors
+                        .find((a) => a.id === 'attacker')
+                        ?.pendingBombs.push(timedBomb(1000, 2, 2, 'enemy-applier'));
+                },
+            })
+        );
+        const playerBurst = playerRun.result.rounds[1].perTargetDamage?.['attacker'];
+        const playerBombDet = playerRun.events.filter((e) => e.type === 'bomb-detonated');
+        // Sanity: exactly one event, on round 2.
+        expect(playerBombDet.length).toBe(1);
+        expect(playerBombDet[0]).toMatchObject({ round: 2, stacks: 2, damage: 2000 });
+        expect(playerBurst).toBe(2000);
+
+        // --- ENEMY side ---
+        // Use a third enemy actor at M2 (outside the firing footprint) so its perTargetDamage
+        // in round 2 is pure burst with no firing-hit contamination — a clean mirror of the player.
+        idc = 0;
+        const enemyRun = collect(
+            POSITIONAL_BASE({
+                enemyAttackers: [
+                    enemyAt('enemy-front', 'M4', 1_000_000_000),
+                    enemyAt('enemy-mid', 'M3', 1_000_000_000),
+                    enemyAt('enemy-back', 'M2', 1_000_000_000), // outside footprint → no firing hit
+                ],
+                __testTapActors: (actors: CombatActor[]) => {
+                    actors
+                        .find((a) => a.id === 'enemy-back')
+                        ?.pendingBombs.push(timedBomb(1000, 2, 2, 'attacker'));
+                },
+            })
+        );
+        const enemyBurst = enemyRun.result.rounds[1].perTargetDamage?.['enemy-back'];
+        const enemyBombDet = enemyRun.events.filter((e) => e.type === 'bomb-detonated');
+        // Sanity: exactly one event, on round 2.
+        expect(enemyBombDet.length).toBe(1);
+        expect(enemyBombDet[0]).toMatchObject({ round: 2, stacks: 2, damage: 2000 });
+        expect(enemyBurst).toBe(2000);
+
+        // --- Cross-side equality assertion (the E5 symmetry pin) ---
+        expect(playerBurst).toBe(enemyBurst);
+        expect(playerBombDet[0].damage).toBe(enemyBombDet[0].damage);
+        expect(playerBombDet[0].stacks).toBe(enemyBombDet[0].stacks);
+    });
+
     it('case 7: GATE-NEGATIVE — a positioned player WITH a timed container but enemyAttackers EMPTY does NOT burst', () => {
         idc = 0;
         // GATE PIN — the `isPositional` half. The new per-positioned-player burst is gated on
