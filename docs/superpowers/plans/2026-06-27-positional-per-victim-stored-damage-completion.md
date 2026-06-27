@@ -521,6 +521,9 @@ This still satisfies every spec-locked decision: per-victim HP via `applyVictimD
   5. **E5-symmetry pin:** the SAME DoT carrier (same tier/stacks, same applier ctx) ticks identical integers + `dot-ticked` events as enemy-victim vs player-victim.
   6. **Stasis pin (the refinement's key decision):** a STASISED positioned victim STILL ticks its DoTs — assert on both a stasised enemy and a stasised player (proves the tick is outside the stasis gate). Non-vacuity: temporarily move the tick inside a gate → this case fails.
   7. **Non-positional regression:** DPS-mode + healing-mode (dummy `:4966` + heal-target `:4373`) byte-identical (suite-wide + an explicit pin).
+  8. **Positioned AND heal-target (branch-collision pin):** a victim that is BOTH positioned AND the heal target ticks EXACTLY ONCE via the heal-target branch (`isHealTarget` precedes the positional branch → no double-tick); assert `tankDotSnapshot`/accounting present and the tick is NOT also counted in `perTargetDamage` via the positional branch.
+  9. **Round-1 faster-victim, no applier ctx:** seed a DoT whose applier has not acted yet → `tickDoTs` skips the entry (no ctx), `total === 0` (no `applyVictimDamage`/`roundPerTargetDamage`), but `expireStacks` still ages it. Pin the skip-but-age behavior.
+  10. **Team-applier DoT on a positioned enemy:** a NON-focus team ship's DoT ticks on the enemy → HP drains via `enemySink`, `perActorDot` keyed under the team source → the focus-DPS fold (`perActorDot.get(focusActorId)`) correctly IGNORES it (focus DoT total unchanged).
 - [ ] **GREEN:** rewrite the `:4384` block (`if (healTarget && actor.id === healTarget.id) { … }`) into the unified prologue. Recommended extraction for clarity (one call site, so optional): inline is fine. Shape:
   ```ts
   if (actor.id !== enemy.id) {                       // dummy keeps legacy :4966 tick
@@ -569,6 +572,7 @@ This still satisfies every spec-locked decision: per-victim HP via `applyVictimD
   ```
   - **Verify** `applyVictimDamage(total, actor, playerSink, {byDirectDamage:false})` is equivalent to the heal-target's `applyIncomingToTarget(total, actor, {byDirectDamage:false})` for the non-heal-target player case (PR-B used `applyVictimDamage(_, _, playerSink)` directly — same primitive; confirm the intake-bucket/penetration accounting matches). If not equivalent, use `applyIncomingToTarget` for the player branch.
   - The credit callback receives post-Vortex-Veil damage; `tickDoTs` ages entries via `expireStacks` internally (per-victim, once).
+  - **Lethal-tick `continue` is INTENTIONAL and follows the heal-target lethal-tick convention** (`:4445-4447` `handleDeadTargetSkip`→`continue`, which skips the shared post-turn block: `drainIntents`/`decrement*`/`turn-ended`). This DIVERGES from the PR2/PR-B timed-burst lethal path (`:5081+`), which does NOT `continue` (lets post-turn decrements + `turn-ended` run). A DoT tick is a turn-START event (like the heal-target tick) → skip the rest of the turn; do NOT "fix" it to match the burst convention.
 - [ ] Hand-validate EVERY positional delta; NEVER `vitest -u`. Run the WHOLE `npm test` (detonation/DoT fixtures live outside `src/utils/combat` too — `healingGoldenParity`). tsc + lint (max-warnings 0) clean. ZERO `.snap` moved.
 
 ### Task C3 — changelog + docs
