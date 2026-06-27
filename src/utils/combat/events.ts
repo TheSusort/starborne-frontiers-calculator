@@ -207,6 +207,11 @@ export type CombatEvent =
            *  Bloodthirst's triggerDamage). Present only when a damage aggregate is in scope.
            *  Tenacity's >25%-max-HP filter reads this. */
           damage?: number;
+          /** G PR1: true when the victim was the directly-targeted (primary) target of the
+           *  attack, false/absent for splash/covered AoE victims. Today the sole emit is the
+           *  focus victim (`tgt`) → always true; positional per-victim emission (future) sets
+           *  false for covered cells. Stalwart's counter gates on this. */
+          isPrimaryTarget?: boolean;
       };
 
 export type CombatEventType = CombatEvent['type'];

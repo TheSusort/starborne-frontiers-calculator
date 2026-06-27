@@ -116,6 +116,10 @@ export interface Intent {
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
         didCrit?: boolean;
+        /** G PR1: true when the owner was the primary (directly-targeted) victim of the
+         *  triggering attack (on-attacked -> attacked.isPrimaryTarget). Stalwart's counter
+         *  gates on this so splash/covered victims do not counter. */
+        isPrimaryTarget?: boolean;
         /** The actor ids of the allies repaired by an on-own-repair-to-ally event
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
          *  exactly these recipients (Font of Power -> repaired allies). */
@@ -485,6 +489,7 @@ export function registerReactiveListeners(args: {
                                 counterTargetId: e.attackerId,
                                 didCrit: e.didCrit,
                                 triggerDamage: e.damage,
+                                isPrimaryTarget: e.isPrimaryTarget,
                             },
                         });
                     });

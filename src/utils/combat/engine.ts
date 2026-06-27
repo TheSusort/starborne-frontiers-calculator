@@ -2721,6 +2721,9 @@ export function runCombat(input: CombatEngineInput): {
                 /** True when THIS application is itself reflected thorns (Reflect gear set). The
                  *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
                 isReflected?: boolean;
+                /** G PR1: true when THIS application is a counterattack (Stalwart). The reflect
+                 *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
+                isCounter?: boolean;
             }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
@@ -3030,7 +3033,13 @@ export function runCombat(input: CombatEngineInput): {
             // The attacker.destroyedRound guard below prevents posthumous reflection TO an
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
-            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
+            // !cause?.isCounter is loop-safe: a counter application must not itself be reflected.
+            if (
+                !cause?.isReflected &&
+                !cause?.isCounter &&
+                hpDamage > 0 &&
+                cause?.byDirectDamage !== false
+            ) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
                 // bombPortion === total → directFraction 0 → basis 0 → skipped below.
@@ -4988,6 +4997,9 @@ export function runCombat(input: CombatEngineInput): {
                                     targetId: tgt.id,
                                     attackerId: actor.id,
                                     round: r,
+                                    // `tgt` is the focus/primary victim today; covered-cell
+                                    // emission (future) would pass the real per-victim role.
+                                    isPrimaryTarget: true,
                                     ...(hitCrit ? { didCrit: true } : {}),
                                     ...(damage > 0 ? { damage } : {}),
                                 });
