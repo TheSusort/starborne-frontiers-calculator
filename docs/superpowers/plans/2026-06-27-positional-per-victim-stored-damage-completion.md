@@ -482,15 +482,102 @@ C.1 drains the positioned enemy's **own** `currentHp` via `applyVictimDamage(...
 3. C.2: HP via `playerSink`/`applyIncomingToTarget(byDirectDamage:false)`; no `creditDamage`, no `cumulativeDamage` interaction; heal-target keeps `tankDotSnapshot`/`tankDotDamage`→incoming-accounting/`handleDeadTargetSkip`.
 4. The per-victim `tickDoTs` invocation passes `enemyHp: recipientMaxHp(victim.id)` (corrosion scales with the victim's own max HP), `ctxFor: lastTurnCtxByActor`, per-victim `emitTicked` (`targetId = victim.id`), and `incomingDotReductionPct` for the victim's Vortex Veil. `tickDoTs` mutates + `expireStacks`-ages that victim's own entries on its own turn.
 
-### C.1 — player→enemy (positioned enemies)
-Add `tickDoTs` at the enemy-attacker turn-start, ahead of PR2's timed block (canonical order `tickDoTs → processBombs → processAccumulators`). HP via `applyVictimDamage(dmg, actor, enemySink, { byDirectDamage:false })`; per-applier ctx via `lastTurnCtxByActor`; corrosion `baseHp = recipientMaxHp(actor.id)`; per-victim `dot-ticked`; suppress the cumulativeDamage feed for positioned enemies (per C0). Gate: positioned enemy with non-empty DoT containers.
+### PLAN REFINEMENT (resolved during detailing 2026-06-27, user-approved + C0-reviewed)
 
-### C.2 — enemy→player (unify the heal-target path)
-Replace the heal-target prologue (grep `Task 11b: tick the HEAL TARGET's own enemy-applied DoTs`, ~`:4373`) with ONE per-victim DoT-tick path at every positioned player's turn-start (attacker + walked-team). Routes via `playerSink`/`applyIncomingToTarget` (`byDirectDamage:false`); per-applier ctx; corrosion `baseHp = recipientMaxHp(victim.id)`; per-victim Vortex Veil `incomingDotReductionPct`. Heal-target stays a branch: `tankDotSnapshot`, `tankDotDamage`→incoming healing accounting, `handleDeadTargetSkip` all fire when victim IS the heal target. Single path keyed per turning actor → structural double-tick guard.
+**Unify C.1 + C.2 into the SINGLE shared `:4373` turn-start prologue — NOT two sites.** The spec's literal C.1 ("enemy tick ahead of the PR2 timed block") would place the enemy DoT tick *inside* the enemy stasis gate (`:5039`), so a stasised positioned enemy would NOT tick — contradicting the heal-target/dummy precedent (DoTs tick at turn-start *regardless* of stasis; the `:4373` prologue + the `:4966` dummy tick both sit OUTSIDE the `!isTurnBlocked` action-body gate, confirmed by the `:4462` comment) and breaking the E5-symmetry invariant.
 
-**Tests:** `perVictimDotTick.integration.test.ts` — C.1 enemy own-HP tick (corrosion uses own HP) + lethal tick→death; C.2 non-heal-target player tick + heal-target still ticks once with accounting/snapshot/dead-skip intact (unification regression); E5-symmetry pin (same carrier ticks identical integers/events both sides); non-positional + DPS-mode regression pins.
+The `:4373` prologue runs once per actor at top-of-turn, BEFORE the kind-branches (attacker `:4452`, walked-team `:4737`, enemy-attacker `:5015`) and OUTSIDE every stasis gate. Widening it to all positioned non-dummy actors therefore covers attacker + walked-team + enemy in **one** site, ticks regardless of stasis on both sides (symmetric), and *is* the "unify the heal-target path" the spec locked for C.2. The dummy enemy (`actor.id === enemy.id`) is excluded → keeps its legacy `:4966` aggregate tick byte-identical. Canonical order is preserved: tick at `:4373` precedes every timed burst (`:4478`/`:4756`/`:5066`, all stasis-gated).
 
-**Detailing checklist when PR-C starts:** complete C0 first and get it reviewed; re-grep all anchors; design the per-victim DoT-tick closure (it will be called at 3+ sites — enemy, attacker, walked-team — so extract like A1/B); carefully preserve every heal-target side-effect during unification (the highest golden-move risk in the epic).
+This still satisfies every spec-locked decision: per-victim HP via `applyVictimDamage`; cumulativeDamage feed suppressed (C0); heal-target side-effects preserved as a branch; both directions symmetric.
+
+### Anchors (this worktree `pr6-dot-ticks`, off PR-B — re-grep before coding)
+- Shared prologue to widen: grep `Task 11b: tick the HEAL TARGET` (~`:4373`), block `:4384-4448`.
+- `perActorDetonation` init (~`:1944`), per-round reset (~`:3832`) — `perActorDot` rides alongside both.
+- Post-round fold: `focus.corrosion`/`focus.inferno` row locals (`:5627-5628`), `totalRoundDamage` (`:5643`, MUST stay focus-only), `totalCorrosionRaw`/`totalInfernoRaw` (`:5650-5651`), surfaced (`:5888-5889`). Mirror the `perActorDetonation` fold at `:5629-5630`/`:5656`.
+- `tickDoTs` def (`:752`); `recipientMaxHp` (`:1948`); `lastTurnCtxByActor` (`:1679`); `playerSink` (`:3160`)/`enemySink` (`:3213`)/`applyIncomingToTarget` (`:3176`); `allPlayerActors` (`:1632`)/`enemyAttackerActors` (`:1739`); `isPositional` usage (`:3649`); `handleDeadTargetSkip` (`:3869`, heal-target-specific — returns false otherwise); `pushSynthesizedFocusSkipTurn()` (`:3886`, no args); Vortex Veil `incomingReductionForHit(incomingAbilitiesOf(id), {…dotType})` (`:4424`); `actor.side` (`'player'|'enemy'`, `:1248`/`:1272`).
+
+### Task C1 — `perActorDot` display plumbing (inert; suite is the guard)
+**Files:** `src/utils/combat/engine.ts`.
+- [ ] Green baseline: `npm test 2>&1 | tail -20`; record count (PR-B base = `3491 passed`). C1 must not change it.
+- [ ] Add `let perActorDot = new Map<string, { corrosion: number; inferno: number }>();` beside `perActorDetonation` (`:1944`).
+- [ ] Reset per round alongside `perActorDetonation` (`:3832`): `perActorDot = new Map();`.
+- [ ] Post-round fold (`:5627-5656`), mirroring `focusPositionalDetonation`:
+  ```ts
+  const focusDot = perActorDot.get(focusActorId);
+  const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
+  const infernoDamage   = focus.inferno   + (focusDot?.inferno   ?? 0);
+  ```
+  Use `corrosionDamage`/`infernoDamage` for the RoundData row + `totalCorrosionRaw += corrosionDamage` / `totalInfernoRaw += infernoDamage`. **DO NOT touch `totalRoundDamage`/`cumulativeDamage`** (stay `focus.corrosion`/`focus.inferno` only — the C0 double-feed guard, identical to the `:5652-5655` detonation comment; add the analogous comment).
+- [ ] `npm test` — count unchanged (`perActorDot` empty everywhere until C2 populates it → `focusDot` undefined → +0). ZERO `.snap` moved.
+
+### Task C2 — unified turn-start DoT-tick prologue (the feature, TDD)
+**Files:** `src/utils/combat/engine.ts`; NEW `src/utils/combat/__tests__/perVictimDotTick.integration.test.ts`.
+
+- [ ] **RED:** author `perVictimDotTick.integration.test.ts` (template: `perVictimTimedDetonation.integration.test.ts` / `perVictimLeech.test.ts` — positioned actors via `__testTapActors`, seed `corrosionEntries`/`infernoEntries`, crit 0 → exact integers). Cases:
+  1. **C.1 enemy own-HP tick:** positioned enemy seeded with focus-applied corrosion+inferno → ticks at its turn against its OWN HP; corrosion baseHp = enemy's own maxHp; `dot-ticked` `targetId = enemy`; `perTargetDamage[enemy]` = tick; focus DPS DoT breakdown reflects the tick (perActorDot fold); the dummy `enemy.currentHp` overwrite is NOT double-fed (assert dummy decline excludes the per-victim tick).
+  2. **C.1 lethal:** tick ≥ enemy HP → `destroyedRound` set, `ship-destroyed` emitted, the enemy's turn skipped (no burst/action).
+  3. **C.2 non-heal-target player:** positioned player seeded with enemy-applied DoTs → ticks at its turn via playerSink against own HP; `dot-ticked` `targetId = player`; NOT in focus DPS (perActorDot stays empty for player-side ticks).
+  4. **C.2 heal-target regression:** heal target still ticks exactly once with `tankDotSnapshot` + healing-accounting (`tankDotDamage`→incoming) + `handleDeadTargetSkip` intact (byte-identical to pre-C2 — the unification regression).
+  5. **E5-symmetry pin:** the SAME DoT carrier (same tier/stacks, same applier ctx) ticks identical integers + `dot-ticked` events as enemy-victim vs player-victim.
+  6. **Stasis pin (the refinement's key decision):** a STASISED positioned victim STILL ticks its DoTs — assert on both a stasised enemy and a stasised player (proves the tick is outside the stasis gate). Non-vacuity: temporarily move the tick inside a gate → this case fails.
+  7. **Non-positional regression:** DPS-mode + healing-mode (dummy `:4966` + heal-target `:4373`) byte-identical (suite-wide + an explicit pin).
+- [ ] **GREEN:** rewrite the `:4384` block (`if (healTarget && actor.id === healTarget.id) { … }`) into the unified prologue. Recommended extraction for clarity (one call site, so optional): inline is fine. Shape:
+  ```ts
+  if (actor.id !== enemy.id) {                       // dummy keeps legacy :4966 tick
+      const isHealTarget = !!healTarget && actor.id === healTarget.id;
+      if (isHealTarget) {
+          // EXISTING heal-target branch — verbatim/UNCHANGED (snapshot + tickDoTs(credit→tankDotDamage)
+          //   + applyIncomingToTarget + handleDeadTargetSkip). Byte-identical; NOT gated on positional.
+      } else {
+          const sideIsPlayer = actor.side === 'player';
+          const opposing = sideIsPlayer ? enemyAttackerActors : allPlayerActors;
+          const hasDots = actor.corrosionEntries.length > 0 || actor.infernoEntries.length > 0;
+          if (hasDots && isPositional(actor.position, opposing)) {
+              let total = 0;
+              tickDoTs({
+                  corrosionEntries: actor.corrosionEntries,
+                  infernoEntries: actor.infernoEntries,
+                  enemyHp: recipientMaxHp(actor.id),               // corrosion baseHp = victim's own max HP
+                  ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                  emitTicked: (dotType, damage) =>
+                      bus.emit({ type: 'dot-ticked', targetId: actor.id, round: r, dotType, damage }),
+                  credit: (sourceId, dotType, damage) => {
+                      total += damage;
+                      if (!sideIsPlayer) {                          // player-applied DoTs on enemy → focus DPS
+                          const e = perActorDot.get(sourceId) ?? { corrosion: 0, inferno: 0 };
+                          e[dotType] += damage;
+                          perActorDot.set(sourceId, e);
+                      }
+                  },
+                  incomingDotReductionPct: (dotType) =>
+                      incomingReductionForHit(incomingAbilitiesOf(actor.id), { didCrit:false,
+                          attackerStealthed:false, victimStealthed:false, victimStasised:false,
+                          hitIndexThisRound:0, dotType }),
+              });
+              if (total > 0) {
+                  applyVictimDamage(total, actor, sideIsPlayer ? playerSink : enemySink,
+                      { byDirectDamage: false });                  // DoT bypass shield; aggregate (no single killer)
+                  roundPerTargetDamage.set(actor.id, (roundPerTargetDamage.get(actor.id) ?? 0) + total);
+              }
+              if (actor.destroyedRound !== undefined) {             // lethal turn-start tick → skip rest of turn
+                  if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
+                  continue;
+              }
+          }
+      }
+  }
+  ```
+  - **Verify** `applyVictimDamage(total, actor, playerSink, {byDirectDamage:false})` is equivalent to the heal-target's `applyIncomingToTarget(total, actor, {byDirectDamage:false})` for the non-heal-target player case (PR-B used `applyVictimDamage(_, _, playerSink)` directly — same primitive; confirm the intake-bucket/penetration accounting matches). If not equivalent, use `applyIncomingToTarget` for the player branch.
+  - The credit callback receives post-Vortex-Veil damage; `tickDoTs` ages entries via `expireStacks` internally (per-victim, once).
+- [ ] Hand-validate EVERY positional delta; NEVER `vitest -u`. Run the WHOLE `npm test` (detonation/DoT fixtures live outside `src/utils/combat` too — `healingGoldenParity`). tsc + lint (max-warnings 0) clean. ZERO `.snap` moved.
+
+### Task C3 — changelog + docs
+- [ ] `UNRELEASED_CHANGES` (`src/constants/changelog.ts`): per-victim DoT ticks now resolve on positioned ships at their own turn-start, both teams (mirror PR-B's wording).
+- [ ] `DocumentationPage.tsx`: extend the DoT-tick clause to "both teams / positioned ships".
+
+### Final: holistic review → open PR-C stacked on PR-B #172.
+
+**NOTE:** pre-commit husky runs full vitest — use `--no-verify` for docs-only commits.
 
 ---
 
