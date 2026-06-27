@@ -51,6 +51,7 @@ import {
     type VictimDamageOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
+import { victimHitDamage } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -2008,6 +2009,10 @@ export function runCombat(input: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
     // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
+    // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
+    // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
+    // for every existing fixture → byte-identical.
+    const counterCritGates = new Map<string, RateGate>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -3219,6 +3224,74 @@ export function runCombat(input: CombatEngineInput): {
         // first round it is built is sufficient. Inert in production (the field is never set).
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
 
+        // G PR1: full mitigated/crit counter walk from the counter owner to the attacker.
+        // Unreferenced dead code until the executor (Task 4) wires it via ctx.applyCounterAttack
+        // → byte-identical now. Reuses applyVictimDamage (no attacked event → no re-counter).
+        const applyCounterAttack = (
+            ownerId: string,
+            attackerId: string,
+            abilityId: string,
+            multiplier: number,
+            hits: number
+        ): void => {
+            const owner = allActorsById.get(ownerId);
+            const attacker = allActorsById.get(attackerId);
+            // Guards: owner alive, attacker alive, not self (spec rule 6).
+            if (!owner || !attacker) return;
+            if (owner.destroyedRound !== undefined) return;
+            if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
+
+            const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
+            const attackerStats = effectiveStatsOf(statusEngine, selfBuffLookup, attacker);
+
+            // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
+            const didCrit = rollRateGate(
+                counterCritGates,
+                `${ownerId}:${abilityId}`,
+                ownerStats.crit / 100
+            );
+
+            const raw = victimHitDamage(
+                {
+                    effectiveAttack: ownerStats.attack,
+                    multiplierPct: multiplier * hits,
+                    secondaryStatValue: 0,
+                    hits,
+                    effectiveCritDamage: ownerStats.critDamage,
+                    outgoingDamageBuffPct: 0,
+                    incomingDamageModifierPct: 0,
+                    // effectiveStatsOf.defensePenetration is BASE-only (buff folds separately) —
+                    // acceptable approximation (no Stalwart fixture; counters ignore pen-buffs).
+                    defensePenetrationPct: ownerStats.defensePenetration,
+                    attackerAffinity: owner.affinity ?? 'antimatter',
+                },
+                {
+                    defence: attackerStats.defence,
+                    defenceModifierPct: 0,
+                    affinity: attacker.affinity ?? 'antimatter',
+                },
+                didCrit,
+                1 // roleScale: a counter is a single full hit
+            );
+            if (raw <= 0) return;
+
+            const sink = attacker.side === 'player' ? playerSink : enemySink;
+            applyVictimDamage(raw, attacker, sink, {
+                killerId: owner.id,
+                byDirectDamage: true,
+                isCounter: true,
+                // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
+                // shieldPenetration field; we deliberately pass 0.
+                shieldPenetrationPct: 0,
+                bombPortion: 0,
+            });
+            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect).
+            roundPerTargetDamage.set(
+                attacker.id,
+                (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
+            );
+        };
+
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
         // injected into `runPlayerTurn` (playerTurn.ts), which calls it AFTER the scheduled
         // debuffs (sourceFired) but BEFORE the ability timed-debuff loop. This ordering ensures:
@@ -3813,6 +3886,7 @@ export function runCombat(input: CombatEngineInput): {
                         creditReactiveDamage: (ownerId: string, amount: number): void => {
                             creditDamage(ownerId, 'direct', amount);
                         },
+                        applyCounterAttack,
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's

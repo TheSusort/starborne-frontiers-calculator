@@ -785,6 +785,16 @@ export interface IntentExecContext {
      *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
      *  sees it. Absent → the damage branch is inert (unit fixtures / DPS mode w/o delegate). */
     creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
+     *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
+     *  apply path (no attacked event → no re-counter). */
+    applyCounterAttack?: (
+        ownerId: string,
+        attackerId: string,
+        abilityId: string,
+        multiplier: number,
+        hits: number
+    ) => void;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
