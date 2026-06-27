@@ -402,20 +402,103 @@ Add another `it(...)`:
     });
 ```
 
-- [ ] **Step 5: Run `enemyActions.test.ts` + the integration test — verify all pass**
+- [ ] **Step 5: Run `enemyActions.test.ts` + the integration test — verify the lift cases pass**
 
 Run: `npx vitest --run src/utils/combat/__tests__/enemyActions.test.ts src/utils/combat/__tests__/enemyCleanse.integration.test.ts`
-Expected: ALL PASS.
+Expected: the E5-seeded, partial, and negative cases PASS. The pre-existing "Task 5b" Grif test in `enemyActions.test.ts` will still FAIL here — it is handled in Task 3b below. Do NOT commit yet.
 
-> If you deferred the Task 2 commit (recommended): the working tree now contains the lift (Task 2) + these test updates. Run `npx vitest --run src/utils/combat` to confirm the WHOLE combat suite is green with ZERO `.snap` movement, then make a single combined commit:
+---
+
+## Task 3b: Reconcile the pre-existing "Task 5b" Grif test with the symmetric cadence
+
+**Why this exists:** `enemyActions.test.ts` has a pre-existing test (the `Phase 4c PR 4 Task 5b` describe, ~line 705, `it('enemy cleanse cast emits cleanse-performed (enemy id), no player credit, Grif procs')`) that asserts the OLD always-fire cadence: an enemy whose active is `cleanse self count:1` — **with no debuff ever applied to it** — fires `cleanse-performed` every round and drives a focus-player Grif `on-enemy-cleansed` damage proc (`grifDamage === perRoundProc * 3`). Under the lift, a no-op enemy cleanse removes nothing → no `cleanse-performed` → no Grif proc. This is the exact open-Q2 Arum/Grif reactor behavior change the spec approved (full symmetry). The fix splits cleanly: (a) the old test's harness already models "enemy cleanse with nothing to remove", so it becomes the NEGATIVE/cadence assertion; (b) the positive Grif chain (proc fires on a REAL removal) moves to the positional integration test, where landing a debuff on the enemy already works (Task 1's harness).
+
+Key facts (verified): `creditReactiveDamage(ownerId, amount)` → `creditDamage(ownerId, 'direct', amount)` (engine.ts:3904), so a Grif `on-enemy-cleansed` proc credits the `direct` bucket → surfaces in `result.rounds[r].directDamage` on BOTH paths. A positional player's own ATTACK damage credits the per-target bucket (`perTargetDamage`), NOT `directDamage` — so reading `directDamage` isolates the Grif reactive even when the focus also attacks.
+
+**Files:**
+- Modify: `src/utils/combat/__tests__/enemyActions.test.ts` (the Task 5b test)
+- Modify: `src/utils/combat/__tests__/enemyCleanse.integration.test.ts` (add a Grif positive case)
+
+- [ ] **Step 1: Retarget the Task 5b test to assert the new symmetric cadence**
+
+Update the existing `it('enemy cleanse cast emits cleanse-performed (enemy id), no player credit, Grif procs')` (~line 755) to reflect that a no-op enemy cleanse now removes nothing → no event → no Grif proc. Keep the no-player-credit assertion (still true). Rename the `it(...)` title to describe the new behavior, e.g. `'enemy cleanse with nothing to remove emits NO cleanse-performed and does not proc Grif (symmetric cadence)'`. Replace the three assertion blocks (the `cleanseEvents`, the `enemyRows` credit check, and the `grifDamage` block at ~lines 792–819) with:
+
+```ts
+        // SYMMETRIC CADENCE: the enemy cleanse has nothing to remove (no debuff was applied to
+        // enemy1), so real removal is 0 → NO cleanse-performed fires (matches the player path).
+        const cleanseEvents = events.filter((e) => e.type === 'cleanse-performed');
+        expect(cleanseEvents).toHaveLength(0);
+
+        // The enemy credited NO player healing buckets under its own id (unchanged by the lift).
+        const enemyRows = (result.healing?.rounds ?? []).map((rd) => rd.perActor.get('enemy1'));
+        for (const row of enemyRows) {
+            if (!row) continue;
+            expect(row.cleanseCount ?? 0).toBe(0);
+            expect(row.directHeal ?? 0).toBe(0);
+            expect(row.effectiveHeal ?? 0).toBe(0);
+        }
+
+        // No cleanse-performed → the focus's on-enemy-cleansed Grif proc never fires → no damage.
+        const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
+        expect(grifDamage).toBe(0);
+```
+
+Update the describe-block header comment (~lines 700–704) to note the test now asserts the no-removal cadence; the positive Grif chain lives in `enemyCleanse.integration.test.ts`.
+
+- [ ] **Step 2: Add a Grif positive case to the positional integration test**
+
+In `src/utils/combat/__tests__/enemyCleanse.integration.test.ts`, add a focus-side Grif `on-enemy-cleansed` damage passive to a player who ALSO applies a removable debuff to the enemy, so the enemy's real cleanse drives the proc. Add a new `it(...)` in a new describe block. Build a player slot list = the existing `damageThenDebuff()` active PLUS a Grif passive:
+
+```ts
+const grifPassive = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'ec-grif',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-enemy-cleansed',
+            conditions: [],
+            config: { type: 'damage', multiplier: 200, noCrit: true },
+        } as unknown as Ability,
+    ],
+});
+
+describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on REAL removal', () => {
+    it('enemy removes a player-applied debuff → focus Grif on-enemy-cleansed proc fires', () => {
+        const input = playerVsEnemy(damageThenDebuff(), [enemyAt('foe', 'M4', selfCleanseSkills(2))]);
+        // Inject the Grif passive alongside the player's debuff active.
+        input.shipSkills = { slots: [damageThenDebuff(), grifPassive()] };
+        const result = runCombat(input);
+        // The Grif on-enemy-cleansed reactive credits the 'direct' bucket (creditReactiveDamage →
+        // creditDamage(_, 'direct', _)). The player's OWN attack credits perTargetDamage, so
+        // directDamage isolates the proc. Real removal happened → proc fired → directDamage > 0.
+        const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
+        expect(grifDamage).toBeGreaterThan(0);
+    });
+});
+```
+
+> If `damageThenDebuff`/`playerVsEnemy`/`selfCleanseSkills` are defined inside another describe's scope, hoist the helpers to module scope (or duplicate minimally) so this new describe can use them. Keep it compiling and DRY.
+
+- [ ] **Step 3: Verify the whole combat suite is green with ZERO `.snap` movement**
+
+Run: `npx vitest --run src/utils/combat`
+Expected: 0 failed. Confirm `git status --porcelain | grep '\.snap'` is empty. Then `npx tsc --noEmit` clean.
+
+- [ ] **Step 4: Single combined commit (lift + all test changes)**
+
+The working tree now holds: the lift (`playerTurn.ts`), the `enemyActions.test.ts` changes (E5 seeding + partial + negative + the retargeted Task 5b), and the integration-test Grif addition. Husky runs the full suite on commit — it should pass now, so do NOT use `--no-verify`.
 
 ```bash
-git add src/utils/combat/playerTurn.ts src/utils/combat/__tests__/enemyActions.test.ts
+git add src/utils/combat/playerTurn.ts src/utils/combat/__tests__/enemyActions.test.ts src/utils/combat/__tests__/enemyCleanse.integration.test.ts
 git commit -m "feat(combat): lift enemy on-cast cleanse removal (symmetric to E5/shield lifts)
 
 Enemy cleanse abilities now remove player-applied debuffs via the side-agnostic
 statusEngine.cleanse over side-aware recipients; cleanse-performed reflects the REAL
 removed count on both sides. Player cleanseCount metric suppressed on the enemy path.
+A no-op enemy cleanse no longer fires cleanse-performed (symmetric cadence) — the
+on-enemy-cleansed Grif chain now requires a real removal.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
