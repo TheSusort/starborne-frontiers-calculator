@@ -144,6 +144,19 @@ const GEAR_SET_ABILITIES: Partial<
         config: { type: 'shield', pct: 4, basis: 'hp' },
         autoFilled: true,
     }),
+    // Boost (4pc set): every buff the wearer APPLIES lasts +1 turn (caster-side). Modeled NOT
+    // as a damage/heal fold but as a marker the engine collects into a per-owner extension map,
+    // applied at the status-engine buff-duration write seams. Top-level type:'modifier' is a
+    // placeholder (engine keys on config.type:'buff-duration-extension', like REFLECT). The
+    // modifier fold ignores it (applyAbilities.ts skips config.type !== 'modifier').
+    BOOST: () => ({
+        type: 'modifier',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'buff-duration-extension', turns: 1 },
+        autoFilled: true,
+    }),
 };
 
 // ---------------------------------------------------------------------------

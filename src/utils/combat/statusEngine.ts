@@ -33,6 +33,10 @@ export interface StatusEngineInput {
      *  not cleared) and the buffName is collected into sourceFired's `resistedEnemy`.
      *  Optional — defaulting to "always lands" keeps the unit tests gate-free. */
     landsTimedEnemyApplication?: (buff: SelectedGameBuff) => boolean;
+    /** Boost gear set: extra turns to add to a TIMED SELF-SIDE buff applied by `casterId`
+     *  (the firing source for scheduled buffs, `status.casterId` for ability buffs). Returns 0
+     *  for non-wearers. Default → always 0 (byte-identical: no wearer, no change). */
+    buffDurationExtensionFor?: (casterId: string) => number;
 }
 
 /** Effect payload of an ability-sourced status, folded into the round totals by the engine. */
@@ -346,6 +350,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
         landsTimedEnemyApplication = fn;
     };
+    const buffDurationExtensionFor = input.buffDurationExtensionFor ?? (() => 0);
 
     // Categorized collections — kept as named closure variables (not inlined) so
     // Task 6 can append ability-sourced statuses to them later.
@@ -630,7 +635,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // the DEFAULT_ENEMY_TARGET on the enemy side (legacy semantics: scheduled buffs/debuffs
     // ride the attacker's cadence and route to the singular default stores — byte-identical
     // to the pre-Task-1 enemyMap/persistentEnemy single-store path).
-    const upsertBuff = (buff: SelectedGameBuff, side: 'self' | 'enemy') => {
+    const upsertBuff = (buff: SelectedGameBuff, side: 'self' | 'enemy', casterId?: string) => {
         const map = side === 'self' ? getSelfMap('attacker') : getEnemyMap(DEFAULT_ENEMY_TARGET);
         // Persistent stacking statuses route by NAME before the family-rule timed path: this
         // application landed (the landing hook already ran at the call site), so add a stack
@@ -642,11 +647,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
         if (typeof buff.skillDuration !== 'number') return;
         const { familyKey, tier } = deriveFamilyKey(buff.buffName);
+        // Boost: +N turns on a buff the caster APPLIES, self-side only (debuffs land enemy-side).
+        // The `&& casterId` is defensive: scheduled buffs always carry a concrete firing sourceId.
+        const extension = side === 'self' && casterId ? buffDurationExtensionFor(casterId) : 0;
+        const duration = buff.skillDuration + extension;
         const existing = map.get(familyKey);
-        if (!familyApplicationWins(existing, tier, buff.skillDuration)) return;
+        if (!familyApplicationWins(existing, tier, duration)) return;
         map.set(familyKey, {
             buffName: buff.buffName,
-            turnsRemaining: buff.skillDuration,
+            turnsRemaining: duration,
             tier,
             appliedSeq: nextAppliedSeq(),
         });
@@ -708,7 +717,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
         // Timed scheduled buffs (this source's) whose skillSource matches the fired slot.
         for (const buff of sets.timedSelf) {
-            if (buff.skillSource === slot) upsertBuff(buff, 'self');
+            if (buff.skillSource === slot) upsertBuff(buff, 'self', sourceId);
         }
         // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
@@ -1127,15 +1136,20 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const map =
             status.side === 'self' ? getSelfMap(selfEffectiveId) : getEnemyMap(enemyEffectiveId);
         const { familyKey, tier } = deriveFamilyKey(status.payload.buffName);
+        // Boost: +N turns on a buff the caster APPLIES, self-side only (debuffs land enemy-side).
+        // Caster fail-safe: fixtures may omit casterId → default to 'attacker'.
+        const extension =
+            status.side === 'self' ? buffDurationExtensionFor(status.casterId ?? 'attacker') : 0;
+        const duration = status.duration + extension;
         const existing = map.get(familyKey);
         // A landed-but-family-blocked application is silently absorbed: the landing roll
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
         // hook), so a blocked application is NOT recorded as resisted — the stronger/longer
         // buff simply persists and this entry never enters the timed-ability folding.
-        if (!familyApplicationWins(existing, tier, status.duration)) return;
+        if (!familyApplicationWins(existing, tier, duration)) return;
         map.set(familyKey, {
             buffName: status.payload.buffName,
-            turnsRemaining: status.duration,
+            turnsRemaining: duration,
             tier,
             payload: status.payload,
             casterId: status.casterId,

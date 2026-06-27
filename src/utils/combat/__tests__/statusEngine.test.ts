@@ -1649,3 +1649,154 @@ describe('clearRemovable', () => {
         expect(eng.timedAbilityStatuses('self', 'tank')).toHaveLength(1);
     });
 });
+
+describe('buffDurationExtensionFor (Boost)', () => {
+    // Boost gear set: +1 turn on every TIMED SELF-SIDE buff its wearer APPLIES (caster-side).
+    // Enemy debuffs and non-finite-duration buffs are excluded. The lookup is keyed by the
+    // APPLYING caster id: status.casterId for ability buffs, the firing sourceId for scheduled
+    // buffs. Default (no field) → always 0, byte-identical.
+
+    const boostExt = (id: string): number => (id === 'booster' ? 1 : 0);
+
+    const timedAbility = (
+        buffName: string,
+        duration: number,
+        side: 'self' | 'enemy',
+        casterId?: string
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName, stacks: 1, parsedEffects: { attack: 10 } },
+        side,
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+        casterId,
+    });
+
+    it('self-side timed ability from a wearer extends +1', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+        });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedAbility('Attack Up', 2, 'self', 'booster'));
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(3);
+    });
+
+    it('self-side timed ability from a non-wearer is unchanged', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+        });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedAbility('Attack Up', 2, 'self', 'plain'));
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(2);
+    });
+
+    it('enemy-side timed ability from a wearer is NOT extended (debuffs excluded)', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+        });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedAbility('Def Down', 2, 'enemy', 'booster'));
+        expect(eng.timedAbilityStatuses('enemy')[0].active.turnsRemaining).toBe(2);
+    });
+
+    it('family rule: extended duration is used in the win check (3 > existing 2 → lands at 3)', () => {
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+        });
+        eng.beginRound(1);
+        // Pre-existing same-family entry at base duration 2, applied by a non-wearer.
+        eng.applyTimedAbilityStatus(1, timedAbility('Attack Up II', 2, 'self', 'plain'));
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(2);
+        // Wearer re-applies the SAME family at base duration 2 → extended to 3, 3 > 2 → wins.
+        eng.applyTimedAbilityStatus(1, timedAbility('Attack Up II', 2, 'self', 'booster'));
+        const active = eng.timedAbilityStatuses('self');
+        expect(active).toHaveLength(1);
+        expect(active[0].active.turnsRemaining).toBe(3);
+    });
+
+    it('scheduled family rule: extended duration is used in the win check (3 > existing 2 → lands at 3)', () => {
+        // Scheduled-path mirror of the ability-path family-rule test above. Both buffs store
+        // under the 'attacker' carrier (scheduled self-buffs always route there); the family
+        // win-check must use the EXTENDED 3, not the un-extended base 2.
+        const plainBuff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+        const boosterBuff = makeBuff('Attack Up II', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+            teamSources: [
+                { sourceId: 'plain', selfBuffs: [plainBuff], enemyDebuffs: [] },
+                { sourceId: 'booster', selfBuffs: [boosterBuff], enemyDebuffs: [] },
+            ],
+        });
+        eng.beginRound(1);
+        // Pre-existing same-family entry at base duration 2, applied by a non-wearer → 2.
+        eng.sourceFired('plain', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up II', turnsRemaining: 2 },
+        ]);
+        // Wearer re-fires the SAME family at base duration 2 → extended to 3, 3 > 2 → wins.
+        // (An un-extended 2 > 2 would NOT win — this guards the scheduled dual-write.)
+        eng.sourceFired('booster', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up II', turnsRemaining: 3 },
+        ]);
+    });
+
+    it('scheduled self-buff: gated on the FIRING sourceId, not the attacker carrier', () => {
+        const boosterBuff = makeBuff('Attack Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+            teamSources: [{ sourceId: 'booster', selfBuffs: [boosterBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        eng.sourceFired('booster', 'active', 1);
+        // Scheduled self-buffs store under the 'attacker' carrier, but the +1 is gated on the
+        // firing source ('booster') — so this lands at 3 even though the carrier is 'attacker'.
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up', turnsRemaining: 3 },
+        ]);
+    });
+
+    it('scheduled self-buff from a non-wearer source is unchanged', () => {
+        const plainBuff = makeBuff('Attack Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [],
+            enemyDebuffs: [],
+            buffDurationExtensionFor: boostExt,
+            teamSources: [{ sourceId: 'plain', selfBuffs: [plainBuff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        eng.sourceFired('plain', 'active', 1);
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up', turnsRemaining: 2 },
+        ]);
+    });
+
+    it('no buffDurationExtensionFor field → default extends nothing', () => {
+        const buff = makeBuff('Attack Up', { skillSource: 'active', skillDuration: 2 });
+        const eng = createStatusEngine({
+            selfBuffs: [buff],
+            enemyDebuffs: [],
+            teamSources: [{ sourceId: 'booster', selfBuffs: [buff], enemyDebuffs: [] }],
+        });
+        eng.beginRound(1);
+        eng.sourceFired('booster', 'active', 1);
+        eng.applyTimedAbilityStatus(1, timedAbility('Shield Up', 2, 'self', 'booster'));
+        expect(eng.snapshot('attacker').activeSelfBuffs).toEqual([
+            { buffName: 'Attack Up', turnsRemaining: 2 },
+        ]);
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(2);
+    });
+});
