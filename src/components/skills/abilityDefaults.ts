@@ -8,6 +8,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
     switch (type) {
         case 'damage':
             return { type: 'damage', multiplier: 100 };
+        case 'counter':
+            return { type: 'counter', multiplier: 100 };
         case 'additional-damage':
             return { type: 'additional-damage', stat: 'hp', pct: 10 };
         case 'modifier':
@@ -90,6 +92,7 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
 
 const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     damage: 'enemy',
+    counter: 'enemy',
     'additional-damage': 'enemy',
     modifier: 'self',
     buff: 'self',
@@ -122,7 +125,11 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
     id,
     type,
     target: DEFAULT_TARGETS[type],
-    trigger: 'on-cast',
+    // A counter only ever fires on the victim-side `on-attacked` path (the parser builds it
+    // that way and the combat executor reads that trigger), so default it correctly — the
+    // helper should always yield a semantically valid ability, even though counters are
+    // currently parser-generated rather than authored via the picker.
+    trigger: type === 'counter' ? 'on-attacked' : 'on-cast',
     conditions: [],
     config: makeDefaultConfig(type),
 });

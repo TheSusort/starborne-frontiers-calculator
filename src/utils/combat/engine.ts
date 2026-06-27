@@ -51,6 +51,7 @@ import {
     type VictimDamageOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars } from './victimDamage';
+import { victimHitDamage } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
@@ -2008,6 +2009,10 @@ export function runCombat(input: CombatEngineInput): {
     // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
     // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
+    // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
+    // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
+    // for every existing fixture → byte-identical.
+    const counterCritGates = new Map<string, RateGate>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -2060,6 +2065,11 @@ export function runCombat(input: CombatEngineInput): {
     // Mirrors repairedThisRound. Feeds the not-hit-this-round gate (Alacrity). Cleared each
     // round alongside repairedThisRound.
     const hitThisRound = new Set<string>();
+
+    // G PR1: once-per-attack guard. Cleared at every actor turn-start so all per-hit `attacked`
+    // events of ONE attack collapse to a single counter, while a separate later attack (a different
+    // turn) counters again. NOT per-round.
+    const counterFiredThisTurn = new Set<string>();
 
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
@@ -2721,6 +2731,9 @@ export function runCombat(input: CombatEngineInput): {
                 /** True when THIS application is itself reflected thorns (Reflect gear set). The
                  *  reflection block skips when set → no ping-pong (a reflected hit never reflects). */
                 isReflected?: boolean;
+                /** G PR1: true when THIS application is a counterattack (Stalwart). The reflect
+                 *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
+                isCounter?: boolean;
             }
         ): VictimDamageOutcome => {
             // D-PR3: a hit may be reduced by proc block BEFORE it is recorded/absorbed. `damage`
@@ -3030,7 +3043,13 @@ export function runCombat(input: CombatEngineInput): {
             // The attacker.destroyedRound guard below prevents posthumous reflection TO an
             // already-dead attacker, but the WEARER dying on the same hit is intentional and
             // covered by test case (e).
-            if (!cause?.isReflected && hpDamage > 0 && cause?.byDirectDamage !== false) {
+            // !cause?.isCounter is loop-safe: a counter application must not itself be reflected.
+            if (
+                !cause?.isReflected &&
+                !cause?.isCounter &&
+                hpDamage > 0 &&
+                cause?.byDirectDamage !== false
+            ) {
                 // Direct slice of the net HP damage: exclude the bomb portion by the raw direct
                 // fraction of the post-block total. bombPortion 0 → directFraction 1 (full reflect);
                 // bombPortion === total → directFraction 0 → basis 0 → skipped below.
@@ -3209,6 +3228,85 @@ export function runCombat(input: CombatEngineInput): {
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
         // first round it is built is sufficient. Inert in production (the field is never set).
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
+
+        // G PR1: full mitigated/crit counter walk from the counter owner to the attacker.
+        // Unreferenced dead code until the executor (Task 4) wires it via ctx.applyCounterAttack
+        // → byte-identical now. Reuses applyVictimDamage (no attacked event → no re-counter).
+        const applyCounterAttack = (
+            ownerId: string,
+            attackerId: string,
+            abilityId: string,
+            multiplier: number,
+            hits: number
+        ): void => {
+            const owner = allActorsById.get(ownerId);
+            const attacker = allActorsById.get(attackerId);
+            // Guards: owner alive, attacker alive, not self (spec rule 6).
+            if (!owner || !attacker) return;
+            if (owner.destroyedRound !== undefined) return;
+            if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
+
+            const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
+            const attackerStats = effectiveStatsOf(statusEngine, selfBuffLookup, attacker);
+
+            // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
+            const didCrit = rollRateGate(
+                counterCritGates,
+                `${ownerId}:${abilityId}`,
+                ownerStats.crit / 100
+            );
+
+            const raw = victimHitDamage(
+                {
+                    effectiveAttack: ownerStats.attack,
+                    // `multiplier` is the PER-HIT value, so the full counter total is
+                    // multiplier × hits. The counter is modeled as ONE consolidated applied
+                    // hit, so fold the count into the multiplier and pass hits:1 — passing the
+                    // real `hits` here would make victimHitDamage re-split (preCritDamage / hits)
+                    // and silently collapse a multi-hit counter back to a single hit's damage.
+                    // Byte-identical for single-hit counters (hits === 1).
+                    multiplierPct: multiplier * hits,
+                    secondaryStatValue: 0,
+                    hits: 1,
+                    effectiveCritDamage: ownerStats.critDamage,
+                    outgoingDamageBuffPct: 0,
+                    // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
+                    // incomingReductionForHit): the counter does NOT apply the attacker's
+                    // incoming-damage-reduction abilities. Harmless today (no Stalwart fixture);
+                    // PR2 may thread incomingReductionForHit(incomingAbilitiesOf(attacker.id))
+                    // here to match the Reflect path exactly.
+                    incomingDamageModifierPct: 0,
+                    // effectiveStatsOf.defensePenetration is BASE-only (buff folds separately) —
+                    // acceptable approximation (no Stalwart fixture; counters ignore pen-buffs).
+                    defensePenetrationPct: ownerStats.defensePenetration,
+                    attackerAffinity: owner.affinity ?? 'antimatter',
+                },
+                {
+                    defence: attackerStats.defence,
+                    defenceModifierPct: 0,
+                    affinity: attacker.affinity ?? 'antimatter',
+                },
+                didCrit,
+                1 // roleScale: a counter is a single full hit
+            );
+            if (raw <= 0) return;
+
+            const sink = attacker.side === 'player' ? playerSink : enemySink;
+            applyVictimDamage(raw, attacker, sink, {
+                killerId: owner.id,
+                byDirectDamage: true,
+                isCounter: true,
+                // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
+                // shieldPenetration field; we deliberately pass 0.
+                shieldPenetrationPct: 0,
+                bombPortion: 0,
+            });
+            // Surface on the attacker's incoming so it appears on the HP curve (mirror Reflect).
+            roundPerTargetDamage.set(
+                attacker.id,
+                (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
+            );
+        };
 
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
         // injected into `runPlayerTurn` (playerTurn.ts), which calls it AFTER the scheduled
@@ -3804,6 +3902,8 @@ export function runCombat(input: CombatEngineInput): {
                         creditReactiveDamage: (ownerId: string, amount: number): void => {
                             creditDamage(ownerId, 'direct', amount);
                         },
+                        applyCounterAttack,
+                        counterFiredThisTurn,
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's
@@ -4070,6 +4170,11 @@ export function runCombat(input: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+
+                // G PR1: reset the once-per-attack counter guard at each actor turn-start so a
+                // later attack (a different turn) can counter again while all per-hit `attacked`
+                // events of ONE attack collapse to a single counter.
+                counterFiredThisTurn.clear();
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
                 // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
@@ -4988,6 +5093,9 @@ export function runCombat(input: CombatEngineInput): {
                                     targetId: tgt.id,
                                     attackerId: actor.id,
                                     round: r,
+                                    // `tgt` is the focus/primary victim today; covered-cell
+                                    // emission (future) would pass the real per-victim role.
+                                    isPrimaryTarget: true,
                                     ...(hitCrit ? { didCrit: true } : {}),
                                     ...(damage > 0 ? { damage } : {}),
                                 });

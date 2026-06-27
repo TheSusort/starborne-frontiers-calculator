@@ -188,6 +188,42 @@ export function parseSkillDamage(text: string): number {
     return 0;
 }
 
+/** A parsed counterattack consequence (Combat G PR1: Stalwart shape only). */
+export interface ParsedCounterAbility {
+    /** raw percentage of the OWNER's effective attack, e.g. 30/70. */
+    multiplier: number;
+    /** true when the trigger clause says "as a primary target" (Stalwart). */
+    requirePrimaryTarget: boolean;
+}
+
+/**
+ * Parses a counterattack consequence from PASSIVE skill text (Combat G PR1: Stalwart ONLY).
+ *
+ * Recognizes the shape: "When this Unit is directly damaged [as a primary target], it deals
+ * <unit-damage>X% damage</unit-damage> to that enemy …". The discriminator is the consequence
+ * verb — "it deals X% damage to that enemy" inside a "directly damaged" trigger clause. Heal
+ * ("repairs"), shield ("gains a Shield"), and reflect ("reflects X% of the Damage taken")
+ * consequences are NOT counters and produce nothing here.
+ *
+ * PR2 (Nyxen shield-hit, Centurion retaliate/adjacent-ally) is intentionally NOT handled.
+ */
+export function parseCounterAbilities(
+    text: string | null | undefined
+): ParsedCounterAbility | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    // Trigger clause + counter consequence must co-occur in the same sentence.
+    // Stalwart: "When this Unit is directly damaged as a primary target, it deals 30% damage
+    // to that enemy …". Anchor the % on the "deals X% damage to that enemy" consequence.
+    const re =
+        /when\s+this\s+unit\s+is\s+directly\s+damaged(?<primary>\s+as\s+a\s+primary\s+target)?[^.;]*?\bit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+to\s+that\s+enemy/i;
+    const m = re.exec(plain);
+    if (!m) return null;
+    const multiplier = parseFloat(m[2]);
+    if (isNaN(multiplier)) return null;
+    return { multiplier, requirePrimaryTarget: Boolean(m.groups?.primary) };
+}
+
 /**
  * Returns the secondary stat-based damage from a skill, e.g.
  * "additional damage equal to <unit-damage>80%</unit-damage> of its Defense".

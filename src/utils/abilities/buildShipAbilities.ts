@@ -20,6 +20,7 @@ import {
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
     parseSkillDamage,
+    parseCounterAbilities,
     parseSecondaryDamage,
     parseConditionalDamage,
     parseChargeGain,
@@ -683,7 +684,33 @@ function abilitiesFromText(
         new RegExp(`<unit-damage>\\s*${escNum(mult)}%\\s*damage`, 'i')
     );
     const damagePos = damageTagPos >= 0 ? damageTagPos : text.search(/<unit-damage>/i);
-    if (mult > 0) {
+    // Combat G PR1: on a PASSIVE, the "When this Unit is directly damaged as a primary target,
+    // it deals X% damage to that enemy" shape (Stalwart) is a reactive COUNTERATTACK, not an
+    // on-cast base damage. Re-type that component to a `counter` ability (on-attacked,
+    // requirePrimaryTarget) when the parsed counter multiplier matches the base damage the tag
+    // carries. Heal/shield/reflect "directly damaged" consequences are not matched by
+    // parseCounterAbilities, so they keep their existing parse. PR2 (Nyxen/Centurion) is unhandled.
+    const counter = slot === 'passive' ? parseCounterAbilities(text) : null;
+    if (mult > 0 && counter && counter.multiplier === mult) {
+        const hits = parseHitCount(text);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: {
+                    type: 'counter',
+                    multiplier: mult,
+                    ...(hits !== undefined ? { hits } : {}),
+                    ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                },
+                autoFilled: true,
+            },
+            pos: damagePos >= 0 ? damagePos : MAX_POS,
+        });
+    } else if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
         out.push({
