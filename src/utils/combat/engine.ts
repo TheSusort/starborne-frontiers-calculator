@@ -4941,6 +4941,13 @@ export function runCombat(input: CombatEngineInput): {
                             let shieldBefore = 0;
                             let hpDamage = 0;
                             let barriered = false;
+                            // Symmetric shieldWasHit: capture the FOCUS player victim's shield
+                            // outcome on the positional path (the non-positional `else` branch binds
+                            // shieldBefore/hpDamage/barriered directly; positional leaves them 0).
+                            // First-hit-focus victim matched by victim.id === tgt.id; OR'd across the
+                            // attack's hits so an early shield-denting hit still counts.
+                            let positionalShieldWasHit = false;
+                            let positionalShieldCaptured = false;
                             if (enemyPositional) {
                                 // Opposing roster + victim wrapper from the per-side bindings
                                 // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -4983,8 +4990,17 @@ export function runCombat(input: CombatEngineInput): {
                                     // off the damage IT took, with the per-victim Barrier /
                                     // requiresHpDamage gates — mirroring the non-positional block
                                     // below, per victim.
-                                    onVictimResolved: (victim, dmg, outcome) =>
-                                        procTakenLeechesPerVictim(victim, dmg, outcome),
+                                    onVictimResolved: (victim, dmg, outcome) => {
+                                        procTakenLeechesPerVictim(victim, dmg, outcome);
+                                        if (victim.id === tgt.id) {
+                                            positionalShieldCaptured = true;
+                                            positionalShieldWasHit =
+                                                positionalShieldWasHit ||
+                                                (!outcome.barriered &&
+                                                    outcome.shieldBefore > 0 &&
+                                                    outcome.hpDamage < dmg);
+                                        }
+                                    },
                                 });
                             } else {
                                 ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
@@ -5089,8 +5105,11 @@ export function runCombat(input: CombatEngineInput): {
                             // absorbed = damage - hpDamage when not barriered; shieldBefore>0 guards a
                             // "had a shield" precondition. Non-positional path only (positional leaves
                             // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
-                            const shieldWasHit =
-                                !barriered && shieldBefore > 0 && hpDamage < damage;
+                            // Positional path captures the focus victim's per-hit shield outcome
+                            // (Step 3); the non-positional else-branch keeps the aggregate fallback.
+                            const shieldWasHit = positionalShieldCaptured
+                                ? positionalShieldWasHit
+                                : !barriered && shieldBefore > 0 && hpDamage < damage;
                             emitAttacked({
                                 bus,
                                 round: r,
