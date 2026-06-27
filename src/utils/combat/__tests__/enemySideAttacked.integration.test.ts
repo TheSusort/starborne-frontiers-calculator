@@ -1,6 +1,10 @@
 /**
- * enemySideAttacked.integration.test.ts — Task 2 (Step 3): POSITIONAL `shieldWasHit` on the
- * enemy→player path so a PLAYER Nyxen counters a POSITIONAL enemy attacker.
+ * enemySideAttacked.integration.test.ts — enemy-side reactive emission (positional two-team sim).
+ *
+ * Task 2 (Step 3): POSITIONAL `shieldWasHit` on the enemy→player path so a PLAYER Nyxen counters
+ * a POSITIONAL enemy attacker (below). Task 3: the symmetric player→enemy `attacked` emit so
+ * ENEMY ships react when the player hits them — enemy Stalwart/Nyxen/Centurion counters + a
+ * representative non-counter on-attacked reactive (see the "Task 3" section further down).
  *
  * The existing Nyxen end-to-end test (counterAttack.integration.test.ts) drives the
  * NON-positional path (`counterBase`, no enemy position/target/pattern), where the enemy's
