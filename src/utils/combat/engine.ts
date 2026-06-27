@@ -3657,7 +3657,17 @@ export function runCombat(input: CombatEngineInput): {
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
                 // returns a `positionalDetonation` recipe for the per-victim detonation loop below
                 // to apply. Conditional spread → non-positional turns omit the key → byte-identical.
-                ...(aoePattern != null && aoeTarget != null && tgt.position != null
+                //
+                // SCOPED TO THE FOCUS ATTACKER (PR1): only the focus-turn site consumes the recipe
+                // (the per-victim detonation loop). The walked-team and enemy-attacker sites have no
+                // such loop yet, so setting `positional` for them would skip their anchor detonation
+                // and silently DROP it (recipe ignored). Gating on focusActorId keeps team/enemy on
+                // their prior anchor-detonation path (byte-identical) until PR2/PR3 wire the loop to
+                // those sites symmetrically.
+                ...(a.id === focusActorId &&
+                aoePattern != null &&
+                aoeTarget != null &&
+                tgt.position != null
                     ? { positional: true }
                     : {}),
                 // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
