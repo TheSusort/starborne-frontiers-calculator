@@ -2340,18 +2340,20 @@ describe('healingGoldenParity', () => {
     // — it emits `cleanse-performed` (casterId = enemy id) each cast, event-only (no enemy
     // numeric, no player-map credit), speed 50 → acts AFTER the focus.
     //
+    // SYMMETRIC CADENCE (post enemy-cleanse lift): the enemy's cleanse has NOTHING to remove —
+    // no debuff is ever applied to e1 — so real removal is 0 → NO `cleanse-performed` fires
+    // (matching the player path and the lift's full-symmetry rule). The on-enemy-cleansed
+    // reactives therefore NEVER wake, so neither the Grif damage proc nor the Yarrow Vigor Up
+    // self-buff ever fire.
+    //
     // Per round (focus speed 100 acts first; nothing to do — its only abilities are reactive;
-    // then the enemy cleanses → both reactives fire):
-    //   R1 focus turn: ctx populated. enemy cleanse → Grif proc credits damage; Vigor Up
-    //       GRANTED to self (lands AFTER the focus's R1 turn → shows from R2).
-    //   R2 enter: activeSelfBuffs/healTargetBuffs = ['Vigor Up'] (the R1 grant). enemy cleanse
-    //       again → proc + re-grant.
-    //   R3, R4: steady — Vigor Up held, reaction fires every round.
+    // then the enemy cleanses → removes nothing → no event → no reactive fires):
+    //   R1–R4: focus turn does nothing (reactive-only); enemy cleanse removes nothing → no
+    //       cleanse-performed → no Grif proc, no Vigor Up grant.
     //   ⇒ No healing of any kind (directHeal/hotHeal/shield/cleanseCount/effective/overheal 0
-    //     every round — the player NEVER heals; the enemy's heal/cleanse are event-only).
-    //     incomingDamage 0 (the enemy has no damage ability). The Vigor Up self-buff appears in
-    //     the round buff display from round 2 (turnsRemaining 2). The Grif damage proc is
-    //     credited to the player damage pool (asserted via the bus, not the healing snapshot).
+    //     every round — the player NEVER heals; the enemy's cleanse removes nothing).
+    //     incomingDamage 0 (the enemy has no damage ability). Vigor Up NEVER appears in the
+    //     round buff display, and the Grif damage proc NEVER credits the player damage pool.
     const scenario28Input = () =>
         BASE({
             rounds: 4,
@@ -2418,21 +2420,22 @@ describe('healingGoldenParity', () => {
         scenario28Input
     );
 
-    // Supplementary: the enemy cleanse fires the player's on-enemy-cleansed reactives every round.
-    // The Grif damage proc credits the player damage pool (not a healing bucket → invisible to the
-    // healing snapshot, asserted off the result), and the Yarrow self-buff surfaces in the round
-    // buff display from round 2 (granted on the round-1 enemy cleanse, which lands after the focus's
-    // round-1 turn). No healing of any kind, and incomingDamage stays 0 (cleanse-only enemy).
-    it('scenario 28: enemy cleanse → Grif damage proc credited + Vigor Up self-buff from round 2', () => {
+    // Supplementary: under the lift the enemy cleanse has nothing to remove → no cleanse-performed
+    // → the player's on-enemy-cleansed reactives never wake. No Grif damage proc, no Yarrow Vigor
+    // Up self-buff, no healing of any kind, and incomingDamage stays 0 (cleanse-only enemy). The
+    // positive on-enemy-cleansed chain (real removal → proc fires) is covered by the Grif case in
+    // enemyCleanse.integration.test.ts.
+    it('scenario 28: enemy cleanse with nothing to remove emits no cleanse-performed → no Grif proc, no Vigor Up (symmetric cadence)', () => {
         idCounter = 0;
         const bus = createEventBus();
         const cleanses: Extract<CombatEvent, { type: 'cleanse-performed' }>[] = [];
         bus.on('cleanse-performed', (e) => cleanses.push(e));
         const result = simulateHealing({ ...scenario28Input(), bus });
 
-        // The enemy cleanse-performed fired with the ENEMY's id each round it cast.
-        expect(cleanses.length).toBeGreaterThan(0);
-        expect(cleanses.every((e) => e.casterId === 'e1' && e.count === 1)).toBe(true);
+        // SYMMETRIC CADENCE: the enemy's cleanse has nothing to remove (no debuff was applied
+        // to e1), so real removal is 0 → NO cleanse-performed fires (matches the player path,
+        // and the lift's full-symmetry rule). The on-enemy-cleansed reactives therefore never wake.
+        expect(cleanses).toHaveLength(0);
 
         // No healing of any kind, and the cleanse-only enemy deals no damage.
         expect(result.rounds.every((r) => r.directHeal === 0)).toBe(true);
@@ -2440,18 +2443,12 @@ describe('healingGoldenParity', () => {
         expect(result.rounds.every((r) => r.cleanseCount === 0)).toBe(true);
         expect(result.rounds.every((r) => r.incomingDamage === 0)).toBe(true);
 
-        // The Vigor Up self-buff surfaces from round 2 (the round-1 grant lands after the focus's
-        // round-1 turn) and persists thereafter.
+        // No cleanse-performed → the on-enemy-cleansed Vigor Up self-buff is NEVER granted.
         const buffNamesByRound = result.rounds.map((r) => r.activeSelfBuffs.map((b) => b.buffName));
-        expect(buffNamesByRound[0]).not.toContain('Vigor Up');
-        expect(buffNamesByRound[1]).toContain('Vigor Up');
-        expect(buffNamesByRound[3]).toContain('Vigor Up');
+        expect(buffNamesByRound.every((names) => !names.includes('Vigor Up'))).toBe(true);
 
-        // The Vigor Up grant fires off the SAME on-enemy-cleansed trigger + firing slot as the
-        // Grif damage proc, so its appearance proves that reactive path resolves. The damage proc
-        // itself credits the player DAMAGE pool (NOT a healing bucket), which the healing result
-        // does not expose — the sister buff is the observable proof the reaction fired, and no
-        // healing leaked from the enemy's event-only cleanse (totalHealing 0).
+        // No reactive ever fired (neither the Grif damage proc nor the Vigor Up self-buff), and no
+        // healing leaked from the enemy's no-op cleanse.
         expect(result.summary.totalHealing).toBe(0);
     });
 });

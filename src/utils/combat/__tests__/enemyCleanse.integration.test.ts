@@ -170,3 +170,33 @@ describe('enemy on-cast cleanse: removes a player-applied debuff (real removed c
         expect(events.filter((e) => e.casterId === 'foe')).toHaveLength(0);
     });
 });
+
+const grifPassive = (): ShipSkills['slots'][number] => ({
+    slot: 'passive',
+    abilities: [
+        {
+            id: 'ec-grif',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-enemy-cleansed',
+            conditions: [],
+            config: { type: 'damage', multiplier: 200, noCrit: true },
+        } as unknown as Ability,
+    ],
+});
+
+describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on REAL removal', () => {
+    it('enemy removes a player-applied debuff → focus Grif on-enemy-cleansed proc fires', () => {
+        const input = playerVsEnemy(damageThenDebuff(), [
+            enemyAt('foe', 'M4', selfCleanseSkills(2)),
+        ]);
+        // Inject the Grif passive alongside the player's debuff active.
+        input.shipSkills = { slots: [damageThenDebuff(), grifPassive()] };
+        const result = runCombat(input);
+        // The Grif on-enemy-cleansed reactive credits the 'direct' bucket (creditReactiveDamage →
+        // creditDamage(_, 'direct', _)). The player's OWN attack credits perTargetDamage, so
+        // directDamage isolates the proc. Real removal happened → proc fired → directDamage > 0.
+        const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
+        expect(grifDamage).toBeGreaterThan(0);
+    });
+});

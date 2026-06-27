@@ -2000,21 +2000,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     });
                 }
             } else if (cfg.type === 'cleanse') {
-                // Real removal is player-side only (recipientsFor returns player ids; enemy-side
-                // actors run event-only and side-correct enemy routing is deferred). The metric
-                // and the cleanse-performed event reflect the ACTUAL number removed.
-                if (!healEventOnly) {
-                    let removed = 0;
-                    for (const rid of recipientsFor(ability.target)) {
-                        removed += statusEngine.cleanse(rid, cfg.count);
-                    }
-                    cleansePerformedCount += removed;
-                    healing.credit(actor.id, 'cleanseCount', removed);
-                } else {
-                    // Enemy-side event-only: no removal yet — preserve the cleanse-performed
-                    // cadence so on-enemy-cleansed reactors (Arum/Grif) stay unaffected.
-                    cleansePerformedCount += typeof cfg.count === 'number' ? cfg.count : 1;
+                // Team-symmetric removal: BOTH the player path and the enemy (event-only) path
+                // remove real debuffs via the side-agnostic statusEngine.cleanse over the
+                // side-aware recipientsFor recipients (self/ally/all-allies). cleansePerformedCount
+                // reflects the ACTUAL removed count on both sides, so the cleanse-performed emit
+                // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
+                // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
+                // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
+                let removed = 0;
+                for (const rid of recipientsFor(ability.target)) {
+                    removed += statusEngine.cleanse(rid, cfg.count);
                 }
+                cleansePerformedCount += removed;
+                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', removed);
             }
         }
 
