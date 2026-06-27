@@ -8,6 +8,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
     switch (type) {
         case 'damage':
             return { type: 'damage', multiplier: 100 };
+        case 'counter':
+            return { type: 'counter', multiplier: 0 };
         case 'additional-damage':
             return { type: 'additional-damage', stat: 'hp', pct: 10 };
         case 'modifier':
@@ -90,6 +92,7 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
 
 const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     damage: 'enemy',
+    counter: 'enemy',
     'additional-damage': 'enemy',
     modifier: 'self',
     buff: 'self',

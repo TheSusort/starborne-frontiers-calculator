@@ -5,6 +5,7 @@ export type SkillSlot = 'active' | 'charged' | 'passive';
 
 export type AbilityType =
     | 'damage'
+    | 'counter'
     | 'additional-damage'
     | 'modifier'
     | 'buff'
@@ -327,6 +328,17 @@ export type ModifierChannel =
 
 export type AbilityConfig =
     | { type: 'damage'; multiplier: number; hits?: number; noCrit?: boolean }
+    | {
+          type: 'counter';
+          /** raw percentage of the OWNER's effective attack, e.g. 30/70/100/200. */
+          multiplier: number;
+          hits?: number;
+          /** Stalwart: fire only when this unit was the directly-targeted (primary) victim,
+           *  not a splash/covered AoE victim. Gated on `attacked.isPrimaryTarget`. */
+          requirePrimaryTarget?: boolean;
+          /** Nyxen (PR2): fire only when the hit reduced the shield pool. Plumbed in PR2. */
+          requireShieldHit?: boolean;
+      }
     | { type: 'additional-damage'; stat: 'hp' | 'defense'; pct: number }
     | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
     | {

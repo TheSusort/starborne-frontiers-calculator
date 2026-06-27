@@ -9,6 +9,7 @@ interface Props {
 
 const TYPE_LABELS: Record<AbilityType, string> = {
     damage: 'Damage',
+    counter: 'Counterattack',
     'additional-damage': 'Additional Damage',
     modifier: 'Modifier',
     buff: 'Buff',
