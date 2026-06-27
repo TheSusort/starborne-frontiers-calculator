@@ -66,6 +66,62 @@ git commit -m "docs(combat): PR1 Task 0 wiring decisions for per-victim detonati
 
 ---
 
+## PR1 Task 0 — Decisions (resolved 2026-06-27 via wiring spike)
+
+**Q1 — Detonate-only positional entry: NOT NEEDED.** No ship has a detonate-only skill. The
+only abilities `detonationsFromSkill` returns are `detonate-dot` (parsed solely by
+`DETONATE_DOT_RE`, `skillTextParser.ts:1470`), produced by exactly three ships — Crocus,
+Demolisher, Incinerator — and all three "deal X% damage AND detonate" in the same skill →
+`hasDamageAbility` true → `positionalScalars` always set whenever detonation is present.
+Lingshe/Chimei "detonate" text parses as reactive triggers / buffs, never `detonate-dot`.
+**→ Task 3 gates the per-victim detonation block on the EXISTING `positional` local
+(`engine.ts:4387`); NO gate widening.** (Belt-and-suspenders: also guard on the recipe's
+`dets.length > 0` so a non-damage skill that somehow set `positional` is a no-op.)
+
+**Q2 — Per-type `applyVictimDamage` cause flags** (shield math in `shieldAbsorb.ts:12-30`;
+`isDot = cause.byDirectDamage === false` at `engine.ts:2885`):
+- **Bomb** (full shield drain, no pen): `{ killerId: bomb.sourceId, byDirectDamage: true,
+  bombPortion: <bomb payout>, shieldPenetrationPct: 0 }` — `bomb === damage` → `shieldEligible =
+  full` regardless of pen. Matches bomb-splash precedent (`engine.ts:2973`).
+- **Inferno** (BYPASS shield): `{ byDirectDamage: false }` → `isDot` → `shieldAbsorb` returns
+  `{ absorbed: 0, hpDamage: damage }` (`shieldAbsorb.ts:20`). The canonical DoT bypass.
+- **Corrosion** (BYPASS shield): `{ byDirectDamage: false }` — same as inferno.
+- Rationale: bombs FULL-DRAIN the shield (locked H rule) → must pass through it (byDirectDamage
+  true + bombPortion); inferno/corrosion BYPASS (locked H rule) → DoT semantics (byDirectDamage
+  false). A victim still dies if a bypass hit zeroes its HP (`recordDestroyed` fires inside
+  `applyVictimDamage` regardless of `byDirectDamage`); the `killerId`/`byDirectDamage` fields only
+  stamp the (currently unconsumed) ship-destroyed attribution, so omitting them on inferno/
+  corrosion is acceptable. Credit/attribution rides Q4's tally + `roundPerTargetDamage`, NOT
+  `killerId`.
+
+**Q3 — Skip `detonate()` in positional mode: SAFE.** Add `positional?: boolean` to
+`PlayerTurnArgs`. Nothing after `detonate()` (`playerTurn.ts:1500`) reads `detonationDamage`
+except the return field (`:2109`); `applyNewDoTs`/`extendDoTs` do not depend on the anchor
+containers having been consumed (extendDoTs runs BEFORE detonate; applyNewDoTs only appends).
+When `positional` set: skip the `detonate()` call entirely (no consume, no credit, no emit), set
+`detonationDamage: 0`, and add a `positionalDetonation` recipe to the return:
+`{ dets: detonationsFromSkill(gatedSkill), effectiveAttack, dotMult, affinityMult, detonationMult }`.
+The engine computes the hint as `isPositional(actor.position, enemyAttackerActors) && target !=
+null && pattern != null` (known pre-call). Since detonation ⟹ damage ability (Q1), the hint and
+the engine's full `positional` gate agree for any turn carrying detonation.
+
+**Q4 — Display vs HP, mirror `perActorSplash`.** Positional DIRECT damage shows via
+`roundPerTargetDamage` (`engine.ts:3445`, surfaced as `perTargetDamage` at `:5396`), NOT
+`cumulativeDamage` (its credit is suppressed at `:4469`), and HP loss happens inside
+`applyVictimDamage` (`:2891`). Bomb-splash-on-death already routes detonation-class damage through
+`applyVictimDamage` + `roundPerTargetDamage` WITHOUT touching `cumulativeDamage` (`:2973-2986`).
+**→ For per-victim detonation:** (1) apply each victim's payout via `applyVictimDamage` (Q2
+flags) + record into `roundPerTargetDamage`; (2) accumulate a NEW per-round tally
+`perActorDetonation` (mirror `perActorSplash`, declared near `:2617`, assembled into RoundData
+near `:5399`) to source the `detonationDamage` display row in positional mode; (3) move the
+aggregate `creditDamage(actor.id,'detonation', turn.detonationDamage)` (`:4474`) INTO the
+`if (!positional)` block — in positional `turn.detonationDamage` is 0 anyway, but the move
+documents intent and prevents feeding `cumulativeDamage`→line-5326. The display row sourcing
+(`focus.detonation` at `:5289`→`:5386`) must read the new tally when positional so the row
+reflects per-victim totals without the cumulative coupling.
+
+---
+
 ### Task 1: Pure per-victim detonation helper
 
 **Goal:** Extract `detonate()`'s per-type payout math into a pure, per-victim, testable helper that takes one victim's containers + the attacker recipe and returns the per-type payouts (does NOT apply HP, does NOT mutate the engine — the engine applies + emits). Refactor the existing `detonate()` to call it (byte-identical for non-positional).
