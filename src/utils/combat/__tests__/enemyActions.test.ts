@@ -9,7 +9,7 @@ import {
     IntentExecContext,
 } from '../triggers';
 import { createEventBus, CombatEvent } from '../events';
-import { createStatusEngine } from '../statusEngine';
+import { createStatusEngine, type RegisteredAbilityStatus } from '../statusEngine';
 import {
     runPlayerTurn,
     PlayerActorRuntime,
@@ -402,12 +402,39 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         ],
     });
 
+    // Minimal enemy-side timed debuff to seed onto a recipient's per-actor debuff store, so an
+    // enemy cleanse has something REAL to remove. Shape mirrors cleanseRemoval.test.ts's mkTimed.
+    const mkTimedDebuff = (
+        buffName: string
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration: 5,
+        payload: { buffName, stacks: 1, parsedEffects: {} },
+    });
+
     it('E5: enemy heal RESTORES HP + emits a real heal-performed amount, still NO player credit', () => {
         const events: CombatEvent[] = [];
         const spy = makeHealingSpy();
         // side:'enemy' → E5 side-aware routing: the 'ally' heal targets the lowest-HP enemy ally
         // (the caster itself here), and applyHealToTarget runs on the enemy path.
         const args = makeArgs(makeRuntime(healCleanseSkills(), 'enemy'), spy.healing, true);
+        // Seed two removable debuffs on the cleanse recipient (enemy1 — the lowest-HP enemy ally
+        // the 'ally'-targeted cleanse routes to) so the lift removes a REAL count of 2.
+        args.statusEngine.applyTimedAbilityStatus(
+            1,
+            mkTimedDebuff('Attack Down'),
+            'attacker',
+            'enemy1'
+        );
+        args.statusEngine.applyTimedAbilityStatus(
+            1,
+            mkTimedDebuff('Defense Down'),
+            'attacker',
+            'enemy1'
+        );
         args.bus.on('heal-performed', (e) => events.push(e));
         args.bus.on('cleanse-performed', (e) => events.push(e));
 
@@ -419,6 +446,7 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         // Both events fired with the enemy actor's id.
         expect(cleanse).toBeDefined();
         expect(cleanse!.casterId).toBe('enemy1');
+        // REAL removal of the 2 seeded debuffs (not the nominal cfg.count).
         expect(cleanse!.count).toBe(2);
         expect(heal).toBeDefined();
         expect(heal!.casterId).toBe('enemy1');
@@ -432,6 +460,43 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
         // ...but NOTHING is credited to the player healing buckets, and no shield was granted.
         expect(spy.credits).toHaveLength(0);
         expect(spy.shields).toHaveLength(0);
+    });
+
+    it('lift: enemy cleanse count 2 against ONE seeded debuff emits cleanse-performed { count: 1 }', () => {
+        const events: CombatEvent[] = [];
+        const spy = makeHealingSpy();
+        const args = makeArgs(makeRuntime(healCleanseSkills(), 'enemy'), spy.healing, true);
+        // Only ONE removable debuff exists → real removal clamps to 1, NOT the nominal cfg.count 2.
+        args.statusEngine.applyTimedAbilityStatus(
+            1,
+            mkTimedDebuff('Attack Down'),
+            'attacker',
+            'enemy1'
+        );
+        args.bus.on('cleanse-performed', (e) => events.push(e));
+
+        runPlayerTurn(args);
+
+        const cleanse = events.find((e) => e.type === 'cleanse-performed');
+        expect(cleanse).toBeDefined();
+        expect(cleanse!.casterId).toBe('enemy1');
+        expect(cleanse!.count).toBe(1);
+        // Still no player metric credit on the enemy path.
+        expect(spy.credits).toHaveLength(0);
+    });
+
+    it('lift: enemy cleanse with NO seeded debuff removes nothing and emits no cleanse-performed', () => {
+        const events: CombatEvent[] = [];
+        const spy = makeHealingSpy();
+        const args = makeArgs(makeRuntime(healCleanseSkills(), 'enemy'), spy.healing, true);
+        // No debuffs seeded on enemy1 → real removal 0 → cleanse-performed must NOT fire (cadence
+        // change from the old stub, which always fired by nominal count).
+        args.bus.on('cleanse-performed', (e) => events.push(e));
+
+        runPlayerTurn(args);
+
+        expect(events.find((e) => e.type === 'cleanse-performed')).toBeUndefined();
+        expect(spy.credits).toHaveLength(0);
     });
 
     it('normal mode (healEventOnly false) DOES credit and emit cleanse-performed', () => {
@@ -648,9 +713,11 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
 
 // ----------------------------------------------------------------------
 // Phase 4c PR 4 Task 5b: integration — a ship-backed enemy attacker whose
-// cast cleanses emits cleanse-performed (casterId = enemy id), credits NO
-// player healing buckets under the enemy id, and a Grif-like player's
-// on-enemy-cleansed damage proc credits the enemy pool.
+// cast cleanses with NOTHING to remove now emits NO cleanse-performed and
+// credits NO player healing buckets under the enemy id (symmetric cadence
+// after the enemy cleanse lift). A no-op enemy cleanse no longer drives a
+// Grif on-enemy-cleansed proc. The POSITIVE Grif chain (proc fires on a
+// REAL removal) lives in enemyCleanse.integration.test.ts.
 // ----------------------------------------------------------------------
 describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif proc', () => {
     const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -702,7 +769,7 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
         ...overrides,
     });
 
-    it('enemy cleanse cast emits cleanse-performed (enemy id), no player credit, Grif procs', () => {
+    it('enemy cleanse with nothing to remove emits NO cleanse-performed and does not proc Grif (symmetric cadence)', () => {
         const events: CombatEvent[] = [];
         const bus = createEventBus();
         bus.on('cleanse-performed', (e) => events.push(e));
@@ -739,15 +806,12 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
             })
         );
 
-        // cleanse-performed fired with the ENEMY's id (every round it cast).
+        // SYMMETRIC CADENCE: the enemy cleanse has nothing to remove (no debuff was applied to
+        // enemy1), so real removal is 0 → NO cleanse-performed fires (matches the player path).
         const cleanseEvents = events.filter((e) => e.type === 'cleanse-performed');
-        expect(cleanseEvents.length).toBeGreaterThan(0);
-        for (const e of cleanseEvents) {
-            expect(e.casterId).toBe('enemy1');
-            expect(e.count).toBe(1);
-        }
+        expect(cleanseEvents).toHaveLength(0);
 
-        // The enemy credited NO player healing buckets under its own id.
+        // The enemy credited NO player healing buckets under its own id (unchanged by the lift).
         const enemyRows = (result.healing?.rounds ?? []).map((rd) => rd.perActor.get('enemy1'));
         for (const row of enemyRows) {
             if (!row) continue;
@@ -756,16 +820,8 @@ describe('Phase 4c PR 4 Task 5b: enemy cleanse cast → cleanse-performed + Grif
             expect(row.effectiveHeal ?? 0).toBe(0);
         }
 
-        // Grif's on-enemy-cleansed damage proc credited the focus player's damage pool
-        // (creditReactiveDamage → direct). The focus has NO cast damage of its own, so any
-        // directDamage in the result comes solely from the on-enemy-cleansed proc. The proc
-        // folds the owner's last-turn ctx bomb-style: focusAttack × multiplier × affinityMult,
-        // with NO defense and NO crit (noCrit). The focus acts before the enemy each round, so
-        // its ctx is already populated when the enemy cleanses — the proc lands every round.
-        // Deterministic value: multiplier is a raw percentage (200 → 2.0), so the fold divides
-        // by 100: 5000 attack × (200/100) × 1.0 affinityMult (no affinity set) × 3 rounds = 30000.
+        // No cleanse-performed → the focus's on-enemy-cleansed Grif proc never fires → no damage.
         const grifDamage = result.rounds.reduce((sum, rd) => sum + rd.directDamage, 0);
-        const perRoundProc = 5000 * (200 / 100) * 1.0;
-        expect(grifDamage).toBe(perRoundProc * 3);
+        expect(grifDamage).toBe(0);
     });
 });

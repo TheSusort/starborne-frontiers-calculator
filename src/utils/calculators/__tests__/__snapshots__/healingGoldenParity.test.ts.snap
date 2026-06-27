@@ -2616,12 +2616,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
@@ -2631,12 +2626,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "directHeal": 0,
       "effectiveHealing": 0,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 0,
@@ -2649,12 +2639,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
@@ -2664,12 +2649,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "directHeal": 0,
       "effectiveHealing": 0,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 0,
@@ -2682,12 +2662,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
     },
     {
       "action": "active",
-      "activeSelfBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "activeSelfBuffs": [],
       "barrierAbsorbed": 0,
       "chargeCount": 0,
       "charges": 0,
@@ -2697,12 +2672,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "directHeal": 0,
       "effectiveHealing": 0,
       "enemyEffects": [],
-      "healTargetBuffs": [
-        {
-          "buffName": "Vigor Up",
-          "turnsRemaining": 2,
-        },
-      ],
+      "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
       "overheal": 0,

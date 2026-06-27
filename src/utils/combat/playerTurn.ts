@@ -1846,12 +1846,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        // Event-only mode (enemy walk, Task 5; HP-restore lifted in E5 §4.1): EMIT heal/cleanse
-        // events and (E5) restore each heal recipient's OWN currentHp via the per-victim pool,
-        // but credit NO player healing bucket and never mutate the player heal-target. Shields
-        // and cleanse still mutate NOTHING on the enemy path (deferred to sub-projects H / enemy
-        // cleanse). Scope to the CAST skill only (the spec: "the cast skill carries"), never the
-        // passive. Normal (player/team) mode keeps both slots and credits/mutates as before.
+        // Event-only mode (enemy walk, Task 5): the enemy path now performs the SAME real effects
+        // as the player path — heals restore each recipient's OWN currentHp (E5 §4.1), shields
+        // grant real pools (#166), and cleanse removes real debuffs (this lift) — via the
+        // side-agnostic helpers over recipientsFor; it only credits NO player healing/metric bucket
+        // and never mutates the player heal-target. Scope to the CAST skill only (the spec: "the
+        // cast skill carries"), never the passive. Normal (player/team) mode keeps both slots and
+        // credits/mutates as before.
         const healAbilities = healEventOnly
             ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false))
             : [
@@ -2000,21 +2001,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     });
                 }
             } else if (cfg.type === 'cleanse') {
-                // Real removal is player-side only (recipientsFor returns player ids; enemy-side
-                // actors run event-only and side-correct enemy routing is deferred). The metric
-                // and the cleanse-performed event reflect the ACTUAL number removed.
-                if (!healEventOnly) {
-                    let removed = 0;
-                    for (const rid of recipientsFor(ability.target)) {
-                        removed += statusEngine.cleanse(rid, cfg.count);
-                    }
-                    cleansePerformedCount += removed;
-                    healing.credit(actor.id, 'cleanseCount', removed);
-                } else {
-                    // Enemy-side event-only: no removal yet — preserve the cleanse-performed
-                    // cadence so on-enemy-cleansed reactors (Arum/Grif) stay unaffected.
-                    cleansePerformedCount += typeof cfg.count === 'number' ? cfg.count : 1;
+                // Team-symmetric removal: BOTH the player path and the enemy (event-only) path
+                // remove real debuffs via the side-agnostic statusEngine.cleanse over the
+                // side-aware recipientsFor recipients (self/ally/all-allies). cleansePerformedCount
+                // reflects the ACTUAL removed count on both sides, so the cleanse-performed emit
+                // (guarded `> 0`) now fires only on real removal — symmetric to the E5 heal lift and
+                // the #166 shield lift. The ONLY side-difference is the player-facing cleanseCount
+                // metric: the enemy event-only path suppresses it (mirrors E5/#166 credit suppression).
+                let removed = 0;
+                for (const rid of recipientsFor(ability.target)) {
+                    removed += statusEngine.cleanse(rid, cfg.count);
                 }
+                cleansePerformedCount += removed;
+                if (!healEventOnly) healing.credit(actor.id, 'cleanseCount', removed);
             }
         }
 
