@@ -49,6 +49,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: enemy ships now react when you hit them — enemy counterattackers (Stalwart, Nyxen, Centurion) strike back, and enemy on-hit reactions (self-repairs, defensive buffs, cleanses) now fire, so enemy teams play more like real opponents. Shield-hit counters (Nyxen) now also work for your own ships in positioned battles.',
     'Combat simulator: enemy ships now benefit from their on-cast shield skills — they gain shields, absorb your damage, and trigger shield-reactive abilities (e.g. shield-hit counters). Previously these effects only worked on your own ships.',
     'Combat simulator: enemy ships that cast a cleanse skill now actually remove the debuffs you applied to them, instead of the cleanse having no effect. Skills that trigger off an enemy being cleansed (such as Arum and Grif) now fire only when a debuff is really removed.',
+    'Combat simulator: in positioned battles, bomb/Inferno/Corrosion detonation now damages each ship the skill hits individually — every target detonates its own stored bombs and damage-over-time effects against its own HP, so a detonation can now kill secondary (splash) targets and trigger their on-death effects, instead of only counting against the primary target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

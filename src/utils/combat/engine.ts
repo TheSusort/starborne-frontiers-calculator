@@ -55,6 +55,7 @@ import { victimHitDamage } from './victimDamage';
 import { incomingReductionForHit, incomingBlockForIntake } from './incomingEffects';
 import { reflectedDamageForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
+import { detonateContainers } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { incomingHealAmpForRecipient } from './healAmplification';
 import { CHEAT_DEATH_BUFFS } from './cheatDeathBuffs';
@@ -1934,6 +1935,13 @@ export function runCombat(input: CombatEngineInput): {
     // seam). Surfaced as RoundData.perActorSplash at the post-round push (absent when empty →
     // non-positional / no-splash rounds stay byte-identical).
     let perActorSplash = new Map<string, number>();
+    // Per-victim skill-triggered detonation (positional): per-round accumulator (detonating
+    // actor id → total detonation damage it dealt across footprint victims THIS round). Mirrors
+    // perActorSplash's lifecycle (declared once, rebound fresh each round, captured by the
+    // positional detonation loop). Sources the focus detonationDamage display row in positional
+    // mode (focus.detonation is 0 there — the aggregate credit is suppressed). Absent when empty
+    // → non-positional rounds byte-identical.
+    let perActorDetonation = new Map<string, number>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -3644,6 +3652,24 @@ export function runCombat(input: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
+                // Positional detonation hint: when the engine will take the positional apply path
+                // (same predicate that computes aoeVictimIds — pattern + target + position all set),
+                // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
+                // returns a `positionalDetonation` recipe for the per-victim detonation loop below
+                // to apply. Conditional spread → non-positional turns omit the key → byte-identical.
+                //
+                // SCOPED TO THE FOCUS ATTACKER (PR1): only the focus-turn site consumes the recipe
+                // (the per-victim detonation loop). The walked-team and enemy-attacker sites have no
+                // such loop yet, so setting `positional` for them would skip their anchor detonation
+                // and silently DROP it (recipe ignored). Gating on focusActorId keeps team/enemy on
+                // their prior anchor-detonation path (byte-identical) until PR2/PR3 wire the loop to
+                // those sites symmetrically.
+                ...(a.id === focusActorId &&
+                aoePattern != null &&
+                aoeTarget != null &&
+                tgt.position != null
+                    ? { positional: true }
+                    : {}),
                 // D-PR4: target's effective attack (for 'amplify-vs-higher-attack' eligibility) and
                 // a per-(owner,ability) deterministic proc closure. Both are READ only when the
                 // actor's passive slot carries an outgoing-amplification ability → byte-identical
@@ -3664,6 +3690,7 @@ export function runCombat(input: CombatEngineInput): {
         // Bomb-splash-on-death: rebind every round (like perActorShieldGranted) so a stale
         // carry-over never over-reports splash. Written only by the death-seam splash block.
         perActorSplash = new Map<string, number>();
+        perActorDetonation = new Map<string, number>();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -4402,6 +4429,11 @@ export function runCombat(input: CombatEngineInput): {
                             let focusEnemyDamage = 0;
                             let focusEnemyShieldWasHit = false;
                             let focusEnemyHit = false;
+                            // Per-victim detonation (positional): collect EVERY footprint victim
+                            // hit by this cast's firing damage (unique by id), so each can detonate
+                            // its OWN containers after the firing hits land. Populated in the
+                            // onVictimResolved hook below alongside the standing-leech proc.
+                            const detonationTargets = new Map<string, CombatActor>();
                             drivePositionalApply({
                                 scalars: turn.positionalScalars!,
                                 hitCrits: turn.hitCrits,
@@ -4418,6 +4450,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // the leech the positional credit-suppression had silenced.
                                 onVictimResolved: (victim, damage, outcome) => {
                                     procStandingLeechesPerVictim(actor.id, damage);
+                                    detonationTargets.set(victim.id, victim);
                                     if (victim.id === tgt.id) {
                                         focusEnemyHit = true;
                                         focusEnemyDamage += damage;
@@ -4447,6 +4480,68 @@ export function runCombat(input: CombatEngineInput): {
                                     damage: focusEnemyDamage,
                                 });
                             }
+
+                            // Per-victim skill-triggered detonation (positional). Each victim HIT
+                            // by this cast that is STILL ALIVE detonates its OWN containers (no
+                            // role-scale — full stored stacks). Bombs = full shield drain/no pen;
+                            // inferno+corrosion BYPASS the shield (DoT semantics). Credited to the
+                            // detonating actor's per-round detonation tally + roundPerTargetDamage;
+                            // NOT into cumulativeDamage (HP lands per-victim via applyVictimDamage).
+                            // recipe present only when a detonate-dot ability fired (else dets empty).
+                            const detonationRecipe = turn.positionalDetonation;
+                            if (detonationRecipe && detonationRecipe.dets.length > 0) {
+                                for (const victim of detonationTargets.values()) {
+                                    if (victim.currentHp <= 0) continue; // died to the firing hit (already splashed)
+                                    const result = detonateContainers(detonationRecipe, {
+                                        corrosionEntries: victim.corrosionEntries,
+                                        infernoEntries: victim.infernoEntries,
+                                        pendingBombs: victim.pendingBombs,
+                                        victimHp: tb.victimMaxHpFor(victim),
+                                    });
+                                    if (result.bomb > 0) {
+                                        applyVictimDamage(result.bomb, victim, enemySink, {
+                                            killerId: actor.id,
+                                            byDirectDamage: true,
+                                            bombPortion: result.bomb, // full shield drain, no pen
+                                            shieldPenetrationPct: 0,
+                                        });
+                                        bus.emit({
+                                            type: 'bomb-detonated',
+                                            actorId: actor.id,
+                                            round: r,
+                                            stacks: result.bombStacks,
+                                            damage: result.bomb,
+                                        });
+                                        roundPerTargetDamage.set(
+                                            victim.id,
+                                            (roundPerTargetDamage.get(victim.id) ?? 0) + result.bomb
+                                        );
+                                    }
+                                    const bypass = result.inferno + result.corrosion;
+                                    if (bypass > 0) {
+                                        applyVictimDamage(bypass, victim, enemySink, {
+                                            byDirectDamage: false, // DoT → bypass shield
+                                        });
+                                        bus.emit({
+                                            type: 'dot-detonated',
+                                            targetId: victim.id,
+                                            round: r,
+                                            damage: bypass,
+                                        });
+                                        roundPerTargetDamage.set(
+                                            victim.id,
+                                            (roundPerTargetDamage.get(victim.id) ?? 0) + bypass
+                                        );
+                                    }
+                                    const dealt = result.bomb + bypass;
+                                    if (dealt > 0) {
+                                        perActorDetonation.set(
+                                            actor.id,
+                                            (perActorDetonation.get(actor.id) ?? 0) + dealt
+                                        );
+                                    }
+                                }
+                            }
                         }
 
                         // Fold the focus turn's numeric damage into the round accumulator.
@@ -4470,8 +4565,12 @@ export function runCombat(input: CombatEngineInput): {
                             d.secondary += turn.secondaryDamage;
                             d.conditional += turn.conditionalDamage;
                             creditDamage(actor.id, 'direct', turn.directDamage);
+                            // Detonation credit is suppressed in positional mode (turn.detonationDamage
+                            // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
+                            // inside this guard documents intent and keeps per-victim detonation out of
+                            // cumulativeDamage (it lands per-victim via applyVictimDamage above).
+                            creditDamage(actor.id, 'detonation', turn.detonationDamage);
                         }
-                        creditDamage(actor.id, 'detonation', turn.detonationDamage);
                         focusTurns.push(turn);
 
                         // Heal-target buffs: if this focus actor IS the heal target (self-heal case),
@@ -5286,14 +5385,17 @@ export function runCombat(input: CombatEngineInput): {
         const directDamage = focus.direct;
         const corrosionDamage = focus.corrosion;
         const infernoDamage = focus.inferno;
-        const detonationDamage = focus.detonation;
+        const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
+        const detonationDamage = focus.detonation + focusPositionalDetonation;
 
-        if (detonationDamage > 0) {
+        // Aggregate dot-detonated fires ONLY for the non-positional aggregate path; positional
+        // detonation already emitted per-victim bomb-detonated/dot-detonated in the apply loop.
+        if (focus.detonation > 0) {
             bus.emit({
                 type: 'dot-detonated',
                 targetId: enemy.id,
                 round: r,
-                damage: detonationDamage,
+                damage: focus.detonation,
             });
         }
 
@@ -5306,7 +5408,11 @@ export function runCombat(input: CombatEngineInput): {
         totalConditionalRaw += focus.conditional;
         totalCorrosionRaw += focus.corrosion;
         totalInfernoRaw += focus.inferno;
-        totalDetonationRaw += focus.detonation;
+        // Summary detonation reflects per-victim positional detonation too (focusPositionalDetonation
+        // is 0 non-positionally → byte-identical). NOTE: cumulativeDamage/totalRoundDamage above
+        // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage,
+        // so folding it into cumulativeDamage would double-count the enemy-HP decline.
+        totalDetonationRaw += detonationDamage;
 
         // Team damage = Σ over all NON-focus actor entries of every channel (direct already
         // includes its secondary/conditional sub-buckets, so they are NOT added separately).
@@ -5400,6 +5506,12 @@ export function runCombat(input: CombatEngineInput): {
             // adjacent allies this round (map non-empty). Absent otherwise → byte-identical.
             ...(perActorSplash.size > 0
                 ? { perActorSplash: Object.fromEntries(perActorSplash) }
+                : {}),
+            // perActorDetonation (per-victim skill-triggered detonation, positional): set ONLY when
+            // the positional detonation loop dealt damage this round (map non-empty). Absent
+            // otherwise → non-positional rounds keep the legacy RoundData shape, goldens byte-identical.
+            ...(perActorDetonation.size > 0
+                ? { perActorDetonation: Object.fromEntries(perActorDetonation) }
                 : {}),
             // perActorShield (H1 Task 6): per-actor shield accounting for THIS round, set only
             // when at least one actor has a nonzero {granted, absorbed, pool}. Mirrors

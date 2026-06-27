@@ -145,6 +145,12 @@ export interface RoundData {
      *  absent otherwise (non-positional / no-splash rounds keep the legacy RoundData shape,
      *  goldens byte-identical). The splash is ALSO folded into perTargetDamage for that ally. */
     perActorSplash?: Record<string, number>;
+    /** Per-victim skill-triggered detonation (positional only): detonating actor id → total
+     *  detonation damage it dealt across footprint victims THIS round. Set ONLY when the positional
+     *  detonation loop dealt damage (map non-empty) — absent otherwise (non-positional rounds keep
+     *  the legacy RoundData shape, goldens byte-identical). The detonation also lands per-victim via
+     *  applyVictimDamage (surfaced in perTargetDamage); this map is the dedicated attribution. */
+    perActorDetonation?: Record<string, number>;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;
