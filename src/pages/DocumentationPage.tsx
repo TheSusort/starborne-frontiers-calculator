@@ -3159,10 +3159,12 @@ const DocumentationPage: React.FC = () => {
                                     ally is directly damaged. These reactions now fire for{' '}
                                     <strong>both teams</strong>: enemy ships react when you hit them
                                     too — enemy counterattackers strike back, and enemy on-hit
-                                    reactions (self-repairs, defensive buffs, cleanses) fire — so
-                                    enemy teams play more like real opponents in positioned battles.
-                                    More implant and gear-set effects will be added in future
-                                    updates.
+                                    reactions (self-repairs, defensive buffs, cleanses) fire. Enemy
+                                    ships also benefit from their own on-cast shield skills — they
+                                    gain shields, absorb your damage, and trigger shield-reactive
+                                    abilities — so enemy teams play more like real opponents in
+                                    positioned battles. More implant and gear-set effects will be
+                                    added in future updates.
                                 </p>
                             </div>
                         </div>
