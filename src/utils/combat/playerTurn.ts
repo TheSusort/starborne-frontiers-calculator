@@ -34,6 +34,7 @@ import {
     createStatusEngine,
 } from './statusEngine';
 import { CombatEventBus } from './events';
+import { detonateContainers } from './detonation';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
@@ -535,60 +536,31 @@ function detonate(args: {
     pendingBombs: PendingBomb[];
     emitBombDetonated?: (stacks: number, damage: number) => void;
 }): number {
-    let detonationDamage = 0;
-    for (const det of detonationsFromSkill(args.gatedSkill)) {
-        const pct = det.powerPct / 100;
-        if (det.dotType === 'inferno') {
-            detonationDamage +=
-                args.infernoEntries.reduce(
-                    (sum, e) =>
-                        sum + e.stacks * (e.tier / 100) * args.effectiveAttack * e.remainingRounds,
-                    0
-                ) *
-                args.dotMult *
-                args.affinityMult *
-                pct *
-                args.detonationMult;
-            args.infernoEntries.length = 0;
-        } else if (det.dotType === 'corrosion') {
-            const baseHp = Math.min(args.enemyHp, 500_000);
-            detonationDamage +=
-                args.corrosionEntries.reduce(
-                    (sum, e) => sum + e.stacks * (e.tier / 100) * baseHp * e.remainingRounds,
-                    0
-                ) *
-                args.dotMult *
-                args.affinityMult *
-                pct *
-                args.detonationMult;
-            args.corrosionEntries.length = 0;
-        } else if (det.dotType === 'bomb') {
-            const totalStacks = args.pendingBombs.reduce((sum, b) => sum + b.stacks, 0);
-            // Each bomb bursts with the APPLIER's affinity matchup AND the applier's
-            // detonation-damage modifier (Voidfire), both snapshotted at application
-            // (PendingBomb.affinityMult / .detonationDamageModifier) — NOT the detonating
-            // actor's. A team-applied bomb detonated by the attacker's skill keeps the
-            // team's modifiers, mirroring the per-entry burst on the enemy turn (engine.ts
-            // detonatePendingBombs). Identical for attacker-only runs (every entry carries
-            // the attacker's mult, equal to args.detonationMult).
-            const payout =
-                args.pendingBombs.reduce(
-                    (sum, b) =>
-                        sum +
-                        b.stacks *
-                            b.damagePerStack *
-                            b.affinityMult *
-                            (1 + b.detonationDamageModifier / 100),
-                    0
-                ) * pct;
-            if (payout > 0) {
-                args.emitBombDetonated?.(totalStacks, payout);
-            }
-            detonationDamage += payout;
-            args.pendingBombs.length = 0;
+    // Delegate the per-type detonation MATH to the pure helper. Bombs burst with the
+    // APPLIER's affinity matchup AND detonation-damage modifier (Voidfire), both snapshotted
+    // at application (PendingBomb.affinityMult / .detonationDamageModifier) — NOT the
+    // detonating actor's — mirroring the per-entry burst on the enemy turn (engine.ts
+    // detonatePendingBombs). The helper consumes each container (`.length = 0`) in `dets`
+    // order, so a 2nd bomb det sees emptied bombs. We keep the side-effect (event emit) here.
+    const result = detonateContainers(
+        {
+            dets: detonationsFromSkill(args.gatedSkill),
+            effectiveAttack: args.effectiveAttack,
+            dotMult: args.dotMult,
+            affinityMult: args.affinityMult,
+            detonationMult: args.detonationMult,
+        },
+        {
+            corrosionEntries: args.corrosionEntries,
+            infernoEntries: args.infernoEntries,
+            pendingBombs: args.pendingBombs,
+            victimHp: args.enemyHp,
         }
+    );
+    if (result.bomb > 0) {
+        args.emitBombDetonated?.(result.bombStacks, result.bomb);
     }
-    return detonationDamage;
+    return result.total;
 }
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
