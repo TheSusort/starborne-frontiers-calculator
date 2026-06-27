@@ -1942,6 +1942,12 @@ export function runCombat(input: CombatEngineInput): {
     // mode (focus.detonation is 0 there — the aggregate credit is suppressed). Absent when empty
     // → non-positional rounds byte-identical.
     let perActorDetonation = new Map<string, number>();
+    // Per-round per-applier DoT-tick display tally (sourceId → {corrosion, inferno}). Populated
+    // ONLY by the positional per-victim DoT-tick path (Task C2); folded into the FOCUS actor's
+    // corrosion/inferno display + raw totals at post-round assembly WITHOUT feeding cumulativeDamage
+    // (the per-victim HP already lands via applyVictimDamage — exact mirror of perActorDetonation).
+    // Empty on non-positional rounds → byte-identical.
+    let perActorDot = new Map<string, { corrosion: number; inferno: number }>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -3830,6 +3836,7 @@ export function runCombat(input: CombatEngineInput): {
         // carry-over never over-reports splash. Written only by the death-seam splash block.
         perActorSplash = new Map<string, number>();
         perActorDetonation = new Map<string, number>();
+        perActorDot = new Map();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -5624,8 +5631,9 @@ export function runCombat(input: CombatEngineInput): {
         // Row fields sourced from the focus entry. secondary/conditional go only to
         // rawTotals (RoundData has no sub-bucket columns) so they're read inline below.
         const directDamage = focus.direct;
-        const corrosionDamage = focus.corrosion;
-        const infernoDamage = focus.inferno;
+        const focusDot = perActorDot.get(focusActorId);
+        const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
+        const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
         const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
         const detonationDamage = focus.detonation + focusPositionalDetonation;
 
@@ -5640,6 +5648,10 @@ export function runCombat(input: CombatEngineInput): {
             });
         }
 
+        // Deliberately uses focus.corrosion/focus.inferno ONLY (not the perActorDot-folded
+        // corrosionDamage/infernoDamage locals) — per-victim DoT ticks land via applyVictimDamage,
+        // so folding perActorDot here would double-drain the dummy HP overwrite (same guard as the
+        // focusPositionalDetonation/detonation comment below).
         const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
         cumulativeDamage += totalRoundDamage;
         // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
@@ -5647,8 +5659,8 @@ export function runCombat(input: CombatEngineInput): {
         totalDirectRaw += focus.direct;
         totalSecondaryRaw += focus.secondary;
         totalConditionalRaw += focus.conditional;
-        totalCorrosionRaw += focus.corrosion;
-        totalInfernoRaw += focus.inferno;
+        totalCorrosionRaw += corrosionDamage;
+        totalInfernoRaw += infernoDamage;
         // Summary detonation reflects per-victim positional detonation too (focusPositionalDetonation
         // is 0 non-positionally → byte-identical). NOTE: cumulativeDamage/totalRoundDamage above
         // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage,
