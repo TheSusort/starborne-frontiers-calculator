@@ -3259,9 +3259,15 @@ export function runCombat(input: CombatEngineInput): {
             const raw = victimHitDamage(
                 {
                     effectiveAttack: ownerStats.attack,
+                    // `multiplier` is the PER-HIT value, so the full counter total is
+                    // multiplier × hits. The counter is modeled as ONE consolidated applied
+                    // hit, so fold the count into the multiplier and pass hits:1 — passing the
+                    // real `hits` here would make victimHitDamage re-split (preCritDamage / hits)
+                    // and silently collapse a multi-hit counter back to a single hit's damage.
+                    // Byte-identical for single-hit counters (hits === 1).
                     multiplierPct: multiplier * hits,
                     secondaryStatValue: 0,
-                    hits,
+                    hits: 1,
                     effectiveCritDamage: ownerStats.critDamage,
                     outgoingDamageBuffPct: 0,
                     // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
