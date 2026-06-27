@@ -3176,8 +3176,13 @@ const DocumentationPage: React.FC = () => {
                                     <strong>both teams</strong>: enemy detonation skills now damage
                                     each of your ships they hit individually too, so an enemy
                                     detonation can kill secondary (splash) targets and trigger their
-                                    on-death effects. More implant and gear-set effects will be
-                                    added in future updates.
+                                    on-death effects. Ally ships (the non-focus members of your
+                                    fleet) also detonate per-victim — each ship they hit detonates
+                                    its own stored bombs and damage-over-time effects against its
+                                    own HP, so an ally detonation can kill secondary targets and
+                                    trigger their on-death effects such as bomb-splash-on-death.
+                                    More implant and gear-set effects will be added in future
+                                    updates.
                                 </p>
                             </div>
                         </div>

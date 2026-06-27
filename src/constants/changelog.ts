@@ -52,6 +52,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: in positioned battles, bomb/Inferno/Corrosion detonation now damages each ship the skill hits individually — every target detonates its own stored bombs and damage-over-time effects against its own HP, so a detonation can now kill secondary (splash) targets and trigger their on-death effects, instead of only counting against the primary target.',
     'Combat simulator: in positioned battles, timed bombs and Echoing Burst accumulators now burst on each enemy ship individually — every affected ship detonates its own timed bombs and accumulators against its own HP on its own turn, so a timed burst can now kill that ship and trigger its on-death effects, instead of only counting against the primary target.',
     'Combat simulator: in positioned battles, enemy detonation skills now damage each of your ships they hit individually — every targeted ship detonates its own stored bombs and damage-over-time effects against its own HP, mirroring how your ships detonate enemies, so an enemy detonation can now kill secondary (splash) targets and trigger their on-death effects.',
+    'Combat simulator: in positioned battles, ally ships (the non-focus members of your fleet) now detonate per-victim — each ship the ally hits detonates its own stored bombs and damage-over-time effects against its own HP, so an ally detonation can now kill secondary targets and trigger their on-death effects such as bomb-splash-on-death.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
