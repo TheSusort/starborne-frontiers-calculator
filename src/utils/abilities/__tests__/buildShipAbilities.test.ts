@@ -1549,6 +1549,82 @@ describe('buildShipAbilities', () => {
         });
     });
 
+    // Combat G PR1 (Task 5): Stalwart's counterattack passive — "When directly damaged as a
+    // primary target, it deals X% damage to that enemy" — auto-produces a reactive `counter`
+    // ability (on-attacked, requirePrimaryTarget) instead of a plain on-cast `damage`, while the
+    // co-located buff grant ("gains Legion Discipline II for 3 turns") still parses.
+    describe('counterattack passives → on-attacked counter (Combat G PR1)', () => {
+        const passiveOf = (s: Ship): Skill | undefined =>
+            buildShipAbilities(s).slots.find((x) => x.slot === 'passive');
+
+        it('Stalwart first passive (30%): emits an on-attacked counter with requirePrimaryTarget and keeps the Legion Discipline II buff', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 30, requirePrimaryTarget: true },
+            });
+            // Non-regression: no phantom on-cast plain damage left behind.
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+            // Co-located buff still parses.
+            const buff = passive?.abilities.find((a) => a.type === 'buff');
+            expect(buff).toMatchObject({
+                type: 'buff',
+                config: { type: 'buff', buffName: 'Legion Discipline II', duration: 3 },
+            });
+        });
+
+        it('Stalwart second passive (70%): emits an on-attacked counter with requirePrimaryTarget and keeps the Legion Discipline II buff', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains <unit-skill>20% Attack</unit-skill>.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 70, requirePrimaryTarget: true },
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+            const buff = passive?.abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Legion Discipline II'
+            );
+            expect(buff).toMatchObject({
+                config: { type: 'buff', buffName: 'Legion Discipline II', duration: 3 },
+            });
+        });
+
+        it('false-positive guard: a "directly damaged" passive that HEALS does not produce a counter', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'counter')).toHaveLength(0);
+        });
+
+        it('false-positive guard: a reflect ("reflects X% of the Damage taken") passive does not produce a counter', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'When directly damaged, this Unit reflects <unit-damage>40%</unit-damage> of the Damage taken to the attacker.',
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'counter')).toHaveLength(0);
+        });
+    });
+
     // Phase 4c PR 1 (Task 8): non-heal damage reactions. Self-subject reaction sentences
     // route their buff grants / debuff inflictions through the LIVE on-attacked trigger
     // (+ triggerCritFilter for "is critically hit") instead of registering as unconditional
