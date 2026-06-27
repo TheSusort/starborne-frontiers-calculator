@@ -135,20 +135,34 @@ removal = 2 and `cleanse.count === 2` holds — turning the assertion into a gen
 Add a negative-control assertion in the same suite: with no debuffs seeded, no `cleanse-performed`
 fires (makes the symmetry behavior change explicit).
 
+### Update: partial-removal case in `enemyActions.test.ts`
+
+Add a partial-removal assertion to the same suite — this is the crux of the symmetry fix and the
+case where the old stub diverged most. `statusEngine.cleanse(rid, count)` clamps to available
+candidates (`Math.min(count, candidates.length)`, statusEngine.ts:994), so an enemy cleanse with
+`count: 2` against **only 1** removable debuff fires `cleanse-performed` with `count === 1` — not
+the nominal 2 the old stub always bumped. Assert this explicitly.
+
 ### New: `enemyCleanse.integration.test.ts`
 
 Mirror `enemyOnCastShield.integration.test.ts` — real skill registry + positional two-team
-harness:
+harness. Real cleanse actives (e.g. Cultivator, Hayyan) bundle cleanse with shields/buffs/heals,
+so all assertions must scope to the **`cleanse-performed`** event specifically (not "no events"),
+and isolate the cleanse observable from co-bundled effects:
 - **Positive:** an enemy with a cleanse active + the player has landed a removable debuff on that
   enemy → after the enemy's cast, the debuff is gone (assert via status snapshot / debuff-derived
   observable, or a `cleanse-performed` count reflecting REAL removal).
-- **Negative control:** enemy with no removable debuff → nothing removed, no event.
+- **Negative control:** enemy with no removable debuff → nothing removed, **no `cleanse-performed`
+  fires** (assert on that event's absence specifically).
 - **Revert check:** reverting the lift makes exactly the positive case fail.
 
 ### Player-side regression guard
 
-An existing player cleanse test stays **byte-identical** (the `if (!healEventOnly)` credit path
-is unchanged for the player; player removal already happened pre-lift).
+The dedicated player cleanse cast-path test `cleanseCastPath.test.ts` stays **byte-identical**
+(player-only path, untouched by the `else`-branch change; player removal already happened
+pre-lift). Note: the `enemyActions.test.ts` "normal mode (healEventOnly false)" test (~lines
+437–470) already seeds debuffs and asserts real removal on the player branch — it is already
+correct and must NOT move.
 
 ### Golden audit
 
