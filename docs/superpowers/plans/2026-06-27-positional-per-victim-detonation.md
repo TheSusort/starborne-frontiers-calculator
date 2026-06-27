@@ -242,16 +242,110 @@ git commit -m "docs(combat): changelog + docs for per-victim skill detonation"
 
 ---
 
-## PR2 — Timed bombs + accumulators per positioned enemy (OUTLINE — detail after PR1)
+## PR2 — Timed bombs + accumulators per positioned enemy (DETAILED 2026-06-27, post-PR1)
 
-**Goal:** `processBombs` / `processAccumulators` (`engine.ts:4725` / `:4746`) run today only on the focus enemy's turn (`actor.id === enemy.id` gate, `:4695`). Make each positioned enemy burst its own timed bombs/accumulators against its own HP on its own turn, routing through `applyVictimDamage` (reusing Task-1 `detonateContainers` for bombs / the accumulator burst math) instead of the aggregate `creditDetonation`.
+**Goal:** Today `processBombs` / `processAccumulators` (`engine.ts:700` / `:727`) run only on the focus dummy enemy's turn (`actor.kind === 'enemy' && actor.id === enemy.id`, `engine.ts:4794`) against the focus dummy's containers (`enemy.pendingBombs` / `enemy.pendingAccumulators`, bound at `:1666-1667`). In positional mode the real enemy victims are the `enemyAttackerActors` (= `playerTurnBindings.opposingRoster`, `engine.ts:3538`) — each is its own turn-taking actor with its own per-actor containers (`state.ts:124-127`, seeded in `createActor`). They take their turns in the enemy-attacker branch (`engine.ts:4851`+), which never processes their own timed containers. So a timed bomb/accumulator stored on a positioned enemy **never bursts**. PR2 makes each positioned enemy burst its OWN timed bombs/accumulators against its OWN HP on its OWN turn, routed through `applyVictimDamage` (the PR1 per-victim sink), suppressing the aggregate `creditDetonation`→`cumulativeDamage` path.
 
-**Key questions for PR2's Task 0:**
-- How does the round loop iterate non-focus positioned enemies, and where is their per-turn hook (the `actor.kind === 'enemy'` branches at `:4695` and `:4752`)?
-- Do non-focus enemies even carry `pendingBombs`/`pendingAccumulators` today (application is anchor-only — so timed bursts on non-focus enemies only matter once those containers can be populated; confirm via PR1's seeding tests whether this is reachable)?
-- Reconcile with the 5326 focus-enemy reconciliation (same seam as PR1).
+**Direction:** player→enemy still (the bombs were applied BY the player TO the enemies; they burst ON the enemies). PR3 does the enemy→player mirror. Damage lands on the enemy actor via `enemySink` (the same sink PR1 used).
 
-PR2 is detailed once PR1's `detonateContainers` + apply-site pattern are concrete.
+**Scope (locked):** timed `processBombs` + `processAccumulators` per positioned enemy. `tickDoTs` stays OUT (sibling follow-up — shares the focus-only restriction; not detonation). New bomb/DoT *application* stays anchor-only (out of scope per spec §5).
+
+### PR2 Task 0 — Decisions (resolved 2026-06-27 via wiring spike against current source)
+
+**Q1 — Turn-site for positioned enemy timed bursts: the enemy-attacker branch (`engine.ts:4851`, `else if (actor.kind === 'enemy')`).** Positioned enemy victims are `enemyAttackerActors` (they require `healTargetId` → the PR1/PR2 harness sets `healTargetId`; same as `perVictimDetonation.integration.test.ts`). They take turns at `:4851`. The focus dummy (`:4794`, `actor.id === enemy.id`) keeps its EXISTING `tickDoTs`/`processBombs`/`processAccumulators` UNCHANGED — in non-positional it is the sole bomb carrier (byte-identical); in positional its containers are empty (application targets the positioned `tgt`, `engine.ts:3628-3631`) → no-op. **PR2 ADDS a per-actor timed-burst step in the `:4851` branch** (does NOT remove the `:4794` gate). DoTs/bombs tick at the START of the afflicted ship's turn (comment `:4797`) → insert the burst at the START of the enemy-attacker turn handling, BEFORE its action body.
+
+**Q2 — Gate the new per-actor burst on `actor.side === 'enemy'` + positional + own containers non-empty.** Reuse `isPositional(actor.position, allPlayerActors)` (the enemy site's positional sense, already computed as part of `enemyPositional` at `:5011`) OR a lighter own-side positional check — Task 1 spike confirms the minimal sufficient gate. Belt-and-suspenders: only enter when `actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0`, so a non-positional / container-less enemy is a strict no-op (byte-identical guard; no fixture seeds enemy-actor timed containers today).
+
+**Q3 — Per-actor burst routing (reuse `processBombs`/`processAccumulators` with repointed callbacks).** Both helpers already take `creditDetonation`/`emitBombDetonated` callbacks and own the countdown decrement + splice. Call them on `actor.pendingBombs` / `actor.pendingAccumulators` (the acting enemy's own containers), with callbacks that:
+- **Bomb** (`processBombs.creditDetonation(sourceId, damage)`): `applyVictimDamage(damage, actor, enemySink, { killerId: sourceId, byDirectDamage: true, bombPortion: damage, shieldPenetrationPct: 0 })` — full shield drain, no pen (same flags as PR1 bomb + bomb-splash precedent `engine.ts:2973`). `emitBombDetonated(actorId, stacks, damage)` → `bus.emit('bomb-detonated', { actorId, round, stacks, damage })` (actorId = applier, unchanged attribution). Record `roundPerTargetDamage[actor.id] += damage`; tally `perActorDetonation[sourceId] += damage` (applier-keyed display, mirrors PR1).
+- **Accumulator** (`processAccumulators.creditDetonation(sourceId, damage)`): **DEFAULT decision — treat as a neutral direct detonation hit the shield absorbs normally** (NOT bomb-style full-drain, NOT DoT bypass): `applyVictimDamage(damage, actor, enemySink, { killerId: sourceId, byDirectDamage: true, bombPortion: 0, shieldPenetrationPct: 0 })`. Rationale: an accumulator (Echoing Burst) is neither a bomb (no locked full-drain rule) nor a DoT (no bypass); the least-surprising shield interaction is ordinary absorb-then-HP. **FLAG for spec-reviewer in Task 4** — if the reviewer wants bomb-style full-drain, change `bombPortion: 0` → `bombPortion: damage`. (Production-unreachable today — application is anchor-only — so this only affects newly-seeded tests; byte-identical for all goldens regardless.) `allPlayersDirect` gather input stays the round-global `[...roundDamage.values()].reduce((s,d)=>s+d.direct,0)` (`engine.ts:4841`), computed identically per acting enemy. Accumulator has no `bomb-detonated`/`dot-detonated` event today → keep none (or emit a `dot-detonated` with `targetId: actor.id` ONLY if the reviewer wants surfacing; default: no new event to stay parity-minimal). Tally `perActorDetonation[sourceId] += damage` + `roundPerTargetDamage[actor.id] += damage`.
+
+**Q4 — No line-5326 double-count for positioned enemies.** The `cumulativeDamage`→`engine.ts:5326` reconciliation overwrites the **focus dummy** `enemy.currentHp` only. Positioned enemy actors decrement their own `currentHp` directly inside `applyVictimDamage` (like PR1 detonation + direct). So routing per-actor bursts through `applyVictimDamage` and NOT through `creditDamage(sourceId,'detonation',…)` keeps them off `cumulativeDamage` → no double-hit. The focus dummy's `:4794` path is untouched (its `creditDetonation`→`cumulativeDamage` only fires for the dummy's own containers, empty in positional). **VERIFY in Task 1 spike:** confirm `creditDamage(…, 'detonation', …)` feeds `cumulativeDamage` (PR1 established it does → suppression was required); the new per-actor path must avoid it.
+
+**Q5 — Death from a turn-start burst skips the actor's action.** A timed burst that zeroes the enemy's HP must prevent its action body from running (a dead ship does not act). `applyVictimDamage` fires `recordDestroyed` on lethal. After the burst, re-check `actor.currentHp <= 0` and SKIP the action body (mirror the existing `targetDead`/dead-actor handling). **Task 1 spike confirms** whether the main loop's actor-selection already excludes the now-dead actor or whether an explicit local guard is needed at `:4877`+; record the exact guard. (Splash-on-death from leftover bombs already chains through `applyVictimDamage`/`recordDestroyed`.)
+
+---
+
+### Task 1: Wiring spike (BLOCKING — confirm the four runtime facts, then proceed)
+
+**Goal:** Confirm the Task-0 decisions against a live throwaway test before implementing. No production code (delete any spike test before Task 2).
+
+**Files (read):** `src/utils/combat/engine.ts:4794-4850` (focus burst), `:4851-5160` (enemy-attacker turn), `:5289-5326` (5326 reconciliation), `:3160-3231` (`playerSink`/`enemySink`/`applyVictimDamage`), `:700-741` (`processBombs`/`processAccumulators`).
+
+- [ ] **Step 1: Confirm `creditDamage(…, 'detonation', …)` feeds `cumulativeDamage`** (grep `creditDamage` + the detonation accumulation into `cumulativeDamage`/`totalDetonationRaw`). Confirm the new per-actor path must NOT call it. Record the exact lines.
+- [ ] **Step 2: Confirm the enemy-attacker turn START is the right insertion point** and that `enemySink` + `applyVictimDamage` + `roundPerTargetDamage` + `perActorDetonation` are all in scope at `:4851`+. Record the exact insertion line (before `if (!isTurnBlocked(actor.id))` at `:4877`, or just inside it — DoTs tick even for a turn-blocked/stasised ship? Check the `:4794` focus path: it processes regardless of stasis since the dummy has no stasis gate; decide whether positioned-enemy bursts run on a stasised turn — DEFAULT: run at turn-start regardless of stasis, matching the focus dummy's unconditional processing, but record the call's exact placement relative to the `isTurnBlocked` gate).
+- [ ] **Step 3: Confirm the dead-after-burst guard** — write a throwaway test seeding a lethal timed bomb on a positioned enemy, burst it, assert the enemy does NOT act afterward (its action body is skipped). Record whether the loop auto-skips or an explicit `actor.currentHp <= 0` local guard is needed.
+- [ ] **Step 4: Confirm accumulator `allPlayersDirect`** is computed identically per acting enemy (round-global) and that bursting it per-enemy does not disturb the focus dummy's accumulator processing.
+- [ ] **Step 5: Append a short "## PR2 Task 1 — Spike confirmations" block** to this plan, delete the throwaway test, commit the plan update:
+```bash
+git add -f docs/superpowers/plans/2026-06-27-positional-per-victim-detonation.md
+git commit -m "docs(combat): PR2 Task 1 wiring confirmations for timed per-victim detonation"
+```
+
+---
+
+### Task 2: Failing integration test — timed bombs/accumulators per positioned enemy
+
+**Goal:** Pin the per-positioned-enemy timed burst. Harness = `perVictimDetonation.integration.test.ts` (positioned `enemyAttackers`, `healTargetId` set, crit 0 → exact integers, `__testTapActors` seeding, multi-round so countdowns reach 0).
+
+**Files:** Create `src/utils/combat/__tests__/perVictimTimedDetonation.integration.test.ts`.
+
+- [ ] **Step 1: Write failing tests.** Seed a TIMED bomb (`countdown: 2`) on a NON-focus positioned enemy (`enemy-mid`) and run `numRounds: 2`. Assert:
+  - the bomb bursts against `enemy-mid`'s OWN HP on its OWN turn (countdown reaches 0 round 2): `perTargetDamage['enemy-mid']` includes the burst; `perActorDetonation[applier]` credited; `bomb-detonated` emitted with applier `actorId`;
+  - the burst is NOT folded into the focus dummy (`enemy.id`) / not double-counted via 5326;
+  - an accumulator seeded on a positioned enemy bursts for `accumulated × pct/100` on expiry, credited to its applier, landing on that enemy's HP (shield-absorb-normal per Q3 default);
+  - a lethal timed bomb KILLS the positioned enemy → `ship-destroyed` for it + (with a leftover bomb) bomb-splash chain → `perActorSplash`; the dead enemy does not act afterward;
+  - **byte-identical guard:** a non-positional run with a timed bomb on the focus dummy bursts EXACTLY as today (regression pin against the `:4794` path).
+- [ ] **Step 2: Run, verify fail** (`npx vitest --run src/utils/combat/__tests__/perVictimTimedDetonation.integration.test.ts`).
+
+---
+
+### Task 3: Implement per-positioned-enemy timed bursts
+
+**Files:** `src/utils/combat/engine.ts` (enemy-attacker branch `:4851`+; add the per-actor timed-burst step + dead-after-burst guard); `src/utils/combat/dpsSimulator.ts` only if a new RoundData field is needed (reuse existing `perActorDetonation`/`perTargetDamage` from PR1 → likely none).
+
+- [ ] **Step 1: Implement** per Task-0 Q1-Q5: at the enemy-attacker turn start, when positional + own timed containers non-empty, call `processBombs`/`processAccumulators` on `actor`'s own containers with callbacks routing each burst through `applyVictimDamage(…, actor, enemySink, <Q3 flags>)` + `roundPerTargetDamage[actor.id]` + `perActorDetonation[sourceId]` + per-victim `bomb-detonated`; guard the action body on `actor.currentHp > 0` after the burst.
+- [ ] **Step 2: Run the new integration test → PASS.**
+- [ ] **Step 3: Run the FULL suite** (`npm test`). All green. **Hand-audit any moved golden — expect ZERO** for non-positional. NEVER `vitest -u`.
+- [ ] **Step 4: tsc + lint** (`npx tsc --noEmit && npm run lint`) → clean (max-warnings 0).
+- [ ] **Step 5: Commit.**
+```bash
+git add src/utils/combat/engine.ts src/utils/combat/__tests__/perVictimTimedDetonation.integration.test.ts
+git commit -m "feat(combat): per-positioned-enemy timed bomb/accumulator detonation"
+```
+
+---
+
+### Task 4: Changelog + docs + memory
+
+**Files:** `src/constants/changelog.ts` (`UNRELEASED_CHANGES`); `src/pages/DocumentationPage.tsx` (only if combat-sim detonation is user-surfaced — else note skip); memory `project_positional_per_victim_detonation.md` + `MEMORY.md` (PR2 status).
+
+- [ ] **Step 1: Changelog** — positioned battle sim: timed bombs and accumulators now burst on each targeted ship individually (against its own HP, can kill it and trigger its death effects), not only on the primary target.
+- [ ] **Step 2: Update memory** with PR2 status + the accumulator-shield-flag decision (flag for review outcome).
+- [ ] **Step 3: Commit.**
+```bash
+git add src/constants/changelog.ts
+git commit -m "docs(combat): changelog for per-positioned-enemy timed detonation"
+```
+
+---
+
+### Task 5: Code review + open PR2
+
+- [ ] **Step 1:** `superpowers:requesting-code-review` on the PR2 diff. Surface the accumulator-shield-flag default explicitly for the reviewer's call (Q3).
+- [ ] **Step 2:** Address findings (prefer doc-only / targeted; re-run full suite after each).
+- [ ] **Step 3:** `gh auth switch --user TheSusort`; open PR2 stacked on `feat/combat-positional-per-victim-detonation` (PR1 #168). PR body: the byte-identical guarantee + that this lifts the focus-enemy timed-burst restriction (player→enemy; PR3 mirrors enemy→player).
+
+---
+
+## Done criteria (PR2)
+
+- [ ] Each positioned enemy bursts its OWN timed bombs/accumulators against its OWN HP on its OWN turn.
+- [ ] A lethal timed burst kills the positioned enemy → death + bomb-splash chain + per-victim reactives; the dead enemy does not act.
+- [ ] `bomb-detonated` emits per bursting victim; `perTargetDamage`/`perActorDetonation` reflect it; credit per applier.
+- [ ] No double-count against line 5326; focus dummy `:4794` path byte-identical.
+- [ ] Non-positional fixtures **byte-identical**; full `npm test` green; tsc + lint clean.
+- [ ] Changelog updated; PR2 opened stacked on PR1 (#168).
 
 ---
 
