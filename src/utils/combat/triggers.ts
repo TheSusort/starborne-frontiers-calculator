@@ -60,6 +60,7 @@ export type ReactiveAbilityType =
     | 'cleanse'
     | 'extra-action'
     | 'damage'
+    | 'counter' // G PR1: counter-attack reactive (on-attacked) — no parser produces it until Task 5
     | 'purge'; // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
@@ -73,6 +74,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'cleanse',
     'extra-action',
     'damage',
+    'counter', // G PR1: counter reactive — byte-identical (no fixture carries a counter ability)
     'purge', // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
 ];
 
@@ -120,6 +122,10 @@ export interface Intent {
          *  triggering attack (on-attacked -> attacked.isPrimaryTarget). Stalwart's counter
          *  gates on this so splash/covered victims do not counter. */
         isPrimaryTarget?: boolean;
+        /** G PR1 (plumbed in PR2): true when the triggering hit reduced the owner's SHIELD pool.
+         *  Nyxen's counter gates on this (`requireShieldHit`). No listener sets it yet → always
+         *  undefined here → the shield-hit gate is currently inert (byte-identical). */
+        shieldWasHit?: boolean;
         /** The actor ids of the allies repaired by an on-own-repair-to-ally event
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
          *  exactly these recipients (Font of Power -> repaired allies). */
@@ -795,6 +801,11 @@ export interface IntentExecContext {
         multiplier: number,
         hits: number
     ) => void;
+    /** G PR1: per-actor-turn once-per-attack guard. Keyed `ownerId:abilityId`. Cleared at each
+     *  actor turn-start (engine) so the per-hit `attacked` events of ONE attack collapse to a
+     *  single counter; a later attack (different turn) counters again. Absent → no guard (the
+     *  counter branch is inert without the engine ctx). */
+    counterFiredThisTurn?: Set<string>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
@@ -1772,6 +1783,40 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, count);
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
+        return;
+    }
+
+    if (cfg.type === 'counter') {
+        // G PR1: a live counter-attack — the owner hits its attacker back via the engine's full
+        // mitigated/crit walk (applyCounterAttack), which emits NO `attacked` event → no re-counter.
+        //
+        // GATE ORDERING (intentional DEVIATION from the `damage` branch's proc→once-per-round
+        // first): the CHEAP, NON-CONSUMING boolean gates run FIRST (primary-target, shield-hit,
+        // attacker presence, once-per-attack), and the CONSUMING gates (proc-chance, once-per-round)
+        // run LAST. `passesOncePerRoundGate` CONSUMES its slot only when it returns true; running it
+        // before the cheap gates would let a counter that is then suppressed (wrong-target hit /
+        // already-fired-this-attack) burn a once-per-round slot it never used. Putting it last means
+        // it is only ever consulted for a counter that WILL fire on this event.
+        if (cfg.requirePrimaryTarget && intent.eventCtx?.isPrimaryTarget !== true) return;
+        if (cfg.requireShieldHit && intent.eventCtx?.shieldWasHit !== true) return; // PR2 plumbs shieldWasHit
+        const attackerId = intent.eventCtx?.counterTargetId;
+        if (!attackerId) return;
+        // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter.
+        // The guard set is cleared at every actor turn-start (engine), so a separate later attack
+        // counters again. Absent (unit ctxs without the engine) → no guard.
+        const key = `${intent.ownerId}:${intent.ability.id}`;
+        if (ctx.counterFiredThisTurn?.has(key)) return;
+        // Consuming gates LAST (see ordering note above).
+        if (!passesProcChanceGate(intent, ctx)) return;
+        if (!passesOncePerRoundGate(intent, ctx)) return;
+        ctx.counterFiredThisTurn?.add(key);
+        ctx.applyCounterAttack?.(
+            intent.ownerId,
+            attackerId,
+            intent.ability.id,
+            cfg.multiplier,
+            cfg.hits ?? 1
+        );
         return;
     }
 

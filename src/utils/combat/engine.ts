@@ -2066,6 +2066,11 @@ export function runCombat(input: CombatEngineInput): {
     // round alongside repairedThisRound.
     const hitThisRound = new Set<string>();
 
+    // G PR1: once-per-attack guard. Cleared at every actor turn-start so all per-hit `attacked`
+    // events of ONE attack collapse to a single counter, while a separate later attack (a different
+    // turn) counters again. NOT per-round.
+    const counterFiredThisTurn = new Set<string>();
+
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Only constructed in healing mode.
     const healingCtx: HealingRuntimeCtx | undefined = healTarget
@@ -3887,6 +3892,7 @@ export function runCombat(input: CombatEngineInput): {
                             creditDamage(ownerId, 'direct', amount);
                         },
                         applyCounterAttack,
+                        counterFiredThisTurn,
                         // Healing mode only — the SAME shared ctx the player turns use, so a
                         // reactive heal/shield/cleanse credits the same per-round buckets and
                         // mutates the same live target. Undefined in DPS mode → the executor's
@@ -4153,6 +4159,11 @@ export function runCombat(input: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+
+                // G PR1: reset the once-per-attack counter guard at each actor turn-start so a
+                // later attack (a different turn) can counter again while all per-hit `attacked`
+                // events of ONE attack collapse to a single counter.
+                counterFiredThisTurn.clear();
 
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
                 // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
