@@ -50,6 +50,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: enemy ships now benefit from their on-cast shield skills — they gain shields, absorb your damage, and trigger shield-reactive abilities (e.g. shield-hit counters). Previously these effects only worked on your own ships.',
     'Combat simulator: enemy ships that cast a cleanse skill now actually remove the debuffs you applied to them, instead of the cleanse having no effect. Skills that trigger off an enemy being cleansed (such as Arum and Grif) now fire only when a debuff is really removed.',
     'Combat simulator: in positioned battles, bomb/Inferno/Corrosion detonation now damages each ship the skill hits individually — every target detonates its own stored bombs and damage-over-time effects against its own HP, so a detonation can now kill secondary (splash) targets and trigger their on-death effects, instead of only counting against the primary target.',
+    'Combat simulator: in positioned battles, timed bombs and Echoing Burst accumulators now burst on each enemy ship individually — every affected ship detonates its own timed bombs and accumulators against its own HP on its own turn, so a timed burst can now kill that ship and trigger its on-death effects, instead of only counting against the primary target.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

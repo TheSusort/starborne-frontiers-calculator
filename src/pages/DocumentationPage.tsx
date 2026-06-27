@@ -3169,7 +3169,10 @@ const DocumentationPage: React.FC = () => {
                                     bombs and damage-over-time effects against its own HP, so a
                                     detonation can kill secondary (splash) targets and trigger their
                                     on-death effects, rather than only counting against the primary
-                                    target. More implant and gear-set effects will be added in
+                                    target. Timed bombs and Echoing Burst accumulators likewise
+                                    burst on each enemy individually — every affected ship detonates
+                                    its own timed bombs and accumulators against its own HP on its
+                                    own turn. More implant and gear-set effects will be added in
                                     future updates.
                                 </p>
                             </div>
