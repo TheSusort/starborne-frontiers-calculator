@@ -1928,9 +1928,37 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     healRawSum += raw;
                 }
             } else if (cfg.type === 'shield') {
-                // Event-only: shields are not repairs → no heal-performed recipient, no numeric.
-                // Skip entirely (no credit/grant).
-                if (healEventOnly) continue;
+                if (healEventOnly) {
+                    // Enemy shields grant a real pool to each enemy recipient and emit
+                    // shield-applied, but credit NO player bucket — the symmetric counterpart to
+                    // the E5 enemy-heal lift above. Routing/cap/absorb are already side-agnostic
+                    // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
+                    // No crit / no modifiers (shields aren't repairs), matching the player branch.
+                    const recipients = recipientsFor(ability.target);
+                    const shieldRecipientIds: string[] = [];
+                    let shieldGrantedSum = 0;
+                    for (const rid of recipients) {
+                        const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
+                        const recipientActor = healing.recipientActor(rid);
+                        if (recipientActor) {
+                            const granted = healing.grantShieldToTarget(raw, recipientActor);
+                            if (granted > 0) {
+                                shieldRecipientIds.push(rid);
+                                shieldGrantedSum += granted;
+                            }
+                        }
+                    }
+                    if (shieldRecipientIds.length > 0) {
+                        bus.emit({
+                            type: 'shield-applied',
+                            granterId: actor.id,
+                            recipientIds: shieldRecipientIds,
+                            round: r,
+                            amount: shieldGrantedSum,
+                        });
+                    }
+                    continue;
+                }
                 // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                 // outgoingHeal/incomingHeal channels — raw = basis × pct.
                 const recipients = recipientsFor(ability.target);
