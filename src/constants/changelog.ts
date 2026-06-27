@@ -45,6 +45,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Voidfire Catalyst implant now also amplifies bomb splash damage — when a bomb-carrier is destroyed, the splash damage dealt to adjacent ships is increased by Voidfire Catalyst, including its rare and legendary splash-only variants.',
     'Combat & DPS simulators now model the Boost gear set: while a ship wears 4 or more Boost pieces, each timed buff it applies — to itself or its allies — lasts one extra turn.',
     "Combat simulator now models counterattacks: one of your ships with a 'when directly damaged' passive (e.g. Stalwart) strikes back at the attacker for a share of its own attack — full damage that can crit and kill. Enemy-side counters are coming in a later update.",
+    'Combat simulator now models more counterattackers: Nyxen strikes back when its shield is directly hit, and Centurion retaliates when it or an adjacent ally is directly damaged.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
