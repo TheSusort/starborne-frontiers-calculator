@@ -164,16 +164,36 @@ pre-lift). Note: the `enemyActions.test.ts` "normal mode (healEventOnly false)" 
 437–470) already seeds debuffs and asserts real removal on the player branch — it is already
 correct and must NOT move.
 
-### Golden audit
+### Golden audit (as-built)
 
-`npx vitest --run src/utils/combat` → expect **ZERO `.snap` movement** (no fixture equips an enemy
-cleanser, same as #166). Investigate any assertion test that moves beyond the deliberately-updated
-`enemyActions.test.ts` case.
+`npx vitest --run src/utils/combat` → **ZERO combat `.snap` movement** (confirmed: no combat
+fixture equips an enemy cleanser, same as #166).
+
+**Correction to the original "byte-identical / ZERO `.snap`" claim (scoped too narrowly):** the
+implementation surfaced **two** pre-existing enemy-cleanser **reactor** fixtures that asserted the
+OLD always-fire cadence (an enemy `cleanse self count:1` with **no debuff ever applied**, relying
+on a nominal `cleanse-performed` to drive a focus on-enemy-cleansed proc):
+
+1. `enemyActions.test.ts` **Task 5b** Grif test — an assertion-only fixture (no `.snap`). Retargeted
+   to the symmetric **no-removal** cadence: a no-op enemy cleanse removes nothing → no
+   `cleanse-performed` → no Grif proc. The positive Grif chain (proc on a REAL removal) moved to
+   `enemyCleanse.integration.test.ts`.
+2. `healingGoldenParity.test.ts` **scenario 28** — a golden-backed fixture (Grif damage proc +
+   Yarrow "Vigor Up" self-buff off the no-op cleanse). Retargeted to the same no-removal cadence and
+   its golden **deliberately refreshed** via the file's sanctioned delete-and-rerun discipline (NOT
+   `vitest -u`) — **one intended `.snap` move**, diff confined to scenario 28's
+   `enemy cleanse reaction (player damage proc + self-buff on enemy cleanse)` entry only (losing the
+   Vigor Up display from round 2 on).
+
+So the as-built audit is: **zero combat `.snap` movement; exactly one deliberate
+`healingGoldenParity.test.ts.snap` scenario-28 refresh.** This is the full-symmetry cadence the spec
+approved (open-Q2): the on-enemy-cleansed reactor chain now requires a real removal on both sides.
 
 ## Verification gates (every epic PR)
 
 `npx tsc --noEmit` clean · `npm run lint` 0 warnings · `npm run audit:skills` 141/0 ·
-`npm test` 0 failed tests · ZERO `.snap` golden movement.
+`npm test` 0 failed tests · ZERO **combat** `.snap` movement (the single deliberate scenario-28
+golden refresh in `healingGoldenParity.test.ts.snap` is the only intended snapshot change).
 
 ## Branch / stack hygiene
 
