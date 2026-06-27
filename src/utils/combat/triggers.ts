@@ -1804,6 +1804,12 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // Once-per-ATTACK: all per-hit `attacked` events of ONE attack collapse to a single counter.
         // The guard set is cleared at every actor turn-start (engine), so a separate later attack
         // counters again. Absent (unit ctxs without the engine) → no guard.
+        // SCOPE NOTE: today this turn-granularity IS per-attack — the `attacked` event is emitted
+        // once per turn for the focus victim only (events.ts), and extra actions re-enter the turn
+        // loop (re-clearing the guard), so one actor can't land two DISTINCT attacks on the same
+        // victim inside one guard window. When positional per-victim emission or multi-attack-per-turn
+        // lands (the same future work that makes isPrimaryTarget meaningful), this key must gain an
+        // attack-instance token from the triggering `attacked` event to stay once-per-attack.
         const key = `${intent.ownerId}:${intent.ability.id}`;
         if (ctx.counterFiredThisTurn?.has(key)) return;
         // Consuming gates LAST (see ordering note above).

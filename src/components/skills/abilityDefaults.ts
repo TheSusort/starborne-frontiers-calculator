@@ -125,7 +125,11 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
     id,
     type,
     target: DEFAULT_TARGETS[type],
-    trigger: 'on-cast',
+    // A counter only ever fires on the victim-side `on-attacked` path (the parser builds it
+    // that way and the combat executor reads that trigger), so default it correctly — the
+    // helper should always yield a semantically valid ability, even though counters are
+    // currently parser-generated rather than authored via the picker.
+    trigger: type === 'counter' ? 'on-attacked' : 'on-cast',
     conditions: [],
     config: makeDefaultConfig(type),
 });

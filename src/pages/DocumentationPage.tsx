@@ -3149,11 +3149,12 @@ const DocumentationPage: React.FC = () => {
                                     Inferno detonations, and Corrosion detonations) and bomb splash
                                     damage by a percentage based on rarity — its rare and legendary
                                     variants amplify bomb splash damage only. Counterattacks are now
-                                    modeled too: a ship with a &quot;when directly damaged&quot;
-                                    passive (such as <strong>Stalwart</strong>) retaliates against
-                                    the attacker for a share of its own attack — a full hit that can
-                                    crit and kill. More implant and gear-set effects will be added in
-                                    future updates.
+                                    modeled too: one of your ships with a &quot;when directly
+                                    damaged&quot; passive (such as <strong>Stalwart</strong>)
+                                    retaliates against the attacker for a share of its own attack —
+                                    a full hit that can crit and kill (enemy-side counters are
+                                    coming in a later update). More implant and gear-set effects
+                                    will be added in future updates.
                                 </p>
                             </div>
                         </div>

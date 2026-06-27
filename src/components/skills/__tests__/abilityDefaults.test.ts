@@ -70,6 +70,10 @@ describe('makeDefaultAbility', () => {
         expect(ability.conditions).toEqual([]);
     });
 
+    it('defaults a counter to the on-attacked trigger (its only valid firing path)', () => {
+        expect(makeDefaultAbility('counter').trigger).toBe('on-attacked');
+    });
+
     it('honours a passed-in id and generates unique ids otherwise', () => {
         expect(makeDefaultAbility('damage', 'fixed-id').id).toBe('fixed-id');
         const a = makeDefaultAbility('damage');
