@@ -379,15 +379,103 @@ git commit -m "docs(combat): changelog for per-positioned-enemy timed detonation
 
 ---
 
-## PR3 — Enemy→player symmetric (OUTLINE — detail after PR1)
+## PR3 — Enemy→player symmetric skill-triggered detonation (DETAILED 2026-06-27, post-PR1/PR2)
 
-**Goal:** Enemy detonate skills land per-player. The enemy-dispatch branch (`engine.ts:4752+`) already runs `runPlayerTurn` with the player target bound as `enemy`; the positional enemy→player apply uses `playerSink`/`applyIncomingToTarget`. Wire the same per-victim detonation through `playerSink`, mirroring PR1.
+**Goal:** An enemy ship's detonate skill lands per **player** footprint victim — each player victim detonates its OWN stored containers against its OWN HP (so an enemy detonate can kill a covered player and fire its death/reactive chain), exactly mirroring PR1's player→enemy block but routed through `playerSink`. The canonical team-symmetry close ([[feedback_engine_team_symmetry]]): the same detonate ship behaves identically on either side.
 
-**Key questions for PR3's Task 0:**
-- The enemy-dispatch branch's positional apply site (the symmetric analogue of `drivePositionalApply` for enemy→player) and its victim wrapper.
-- The E5-symmetry invariant test: a ship with a detonate skill behaves identically detonating player bombs as enemy bombs.
+**Direction:** enemy→player. The enemy-attacker branch (`engine.ts:4851`+) already runs `runPlayerTurn(buildTurnArgs(actor, tgt))` with the player victim bound as `enemy`, and its positional firing hit lands per-victim via `drivePositionalApply` + the enemy-side `applyToVictim` (= `applyIncomingToTarget` → `playerSink`). PR3 routes the per-victim DETONATION through `applyVictimDamage(..., victim, playerSink, flags)`.
 
-PR3 is detailed once PR1 lands.
+**Scope (locked):** skill-triggered detonation only (the PR1 analogue). Timed bombs/accumulators on positioned PLAYER victims are PR2's mirror — NOT in PR3 (PR2 lifted the focus-enemy timed gate for positioned ENEMIES; positioned-player timed bursts are a sibling follow-up, same as the player→enemy timed burst was its own PR). DoT TICKS still OUT.
+
+### PR3 Task 0 — Decisions (resolved 2026-06-27 via wiring spike against live source)
+
+**THE GAP is already named in-source.** `engine.ts:5249-5261` carries an explicit `DETONATION CAVEAT (E5 §4.3 — PEELED to a dedicated follow-up)`: on the enemy positional path, `drivePositionalApply` lands ONLY the direct firing hit (`enemyScalars`); the detonation slice (folded into the aggregate `damage` as `enemyTurn.detonationDamage`) is left **unrouted** (the non-positional `else` drains it per-victim via `applyIncomingToTarget(damage, tgt, { bombPortion: enemyDetonationDamage })`, but the positional branch drops it). **PR3 IS that peeled follow-up.**
+
+**Q1 — Widen the positional-hint gate (`engine.ts:3667`).** Today the `positional: true` hint passed into `runPlayerTurn` is gated `a.id === focusActorId` (PR1 CR-fix `d2632128` — team/enemy sites had no per-victim loop, so the hint would skip their anchor detonate() and silently DROP it). Widen to **`(a.id === focusActorId || a.side === 'enemy')`** so a positional ENEMY actor's `runPlayerTurn` also gets `positional: true` → skips `detonate()` (no consume/credit/emit), returns the `positionalDetonation` recipe, leaves `detonationDamage = 0`. **Walked-team PLAYER actors STAY on the legacy anchor path** (no per-victim detonation loop at the team site yet — out of scope). **VERIFIED safe (`playerTurn.ts:1484-1508`):** `positional: true` ONLY swaps the `detonate()` call for the recipe build; nothing else in `runPlayerTurn` branches on it. Byte-identical for every golden (no production caller threads enemy position+pattern → `enemyPositional` is false for all fixtures; the gate widening only affects newly-seeded PR3 tests).
+
+**Q2 — No `playerTurn.ts` change.** The `positionalDetonation` recipe (`DetonationRecipe` from `./detonation`, already imported into engine.ts:58) is side-agnostic — built from the gated skill's `detonationsFromSkill` + the attacker's own scalars. `runPlayerTurn` already returns it whenever `positional` is set, regardless of side. PR3 is an **engine.ts-only** change.
+
+**Q3 — Hoist the recipe + collect victims (mirror `enemyScalars`).** `enemyTurn` is scoped INSIDE the enemy turn's `else` block (`engine.ts:5060`+). Add a hoisted `let enemyPositionalDetonation: DetonationRecipe | undefined;` next to `enemyScalars`/`enemyHitCrits` (`:5037`), assigned `= enemyTurn.positionalDetonation;` inside the else (next to `enemyScalars = enemyTurn.positionalScalars;` at `:5130`). Declare `const detonationTargets = new Map<string, CombatActor>();` before the `drivePositionalApply` call (`:5263`) and add `detonationTargets.set(victim.id, victim);` to its `onVictimResolved` hook (`:5278`, alongside `procTakenLeechesPerVictim`) — mirror PR1's collection at `:4453`.
+
+**Q4 — Per-victim detonation block (mirror PR1 `:4484-4544`), routed through `playerSink`.** After the `emitAttacked` call (`engine.ts:5401-5410`), still inside `if (damage > 0)`, gated on `enemyPositional && enemyPositionalDetonation && enemyPositionalDetonation.dets.length > 0`:
+- for each `victim` of `detonationTargets.values()`: skip if `victim.currentHp <= 0` (died to the firing hit → already splashed);
+- `const result = detonateContainers(enemyPositionalDetonation, { corrosionEntries, infernoEntries, pendingBombs: victim.*, victimHp: tb.victimMaxHpFor(victim) })` — `tb = turnBindings(actor.side)` (= `enemyTurnBindings`), so `victimMaxHpFor` = `recipientMaxHp(victim.id)` (the player victim's max HP, used for corrosion `min(hp,500k)`);
+- bomb (`result.bomb > 0`): `applyVictimDamage(result.bomb, victim, playerSink, { killerId: actor.id, byDirectDamage: true, bombPortion: result.bomb, shieldPenetrationPct: 0 })` — full shield drain, no pen; emit `bomb-detonated { actorId: actor.id, round: r, stacks: result.bombStacks, damage: result.bomb }`; `roundPerTargetDamage[victim.id] += result.bomb`;
+- bypass (`result.inferno + result.corrosion > 0`): `applyVictimDamage(bypass, victim, playerSink, { byDirectDamage: false })` — DoT shield BYPASS; emit `dot-detonated { targetId: victim.id, round: r, damage: bypass }`; `roundPerTargetDamage[victim.id] += bypass`;
+- `perActorDetonation[actor.id] += (result.bomb + bypass)` (caster-keyed, mirrors PR1's `actor.id` keying). **The ONLY delta from PR1's block is `enemySink` → `playerSink`.**
+
+**Q5 — No line-5432 double-count.** When `positional: true`, `enemyTurn.detonationDamage === 0` → `damage = enemyTurn.directDamage` only → the dropped-detonation caveat is moot (nothing to drop). The per-victim payout lands via `applyVictimDamage` (decrements the player victim's own `currentHp`) + `roundPerTargetDamage` + the `perActorDetonation[actor.id]` display tally; it NEVER calls `creditDamage(actor.id, 'detonation', …)`, so it stays off `cumulativeDamage`→`:5432` (which overwrites the FOCUS DUMMY enemy's HP only — irrelevant to player victims, who carry their own HP). Identical discipline to PR1/PR2.
+
+**Q6 — E5-symmetry invariant.** The defining PR3 test: the SAME detonate ship, given the SAME seeded victim containers + HP, must produce the SAME per-victim detonation payout integers / death / events whether it acts as a PLAYER (PR1 path, focus or via positioned player attacker) or as an ENEMY (PR3 path). Crit 0 → exact integers. This is the team-symmetry pin ([[feedback_engine_team_symmetry]], E5 heal-lift template).
+
+---
+
+### Task 1: Failing integration test — enemy→player per-victim detonation + E5-symmetry
+
+**Goal:** Pin the enemy→player per-victim skill-triggered detonation. Harness = `perVictimDetonation.integration.test.ts` (PR1's player→enemy test) MIRRORED to the enemy direction: positioned enemy ATTACKER with a parsed target+pattern, positioned PLAYER victims carrying seeded containers, crit 0 → exact integers, `__testTapActors` seeding.
+
+**Files:** Create `src/utils/combat/__tests__/perVictimEnemyDetonation.integration.test.ts`.
+
+- [ ] **Step 1: Write failing tests.** Seed bombs/inferno/corrosion on BOTH an origin player footprint victim AND a covered player victim; fire a positional enemy detonate skill. Assert:
+  - origin player victim's bombs detonate full against ITS hp; covered player victim's bombs detonate full against ITS hp (covered no longer ignored);
+  - corrosion uses per-victim `min(playerHp, 500k)`;
+  - a player victim whose detonation exceeds its HP DIES (`ship-destroyed` + bomb-splash-on-death chain → `perActorSplash`), with the leftover-bomb seeding caveat from PR1 (detonation consumes the bombs before death — kill via inferno/corrosion leaving a bomb stack, or via a non-bomb type);
+  - `bomb-detonated` (`actorId: enemy attacker`) / `dot-detonated` (`targetId: player victim`) emit per victim;
+  - per-victim detonation recorded in `perTargetDamage`; `perActorDetonation[enemy attacker]` credited;
+  - NOT double-counted via line-5432 (focus dummy unaffected);
+  - **byte-identical guard / regression pin:** a NON-positional enemy detonate (focus-dummy victim, no enemy position+pattern) still drains exactly as today via `applyIncomingToTarget(damage, tgt, { bombPortion })` — prove the new positional branch is non-vacuous by checking the gate negative path.
+  - **E5-symmetry test (Q6):** assert the same ship + same seeded containers yields identical per-victim detonation whether player-cast (PR1) or enemy-cast (PR3).
+- [ ] **Step 2: Run, verify fail** (`npx vitest --run src/utils/combat/__tests__/perVictimEnemyDetonation.integration.test.ts`).
+
+---
+
+### Task 2: Implement enemy→player per-victim detonation
+
+**Files:** `src/utils/combat/engine.ts` (gate widening `:3667`; hoist `enemyPositionalDetonation` `:5037`; assign inside else `:5130`; `detonationTargets` declare + `onVictimResolved` collect `:5263-5288`; the detonation loop after `emitAttacked` `:5411`). No `dpsSimulator.ts` change (reuse PR1's `perActorDetonation`/`perTargetDamage`).
+
+- [ ] **Step 1: Implement** per Q1-Q5. The detonation loop is PR1's block with `enemySink` → `playerSink` and `turn.positionalDetonation` → the hoisted `enemyPositionalDetonation`.
+- [ ] **Step 2: New integration test → PASS.**
+- [ ] **Step 3: FULL suite** (`npm test`). All green. **Hand-audit any moved golden — expect ZERO** for non-positional. NEVER `vitest -u`.
+- [ ] **Step 4: tsc + lint** (`npx tsc --noEmit && npm run lint`) → clean (max-warnings 0).
+- [ ] **Step 5: Commit.**
+```bash
+git add src/utils/combat/engine.ts src/utils/combat/__tests__/perVictimEnemyDetonation.integration.test.ts
+git commit -m "feat(combat): enemy->player per-victim skill-triggered detonation"
+```
+
+---
+
+### Task 3: Changelog + docs + memory
+
+**Files:** `src/constants/changelog.ts` (`UNRELEASED_CHANGES`); `src/pages/DocumentationPage.tsx` (only if combat-sim detonation is user-surfaced — else note skip); memory `project_positional_per_victim_detonation.md` + `MEMORY.md` (PR3 status).
+
+- [ ] **Step 1: Changelog** — positioned battle sim: enemy bomb/DoT detonation now damages each targeted player ship individually (can kill covered ships, triggers their death effects), matching how player detonation already works.
+- [ ] **Step 2: Update memory** with PR3 status + the gate-widening fact.
+- [ ] **Step 3: Commit.**
+```bash
+git add src/constants/changelog.ts
+git commit -m "docs(combat): changelog for enemy->player per-victim detonation"
+```
+
+---
+
+### Task 4: Code review + open PR3
+
+- [ ] **Step 1:** `superpowers:requesting-code-review` on the PR3 diff.
+- [ ] **Step 2:** Address findings (prefer doc-only / targeted; re-run full suite after each).
+- [ ] **Step 3:** `gh auth switch --user TheSusort`; open PR3 stacked on `feat/combat-positional-detonation-pr2-timed` (PR2 #169). PR body: the byte-identical guarantee + that this resolves the E5 §4.3 PEELED detonation caveat (`engine.ts:5249`) and completes the symmetry (player→enemy PR1 + enemy→player PR3).
+
+---
+
+## Done criteria (PR3)
+
+- [ ] An enemy detonate skill lands per player footprint victim's own HP (origin + covered), full (no role-scale).
+- [ ] Enemy detonation can kill a positioned player → death + bomb-splash chain + per-victim reactives.
+- [ ] `bomb-detonated`/`dot-detonated` emit per victim; `perTargetDamage`/`perActorDetonation` reflect it; credit to the enemy attacker.
+- [ ] No double-count vs line 5432; the E5 §4.3 detonation caveat (`engine.ts:5249`) is resolved/removed.
+- [ ] E5-symmetry invariant: the same ship detonates identically on either side.
+- [ ] Non-positional fixtures **byte-identical**; full `npm test` green; tsc + lint clean.
+- [ ] Changelog updated; PR3 opened stacked on PR2 (#169).
 
 ---
 
