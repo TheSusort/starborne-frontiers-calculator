@@ -432,11 +432,61 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ### Task C0 (BLOCKING, written deliverable, reviewed before code)
 Produce a channel-map: which `creditDamage` channels (`dot-inferno`, `dot-corrosion`, …) feed `cumulativeDamage` and thus the line-5326/5432 `enemy.currentHp` overwrite. Confirm the per-victim display story — the DPS DoT breakdown (`dot-*` totals) must still reflect per-victim ticks for the focus actor WITHOUT feeding HP twice (the detonation precedent: HP via `applyVictimDamage`, display via `roundPerTargetDamage` + per-victim path, aggregate credit suppressed in positional). Commit as a plan note; review before C.1/C.2.
 
+#### Task C0 — DELIVERABLE (channel-map, verified against the PR-B-base `engine.ts` in this worktree)
+
+> Line numbers are this worktree's (`feat/combat-positional-detonation-pr6-dot-ticks`, off PR-B). Re-grep the symbolic anchors before C.1/C.2 — a later refactor in this PR will shift them.
+
+**Q1 — Which channels feed the `enemy.currentHp` overwrite?**
+
+The overwrite is `engine.ts:5673`:
+```
+enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);   // enemyHpDecline = cumulativeDamage + cumulativeTeamDamage  (:5672)
+```
+Its two inputs accumulate per round from the `roundDamage` map only:
+- `cumulativeDamage += totalRoundDamage` (`:5644`), where `totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation` (`:5643`).
+- `cumulativeTeamDamage += teamRoundDamage` (`:5666`), where `teamRoundDamage = Σ_{id≠focus} (d.direct + d.corrosion + d.inferno + d.detonation)` (`:5662-5664`).
+
+`roundDamage[id][channel]` is written through **exactly one** seam — `creditDamage(id, channel, amount)` (`:2640-2643` → `dmg(id)[channel] += amount`). So:
+
+> **The four channels that drain the dummy `enemy.currentHp` are `direct`, `corrosion`, `inferno`, `detonation`, summed over focus + team. Any `creditDamage(_, 'corrosion'|'inferno', _)` call feeds the line-5673 overwrite.**
+
+The focus-dummy `tickDoTs` (`:4966-4981`) credits via `credit: (sourceId, dotType, dmg) => creditDamage(sourceId, dotType, dmg)` — i.e. it is precisely the legacy aggregate DoT→HP path.
+
+**Q2 — Does a per-victim DoT tick double-drain if it also credits?** Yes.
+
+C.1 drains the positioned enemy's **own** `currentHp` via `applyVictimDamage(..., enemySink, { byDirectDamage:false })`. If the same tick also called `creditDamage(sourceId, 'corrosion'|'inferno', _)`, that amount re-enters `cumulativeDamage` and drains the dummy `enemy.currentHp` a *second* time at `:5673`.
+
+> **Locked rule (identical to the detonation seam): positioned per-victim DoT ticks MUST NOT call `creditDamage` for the `corrosion`/`inferno` channels.** This is the DoT analog of PR1–PR3 moving `creditDamage(_,'detonation',_)` inside `if(!positional)` / never calling it on the per-victim path.
+
+**Q3 — Display story (keep focus DoT DPS without double-feeding HP).** Mirror detonation exactly.
+
+- The DoT DPS breakdown reads `totalCorrosionRaw`/`totalInfernoRaw` (`:5650-5651`, surfaced `:5888-5889`); the RoundData row reads `corrosionDamage = focus.corrosion` / `infernoDamage = focus.inferno` (`:5627-5628`). All sourced from `focus.{corrosion,inferno}` in the `roundDamage` map.
+- **In positional mode this is already 0:** the focus-dummy `tickDoTs` ticks `enemy.corrosionEntries`/`infernoEntries` (bound `:1664-1665` to the dummy/`legacyVictim`), which stay **empty** because positional DoT application lands on `tgt.corrosionEntries` (positioned victims, `:3766`). So positional DoT builds currently under-report focus DoT DPS — the same gap detonation had before PR1.
+- **Detonation's split (the template):** HP via `applyVictimDamage`; DISPLAY via the `perActorDetonation` map (init `:1944`, per-round reset `:3832`, keyed by caster/applier), folded into the focus row as `focus.detonation + perActorDetonation[focus]` (`:5629-5630`) and into `totalDetonationRaw` (`:5656`) — while `totalRoundDamage`/`cumulativeDamage` deliberately use `focus.detonation` **only** (`:5643`, guard comment `:5652-5655`).
+- **DoT analog — introduce `perActorDot: Map<string, { corrosion: number; inferno: number }>`** (per-round reset alongside `perActorDetonation` at `:3832`; init near `:1944`), keyed by the DoT entry's `sourceId` (matches the focus-dummy `credit(sourceId, …)` attribution). On a positioned per-victim tick, the per-victim `credit` callback:
+  1. applies HP: `applyVictimDamage(damage, victim, sink, { byDirectDamage:false })`;
+  2. records per-target display: `roundPerTargetDamage[victim.id] += damage`;
+  3. records focus-DPS display: `perActorDot[sourceId][channel] += damage`;
+  and **never** calls `creditDamage`.
+  Then at post-round assembly fold focus's share into the row + raw totals, NOT into the HP-feeding sums:
+  - `corrosionDamage = focus.corrosion + (perActorDot.get(focusActorId)?.corrosion ?? 0)`; `infernoDamage` likewise.
+  - `totalCorrosionRaw += <that>`; `totalInfernoRaw += <that>`.
+  - **`totalRoundDamage`/`cumulativeDamage` stay `focus.{direct,corrosion,inferno,detonation}` ONLY** — `perActorDot` is never added there (the exact `:5652-5655` detonation guard, extended to DoTs).
+- Non-positional / DPS-mode: `perActorDot` is empty (no positioned per-victim ticks) → byte-identical, ZERO `.snap` moved. `tickDoTs` already computes final (post-Vortex-Veil) damage and `applyVictimDamage` applies it to HP as-is (the block step is gated on `byDirectDamage`, skipped for DoTs, `:2773`) → no re-scaling.
+
+**Q4 — C.2 (enemy→player) has NO `cumulativeDamage` seam.** DoTs applied *by enemies* are never the focus player's DPS, so they never touch `roundDamage`/`creditDamage`. They route via `playerSink`/`applyIncomingToTarget(..., { byDirectDamage:false })` into the victim's HP + healing-mode intake accounting. The heal-target prologue already does exactly this (`:4400-4438`: `tickDoTs` → sum `tankDotDamage` → `applyIncomingToTarget`, **not** `creditDamage`). The `enemy.currentHp` overwrite is a focus-DUMMY concept irrelevant to player victims. C.2's only display surface is the heal-target healing-accounting branch (`tankDotSnapshot`/`tankDotDamage`→incoming/`handleDeadTargetSkip`), preserved as a branch of the unified path; non-heal-target positioned players just take HP damage.
+
+**Decisions locked for C.1/C.2 code:**
+1. HP-feeding channels: `direct`/`corrosion`/`inferno`/`detonation` over focus + team via `roundDamage`.
+2. C.1: HP via `applyVictimDamage(enemySink, byDirectDamage:false)`; display via NEW `perActorDot` (sourceId-keyed, per channel) + `roundPerTargetDamage[victim]`; NEVER `creditDamage(corrosion/inferno)`. Fold `perActorDot[focus]` into the focus corrosion/inferno row + raw totals at post-round assembly, NOT into `totalRoundDamage`/`cumulativeDamage`.
+3. C.2: HP via `playerSink`/`applyIncomingToTarget(byDirectDamage:false)`; no `creditDamage`, no `cumulativeDamage` interaction; heal-target keeps `tankDotSnapshot`/`tankDotDamage`→incoming-accounting/`handleDeadTargetSkip`.
+4. The per-victim `tickDoTs` invocation passes `enemyHp: recipientMaxHp(victim.id)` (corrosion scales with the victim's own max HP), `ctxFor: lastTurnCtxByActor`, per-victim `emitTicked` (`targetId = victim.id`), and `incomingDotReductionPct` for the victim's Vortex Veil. `tickDoTs` mutates + `expireStacks`-ages that victim's own entries on its own turn.
+
 ### C.1 — player→enemy (positioned enemies)
 Add `tickDoTs` at the enemy-attacker turn-start, ahead of PR2's timed block (canonical order `tickDoTs → processBombs → processAccumulators`). HP via `applyVictimDamage(dmg, actor, enemySink, { byDirectDamage:false })`; per-applier ctx via `lastTurnCtxByActor`; corrosion `baseHp = recipientMaxHp(actor.id)`; per-victim `dot-ticked`; suppress the cumulativeDamage feed for positioned enemies (per C0). Gate: positioned enemy with non-empty DoT containers.
 
 ### C.2 — enemy→player (unify the heal-target path)
-Replace the heal-target prologue (grep `Task 11b: tick the HEAL TARGET's own enemy-applied DoTs`, ~`:4248`) with ONE per-victim DoT-tick path at every positioned player's turn-start (attacker + walked-team). Routes via `playerSink`/`applyIncomingToTarget` (`byDirectDamage:false`); per-applier ctx; corrosion `baseHp = recipientMaxHp(victim.id)`; per-victim Vortex Veil `incomingDotReductionPct`. Heal-target stays a branch: `tankDotSnapshot`, `tankDotDamage`→incoming healing accounting, `handleDeadTargetSkip` all fire when victim IS the heal target. Single path keyed per turning actor → structural double-tick guard.
+Replace the heal-target prologue (grep `Task 11b: tick the HEAL TARGET's own enemy-applied DoTs`, ~`:4373`) with ONE per-victim DoT-tick path at every positioned player's turn-start (attacker + walked-team). Routes via `playerSink`/`applyIncomingToTarget` (`byDirectDamage:false`); per-applier ctx; corrosion `baseHp = recipientMaxHp(victim.id)`; per-victim Vortex Veil `incomingDotReductionPct`. Heal-target stays a branch: `tankDotSnapshot`, `tankDotDamage`→incoming healing accounting, `handleDeadTargetSkip` all fire when victim IS the heal target. Single path keyed per turning actor → structural double-tick guard.
 
 **Tests:** `perVictimDotTick.integration.test.ts` — C.1 enemy own-HP tick (corrosion uses own HP) + lethal tick→death; C.2 non-heal-target player tick + heal-target still ticks once with accounting/snapshot/dead-skip intact (unification regression); E5-symmetry pin (same carrier ticks identical integers/events both sides); non-positional + DPS-mode regression pins.
 
