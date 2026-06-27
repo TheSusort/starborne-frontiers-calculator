@@ -4943,11 +4943,11 @@ export function runCombat(input: CombatEngineInput): {
                             // Accumulators (Echoing Burst): the gather INPUT is the summed
                             // direct damage of ALL players this round, read at THIS enemy's
                             // turn position (same expression as the focus-dummy path `:4841`).
-                            // The burst is a NEUTRAL direct detonation the shield absorbs
-                            // normally (DEFAULT — flagged for code review): NOT bomb-style
-                            // full-drain (bombPortion 0), NOT DoT bypass (byDirectDamage true).
-                            // No bomb-detonated/dot-detonated event today (parity with the
-                            // focus-dummy accumulator path, which emits none).
+                            // The burst detonates LIKE A BOMB: full shield drain, no penetration
+                            // (bombPortion = full payout, byDirectDamage true) — same shield
+                            // interaction as the timed-bomb path above. No bomb-detonated/
+                            // dot-detonated event today (parity with the focus-dummy accumulator
+                            // path, which emits none).
                             const allPlayersDirect = [...roundDamage.values()].reduce(
                                 (s, d) => s + d.direct,
                                 0
@@ -4959,7 +4959,7 @@ export function runCombat(input: CombatEngineInput): {
                                     applyVictimDamage(damage, actor, enemySink, {
                                         killerId: sourceId,
                                         byDirectDamage: true,
-                                        bombPortion: 0, // shield absorbs normally
+                                        bombPortion: damage, // full shield drain, no pen (bomb-style)
                                         shieldPenetrationPct: 0,
                                     });
                                     roundPerTargetDamage.set(
