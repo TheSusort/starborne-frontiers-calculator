@@ -214,19 +214,214 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## PR-B — Positioned-player timed bursts (OUTLINE — detail in-place after PR-A lands)
+## PR-B — Positioned-player timed bursts
 
-**Branch:** off PR-A. Mirror of PR2 (grep `PER-POSITIONED-ENEMY TIMED BURST`, ~`:4886`) onto the player attacker (grep `ATTACKER TURN`, ~`:4314`) and walked-team (grep `WALKED TEAM TURN`) branches.
+**Branch:** `feat/combat-positional-detonation-pr5-player-timed` off PR-A (`feat/combat-positional-detonation-pr4-walked-team`, #171). Worktree at `.worktrees/pr5-player-timed` (this epic ran in-place before; PR-B uses a worktree because the main dir is busy rebasing the upstream stack). Worktree setup already done: `node_modules` symlinked, `.env` + `docs/*.csv` copied.
 
-**Shape (per site):** at the start of the turn body, after `firstActivatorId ??=`, inside the `!isTurnBlocked` gate:
-- Gate `(actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0) && isPositional(actor.position, enemyAttackerActors)`.
-- `processBombs` + `processAccumulators` callbacks route via `applyVictimDamage(dmg, actor, playerSink, { killerId: sourceId, byDirectDamage:true, bombPortion: dmg, shieldPenetrationPct:0 })` (accumulator same flags), `roundPerTargetDamage[actor.id]`, `perActorDetonation[sourceId]` (applier-keyed). NEVER `creditDamage('detonation')`.
-- Accumulator gather input: reuse `allPlayersDirect` with inline `// symmetric input TBD — inert, no fixture` note.
-- Dead-after-burst guard on `actor.destroyedRound !== undefined` (+ healTarget carve-out). Focus attacker: lethal self-burst still `pushSynthesizedFocusSkipTurn()`.
+**What it does:** the byte-for-byte mirror of PR2 (per-positioned-**enemy** timed burst) onto the **player** side. A positioned player (focus attacker OR walked-team ally) carrying **enemy-seeded** `pendingBombs`/`pendingAccumulators` bursts them at the START of its own turn, against its OWN HP, via `playerSink` — instead of those timed containers never firing.
 
-**Tests:** `perVictimPlayerTimedDetonation.integration.test.ts` — burst on positioned player (focus + walked-team) via `playerSink`; lethal burst → death/splash; non-positional + gate-negative pins.
+**Decision (detailing checklist resolved):** **Extract-first**, like PR-A. The timed-burst block exists today at exactly ONE site (PR2 enemy). Extract it into a shared `applyPositionedTimedBurst(actor, sink, opposingRoster)` closure (commit 1, byte-identical — enemy site adopts), then add the two player sites that call it (commit 2). After extraction the burst is shared by 3 sites (enemy + focus + walked-team), parameterized only by `sink` + `opposingRoster`. The accumulator gather input (`allPlayersDirect`) is computed inside the helper — correct for the enemy site, the ratified inert placeholder for the player side (no enemy-direct sum exists; no fixture/ability applies accumulators to players).
 
-**Detailing checklist when PR-B starts:** re-grep all anchors (shifted by PR-A); decide whether the two player sites share a helper closure like A1 did (likely yes — extract `applyPositionedTimedBurst` if the focus/walked-team/enemy timed blocks triplicate); confirm `pushSynthesizedFocusSkipTurn` ordering vs the burst.
+**Anchor re-grep (PR-A-shifted, in this PR-B base; all `:NNNN` are grep-anchors — verify before editing):**
+- PR2 enemy timed block: grep `PER-POSITIONED-ENEMY TIMED BURST` (~`:4933`); its dead-after-burst guard: grep `burstDestroyedActor` (~`:5040`).
+- Shared-closure neighborhood: grep `const applyPerVictimDetonation =` (~`:3575`) — place the new helper immediately after it (same in-round-loop scope; closes over `r`/`roundPerTargetDamage`/`perActorDetonation`/`roundDamage`/`bus`, which rebind per round BEFORE any turn-loop call — same safety PR-A verified).
+- Focus attacker site: grep `ATTACKER TURN` (~`:4376`) → `firstActivatorId ??= actor.id;` (~`:4394`); body runs through `processExtraActionGrants(actor, turn.extraActionGrants);` to the stasis `} else {` at ~`:4612`.
+- Walked-team site: grep `WALKED TEAM TURN` (~`:4636`) → `firstActivatorId ??= actor.id;` (~`:4650`).
+- `pushSynthesizedFocusSkipTurn` helper: grep it (~`:3810`).
+- Sinks: `playerSink` (~`:3160`), `enemySink` (~`:3213`); type `DamageAccountingSink` (~`:1141`); `focusActorId = 'attacker'` (~`:1292`).
+
+**Why NO positional-hint-gate change (unlike PR-A):** PR-A widened the `engine.ts:3730` hint because skill detonation rides the `runPlayerTurn` recipe. Timed bursts do NOT — they read `actor.pendingBombs`/`pendingAccumulators` directly in the engine turn body. The only gate is the burst's own `isPositional(actor.position, enemyAttackerActors)` + non-empty-container check. **No `runPlayerTurn`/playerTurn.ts change at all.**
+
+### Task B1: Extract the shared positioned timed-burst closure (byte-identical refactor)
+
+**Files:**
+- Modify: `src/utils/combat/engine.ts` (helper decl + PR2 enemy call site)
+- Test: the whole existing suite is the guard (provably-inert refactor — no new test)
+
+- [ ] **Step 1: Green baseline.** Run `npm test 2>&1 | tail -20`; record the exact count (e.g. `3483 passed`). B1 must not change it.
+
+- [ ] **Step 2: Define the shared closure.** Add immediately after `applyPerVictimDetonation` (grep `const applyPerVictimDetonation =`). The body is the PR2 enemy burst verbatim, parameterized by `sink` + `opposingRoster`; the gate + the internal `allPlayersDirect` computation move inside:
+
+```typescript
+// Shared positioned timed-burst loop. A POSITIONED actor carrying timed
+// pendingBombs/pendingAccumulators (seeded by the opposing side's earlier bomb/accumulator
+// applications) bursts them at the START of its own turn — against its OWN HP — via
+// applyVictimDamage (the per-victim sink). Bombs + accumulators = full shield drain, NO
+// penetration (bomb-splash precedent). Credited to the per-round detonation tally keyed by
+// the bomb's APPLIER (sourceId, unchanged attribution) + roundPerTargetDamage on the
+// bursting actor. NEVER routed through creditDamage(actor.id,'detonation') — that feeds
+// cumulativeDamage → the focus-dummy HP overwrite (~:5432) → double-hit (HP already drained
+// inside applyVictimDamage). STRICT no-op (byte-identical) when the actor carries no timed
+// containers OR is not positioned vs opposingRoster — no fixture seeds actor-side timed
+// containers. Used by the enemy site (PR2: sink=enemySink, roster=allPlayerActors) and the
+// focus attacker + walked-team sites (PR-B: sink=playerSink, roster=enemyAttackerActors).
+const applyPositionedTimedBurst = (
+    actor: CombatActor,
+    sink: DamageAccountingSink,
+    opposingRoster: CombatActor[]
+): void => {
+    const hasTimedContainers =
+        actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0;
+    if (!hasTimedContainers || !isPositional(actor.position, opposingRoster)) return;
+
+    processBombs({
+        pendingBombs: actor.pendingBombs,
+        emitBombDetonated: (actorId, stacks, damage) =>
+            bus.emit({ type: 'bomb-detonated', actorId, round: r, stacks, damage }),
+        creditDetonation: (sourceId, damage) => {
+            applyVictimDamage(damage, actor, sink, {
+                killerId: sourceId,
+                byDirectDamage: true,
+                bombPortion: damage, // full shield drain, no pen
+                shieldPenetrationPct: 0,
+            });
+            roundPerTargetDamage.set(
+                actor.id,
+                (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+            );
+            perActorDetonation.set(
+                sourceId,
+                (perActorDetonation.get(sourceId) ?? 0) + damage
+            );
+        },
+    });
+
+    // Accumulator gather input: the round-global player-DIRECT sum (same expression as the
+    // focus-dummy path). CORRECT for the enemy site; for the player side it is an INERT
+    // placeholder — the symmetric all-enemies-direct sum is not exposed and no fixture/ability
+    // applies accumulators to players. // symmetric input TBD — inert, no fixture
+    const allPlayersDirect = [...roundDamage.values()].reduce((s, d) => s + d.direct, 0);
+    processAccumulators({
+        pendingAccumulators: actor.pendingAccumulators,
+        allPlayersDirect,
+        creditDetonation: (sourceId, damage) => {
+            applyVictimDamage(damage, actor, sink, {
+                killerId: sourceId,
+                byDirectDamage: true,
+                bombPortion: damage, // full shield drain, no pen (bomb-style)
+                shieldPenetrationPct: 0,
+            });
+            roundPerTargetDamage.set(
+                actor.id,
+                (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+            );
+            perActorDetonation.set(
+                sourceId,
+                (perActorDetonation.get(sourceId) ?? 0) + damage
+            );
+        },
+    });
+};
+```
+
+> **Capture guard:** the body must reference ONLY its params (`actor`, `sink`, `opposingRoster`) plus the legitimately-shared closures (`processBombs`, `processAccumulators`, `applyVictimDamage`, `bus`, `r`, `roundPerTargetDamage`, `perActorDetonation`, `roundDamage`, `isPositional`). After extracting, scan the body to confirm no accidental outer capture of the enemy site's `actor`/`enemySink`/`allPlayerActors`. Confirm the shared helpers are in scope: `isPositional` is a module-level import; `processBombs`/`processAccumulators` are module-level function declarations (grep their `function`/`const` decls). All are reachable from the helper.
+
+- [ ] **Step 3: Replace the PR2 enemy block with a call.** Grep `PER-POSITIONED-ENEMY TIMED BURST`. Replace the inline gate + `processBombs` + `allPlayersDirect` + `processAccumulators` block (the `const enemyHasTimedContainers = …` line through the closing `}` of the `if (enemyHasTimedContainers && isPositional(...)) { … }`) with:
+```typescript
+applyPositionedTimedBurst(actor, enemySink, allPlayerActors);
+```
+Leave the dead-after-burst guard (`const burstDestroyedActor = …` and its `if (!burstDestroyedActor) { … }` wrap of the enemy action body) exactly as-is — that stays per-site.
+
+- [ ] **Step 4: tsc + lint + full suite — prove inert.** Run `npx tsc --noEmit && npm run lint && npm test 2>&1 | tail -20`. Expected: clean; suite green with the **exact same count** as Step 1; ZERO `.snap` moved.
+
+- [ ] **Step 5: Commit.**
+```bash
+git add src/utils/combat/engine.ts
+git commit -m "refactor(combat): extract shared positioned timed-burst closure
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+### Task B2: Positioned-player timed bursts at the focus + walked-team sites (new behavior)
+
+**Files:**
+- Modify: `src/utils/combat/engine.ts` (focus attacker body, walked-team body)
+- Test: `src/utils/combat/__tests__/perVictimPlayerTimedDetonation.integration.test.ts` (new)
+
+- [ ] **Step 1: Write the failing integration test.** Model on `perVictimTimedDetonation.integration.test.ts` (its helpers: `timedBomb`, `accumulator`, `enemyAt`, `lineRange1Pattern`, `POSITIONAL_BASE`, and `__testTapActors` to push containers onto an actor by id). Crit 0 → exact integers. The KEY DIFFERENCE from PR2: tap the **player** actor (`'attacker'` for focus, or a walked-team ally id) instead of an enemy, and the positional base must include `enemyAttackers` so `isPositional(playerActor.position, enemyAttackerActors)` is true. Cases:
+  1. **Focus attacker timed bomb:** `__testTapActors` pushes a `timedBomb` (countdown reaching 0 within `numRounds`) onto `'attacker'`; focus positioned with `enemyAttackers` present → assert it bursts against the focus attacker's OWN HP via `playerSink` (its `currentHp` drops by the burst; `perActorDetonation[applier]` + `roundPerTargetDamage['attacker']` reflect it); `bomb-detonated` emits with the applier `actorId`.
+  2. **Focus attacker accumulator:** push `accumulator(accumulated, pct, roundsRemaining=1)` onto `'attacker'` → bursts for `(accumulated + Σ allPlayersDirect over its active runs) × pct/100`. **CAUTION — unlike the PR2 enemy case, `allPlayersDirect` is NOT 0 on the player side** (the focus's own direct credit may be non-zero unless suppressed). Pick a base where the focus does no creditable direct at the burst turn (e.g. a non-positional-apply firing path / attack 0 for that turn), OR read `roundDamage` at the burst turn position and assert the exact computed value. Document the chosen value's derivation in a comment.
+  3. **Walked-team ally timed bomb:** seed a `team`/`teamActors` input with a positioned ally; tap its id with a `timedBomb` → bursts against ITS own HP via `playerSink` on its own turn.
+  4. **Lethal self-burst (focus):** seed a bomb whose burst ≥ focus HP → focus dies; assert death event + bomb-splash-on-death chain fires, AND the round still assembles (synthesized focus turn — no throw on the post-round `focusTurns.length` guard).
+  5. **Lethal self-burst (walked-team):** ally dies to its burst → death/splash; round assembles (no focus synthesis; its action body is skipped).
+  6. **Non-positional regression pin:** tap a player-actor timed container in NON-positional mode → it does NOT burst at the player turn (`isPositional` false) — assert no per-victim burst, and the legacy focus-dummy timed path (grep `:4807`-area `tickDoTs`/`processBombs` on the dummy enemy) is unchanged.
+  7. **isPositional-gate negative pin:** positioned player WITH a timed container but `enemyAttackers` empty (or the player not positioned vs them) → no burst. Prove non-vacuous by temporarily flipping the helper's gate to `if (!hasTimedContainers) return;` and confirming this case THEN bursts; document the flip in a comment and revert before commit.
+
+- [ ] **Step 2: Run it — verify it fails.** Run `npx vitest run src/utils/combat/__tests__/perVictimPlayerTimedDetonation.integration.test.ts`. Expected: positional cases (1–5) FAIL (player timed containers never burst today); regression/negative pins (6,7) PASS.
+
+- [ ] **Step 3: Add the burst + dead-after-burst guard at the focus attacker site.** Grep `ATTACKER TURN` → the `if (!isTurnBlocked(actor.id)) {` body. Right after `firstActivatorId ??= actor.id;` insert the burst, then WRAP the existing action body (from `const target = parsedTargetFor(actor);` through `processExtraActionGrants(actor, turn.extraActionGrants);`) in the dead-after-burst guard. Net shape:
+
+```typescript
+firstActivatorId ??= actor.id;
+
+// PR-B: PER-POSITIONED-PLAYER TIMED BURST (enemy-seeded bombs/accumulators on the focus
+// attacker burst against its OWN HP at its turn-start, via playerSink). Mirror of the PR2
+// enemy site; strict no-op for every existing fixture (none seed player-actor timed
+// containers). Canonical turn-start order is tickDoTs → processBombs → processAccumulators;
+// PR-C will add tickDoTs AHEAD of this burst.
+applyPositionedTimedBurst(actor, playerSink, enemyAttackerActors);
+
+// Dead-after-burst guard (PR2 lesson): a lethal self-burst stamped destroyedRound inside
+// applyVictimDamage AFTER the top-of-turn dead-skip already ran, so it cannot be caught
+// there. Key off destroyedRound (canonical death signal), NOT currentHp > 0 (bare actors
+// carry currentHp 0). healTarget carve-out mirrors the top-of-turn guard. A focus actor
+// killed by its own burst must still push a synthesized focus turn so the post-round
+// focusTurns.length guard does not throw.
+const burstDestroyedActor =
+    actor.destroyedRound !== undefined &&
+    !(healTarget && actor.id === healTarget.id);
+if (!burstDestroyedActor) {
+    const target = parsedTargetFor(actor);
+    /* …existing focus action body, unchanged, re-indented one level… */
+    processExtraActionGrants(actor, turn.extraActionGrants);
+} else if (actor.id === focusActorId) {
+    pushSynthesizedFocusSkipTurn();
+}
+```
+The existing stasis `} else { … }` at the `if (!isTurnBlocked)` level is untouched (it handles `isTurnBlocked` true; the new guard nests inside the `!isTurnBlocked` true branch). The re-indent of the action body must move ZERO goldens — verify in Step 6.
+
+- [ ] **Step 4: Add the burst + guard at the walked-team site.** Grep `WALKED TEAM TURN` → `firstActivatorId ??= actor.id;`. Insert the same burst call, then wrap the walked-team action body. No focus synthesis — a walked-team actor is never the focus:
+```typescript
+firstActivatorId ??= actor.id;
+
+// PR-B: per-positioned-player timed burst (walked-team ally). Same as the focus site; no
+// focusTurns synthesis (a walked-team actor is never the focus). tickDoTs added ahead by PR-C.
+applyPositionedTimedBurst(actor, playerSink, enemyAttackerActors);
+const burstDestroyedActor =
+    actor.destroyedRound !== undefined &&
+    !(healTarget && actor.id === healTarget.id);
+if (!burstDestroyedActor) {
+    const teamTarget = parsedTargetFor(actor);
+    /* …existing walked-team action body, unchanged, re-indented one level… */
+}
+```
+> **Shadowing note:** each player site declares a local `burstDestroyedActor`; the enemy site already has one. All three are in separate block scopes (different branches of the turn-kind `if/else if`) — no collision. Confirm with tsc.
+
+- [ ] **Step 5: Run the new test — verify it passes.** Run `npx vitest run src/utils/combat/__tests__/perVictimPlayerTimedDetonation.integration.test.ts`. Expected: PASS (all cases).
+
+- [ ] **Step 6: tsc + lint + full suite audit.** Run `npx tsc --noEmit && npm run lint && npm test 2>&1 | tail -30`. Expected: clean; only the new test added; ZERO existing `.snap` moved (the action-body re-indentation alone must not move any golden).
+
+- [ ] **Step 7: Commit.**
+```bash
+git add src/utils/combat/engine.ts src/utils/combat/__tests__/perVictimPlayerTimedDetonation.integration.test.ts
+git commit -m "feat(combat): positioned-player timed bomb/accumulator burst
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
+```
+
+### Task B3: Changelog + docs
+
+**Files:**
+- Modify: `src/constants/changelog.ts` (`UNRELEASED_CHANGES`)
+- Modify: `src/pages/DocumentationPage.tsx` only if the positional-sim section enumerates timed-burst coverage
+
+- [ ] **Step 1:** Add a plain-English `UNRELEASED_CHANGES` entry: timed bombs/accumulators stored on a positioned player ship now burst against that ship on its own turn (previously only positioned enemies and the focus dummy did).
+- [ ] **Step 2:** Commit `docs(combat): changelog for positioned-player timed bursts` (docs-only → `--no-verify`; husky runs the full vitest suite on commit).
+
+### Task B4: Review + PR
+
+- [ ] **Step 1:** Final holistic review (superpowers:requesting-code-review): confirm the three timed-burst sites (enemy/focus/walked-team) are mutually consistent through the shared closure, no `cumulativeDamage` double-count, dead-after-burst guard correct at each site (focus synthesizes, walked-team/enemy don't), E5-symmetry intact (same carrier bursts identical integers as player vs enemy — case 3 vs the PR2 enemy fixture).
+- [ ] **Step 2:** `gh auth switch --user TheSusort`; push; open PR-B stacked on PR-A (#171, base `feat/combat-positional-detonation-pr4-walked-team`).
 
 ---
 
