@@ -44,8 +44,9 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator now models bomb splash-on-death: when a ship is destroyed while still carrying un-detonated bombs, each adjacent ally takes a share of every bomb's damage (25% at tier 1, 50% at tier 2, 75% at tier 3). This is positional, so it only applies in battles with board positions.",
     'Voidfire Catalyst implant now also amplifies bomb splash damage — when a bomb-carrier is destroyed, the splash damage dealt to adjacent ships is increased by Voidfire Catalyst, including its rare and legendary splash-only variants.',
     'Combat & DPS simulators now model the Boost gear set: while a ship wears 4 or more Boost pieces, each timed buff it applies — to itself or its allies — lasts one extra turn.',
-    "Combat simulator now models counterattacks: one of your ships with a 'when directly damaged' passive (e.g. Stalwart) strikes back at the attacker for a share of its own attack — full damage that can crit and kill. Enemy-side counters are coming in a later update.",
+    "Combat simulator now models counterattacks: one of your ships with a 'when directly damaged' passive (e.g. Stalwart) strikes back at the attacker for a share of its own attack — full damage that can crit and kill.",
     'Combat simulator now models more counterattackers: Nyxen strikes back when its shield is directly hit, and Centurion retaliates when it or an adjacent ally is directly damaged.',
+    'Combat simulator: enemy ships now react when you hit them — enemy counterattackers (Stalwart, Nyxen, Centurion) strike back, and enemy on-hit reactions (self-repairs, defensive buffs, cleanses) now fire, so enemy teams play more like real opponents. Shield-hit counters (Nyxen) now also work for your own ships in positioned battles.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

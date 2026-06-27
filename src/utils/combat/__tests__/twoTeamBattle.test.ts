@@ -317,13 +317,24 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
             (e): e is Extract<CombatEvent, { type: 'attacked' }> => e.type === 'attacked'
         );
         expect(attacked.length).toBeGreaterThan(0);
-        // Anchor victims only: enemy attackers struck players (the anchor `tgt`).
-        expect(attacked.every((e) => ENEMY_IDS.has(e.attackerId))).toBe(true);
-        expect(attacked.every((e) => PLAYER_IDS.has(e.targetId))).toBe(true);
-        // CONTRACT (D-PR16): `attacked` now carries the per-ATTACK aggregate damage (5000 here,
-        // enemyAttack with the victim's defence 0) so Tenacity's >25%-max-HP filter can read it.
-        // Added via conditional spread → present only when damage > 0 (healing-mode 0-damage
-        // events stay byte-identical).
+        // SYMMETRIC EMIT (player→enemy attacked emit): `attacked` now fires for BOTH directions —
+        // enemy attackers struck players (anchor `tgt`) AND player attackers struck enemies — so
+        // enemy on-attacked reactives wake when the player hits them. Every event still pairs an
+        // attacker with the single anchor victim it fired at on the OPPOSING side.
+        const enemyToPlayer = attacked.filter(
+            (e) => ENEMY_IDS.has(e.attackerId) && PLAYER_IDS.has(e.targetId)
+        );
+        const playerToEnemy = attacked.filter(
+            (e) => PLAYER_IDS.has(e.attackerId) && ENEMY_IDS.has(e.targetId)
+        );
+        expect(enemyToPlayer.length).toBeGreaterThan(0); // enemy→player (pre-existing)
+        expect(playerToEnemy.length).toBeGreaterThan(0); // player→enemy (the new symmetric emit)
+        // Every attacked event is one of those two cross-team directions (no same-side / stray ids).
+        expect(attacked.length).toBe(enemyToPlayer.length + playerToEnemy.length);
+        // CONTRACT (D-PR16): `attacked` carries the per-ATTACK aggregate damage (5000 here — both
+        // sides have attack 5000 vs the victim's defence 0) so Tenacity's >25%-max-HP filter can
+        // read it. Added via conditional spread → present only when damage > 0 (healing-mode
+        // 0-damage events stay byte-identical).
         expect(attacked.every((e) => e.damage === 5000)).toBe(true);
     });
 

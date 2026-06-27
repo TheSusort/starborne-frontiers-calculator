@@ -64,6 +64,7 @@ import { thresholdShieldForHit } from './thresholdShield';
 import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
+import { emitAttacked } from './emitAttacked';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -4392,6 +4393,15 @@ export function runCombat(input: CombatEngineInput): {
                             // Opposing roster + victim wrapper come from the per-side bindings
                             // (player→enemy here). pattern/target are non-null via the `positional` gate.
                             const tb = turnBindings(actor.side);
+                            // Player→enemy `attacked` capture: aggregate the FOCUS enemy victim's
+                            // per-attack damage + OR its shield-hit flag across the attack's hits so
+                            // the post-apply emit wakes the enemy's on-attacked reactives (counters +
+                            // self-repairs/defensive buffs). focusEnemyDamage is the per-victim
+                            // analogue of the enemy side's aggregate `damage` (Tenacity's >25%-maxHP
+                            // gate reads it). Matched by victim.id === tgt.id (first-hit-focus victim).
+                            let focusEnemyDamage = 0;
+                            let focusEnemyShieldWasHit = false;
+                            let focusEnemyHit = false;
                             drivePositionalApply({
                                 scalars: turn.positionalScalars!,
                                 hitCrits: turn.hitCrits,
@@ -4406,9 +4416,37 @@ export function runCombat(input: CombatEngineInput): {
                                 // attacker's standing leeches proc off EACH footprint victim's
                                 // role-scaled dealt damage (origin full, covered half) → restoring
                                 // the leech the positional credit-suppression had silenced.
-                                onVictimResolved: (_victim, damage) =>
-                                    procStandingLeechesPerVictim(actor.id, damage),
+                                onVictimResolved: (victim, damage, outcome) => {
+                                    procStandingLeechesPerVictim(actor.id, damage);
+                                    if (victim.id === tgt.id) {
+                                        focusEnemyHit = true;
+                                        focusEnemyDamage += damage;
+                                        focusEnemyShieldWasHit =
+                                            focusEnemyShieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                    }
+                                },
                             });
+                            // Player→enemy `attacked` emit (Task 3 — the symmetric reaction). Fires
+                            // once per hit (mirrors the enemy-turn empty-hitCrits fallback) for the
+                            // focus enemy victim → enemy Stalwart/Nyxen/Centurion counter the player
+                            // attacker, and enemy on-hit reactions (Second Wind, etc.) fire.
+                            if (focusEnemyHit) {
+                                const hitOutcomes =
+                                    turn.hitCrits.length > 0 ? turn.hitCrits : [turn.roundCrit];
+                                emitAttacked({
+                                    bus,
+                                    round: r,
+                                    targetId: tgt.id,
+                                    attackerId: actor.id,
+                                    hitOutcomes,
+                                    isPrimaryTarget: true,
+                                    shieldWasHit: focusEnemyShieldWasHit,
+                                    damage: focusEnemyDamage,
+                                });
+                            }
                         }
 
                         // Fold the focus turn's numeric damage into the round accumulator.
@@ -4549,6 +4587,11 @@ export function runCombat(input: CombatEngineInput): {
                             // Same direction as the focus site (player→enemy); keyed to THIS team
                             // actor's position / parsed target / parsed pattern. Non-null via the gate.
                             const tb = turnBindings(actor.side);
+                            // Player→enemy `attacked` capture (Task 3) — mirror of the focus site,
+                            // keyed to THIS walked team actor's focus enemy victim (teamTarget tgt).
+                            let teamFocusEnemyDamage = 0;
+                            let teamFocusEnemyShieldWasHit = false;
+                            let teamFocusEnemyHit = false;
                             drivePositionalApply({
                                 scalars: teamTurn.positionalScalars!,
                                 hitCrits: teamTurn.hitCrits,
@@ -4562,9 +4605,38 @@ export function runCombat(input: CombatEngineInput): {
                                 // E2 Task 3: per-victim standing leech (player→enemy), keyed to
                                 // THIS walked team actor as the acting attacker. Same per-victim
                                 // proc as the focus site.
-                                onVictimResolved: (_victim, damage) =>
-                                    procStandingLeechesPerVictim(actor.id, damage),
+                                onVictimResolved: (victim, damage, outcome) => {
+                                    procStandingLeechesPerVictim(actor.id, damage);
+                                    if (victim.id === tgt.id) {
+                                        teamFocusEnemyHit = true;
+                                        teamFocusEnemyDamage += damage;
+                                        teamFocusEnemyShieldWasHit =
+                                            teamFocusEnemyShieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                    }
+                                },
                             });
+                            // Player→enemy `attacked` emit (Task 3) — one per walked team actor's
+                            // firing turn for its focus enemy victim. Wakes the enemy's on-attacked
+                            // reactives just like the focus site.
+                            if (teamFocusEnemyHit) {
+                                const hitOutcomes =
+                                    teamTurn.hitCrits.length > 0
+                                        ? teamTurn.hitCrits
+                                        : [teamTurn.roundCrit];
+                                emitAttacked({
+                                    bus,
+                                    round: r,
+                                    targetId: tgt.id,
+                                    attackerId: actor.id,
+                                    hitOutcomes,
+                                    isPrimaryTarget: true,
+                                    shieldWasHit: teamFocusEnemyShieldWasHit,
+                                    damage: teamFocusEnemyDamage,
+                                });
+                            }
                         }
 
                         // Fold the team turn's damage into ITS OWN map entry (post-round assembly
@@ -4940,6 +5012,13 @@ export function runCombat(input: CombatEngineInput): {
                             let shieldBefore = 0;
                             let hpDamage = 0;
                             let barriered = false;
+                            // Symmetric shieldWasHit: capture the FOCUS player victim's shield
+                            // outcome on the positional path (the non-positional `else` branch binds
+                            // shieldBefore/hpDamage/barriered directly; positional leaves them 0).
+                            // First-hit-focus victim matched by victim.id === tgt.id; OR'd across the
+                            // attack's hits so an early shield-denting hit still counts.
+                            let positionalShieldWasHit = false;
+                            let positionalShieldCaptured = false;
                             if (enemyPositional) {
                                 // Opposing roster + victim wrapper from the per-side bindings
                                 // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -4982,8 +5061,17 @@ export function runCombat(input: CombatEngineInput): {
                                     // off the damage IT took, with the per-victim Barrier /
                                     // requiresHpDamage gates — mirroring the non-positional block
                                     // below, per victim.
-                                    onVictimResolved: (victim, dmg, outcome) =>
-                                        procTakenLeechesPerVictim(victim, dmg, outcome),
+                                    onVictimResolved: (victim, dmg, outcome) => {
+                                        procTakenLeechesPerVictim(victim, dmg, outcome);
+                                        if (victim.id === tgt.id) {
+                                            positionalShieldCaptured = true;
+                                            positionalShieldWasHit =
+                                                positionalShieldWasHit ||
+                                                (!outcome.barriered &&
+                                                    outcome.shieldBefore > 0 &&
+                                                    outcome.hpDamage < dmg);
+                                        }
+                                    },
                                 });
                             } else {
                                 ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
@@ -5088,25 +5176,21 @@ export function runCombat(input: CombatEngineInput): {
                             // absorbed = damage - hpDamage when not barriered; shieldBefore>0 guards a
                             // "had a shield" precondition. Non-positional path only (positional leaves
                             // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
-                            const shieldWasHit =
-                                !barriered && shieldBefore > 0 && hpDamage < damage;
-                            for (const hitCrit of hitOutcomes) {
-                                bus.emit({
-                                    type: 'attacked',
-                                    // The actor actually hit this turn (`tgt`). Legacy path:
-                                    // tgt === healTarget! → byte-identical. Positional path: the
-                                    // selected player actor.
-                                    targetId: tgt.id,
-                                    attackerId: actor.id,
-                                    round: r,
-                                    // `tgt` is the focus/primary victim today; covered-cell
-                                    // emission (future) would pass the real per-victim role.
-                                    isPrimaryTarget: true,
-                                    ...(shieldWasHit ? { shieldWasHit: true } : {}),
-                                    ...(hitCrit ? { didCrit: true } : {}),
-                                    ...(damage > 0 ? { damage } : {}),
-                                });
-                            }
+                            // Positional path captures the focus victim's per-hit shield outcome
+                            // (Step 3); the non-positional else-branch keeps the aggregate fallback.
+                            const shieldWasHit = positionalShieldCaptured
+                                ? positionalShieldWasHit
+                                : !barriered && shieldBefore > 0 && hpDamage < damage;
+                            emitAttacked({
+                                bus,
+                                round: r,
+                                targetId: tgt.id,
+                                attackerId: actor.id,
+                                hitOutcomes,
+                                isPrimaryTarget: true,
+                                shieldWasHit,
+                                damage,
+                            });
                         }
                     } else {
                         // §4.5 Deferred break: consume any pending Stasis break (real-enemy skip).
