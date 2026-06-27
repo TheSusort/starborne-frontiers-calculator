@@ -3163,8 +3163,14 @@ const DocumentationPage: React.FC = () => {
                                     ships also benefit from their own on-cast shield skills — they
                                     gain shields, absorb your damage, and trigger shield-reactive
                                     abilities — so enemy teams play more like real opponents in
-                                    positioned battles. More implant and gear-set effects will be
-                                    added in future updates.
+                                    positioned battles. In positioned battles, bomb, Inferno, and
+                                    Corrosion <strong>detonation</strong> now lands on each ship the
+                                    skill hits individually — every target detonates its own stored
+                                    bombs and damage-over-time effects against its own HP, so a
+                                    detonation can kill secondary (splash) targets and trigger their
+                                    on-death effects, rather than only counting against the primary
+                                    target. More implant and gear-set effects will be added in
+                                    future updates.
                                 </p>
                             </div>
                         </div>
