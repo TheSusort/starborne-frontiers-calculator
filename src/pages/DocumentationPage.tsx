@@ -3181,8 +3181,13 @@ const DocumentationPage: React.FC = () => {
                                     its own stored bombs and damage-over-time effects against its
                                     own HP, so an ally detonation can kill secondary targets and
                                     trigger their on-death effects such as bomb-splash-on-death.
-                                    More implant and gear-set effects will be added in future
-                                    updates.
+                                    Inferno and Corrosion <strong>damage-over-time ticks</strong>{' '}
+                                    likewise resolve per ship — on <strong>both teams</strong>, each
+                                    affected ship takes its own DoT damage against its own HP at the
+                                    start of its turn (even while in Stasis), so a DoT can wear down
+                                    and kill secondary ships and trigger their on-death effects,
+                                    instead of only counting against the primary target. More
+                                    implant and gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>
