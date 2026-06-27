@@ -355,3 +355,44 @@ describe('G PR1 — counter primary-target gate (executor level)', () => {
         expect(spy).toHaveBeenCalledTimes(1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// G PR2 — Centurion self/adjacent-ally counter (executor level).
+//
+// Centurion builds TWO counters (self on-attacked + adjacent-ally on-ally-attacked). Neither
+// carries requirePrimaryTarget/requireShieldHit. The adjacency gate (requireDamagedAllyAdjacent)
+// lives in the LISTENER (registerReactiveListeners), NOT the executor — by the time an intent
+// reaches executeIntent, counterTargetId is already routed. So at the executor level both fire
+// purely on a routed counterTargetId (no gates). The adjacency positive/negative is asserted at
+// the integration level (counterAttack.integration.test.ts).
+// ---------------------------------------------------------------------------
+describe('G PR2 — Centurion self/adjacent-ally counter (executor level)', () => {
+    it('self counter (no primary/shield gate): fires on a routed counterTargetId', () => {
+        const spy = vi.fn();
+        executeIntent(
+            counterIntent({ type: 'counter', multiplier: 50 }, { counterTargetId: 'foe' }),
+            makeCounterCtx(spy)
+        );
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith(OWNER, 'foe', 'cnt-gate', 50, 1);
+    });
+
+    it('counter does NOT fire when no attacker is routed (counterTargetId absent)', () => {
+        const spy = vi.fn();
+        executeIntent(counterIntent({ type: 'counter', multiplier: 50 }, {}), makeCounterCtx(spy));
+        expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('once-per-attack: 3 attacked events on the same focus victim collapse to ONE counter', () => {
+        const spy = vi.fn();
+        const ctx = makeCounterCtx(spy);
+        const intent = counterIntent(
+            { type: 'counter', multiplier: 100 },
+            { counterTargetId: 'foe' }
+        );
+        executeIntent(intent, ctx);
+        executeIntent(intent, ctx);
+        executeIntent(intent, ctx);
+        expect(spy).toHaveBeenCalledTimes(1);
+    });
+});

@@ -3889,6 +3889,33 @@ describe('parseCounterAbilities', () => {
         ).toMatchObject({ multiplier: 30, requirePrimaryTarget: true });
     });
 
+    it('Centurion second passive (50%): self/adjacent-ally retaliate → allySubject, no primary-target/shield', () => {
+        expect(
+            parseCounterAbilities(
+                'At the start of combat, this Unit gains 750 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>50%</unit-damage>.'
+            )
+        ).toEqual({ multiplier: 50, requirePrimaryTarget: false, allySubject: true });
+    });
+
+    it('Centurion third passive (100%): allySubject retaliate', () => {
+        expect(
+            parseCounterAbilities(
+                'At the start of combat, this Unit gains 1000 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>100%</unit-damage>.'
+            )
+        ).toEqual({ multiplier: 100, requirePrimaryTarget: false, allySubject: true });
+    });
+
+    it('Stalwart/Nyxen do NOT set allySubject', () => {
+        const stalwart = parseCounterAbilities(
+            'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy.'
+        );
+        expect(stalwart?.allySubject).toBeUndefined();
+        const nyxen = parseCounterAbilities(
+            'This Unit deals <unit-damage>100% damage</unit-damage> when its Shield is directly damaged.'
+        );
+        expect(nyxen?.allySubject).toBeUndefined();
+    });
+
     it('returns null for empty/unmatched text', () => {
         expect(parseCounterAbilities(null)).toBeNull();
         expect(parseCounterAbilities('This Unit gains a Shield when attacked.')).toBeNull();

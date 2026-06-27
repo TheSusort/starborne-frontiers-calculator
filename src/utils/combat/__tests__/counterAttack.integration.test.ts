@@ -21,11 +21,12 @@
  * Scope: NO enemy-side mirror (enemy victims don't emit `attacked` — out of scope per the spec).
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { ShipSkills } from '../../../types/abilities';
+import type { Position } from '../../../types/encounters';
 
 /** A Ship carrying Stalwart's first-passive (30%) counterattack skill text, verbatim from
  *  constants/ships.ts. Parsed through the real registry → an on-attacked `counter` ability
@@ -252,5 +253,138 @@ describe('G PR2 — Nyxen shield-hit counterattack END-TO-END via the real regis
             .filter((d) => d > 0);
         expect(counterRounds.length).toBeGreaterThan(0);
         for (const dealt of counterRounds) expect(dealt).toBeCloseTo(20_000, 6);
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via the real registry.
+//
+// Centurion's passive ("At the start of combat, this Unit gains N attack per adjacent ally.<br/>
+// <br/>When this Unit OR AN ADJACENT ALLY is directly damaged, this Unit retaliates dealing X%.")
+// parses to TWO counters: a self on-attacked counter (no gate) + an adjacent-ally on-ally-attacked
+// counter (requireDamagedAllyAdjacent). Built through the real registry and fed to runCombat with
+// REAL board positions so the listener's adjacency gate is exercised end to end.
+//
+// Read mechanism: the counter surfaces as the attacking enemy's incoming damage via the round
+// perTargetDamage map (same channel as Stalwart/Nyxen above). Geometry (board.ts): owner at M2 →
+// adjacent = T1,T2,M1,M3,B1,B2; NON-adjacent = B4.
+// ───────────────────────────────────────────────────────────────────────────
+
+const CENTURION_P2 =
+    'At the start of combat, this Unit gains 750 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>50%</unit-damage>.';
+
+/** A Ship carrying Centurion's second passive (self/adjacent-ally retaliate), verbatim from
+ *  docs/ship-skills.csv, parsed through the real registry. */
+function centurionShip(passiveText: string): Ship {
+    return {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ...({} as any),
+        refits: [{}, {}, {}, {}],
+        secondPassiveSkillText: passiveText,
+    } as Ship;
+}
+
+/** A positioned, inert team ally (no skills, big HP, no real damage). Mirrors the cfProvoke harness. */
+function ally(id: string, position: Position): TeamActorEngineInput {
+    return {
+        id,
+        speed: 10, // slower than the focus / enemy so it never acts first
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    };
+}
+
+describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via the real registry', () => {
+    it('parsing produces self (on-attacked) + adjacent-ally (on-ally-attacked) counters (sanity)', () => {
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+        const passive = skills.slots.find((s) => s.slot === 'passive');
+        const counters = passive?.abilities.filter((a) => a.type === 'counter') ?? [];
+        expect(counters).toHaveLength(2);
+        expect(counters.find((a) => a.trigger === 'on-attacked')).toMatchObject({
+            type: 'counter',
+            config: { type: 'counter', multiplier: 50 },
+        });
+        expect(counters.find((a) => a.trigger === 'on-ally-attacked')).toMatchObject({
+            type: 'counter',
+            config: { type: 'counter', multiplier: 50 },
+            requireDamagedAllyAdjacent: true,
+        });
+    });
+
+    it('SELF hit: Centurion retaliates against the attacker when it is directly hit', () => {
+        // Focus 'attacker' (Centurion owner) IS the heal target → the enemy hits IT each round →
+        // the self on-attacked counter fires. No adjacency needed.
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+        const result = runCombat(
+            counterBase(skills, {
+                position: 'M2',
+                healTargetId: 'attacker',
+                enemyAttackers: [basicEnemy('foe', 3_000)],
+            })
+        );
+        // Owner attack 10000 × 50% vs defence 0 / neutral affinity / no crit = 5000 per counter.
+        const counterRounds = result.rounds
+            .map((rd) => rd.perTargetDamage?.['foe'] ?? 0)
+            .filter((d) => d > 0);
+        expect(counterRounds.length).toBeGreaterThan(0);
+        for (const dealt of counterRounds) expect(dealt).toBeCloseTo(5_000, 6);
+    });
+
+    it('ADJACENT ally hit: Centurion retaliates when an adjacent ally is directly damaged', () => {
+        // Owner at M2; adjacent ally 'ally-T2' at T2 is the heal target → the enemy hits T2 →
+        // owner is adjacent → the on-ally-attacked counter fires against the attacker.
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+        const result = runCombat(
+            counterBase(skills, {
+                speed: 100, // owner acts first; its passive listens for the ally hit
+                position: 'M2',
+                teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
+                healTargetId: 'ally-T2',
+                enemyAttackers: [basicEnemy('foe', 3_000)],
+            })
+        );
+        const counterRounds = result.rounds
+            .map((rd) => rd.perTargetDamage?.['foe'] ?? 0)
+            .filter((d) => d > 0);
+        expect(counterRounds.length).toBeGreaterThan(0);
+        for (const dealt of counterRounds) expect(dealt).toBeCloseTo(5_000, 6);
+    });
+
+    it('NON-adjacent ally hit: Centurion does NOT retaliate (adjacency gate)', () => {
+        // Owner at M2; heal target is 'ally-B4' at B4 (NON-adjacent). The enemy hits B4; the
+        // on-ally-attacked listener runs but requireDamagedAllyAdjacent rejects it → no counter.
+        // Adjacent ally-T2 still present so the geometry is positional (not the all-allies fallback).
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+        const result = runCombat(
+            counterBase(skills, {
+                speed: 100,
+                position: 'M2',
+                teamActors: [ally('ally-T2', 'T2'), ally('ally-B4', 'B4')],
+                healTargetId: 'ally-B4',
+                enemyAttackers: [basicEnemy('foe', 3_000)],
+            })
+        );
+        expect(totalPerTargetDamage(result, 'foe')).toBe(0);
     });
 });

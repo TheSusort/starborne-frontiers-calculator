@@ -211,8 +211,9 @@ export interface ParsedCounterAbility {
  * consequences are NOT counters and produce nothing here.
  *
  * PR2: Nyxen's shield-hit shape ("This Unit deals X% damage when its Shield is directly
- * damaged.") IS handled and returns requireShieldHit: true. Centurion (adjacent-ally
- * retaliate / allySubject) is intentionally NOT handled here yet.
+ * damaged.") IS handled and returns requireShieldHit: true. Centurion's adjacent-ally
+ * retaliate shape ("When this Unit or an adjacent ally is directly damaged, this Unit
+ * retaliates dealing X%.") IS handled and returns allySubject: true.
  */
 export function parseCounterAbilities(
     text: string | null | undefined
@@ -242,6 +243,17 @@ export function parseCounterAbilities(
         const m = parseFloat(nyxen[1]);
         if (!isNaN(m))
             return { multiplier: m, requirePrimaryTarget: false, requireShieldHit: true };
+    }
+
+    // Centurion: "When this Unit or an adjacent ally is directly damaged, this Unit retaliates
+    // dealing X%." NOTE: the <unit-damage> tag wraps just "X%" — do NOT require the word "damage".
+    const centurion =
+        /when\s+this\s+unit\s+or\s+an\s+adjacent\s+ally\s+is\s+directly\s+damaged[^.;]*?\bretaliates\s+dealing\s+(\d+(?:\.\d+)?)%/i.exec(
+            plain
+        );
+    if (centurion) {
+        const m = parseFloat(centurion[1]);
+        if (!isNaN(m)) return { multiplier: m, requirePrimaryTarget: false, allySubject: true };
     }
 
     return null;
