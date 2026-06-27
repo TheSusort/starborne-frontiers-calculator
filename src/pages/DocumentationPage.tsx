@@ -3172,8 +3172,12 @@ const DocumentationPage: React.FC = () => {
                                     target. Timed bombs and Echoing Burst accumulators likewise
                                     burst on each enemy individually — every affected ship detonates
                                     its own timed bombs and accumulators against its own HP on its
-                                    own turn. More implant and gear-set effects will be added in
-                                    future updates.
+                                    own turn. This per-ship detonation works for{' '}
+                                    <strong>both teams</strong>: enemy detonation skills now damage
+                                    each of your ships they hit individually too, so an enemy
+                                    detonation can kill secondary (splash) targets and trigger their
+                                    on-death effects. More implant and gear-set effects will be
+                                    added in future updates.
                                 </p>
                             </div>
                         </div>

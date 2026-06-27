@@ -51,6 +51,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: enemy ships that cast a cleanse skill now actually remove the debuffs you applied to them, instead of the cleanse having no effect. Skills that trigger off an enemy being cleansed (such as Arum and Grif) now fire only when a debuff is really removed.',
     'Combat simulator: in positioned battles, bomb/Inferno/Corrosion detonation now damages each ship the skill hits individually — every target detonates its own stored bombs and damage-over-time effects against its own HP, so a detonation can now kill secondary (splash) targets and trigger their on-death effects, instead of only counting against the primary target.',
     'Combat simulator: in positioned battles, timed bombs and Echoing Burst accumulators now burst on each enemy ship individually — every affected ship detonates its own timed bombs and accumulators against its own HP on its own turn, so a timed burst can now kill that ship and trigger its on-death effects, instead of only counting against the primary target.',
+    'Combat simulator: in positioned battles, enemy detonation skills now damage each of your ships they hit individually — every targeted ship detonates its own stored bombs and damage-over-time effects against its own HP, mirroring how your ships detonate enemies, so an enemy detonation can now kill secondary (splash) targets and trigger their on-death effects.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
