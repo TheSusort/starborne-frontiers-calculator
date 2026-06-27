@@ -47,6 +47,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator now models counterattacks: one of your ships with a 'when directly damaged' passive (e.g. Stalwart) strikes back at the attacker for a share of its own attack — full damage that can crit and kill.",
     'Combat simulator now models more counterattackers: Nyxen strikes back when its shield is directly hit, and Centurion retaliates when it or an adjacent ally is directly damaged.',
     'Combat simulator: enemy ships now react when you hit them — enemy counterattackers (Stalwart, Nyxen, Centurion) strike back, and enemy on-hit reactions (self-repairs, defensive buffs, cleanses) now fire, so enemy teams play more like real opponents. Shield-hit counters (Nyxen) now also work for your own ships in positioned battles.',
+    'Combat simulator: enemy ships now benefit from their on-cast shield skills — they gain shields, absorb your damage, and trigger shield-reactive abilities (e.g. shield-hit counters). Previously these effects only worked on your own ships.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

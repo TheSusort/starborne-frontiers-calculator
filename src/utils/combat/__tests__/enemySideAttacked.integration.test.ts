@@ -295,11 +295,12 @@ describe('Task 3 — player→enemy attacked emit: enemy COUNTERS fire when the 
     });
 
     it('enemy NYXEN (shield-hit counter) counters ONLY when the player dents its live shield', () => {
-        // ENGINE NOTE: the engine does NOT model enemy self-shields from on-CAST shield abilities
-        // (playerTurn.ts:1962-1964: enemy event-only shields `continue` before granting a pool), so
-        // Nyxen's own active 15%-Max-HP shield never goes live on an enemy. A REACTIVE on-attacked
-        // shield grant DOES create a live enemy pool (it routes through grantShieldToTarget directly,
-        // bypassing the event-only gate). So we pair Nyxen's REAL parsed shield-hit counter
+        // ENGINE NOTE: the engine NOW models enemy self-shields from on-CAST shield abilities — the
+        // event-only sub-branch in playerTurn.ts grants real enemy pools (see
+        // enemyOnCastShield.integration.test.ts). THIS test deliberately keeps the *injected
+        // reactive* on-attacked self-shield variant to isolate the reactive-shield path in
+        // particular: a REACTIVE on-attacked shield grant creates a live enemy pool by routing
+        // through grantShieldToTarget directly. So we pair Nyxen's REAL parsed shield-hit counter
         // (requireShieldHit) with an injected reactive on-attacked self-shield: round 1 the player
         // hits an UNSHIELDED enemy (no counter — shieldWasHit false), the reactive grants a shield,
         // and from round 2 the player dents the LIVE shield → the player→enemy emit carries
