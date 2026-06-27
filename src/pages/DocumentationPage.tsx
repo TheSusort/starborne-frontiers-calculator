@@ -3152,13 +3152,17 @@ const DocumentationPage: React.FC = () => {
                                     modeled too: one of your ships with a &quot;when directly
                                     damaged&quot; passive (such as <strong>Stalwart</strong>)
                                     retaliates against the attacker for a share of its own attack —
-                                    a full hit that can crit and kill (enemy-side counters are
-                                    coming in a later update). Different counterattackers have their
-                                    own triggers: <strong>Nyxen</strong> strikes back only when its
-                                    shield is the part that takes the hit, and{' '}
+                                    a full hit that can crit and kill. Different counterattackers
+                                    have their own triggers: <strong>Nyxen</strong> strikes back
+                                    only when its shield is the part that takes the hit, and{' '}
                                     <strong>Centurion</strong> retaliates when it or an adjacent
-                                    ally is directly damaged. More implant and gear-set effects will
-                                    be added in future updates.
+                                    ally is directly damaged. These reactions now fire for{' '}
+                                    <strong>both teams</strong>: enemy ships react when you hit them
+                                    too — enemy counterattackers strike back, and enemy on-hit
+                                    reactions (self-repairs, defensive buffs, cleanses) fire — so
+                                    enemy teams play more like real opponents in positioned battles.
+                                    More implant and gear-set effects will be added in future
+                                    updates.
                                 </p>
                             </div>
                         </div>
