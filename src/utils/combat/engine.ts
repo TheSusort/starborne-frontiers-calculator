@@ -3565,6 +3565,68 @@ export function runCombat(input: CombatEngineInput): {
         const turnBindings = (side: Side): TurnBindings =>
             side === 'player' ? playerTurnBindings : enemyTurnBindings;
 
+        // Shared per-victim skill-triggered detonation loop. Each victim hit by the cast
+        // that is STILL ALIVE detonates its OWN containers (no role-scale). Bombs = full
+        // shield drain/no pen; inferno+corrosion BYPASS shield. Credited to the detonating
+        // actor's per-round detonation tally + roundPerTargetDamage; NOT into cumulativeDamage
+        // (HP lands per-victim via applyVictimDamage). Used by the focus (player→enemy),
+        // enemy (enemy→player), and walked-team (player→enemy) sites — the ONLY difference
+        // between call sites is the sink + the recipe source + the per-side tb.
+        const applyPerVictimDetonation = (
+            recipe: DetonationRecipe,
+            victims: Map<string, CombatActor>,
+            sink: DamageAccountingSink,
+            actorId: string,
+            tb: TurnBindings
+        ): void => {
+            for (const victim of victims.values()) {
+                if (victim.currentHp <= 0) continue; // died to the firing hit (already splashed)
+                const result = detonateContainers(recipe, {
+                    corrosionEntries: victim.corrosionEntries,
+                    infernoEntries: victim.infernoEntries,
+                    pendingBombs: victim.pendingBombs,
+                    victimHp: tb.victimMaxHpFor(victim),
+                });
+                if (result.bomb > 0) {
+                    applyVictimDamage(result.bomb, victim, sink, {
+                        killerId: actorId,
+                        byDirectDamage: true,
+                        bombPortion: result.bomb, // full shield drain, no pen
+                        shieldPenetrationPct: 0,
+                    });
+                    bus.emit({
+                        type: 'bomb-detonated',
+                        actorId,
+                        round: r,
+                        stacks: result.bombStacks,
+                        damage: result.bomb,
+                    });
+                    roundPerTargetDamage.set(
+                        victim.id,
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + result.bomb
+                    );
+                }
+                const bypass = result.inferno + result.corrosion;
+                if (bypass > 0) {
+                    applyVictimDamage(bypass, victim, sink, { byDirectDamage: false }); // DoT → bypass shield
+                    bus.emit({
+                        type: 'dot-detonated',
+                        targetId: victim.id,
+                        round: r,
+                        damage: bypass,
+                    });
+                    roundPerTargetDamage.set(
+                        victim.id,
+                        (roundPerTargetDamage.get(victim.id) ?? 0) + bypass
+                    );
+                }
+                const dealt = result.bomb + bypass;
+                if (dealt > 0) {
+                    perActorDetonation.set(actorId, (perActorDetonation.get(actorId) ?? 0) + dealt);
+                }
+            }
+        };
+
         // Unified positional target selection (bySide unification PR6a). Reproduces the
         // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
         // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
@@ -3658,16 +3720,14 @@ export function runCombat(input: CombatEngineInput): {
                 // returns a `positionalDetonation` recipe for the per-victim detonation loop below
                 // to apply. Conditional spread → non-positional turns omit the key → byte-identical.
                 //
-                // SCOPED TO THE FOCUS ATTACKER + ENEMY SIDE (PR1 + PR3): the focus-turn site (PR1)
-                // and now the enemy-attacker site (PR3) both consume the recipe via a per-victim
-                // detonation loop, so they get `positional: true` (runPlayerTurn SKIPS the anchor
-                // detonation and returns the recipe; detonationDamage stays 0 — the loop applies it
-                // per footprint victim). The WALKED-TEAM players (side 'player', id !== focusActorId)
-                // are the ONLY site without such a loop yet, so setting `positional` for them would
-                // skip their anchor detonation and silently DROP it (recipe ignored). They stay on
-                // the prior anchor-detonation path (byte-identical) until a future PR wires the loop
-                // to the walked-team site symmetrically.
-                ...((a.id === focusActorId || a.side === 'enemy') &&
+                // ALL THREE CAST-SITES (PR1 + PR3 + PR4): the focus-turn site (PR1), the enemy-
+                // attacker site (PR3), and now the WALKED-TEAM site (PR4 — `a.kind === 'team'`) each
+                // consume the recipe via their own per-victim detonation loop, so all three get
+                // `positional: true` (runPlayerTurn SKIPS the anchor detonation and returns the
+                // recipe; detonationDamage stays 0 — the loop applies it per footprint victim). With
+                // the walked-team loop now wired, every positional cast-site lands detonation per
+                // footprint victim symmetrically; no cast-site silently drops the recipe.
+                ...((a.id === focusActorId || a.side === 'enemy' || a.kind === 'team') &&
                 aoePattern != null &&
                 aoeTarget != null &&
                 tgt.position != null
@@ -4493,57 +4553,13 @@ export function runCombat(input: CombatEngineInput): {
                             // recipe present only when a detonate-dot ability fired (else dets empty).
                             const detonationRecipe = turn.positionalDetonation;
                             if (detonationRecipe && detonationRecipe.dets.length > 0) {
-                                for (const victim of detonationTargets.values()) {
-                                    if (victim.currentHp <= 0) continue; // died to the firing hit (already splashed)
-                                    const result = detonateContainers(detonationRecipe, {
-                                        corrosionEntries: victim.corrosionEntries,
-                                        infernoEntries: victim.infernoEntries,
-                                        pendingBombs: victim.pendingBombs,
-                                        victimHp: tb.victimMaxHpFor(victim),
-                                    });
-                                    if (result.bomb > 0) {
-                                        applyVictimDamage(result.bomb, victim, enemySink, {
-                                            killerId: actor.id,
-                                            byDirectDamage: true,
-                                            bombPortion: result.bomb, // full shield drain, no pen
-                                            shieldPenetrationPct: 0,
-                                        });
-                                        bus.emit({
-                                            type: 'bomb-detonated',
-                                            actorId: actor.id,
-                                            round: r,
-                                            stacks: result.bombStacks,
-                                            damage: result.bomb,
-                                        });
-                                        roundPerTargetDamage.set(
-                                            victim.id,
-                                            (roundPerTargetDamage.get(victim.id) ?? 0) + result.bomb
-                                        );
-                                    }
-                                    const bypass = result.inferno + result.corrosion;
-                                    if (bypass > 0) {
-                                        applyVictimDamage(bypass, victim, enemySink, {
-                                            byDirectDamage: false, // DoT → bypass shield
-                                        });
-                                        bus.emit({
-                                            type: 'dot-detonated',
-                                            targetId: victim.id,
-                                            round: r,
-                                            damage: bypass,
-                                        });
-                                        roundPerTargetDamage.set(
-                                            victim.id,
-                                            (roundPerTargetDamage.get(victim.id) ?? 0) + bypass
-                                        );
-                                    }
-                                    const dealt = result.bomb + bypass;
-                                    if (dealt > 0) {
-                                        perActorDetonation.set(
-                                            actor.id,
-                                            (perActorDetonation.get(actor.id) ?? 0) + dealt
-                                        );
-                                    }
-                                }
+                                applyPerVictimDetonation(
+                                    detonationRecipe,
+                                    detonationTargets,
+                                    enemySink,
+                                    actor.id,
+                                    tb
+                                );
                             }
                         }
 
@@ -4694,6 +4710,12 @@ export function runCombat(input: CombatEngineInput): {
                             let teamFocusEnemyDamage = 0;
                             let teamFocusEnemyShieldWasHit = false;
                             let teamFocusEnemyHit = false;
+                            // Per-victim detonation (positional): collect EVERY footprint victim hit
+                            // by this cast's firing damage (unique by id), so each can detonate its
+                            // OWN containers after the firing hits land. Populated in the
+                            // onVictimResolved hook below alongside the standing-leech proc (mirror
+                            // of the focus site).
+                            const detonationTargets = new Map<string, CombatActor>();
                             drivePositionalApply({
                                 scalars: teamTurn.positionalScalars!,
                                 hitCrits: teamTurn.hitCrits,
@@ -4709,6 +4731,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // proc as the focus site.
                                 onVictimResolved: (victim, damage, outcome) => {
                                     procStandingLeechesPerVictim(actor.id, damage);
+                                    detonationTargets.set(victim.id, victim);
                                     if (victim.id === tgt.id) {
                                         teamFocusEnemyHit = true;
                                         teamFocusEnemyDamage += damage;
@@ -4739,6 +4762,26 @@ export function runCombat(input: CombatEngineInput): {
                                     damage: teamFocusEnemyDamage,
                                 });
                             }
+
+                            // Per-victim skill-triggered detonation (positional) — mirror of the
+                            // focus site, keyed to THIS walked team actor. Each enemy victim HIT by
+                            // this cast that is STILL ALIVE detonates its OWN containers (no role-
+                            // scale — full stored stacks). Bombs = full shield drain/no pen; inferno+
+                            // corrosion BYPASS the shield (DoT semantics). Credited to the walked-team
+                            // actor's per-round detonation tally + roundPerTargetDamage; NOT into
+                            // cumulativeDamage (HP lands per-victim via applyVictimDamage). `tb`
+                            // resolves player→enemy → enemySink is the correct sink. recipe present
+                            // only when a detonate-dot ability fired (else dets empty).
+                            const teamDetonationRecipe = teamTurn.positionalDetonation;
+                            if (teamDetonationRecipe && teamDetonationRecipe.dets.length > 0) {
+                                applyPerVictimDetonation(
+                                    teamDetonationRecipe,
+                                    detonationTargets,
+                                    enemySink,
+                                    actor.id,
+                                    tb
+                                );
+                            }
                         }
 
                         // Fold the team turn's damage into ITS OWN map entry (post-round assembly
@@ -4757,8 +4800,12 @@ export function runCombat(input: CombatEngineInput): {
                             td.secondary += teamTurn.secondaryDamage;
                             td.conditional += teamTurn.conditionalDamage;
                             creditDamage(actor.id, 'direct', teamTurn.directDamage);
+                            // Detonation credit is suppressed in positional mode (teamTurn.detonationDamage
+                            // is 0 there anyway — runPlayerTurn returns the recipe instead). Keeping it
+                            // inside this guard documents intent and keeps per-victim detonation out of
+                            // cumulativeDamage (it lands per-victim via applyVictimDamage above).
+                            creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
                         }
-                        creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
 
                         // The team turn's result row fields (action/roundCrit/etc.) are NOT consumed
                         // beyond damage + resisted routing + ctx. Stage its resisted enemy applications
@@ -5313,62 +5360,13 @@ export function runCombat(input: CombatEngineInput): {
                                         enemyPositionalDetonation &&
                                         enemyPositionalDetonation.dets.length > 0
                                     ) {
-                                        for (const victim of detonationTargets.values()) {
-                                            if (victim.currentHp <= 0) continue; // died to firing hit (already splashed)
-                                            const result = detonateContainers(
-                                                enemyPositionalDetonation,
-                                                {
-                                                    corrosionEntries: victim.corrosionEntries,
-                                                    infernoEntries: victim.infernoEntries,
-                                                    pendingBombs: victim.pendingBombs,
-                                                    victimHp: tb.victimMaxHpFor(victim),
-                                                }
-                                            );
-                                            if (result.bomb > 0) {
-                                                applyVictimDamage(result.bomb, victim, playerSink, {
-                                                    killerId: actor.id,
-                                                    byDirectDamage: true,
-                                                    bombPortion: result.bomb, // full shield drain, no pen
-                                                    shieldPenetrationPct: 0,
-                                                });
-                                                bus.emit({
-                                                    type: 'bomb-detonated',
-                                                    actorId: actor.id,
-                                                    round: r,
-                                                    stacks: result.bombStacks,
-                                                    damage: result.bomb,
-                                                });
-                                                roundPerTargetDamage.set(
-                                                    victim.id,
-                                                    (roundPerTargetDamage.get(victim.id) ?? 0) +
-                                                        result.bomb
-                                                );
-                                            }
-                                            const bypass = result.inferno + result.corrosion;
-                                            if (bypass > 0) {
-                                                applyVictimDamage(bypass, victim, playerSink, {
-                                                    byDirectDamage: false, // DoT → bypass shield
-                                                });
-                                                bus.emit({
-                                                    type: 'dot-detonated',
-                                                    targetId: victim.id,
-                                                    round: r,
-                                                    damage: bypass,
-                                                });
-                                                roundPerTargetDamage.set(
-                                                    victim.id,
-                                                    (roundPerTargetDamage.get(victim.id) ?? 0) +
-                                                        bypass
-                                                );
-                                            }
-                                            const dealt = result.bomb + bypass;
-                                            if (dealt > 0) {
-                                                perActorDetonation.set(
-                                                    actor.id,
-                                                    (perActorDetonation.get(actor.id) ?? 0) + dealt
-                                                );
-                                            }
-                                        }
+                                        applyPerVictimDetonation(
+                                            enemyPositionalDetonation,
+                                            detonationTargets,
+                                            playerSink,
+                                            actor.id,
+                                            tb
+                                        );
                                     }
                                 } else {
                                     ({ shieldBefore, hpDamage, barriered } = applyIncomingToTarget(
