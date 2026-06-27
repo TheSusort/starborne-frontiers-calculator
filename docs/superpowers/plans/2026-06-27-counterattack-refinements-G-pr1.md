@@ -40,7 +40,7 @@
 - **Modify** `src/utils/combat/triggers.ts` — `counter` executor branch + `applyCounterAttack`/`counterFiredThisTurn` on `IntentExecContext` interface + `isPrimaryTarget` passthrough in the `on-attacked` listener + `eventCtx.isPrimaryTarget`.
 - **Modify** `src/utils/skillTextParser.ts` — `parseCounterAbilities` (new) modeled on `parseHealAbilities`.
 - **Modify** `src/utils/abilities/buildShipAbilities.ts` — consume `parseCounterAbilities`, build `counter` abilities on `on-attacked`.
-- **Modify** editor exhaustiveness sites IF tsc forces: `src/components/skills/AbilityCard.tsx`, `AbilityTypePicker.tsx`, `src/utils/abilities/abilityDefaults.ts` (add stubs only).
+- **Modify** editor exhaustiveness sites IF tsc forces: `src/components/skills/AbilityCard.tsx`, `AbilityTypePicker.tsx`, `src/components/skills/abilityDefaults.ts` (add stubs only).
 - **Modify** `src/constants/changelog.ts`, `src/pages/DocumentationPage.tsx` — final task.
 - **Tests:** `src/utils/combat/__tests__/counterAttack.test.ts` (new, executor/helper unit), `src/utils/combat/__tests__/counterAttack.integration.test.ts` (new, runCombat), parser test in `src/utils/abilities/__tests__/` or `src/utils/__tests__/skillTextParser` area.
 
@@ -65,7 +65,7 @@ Expected: branch correct, working tree clean, reflect tests pass (sanity that th
 
 **Files:**
 - Modify: `src/types/abilities.ts:328` (union)
-- Modify (only if tsc errors): `src/components/skills/AbilityCard.tsx`, `src/components/skills/AbilityTypePicker.tsx`, `src/utils/abilities/abilityDefaults.ts`
+- Modify (only if tsc errors): `src/components/skills/AbilityCard.tsx`, `src/components/skills/AbilityTypePicker.tsx`, `src/components/skills/abilityDefaults.ts`
 
 - [ ] **Step 1: Add the union variant**
 
@@ -92,7 +92,7 @@ Expected: errors at any `switch (ability.type)` / `Record<AbilityType, …>` tha
 
 - [ ] **Step 3: Add minimal stubs**
 
-For each tsc error, add a minimal entry mirroring the `'damage'` case (e.g. in `abilityDefaults.ts` a `counter` default `{ type: 'counter', multiplier: 0 }`; in pickers a label like "Counterattack"; in `AbilityCard.tsx` reuse the damage rendering or a one-line summary). Do NOT add `'counter'` to `NOT_SIMULATED_TYPES` (it IS simulated). Keep stubs minimal — the editor is not the focus.
+For each tsc error, add a minimal entry mirroring the `'damage'` case. Expected sites (verified): `src/components/skills/abilityDefaults.ts` `makeDefaultConfig` switch (~line 7) + `DEFAULT_TARGETS: Record<AbilityType, AbilityTarget>` (~line 91, use `'enemy'`); `AbilityTypePicker.tsx` `TYPE_LABELS: Record<AbilityType, string>` (~line 10, label "Counterattack"); `AbilityCard.tsx` (~line 248) reuse the damage rendering or a one-line summary. **No `simCoverage.ts` edit is needed** — `NOT_SIMULATED_TYPES = {'control'}` (simCoverage.ts:17) and `PASSIVE_NOOP_TYPES` both correctly exclude `counter` (it IS simulated); do NOT add `counter` to either. Keep stubs minimal — the editor is not the focus.
 
 - [ ] **Step 4: Verify clean**
 
@@ -143,7 +143,13 @@ This task adds the signals only (no executor yet) — all byte-identical.
 
 - [ ] **Step 4: Add `isCounter?` cause flag (for no-re-reflect / no-re-counter intent)**
 
-Find the `cause` type used by `applyVictimDamage` (search `isReflected?:` in `engine.ts`). Add `isCounter?: boolean` beside `isReflected?`. Update the reflect re-entry guard at `engine.ts:3020` from `if (!cause?.isReflected && …)` to `if (!cause?.isReflected && !cause?.isCounter && …)` so a counter application is NOT itself reflected (loop-safe; documented in spec rule 2). Add a one-line comment.
+The `cause` param type is an INLINE object literal on `applyVictimDamage` at
+**engine.ts:~2701–2711** (a near-duplicate exists on `applyIncomingToTarget` ~3143–3148;
+only the `applyVictimDamage` one is load-bearing for the counter apply path). Add
+`isCounter?: boolean` to the `applyVictimDamage` cause literal (2701–2711). Update the
+reflect re-entry guard at **engine.ts:3020** from `if (!cause?.isReflected && …)` to
+`if (!cause?.isReflected && !cause?.isCounter && …)` so a counter application is NOT
+itself reflected (loop-safe; documented in spec rule 2). Add a one-line comment.
 
 - [ ] **Step 5: Verify byte-identical**
 
@@ -174,16 +180,25 @@ The helper rolls the owner's crit, computes raw via `victimHitDamage`, applies v
 `src/utils/combat/triggers.ts`, in `IntentExecContext` (near `creditReactiveDamage?`, ~782):
 ```ts
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
-     *  Reuses the engine's no-event apply path (no attacked event → no re-counter). */
-    applyCounterAttack?: (ownerId: string, attackerId: string, multiplier: number, hits: number) => void;
+     *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
+     *  apply path (no attacked event → no re-counter). */
+    applyCounterAttack?: (
+        ownerId: string,
+        attackerId: string,
+        abilityId: string,
+        multiplier: number,
+        hits: number
+    ) => void;
 ```
 
-- [ ] **Step 2: Write the failing engine test (testtap)**
+- [ ] **Step 2: (No test committed in this task — see note)**
 
-Add `src/utils/combat/__tests__/counterAttack.test.ts`. Drive a minimal `runCombat` where a player ship carries a `counter` ability (built inline or via a test ability) and is hit by an enemy; assert via the result/perTargetDamage that the attacker took mitigated counter damage matching `victimHitDamage` (owner attack × mult/100, vs attacker defence/affinity), and that owner crit can apply. Mirror the harness in `reflect`/`reactiveExtraAction` tests. Start with the magnitude assertion.
-
-Run: `npx vitest run src/utils/combat/__tests__/counterAttack.test.ts -v`
-Expected: FAIL (no counter executor/helper yet).
+The helper's magnitude is only observable once the executor calls it (Task 4). To avoid
+committing a RED test, the end-to-end magnitude test (`counterAttack.test.ts`) is written
+in **Task 4** alongside the executor. This task adds the helper + ctx wiring only and
+verifies via tsc/lint. (If you prefer a Task-3 test, expose an engine `__testTap` that
+invokes `applyCounterAttack` directly and assert magnitude against `victimHitDamage` — but
+the default is to defer the test to Task 4.)
 
 - [ ] **Step 3: Implement `applyCounterAttack`**
 
@@ -193,6 +208,7 @@ Inside the per-round scope where `applyVictimDamage`, `statusEngine`, `selfBuffL
 const applyCounterAttack = (
     ownerId: string,
     attackerId: string,
+    abilityId: string,
     multiplier: number,
     hits: number
 ): void => {
@@ -206,11 +222,16 @@ const applyCounterAttack = (
     const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
     const attackerStats = effectiveStatsOf(statusEngine, selfBuffLookup, attacker);
 
-    // Roll the OWNER's crit (spec rule 4). Use the SAME crit rate-gate machinery the
-    // normal attack path uses (locate it next to the existing crit gate; key per
-    // owner+ability or per the established reactive crit pattern). Dormant in every
-    // fixture (no Stalwart equipped) → byte-identical.
-    const didCrit = /* rollOwnerCrit(ownerId, ownerStats.crit) */ false; // see Step 3a
+    // Roll the OWNER's crit (spec rule 4) via a NEW dedicated combat-scoped gate map
+    // (Task 3a) — NOT any existing per-actor crit gate (reusing one would corrupt that
+    // actor's crit schedule and could move goldens even without Stalwart). A dedicated
+    // map only ever creates keys for counter-carriers → no key, no draw, no perturbation
+    // for every existing fixture → byte-identical.
+    const didCrit = rollRateGate(
+        counterCritGates,
+        `${ownerId}:${abilityId}`, // one crit stream per counter ability per owner
+        ownerStats.crit / 100
+    );
 
     const raw = victimHitDamage(
         {
@@ -221,7 +242,10 @@ const applyCounterAttack = (
             effectiveCritDamage: ownerStats.critDamage,
             outgoingDamageBuffPct: 0,
             incomingDamageModifierPct: 0,
-            defensePenetrationPct: ownerStats.defensePenetration ?? 0,
+            // effectiveStatsOf.defensePenetration is BASE-only (the buff folds via a
+            // separate channel) — acceptable: no Stalwart fixture, and counters ignoring
+            // pen-buffs is a documented approximation. Field exists on EffectiveStats.
+            defensePenetrationPct: ownerStats.defensePenetration,
             attackerAffinity: owner.affinity,
         },
         {
@@ -239,7 +263,10 @@ const applyCounterAttack = (
         killerId: owner.id,
         byDirectDamage: true,
         isCounter: true,
-        shieldPenetrationPct: ownerStats.shieldPenetration ?? 0,
+        // Mirror Reflect (engine.ts:3091): no shield penetration on the reactive hit.
+        // (EffectiveStats has NO shieldPenetration field; shield-pen lives on
+        // actor.stats.shieldPenetration via attackerShieldPenOf — deliberately not used.)
+        shieldPenetrationPct: 0,
         bombPortion: 0,
     });
     // Surface on the attacker's incoming so it appears on the HP curve (mirror reflect
@@ -251,20 +278,35 @@ const applyCounterAttack = (
 };
 ```
 
-- [ ] **Step 3a: Wire the owner crit roll**
+- [ ] **Step 3a: Wire the owner crit roll via a NEW dedicated gate map**
 
-Locate the crit rate-gate used for normal/reactive crits (search `critGate`, `makeRateGate`, `rollRateGate` in `engine.ts`/`rateAccumulator.ts`). Replace the `didCrit` placeholder with a roll of the owner's effective crit chance through that gate (own stream — must NOT perturb existing gate draws for fixtures without Stalwart). If the simplest faithful option is to mirror the reflect path (which uses `didCrit:false`, i.e. no crit), STOP and reconsider — spec rule 4 requires crit. Prefer drawing the owner's crit gate. Document the chosen stream in a comment.
+Do NOT reuse any existing per-actor crit gate — those are per-actor-runtime fields
+(`owner.activeCritGate(rate)` / `rt.activeHealCritGate(...)`, e.g. engine.ts:2352/2422/
+2497/4939) and reusing one corrupts that actor's crit schedule (golden movement risk
+even without Stalwart). Instead:
+1. Import `rollRateGate` from `./rateAccumulator` (it exists: `rateAccumulator.ts:31`,
+   signature `rollRateGate(gates, key, chance)` — the same deterministic accumulator the
+   D-PR proc gates use).
+2. Declare a NEW combat-scoped map next to the other gate maps (e.g. beside
+   `procChanceGates`): `const counterCritGates = new Map<string, ReturnType<typeof makeRateGate>>();`
+3. Key it `${ownerId}:${abilityId}` (NOT `${ownerId}:${attackerId}` — one crit stream per
+   counter ability per owner; update the helper's key accordingly, threading the ability id
+   into `applyCounterAttack` if needed, or roll the gate in the executor and pass `didCrit`
+   in). A dedicated map creates keys ONLY for counter-carriers → no draw for any existing
+   fixture → byte-identical.
+
+Document the chosen stream in a comment.
 
 - [ ] **Step 4: Expose on the per-round ctx**
 
 `src/utils/combat/engine.ts:~3791`, in the IntentExecContext object literal next to `creditReactiveDamage`, add `applyCounterAttack,`.
 
-- [ ] **Step 5: Run the test (still fails until executor — Task 4)**
+- [ ] **Step 5: Verify clean (no behavior change yet)**
 
-The helper exists but nothing calls it yet. Keep the magnitude test focused on the helper if you exposed a testtap; otherwise this test green-lights in Task 4. Run tsc/lint:
+The helper exists but nothing calls it yet → byte-identical. Run:
 
-Run: `npx tsc --noEmit && npm run lint`
-Expected: clean.
+Run: `npx tsc --noEmit && npm run lint && npx vitest run 2>&1 | tail -6`
+Expected: clean; full suite green; ZERO `.snap` movement (helper is unreferenced).
 
 - [ ] **Step 6: Commit**
 
@@ -293,7 +335,7 @@ In `engine.ts` at combat scope (near `hitThisRound`), declare:
 // would wrongly suppress a second attack in the same round).
 const counterFiredThisTurn = new Set<string>();
 ```
-Clear it (`counterFiredThisTurn.clear();`) at the TOP of each per-actor turn iteration — locate the per-actor turn-order loop body / the `turn-started` emit (~engine.ts:3562) and clear once per actor turn, before the action branches and before the drain that follows the turn. Expose on the per-round ctx (next to `applyCounterAttack`):
+Clear it (`counterFiredThisTurn.clear();`) once per actor turn at the TOP of the per-actor turn-order loop. The single boundary is the `turn-started` emit at **engine.ts:~4061** (loop `for (let actor = selectNext(); ...)` at ~4003; clear right after `actingActorId = actor.id` ~4059, before the action branches and before the post-turn drain). Two dead-actor `continue`s precede it (~4012, ~4044) — harmless, a skipped dead actor doesn't attack. (NOT line 3562 — that's unrelated `targetHpPctStart`.) Expose on the per-round ctx (next to `applyCounterAttack`):
 ```ts
 counterFiredThisTurn,
 ```
@@ -301,7 +343,7 @@ and declare `counterFiredThisTurn?: Set<string>;` on `IntentExecContext` (trigge
 
 - [ ] **Step 2: Write the failing executor tests**
 
-In `counterAttack.test.ts` add: (a) a 3-hit attack on a counter-carrier → exactly ONE counter (assert attacker incoming == one counter's worth); (b) `requirePrimaryTarget:true` + an `attacked` with `isPrimaryTarget:false` → NO counter; with `true` → counter; (c) no-re-counter: attacker also carries a counter → only the first fires.
+In `counterAttack.test.ts` add: (a) **magnitude** (moved from Task 3) — a player counter-carrier hit by an enemy → attacker takes mitigated counter damage matching `victimHitDamage` (owner attack × mult/100 vs attacker defence/affinity); (b) a 3-hit attack on a counter-carrier → exactly ONE counter (assert attacker incoming == one counter's worth); (c) `requirePrimaryTarget:true` + an `attacked` with `isPrimaryTarget:false` → NO counter; with `true` → counter; (d) no-re-counter: attacker also carries a counter → only the first fires.
 
 Run: `npx vitest run src/utils/combat/__tests__/counterAttack.test.ts -v`
 Expected: FAIL.
@@ -323,7 +365,7 @@ if (cfg.type === 'counter') {
     const key = `${intent.ownerId}:${intent.ability.id}`;
     if (ctx.counterFiredThisTurn?.has(key)) return;
     ctx.counterFiredThisTurn?.add(key);
-    ctx.applyCounterAttack?.(intent.ownerId, attackerId, cfg.multiplier, cfg.hits ?? 1);
+    ctx.applyCounterAttack?.(intent.ownerId, attackerId, intent.ability.id, cfg.multiplier, cfg.hits ?? 1);
     return;
 }
 ```
