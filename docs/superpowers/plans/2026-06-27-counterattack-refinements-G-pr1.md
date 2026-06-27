@@ -284,11 +284,13 @@ Do NOT reuse any existing per-actor crit gate — those are per-actor-runtime fi
 (`owner.activeCritGate(rate)` / `rt.activeHealCritGate(...)`, e.g. engine.ts:2352/2422/
 2497/4939) and reusing one corrupts that actor's crit schedule (golden movement risk
 even without Stalwart). Instead:
-1. Import `rollRateGate` from `./rateAccumulator` (it exists: `rateAccumulator.ts:31`,
-   signature `rollRateGate(gates, key, chance)` — the same deterministic accumulator the
-   D-PR proc gates use).
+1. `rollRateGate` and `makeRateGate` are ALREADY imported in `engine.ts:12`
+   (`import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';`) — no new
+   import needed. Signature `rollRateGate(gates, key, chance)` (`calculators/rateAccumulator.ts:31`)
+   — the same deterministic accumulator the D-PR proc gates use.
 2. Declare a NEW combat-scoped map next to the other gate maps (e.g. beside
-   `procChanceGates`): `const counterCritGates = new Map<string, ReturnType<typeof makeRateGate>>();`
+   `procChanceGates`, engine.ts:~1997): `const counterCritGates = new Map<string, RateGate>();`
+   (use the `RateGate` alias to match `procChanceGates`' style).
 3. Key it `${ownerId}:${abilityId}` (NOT `${ownerId}:${attackerId}` — one crit stream per
    counter ability per owner; update the helper's key accordingly, threading the ability id
    into `applyCounterAttack` if needed, or roll the gate in the executor and pass `didCrit`
