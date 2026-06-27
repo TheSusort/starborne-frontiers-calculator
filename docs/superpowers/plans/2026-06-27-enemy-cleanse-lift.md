@@ -481,24 +481,92 @@ describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on
 
 > If `damageThenDebuff`/`playerVsEnemy`/`selfCleanseSkills` are defined inside another describe's scope, hoist the helpers to module scope (or duplicate minimally) so this new describe can use them. Keep it compiling and DRY.
 
-- [ ] **Step 3: Verify the whole combat suite is green with ZERO `.snap` movement**
+- [ ] **Step 3: Verify the combat suite is green (commit happens after Task 3c)**
 
 Run: `npx vitest --run src/utils/combat`
-Expected: 0 failed. Confirm `git status --porcelain | grep '\.snap'` is empty. Then `npx tsc --noEmit` clean.
+Expected: 0 failed in `src/utils/combat`. Confirm `git status --porcelain | grep '\.snap'` is empty (no combat-suite golden moved). Then `npx tsc --noEmit` clean. **Do NOT commit yet** — the full-suite golden-parity scenario (scenario 28) is handled in Task 3c, and everything lands in ONE combined commit at the end of Task 3c.
 
-- [ ] **Step 4: Single combined commit (lift + all test changes)**
+---
 
-The working tree now holds: the lift (`playerTurn.ts`), the `enemyActions.test.ts` changes (E5 seeding + partial + negative + the retargeted Task 5b), and the integration-test Grif addition. Husky runs the full suite on commit — it should pass now, so do NOT use `--no-verify`.
+## Task 3c: Retarget the golden-parity scenario 28 + deliberate snapshot refresh
+
+**Why this exists:** The full husky suite (`npm test`) runs beyond `src/utils/combat`. A SECOND pre-existing enemy-cleanser fixture lives in `src/utils/calculators/__tests__/healingGoldenParity.test.ts` — **scenario 28** (`scenario28Input` ~line 2355; `snap('enemy cleanse reaction (player damage proc + self-buff on enemy cleanse)', …)` ~line 2416; `it('scenario 28: enemy cleanse → Grif damage proc credited + Vigor Up self-buff from round 2')` ~line 2426). Identical structure to Task 5b: an enemy whose active is `cleanse self count:1` with **no debuff ever applied**, relying on the old always-fire cadence to drive a focus player's on-enemy-cleansed Grif damage proc AND a Yarrow "Vigor Up" self-buff. Under the lift, the no-op cleanse removes nothing → no `cleanse-performed` → neither reactive fires → the assertions AND the snapshot move.
+
+**Decisions (user-approved):** Retarget scenario 28 to assert the NEW symmetric cadence (no-op enemy cleanse → no event → no proc, no buff). Deliberately refresh the scenario-28 snapshot via this file's sanctioned delete-and-rerun discipline (the file forbids `vitest -u`), reviewing the diff to confirm ONLY scenario 28 moved. The positive on-enemy-cleansed chain remains covered by the Grif case added in Task 3b Step 2.
+
+**Files:**
+- Modify: `src/utils/calculators/__tests__/healingGoldenParity.test.ts` (scenario 28 + its comments)
+- Refresh: `src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap` (scenario-28 entry only)
+
+- [ ] **Step 1: Retarget the scenario 28 assertions**
+
+In the `it('scenario 28: …')` body (~lines 2426–2456), replace the cleanse/Vigor-Up assertions to reflect the no-removal cadence. Keep the no-healing assertions (still true). Replace:
+
+```ts
+        // The enemy cleanse-performed fired with the ENEMY's id each round it cast.
+        expect(cleanses.length).toBeGreaterThan(0);
+        expect(cleanses.every((e) => e.casterId === 'e1' && e.count === 1)).toBe(true);
+```
+with
+```ts
+        // SYMMETRIC CADENCE: the enemy's cleanse has nothing to remove (no debuff was applied
+        // to e1), so real removal is 0 → NO cleanse-performed fires (matches the player path,
+        // and the lift's full-symmetry rule). The on-enemy-cleansed reactives therefore never wake.
+        expect(cleanses).toHaveLength(0);
+```
+
+And replace the Vigor-Up block:
+```ts
+        const buffNamesByRound = result.rounds.map((r) => r.activeSelfBuffs.map((b) => b.buffName));
+        expect(buffNamesByRound[0]).not.toContain('Vigor Up');
+        expect(buffNamesByRound[1]).toContain('Vigor Up');
+        expect(buffNamesByRound[3]).toContain('Vigor Up');
+```
+with
+```ts
+        // No cleanse-performed → the on-enemy-cleansed Vigor Up self-buff is NEVER granted.
+        const buffNamesByRound = result.rounds.map((r) => r.activeSelfBuffs.map((b) => b.buffName));
+        expect(buffNamesByRound.every((names) => !names.includes('Vigor Up'))).toBe(true);
+```
+
+Keep the `directHeal/hotHeal/shield/cleanseCount/incomingDamage` zero assertions and `expect(result.summary.totalHealing).toBe(0)` (all still hold). Rename the `it(...)` title to e.g. `'scenario 28: enemy cleanse with nothing to remove emits no cleanse-performed → no Grif proc, no Vigor Up (symmetric cadence)'`. Update the scenario's narrative comment block (~lines 2330–2354 and 2421–2425, 2450–2454) to describe the no-reaction behavior (the per-round trace now: focus turn does nothing; enemy cleanse removes nothing → no event → no proc/buff; all buckets 0).
+
+- [ ] **Step 2: Deliberately refresh the scenario-28 snapshot (sanctioned delete-and-rerun)**
+
+This file's discipline (header lines 11–18) is: regenerate via DELETE-AND-RERUN, never `vitest -u`. Do exactly:
 
 ```bash
-git add src/utils/combat/playerTurn.ts src/utils/combat/__tests__/enemyActions.test.ts src/utils/combat/__tests__/enemyCleanse.integration.test.ts
+rm src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap
+npx vitest --run src/utils/calculators/__tests__/healingGoldenParity.test.ts
+git diff -- src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap
+```
+
+The regenerated file is byte-identical for every scenario whose behavior is unchanged (same input → same output), so the `git diff` MUST show changes confined to the `enemy cleanse reaction (player damage proc + self-buff on enemy cleanse)` snapshot entry only (losing the Vigor Up buff display from round 2 on). **If the diff touches ANY other scenario's entry, STOP and report BLOCKED** — that indicates unexpected drift to investigate, not a clean refresh.
+
+- [ ] **Step 3: Full-suite verification**
+
+Run (the full suite, husky parity): `npm test`
+Expected: 0 failed tests. If any OTHER test fails from the cadence change (a third enemy-cleanser fixture the audit missed), STOP and report BLOCKED with specifics — do not paper over. Then `npx tsc --noEmit` clean, `npm run lint` 0 warnings.
+
+- [ ] **Step 4: Single combined commit (lift + all test changes + refreshed golden)**
+
+The working tree now holds: the lift (`playerTurn.ts`), the `enemyActions.test.ts` changes (E5 seeding + partial + negative + retargeted Task 5b), the integration-test Grif addition (`enemyCleanse.integration.test.ts`), the retargeted scenario 28 (`healingGoldenParity.test.ts`), and the refreshed snapshot. Husky runs the full suite on commit — it should pass now, so do NOT use `--no-verify`.
+
+```bash
+git add src/utils/combat/playerTurn.ts \
+        src/utils/combat/__tests__/enemyActions.test.ts \
+        src/utils/combat/__tests__/enemyCleanse.integration.test.ts \
+        src/utils/calculators/__tests__/healingGoldenParity.test.ts \
+        src/utils/calculators/__tests__/__snapshots__/healingGoldenParity.test.ts.snap
 git commit -m "feat(combat): lift enemy on-cast cleanse removal (symmetric to E5/shield lifts)
 
 Enemy cleanse abilities now remove player-applied debuffs via the side-agnostic
 statusEngine.cleanse over side-aware recipients; cleanse-performed reflects the REAL
 removed count on both sides. Player cleanseCount metric suppressed on the enemy path.
 A no-op enemy cleanse no longer fires cleanse-performed (symmetric cadence) — the
-on-enemy-cleansed Grif chain now requires a real removal.
+on-enemy-cleansed reactor chain (Grif/Yarrow) now requires a real removal. Retargets the
+two pre-existing no-op-cleanse reactor fixtures (enemyActions Task 5b + healingGoldenParity
+scenario 28) to the new cadence; scenario-28 golden deliberately refreshed.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -528,8 +596,10 @@ Open `src/pages/DocumentationPage.tsx` and search for any combat/cleanse descrip
 npx tsc --noEmit            # clean
 npm run lint                # 0 warnings
 npm run audit:skills        # 141/0
-npx vitest --run src/utils/combat   # 0 failed, ZERO .snap movement
+npx vitest --run src/utils/combat   # 0 failed, ZERO combat .snap movement
 ```
+
+NOTE: the ONLY intended golden movement in this PR is the deliberate scenario-28 refresh in `healingGoldenParity.test.ts.snap` (Task 3c) — already committed. No combat `.snap` moves. The spec's original "byte-identical / ZERO .snap" claim was scoped too narrowly (it missed the two enemy-cleanser reactor fixtures); update the spec's Testing/golden-audit section to record this in Step 6 below.
 
 Expected: all clean. If `audit:skills` is not 141/0, STOP — the parser corpus is unrelated to this change and a delta means something else moved.
 
@@ -538,11 +608,16 @@ Expected: all clean. If `audit:skills` is not 141/0, STOP — the parser corpus 
 Run: `npm test`
 Expected: 0 failed tests. (If a fresh worktree: copy the main repo's `.env` first or ~14 `.tsx` files fail to *collect* — that's 0 failed tests, a collection error, not a regression.)
 
-- [ ] **Step 5: Commit changelog/docs**
+- [ ] **Step 5: Update the spec's golden-audit section**
+
+In `docs/superpowers/specs/2026-06-27-enemy-cleanse-lift-design.md`, update the Testing/golden-audit and any "byte-identical / ZERO `.snap`" language to record reality: two pre-existing enemy-cleanser reactor fixtures (`enemyActions.test.ts` Task 5b, `healingGoldenParity.test.ts` scenario 28) asserted the old always-fire cadence; both were retargeted to the symmetric no-removal cadence, and the scenario-28 golden was deliberately refreshed (one intended `.snap` move). `git add -f` the spec (gitignored).
+
+- [ ] **Step 6: Commit changelog/docs + spec**
 
 ```bash
 git add src/constants/changelog.ts src/pages/DocumentationPage.tsx
-git commit -m "docs(combat): changelog + docs for enemy cleanse lift
+git add -f docs/superpowers/specs/2026-06-27-enemy-cleanse-lift-design.md
+git commit -m "docs(combat): changelog + docs + spec golden-audit for enemy cleanse lift
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -553,8 +628,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ## Done criteria
 
-- `enemyCleanse.integration.test.ts` positive (real count 1) + negative (no event) pass; reverting the lift fails exactly those.
-- `enemyActions.test.ts` E5 test passes via 2 seeded debuffs; partial-removal (count 1) and negative-control cases pass.
-- `cleanseCastPath.test.ts` and all other combat tests stay byte-identical / green; ZERO `.snap` movement.
-- `tsc` clean, lint 0 warnings, `audit:skills` 141/0, full suite 0 failed.
-- Changelog line added.
+- `enemyCleanse.integration.test.ts` positive (real count 1) + negative (no event) + Grif positive pass; reverting the lift fails exactly those.
+- `enemyActions.test.ts` E5 test passes via 2 seeded debuffs; partial-removal (count 1), negative-control, and retargeted Task 5b cases pass.
+- `healingGoldenParity.test.ts` scenario 28 retargeted to the no-removal cadence; its golden deliberately refreshed (the ONLY snapshot that moves), diff confined to that one entry.
+- `cleanseCastPath.test.ts` and all other combat tests stay byte-identical / green; ZERO COMBAT `.snap` movement.
+- `tsc` clean, lint 0 warnings, `audit:skills` 141/0, full `npm test` suite 0 failed.
+- Changelog line added; spec golden-audit section updated.
