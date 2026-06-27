@@ -3627,6 +3627,82 @@ export function runCombat(input: CombatEngineInput): {
             }
         };
 
+        // Shared positioned timed-burst loop. A POSITIONED actor carrying timed
+        // pendingBombs/pendingAccumulators (seeded by the opposing side's earlier bomb/accumulator
+        // applications) bursts them at the START of its own turn — against its OWN HP — via
+        // applyVictimDamage (the per-victim sink). Bombs + accumulators = full shield drain, NO
+        // penetration (bomb-splash precedent). Credited to the per-round detonation tally keyed by
+        // the bomb's APPLIER (sourceId, unchanged attribution) + roundPerTargetDamage on the
+        // bursting actor. NEVER routed through creditDamage(actor.id,'detonation') — that feeds
+        // cumulativeDamage → the focus-dummy HP overwrite → double-hit (HP already drained inside
+        // applyVictimDamage). STRICT no-op (byte-identical) when the actor carries no timed
+        // containers OR is not positioned vs opposingRoster — no fixture seeds actor-side timed
+        // containers. Used by the enemy site (PR2: sink=enemySink, roster=allPlayerActors) and the
+        // focus attacker + walked-team sites (PR-B: sink=playerSink, roster=enemyAttackerActors).
+        const applyPositionedTimedBurst = (
+            actor: CombatActor,
+            sink: DamageAccountingSink,
+            opposingRoster: CombatActor[]
+        ): void => {
+            const hasTimedContainers =
+                actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0;
+            if (!hasTimedContainers || !isPositional(actor.position, opposingRoster)) return;
+
+            processBombs({
+                pendingBombs: actor.pendingBombs,
+                emitBombDetonated: (actorId, stacks, damage) =>
+                    bus.emit({
+                        type: 'bomb-detonated',
+                        actorId,
+                        round: r,
+                        stacks,
+                        damage,
+                    }),
+                creditDetonation: (sourceId, damage) => {
+                    applyVictimDamage(damage, actor, sink, {
+                        killerId: sourceId,
+                        byDirectDamage: true,
+                        bombPortion: damage, // full shield drain, no pen
+                        shieldPenetrationPct: 0,
+                    });
+                    roundPerTargetDamage.set(
+                        actor.id,
+                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+                    );
+                    perActorDetonation.set(
+                        sourceId,
+                        (perActorDetonation.get(sourceId) ?? 0) + damage
+                    );
+                },
+            });
+
+            // Accumulator gather input: the round-global player-DIRECT sum (same expression as the
+            // focus-dummy path). CORRECT for the enemy site; for the player side it is an INERT
+            // placeholder — the symmetric all-enemies-direct sum is not exposed and no fixture/ability
+            // applies accumulators to players. // symmetric input TBD — inert, no fixture
+            const allPlayersDirect = [...roundDamage.values()].reduce((s, d) => s + d.direct, 0);
+            processAccumulators({
+                pendingAccumulators: actor.pendingAccumulators,
+                allPlayersDirect,
+                creditDetonation: (sourceId, damage) => {
+                    applyVictimDamage(damage, actor, sink, {
+                        killerId: sourceId,
+                        byDirectDamage: true,
+                        bombPortion: damage, // full shield drain, no pen (bomb-style)
+                        shieldPenetrationPct: 0,
+                    });
+                    roundPerTargetDamage.set(
+                        actor.id,
+                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
+                    );
+                    perActorDetonation.set(
+                        sourceId,
+                        (perActorDetonation.get(sourceId) ?? 0) + damage
+                    );
+                },
+            });
+        };
+
         // Unified positional target selection (bySide unification PR6a). Reproduces the
         // focus(C1)/team(C2)/enemy(C3) selection: resolve the actor's parsed target against
         // its opposing roster, else fall back to the side's legacy victim (dummy / heal target).
@@ -4951,78 +5027,7 @@ export function runCombat(input: CombatEngineInput): {
                         // Stasis: this burst sits INSIDE the `!isTurnBlocked` gate, so a stasised/
                         // disabled positioned enemy does NOT burst this turn (its whole turn is
                         // skipped per the locked combat rule).
-                        const enemyHasTimedContainers =
-                            actor.pendingBombs.length > 0 || actor.pendingAccumulators.length > 0;
-                        if (
-                            enemyHasTimedContainers &&
-                            isPositional(actor.position, allPlayerActors)
-                        ) {
-                            // Bombs: each burst lands full on the enemy's own HP (full shield
-                            // drain, no penetration — bomb-splash precedent). bomb-detonated
-                            // actorId is the bomb's applier (`bomb.sourceId`, unchanged
-                            // attribution). Credit the per-round detonation tally to the applier
-                            // + record the per-target damage on the bursting enemy.
-                            processBombs({
-                                pendingBombs: actor.pendingBombs,
-                                emitBombDetonated: (actorId, stacks, damage) =>
-                                    bus.emit({
-                                        type: 'bomb-detonated',
-                                        actorId,
-                                        round: r,
-                                        stacks,
-                                        damage,
-                                    }),
-                                creditDetonation: (sourceId, damage) => {
-                                    applyVictimDamage(damage, actor, enemySink, {
-                                        killerId: sourceId,
-                                        byDirectDamage: true,
-                                        bombPortion: damage, // full shield drain, no pen
-                                        shieldPenetrationPct: 0,
-                                    });
-                                    roundPerTargetDamage.set(
-                                        actor.id,
-                                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
-                                    );
-                                    perActorDetonation.set(
-                                        sourceId,
-                                        (perActorDetonation.get(sourceId) ?? 0) + damage
-                                    );
-                                },
-                            });
-
-                            // Accumulators (Echoing Burst): the gather INPUT is the summed
-                            // direct damage of ALL players this round, read at THIS enemy's
-                            // turn position (same expression as the focus-dummy path `:4841`).
-                            // The burst detonates LIKE A BOMB: full shield drain, no penetration
-                            // (bombPortion = full payout, byDirectDamage true) — same shield
-                            // interaction as the timed-bomb path above. No bomb-detonated/
-                            // dot-detonated event today (parity with the focus-dummy accumulator
-                            // path, which emits none).
-                            const allPlayersDirect = [...roundDamage.values()].reduce(
-                                (s, d) => s + d.direct,
-                                0
-                            );
-                            processAccumulators({
-                                pendingAccumulators: actor.pendingAccumulators,
-                                allPlayersDirect,
-                                creditDetonation: (sourceId, damage) => {
-                                    applyVictimDamage(damage, actor, enemySink, {
-                                        killerId: sourceId,
-                                        byDirectDamage: true,
-                                        bombPortion: damage, // full shield drain, no pen (bomb-style)
-                                        shieldPenetrationPct: 0,
-                                    });
-                                    roundPerTargetDamage.set(
-                                        actor.id,
-                                        (roundPerTargetDamage.get(actor.id) ?? 0) + damage
-                                    );
-                                    perActorDetonation.set(
-                                        sourceId,
-                                        (perActorDetonation.get(sourceId) ?? 0) + damage
-                                    );
-                                },
-                            });
-                        }
+                        applyPositionedTimedBurst(actor, enemySink, allPlayerActors);
 
                         // Dead-after-burst guard (spike Fact 3): a lethal timed burst above
                         // fires recordDestroyed inside applyVictimDamage, but the loop's
