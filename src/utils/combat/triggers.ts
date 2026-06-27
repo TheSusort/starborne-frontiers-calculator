@@ -496,6 +496,7 @@ export function registerReactiveListeners(args: {
                                 didCrit: e.didCrit,
                                 triggerDamage: e.damage,
                                 isPrimaryTarget: e.isPrimaryTarget,
+                                shieldWasHit: e.shieldWasHit,
                             },
                         });
                     });
