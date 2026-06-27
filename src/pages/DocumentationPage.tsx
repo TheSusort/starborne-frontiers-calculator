@@ -3153,8 +3153,12 @@ const DocumentationPage: React.FC = () => {
                                     damaged&quot; passive (such as <strong>Stalwart</strong>)
                                     retaliates against the attacker for a share of its own attack —
                                     a full hit that can crit and kill (enemy-side counters are
-                                    coming in a later update). More implant and gear-set effects
-                                    will be added in future updates.
+                                    coming in a later update). Different counterattackers have their
+                                    own triggers: <strong>Nyxen</strong> strikes back only when its
+                                    shield is the part that takes the hit, and{' '}
+                                    <strong>Centurion</strong> retaliates when it or an adjacent
+                                    ally is directly damaged. More implant and gear-set effects will
+                                    be added in future updates.
                                 </p>
                             </div>
                         </div>

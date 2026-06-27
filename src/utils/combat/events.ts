@@ -212,6 +212,12 @@ export type CombatEvent =
            *  focus victim (`tgt`) → always true; positional per-victim emission (future) sets
            *  false for covered cells. Stalwart's counter gates on this. */
           isPrimaryTarget?: boolean;
+          /** G PR2: true when this hit actually reduced the victim's shield pool
+           *  (absorbed > 0). Sourced from the shield-first drain at the emit
+           *  (shieldBefore > 0 && hpDamage < damage && !barriered). Nyxen's counter
+           *  gates on this. False/absent when no shield was present, the hit fully
+           *  penetrated to HP, or a Barrier blocked it (shield untouched). */
+          shieldWasHit?: boolean;
       };
 
 export type CombatEventType = CombatEvent['type'];

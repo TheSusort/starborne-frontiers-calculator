@@ -122,9 +122,9 @@ export interface Intent {
          *  triggering attack (on-attacked -> attacked.isPrimaryTarget). Stalwart's counter
          *  gates on this so splash/covered victims do not counter. */
         isPrimaryTarget?: boolean;
-        /** G PR1 (plumbed in PR2): true when the triggering hit reduced the owner's SHIELD pool.
-         *  Nyxen's counter gates on this (`requireShieldHit`). No listener sets it yet → always
-         *  undefined here → the shield-hit gate is currently inert (byte-identical). */
+        /** G PR2: true when the triggering hit reduced the owner's SHIELD pool (absorbed > 0).
+         *  Sourced at the `attacked` emit and copied here by the on-attacked listener. Nyxen's
+         *  counter gates on this (`requireShieldHit`). */
         shieldWasHit?: boolean;
         /** The actor ids of the allies repaired by an on-own-repair-to-ally event
          *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
@@ -496,6 +496,7 @@ export function registerReactiveListeners(args: {
                                 didCrit: e.didCrit,
                                 triggerDamage: e.damage,
                                 isPrimaryTarget: e.isPrimaryTarget,
+                                shieldWasHit: e.shieldWasHit,
                             },
                         });
                     });

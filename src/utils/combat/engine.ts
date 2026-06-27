@@ -5084,6 +5084,12 @@ export function runCombat(input: CombatEngineInput): {
                             // roundCrit binary — the pre-4c contract.
                             const hitOutcomes =
                                 enemyHitCrits.length > 0 ? enemyHitCrits : [enemyTurnDidCrit];
+                            // G PR2: did the attack actually dent the victim's shield this turn?
+                            // absorbed = damage - hpDamage when not barriered; shieldBefore>0 guards a
+                            // "had a shield" precondition. Non-positional path only (positional leaves
+                            // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
+                            const shieldWasHit =
+                                !barriered && shieldBefore > 0 && hpDamage < damage;
                             for (const hitCrit of hitOutcomes) {
                                 bus.emit({
                                     type: 'attacked',
@@ -5096,6 +5102,7 @@ export function runCombat(input: CombatEngineInput): {
                                     // `tgt` is the focus/primary victim today; covered-cell
                                     // emission (future) would pass the real per-victim role.
                                     isPrimaryTarget: true,
+                                    ...(shieldWasHit ? { shieldWasHit: true } : {}),
                                     ...(hitCrit ? { didCrit: true } : {}),
                                     ...(damage > 0 ? { damage } : {}),
                                 });

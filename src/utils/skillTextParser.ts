@@ -188,12 +188,17 @@ export function parseSkillDamage(text: string): number {
     return 0;
 }
 
-/** A parsed counterattack consequence (Combat G PR1: Stalwart shape only). */
+/** A parsed counterattack consequence (Combat G PR1: Stalwart; PR2: Nyxen). */
 export interface ParsedCounterAbility {
     /** raw percentage of the OWNER's effective attack, e.g. 30/70. */
     multiplier: number;
     /** true when the trigger clause says "as a primary target" (Stalwart). */
     requirePrimaryTarget: boolean;
+    /** G PR2: true for "deals X% damage when its Shield is directly damaged" (Nyxen). */
+    requireShieldHit?: boolean;
+    /** G PR2: true for "when this Unit or an adjacent ally is directly damaged …
+     *  retaliates dealing X%" (Centurion) — routes to self + adjacent-ally counters. */
+    allySubject?: boolean;
 }
 
 /**
@@ -205,7 +210,10 @@ export interface ParsedCounterAbility {
  * ("repairs"), shield ("gains a Shield"), and reflect ("reflects X% of the Damage taken")
  * consequences are NOT counters and produce nothing here.
  *
- * PR2 (Nyxen shield-hit, Centurion retaliate/adjacent-ally) is intentionally NOT handled.
+ * PR2: Nyxen's shield-hit shape ("This Unit deals X% damage when its Shield is directly
+ * damaged.") IS handled and returns requireShieldHit: true. Centurion's adjacent-ally
+ * retaliate shape ("When this Unit or an adjacent ally is directly damaged, this Unit
+ * retaliates dealing X%.") IS handled and returns allySubject: true.
  */
 export function parseCounterAbilities(
     text: string | null | undefined
@@ -215,13 +223,40 @@ export function parseCounterAbilities(
     // Trigger clause + counter consequence must co-occur in the same sentence.
     // Stalwart: "When this Unit is directly damaged as a primary target, it deals 30% damage
     // to that enemy …". Anchor the % on the "deals X% damage to that enemy" consequence.
-    const re =
-        /when\s+this\s+unit\s+is\s+directly\s+damaged(?<primary>\s+as\s+a\s+primary\s+target)?[^.;]*?\bit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+to\s+that\s+enemy/i;
-    const m = re.exec(plain);
-    if (!m) return null;
-    const multiplier = parseFloat(m[2]);
-    if (isNaN(multiplier)) return null;
-    return { multiplier, requirePrimaryTarget: Boolean(m.groups?.primary) };
+    const stalwart =
+        /when\s+this\s+unit\s+is\s+directly\s+damaged(?<primary>\s+as\s+a\s+primary\s+target)?[^.;]*?\bit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+to\s+that\s+enemy/i.exec(
+            plain
+        );
+    if (stalwart) {
+        const m = parseFloat(stalwart[2]);
+        if (!isNaN(m))
+            return { multiplier: m, requirePrimaryTarget: Boolean(stalwart.groups?.primary) };
+    }
+
+    // Nyxen: "This Unit deals X% damage when its Shield is directly damaged." (consequence
+    // precedes the trigger; "its Shield … directly damaged" is the discriminator).
+    const nyxen =
+        /this\s+unit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+when\s+its\s+shield\s+is\s+directly\s+damaged/i.exec(
+            plain
+        );
+    if (nyxen) {
+        const m = parseFloat(nyxen[1]);
+        if (!isNaN(m))
+            return { multiplier: m, requirePrimaryTarget: false, requireShieldHit: true };
+    }
+
+    // Centurion: "When this Unit or an adjacent ally is directly damaged, this Unit retaliates
+    // dealing X%." NOTE: the <unit-damage> tag wraps just "X%" — do NOT require the word "damage".
+    const centurion =
+        /when\s+this\s+unit\s+or\s+an\s+adjacent\s+ally\s+is\s+directly\s+damaged[^.;]*?\bretaliates\s+dealing\s+(\d+(?:\.\d+)?)%/i.exec(
+            plain
+        );
+    if (centurion) {
+        const m = parseFloat(centurion[1]);
+        if (!isNaN(m)) return { multiplier: m, requirePrimaryTarget: false, allySubject: true };
+    }
+
+    return null;
 }
 
 /**

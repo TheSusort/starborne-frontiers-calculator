@@ -1606,6 +1606,113 @@ describe('buildShipAbilities', () => {
             });
         });
 
+        // Combat G PR2: Nyxen's shield-hit counterattack passive — "This Unit deals X% damage
+        // when its Shield is directly damaged." — auto-produces a reactive `counter` ability
+        // (on-attacked, requireShieldHit) with NO requirePrimaryTarget.
+        it('Nyxen first passive (100%): emits an on-attacked counter with requireShieldHit and no primary-target requirement', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit deals <unit-damage>100% damage</unit-damage> when its Shield is directly damaged.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 100, requireShieldHit: true },
+            });
+            expect(
+                (counterAb?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+            ).toBeUndefined();
+            // Non-regression: no phantom on-cast plain damage left behind.
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+        });
+
+        it('Nyxen second passive (200%): emits an on-attacked counter with requireShieldHit', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'This Unit deals <unit-damage>200% damage</unit-damage> when its Shield is directly damaged.',
+            });
+            const passive = passiveOf(s);
+            const counterAb = passive?.abilities.find((a) => a.type === 'counter');
+            expect(counterAb).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 200, requireShieldHit: true },
+            });
+            expect(
+                (counterAb?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+            ).toBeUndefined();
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+        });
+
+        // Combat G PR2: Centurion's self/adjacent-ally retaliate passive — "When this Unit OR
+        // AN ADJACENT ALLY is directly damaged, this Unit retaliates dealing X%." Its retaliate
+        // <unit-damage> tag carries no "damage" word → parseSkillDamage returns 0 → it does NOT
+        // ride the re-type path; it is pushed as TWO counters (self on-attacked + adjacent-ally
+        // on-ally-attacked with requireDamagedAllyAdjacent).
+        it('Centurion second passive (50%): emits a self on-attacked counter and an adjacent-ally on-ally-attacked counter', () => {
+            const s = ship({
+                secondPassiveSkillText:
+                    'At the start of combat, this Unit gains 750 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>50%</unit-damage>.',
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            const counters = all.filter((a) => a.type === 'counter');
+            expect(counters).toHaveLength(2);
+
+            const self = counters.find((a) => a.trigger === 'on-attacked');
+            expect(self).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                config: { type: 'counter', multiplier: 50 },
+            });
+            expect(
+                (self?.config as { requirePrimaryTarget?: boolean }).requirePrimaryTarget
+            ).toBeUndefined();
+            expect(
+                (self?.config as { requireShieldHit?: boolean }).requireShieldHit
+            ).toBeUndefined();
+            expect(self?.requireDamagedAllyAdjacent).toBeUndefined();
+
+            const ally = counters.find((a) => a.trigger === 'on-ally-attacked');
+            expect(ally).toMatchObject({
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-ally-attacked',
+                config: { type: 'counter', multiplier: 50 },
+                requireDamagedAllyAdjacent: true,
+            });
+
+            // M1 non-regression: the co-located "750 attack per adjacent ally" start-of-combat
+            // clause produces NO spurious damage/buff ability (it is unparsed today and stays so).
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+            expect(all.filter((a) => a.type === 'buff')).toHaveLength(0);
+        });
+
+        it('Centurion third passive (100%): self/adjacent-ally counters at multiplier 100', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'At the start of combat, this Unit gains 1000 attack per adjacent ally.<br /><br />When this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>100%</unit-damage>.',
+            });
+            const all = buildShipAbilities(s).slots.flatMap((x) => x.abilities);
+            const counters = all.filter((a) => a.type === 'counter');
+            expect(counters).toHaveLength(2);
+            expect(counters.find((a) => a.trigger === 'on-attacked')).toMatchObject({
+                config: { type: 'counter', multiplier: 100 },
+            });
+            expect(counters.find((a) => a.trigger === 'on-ally-attacked')).toMatchObject({
+                config: { type: 'counter', multiplier: 100 },
+                requireDamagedAllyAdjacent: true,
+            });
+            expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
+            expect(all.filter((a) => a.type === 'buff')).toHaveLength(0);
+        });
+
         it('false-positive guard: a "directly damaged" passive that HEALS does not produce a counter', () => {
             const s = ship({
                 firstPassiveSkillText:

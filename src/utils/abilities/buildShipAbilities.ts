@@ -689,7 +689,9 @@ function abilitiesFromText(
     // on-cast base damage. Re-type that component to a `counter` ability (on-attacked,
     // requirePrimaryTarget) when the parsed counter multiplier matches the base damage the tag
     // carries. Heal/shield/reflect "directly damaged" consequences are not matched by
-    // parseCounterAbilities, so they keep their existing parse. PR2 (Nyxen/Centurion) is unhandled.
+    // parseCounterAbilities, so they keep their existing parse. PR2: Nyxen's shield-hit shape
+    // also rides this path (requireShieldHit). Centurion (adjacent-ally) does NOT ride this path
+    // (its retaliate tag carries no "damage" word → mult is 0) — it is pushed separately below.
     const counter = slot === 'passive' ? parseCounterAbilities(text) : null;
     if (mult > 0 && counter && counter.multiplier === mult) {
         const hits = parseHitCount(text);
@@ -705,6 +707,7 @@ function abilitiesFromText(
                     multiplier: mult,
                     ...(hits !== undefined ? { hits } : {}),
                     ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                    ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
                 },
                 autoFilled: true,
             },
@@ -729,6 +732,51 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: damagePos >= 0 ? damagePos : MAX_POS,
+        });
+    }
+
+    // Combat G PR2 (Centurion): "When this Unit OR AN ADJACENT ALLY is directly damaged, this
+    // Unit retaliates dealing X%." The retaliate <unit-damage> tag omits "damage" → parseSkillDamage
+    // returns 0 → NOT an on-cast base-damage component, so it cannot ride the re-type path above.
+    // Push it directly as TWO counter abilities: a self counter (on-attacked, any direct hit) +
+    // an adjacent-ally counter (on-ally-attacked, reusing the existing requireDamagedAllyAdjacent
+    // gate). The per-ability once-per-attack guard collapses multi-hit; self/ally are mutually
+    // exclusive per attack (single-focus `attacked` emit), so exactly one retaliation fires. If
+    // multi-victim `attacked` emission is ever added, switch the executor guard to `${ownerId}` to
+    // dedupe across these two abilities. The co-located "start of combat … attack per adjacent
+    // ally" buff parses independently and is unaffected.
+    if (slot === 'passive' && counter && counter.allySubject) {
+        const hits = parseHitCount(text);
+        const counterConfig = {
+            type: 'counter' as const,
+            multiplier: counter.multiplier,
+            ...(hits !== undefined ? { hits } : {}),
+        };
+        const pos = damagePos >= 0 ? damagePos : MAX_POS;
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-attacked',
+                conditions: [],
+                config: counterConfig,
+                autoFilled: true,
+            },
+            pos,
+        });
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'counter',
+                target: 'enemy',
+                trigger: 'on-ally-attacked',
+                conditions: [],
+                config: counterConfig,
+                requireDamagedAllyAdjacent: true,
+                autoFilled: true,
+            },
+            pos,
         });
     }
 
