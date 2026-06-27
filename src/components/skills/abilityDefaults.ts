@@ -9,7 +9,7 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
         case 'damage':
             return { type: 'damage', multiplier: 100 };
         case 'counter':
-            return { type: 'counter', multiplier: 0 };
+            return { type: 'counter', multiplier: 100 };
         case 'additional-damage':
             return { type: 'additional-damage', stat: 'hp', pct: 10 };
         case 'modifier':

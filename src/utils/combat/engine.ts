@@ -3264,6 +3264,11 @@ export function runCombat(input: CombatEngineInput): {
                     hits,
                     effectiveCritDamage: ownerStats.critDamage,
                     outgoingDamageBuffPct: 0,
+                    // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
+                    // incomingReductionForHit): the counter does NOT apply the attacker's
+                    // incoming-damage-reduction abilities. Harmless today (no Stalwart fixture);
+                    // PR2 may thread incomingReductionForHit(incomingAbilitiesOf(attacker.id))
+                    // here to match the Reflect path exactly.
                     incomingDamageModifierPct: 0,
                     // effectiveStatsOf.defensePenetration is BASE-only (buff folds separately) —
                     // acceptable approximation (no Stalwart fixture; counters ignore pen-buffs).
