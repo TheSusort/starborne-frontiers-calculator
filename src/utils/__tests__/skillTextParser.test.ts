@@ -3951,6 +3951,12 @@ describe('parseControlInflicts', () => {
         ).toEqual([{ effect: 'stasis', pos: expect.any(Number), side: 'enemy' }]);
     });
 
+    it('recognizes a control effect applied via a shared verb in a coordinated list', () => {
+        const text =
+            'inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns, and <unit-skill>Provoke</unit-skill> for 1 turn';
+        expect(parseControlInflicts(text).map((c) => c.effect)).toContain('provoke');
+    });
+
     it('does NOT match a control word in a condition clause', () => {
         expect(
             parseControlInflicts(

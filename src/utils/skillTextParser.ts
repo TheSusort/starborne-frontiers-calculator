@@ -1024,12 +1024,21 @@ export function detectDebuffInflictedTrigger(
 //   - `parseSkillEffects` — the named-status *application* path that actually applies the debuff.
 // The control ability is purely additive; nothing here suppresses those other paths.
 //
-// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The four
-// other effects use tight verb-adjacent regexes: the infliction verb is always immediately
-// tag-adjacent (at most "with" between), so a control word in a condition clause ("If the target
-// has <unit-skill>Provoke…") has no preceding application verb adjacent and is correctly ignored.
+// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The three
+// enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
+// either immediately tag-adjacent OR governs a coordinated list ("inflicts <Defense Down II> for
+// 2 turns, and <Provoke>" — Kafa): the verb, then zero-or-more "<unit-skill>…</unit-skill> [for N
+// turns]" items joined by commas/"and", then the target tag. This still ignores a control word in
+// a condition clause ("If the target has <unit-skill>Provoke…") — no application verb precedes it.
+// Taunt stays TIGHT (verb-adjacent only): no corpus text grants Taunt via a shared-verb compound
+// list, so the list-tolerant form would be unused surface area.
 // "applying" is deliberately omitted: it only appears in the passive reactive clause ("when
 // applying Stasis"), matched separately below.
+//
+// Shared list-prefix between the verb and the target tag (zero-or-more coordinated items).
+const CONTROL_LIST_PREFIX =
+    '(?:\\s+<unit-skill>[^<]*<\\/unit-skill>(?:\\s+for\\s+\\d+\\s+turns?)?,?\\s+and)*';
+const ENEMY_INFLICT_VERB = '\\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\\b';
 const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
 
 /** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
@@ -1050,19 +1059,28 @@ const CONTROL_INFLICTS: {
         effect: 'provoke',
         tag: 'Provoke',
         side: 'enemy',
-        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Provoke\b/i,
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Provoke\\b`,
+            'i'
+        ),
     },
     {
         effect: 'concentrate-fire',
         tag: 'Concentrate Fire',
         side: 'enemy',
-        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Concentrate Fire\b/i,
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Concentrate Fire\\b`,
+            'i'
+        ),
     },
     {
         effect: 'disable',
         tag: 'Disable',
         side: 'enemy',
-        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Disable\b/i,
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Disable\\b`,
+            'i'
+        ),
     },
     {
         effect: 'taunt',
