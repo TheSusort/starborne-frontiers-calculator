@@ -55,6 +55,7 @@ import {
     parseDoesntBreakStasis,
     parseChargeLossImmune,
     parseChargeRemoval,
+    parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
     REMOVE_CHARGE_RE,
     parseAllyInflictsDebuff,
@@ -1387,6 +1388,25 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: extraPos >= 0 ? extraPos : MAX_POS,
+        });
+    }
+
+    // Overload lose-on-kill (and "removes"/"is lost" phrasings): the 5 Marauder ships drop a
+    // named self-buff on a reactive trigger. parseSelfBuffRemovals (Task 5) scopes the trigger to
+    // the removal clause's position; the buff is cleared from ALL self stores (scope: 'all').
+    for (const rem of parseSelfBuffRemovals(text)) {
+        const removePos = text.indexOf(rem.buffName);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'remove-self-buff',
+                target: 'self',
+                trigger: rem.trigger,
+                conditions: [],
+                config: { type: 'remove-self-buff', buffName: rem.buffName, scope: 'all' },
+                autoFilled: true,
+            },
+            pos: removePos >= 0 ? removePos : MAX_POS,
         });
     }
 
