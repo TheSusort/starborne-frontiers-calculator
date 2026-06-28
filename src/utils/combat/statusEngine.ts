@@ -893,8 +893,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // by one turn at its own Post-Turn. The two stores differ in their own-turn handling:
     //
     //   - decrementPlayer (self-buff store): a timed self-buff applied during the carrier's
-    //     OWN turn is flagged appliedThisTurn (set by beginTurn, stamped in
-    //     applyTimedAbilityStatus). Such an entry gets a one-turn reprieve — it is skipped
+    //     OWN turn is flagged appliedThisTurn (set by beginTurn, stamped in both self-side
+    //     timed write seams — applyTimedAbilityStatus and upsertBuff). Such an entry gets a
+    //     one-turn reprieve — it is skipped
     //     once and the flag cleared, so it first decrements at the carrier's NEXT Post-Turn
     //     (and thus lasts through the carrier's next turn). All other timed self statuses
     //     decrement normally.
