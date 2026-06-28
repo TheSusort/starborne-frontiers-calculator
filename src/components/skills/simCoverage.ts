@@ -1,4 +1,4 @@
-import { AbilityType } from '../../types/abilities';
+import { Ability, AbilityType, ControlEffect } from '../../types/abilities';
 
 /**
  * Ability types not yet consumed by any calculator. They stay pickable in the
@@ -8,13 +8,43 @@ import { AbilityType } from '../../types/abilities';
  * healing calculator / combat sim consume them (heal/shield/cleanse in the
  * healing-calc work; purge in the C2a on-cast purge work, which removes enemy
  * buffs from the cast path).
- * `control` stays flagged because its OWN lockout/combat effect (Stasis/Taunt/
- * etc.) is still unsimulated — but it is now a TRIGGER SOURCE: the cast-path
- * emits a `control-applied` event that drives reactions (e.g. Defiant's
- * shield-on-Stasis). So the control's effect is unsimulated even though it can
- * fire a simulated reaction.
+ * `control` is NOT in this set: control simulation is now effect-aware (see
+ * SIMULATED_CONTROL_EFFECTS + isAbilityNotSimulated). The five named effects
+ * (stasis / provoke / taunt / concentrate-fire / disable) are simulated via the
+ * named-status path and emit `control-applied` events. Only Overload remains
+ * unmodeled and still shows the "Not simulated" badge.
  */
-export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set(['control']);
+export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set([]);
+
+/**
+ * The five control effects that are fully modeled in the combat engine.
+ * Overload is excluded — it is deferred to a future project.
+ */
+export const SIMULATED_CONTROL_EFFECTS: ReadonlySet<ControlEffect> = new Set([
+    'stasis',
+    'provoke',
+    'taunt',
+    'concentrate-fire',
+    'disable',
+]);
+
+/**
+ * Returns true when an ability should show the "Not simulated" badge.
+ *
+ * For `type:'control'` abilities the decision is per-effect:
+ *   - A modeled effect (stasis / provoke / taunt / concentrate-fire / disable)
+ *     returns false (IS simulated).
+ *   - An unmodeled effect (currently: overload) returns true (NOT simulated).
+ *
+ * All other ability types fall back to the NOT_SIMULATED_TYPES set (currently
+ * empty — all other ability types are simulated).
+ */
+export function isAbilityNotSimulated(ability: Ability): boolean {
+    if (ability.type === 'control' && ability.config.type === 'control') {
+        return !SIMULATED_CONTROL_EFFECTS.has(ability.config.effect);
+    }
+    return NOT_SIMULATED_TYPES.has(ability.type);
+}
 
 /**
  * Ability types the DPS sim sources from the FIRING skill only (active/charged).
