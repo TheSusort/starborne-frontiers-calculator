@@ -144,6 +144,11 @@ export interface StatusEngine {
      *  Calling on an owner with no statuses (lazy-empty map) is a safe no-op.
      *  Returns expired buff names so the engine can emit buff-expired. */
     decrementPlayer(ownerId: string): { expired: string[] };
+    /** Mark the start of an actor's turn. Sets the "active carrier" so self-side timed
+     *  writes during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
+     *  match the self-store key for that actor: the focus actor uses 'attacker'; team actors
+     *  use their real id. Called at each turn-started. */
+    beginTurn(actorId: string): void;
     /** Owner Post-Turn (enemy side): decrement ALL timed enemy statuses for the given
      *  `targetId` (defaults to the singular default enemy target — pre-Task-1 path,
      *  byte-identical). Returns expired buff names so the engine can emit buff-expired. */
@@ -287,6 +292,12 @@ interface BuffState {
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
     appliedSeq: number;
+    /** Set true when this timed self-buff was applied during the carrier's OWN turn (the
+     *  carrier was the active actor — see beginTurn). Granted a one-turn reprieve at that
+     *  turn's Post-Turn (skipped + flipped false by decrementPlayer), then decrements
+     *  normally from the carrier's next Post-Turn. Off-turn and enemy-side writes leave it
+     *  falsy. */
+    appliedThisTurn?: boolean;
 }
 
 interface AccumulatingState {
@@ -591,6 +602,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     let appliedSeqCounter = 0;
     const nextAppliedSeq = (): number => ++appliedSeqCounter;
 
+    // The actor whose turn is currently executing (set at each turn-started via beginTurn).
+    // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
+    // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
+    let currentTurnActorId: string | undefined;
+    const beginTurn = (actorId: string): void => {
+        currentTurnActorId = actorId;
+    };
+
     // beginRound: advance the round counter (strictly sequential) and apply the
     // per-round accumulating increment. Per-round stacks tick once at round top,
     // independent of any source firing. Called before any turns — preserving the
@@ -878,6 +897,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const expired: string[] = [];
         if (map) {
             for (const [key, s] of map) {
+                if (s.appliedThisTurn) {
+                    s.appliedThisTurn = false; // reprieve consumed; next Post-Turn decrements
+                    continue;
+                }
                 s.turnsRemaining -= 1;
                 if (s.turnsRemaining <= 0) {
                     expired.push(s.buffName);
@@ -1182,6 +1205,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             payload: status.payload,
             casterId: status.casterId,
             appliedSeq: nextAppliedSeq(),
+            appliedThisTurn: status.side === 'self' && selfEffectiveId === currentTurnActorId,
         });
     };
 
@@ -1287,6 +1311,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         setLandsTimedEnemyApplication,
         snapshot,
         decrementPlayer,
+        beginTurn,
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,

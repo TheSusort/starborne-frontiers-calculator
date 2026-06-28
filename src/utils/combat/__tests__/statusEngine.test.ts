@@ -527,6 +527,45 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
     });
 });
 
+describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () => {
+    const mkStatus = (duration: number): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+        side: 'self',
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+    });
+
+    it('a 1-turn self-buff applied during the carrier own turn survives that Post-Turn, expires next', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        eng.decrementPlayer('attacker'); // reprieve: stays (flag flips false)
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // now decrements 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+
+    it('negative control: a self-buff applied while NOT the active carrier gets no reprieve', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('someOtherActor');
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+        eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+});
+
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
     // Rule: a new application within a buff family (name minus the I/II/III tier suffix)
     // wins only if (a) its tier is higher, or (b) same tier AND its duration > the existing
