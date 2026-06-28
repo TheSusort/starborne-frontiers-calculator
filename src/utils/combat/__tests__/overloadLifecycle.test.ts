@@ -152,6 +152,9 @@ const dummy = (id: string, type: Ship['type'] = 'Attacker'): Ship =>
     ship(id, { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.', type });
 
 // ── Skill-text definitions (docs/ship-skills.csv, tagged) ───────────────────
+// NOTE: the constants below (MANGLER_*, RAVAGER_*, BUTCHER_*, RUINER_*, ASPHYXIATOR_*) are frozen
+// VERBATIM snapshots of the corresponding rows in docs/ship-skills.csv (the skill-text source of
+// truth). If that CSV changes for any of these ships, re-sync these strings to match.
 const MANGLER_P1 =
     'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage I</unit-skill> for 2 turns upon killing an opponent.';
 const RAVAGER_P1 =
@@ -210,6 +213,12 @@ describe('Overload lifecycle — engine fixtures', () => {
             expect(killAt.length).toBeGreaterThan(0);
             expect(deathRounds(noKillRun)).toEqual([]);
             const kr = killAt[0]; // first death round (1-indexed)
+
+            // Robustness guard: we read kill[kr] as "the round AFTER the death" (kr is 1-indexed,
+            // so array idx kr is the next round). That read is only valid if the kill is not the
+            // final round — fail LOUDLY here if it ever drifts, instead of a confusing
+            // `undefined < number` comparison below.
+            expect(kr).toBeLessThan(kill.length - 1);
 
             // Control: Overload never stripped → strictly increasing outgoing every round.
             for (let i = 1; i < noKill.length; i++) {
