@@ -327,14 +327,21 @@ export function parseSelfBuffRemovals(text: string): { buffName: string; trigger
 }
 ```
 
-  Add a position-scoped helper `detectRemovalTriggerAt(text, idx)`: strip tags, then take the
-  WINDOW = the comma-or-sentence segment containing `idx` PLUS the immediately preceding segment
-  (covers both "loses Overload **on kill**" where the trigger trails, and "**upon killing an
-  enemy**, this Unit removes Overload" / Asphyxiator's separate "Upon killing an enemy, …" sentence
-  where it leads). Run `KILL_TRIGGER_RE` / `ENEMY_REPAIRS_RE` / `APPLYING_DEBUFF_RE` / `START_OF_ROUND_RE`
-  on the window (kill first is fine here — a removal window won't contain a competing repair-grant);
-  default `'on-cast'` if none. Mirror the existing `phrasePosTrigger` position-anchoring pattern
-  (skillTextParser.ts) rather than inventing a new convention.
+  Add a position-scoped helper `detectRemovalTriggerAt(text, idx)`: WINDOW = the comma-or-sentence
+  segment containing `idx` PLUS the immediately preceding segment (covers both "loses Overload **on
+  kill**" where the trigger trails, and "**upon killing an enemy**, this Unit removes Overload" /
+  Asphyxiator's separate "Upon killing an enemy, …" sentence where it leads). Run `KILL_TRIGGER_RE` /
+  `ENEMY_REPAIRS_RE` / `APPLYING_DEBUFF_RE` / `START_OF_ROUND_RE` on the window; default `'on-cast'`
+  if none.
+
+  > **CRITICAL — keep `idx` valid:** `parseSelfBuffRemovals` computes the removal match `idx` against
+  > the TAGGED text. Do NOT `stripUnitTags` before segmenting — `stripUnitTags` (skillTextParser.ts:412)
+  > DELETES characters and shifts every downstream position, so a tagged `idx` would no longer align
+  > (off-by-N window). Segment on the un-stripped text using length-PRESERVING masking only — mirror
+  > the existing `rawSentenceAround` (skillTextParser.ts:~1356), which uses `maskAbbrev` and never
+  > strips tags precisely to keep its anchor valid. Comma/period boundaries are never inside tags, so
+  > segmentation is identical with or without tags; only the index mapping is fragile. (Same
+  > position-anchoring discipline as `phrasePosTrigger`.)
 
 > Scope to self: the active verbs imply the unit's own action; the named-buff gate (`resolveBuffName`
 > over self-buffs) prevents matching enemy purge text. The `seen` dedup stops a ship naming the same
