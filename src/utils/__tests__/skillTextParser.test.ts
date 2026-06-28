@@ -43,6 +43,7 @@ import {
     parseChargeRemoval,
     parseEnemyChargedCastReaction,
     parseCounterAbilities,
+    parseSelfBuffRemovals,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1542,6 +1543,43 @@ describe('detectReactiveTrigger', () => {
                 'Overload'
             )
         ).toBe('on-enemy-repaired'));
+});
+
+describe('parseSelfBuffRemovals', () => {
+    it('emits for "loses Overload on kill"', () =>
+        expect(
+            parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('emits for "removes Overload" (Ruiner)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('emits for passive "Overload is lost" (Butcher R2)', () =>
+        expect(
+            parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'At the start of the round, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a repair, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('returns [] for no-loss text', () =>
+        expect(
+            parseSelfBuffRemovals('This Unit gains <unit-skill>Overload</unit-skill> every turn')
+        ).toEqual([]));
+    it('returns [] for an unknown buff', () =>
+        expect(
+            parseSelfBuffRemovals('this Unit removes <unit-skill>Nonsense</unit-skill>')
+        ).toEqual([]));
 });
 
 describe('detectCritRepairTrigger', () => {

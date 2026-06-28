@@ -896,6 +896,87 @@ export function detectReactiveTrigger(
     return undefined;
 }
 
+// POSITION-scoped trigger resolver for a self-buff REMOVAL (Overload lifecycle, Task 5).
+//
+// Unlike detectReactiveTrigger (which scopes by the buff's NAME clause), the removal trigger must
+// be resolved from text NEAR the removal verb: a buff like Overload often appears in BOTH an
+// earlier GRANT sentence (start-of-round / on-repair) and a separate REMOVAL clause (on-kill).
+// Keying off the buff name would pick the grant's trigger; the removal needs the kill trigger.
+//
+// WINDOW = the comma-or-sentence segment containing `idx` PLUS the immediately preceding segment
+// (the leading trigger phrase often sits in the prior comma-clause, e.g. Ruiner/Asphyxiator's
+// "upon killing an enemy, this Unit removes Overload"). For Ruiner the grant's "performs a repair"
+// segment is TWO segments back, so it is excluded from the removal window and cannot mis-match.
+//
+// INDEX STABILITY: `idx` is a match position into the TAGGED text. We MUST NOT stripUnitTags here —
+// stripUnitTags deletes characters and shifts every downstream position, so a tagged idx would no
+// longer align (off-by-N window). We mirror rawSentenceAround: length-PRESERVING maskAbbrev only,
+// segment on the un-stripped text. Comma/period boundaries never fall inside <unit-skill> tags, so
+// segmentation is identical with or without tags; only the index mapping is fragile.
+const REMOVAL_SEGMENT_BOUNDARY = /[,.;](?=\s|$)|<br\s*\/?>/gi;
+function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
+    const masked = maskAbbrev(text);
+    // Collect segment boundary spans [start,end) keyed by their terminator position so we can find
+    // the segment containing idx plus the one before it.
+    const segments: { start: number; end: number }[] = [];
+    let start = 0;
+    let m: RegExpExecArray | null;
+    REMOVAL_SEGMENT_BOUNDARY.lastIndex = 0;
+    while ((m = REMOVAL_SEGMENT_BOUNDARY.exec(masked)) !== null) {
+        const end = m.index + m[0].length;
+        segments.push({ start, end });
+        start = end;
+    }
+    segments.push({ start, end: masked.length });
+    let containing = segments.length - 1;
+    for (let i = 0; i < segments.length; i++) {
+        if (idx < segments[i].end) {
+            containing = i;
+            break;
+        }
+    }
+    const windowStart = containing > 0 ? segments[containing - 1].start : segments[containing].start;
+    const window = masked.slice(windowStart, segments[containing].end);
+    // Order mirrors detectReactiveTrigger's reactive tail. For a REMOVAL window kill-first is safe:
+    // the window excludes the earlier repair-grant segment (Ruiner), so it cannot match repair.
+    if (KILL_TRIGGER_RE.test(window)) return 'on-enemy-destroyed';
+    if (ENEMY_REPAIRS_RE.test(window)) return 'on-enemy-repaired';
+    if (APPLYING_DEBUFF_RE.test(window)) return 'on-debuff-inflicted';
+    if (START_OF_ROUND_RE.test(window)) return 'start-of-round';
+    return 'on-cast';
+}
+
+// Active removal: "loses/removes <unit-skill>NAME</unit-skill>" (Mangler/Ravager/Asphyxiator/
+// Butcher-R1/Ruiner). Passive removal: "<unit-skill>NAME</unit-skill> is lost" (Butcher-R2).
+const SELF_BUFF_REMOVAL_ACTIVE_RE = /\b(?:loses|removes)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
+const SELF_BUFF_REMOVAL_PASSIVE_RE = /<unit-skill>([^<]+)<\/unit-skill>\s+is\s+lost\b/gi;
+
+/**
+ * Parses "this Unit loses/removes <buff>" and the passive "<buff> is lost" into self-buff-removal
+ * descriptors, resolving each removal's trigger from text NEAR the removal verb (NOT by buff-name
+ * sentence — see detectRemovalTriggerAt). Unknown buffs are skipped (resolveBuffName gate) and
+ * duplicate buff names are deduped. Operates on the TAGGED text. Reference data: docs/ship-skills.csv.
+ */
+export function parseSelfBuffRemovals(
+    text: string
+): { buffName: string; trigger: AbilityTrigger }[] {
+    const out: { buffName: string; trigger: AbilityTrigger }[] = [];
+    const seen = new Set<string>();
+    const scan = (re: RegExp) => {
+        re.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+            const name = resolveBuffName(m[1]);
+            if (!name || seen.has(name)) continue;
+            seen.add(name);
+            out.push({ buffName: name, trigger: detectRemovalTriggerAt(text, m.index) });
+        }
+    };
+    scan(SELF_BUFF_REMOVAL_ACTIVE_RE);
+    scan(SELF_BUFF_REMOVAL_PASSIVE_RE);
+    return out;
+}
+
 /**
  * Maps a targeting status to its model condition. Taunt is a buff on the ENEMY (it forces
  * targeting); Provoke is a debuff on THIS unit. Both are manual (the user assumes the situation).
