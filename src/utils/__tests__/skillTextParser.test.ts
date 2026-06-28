@@ -1508,6 +1508,40 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Out. Damage Down I')).toBe('on-enemy-cleansed');
         expect(detectReactiveTrigger(text, 'Gelecek Contagion II')).toBe('on-enemy-cleansed');
     });
+
+    it('detects on-enemy-destroyed from "on kill"', () =>
+        expect(detectReactiveTrigger('loses Overload on kill', 'Overload')).toBe(
+            'on-enemy-destroyed'
+        ));
+    it('detects on-enemy-destroyed from "killing an opponent"', () =>
+        expect(
+            detectReactiveTrigger(
+                'it gains Marauder Rage I for 2 turns upon killing an opponent',
+                'Marauder Rage I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('detects on-enemy-destroyed from "killing an enemy"', () =>
+        expect(detectReactiveTrigger('upon killing an enemy, loses Overload', 'Overload')).toBe(
+            'on-enemy-destroyed'
+        ));
+    it('detects on-enemy-repaired', () =>
+        expect(
+            detectReactiveTrigger('gains Overload when an enemy performs a repair', 'Overload')
+        ).toBe('on-enemy-repaired'));
+    it('detects on-debuff-inflicted from "On inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'On inflicting a debuff, this Unit gains Marauder Rage II for 3 turns',
+                'Marauder Rage II'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('routes Ruiner Overload grant to on-enemy-repaired despite a kill clause in the same sentence', () =>
+        expect(
+            detectReactiveTrigger(
+                'gains 1 stack of Overload when an enemy performs a repair, upon killing an enemy, this Unit removes Overload',
+                'Overload'
+            )
+        ).toBe('on-enemy-repaired'));
 });
 
 describe('detectCritRepairTrigger', () => {

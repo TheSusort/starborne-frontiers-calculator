@@ -826,6 +826,13 @@ const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
 const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
+// Overload lifecycle (Task 4) — kill/apply-debuff reactive phrasings for buff grants/removals.
+// Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
+// that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
+// Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
+const KILL_TRIGGER_RE = /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
+// "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
+const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -871,6 +878,14 @@ export function detectReactiveTrigger(
     // for the named buff/debuff grant in its clause (Arum Out. Damage Down I, Yarrow/Larkspur
     // Gelecek Contagion, Arum-refit all-allies Gelecek Contagion II).
     if (ENEMY_CLEANSE_RE.test(clause)) return 'on-enemy-cleansed';
+    // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
+    // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
+    // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
+    // on-enemy-repaired. Safe: no Marauder Rage clause contains "repair", and the Mangler/Ravager/
+    // Butcher Overload grants use the accumulating "every turn" path (not detectReactiveTrigger).
+    if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
+    if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
+    if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     return undefined;
 }
 
