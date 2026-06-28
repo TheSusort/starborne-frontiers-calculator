@@ -4350,6 +4350,14 @@ export function runCombat(input: CombatEngineInput): {
                 // events of ONE attack collapse to a single counter.
                 counterFiredThisTurn.clear();
 
+                // Set the active carrier for the own-turn self-buff reprieve: a TIMED self-buff
+                // written during this actor's own turn is flagged appliedThisTurn so it survives
+                // one extra Post Turn (lasting through the carrier's next turn, matching the game).
+                // Team-symmetric — applies to the focus, team actors, AND the dummy/enemy actors
+                // (an enemy ship that self-buffs on its own turn gets the same reprieve). Must run
+                // BEFORE the turn body applies any buffs, so it precedes the kind-branch below.
+                statusEngine.beginTurn(actor.id);
+
                 bus.emit({ type: 'turn-started', actorId: actor.id, round: r });
                 // Phase 0 Task 5: bump the actor's own-turn counter so every-n-turns conditions
                 // can evaluate the live N. Incremented AFTER turn-started so end-of-turn
