@@ -3805,6 +3805,17 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
                 buffName: 'Overload',
                 scope: 'all',
             });
+
+            // Grant branch: the start-of-round conditional grants Marauder Rage II — assert it is
+            // parsed onto the start-of-round trigger (locks the grant branch against a parser
+            // regression, complementing the removal assertion above).
+            const rage = abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Marauder Rage II'
+            )!;
+            expect(rage).toBeDefined();
+            expect(rage.trigger).toBe('start-of-round');
         });
 
         it('Ruiner p2: remove Overload on kill + Overload gain on-enemy-repaired', () => {

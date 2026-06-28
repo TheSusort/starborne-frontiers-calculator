@@ -144,6 +144,9 @@ const buffActorRounds = (
 };
 const focusDamageByRound = (r: ReturnType<typeof simulateBattle>): number[] =>
     r.rounds.map((rd) => Math.round(rd.ships.find((s) => s.actorId === 'attacker')?.damageDealt ?? 0));
+// Per-round outgoing damage for an arbitrary actor (used for the enemy-side footprint proxy).
+const damageByRoundFor = (r: ReturnType<typeof simulateBattle>, actorId: string): number[] =>
+    r.rounds.map((rd) => Math.round(rd.ships.find((s) => s.actorId === actorId)?.damageDealt ?? 0));
 const deathRounds = (r: ReturnType<typeof simulateBattle>): number[] =>
     r.rounds.filter((rd) => rd.events.some((e) => e.kind === 'death')).map((rd) => rd.round);
 
@@ -292,6 +295,23 @@ describe('Overload lifecycle — engine fixtures', () => {
         expect(names.some((round) => round.includes('Marauder Rage II'))).toBe(true);
         // Overload still accrues alongside (the every-turn grant is unaffected).
         expect(names.some((round) => round.includes('Overload'))).toBe(true);
+
+        // NEGATIVE CONTROL — isolates on-debuff-inflicted from on-cast. Same Butcher passive (R2),
+        // same active turns every round, but the active deals PURE DAMAGE (inflicts NO debuff). The
+        // grant trigger is on-debuff-inflicted, so Marauder Rage II must be ABSENT here. If the
+        // trigger ever regressed to on-cast, the cast would still fire and Rage would appear —
+        // failing this assertion. Overload's every-turn accrual still happens (cast-independent).
+        const butcherNoDebuff = ship('Butcher', {
+            activeSkillText: 'This Unit deals <unit-damage>160% damage</unit-damage>.',
+            firstPassiveSkillText: 'placeholder (R0 — superseded by the refit-active R2 passive)',
+            secondPassiveSkillText: BUTCHER_P2,
+            refits: [{}, {}] as Ship['refits'],
+        });
+        const rNoDebuff = runCombat(dpsBase(skillsFor(butcherNoDebuff)));
+        const namesNoDebuff = selfBuffNames(rNoDebuff);
+        expect(namesNoDebuff.some((round) => round.includes('Marauder Rage II'))).toBe(false);
+        // Sanity: the ship still acted (Overload accrues), so the absence above is non-vacuous.
+        expect(namesNoDebuff.some((round) => round.includes('Overload'))).toBe(true);
     });
 
     // ── 4. Ruiner on-enemy-repaired (gain Overload) ──────────────────────────
@@ -333,6 +353,32 @@ describe('Overload lifecycle — engine fixtures', () => {
         for (let i = 1; i < present.length; i++) {
             expect(present[i]).toBeGreaterThan(present[i - 1]);
         }
+
+        // NEGATIVE CONTROL — isolates on-enemy-repaired from on-cast. Same Ruiner, same active turns
+        // every round, but the enemy attacker deals PURE DAMAGE and never repairs. Ruiner gains
+        // Overload only on an enemy repair (it has no every-turn accrual), so with no enemy repair the
+        // Overload store must stay EMPTY all rounds. A regression to on-cast (its own or the enemy's
+        // cast) would light it up — failing this assertion.
+        const noRepairEnemy = ship('Striker', {
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            type: 'Attacker',
+        });
+        const rNoRepair = runCombat(
+            dpsBase(skillsFor(ruiner), {
+                numRounds: 4,
+                healTargetId: 'attacker',
+                enemyAttackers: [
+                    {
+                        id: 'striker',
+                        stats: { attack: 100, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: skillsFor(noRepairEnemy),
+                    },
+                ],
+            })
+        );
+        expect(overloadStacks(rNoRepair).every((s) => s === undefined)).toBe(true);
     });
 
     // ── 5. Asphyxiator start-of-round conditional ────────────────────────────
@@ -409,5 +455,79 @@ describe('Overload lifecycle — engine fixtures', () => {
         }
         // The grant coincides with the kill round.
         expect(mr.rounds).toEqual(deathRounds(r));
+    });
+
+    it('6b. an ENEMY-side Marauder that kills a PLAYER ship LOSES Overload (damage-footprint mirror)', () => {
+        // The Rage assertion in 6 proves the GRANT branch crosses sides; this proves the RESET branch
+        // does too — a regression where enemy kills grant Rage but never clear Overload would pass 6.
+        // Mirror of the player-side lose-on-kill test (channel B): an enemy BUTCHER (grants NO Marauder
+        // Rage on kill) is the clean probe — only Overload moves its outgoing damage (+10%/stack), so
+        // a drop the round after its kill is an unconfounded Overload-reset signal. KILL run: a fragile
+        // player victim dies mid-battle; the enemy Butcher's damage CLIMBS while accruing then DROPS
+        // the round its kill strips Overload. NOKILL control: nothing player-side dies → monotone climb.
+        const enemyButcher = (id: string): Ship =>
+            ship(id, {
+                activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                firstPassiveSkillText: BUTCHER_P1,
+            });
+        const anchor = (): BattlePlacement =>
+            place(
+                ship('Anchor', {
+                    activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
+                    type: 'Defender',
+                }),
+                'M3',
+                1,
+                1e12
+            );
+        const killRun = simulateBattle({
+            playerTeam: [
+                anchor(),
+                place(
+                    ship('Victim', { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.' }),
+                    'M4',
+                    1,
+                    250
+                ),
+            ],
+            enemyTeam: [place(enemyButcher('EBK'), 'M4', 100, 1e12)],
+            rounds: 8,
+        });
+        const noKillRun = simulateBattle({
+            playerTeam: [
+                anchor(),
+                place(
+                    ship('Victim2', { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.' }),
+                    'M4',
+                    1,
+                    1e12
+                ),
+            ],
+            enemyTeam: [place(enemyButcher('EBN'), 'M4', 100, 1e12)],
+            rounds: 8,
+        });
+
+        const enemyId = killRun.roster.find((x) => x.side === 'enemy')!.actorId;
+        const noKillEnemyId = noKillRun.roster.find((x) => x.side === 'enemy')!.actorId;
+        const kill = damageByRoundFor(killRun, enemyId);
+        const noKill = damageByRoundFor(noKillRun, noKillEnemyId);
+
+        // A PLAYER ship died in the kill run, none in the control.
+        const killAt = deathRounds(killRun);
+        expect(killAt.length).toBeGreaterThan(0);
+        expect(deathRounds(noKillRun)).toEqual([]);
+        const kr = killAt[0]; // first death round (1-indexed → array idx kr is the round after)
+        expect(kr).toBeLessThan(kill.length - 1);
+
+        // Control: enemy Overload never stripped → strictly increasing outgoing every round.
+        for (let i = 1; i < noKill.length; i++) {
+            expect(noKill[i]).toBeGreaterThan(noKill[i - 1]);
+        }
+        // Kill run: the round after the kill strips the enemy's Overload → outgoing DROPS vs the round
+        // before and is strictly below the monotone control at that same round.
+        expect(kill[kr]).toBeLessThan(kill[kr - 1]);
+        expect(kill[kr]).toBeLessThan(noKill[kr]);
+        // …and the enemy's Overload RESUMES accruing afterwards (reset, not destroyed, on the enemy side).
+        expect(kill[kill.length - 1]).toBeGreaterThan(kill[kr]);
     });
 });

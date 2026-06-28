@@ -143,12 +143,25 @@ describe('removeSelfBuffByName', () => {
 ```
 
 Impl near :944 (confirm each map's key: timed → `deriveFamilyKey(buffName).familyKey`; accum →
-`payload.buffName`; persistent → raw `buffName`, verify against `addPersistentStack` ~517-543):
+`payload.buffName`; persistent → raw `buffName`, verify against `addPersistentStack` ~517-543).
+
+**CRITICAL — the accumulating entry must be RESET, not deleted.** The "gains Overload every turn"
+grant is a single seeded accumulating entry that `beginRound`'s per-round tick increments. Deleting
+that entry permanently stops Overload re-accrual after the first kill — but the Marauder mechanic is
+"lose all stacks on kill, then keep building again". Zero the entry's `stacks` (and clear its
+`appliedSeq` so the next 0→positive tick re-stamps ordering) instead, which makes it inert this round
+(`activeAbilityStatuses` excludes `stacks <= 0`) while letting `beginRound` resume accrual next round.
+Timed and persistent stores have no such re-accrual obligation → delete those:
 
 ```ts
     const removeSelfBuffByName = (actorId: string, buffName: string): void => {
         selfMaps.get(actorId)?.delete(deriveFamilyKey(buffName).familyKey);
-        accumSelfMaps.get(actorId)?.delete(buffName);
+        // RESET accumulating Overload to 0 (do NOT delete — deleting kills re-accrual after a kill).
+        const accum = accumSelfMaps.get(actorId)?.get(buffName);
+        if (accum) {
+            accum.stacks = 0;
+            accum.appliedSeq = undefined;
+        }
         persistentSelfMaps.get(actorId)?.delete(buffName);
     };
 ```
