@@ -664,3 +664,64 @@ describe('assembleBattleResult — shield fields (H1 Task 8)', () => {
         expect(r2.currentShieldPool).toBe(7000);
     });
 });
+
+describe('assembleBattleResult — per-victim incoming fields (PR7 Task 7)', () => {
+    // perRoundPerIncoming threads each covered victim's own damage-taken bucket
+    // ({incoming, shieldAbsorbed, barrierAbsorbed}) into the ShipRoundState incoming fields.
+    it('populates incomingDamage, incomingShieldAbsorbed, and incomingBarrierAbsorbed from perRoundPerIncoming', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerIncoming: {
+                1: {
+                    attacker: { incoming: 2800, shieldAbsorbed: 1200, barrierAbsorbed: 700 },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        expect(ship.incomingDamage).toBe(2800);
+        expect(ship.incomingShieldAbsorbed).toBe(1200);
+        expect(ship.incomingBarrierAbsorbed).toBe(700);
+    });
+
+    it('defaults all incoming fields to 0 when perRoundPerIncoming is absent', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        expect(ship.incomingDamage).toBe(0);
+        expect(ship.incomingShieldAbsorbed).toBe(0);
+        expect(ship.incomingBarrierAbsorbed).toBe(0);
+    });
+
+    it("defaults all incoming fields to 0 for an actor not present in that round's incoming map", () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerIncoming: {
+                1: {
+                    'enemy-front': { incoming: 500, shieldAbsorbed: 0, barrierAbsorbed: 0 },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        // 'attacker' has no entry in round 1's incoming map
+        const ship = find(result, 1, 'attacker');
+        expect(ship.incomingDamage).toBe(0);
+        expect(ship.incomingShieldAbsorbed).toBe(0);
+        expect(ship.incomingBarrierAbsorbed).toBe(0);
+
+        // 'enemy-front' carries its own bucket
+        const enemy = find(result, 1, 'enemy-front');
+        expect(enemy.incomingDamage).toBe(500);
+    });
+});
