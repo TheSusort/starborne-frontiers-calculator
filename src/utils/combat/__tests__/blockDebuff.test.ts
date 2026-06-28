@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { dotResistLabel, isBlockDebuff } from '../debuffImmunity';
+import { dotResistLabel, isBlockDebuff, controlEffectLabel } from '../debuffImmunity';
 import { runCombat, CombatEngineInput } from '../engine';
 import { ShipSkills, Ability } from '../../../types/abilities';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
@@ -31,6 +31,12 @@ describe('debuffImmunity helpers', () => {
 
         it('formats bomb with no tier suffix', () => {
             expect(dotResistLabel('bomb', 0)).toBe('Bomb');
+        });
+    });
+
+    describe('controlEffectLabel', () => {
+        it('returns "Disable" for the disable control effect', () => {
+            expect(controlEffectLabel('disable')).toBe('Disable');
         });
     });
 });

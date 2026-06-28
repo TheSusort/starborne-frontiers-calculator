@@ -36,6 +36,7 @@ const CONTROL_EFFECT_LABEL: Record<ControlEffect, string> = {
     stasis: 'Stasis',
     overload: 'Overload',
     'concentrate-fire': 'Concentrate Fire',
+    disable: 'Disable',
 };
 export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFFECT_LABEL[effect];
 

@@ -534,7 +534,13 @@ export type AbilityConfig =
 /** Crowd-control effects a `control` ability can apply. The engine does not simulate
  *  these combat effects; the `control-applied` event (events.ts) only exposes the
  *  application moment so reactions (e.g. Defiant's shield-on-Stasis) can fire. */
-export type ControlEffect = 'provoke' | 'taunt' | 'stasis' | 'overload' | 'concentrate-fire';
+export type ControlEffect =
+    | 'provoke'
+    | 'taunt'
+    | 'stasis'
+    | 'overload'
+    | 'concentrate-fire'
+    | 'disable';
 
 export interface Ability {
     id: string;
