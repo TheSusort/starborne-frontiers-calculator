@@ -20,11 +20,12 @@
  * Crit 0 keeps everything deterministic.
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import type { CombatStatBlock } from '../../../types/calculator';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -141,6 +142,114 @@ describe('PR7 Task 2 — per-victim attacked at the focus player→enemy site', 
         const { attacked } = collectAttacked(BASE(basePattern()));
         // The anchor (primary target) still gets its event.
         expect(attacked.filter((e) => e.targetId === 'enemy-anchor').length).toBeGreaterThan(0);
+        // The covered enemy is outside a single-target footprint → never attacked.
+        expect(attacked.filter((e) => e.targetId === 'enemy-covered').length).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------------------------
+// PR7 Task 3 — the WALKED-TEAM player→enemy site (identical transformation applied at the second
+// player→enemy positional cast-site, where the acting attacker is a non-focus team actor walked
+// onto the board). The focus player ('attacker') is parked OUT of the footprint (M1, zero offense,
+// empty slot) so the ONLY damage source is the walked-team ally. Mirror of the focus tests above.
+// ---------------------------------------------------------------------------------------------
+
+const teamStats = (): CombatStatBlock => ({
+    attack: 5_000,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    defence: 0,
+    hp: 1_000_000_000,
+    hacking: 0,
+});
+
+// The acting WALKED-TEAM ally: positioned at M4, fires `front` with the supplied pattern + a 100%
+// damage active. Anchors the front enemy (M4), covering the enemy at M3 under a Line-Range-1 pattern.
+const teamAttacker = (pattern: ParsedPattern): TeamActorEngineInput =>
+    ({
+        id: 'team-attacker',
+        speed: 100,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern,
+        walk: {
+            shipSkills: { slots: [basicAttack()] },
+            stats: teamStats(),
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+            healModifier: 0,
+        },
+    }) as TeamActorEngineInput;
+
+// The focus player ('attacker') is zero-offense, empty slot, parked at M1 (out of the footprint) so
+// only the walked-team ally deals damage. Two enemies: the anchor at M4 and a covered enemy at M3.
+const TEAM_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [] },
+    enemyDefense: 0,
+    enemyHp: 1_000_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 1_000_000_000,
+    healTargetId: 'attacker',
+    position: 'M1',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    teamActors: [teamAttacker(pattern)],
+    enemyAttackers: [enemyAt('enemy-anchor', 'M4'), enemyAt('enemy-covered', 'M3')],
+});
+
+describe('PR7 Task 3 — per-victim attacked at the WALKED-TEAM player→enemy site', () => {
+    it('a COVERED enemy receives an attacked event NAMING the walked-team actor (it did not before)', () => {
+        const { attacked } = collectAttacked(TEAM_BASE(lineRange1Pattern()));
+        const coveredEvents = attacked.filter((e) => e.targetId === 'enemy-covered');
+        const anchorEvents = attacked.filter((e) => e.targetId === 'enemy-anchor');
+        // The fix: the covered footprint victim now appears, attributed to the walked-team actor.
+        expect(coveredEvents.length).toBeGreaterThan(0);
+        for (const e of coveredEvents) expect(e.attackerId).toBe('team-attacker');
+        // The anchor still gets its event too, also attributed to the walked-team actor.
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        for (const e of anchorEvents) expect(e.attackerId).toBe('team-attacker');
+    });
+
+    it('only the ANCHOR carries isPrimaryTarget; the covered victim does not', () => {
+        const { attacked } = collectAttacked(TEAM_BASE(lineRange1Pattern()));
+        const anchorEvents = attacked.filter((e) => e.targetId === 'enemy-anchor');
+        const coveredEvents = attacked.filter((e) => e.targetId === 'enemy-covered');
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        expect(coveredEvents.length).toBeGreaterThan(0);
+        for (const e of anchorEvents) expect(e.isPrimaryTarget).toBe(true);
+        for (const e of coveredEvents) expect(e.isPrimaryTarget).not.toBe(true);
+    });
+
+    it('NON-VACUOUS control: a single-target (base) pattern emits NO attacked for the covered enemy', () => {
+        const { attacked } = collectAttacked(TEAM_BASE(basePattern()));
+        // The anchor (primary target) still gets its event from the walked-team actor.
+        const anchorEvents = attacked.filter((e) => e.targetId === 'enemy-anchor');
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        for (const e of anchorEvents) expect(e.attackerId).toBe('team-attacker');
         // The covered enemy is outside a single-target footprint → never attacked.
         expect(attacked.filter((e) => e.targetId === 'enemy-covered').length).toBe(0);
     });

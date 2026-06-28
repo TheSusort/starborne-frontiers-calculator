@@ -4930,11 +4930,16 @@ export function runCombat(input: CombatEngineInput): {
                                 // Same direction as the focus site (player→enemy); keyed to THIS team
                                 // actor's position / parsed target / parsed pattern. Non-null via the gate.
                                 const tb = turnBindings(actor.side);
-                                // Player→enemy `attacked` capture (Task 3) — mirror of the focus site,
-                                // keyed to THIS walked team actor's focus enemy victim (teamTarget tgt).
-                                let teamFocusEnemyDamage = 0;
-                                let teamFocusEnemyShieldWasHit = false;
-                                let teamFocusEnemyHit = false;
+                                // Player→enemy `attacked` capture (PR7 Task 3) — mirror of the focus
+                                // site, keyed to THIS walked team actor. Aggregate EACH footprint
+                                // victim's per-attack damage + OR its shield-hit flag across the hits so
+                                // the post-apply emit wakes EVERY hit victim's on-attacked reactives
+                                // (counters + self-repairs/defensive buffs), not just the anchor. Keyed
+                                // by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    { damage: number; shieldWasHit: boolean }
+                                >();
                                 // Per-victim detonation (positional): collect EVERY footprint victim hit
                                 // by this cast's firing damage (unique by id), so each can detonate its
                                 // OWN containers after the firing hits land. Populated in the
@@ -4957,34 +4962,36 @@ export function runCombat(input: CombatEngineInput): {
                                     onVictimResolved: (victim, damage, outcome) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
-                                        if (victim.id === tgt.id) {
-                                            teamFocusEnemyHit = true;
-                                            teamFocusEnemyDamage += damage;
-                                            teamFocusEnemyShieldWasHit =
-                                                teamFocusEnemyShieldWasHit ||
-                                                (!outcome.barriered &&
-                                                    outcome.shieldBefore > 0 &&
-                                                    outcome.hpDamage < damage);
-                                        }
+                                        const prev = attackedSignals.get(victim.id) ?? {
+                                            damage: 0,
+                                            shieldWasHit: false,
+                                        };
+                                        prev.damage += damage;
+                                        prev.shieldWasHit =
+                                            prev.shieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                        attackedSignals.set(victim.id, prev);
                                     },
                                 });
-                                // Player→enemy `attacked` emit (Task 3) — one per walked team actor's
-                                // firing turn for its focus enemy victim. Wakes the enemy's on-attacked
-                                // reactives just like the focus site.
-                                if (teamFocusEnemyHit) {
+                                // Player→enemy `attacked` emit (PR7 Task 3 — per-victim). Fires once per
+                                // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
+                                // victim hit by THIS walked team actor → enemy on-attacked reactives
+                                // (counters + Second Wind, etc.) wake from any covered cell, not just the
+                                // anchor. isPrimaryTarget is set only on the anchor (tgt.id).
+                                if (attackedSignals.size > 0) {
                                     const hitOutcomes =
                                         teamTurn.hitCrits.length > 0
                                             ? teamTurn.hitCrits
                                             : [teamTurn.roundCrit];
-                                    emitAttacked({
+                                    emitPerVictimAttacked({
                                         bus,
                                         round: r,
-                                        targetId: tgt.id,
                                         attackerId: actor.id,
+                                        primaryId: tgt.id,
                                         hitOutcomes,
-                                        isPrimaryTarget: true,
-                                        shieldWasHit: teamFocusEnemyShieldWasHit,
-                                        damage: teamFocusEnemyDamage,
+                                        victims: attackedSignals,
                                     });
                                 }
 
