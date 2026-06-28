@@ -98,6 +98,23 @@ effect. The parallel named-status ability for the same text continues to be
 produced by the generic `parseSkillEffects` path **unchanged** — the control
 ability is purely additive output.
 
+The exact verb/phrasing patterns above are **illustrative**. The plan must first
+enumerate the real phrasings from `docs/ship-skills.csv` for each effect
+(Concentrate Fire / Disable / Provoke / Taunt, plus Taunt's self-grant form)
+before writing regexes — this is a prerequisite plan task and directly mitigates
+the over-matching risk (§6.2).
+
+**Stale comments to update.** The current docstring at
+`skillTextParser.ts:1018-1023` and the comment at `buildShipAbilities.ts:987`
+explicitly state "Provoke/Taunt stay handled as targeting-status CONDITIONS
+(`statusEffectCondition`), not control abilities." These become contradictory
+once the matcher generalizes and must be rewritten by the plan. Note the
+distinction the comments blur: `statusEffectCondition` (`skillTextParser.ts:882`)
+is the *read/gate* path (does the actor have Provoke?), entirely separate from
+the *application* path (`parseSkillEffects` → named status). This design touches
+neither — it only adds the control-ability output — but the plan should make the
+two-path distinction explicit so a reader of the old comments isn't misled.
+
 ### 4.2 Type system (`types/abilities.ts`)
 
 - Add `'disable'` to `ControlEffect`
