@@ -3093,6 +3093,63 @@ describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () 
 });
 
 // ----------------------------------------------------------------------
+// Overload lifecycle Task 3 — remove-self-buff partition guard.
+// A `remove-self-buff` ability with a REACTIVE trigger (on-enemy-destroyed)
+// MUST route to reactiveAbilities so its bus listener registers and the
+// removal fires reactively. The SAME ability with `on-cast` MUST stay in
+// castSkills (the cast path handles it). This guard ensures a future edit to
+// REACTIVE_ABILITY_TYPES cannot silently regress either path.
+// ----------------------------------------------------------------------
+describe('Overload lifecycle Task 3: remove-self-buff partition guard (on-enemy-destroyed reactive, on-cast stays cast)', () => {
+    const removeSelfBuffOnKill = (): Ability => ({
+        id: 'rsbk1',
+        type: 'remove-self-buff',
+        target: 'self',
+        trigger: 'on-enemy-destroyed',
+        conditions: [],
+        config: { type: 'remove-self-buff', buffName: 'Overload', scope: 'all' },
+    });
+
+    const removeSelfBuffOnCast = (): Ability => ({
+        id: 'rsbc1',
+        type: 'remove-self-buff',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'remove-self-buff', buffName: 'Overload', scope: 'all' },
+    });
+
+    const skills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [removeSelfBuffOnCast()],
+            },
+            {
+                slot: 'passive',
+                abilities: [removeSelfBuffOnKill()],
+            },
+        ],
+    });
+
+    it('on-enemy-destroyed remove-self-buff routes to reactiveAbilities (IS classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(reactiveIds).toContain('rsbk1');
+        expect(castIds).not.toContain('rsbk1');
+    });
+
+    it('on-cast remove-self-buff stays in castSkills (NOT classified reactive)', () => {
+        const { castSkills, reactiveAbilities } = partitionReactiveAbilities(skills());
+        const castIds = castSkills.slots.flatMap((s) => s.abilities.map((a) => a.id));
+        const reactiveIds = reactiveAbilities.map((r) => r.ability.id);
+        expect(castIds).toContain('rsbc1');
+        expect(reactiveIds).not.toContain('rsbc1');
+    });
+});
+
+// ----------------------------------------------------------------------
 // Phase 4c PR 2 Task 5: on-ally-attacked ENGINE integration (scenario 16).
 // Full runCombat in healing mode: a walked TEAM owner carries the reactive
 // ability; the heal target is a walked team 'tank' the enemy attacker hits.

@@ -1790,6 +1790,9 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
     }
 
     if (cfg.type === 'remove-self-buff') {
+        // NOTE: cfg.scope is presently descriptive metadata only — the engine always removes the
+        // named family from ALL self stores via removeSelfBuffByName, so scope:'all' is the only
+        // behavior today (a future editor must NOT assume narrower scopes are wired here).
         ctx.statusEngine.removeSelfBuffByName(intent.ownerId, cfg.buffName);
         return;
     }
