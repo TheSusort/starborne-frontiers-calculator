@@ -6019,6 +6019,27 @@ export function runCombat(input: CombatEngineInput): {
                 }
                 return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
             })(),
+            // perActorIncoming (PR7 Task 6): per-victim incoming-damage accounting for THIS round,
+            // keyed by victim id ({incoming, shieldAbsorbed, barrierAbsorbed}). Mirrors
+            // perActorShield's "absent when empty" rule — set ONLY when at least one victim has a
+            // nonzero entry, so legacy / no-intake rounds keep the RoundData shape byte-identical
+            // (perActorIncoming is a fresh per-round map, already this-round, not cumulative).
+            ...(() => {
+                const out: Record<
+                    string,
+                    { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }
+                > = {};
+                for (const [id, v] of perActorIncoming) {
+                    if (v.incoming === 0 && v.shieldAbsorbed === 0 && v.barrierAbsorbed === 0)
+                        continue;
+                    out[id] = {
+                        incoming: v.incoming,
+                        shieldAbsorbed: v.shieldAbsorbed,
+                        barrierAbsorbed: v.barrierAbsorbed,
+                    };
+                }
+                return Object.keys(out).length > 0 ? { perActorIncoming: out } : {};
+            })(),
             // perActorReflected (Reflect gear set, Task 5): per-attacker reflected-thorns damage
             // dealt back THIS round. Mirrors perActorShield's "absent when empty" rule so legacy /
             // no-reflect rounds stay byte-identical (perActorReflected is empty unless a Reflect
