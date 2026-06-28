@@ -62,15 +62,31 @@ buff-grant ability:
 
 - **statusEngine method** `removeSelfBuffByName(actorId, buffName)`
   (`src/utils/combat/statusEngine.ts`): clears the named family from **all** self-side stores —
-  the **accumulating self store** (where "gains Overload every turn" actually lives), the
-  **persistent-stacking self map**, and the **timed self store** — so it is robust to wherever
-  Overload was applied. Mirrors the existing targeted `removeTimedEnemyStatus(targetId, buffName)`
+  the **accumulating self store** (`accumSelfMaps`), the **persistent-stacking self map**
+  (`persistentSelfMaps`), and the **timed self store** (`selfMaps`) — so it is robust to whichever
+  door applied Overload. Mirrors the existing targeted `removeTimedEnemyStatus(targetId, buffName)`
   (statusEngine.ts:940) but self-side and store-spanning. Lazy-empty / unknown id / unknown name →
   safe no-op.
 
-  > Implementation note: `removeNewestFirst` (cleanse/purge) deliberately **never visits** the
-  > accumulating/persistent maps, so it cannot be reused here — Approach C from brainstorming is
-  > ruled out. This is why a dedicated self-side, name-targeted removal is required.
+  > Which store holds Overload (verified against code):
+  > - **"gains Overload every turn"** (Mangler/Ravager/Butcher) is classified *accumulating*
+  >   (`stackTrigger:'per-round'`, `isStackable`) and registered via
+  >   `registerAbilityStatuses` → `getAccumSelf(ownerId)` (statusEngine.ts:1065-1082). It lands in
+  >   **`accumSelfMaps`** — `registerAbilityStatuses` does **not** consult
+  >   `PERSISTENT_STACKING_BUFFS`, so it is NOT diverted to the persistent map.
+  > - The **`upsertBuff`** door (scheduled timed buffs, statusEngine.ts:638-647) *does* route any
+  >   `PERSISTENT_STACKING_BUFFS`-named buff to the persistent map by name. Asphyxiator's
+  >   start-of-round grant and Ruiner's reactive grant may travel this (or the timed-status) door
+  >   → could land in **`persistentSelfMaps`**. The plan MUST empirically determine each ship's
+  >   store and assert removal from the actual store(s); `removeSelfBuffByName` spans all three so
+  >   correctness does not hinge on getting this prediction exactly right, but the tests must.
+
+  > Why `removeNewestFirst` (cleanse/purge) can't be reused: it is **count-based, newest-first,
+  > not name-targeted** (it would remove whatever newest removable buff, not specifically
+  > Overload), AND it deliberately **skips the persistent-stacking maps** (statusEngine.ts:959-960)
+  > where some Overload lands. (It *does* visit `accumSelfMaps`, statusEngine.ts:983-990 — so the
+  > "skips accum" framing is wrong; the disqualifiers are name-targeting + persistent coverage.)
+  > Approach C from brainstorming is ruled out for these two reasons.
 
 - **Reactive executor branch** (`src/utils/combat/triggers.ts`): add a `cfg.type === 'remove-self-buff'`
   case alongside the `buff` / `charge` / `cleanse` branches → calls `removeSelfBuffByName(ownerId, buffName)`.
@@ -80,17 +96,28 @@ buff-grant ability:
   turns that descriptor into the ability, resolving the trigger via `detectReactiveTrigger` (the
   "Overload" clause around "upon killing an enemy" → `on-enemy-destroyed`).
 
-### 2.2 Trigger-detection additions (`detectReactiveTrigger`)
+### 2.2 Trigger-detection additions (wire into the buff-grant / remove path)
 
 `detectReactiveTrigger` (skillTextParser.ts) currently covers start-of-round / on-crit /
-on-ally-crit / on-bomb-detonated / on-cheat-death-activated / on-enemy-cleansed. Add three clause
-patterns that currently fall through to `on-cast`:
+on-ally-crit / on-bomb-detonated / on-cheat-death-activated / on-enemy-cleansed. The buff-grant /
+remove-self-buff path resolves its trigger through `detectReactiveTrigger`
+(buildShipAbilities.ts:~1602), so anything `detectReactiveTrigger` doesn't recognize there falls
+through to `on-cast`. Several of the needed regexes already exist but are only wired into OTHER
+paths (extra-action, charge) — the work is to make `detectReactiveTrigger` (hence the buff/remove
+path) recognize them:
 
-- `on-enemy-destroyed` ← "upon killing an enemy" / "upon killing". Serves **both** the
-  remove-self-buff (Overload) **and** the Marauder Rage grant (Mangler/Ravager), whose clauses sit
-  together ("loses Overload **and gains** Marauder Rage").
-- `on-debuff-inflicted` ← "upon/after applying/inflicting a debuff" (Butcher's Rage).
-- `on-enemy-repaired` ← "when an enemy performs a repair on themselves" (Ruiner's Overload).
+- `on-enemy-destroyed` ← "upon killing an enemy". The regex `ENEMY_DEATH_PHRASING_RE`
+  (skillTextParser.ts:~1961) already matches this wording but is only wired into `parseExtraAction`.
+  Reuse it in `detectReactiveTrigger`. Serves **both** the remove-self-buff (Overload) **and** the
+  Marauder Rage grant (Mangler/Ravager), whose clauses sit together ("loses Overload **and gains**
+  Marauder Rage").
+- `on-enemy-repaired` ← "when an enemy performs a repair on themselves". The regex
+  `ENEMY_REPAIRS_RE` (skillTextParser.ts:~441) already exists, wired only into
+  `parseChargeGain`/`parseChargeRemoval`. Reuse it in `detectReactiveTrigger` (Ruiner's Overload).
+- `on-debuff-inflicted` ← "upon/after applying/inflicting a debuff" (Butcher's Rage). The trigger
+  value exists and `detectDebuffInflictedTrigger` exists, but its `ENEMY_DEBUFFED_RE` matches
+  "enemy gets/is/becomes debuffed" — NOT "upon applying a debuff". This needs a **new** wording
+  pattern for the active "applying a debuff" phrasing.
 
 ### 2.3 Marauder Rage grants (reuse existing reactive buff executor)
 
@@ -108,13 +135,25 @@ once per round per enemy." Model the literal rule (not a stack-cap approximation
 - `passesOncePerRoundGate` (triggers.ts:1232) keys on
   `${ownerId}:${abilityId}:${eventSourceId}` when `oncePerRoundPerSource` is set (vs.
   `${ownerId}:${abilityId}` for plain `oncePerRound`), reusing the same per-round-reset
-  `oncePerRoundConsumed` set (reset each round by the engine). Each distinct repairing enemy
-  contributes once per round; all entries reset next round.
-- The repairer id is already on the event context (`eventCtx`, on-enemy-repaired captures
-  `heal-performed.casterId` — triggers.ts:133).
+  `oncePerRoundConsumed` set (reset each round by the engine, triggers.ts:822-823). Each distinct
+  repairing enemy contributes once per round; all entries reset next round.
+- The repairer id is already on the event context: `eventCtx.repairerId` (triggers.ts:133-136,
+  captured from `heal-performed`'s casterId on the on-enemy-repaired drain).
 - **Parser:** "limited to once per round per enemy" → `oncePerRoundPerSource`; plain "once per
   round" → existing `oncePerRound`.
 - Reusable for any future "once per round per enemy/ally" text.
+
+> Note on existing per-source infra: there IS a per-source reactive mechanism already —
+> `Ability.everyNthEvent` keyed `${ownerId}:${abilityId}:${repairerId}` via
+> `ctx.repairCountBySource` (abilities.ts:~584; triggers.ts:~1311), but it is (a) combat-lifetime,
+> not per-round-reset, and (b) wired only on the charge branch (Zosimos). It models "every Nth
+> repair," not "once per round per enemy," so it cannot be reused — `oncePerRoundPerSource` riding
+> the per-round-reset `oncePerRoundConsumed` set is the right primitive.
+
+> Ruiner cap-5 risk (see §6): Overload's global cap in `PERSISTENT_STACKING_BUFFS` is 10. If
+> Ruiner's reactive Overload routes through the persistent door, it would cap at 10, not the
+> parsed "limit of 5". The accumulating door honors the per-ability `maxStacks` (the parsed limit).
+> The plan must verify Ruiner's store and ensure the parsed "limit of 5" wins.
 
 ### 2.5 Asphyxiator conditional grant (verify, no new code expected)
 
@@ -170,8 +209,10 @@ by new fixtures.
 - **Reactive executor** (`triggers.test.ts`): remove-self-buff branch calls the removal;
   `oncePerRoundPerSource` gate allows one fire per distinct source per round and resets next round.
 - **Engine** (combat fixtures): on kill → Overload cleared + Marauder Rage granted (Mangler/Ravager);
-  Butcher Rage on debuff-inflict; Ruiner Overload on enemy self-repair with per-enemy cap;
-  Asphyxiator SoR conditional; **team-symmetric** enemy-side Marauder fixture.
+  Butcher Rage on debuff-inflict; Ruiner Overload on enemy self-repair with the per-enemy
+  once-per-round gate **and a cap-5 assertion**; Asphyxiator SoR conditional; **team-symmetric**
+  enemy-side Marauder fixture. Each ship's Overload-removal test asserts against that ship's actual
+  store (accum vs persistent — see §6).
 - **simCoverage** (`simCoverage.test.ts`, `AbilityCard.test.tsx`): overload no longer in
   `ControlEffect`; no ability is flagged not-simulated for it.
 - `audit:skills` clean; `tsc` exhaustiveness (the `ControlEffect` removal + new AbilityConfig
@@ -179,9 +220,19 @@ by new fixtures.
 
 ## 6. Risks / open notes
 
-- **Which store holds Overload:** confirmed it lands in the accumulating self store for the
-  every-turn ships; `removeSelfBuffByName` spans all self stores so the exact door doesn't matter,
-  but tests must assert removal from the accumulating store specifically.
+- **Which store holds Overload (verified, store-dependent):** "gains Overload every turn"
+  (Mangler/Ravager/Butcher) lands in the **accumulating** self store (`accumSelfMaps`, verified
+  §2.1). Asphyxiator (start-of-round) and Ruiner (reactive) may instead travel the `upsertBuff` /
+  timed-status door, which routes persistent-named buffs to **`persistentSelfMaps`**.
+  `removeSelfBuffByName` spans all three self stores, so removal is robust — **but each ship's tests
+  must assert removal from that ship's actual store** (do not blindly assert the accumulating store
+  for all five). The plan's first engine task should empirically log/confirm the store per ship.
+- **Ruiner cap-5 (work item, MAJOR):** `PERSISTENT_STACKING_BUFFS` caps Overload at 10 globally
+  (persistentStackingBuffs.ts:38) and the persistent door applies that cap by name
+  (statusEngine.ts:528). If Ruiner's Overload lands in the persistent map it will climb to 10, not
+  5. Ensure the parsed "limit of 5" wins — confirm Ruiner routes through the accumulating door
+  (per-ability `maxStacks`), or add a per-text cap override for the persistent path. A fixture must
+  assert Ruiner's Overload caps at 5.
 - **`oncePerRoundConsumed` reset:** confirmed reset each round by the engine (triggers.ts:822-823) —
   the per-source key relies on this. A fixture must cross a round boundary to prove the reset.
 - **DocumentationPage / changelog:** add a user-facing changelog entry (combat sim now models the
