@@ -1101,15 +1101,23 @@ export function parseControlInflicts(
     if (!text) return [];
     const out: { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] = [];
     for (const c of CONTROL_INFLICTS) {
-        if (c.re.test(text)) {
-            const pos = text.search(
-                new RegExp(
-                    `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-                    'i'
-                )
-            );
-            out.push({ effect: c.effect, pos, side: c.side });
-        }
+        // Match the APPLICATION clause (c.re anchors on the application verb) and locate the
+        // control tag WITHIN that match — not the first tag anywhere in the row. A status named
+        // in an earlier CONDITION clause ("If the target has <unit-skill>Stasis…") would otherwise
+        // pull `pos` back to the wrong clause, mis-ordering the emitted control ability (the
+        // builder sorts emission order by `pos`).
+        const match = c.re.exec(text);
+        if (!match) continue;
+        const tagRe = new RegExp(
+            `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            'i'
+        );
+        const tagMatch = tagRe.exec(match[0]);
+        out.push({
+            effect: c.effect,
+            pos: tagMatch ? match.index + tagMatch.index : -1,
+            side: c.side,
+        });
     }
     return out;
 }
