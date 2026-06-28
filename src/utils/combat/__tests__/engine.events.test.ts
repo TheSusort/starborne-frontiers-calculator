@@ -330,10 +330,12 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         ],
     });
 
-    it('2-turn timed self-buff applied round 1 is present rounds 1-2 only and expires round 2', () => {
+    it('2-turn timed self-buff applied round 1 is present rounds 1-3 only and expires round 3', () => {
         // Self-buff with skillSource 'charge' + startCharged + a large chargeCount: it
         // fires round 1 and never again (the charge never re-banks). Duration 2 means
-        // the buff is present rounds 1-2 and expires at the attacker's round-2 Post Turn.
+        // the buff is present rounds 1-3 and expires at the attacker's round-3 Post Turn:
+        // a self-buff applied during the carrier's OWN turn gets a one-turn reprieve, so it
+        // lasts through one ADDITIONAL of the carrier's turns (rounds 1-2 → rounds 1-3).
         const buff: SelectedGameBuff = {
             id: 's1',
             buffName: 'Attack Up',
@@ -361,21 +363,24 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
                 .find((r) => r.round === round)!
                 .activeSelfBuffs.some((b) => b.buffName === 'Attack Up');
         expect(present(1)).toBe(true); // applied round 1
-        expect(present(2)).toBe(true); // still within the 2-turn window
-        expect(present(3)).toBe(false); // expired at the attacker's round-2 Post Turn
+        expect(present(2)).toBe(true); // still within the (reprieved) window
+        expect(present(3)).toBe(true); // last reprieved round
+        expect(present(4)).toBe(false); // expired at the attacker's round-3 Post Turn
 
-        // buff-expired fires once, at round 2, on the attacker (the self-buff carrier).
+        // buff-expired fires once, at round 3, on the attacker (the self-buff carrier).
         const expired = events.filter((e) => e.type === 'buff-expired');
         expect(expired).toHaveLength(1);
         const e = expired[0];
         if (e.type !== 'buff-expired') throw new Error('unreachable');
-        expect(e).toMatchObject({ actorId: 'attacker', round: 2, buffName: 'Attack Up' });
+        expect(e).toMatchObject({ actorId: 'attacker', round: 3, buffName: 'Attack Up' });
     });
 
-    it('duration-1 self-buff re-applied every round expires every round', () => {
-        // Active source, 1-turn duration, fires every (active) round. Applied each round at the
-        // attacker turn, decremented to 0 at that same round's attacker Post Turn → expires every
-        // round and is re-applied next round.
+    it('duration-1 self-buff re-applied every round expires every other round (own-turn reprieve)', () => {
+        // Active source, 1-turn duration, fires every (active) round. A 1-turn self-buff applied
+        // during the carrier's OWN turn gets a one-turn reprieve, so it survives through the
+        // carrier's NEXT turn before expiring. Re-application refreshes the window: round-1
+        // application expires at round 2 (and is re-applied that same round), round-2 re-application
+        // expires at round 4, etc. → expiries land on every OTHER round.
         const buff: SelectedGameBuff = {
             id: 's1',
             buffName: 'Attack Up',
@@ -398,8 +403,9 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
         const expiredRounds = events
             .filter((e) => e.type === 'buff-expired')
             .map((e) => (e.type === 'buff-expired' ? e.round : 0));
-        // One expiry per round, every round.
-        expect(expiredRounds).toEqual([1, 2, 3, 4]);
+        // With the own-turn reprieve, expiries land on every other round (the round-1
+        // application expires round 2 and re-arms, round-2 re-application expires round 4).
+        expect(expiredRounds).toEqual([2, 4]);
     });
 
     // The same 2-turn enemy debuff, applied once in round 1, observed via the buff-expired

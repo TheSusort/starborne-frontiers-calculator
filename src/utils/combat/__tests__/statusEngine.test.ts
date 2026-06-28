@@ -527,6 +527,110 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
     });
 });
 
+describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () => {
+    const mkStatus = (duration: number): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName: 'Attack Up', stacks: 1, parsedEffects: { attack: 30 } },
+        side: 'self',
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+    });
+
+    it('a 1-turn self-buff applied during the carrier own turn survives that Post-Turn, expires next', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        eng.decrementPlayer('attacker'); // reprieve: stays (flag flips false)
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        // Prove the reprieve SKIPPED the decrement rather than the survival being a
+        // coincidence: a full-duration status confirms turnsRemaining was untouched.
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(1);
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // now decrements 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+
+    it('negative control: a self-buff applied while NOT the active carrier gets no reprieve', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        // Flag-LOGIC unit test: currentTurnActorId ('someOtherActor') ≠ the 'attacker'
+        // store, so applyTimedAbilityStatus never stamps appliedThisTurn → no reprieve.
+        // The real off-turn ROUTING-fidelity case (a buff applied on a ship while another
+        // ship is acting) is covered by the engine behavioral test (Task 3).
+        eng.beginRound(1);
+        eng.beginTurn('someOtherActor');
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+        eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+
+    it('scheduled self-buff (upsertBuff path) gets the reprieve on the attacker turn', () => {
+        const selfBuffs: SelectedGameBuff[] = [
+            makeBuff('Attack Up', { skillSource: 'active', skillDuration: 1 }),
+        ];
+        const eng = createStatusEngine({ selfBuffs, enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.sourceFired('attacker', 'active', 1); // applies the scheduled self-buff via upsertBuff
+        eng.decrementPlayer('attacker'); // reprieve: survives
+        expect(
+            eng.snapshot('attacker').activeSelfBuffs.some((b) => b.buffName === 'Attack Up')
+        ).toBe(true);
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // expires now
+        expect(
+            eng.snapshot('attacker').activeSelfBuffs.some((b) => b.buffName === 'Attack Up')
+        ).toBe(false);
+    });
+
+    it('start-of-round self-buff (applied before beginTurn) gets no reprieve (currentTurnActorId reset at round top)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker');
+
+        eng.beginRound(2);
+        // start-of-round application: no beginTurn yet this round
+        eng.applyTimedAbilityStatus(2, mkStatus(1));
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+
+    it('post-Post-Turn self-buff (applied in the turn-ended/round-ended drain) gets no reprieve', () => {
+        // A self-side write that lands AFTER the carrier's own Post-Turn decrement (engine
+        // turn-ended / round-ended drains run after decrementPlayer) must NOT be flagged for
+        // this turn — its same-turn Post-Turn is already spent, so a reprieve would grant it
+        // an extra turn. decrementPlayer clears the active marker once it has run for the owner.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // owner Post-Turn — clears the active marker
+        // turn-ended/round-ended drain window: application after the carrier's Post-Turn
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // first decrement for this entry: 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
+});
+
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
     // Rule: a new application within a buff family (name minus the I/II/III tier suffix)
     // wins only if (a) its tier is higher, or (b) same tier AND its duration > the existing

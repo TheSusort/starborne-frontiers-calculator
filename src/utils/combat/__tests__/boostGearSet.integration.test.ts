@@ -159,10 +159,13 @@ describe('BOOST gear set — self-buff extended (combat sim)', () => {
         // ONCE there and then left to decay — no re-application on the in-between active rounds, so
         // the +1 turn is directly observable.
         //
-        // Base duration 2 → present round 3 only (decremented at the wearer's own Post-Turn).
-        // With Boost: duration 2 + 1 = 3 → present rounds 3 AND 4. Round 4 is the unambiguous
-        // delta (an active round — the buff is NOT re-applied there, so its presence is purely the
-        // extended tail). The same delta repeats on the next charged cycle (round 6 fire → round 7).
+        // A self-buff applied during the carrier's OWN turn gets a one-turn reprieve (it lasts
+        // through one additional of the carrier's turns), which lifts BOTH baselines by +1:
+        //   Base duration 2 → present rounds 3 AND 4 (reprieved tail), expires round 4.
+        //   With Boost: duration 2 + 1 = 3 → present rounds 3, 4 AND 5 (Boost tail + reprieve).
+        // Round 5 is the unambiguous delta (an active round — the buff is NOT re-applied there,
+        // so its presence is purely the Boost-extended tail). BOOST still yields exactly ONE more
+        // round than non-Boost; the reprieve moved both windows but preserved the +1 from BOOST.
         const chargedText =
             'This Unit deals <unit-damage>100% damage</unit-damage> and gains <unit-skill>Attack Up III</unit-skill> for 2 turns.';
         const opts = { activeText: PLAIN_HIT, chargedText, chargeCount: 2 };
@@ -209,14 +212,15 @@ describe('BOOST gear set — self-buff extended (combat sim)', () => {
         expect(wearerHasBuff(withBoost, 3, 'Attack Up III')).toBe(true);
         expect(wearerHasBuff(noBoost, 3, 'Attack Up III')).toBe(true);
 
-        // Round 4 (the extended tail): present ONLY with Boost. This is the unambiguous +1 turn.
-        // Non-vacuous: the without-Boost branch is FALSE here, so the assertion would fail if Boost
-        // did nothing.
+        // Round 4 (the reprieved tail): present in BOTH runs now — the own-turn reprieve lifts
+        // both baselines by one round, so round 4 no longer distinguishes Boost from non-Boost.
         expect(wearerHasBuff(withBoost, 4, 'Attack Up III')).toBe(true);
-        expect(wearerHasBuff(noBoost, 4, 'Attack Up III')).toBe(false);
+        expect(wearerHasBuff(noBoost, 4, 'Attack Up III')).toBe(true);
 
-        // Sanity: the buff has truly expired in BOTH runs by round 5 (no application that round).
-        expect(wearerHasBuff(withBoost, 5, 'Attack Up III')).toBe(false);
+        // Round 5 (the Boost-extended tail): present ONLY with Boost. This is the unambiguous +1
+        // turn from BOOST. Non-vacuous: the without-Boost branch is FALSE here, so the assertion
+        // would fail if Boost did nothing.
+        expect(wearerHasBuff(withBoost, 5, 'Attack Up III')).toBe(true);
         expect(wearerHasBuff(noBoost, 5, 'Attack Up III')).toBe(false);
     });
 });

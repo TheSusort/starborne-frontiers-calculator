@@ -57,6 +57,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: in positioned battles, Inferno and Corrosion damage-over-time now ticks on every affected ship individually — each ship takes its own DoT damage against its own HP at the start of its turn (on both your fleet and the enemy), so a DoT can now wear down and kill secondary ships and trigger their on-death effects, instead of only counting against the primary target.',
     'Skill editor: Provoke, Taunt, Concentrate Fire, Disable and Stasis are now recognized as control effects and no longer marked "Not simulated" — their combat impact is reflected in the battle simulator.',
     'Combat simulator now models the Overload lifecycle: Marauder-family ships (Mangler, Ravager, Butcher, Asphyxiator, Ruiner) lose all their Overload stacks when they kill an enemy and gain Marauder Rage in return (on a kill, on inflicting a debuff, or at the start of the round depending on the ship). With this, Overload is no longer flagged "Not simulated" — closing the last remaining simulation-coverage gap.',
+    'Combat & DPS simulators: self-buffs no longer expire one turn too early — a timed buff a ship applies on its own turn now correctly lasts through its next turn, matching the game. Enemy debuffs, damage-over-time effects, and buffs applied off-turn are unchanged.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

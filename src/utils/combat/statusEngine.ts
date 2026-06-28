@@ -144,6 +144,11 @@ export interface StatusEngine {
      *  Calling on an owner with no statuses (lazy-empty map) is a safe no-op.
      *  Returns expired buff names so the engine can emit buff-expired. */
     decrementPlayer(ownerId: string): { expired: string[] };
+    /** Mark the start of an actor's turn. Sets the "active carrier" so self-side timed
+     *  writes during this turn are flagged appliedThisTurn (own-turn reprieve). The id MUST
+     *  match the self-store key for that actor: the focus actor uses 'attacker'; team actors
+     *  use their real id. Called at each turn-started. */
+    beginTurn(actorId: string): void;
     /** Owner Post-Turn (enemy side): decrement ALL timed enemy statuses for the given
      *  `targetId` (defaults to the singular default enemy target — pre-Task-1 path,
      *  byte-identical). Returns expired buff names so the engine can emit buff-expired. */
@@ -287,6 +292,12 @@ interface BuffState {
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
     appliedSeq: number;
+    /** Set true when this timed self-buff was applied during the carrier's OWN turn (the
+     *  carrier was the active actor — see beginTurn). Granted a one-turn reprieve at that
+     *  turn's Post-Turn (skipped + flipped false by decrementPlayer), then decrements
+     *  normally from the carrier's next Post-Turn. Off-turn and enemy-side writes leave it
+     *  falsy. */
+    appliedThisTurn?: boolean;
 }
 
 interface AccumulatingState {
@@ -591,6 +602,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     let appliedSeqCounter = 0;
     const nextAppliedSeq = (): number => ++appliedSeqCounter;
 
+    // The actor whose turn is currently executing (set at each turn-started via beginTurn).
+    // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
+    // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
+    let currentTurnActorId: string | undefined;
+    const beginTurn = (actorId: string): void => {
+        currentTurnActorId = actorId;
+    };
+
     // beginRound: advance the round counter (strictly sequential) and apply the
     // per-round accumulating increment. Per-round stacks tick once at round top,
     // independent of any source firing. Called before any turns — preserving the
@@ -602,6 +621,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             );
         }
         lastRound = r;
+
+        // The active carrier is turn-scoped: clearing it at round top ensures start-of-round /
+        // pre-turn-body self-buff writes (which run before any beginTurn this round) are not
+        // mis-flagged for the prior round's last actor — they get no own-turn reprieve.
+        currentTurnActorId = undefined;
 
         // (Decrement+expire moved out to decrementPlayer/decrementEnemy, called from each
         //  owner's Post Turn in the engine.)
@@ -662,6 +686,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             turnsRemaining: duration,
             tier,
             appliedSeq: nextAppliedSeq(),
+            appliedThisTurn: side === 'self' && currentTurnActorId === 'attacker',
         });
     };
 
@@ -864,10 +889,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         };
     };
 
-    // Owner Post-Turn decrement helpers. The status CARRIER decrements ALL its timed
-    // statuses by one turn, INCLUDING ones applied earlier in this same turn (same-turn
-    // decrement rule — skipping same-turn applications would ADD a round). Expired
-    // statuses are removed and their stored buffName reported so the engine emits
+    // Owner Post-Turn decrement helpers. The status CARRIER decrements its timed statuses
+    // by one turn at its own Post-Turn. The two stores differ in their own-turn handling:
+    //
+    //   - decrementPlayer (self-buff store): a timed self-buff applied during the carrier's
+    //     OWN turn is flagged appliedThisTurn (set by beginTurn, stamped in both self-side
+    //     timed write seams — applyTimedAbilityStatus and upsertBuff). Such an entry gets a
+    //     one-turn reprieve — it is skipped
+    //     once and the flag cleared, so it first decrements at the carrier's NEXT Post-Turn
+    //     (and thus lasts through the carrier's next turn). All other timed self statuses
+    //     decrement normally.
+    //   - decrementEnemy (debuffs landed on the carrier): UNCHANGED — it always decrements,
+    //     including same-turn applications, because debuffs are applied during the ATTACKER's
+    //     turn and so are never "own-turn" for the carrier they sit on.
+    //
+    // Expired statuses are removed and their stored buffName reported so the engine emits
     // buff-expired. Ability-sourced timed statuses live in the same maps and decrement here.
 
     /** Decrement all timed statuses in the SELF-BUFF STORE for the named carrier (side-agnostic;
@@ -878,6 +914,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const expired: string[] = [];
         if (map) {
             for (const [key, s] of map) {
+                if (s.appliedThisTurn) {
+                    s.appliedThisTurn = false; // reprieve consumed; next Post-Turn decrements
+                    continue;
+                }
                 s.turnsRemaining -= 1;
                 if (s.turnsRemaining <= 0) {
                     expired.push(s.buffName);
@@ -885,6 +925,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 }
             }
         }
+        // The active-turn marker is turn-scoped and consumed here. Clearing it once the owner's
+        // Post-Turn has run prevents later same-turn writes (engine turn-ended / round-ended
+        // drains run after this) from being stamped appliedThisTurn for a turn whose Post-Turn
+        // is already spent — which would otherwise grant them an extra turn. (Pairs with the
+        // round-top reset in beginRound, which guards the start-of-round drain.)
+        if (currentTurnActorId === ownerId) currentTurnActorId = undefined;
         return { expired };
     };
 
@@ -1182,6 +1228,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             payload: status.payload,
             casterId: status.casterId,
             appliedSeq: nextAppliedSeq(),
+            appliedThisTurn: status.side === 'self' && selfEffectiveId === currentTurnActorId,
         });
     };
 
@@ -1287,6 +1334,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         setLandsTimedEnemyApplication,
         snapshot,
         decrementPlayer,
+        beginTurn,
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,
