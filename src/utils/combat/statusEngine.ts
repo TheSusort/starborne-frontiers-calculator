@@ -162,6 +162,10 @@ export interface StatusEngine {
      *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     removeTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Remove a named buff family from ALL of `actorId`'s self stores (timed selfMaps,
+     *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
+     *  unknown name → safe no-op. */
+    removeSelfBuffByName(actorId: string, buffName: string): void;
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
      *  the number actually removed. Unknown id → no-op (returns 0). */
@@ -943,6 +947,19 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         map.delete(deriveFamilyKey(buffName).familyKey);
     };
 
+    /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
+     *  doors a buff can arrive through each use a different key:
+     *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
+     *   - accumulating `accumSelfMaps` are keyed by the raw `buffName` (payload.buffName),
+     *   - persistent `persistentSelfMaps` are keyed by the raw `buffName`.
+     *  Clearing all three makes removal robust regardless of which door applied the buff.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    const removeSelfBuffByName = (actorId: string, buffName: string): void => {
+        selfMaps.get(actorId)?.delete(deriveFamilyKey(buffName).familyKey);
+        accumSelfMaps.get(actorId)?.delete(buffName);
+        persistentSelfMaps.get(actorId)?.delete(buffName);
+    };
+
     /** Remove up to `count` removable statuses for `actorId` on the chosen side, NEWEST-APPLIED
      *  FIRST (highest `appliedSeq` removed first).
      *
@@ -1262,6 +1279,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,
+        removeSelfBuffByName,
         cleanse,
         reduceNewestDebuffDuration,
         purge,
