@@ -1031,7 +1031,11 @@ export function detectDebuffInflictedTrigger(
 // turns]" items joined by commas/"and", then the target tag. This still ignores a control word in
 // a condition clause ("If the target has <unit-skill>Provoke…") — no application verb precedes it.
 // Taunt stays TIGHT (verb-adjacent only): no corpus text grants Taunt via a shared-verb compound
-// list, so the list-tolerant form would be unused surface area.
+// list, so the list-tolerant form would be unused surface area. It also carries a negative
+// lookbehind rejecting an `enemy` subject within a short window before the verb, so Amartya's
+// CONDITION clause "When an enemy defender gains <unit-skill>Taunt" (an enemy gaining Taunt, not a
+// self-grant) does not emit a phantom self `taunt` ability, while "This Unit gains/grants Taunt"
+// and "and grants Taunt" still match.
 // "applying" is deliberately omitted: it only appears in the passive reactive clause ("when
 // applying Stasis"), matched separately below.
 //
@@ -1086,7 +1090,7 @@ const CONTROL_INFLICTS: {
         effect: 'taunt',
         tag: 'Taunt',
         side: 'self',
-        re: /\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
+        re: /(?<!\benemy\b[\s\w]{1,20})\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
     },
 ];
 

@@ -3945,6 +3945,21 @@ describe('parseControlInflicts', () => {
         ).toEqual([{ effect: 'taunt', pos: expect.any(Number), side: 'self' }]);
     });
 
+    it('does NOT treat an enemy-gains-Taunt condition as a self Taunt grant', () => {
+        expect(
+            parseControlInflicts(
+                'When an enemy defender gains <unit-skill>Taunt</unit-skill>, deal +20% damage'
+            )
+        ).toEqual([]);
+    });
+
+    it('still recognizes a self Taunt grant', () => {
+        expect(
+            parseControlInflicts('This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn')[0]
+                .effect
+        ).toBe('taunt');
+    });
+
     it('keeps Stasis byte-identical', () => {
         expect(
             parseControlInflicts('inflicts <unit-skill>Stasis</unit-skill> for 2 turns')
