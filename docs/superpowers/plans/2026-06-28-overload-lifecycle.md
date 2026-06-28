@@ -34,10 +34,19 @@
 
 ---
 
-## Task 1: Types — `remove-self-buff` config, `oncePerRoundPerSource` flag, drop `'overload'`
+## Task 1: Types — `remove-self-buff` type+config, `oncePerRoundPerSource` flag, drop `'overload'`, editor defaults
 
 **Files:**
-- Modify: `src/types/abilities.ts` (AbilityConfig union ~329-532; Ability flags ~569-589; `ControlEffect` ~539-545)
+- Modify: `src/types/abilities.ts` (`AbilityType` union 6-29; AbilityConfig union ~329-532; Ability flags ~569-589; `ControlEffect` ~539-545)
+- Modify: `src/components/skills/abilityDefaults.ts` (`makeDefaultConfig` switch 7-90; `DEFAULT_TARGETS` Record 93-117)
+- Modify: `src/components/skills/AbilityTypePicker.tsx` (`TYPE_LABELS` Record 10)
+- Modify: `src/components/skills/AbilityCard.tsx` (`ABILITY_TYPE_LABELS` Record 40)
+
+> **Why the editor files:** `Ability.type` is typed `AbilityType` (a SEPARATE union at abilities.ts:6-29 from `AbilityConfig`). Adding the new type to ONLY `AbilityConfig` will not typecheck the Task 8 emit. Adding it to `AbilityType` then breaks three exhaustive `Record<AbilityType,…>` maps at compile time — they MUST be updated in this task. `AbilityCard.tsx`'s `renderBody` switch (248) has a `default` case (694-699) so it needs no editor body, only the label Record.
+
+- [ ] **Step 0: Add `'remove-self-buff'` to the `AbilityType` union.**
+
+In `AbilityType` (abilities.ts:6-29), add `| 'remove-self-buff'` (after `'control'`).
 
 - [ ] **Step 1: Add the `remove-self-buff` AbilityConfig variant.**
 
@@ -72,16 +81,24 @@ After the `oncePerRound?` field (~569), add:
 
 Change the `ControlEffect` union (~539-545) to drop `| 'overload'`. Update the JSDoc above it (the "Overload is the sole deferred exception" line, abilities.ts:536) to state all control effects are now simulated.
 
-- [ ] **Step 4: Run tsc to see the exhaustiveness fallout.**
+- [ ] **Step 4: Update the editor default/label sites broken by the new `AbilityType`.**
+
+- `abilityDefaults.ts` `makeDefaultConfig` (switch, 7-90): add a case
+  `case 'remove-self-buff': return { type: 'remove-self-buff', buffName: '', scope: 'all' };`
+- `abilityDefaults.ts` `DEFAULT_TARGETS` (93-117): add `'remove-self-buff': 'self',`
+- `AbilityTypePicker.tsx` `TYPE_LABELS` (10): add `'remove-self-buff': 'Remove Self Buff',`
+- `AbilityCard.tsx` `ABILITY_TYPE_LABELS` (40): add `'remove-self-buff': 'Remove Self Buff',`
+
+- [ ] **Step 5: Run tsc to see the remaining exhaustiveness fallout.**
 
 Run: `npx tsc --noEmit`
-Expected: errors in `debuffImmunity.ts` (`CONTROL_EFFECT_LABEL` Record missing/extra key) and the synthetic tests referencing `effect:'overload'`. These are fixed in Tasks 3/9 — note them. The new `remove-self-buff` variant may surface non-exhaustive switch warnings (executeIntent, simCoverage) — also fixed in later tasks.
+Expected remaining errors (fixed in later tasks): `debuffImmunity.ts` `CONTROL_EFFECT_LABEL` Record has an extra `overload` key (Task 9); synthetic tests referencing `effect:'overload'` (Task 9); `executeIntent`/partition may warn on the new config type until Task 3. The three editor Records above should now be clean.
 
-- [ ] **Step 5: Commit.**
+- [ ] **Step 6: Commit.**
 
 ```bash
-git add src/types/abilities.ts
-git commit -m "feat(combat): add remove-self-buff ability config + oncePerRoundPerSource flag; drop overload ControlEffect"
+git add src/types/abilities.ts src/components/skills/abilityDefaults.ts src/components/skills/AbilityTypePicker.tsx src/components/skills/AbilityCard.tsx
+git commit -m "feat(combat): add remove-self-buff ability type/config + oncePerRoundPerSource flag; drop overload ControlEffect"
 ```
 
 ---
@@ -167,6 +184,32 @@ git add src/utils/combat/statusEngine.ts src/utils/combat/__tests__/statusEngine
 git commit -m "feat(combat): statusEngine.removeSelfBuffByName clears a named buff from all self stores"
 ```
 
+- [ ] **Step 6: Write a failing test for the per-application persistent cap override (Ruiner cap-5).**
+
+`addPersistentStack` caps at the GLOBAL `PERSISTENT_STACKING_BUFFS.get('Overload')` = 10 (statusEngine.ts:528), ignoring a per-application limit. Ruiner's "Overload with a limit of 5" reactive grant flows through `applyTimedAbilityStatus` → the persistent branch (statusEngine.ts:1123-1131) → `addPersistentStack`, so it would climb to 10. Add a statusEngine test: apply `Overload` self with a payload-carried `maxStacks: 5` six times via the persistent door; assert stacks cap at 5, not 10. Also assert that an application with NO override still caps at the global 10 (byte-identical for the every-turn ships).
+
+- [ ] **Step 7: Run to verify it fails.**
+
+Run: `npm test -- statusEngine.test.ts -t 'cap'`
+Expected: FAIL — caps at 10.
+
+- [ ] **Step 8: Implement the cap override.**
+
+Add an optional `capOverride?: number` param to `addPersistentStack` (or read `payload.maxStacks` if the payload already carries it — CHECK `AbilityStatusPayload` and `payloadFromConfig` in triggers.ts:1174; if `maxStacks` is not threaded, add it to the payload from the buff config). Compute the effective cap as `min(globalCap ?? Infinity, override ?? Infinity)` (when both absent → uncapped, unchanged). Thread the override from BOTH persistent callers:
+- `applyTimedAbilityStatus` persistent branch (statusEngine.ts:1123-1131) → pass `status.payload.maxStacks`.
+- `upsertBuff` persistent branch (statusEngine.ts:644-646) → pass `buff.maxStacks`.
+
+> The every-turn ships use the ACCUM door (per-ability `maxStacks` already honored at registration, statusEngine.ts:1076) — unaffected. Only the persistent door needed this. Verify no existing persistent golden moves (Defense Shred/Blast/Titanite carry no per-app override → `min(globalCap, Infinity)` = unchanged).
+
+- [ ] **Step 9: Run to verify it passes + commit.**
+
+Run: `npm test -- statusEngine.test.ts` → PASS.
+
+```bash
+git add src/utils/combat/statusEngine.ts src/utils/combat/triggers.ts src/utils/combat/__tests__/statusEngine.test.ts
+git commit -m "feat(combat): persistent-stack per-application cap override (Ruiner Overload limit 5)"
+```
+
 ---
 
 ## Task 3: `executeIntent` remove-self-buff branch + reactive partition
@@ -230,7 +273,7 @@ In `reactiveOncePerRoundGate.test.ts`, add cases for `oncePerRoundPerSource`:
 - A second event from the SAME source in the same round is blocked.
 - After a round reset (clear `oncePerRoundConsumed`), the same source passes again.
 
-Build the ability with `oncePerRoundPerSource: true` and intents whose `eventCtx.repairerId` (or the resolved source id) differs. Mirror the existing oncePerRound tests in this file.
+Build the ability with `oncePerRoundPerSource: true` and intents whose `eventCtx.repairerId` (or the resolved source id) differs. Mirror the existing oncePerRound tests in this file. **Include at least one test that drives the gate through the `buff` branch of `executeIntent`** (a `type:'buff'` ability with `oncePerRoundPerSource` + on-enemy-repaired), since that branch is the one Ruiner uses and the one missing the gate call (Step 3b).
 
 - [ ] **Step 2: Run to verify it fails.**
 
@@ -258,9 +301,17 @@ function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean
 }
 ```
 
-> Confirm which `eventCtx` field carries the source for the trigger Ruiner uses (`repairerId` for on-enemy-repaired, triggers.ts:133-136). If a future trigger needs a different source field, generalize then — YAGNI now.
+> Confirm which `eventCtx` field carries the source for the trigger Ruiner uses (`repairerId` for on-enemy-repaired, triggers.ts:133-136, stamped on the intent at triggers.ts:606-608). If a future trigger needs a different source field, generalize then — YAGNI now.
 
-Ensure the buff branch (`cfg.type === 'buff'`) calls `passesOncePerRoundGate` (it already does at ~1624 for some paths — verify the on-enemy-repaired buff grant reaches it; if not, add the call in the buff branch before applying the status).
+- [ ] **Step 3b (MANDATORY): add the gate call to the `buff` branch.**
+
+The `cfg.type === 'buff'` branch (triggers.ts:1340-1463) currently gates ONLY on `oncePerCombat` (1344) and `passesProcChanceGate` (1353) — it does **not** call `passesOncePerRoundGate`. (The `~1624` reference is the heal/shield branch, NOT buff.) Ruiner's Overload is a `buff` grant, so without this the per-source gate is dead code. Add, immediately after the `passesProcChanceGate` check (~1353):
+
+```ts
+        if (!passesOncePerRoundGate(intent, ctx)) return;
+```
+
+This is byte-identical for every existing buff grant (they set neither `oncePerRound` nor `oncePerRoundPerSource`, so the gate returns true without marking).
 
 - [ ] **Step 4: Run to verify it passes.**
 
@@ -428,7 +479,7 @@ git commit -m "feat(combat): detect 'once per round per enemy' clause"
 
 **Files:**
 - Modify: `src/utils/abilities/buildShipAbilities.ts` (emit remove-self-buff abilities; set `oncePerRoundPerSource` on Ruiner's Overload buff)
-- Test: `src/utils/abilities/__tests__/buildShipAbilities.test.ts` (or the existing ship-abilities test file — confirm name)
+- Test: `src/utils/abilities/__tests__/buildShipAbilities.test.ts` (confirmed to exist)
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -507,6 +558,8 @@ Run: `npm test -- simCoverage.test.ts AbilityCard.test.tsx` → FAIL until code 
 
 - [ ] **Step 3: Remove `overload` from `CONTROL_EFFECT_LABEL`** (debuffImmunity.ts:37) — the `Record<ControlEffect,string>` type forces this. Update `SIMULATED_CONTROL_EFFECTS` (simCoverage.ts:23-29) to list the remaining effects (it now equals the full enum) and refresh the surrounding comments (lines 14-15, 21, 36-37) to drop the "Overload remains unmodeled" language. Leave `NOT_SIMULATED_TYPES` empty and `isAbilityNotSimulated` intact.
 
+- [ ] **Step 3b: Refresh the now-false comment in `persistentStackingBuffs.ts:15-16`** — the "Overload … kills never occur in-sim → permanent here; per-kill removal is a Phase 4 concern" line is no longer true (lose-on-kill is now modeled). Reword to note Overload is cleared on kill via the remove-self-buff path in the combat sim (still permanent in the DPS calc, where the dummy is indestructible).
+
 - [ ] **Step 4: Run to verify pass + tsc.**
 
 Run: `npx tsc --noEmit` → clean.
@@ -515,7 +568,7 @@ Run: `npm test -- simCoverage.test.ts AbilityCard.test.tsx` → PASS.
 - [ ] **Step 5: Commit.**
 
 ```bash
-git add src/utils/combat/debuffImmunity.ts src/components/skills/simCoverage.ts src/components/skills/__tests__/*
+git add src/utils/combat/debuffImmunity.ts src/components/skills/simCoverage.ts src/components/skills/__tests__/* src/constants/persistentStackingBuffs.ts
 git commit -m "feat(combat): drop overload from control not-simulated framing (last unmodeled effect)"
 ```
 
@@ -545,7 +598,7 @@ Expected: FAIL (behaviors not yet exercised end-to-end / store assertions wrong)
 
 - [ ] **Step 3: Make them pass.**
 
-Most behavior should already work from Tasks 1-8; this task is primarily about proving the end-to-end path and catching integration gaps (e.g. the buff branch not calling `passesOncePerRoundGate` for on-enemy-repaired; the cap-5 routing — confirm Ruiner's Overload caps at 5, applying the §6 cap-5 risk fix if it lands in the persistent map). Fix integration gaps in their source files (with a note in the commit).
+Most behavior should already work from Tasks 1-9 (lose-on-kill from Task 3; per-source gate from Task 4 incl. the mandatory buff-branch gate call; cap-5 from Task 2 Step 8). This task proves the end-to-end path and catches any remaining integration gaps. Fix integration gaps in their source files (with a note in the commit).
 
 - [ ] **Step 4: Run to verify they pass.** → PASS.
 
@@ -614,5 +667,5 @@ End PR body with the Claude Code generated-with footer.
 
 - **Team symmetry is a locked invariant** ([[feedback_engine_team_symmetry]]): a ship must behave identically on either side. All new paths ride team-agnostic triggers already; the symmetry fixture (Task 10.6) is the proof.
 - **Store-aware assertions** (Task 2 / Task 10): each ship's Overload may live in a different self store. Do not blindly assert the accumulating store for all five; check the store the ship actually uses (see Background facts + §6 of the spec).
-- **Ruiner cap-5** (spec §6, Task 10.4): if Overload lands in the persistent map it caps at the global 10, not 5. Ensure the parsed limit-5 wins (accum door honors per-ability maxStacks; persistent door needs a cap override). Prove with a fixture.
+- **Ruiner cap-5** (spec §6): implemented in Task 2 Step 8 (per-application cap override on the persistent door). Ruiner's reactive Overload routes through the persistent door (verified), so the override is REQUIRED, not optional. Task 10.4 is the end-to-end proof.
 - **Combat-engine workflow:** work on the `main` checkout (avoids the fresh-worktree esbuild crash, [[project_fresh_worktree_vite_esbuild_crash]]); ensure `.env` is present for the full suite ([[project_worktree_missing_env_test_failures]]).
