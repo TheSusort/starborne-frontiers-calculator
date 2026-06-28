@@ -37,6 +37,7 @@ import {
     parsePurge,
     parseHealNoCrit,
     statusEffectCondition,
+    parseControlInflicts,
     detectIgnoresForcedTargeting,
     parseDoesntBreakStasis,
     parseChargeRemoval,
@@ -3919,5 +3920,46 @@ describe('parseCounterAbilities', () => {
     it('returns null for empty/unmatched text', () => {
         expect(parseCounterAbilities(null)).toBeNull();
         expect(parseCounterAbilities('This Unit gains a Shield when attacked.')).toBeNull();
+    });
+});
+
+describe('parseControlInflicts', () => {
+    it('recognizes each inflicted control effect', () => {
+        expect(
+            parseControlInflicts(
+                'Deals damage and applies <unit-skill>Provoke</unit-skill> for 1 turn'
+            )
+        ).toEqual([{ effect: 'provoke', pos: expect.any(Number), side: 'enemy' }]);
+        expect(
+            parseControlInflicts('inflicts <unit-skill>Disable</unit-skill> for 2 turns')[0].effect
+        ).toBe('disable');
+        expect(
+            parseControlInflicts('apply <unit-skill>Concentrate Fire</unit-skill> for 1 turn')[0]
+                .effect
+        ).toBe('concentrate-fire');
+    });
+
+    it('recognizes Taunt as a self-grant', () => {
+        expect(
+            parseControlInflicts('This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn')
+        ).toEqual([{ effect: 'taunt', pos: expect.any(Number), side: 'self' }]);
+    });
+
+    it('keeps Stasis byte-identical', () => {
+        expect(
+            parseControlInflicts('inflicts <unit-skill>Stasis</unit-skill> for 2 turns')
+        ).toEqual([{ effect: 'stasis', pos: expect.any(Number), side: 'enemy' }]);
+    });
+
+    it('does NOT match a control word in a condition clause', () => {
+        expect(
+            parseControlInflicts(
+                'If the target has <unit-skill>Provoke</unit-skill>, deal +20% damage'
+            )
+        ).toEqual([]);
+    });
+
+    it('returns [] for non-control text', () => {
+        expect(parseControlInflicts('Deals 300% damage')).toEqual([]);
     });
 });

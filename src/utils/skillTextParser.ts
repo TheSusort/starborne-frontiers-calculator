@@ -1015,12 +1015,21 @@ export function detectDebuffInflictedTrigger(
     return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
 }
 
-// "inflicts/applies Stasis" — a control infliction. Conservative: ONLY Stasis (the one control
-// any ship reacts to today, via Defiant's shield-on-Stasis). Provoke/Taunt stay handled as
-// targeting-status CONDITIONS (statusEffectCondition), NOT control abilities. The <unit-skill>
-// tags don't bracket the verb, so matching on raw text is safe.
-// "applying" deliberately omitted: the infliction verb is always "inflicts/applies"; "applying"
-// only appears in the passive reactive clause ("when applying Stasis"), matched separately below.
+// Control-infliction recognition for the control EVENT. A skill that inflicts/grants one of the
+// five control statuses (Stasis/Provoke/Concentrate Fire/Disable enemy-side, Taunt self-side)
+// produces a `type:'control'` event-only ability so reactions can listen for `control-applied`.
+//
+// This is recognition of the *application* for the control event — it is SEPARATE from:
+//   - `statusEffectCondition` — the read/gate path ("If the target HAS <unit-skill>Provoke…").
+//   - `parseSkillEffects` — the named-status *application* path that actually applies the debuff.
+// The control ability is purely additive; nothing here suppresses those other paths.
+//
+// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The four
+// other effects use tight verb-adjacent regexes: the infliction verb is always immediately
+// tag-adjacent (at most "with" between), so a control word in a condition clause ("If the target
+// has <unit-skill>Provoke…") has no preceding application verb adjacent and is correctly ignored.
+// "applying" is deliberately omitted: it only appears in the passive reactive clause ("when
+// applying Stasis"), matched separately below.
 const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
 
 /** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
@@ -1028,6 +1037,66 @@ const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\
 export function parseControlInflict(text: string | null | undefined): ControlEffect | null {
     if (!text) return null;
     return STASIS_INFLICT_RE.test(text) ? 'stasis' : null;
+}
+
+const CONTROL_INFLICTS: {
+    effect: ControlEffect;
+    tag: string;
+    side: 'enemy' | 'self';
+    re: RegExp;
+}[] = [
+    { effect: 'stasis', tag: 'Stasis', side: 'enemy', re: STASIS_INFLICT_RE },
+    {
+        effect: 'provoke',
+        tag: 'Provoke',
+        side: 'enemy',
+        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Provoke\b/i,
+    },
+    {
+        effect: 'concentrate-fire',
+        tag: 'Concentrate Fire',
+        side: 'enemy',
+        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Concentrate Fire\b/i,
+    },
+    {
+        effect: 'disable',
+        tag: 'Disable',
+        side: 'enemy',
+        re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Disable\b/i,
+    },
+    {
+        effect: 'taunt',
+        tag: 'Taunt',
+        side: 'self',
+        re: /\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
+    },
+];
+
+/**
+ * Parses ALL control inflictions in `text` → one entry per matched effect. Each entry carries the
+ * control effect, its raw tag position (`text.search(<tag>)`, may be -1 — the builder maps -1 →
+ * MAX_POS), and the side the status lands on (Taunt is a self-grant; the rest hit the enemy).
+ * Recognizes the application for the control EVENT only; see CONTROL_INFLICTS comment above for
+ * how this differs from `statusEffectCondition` (read/gate) and `parseSkillEffects` (apply).
+ * Reference data: docs/ship-skills.csv.
+ */
+export function parseControlInflicts(
+    text: string | null | undefined
+): { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] {
+    if (!text) return [];
+    const out: { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] = [];
+    for (const c of CONTROL_INFLICTS) {
+        if (c.re.test(text)) {
+            const pos = text.search(
+                new RegExp(
+                    `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+                    'i'
+                )
+            );
+            out.push({ effect: c.effect, pos, side: c.side });
+        }
+    }
+    return out;
 }
 
 // "when applying Stasis" — the reactive trigger for a grant that procs when THIS unit applies
