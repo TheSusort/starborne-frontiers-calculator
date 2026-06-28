@@ -225,6 +225,8 @@ if (attackedSignals.size > 0) {
 
   Add the import at the top of engine.ts: `import { emitPerVictimAttacked } from './emitPerVictimAttacked';`
 
+  **Note — intentional guard broadening:** the gate changes from `if (focusEnemyHit)` (primary hit) to `if (attackedSignals.size > 0)` (any victim hit). If the primary anchor whiffs but a covered victim is struck, the emit fires for the covered victim and no `isPrimaryTarget` event fires that turn — this is correct by design (the per-victim contract: only ships actually hit emit), not a regression.
+
 - [ ] **Step 4: Run the new test → PASS. Run the full suite** — `npm test`. Hand-audit any `.snap` delta (expected: none, unless a golden fixture has an AoE-covered reactive-bearer). `npm run lint && npx tsc --noEmit`.
 - [ ] **Step 5: Commit** — `feat(combat): per-victim attacked at focus site (PR7 Task 2)`
 
@@ -257,6 +259,8 @@ The enemy emit (~5631) is **shared** between positional and non-positional paths
 
 - [ ] **Step 2: Collect per-victim signals in the enemy positional branch.**
   In the enemy `if (enemyPositional)` block (~5446+), where `detonationTargets` is collected in `onVictimResolved`, also populate an `attackedSignals` map (same accumulation as Task 2). Capture the per-victim damage/shield from the victim outcome (the focus-only `positionalShieldWasHit`/`positionalShieldCaptured` locals become per-victim entries).
+  **TRAP — parameter name:** the enemy `onVictimResolved` names its per-victim damage param **`dmg`** (NOT `damage`), because the outer `damage` is already bound to the turn aggregate (engine.ts ~5317, hook ~5488). Accumulate `prev.damage += dmg` and compare `outcome.hpDamage < dmg` — do NOT copy Task 2's `damage` identifier verbatim here.
+  **SCOPE — hoist required:** declare `attackedSignals` (and the Task 5 `coveredStasisVictims`) in the **enemy-turn body scope** alongside `positionalShieldWasHit` (~5444), NOT inside the `if (enemyPositional)` block — the emit at ~5631 is in the outer scope and would not see a block-local map.
 
 - [ ] **Step 3: Make the emit positional-aware.**
   At the shared emit (~5613-5640), wrap:
@@ -325,9 +329,11 @@ for (const victimId of coveredStasisVictims) {
 ## Task 6: Surface `perActorIncoming` on `RoundData`
 
 **Files:**
-- Modify: `src/utils/calculators/dpsSimulator.ts` ~153 (RoundData interface)
-- Modify: `src/utils/combat/engine.ts` ~5869 (row assembly, beside perActorShield)
+- Modify: `src/utils/calculators/dpsSimulator.ts` ~153 (RoundData interface, after `perActorDetonation?`)
+- Modify: `src/utils/combat/engine.ts` ~5877-5895 (row assembly, beside the perActorShield IIFE)
 - Test: `src/utils/combat/__tests__/perActorIncomingSurface.test.ts`
+
+> `perActorIncoming` is the **fresh per-round `Map<string, ActorIntake>` declared at ~2667** (`ActorIntake = {incoming, shieldAbsorbed, barrierAbsorbed}`, ~1098). It is already read by the perActorShield IIFE (`perActorIncoming.get(id)?.shieldAbsorbed`, ~5889), so it is in scope at the row push — there is NO top-level `let perActorIncoming` rebind to look for (unlike `perActorShieldGranted`/`perActorDetonation`).
 
 - [ ] **Step 1: Add the RoundData field** (dpsSimulator.ts, after `perActorDetonation`):
 
