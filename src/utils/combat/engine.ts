@@ -1942,6 +1942,12 @@ export function runCombat(input: CombatEngineInput): {
     // mode (focus.detonation is 0 there — the aggregate credit is suppressed). Absent when empty
     // → non-positional rounds byte-identical.
     let perActorDetonation = new Map<string, number>();
+    // Per-round per-applier DoT-tick display tally (sourceId → {corrosion, inferno}). Populated
+    // ONLY by the positional per-victim DoT-tick path (Task C2); folded into the FOCUS actor's
+    // corrosion/inferno display + raw totals at post-round assembly WITHOUT feeding cumulativeDamage
+    // (the per-victim HP already lands via applyVictimDamage — exact mirror of perActorDetonation).
+    // Empty on non-positional rounds → byte-identical.
+    let perActorDot = new Map<string, { corrosion: number; inferno: number }>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
     // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
@@ -3830,6 +3836,7 @@ export function runCombat(input: CombatEngineInput): {
         // carry-over never over-reports splash. Written only by the death-seam splash block.
         perActorSplash = new Map<string, number>();
         perActorDetonation = new Map<string, number>();
+        perActorDot = new Map();
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
@@ -4381,69 +4388,162 @@ export function runCombat(input: CombatEngineInput): {
                 // (the tank's) max HP. The dead-target guard above already skipped a destroyed tank,
                 // so the tank is alive here. DPS mode / no enemy-applied DoTs → empty containers →
                 // a no-op (goldens byte-identical).
-                if (healTarget && actor.id === healTarget.id) {
-                    // Snapshot BEFORE tickDoTs so expiring entries still appear in the
-                    // display panel (mergeDoTsForDisplay + buildEnemyRoundEffects read it).
-                    tankDotSnapshot = {
-                        corrosion: healTarget.corrosionEntries.map((e) => ({
-                            sourceId: e.sourceId,
-                            tier: e.tier,
-                            stacks: e.stacks,
-                        })),
-                        inferno: healTarget.infernoEntries.map((e) => ({
-                            sourceId: e.sourceId,
-                            tier: e.tier,
-                            stacks: e.stacks,
-                        })),
-                    };
-                    let tankDotDamage = 0;
-                    tickDoTs({
-                        corrosionEntries: healTarget.corrosionEntries,
-                        infernoEntries: healTarget.infernoEntries,
-                        // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
-                        enemyHp: recipientMaxHp(healTarget.id),
-                        ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
-                        emitTicked: (dotType, damage) =>
-                            bus.emit({
-                                type: 'dot-ticked',
-                                targetId: healTarget.id,
-                                round: r,
-                                dotType,
-                                damage,
-                            }),
-                        // Sum the ticked damage across all appliers; route it as INCOMING to the tank
-                        // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
-                        credit: (_sourceId, _dotType, damage) => {
-                            tankDotDamage += damage;
-                        },
-                        // D-PR3 (Vortex Veil): reduce the carrier's incoming DoT ticks when
-                        // the tank equips Vortex Veil. The condition 'dot-inferno-corrosion'
-                        // gates on dotType being set, so querying with either dotType returns
-                        // the same %. Absent → 0 → byte-identical for all existing tests.
-                        incomingDotReductionPct: (dotType) =>
-                            incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
-                                didCrit: false,
-                                attackerStealthed: false,
-                                victimStealthed: false,
-                                victimStasised: false,
-                                hitIndexThisRound: 0,
-                                dotType,
-                            }),
-                    });
-                    if (tankDotDamage > 0) {
-                        // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
-                        // single killer → byDirectDamage:false, killerId undefined (overrides the
-                        // wrapper's direct-damage default). A defaulted true would wrongly tag a
-                        // DoT kill as a direct hit (Faust, Task 6, distinguishes them).
-                        applyIncomingToTarget(tankDotDamage, healTarget, { byDirectDamage: false });
-                    }
-                    // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
-                    // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
-                    // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
-                    // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
-                    // acts normally.)
-                    if (handleDeadTargetSkip(actor)) {
-                        continue;
+                // PR-C C2: unified per-victim DoT-tick prologue. EVERY positioned non-dummy actor
+                // (attacker, walked-team ally, enemy attacker) ticks its OWN DoT containers against
+                // its OWN HP at its turn-start — the last per-victim gap after the firing hit +
+                // skill detonation + timed bursts. The dummy `enemy` (actor.id === enemy.id) keeps
+                // its legacy aggregate tick at the enemy-turn branch (~:4966, byte-identical via
+                // creditDamage); only the dummy is excluded here. The heal-target branch is preserved
+                // VERBATIM (snapshot + tankDotDamage healing accounting + dead-skip). The per-victim
+                // branch lands HP via applyVictimDamage (DoT → bypass shield) and NEVER calls
+                // creditDamage (no cumulativeDamage double-feed against the dummy HP overwrite).
+                //
+                // OUTSIDE every `if (!isTurnBlocked)` stasis gate (this prologue precedes all
+                // kind-branches) → a STASISED victim STILL ticks, matching the heal-target/dummy
+                // precedent and the E5-symmetry invariant. Moving this inside a stasis gate would
+                // wrongly silence a stasised victim's DoTs.
+                if (actor.id !== enemy.id) {
+                    const isHealTarget = !!healTarget && actor.id === healTarget.id;
+                    if (isHealTarget) {
+                        // Snapshot BEFORE tickDoTs so expiring entries still appear in the
+                        // display panel (mergeDoTsForDisplay + buildEnemyRoundEffects read it).
+                        tankDotSnapshot = {
+                            corrosion: healTarget.corrosionEntries.map((e) => ({
+                                sourceId: e.sourceId,
+                                tier: e.tier,
+                                stacks: e.stacks,
+                            })),
+                            inferno: healTarget.infernoEntries.map((e) => ({
+                                sourceId: e.sourceId,
+                                tier: e.tier,
+                                stacks: e.stacks,
+                            })),
+                        };
+                        let tankDotDamage = 0;
+                        tickDoTs({
+                            corrosionEntries: healTarget.corrosionEntries,
+                            infernoEntries: healTarget.infernoEntries,
+                            // Corrosion scales with the afflicted ship's HP — the tank's own max HP.
+                            enemyHp: recipientMaxHp(healTarget.id),
+                            ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                            emitTicked: (dotType, damage) =>
+                                bus.emit({
+                                    type: 'dot-ticked',
+                                    targetId: healTarget.id,
+                                    round: r,
+                                    dotType,
+                                    damage,
+                                }),
+                            // Sum the ticked damage across all appliers; route it as INCOMING to the tank
+                            // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
+                            credit: (_sourceId, _dotType, damage) => {
+                                tankDotDamage += damage;
+                            },
+                            // D-PR3 (Vortex Veil): reduce the carrier's incoming DoT ticks when
+                            // the tank equips Vortex Veil. The condition 'dot-inferno-corrosion'
+                            // gates on dotType being set, so querying with either dotType returns
+                            // the same %. Absent → 0 → byte-identical for all existing tests.
+                            incomingDotReductionPct: (dotType) =>
+                                incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
+                                    didCrit: false,
+                                    attackerStealthed: false,
+                                    victimStealthed: isStealthed(healTarget.id),
+                                    victimStasised: isStasised(healTarget.id),
+                                    hitIndexThisRound: 0,
+                                    dotType,
+                                }),
+                        });
+                        if (tankDotDamage > 0) {
+                            // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
+                            // single killer → byDirectDamage:false, killerId undefined (overrides the
+                            // wrapper's direct-damage default). A defaulted true would wrongly tag a
+                            // DoT kill as a direct hit (Faust, Task 6, distinguishes them).
+                            applyIncomingToTarget(tankDotDamage, healTarget, {
+                                byDirectDamage: false,
+                            });
+                        }
+                        // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
+                        // (recordDestroyed fired inside applyIncomingToTarget). It must NOT fall through
+                        // and take a full turn — re-run the SAME dead-target skip as the top-of-turn
+                        // guard. (With Cheat Death the intercept floored HP at 1 → not dead → false → it
+                        // acts normally.)
+                        if (handleDeadTargetSkip(actor)) {
+                            continue;
+                        }
+                    } else {
+                        // Per-victim DoT tick (both sides). The actor ticks its OWN containers
+                        // against its OWN HP only when it is POSITIONAL against its opposing roster
+                        // (DPS/healing-only mode has no positioned opposing actors → no-op →
+                        // byte-identical for non-positional fixtures).
+                        const sideIsPlayer = actor.side === 'player';
+                        const opposing = sideIsPlayer ? enemyAttackerActors : allPlayerActors;
+                        const hasDots =
+                            actor.corrosionEntries.length > 0 || actor.infernoEntries.length > 0;
+                        if (hasDots && isPositional(actor.position, opposing)) {
+                            let total = 0;
+                            tickDoTs({
+                                corrosionEntries: actor.corrosionEntries,
+                                infernoEntries: actor.infernoEntries,
+                                // Corrosion scales with the AFFLICTED ship's own max HP.
+                                enemyHp: recipientMaxHp(actor.id),
+                                ctxFor: (sourceId) => lastTurnCtxByActor.get(sourceId),
+                                emitTicked: (dotType, damage) =>
+                                    bus.emit({
+                                        type: 'dot-ticked',
+                                        targetId: actor.id,
+                                        round: r,
+                                        dotType,
+                                        damage,
+                                    }),
+                                credit: (sourceId, dotType, damage) => {
+                                    total += damage;
+                                    // Only PLAYER-applied DoTs ticking on an ENEMY victim are the
+                                    // focus player's outgoing DPS → surface via perActorDot (keyed
+                                    // by the DoT APPLIER; the C1 fold reads perActorDot[focus]).
+                                    // Enemy-applied DoTs on a player victim are NOT the focus's DPS.
+                                    if (!sideIsPlayer) {
+                                        const e = perActorDot.get(sourceId) ?? {
+                                            corrosion: 0,
+                                            inferno: 0,
+                                        };
+                                        e[dotType] += damage;
+                                        perActorDot.set(sourceId, e);
+                                    }
+                                },
+                                // D-PR3 (Vortex Veil): reduce this carrier's incoming DoT ticks.
+                                incomingDotReductionPct: (dotType) =>
+                                    incomingReductionForHit(incomingAbilitiesOf(actor.id), {
+                                        didCrit: false,
+                                        attackerStealthed: false,
+                                        victimStealthed: isStealthed(actor.id),
+                                        victimStasised: isStasised(actor.id),
+                                        hitIndexThisRound: 0,
+                                        dotType,
+                                    }),
+                            });
+                            if (total > 0) {
+                                // DoT batch: bypass shield (byDirectDamage:false), aggregate of
+                                // appliers with no single killer. Mirrors the heal-target route
+                                // (applyIncomingToTarget == applyVictimDamage + playerSink + pen 0).
+                                applyVictimDamage(
+                                    total,
+                                    actor,
+                                    sideIsPlayer ? playerSink : enemySink,
+                                    { byDirectDamage: false }
+                                );
+                                roundPerTargetDamage.set(
+                                    actor.id,
+                                    (roundPerTargetDamage.get(actor.id) ?? 0) + total
+                                );
+                            }
+                            // Lethal turn-start tick → skip the rest of the turn. INTENTIONALLY
+                            // follows the heal-target lethal convention (skip the shared post-turn
+                            // block: decrements / turn-ended), NOT the timed-burst convention.
+                            if (actor.destroyedRound !== undefined) {
+                                if (actor.id === focusActorId) pushSynthesizedFocusSkipTurn();
+                                continue;
+                            }
+                        }
                     }
                 }
 
@@ -5624,8 +5724,9 @@ export function runCombat(input: CombatEngineInput): {
         // Row fields sourced from the focus entry. secondary/conditional go only to
         // rawTotals (RoundData has no sub-bucket columns) so they're read inline below.
         const directDamage = focus.direct;
-        const corrosionDamage = focus.corrosion;
-        const infernoDamage = focus.inferno;
+        const focusDot = perActorDot.get(focusActorId);
+        const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
+        const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
         const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
         const detonationDamage = focus.detonation + focusPositionalDetonation;
 
@@ -5640,6 +5741,10 @@ export function runCombat(input: CombatEngineInput): {
             });
         }
 
+        // Deliberately uses focus.corrosion/focus.inferno ONLY (not the perActorDot-folded
+        // corrosionDamage/infernoDamage locals) — per-victim DoT ticks land via applyVictimDamage,
+        // so folding perActorDot here would double-drain the dummy HP overwrite (same guard as the
+        // focusPositionalDetonation/detonation comment below).
         const totalRoundDamage = focus.direct + focus.corrosion + focus.inferno + focus.detonation;
         cumulativeDamage += totalRoundDamage;
         // Row/summary rawTotals stay FOCUS-only — only the focus actor reaches summary DPS
@@ -5647,8 +5752,8 @@ export function runCombat(input: CombatEngineInput): {
         totalDirectRaw += focus.direct;
         totalSecondaryRaw += focus.secondary;
         totalConditionalRaw += focus.conditional;
-        totalCorrosionRaw += focus.corrosion;
-        totalInfernoRaw += focus.inferno;
+        totalCorrosionRaw += corrosionDamage;
+        totalInfernoRaw += infernoDamage;
         // Summary detonation reflects per-victim positional detonation too (focusPositionalDetonation
         // is 0 non-positionally → byte-identical). NOTE: cumulativeDamage/totalRoundDamage above
         // deliberately use focus.detonation ONLY — per-victim detonation lands via applyVictimDamage,
