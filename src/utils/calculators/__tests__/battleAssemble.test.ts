@@ -668,7 +668,7 @@ describe('assembleBattleResult — shield fields (H1 Task 8)', () => {
 describe('assembleBattleResult — per-victim incoming fields (PR7 Task 7)', () => {
     // perRoundPerIncoming threads each covered victim's own damage-taken bucket
     // ({incoming, shieldAbsorbed, barrierAbsorbed}) into the ShipRoundState incoming fields.
-    it('populates incomingDamage, incomingShieldAbsorbed, and incomingBarrierAbsorbed from perRoundPerIncoming', () => {
+    it('populates incomingDamage (NET HP = incoming - shield - barrier) plus raw absorbed fields', () => {
         const result = assembleBattleResult({
             events: [],
             perRoundPerTarget: {},
@@ -682,9 +682,30 @@ describe('assembleBattleResult — per-victim incoming fields (PR7 Task 7)', () 
         });
 
         const ship = find(result, 1, 'attacker');
-        expect(ship.incomingDamage).toBe(2800);
+        // incomingDamage is NET HP landed: 2800 - 1200 - 700 = 900.
+        expect(ship.incomingDamage).toBe(900);
+        // absorbed fields stay raw.
         expect(ship.incomingShieldAbsorbed).toBe(1200);
         expect(ship.incomingBarrierAbsorbed).toBe(700);
+    });
+
+    it('yields incomingDamage 0 when the hit is fully absorbed by shield/barrier', () => {
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget: {},
+            perRoundPerIncoming: {
+                1: {
+                    attacker: { incoming: 1000, shieldAbsorbed: 1000, barrierAbsorbed: 0 },
+                },
+            },
+            roster: roster(),
+            numRounds: 1,
+        });
+
+        const ship = find(result, 1, 'attacker');
+        expect(ship.incomingDamage).toBe(0);
+        expect(ship.incomingShieldAbsorbed).toBe(1000);
+        expect(ship.incomingBarrierAbsorbed).toBe(0);
     });
 
     it('defaults all incoming fields to 0 when perRoundPerIncoming is absent', () => {

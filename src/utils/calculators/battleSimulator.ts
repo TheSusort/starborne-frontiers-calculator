@@ -292,7 +292,12 @@ export function assembleBattleResult(args: {
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
                 currentShieldPool: shield?.pool ?? 0,
-                incomingDamage: incoming?.incoming ?? 0,
+                incomingDamage: incoming
+                    ? Math.max(
+                          0,
+                          incoming.incoming - incoming.shieldAbsorbed - incoming.barrierAbsorbed
+                      )
+                    : 0,
                 incomingShieldAbsorbed: incoming?.shieldAbsorbed ?? 0,
                 incomingBarrierAbsorbed: incoming?.barrierAbsorbed ?? 0,
                 hpPct:

@@ -452,3 +452,94 @@ describe('PR7 Task 4 — ENEMY→player per-victim attacked is E5-symmetric with
         expect(enemyAttacked.length).toBe(playerAttacked.length);
     });
 });
+
+// ---------------------------------------------------------------------------------------------
+// PR7 CodeRabbit fix — per-victim hitOutcomes. emitPerVictimAttacked previously replayed the
+// attack-wide hitOutcomes for EVERY victim. But a victim killed on an earlier hit drops out of
+// later hits (positionalApply re-resolves the LIVE roster each hit), so a victim hit fewer times
+// than the attack's hit count was OVER-emitted `attacked` (over-firing its on-hit reactives).
+// The fix tracks each victim's OWN hitOutcomes. This integration test exercises a multi-hit AoE
+// where a COVERED victim dies on hit 1 → it emits exactly ONE `attacked`, while the surviving
+// anchor emits one per hit.
+// ---------------------------------------------------------------------------------------------
+
+// A 3-hit basic-attack active slot (multiplier 100% = 1x, 3 hits).
+const multiHitAttack = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: 'pva-multi',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 100, hits: 3 },
+        },
+    ],
+});
+
+// A 3-hit enemy AoE attacker. attack high enough that one hit overkills the (low-HP) covered
+// victim while the (huge-HP) anchor survives all three.
+const multiHitEnemyAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
+    ({
+        id,
+        stats: {
+            attack: 100_000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern,
+        shipSkills: { slots: [multiHitAttack()] },
+    }) as EnemyAttacker;
+
+describe('PR7 CodeRabbit fix — per-victim hitOutcomes (drop-out victim under-emits)', () => {
+    it('a covered victim killed on hit 1 emits exactly ONE attacked; the surviving anchor emits one per hit', () => {
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M1',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [
+                // Anchor (M4): huge HP → survives all 3 hits → 3 attacked events.
+                playerVictim('pl-front', 'M4', 1_000_000_000),
+                // Covered (M3): tiny HP → dies on hit 1 → 1 attacked event (NOT 3).
+                playerVictim('pl-mid', 'M3', 1_000),
+            ],
+            enemyAttackers: [multiHitEnemyAt('enemy-aoe', 'M4', lineRange1Pattern())],
+        };
+        const { attacked } = collectAttacked(input);
+        const anchorEvents = attacked.filter((e) => e.targetId === 'pl-front');
+        const coveredEvents = attacked.filter((e) => e.targetId === 'pl-mid');
+        // The anchor survives all hits → one event per hit (3).
+        expect(anchorEvents.length).toBe(3);
+        // The drop-out victim is hit only once before dying → exactly one event (the fix; pre-fix = 3).
+        expect(coveredEvents.length).toBe(1);
+    });
+});

@@ -4701,7 +4701,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // `damage` (Tenacity's >25%-maxHP gate reads it). Keyed by victim.id.
                                 const attackedSignals = new Map<
                                     string,
-                                    { damage: number; shieldWasHit: boolean }
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
                                 >();
                                 // PR7 Task 5: per-footprint Stasis-break (player→enemy, focus site).
                                 // Collect EVERY covered footprint victim (≠ anchor) that was stasised at
@@ -4729,12 +4733,13 @@ export function runCombat(input: CombatEngineInput): {
                                     // attacker's standing leeches proc off EACH footprint victim's
                                     // role-scaled dealt damage (origin full, covered half) → restoring
                                     // the leech the positional credit-suppression had silenced.
-                                    onVictimResolved: (victim, damage, outcome) => {
+                                    onVictimResolved: (victim, damage, outcome, didCrit) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
                                         const prev = attackedSignals.get(victim.id) ?? {
                                             damage: 0,
                                             shieldWasHit: false,
+                                            hitOutcomes: [],
                                         };
                                         prev.damage += damage;
                                         prev.shieldWasHit =
@@ -4742,6 +4747,7 @@ export function runCombat(input: CombatEngineInput): {
                                             (!outcome.barriered &&
                                                 outcome.shieldBefore > 0 &&
                                                 outcome.hpDamage < damage);
+                                        prev.hitOutcomes.push(didCrit);
                                         attackedSignals.set(victim.id, prev);
                                         // PR7 Task 5: record covered (non-anchor) victims that were
                                         // stasised at hit time for the post-apply break.
@@ -4770,14 +4776,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // anchor whiffs but a covered victim is hit, emission fires for the covered
                                 // victim and no isPrimaryTarget event fires that turn — correct by design.
                                 if (attackedSignals.size > 0) {
-                                    const hitOutcomes =
-                                        turn.hitCrits.length > 0 ? turn.hitCrits : [turn.roundCrit];
                                     emitPerVictimAttacked({
                                         bus,
                                         round: r,
                                         attackerId: actor.id,
                                         primaryId: tgt.id,
-                                        hitOutcomes,
                                         victims: attackedSignals,
                                     });
                                 }
@@ -4967,7 +4970,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // by victim.id.
                                 const attackedSignals = new Map<
                                     string,
-                                    { damage: number; shieldWasHit: boolean }
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
                                 >();
                                 // PR7 Task 5: per-footprint Stasis-break (player→enemy, walked-team site).
                                 // Mirror of the focus site — collect EVERY covered footprint victim
@@ -4993,12 +5000,13 @@ export function runCombat(input: CombatEngineInput): {
                                     // E2 Task 3: per-victim standing leech (player→enemy), keyed to
                                     // THIS walked team actor as the acting attacker. Same per-victim
                                     // proc as the focus site.
-                                    onVictimResolved: (victim, damage, outcome) => {
+                                    onVictimResolved: (victim, damage, outcome, didCrit) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
                                         const prev = attackedSignals.get(victim.id) ?? {
                                             damage: 0,
                                             shieldWasHit: false,
+                                            hitOutcomes: [],
                                         };
                                         prev.damage += damage;
                                         prev.shieldWasHit =
@@ -5006,6 +5014,7 @@ export function runCombat(input: CombatEngineInput): {
                                             (!outcome.barriered &&
                                                 outcome.shieldBefore > 0 &&
                                                 outcome.hpDamage < damage);
+                                        prev.hitOutcomes.push(didCrit);
                                         attackedSignals.set(victim.id, prev);
                                         // PR7 Task 5: record covered (non-anchor) victims that were
                                         // stasised at hit time for the post-apply break.
@@ -5029,16 +5038,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // (counters + Second Wind, etc.) wake from any covered cell, not just the
                                 // anchor. isPrimaryTarget is set only on the anchor (tgt.id).
                                 if (attackedSignals.size > 0) {
-                                    const hitOutcomes =
-                                        teamTurn.hitCrits.length > 0
-                                            ? teamTurn.hitCrits
-                                            : [teamTurn.roundCrit];
                                     emitPerVictimAttacked({
                                         bus,
                                         round: r,
                                         attackerId: actor.id,
                                         primaryId: tgt.id,
-                                        hitOutcomes,
                                         victims: attackedSignals,
                                     });
                                 }
@@ -5514,7 +5518,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // (which keeps its legacy single emit, byte-identical). Keyed by victim.id.
                                 const attackedSignals = new Map<
                                     string,
-                                    { damage: number; shieldWasHit: boolean }
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
                                 >();
                                 // PR7 Task 5: per-footprint Stasis-break (enemy→player site). Mirror of
                                 // the focus/walked-team sites — collect EVERY covered footprint player
@@ -5565,7 +5573,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // off the damage IT took, with the per-victim Barrier /
                                         // requiresHpDamage gates — mirroring the non-positional block
                                         // below, per victim.
-                                        onVictimResolved: (victim, dmg, outcome) => {
+                                        onVictimResolved: (victim, dmg, outcome, didCrit) => {
                                             detonationTargets.set(victim.id, victim);
                                             procTakenLeechesPerVictim(victim, dmg, outcome);
                                             if (victim.id === tgt.id) {
@@ -5584,6 +5592,7 @@ export function runCombat(input: CombatEngineInput): {
                                             const prev = attackedSignals.get(victim.id) ?? {
                                                 damage: 0,
                                                 shieldWasHit: false,
+                                                hitOutcomes: [],
                                             };
                                             prev.damage += dmg;
                                             prev.shieldWasHit =
@@ -5591,6 +5600,7 @@ export function runCombat(input: CombatEngineInput): {
                                                 (!outcome.barriered &&
                                                     outcome.shieldBefore > 0 &&
                                                     outcome.hpDamage < dmg);
+                                            prev.hitOutcomes.push(didCrit);
                                             attackedSignals.set(victim.id, prev);
                                             // PR7 Task 5: record covered (non-anchor) player victims
                                             // stasised at hit time for the post-apply break. isStasised
@@ -5750,7 +5760,6 @@ export function runCombat(input: CombatEngineInput): {
                                             round: r,
                                             attackerId: actor.id,
                                             primaryId: tgt.id,
-                                            hitOutcomes,
                                             victims: attackedSignals,
                                         });
                                     }

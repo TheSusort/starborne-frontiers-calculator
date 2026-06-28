@@ -77,7 +77,9 @@ describe('ShipRoundCard', () => {
     it('renders per-victim incoming damage-taken StatCards with formatted values', () => {
         const stateWithIncoming: ShipRoundState = {
             ...state,
-            incomingDamage: 2800,
+            // Net HP landed (incomingDamage) is what the card renders; the absorbed
+            // fields are the portions soaked off the same arriving hit (900 + 1200 + 700 = 2800 total).
+            incomingDamage: 900,
             incomingShieldAbsorbed: 1200,
             incomingBarrierAbsorbed: 700,
         };
@@ -89,7 +91,7 @@ describe('ShipRoundCard', () => {
         };
         render(<ShipRoundCard actorId="attacker" round={roundWithIncoming} roster={roster} />);
         expect(screen.getByText('Incoming (HP)')).toBeInTheDocument();
-        expect(screen.getByText('2,800')).toBeInTheDocument();
+        expect(screen.getByText('900')).toBeInTheDocument();
         expect(screen.getByText('Incoming shield absorbed')).toBeInTheDocument();
         expect(screen.getByText('1,200')).toBeInTheDocument();
         expect(screen.getByText('Incoming barrier absorbed')).toBeInTheDocument();
