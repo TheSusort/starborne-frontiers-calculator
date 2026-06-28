@@ -2336,7 +2336,10 @@ describe('buildShipAbilities', () => {
             expect(dmg).toMatchObject({ config: { type: 'damage', multiplier: 195 } });
         });
 
-        it('active "applies Provoke" does NOT produce a stasis control ability', () => {
+        // Task 3: control abilities are now emitted ADDITIVELY for EVERY recognized inflicted
+        // effect (provoke/taunt/concentrate-fire/disable), not just Stasis. The parallel named
+        // status (debuff/buff) ability MUST stay byte-identical alongside the new control ability.
+        it('active "applies Provoke" emits a provoke control ability AND keeps the named Provoke debuff', () => {
             const s = ship({
                 activeSkillText:
                     'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
@@ -2345,7 +2348,60 @@ describe('buildShipAbilities', () => {
             const control = active?.abilities.find(
                 (a) => a.type === 'control' && a.config.type === 'control'
             );
-            expect(control).toBeUndefined();
+            expect(control).toMatchObject({
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'control', effect: 'provoke' },
+            });
+            // The named-status debuff (the path that actually performs the targeting lockout) is
+            // still produced unchanged.
+            const debuff = active?.abilities.find(
+                (a) =>
+                    a.type === 'debuff' &&
+                    a.config.type === 'debuff' &&
+                    a.config.buffName === 'Provoke'
+            );
+            expect(debuff).toBeDefined();
+        });
+
+        it('active "This Unit gains Taunt" emits a self-targeted taunt control ability AND keeps the named Taunt buff', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage>. This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.',
+            });
+            const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+            const control = active?.abilities.find(
+                (a) => a.type === 'control' && a.config.type === 'control'
+            );
+            expect(control).toMatchObject({
+                type: 'control',
+                target: 'self',
+                trigger: 'on-cast',
+                config: { type: 'control', effect: 'taunt' },
+            });
+            // The named Taunt buff (self buff) is still produced.
+            const buff = active?.abilities.find(
+                (a) => a.config.type === 'buff' && a.config.buffName === 'Taunt'
+            );
+            expect(buff).toBeDefined();
+        });
+
+        it('active "inflicts Disable for 2 turns" emits a disable control ability targeting enemy', () => {
+            const s = ship({
+                activeSkillText:
+                    'This Unit deals <unit-damage>145% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 2 turns.',
+            });
+            const active = buildShipAbilities(s).slots.find((sl) => sl.slot === 'active');
+            const control = active?.abilities.find(
+                (a) => a.type === 'control' && a.config.type === 'control'
+            );
+            expect(control).toMatchObject({
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'control', effect: 'disable' },
+            });
         });
 
         it('R0 passive "Shield equal to 30% of Max HP when applying Stasis" → shield on-stasis-applied', () => {
@@ -3487,12 +3543,14 @@ describe('buildShipAbilities — D-PR3 Iridium incoming-reduction parser (T5)', 
     });
 });
 
-// D-PR13: 'inflicts Disable for N turns' in active skill text → named Disable DEBUFF, not control.
-// Locks the contract that parseControlInflict is Stasis-only, so Disable falls through to the
-// named-debuff parser. The engine's isTurnBlocked() then recognises any active 'Disable' buff by
-// name, so all five corpus ships (APEX, IonScorp, Makoli, Xcellence, Yuyan) light up for free.
-describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff, not control', () => {
-    it('active skill "inflicts Disable for 1 turn" produces a named Disable DEBUFF, not a control ability', () => {
+// D-PR13: 'inflicts Disable for N turns' in active skill text → named Disable DEBUFF (the path that
+// performs the actual turn-block via isTurnBlocked recognising any active 'Disable' buff by name,
+// so all five corpus ships — APEX, IonScorp, Makoli, Xcellence, Yuyan — light up for free).
+// Task 3 update: Disable is now ALSO recognized by parseControlInflicts, so a `type:'control'`
+// ability is emitted ADDITIVELY alongside the named debuff (it only sources the control-applied
+// event; the named debuff still does the lockout). Both abilities must be present.
+describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff + additive control', () => {
+    it('active skill "inflicts Disable for 1 turn" produces a named Disable DEBUFF and an additive control ability', () => {
         const s = ship({
             activeSkillText:
                 'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
@@ -3515,10 +3573,14 @@ describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff, not 
             },
         });
 
-        // Must NOT produce a control-type ability for Disable
-        // (parseControlInflict is Stasis-only; Disable must not be claimed by it).
+        // Task 3: ADDITIVELY produces a control ability for Disable (sources control-applied).
         const control = active!.abilities.find((a) => a.type === 'control');
-        expect(control).toBeUndefined();
+        expect(control).toMatchObject({
+            type: 'control',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: { type: 'control', effect: 'disable' },
+        });
     });
 });
 
