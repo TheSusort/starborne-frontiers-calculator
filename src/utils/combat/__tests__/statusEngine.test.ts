@@ -547,6 +547,9 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
         eng.decrementPlayer('attacker'); // reprieve: stays (flag flips false)
         expect(eng.timedAbilityStatuses('self')).toHaveLength(1);
+        // Prove the reprieve SKIPPED the decrement rather than the survival being a
+        // coincidence: a full-duration status confirms turnsRemaining was untouched.
+        expect(eng.timedAbilityStatuses('self')[0].active.turnsRemaining).toBe(1);
 
         eng.beginRound(2);
         eng.beginTurn('attacker');
@@ -558,6 +561,10 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         eng.registerAbilityStatuses([mkStatus(1)]);
 
+        // Flag-LOGIC unit test: currentTurnActorId ('someOtherActor') ≠ the 'attacker'
+        // store, so applyTimedAbilityStatus never stamps appliedThisTurn → no reprieve.
+        // The real off-turn ROUTING-fidelity case (a buff applied on a ship while another
+        // ship is acting) is covered by the engine behavioral test (Task 3).
         eng.beginRound(1);
         eng.beginTurn('someOtherActor');
         eng.applyTimedAbilityStatus(1, mkStatus(1));
