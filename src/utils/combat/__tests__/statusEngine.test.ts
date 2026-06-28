@@ -571,6 +571,28 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
         eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
     });
+
+    it('scheduled self-buff (upsertBuff path) gets the reprieve on the attacker turn', () => {
+        const selfBuffs: SelectedGameBuff[] = [
+            makeBuff('Attack Up', { skillSource: 'active', skillDuration: 1 }),
+        ];
+        const eng = createStatusEngine({ selfBuffs, enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.sourceFired('attacker', 'active', 1); // applies the scheduled self-buff via upsertBuff
+        eng.decrementPlayer('attacker'); // reprieve: survives
+        expect(
+            eng.snapshot('attacker').activeSelfBuffs.some((b) => b.buffName === 'Attack Up')
+        ).toBe(true);
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // expires now
+        expect(
+            eng.snapshot('attacker').activeSelfBuffs.some((b) => b.buffName === 'Attack Up')
+        ).toBe(false);
+    });
 });
 
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {

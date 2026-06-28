@@ -681,6 +681,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             turnsRemaining: duration,
             tier,
             appliedSeq: nextAppliedSeq(),
+            appliedThisTurn: side === 'self' && currentTurnActorId === 'attacker',
         });
     };
 
