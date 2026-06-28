@@ -95,7 +95,7 @@ disable: 'Disable',
 - Modify: `src/utils/skillTextParser.ts` (around `:1018-1031`, `STASIS_INFLICT_RE` / `parseControlInflict`)
 - Test: `src/utils/__tests__/skillTextParser.test.ts` (control section; co-locate with existing parser tests)
 
-**Design:** add `parseControlInflicts(text): { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[]`. Build a small table mapping each `ControlEffect` to its buff tag-name + side + verb set, scan the text with a tight adjacency regex per effect, and return one entry per match (multiple effects per skill → multiple entries). Keep `parseControlInflict` exported (delegating to the new fn, returning the Stasis entry) only if other call sites need it; otherwise inline. **Stasis's emitted entry (effect `'stasis'`, side `'enemy'`, `pos` = position of the Stasis tag) MUST be byte-identical to today.**
+**Design:** add `parseControlInflicts(text): { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[]`. Build a small table mapping each new `ControlEffect` to its buff tag-name + side + verb set, scan the text with a tight adjacency regex per effect, and return one entry per match (multiple effects per skill → multiple entries). **Zero-churn rule for Stasis:** keep the existing `STASIS_INFLICT_RE` regex VERBATIM and use it for the stasis entry — do NOT retype Stasis into the tight form. (Corpus check done: the four new effects' verbs are always tag-adjacent — `applies/apply/applied with/inflicts/inflicted with` for enemy effects, `gains/grants` for Taunt — so tight adjacency loses nothing; Stasis stays on its own regex purely to guarantee byte-identity.) `pos` is the raw `text.search(<tag>)` result (may be `-1`); the **builder** maps `-1 → MAX_POS` exactly as it does today (so Stasis's pos handling is unchanged). **Stasis's emitted entry (effect `'stasis'`, side `'enemy'`, same `pos`) MUST be byte-identical to today.**
 
 - [ ] **Step 1: Write failing tests** — one per effect + Stasis-unchanged + negatives:
 
@@ -127,28 +127,32 @@ it('returns [] for non-control text', () => {
 - [ ] **Step 3: Implement** — table + tight matcher. Sketch:
 
 ```ts
+// Stasis row reuses the EXISTING regex verbatim (zero churn). The four new effects use a
+// tight verb-adjacent matcher (verb immediately before the <unit-skill> tag, optional "with").
 const CONTROL_INFLICTS: { effect: ControlEffect; tag: string; side: 'enemy' | 'self'; re: RegExp }[] = [
-    { effect: 'stasis',           tag: 'Stasis',           side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|inflicted with|applied with)\s+<unit-skill>\s*Stasis\b/i },
-    { effect: 'provoke',          tag: 'Provoke',          side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|inflicted with|applied with)\s+<unit-skill>\s*Provoke\b/i },
-    { effect: 'concentrate-fire', tag: 'Concentrate Fire', side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|inflicted with|applied with)\s+<unit-skill>\s*Concentrate Fire\b/i },
-    { effect: 'disable',          tag: 'Disable',          side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|inflicted with|applied with)\s+<unit-skill>\s*Disable\b/i },
+    { effect: 'stasis',           tag: 'Stasis',           side: 'enemy', re: STASIS_INFLICT_RE },
+    { effect: 'provoke',          tag: 'Provoke',          side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Provoke\b/i },
+    { effect: 'concentrate-fire', tag: 'Concentrate Fire', side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Concentrate Fire\b/i },
+    { effect: 'disable',          tag: 'Disable',          side: 'enemy', re: /\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\s+<unit-skill>\s*Disable\b/i },
     { effect: 'taunt',            tag: 'Taunt',            side: 'self',  re: /\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i },
 ];
 
+// Returns one entry per matched effect. `pos` is the raw tag index (may be -1); the BUILDER
+// maps -1 -> MAX_POS, identical to today's Stasis handling, so no MAX_POS dependency here.
 export function parseControlInflicts(text: string | null | undefined) {
     if (!text) return [];
     const out: { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] = [];
     for (const c of CONTROL_INFLICTS) {
         if (c.re.test(text)) {
             const pos = text.search(new RegExp(`<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'));
-            out.push({ effect: c.effect, pos: pos >= 0 ? pos : Number.MAX_SAFE_INTEGER, side: c.side });
+            out.push({ effect: c.effect, pos, side: c.side });
         }
     }
     return out;
 }
 ```
 
-(Reuse the file's existing `MAX_POS` constant rather than `MAX_SAFE_INTEGER` if present. Keep the Stasis row first so its `pos` matches the prior `text.search(/<unit-skill>\s*Stasis\b/i)`.) Rewrite the stale docstring at `:1018-1023` to describe all five effects and the gate-path-vs-application-path distinction (per spec §4.1).
+Note: `MAX_POS` does **not** exist in `skillTextParser.ts` (it lives in `buildShipAbilities.ts:591 = Number.MAX_SAFE_INTEGER`). The parser returns the raw `pos`; the builder applies the `pos >= 0 ? pos : MAX_POS` mapping it already uses. Rewrite the stale docstring at `:1018-1023` to describe all five effects and the gate-path-vs-application-path distinction (per spec §4.1).
 
 - [ ] **Step 4: Run, expect PASS** — control tests green; `npx tsc --noEmit` clean.
 
@@ -211,7 +215,7 @@ for (const ctrl of parseControlInflicts(text)) {
             config: { type: 'control', effect: ctrl.effect },
             autoFilled: true,
         },
-        pos: ctrl.pos,
+        pos: ctrl.pos >= 0 ? ctrl.pos : MAX_POS, // same mapping the block used for Stasis today
     });
 }
 ```
