@@ -1045,13 +1045,6 @@ const CONTROL_LIST_PREFIX =
 const ENEMY_INFLICT_VERB = '\\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\\b';
 const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
 
-/** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
- *  docs/ship-skills.csv (Defiant charged "inflicts Stasis for 1 turn"). */
-export function parseControlInflict(text: string | null | undefined): ControlEffect | null {
-    if (!text) return null;
-    return STASIS_INFLICT_RE.test(text) ? 'stasis' : null;
-}
-
 const CONTROL_INFLICTS: {
     effect: ControlEffect;
     tag: string;

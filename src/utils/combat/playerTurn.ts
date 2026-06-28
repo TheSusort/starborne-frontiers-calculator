@@ -1262,10 +1262,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // round. Walked in text order with a same-cast DoT overlay (see applyAbilities).
     const { gatedSkill, ctxFor } = gateFiringAbilities(firingSkill, ctx);
 
-    // Control inflictions (e.g. Defiant's charged Stasis): emit `control-applied` so reactions
-    // (on-stasis-applied) can fire. Emission ONLY — the engine does NOT simulate the control's
-    // combat effect (Stasis/Taunt stay unmodelled). An emitted-but-unconsumed event changes
-    // nothing, so DPS-mode goldens are unaffected.
+    // Control inflictions (Stasis, Provoke, Taunt, Concentrate Fire, Disable): emit `control-applied`
+    // so reactions (on-stasis-applied) can fire. Each control effect's combat impact is modelled
+    // in the engine (Overload is the sole deferred exception). An emitted-but-unconsumed event
+    // changes nothing, so DPS-mode goldens are unaffected.
     //
     // A control effect reaches the engine BOTH as a named timed debuff (its buffName, routed
     // through the timed landing fold above which OWNS the Block-Debuff resist, symmetric with
