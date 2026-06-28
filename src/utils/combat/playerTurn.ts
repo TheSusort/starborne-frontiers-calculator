@@ -40,7 +40,12 @@ import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
-import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
+import {
+    targetCarriesBlockDebuff,
+    emitBlockDebuffResist,
+    dotResistLabel,
+    controlEffectLabel,
+} from './debuffImmunity';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { healAmplificationForCast } from './healAmplification';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
@@ -957,6 +962,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const inflictedEnemyDebuffs: ActiveBuff[] = scheduledEnemy.landedEnemyDebuffs.filter((ab) =>
         appliedScheduledSet.has(ab.buffName)
     );
+    // Buff NAMES of the ability-timed enemy debuffs the landing decision REJECTED this cast (the
+    // condition gate passed but the application was resisted — by affinity disadvantage, the
+    // landing-roll gate, or Block-Debuff immunity, since landsTimedEnemyApplicationLive folds all
+    // three). Unioned with the scheduled-path resisted names below to gate the control-applied
+    // emission: a control whose paired named status was RESISTED must NOT emit a success event
+    // (Finding 1). A control with NO paired named status leaves this set empty for that name, so it
+    // still emits (only Block-Debuff immunity gates a standalone control — preserved separately).
+    const resistedTimedEnemyNames: string[] = [];
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
@@ -974,6 +987,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 buffName: status.payload.buffName,
                 turnsRemaining: status.duration,
             });
+            resistedTimedEnemyNames.push(status.payload.buffName);
             emitDebuffResisted(status.payload.buffName);
         }
     }
@@ -1268,15 +1282,36 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // changes nothing, so DPS-mode goldens are unaffected.
     //
     // A control effect reaches the engine BOTH as a named timed debuff (its buffName, routed
-    // through the timed landing fold above which OWNS the Block-Debuff resist, symmetric with
+    // through the timed landing fold above which OWNS the resist decision — Block-Debuff immunity,
+    // affinity disadvantage on 'apply', and the landing-roll gate on 'inflict' — symmetric with
     // every debuff type) AND, additively, as this `type:'control'` ability. So the control loop
     // does NOT emit its own resist — that would double-count (the named-status path already emits
-    // `debuff-resisted`). On a blocked ENEMY infliction we simply skip the success event (no
-    // `control-applied`, so on-stasis-applied reactions stay dormant). SELF-target controls
-    // (Taunt) have no enemy debuff target → no immune gate; they always emit.
+    // `debuff-resisted`).
+    //
+    // We SUPPRESS the success event (`control-applied`) for an ENEMY-targeted control when its
+    // paired named status was RESISTED this cast — its buffName is in the union of the resisted
+    // names from the two enemy-debuff landing paths: the ability-timed loop (resistedTimedEnemyNames,
+    // which already folds affinity/landing-roll/Block-Debuff) and the scheduled path
+    // (resistedScheduledTimedNames). On a resist we skip the success event so on-stasis-applied
+    // (etc.) reactions stay dormant for a control that did not land (Finding 1).
+    //
+    // A control with NO paired named status (the engine's control-only fixtures: Defiant Stasis,
+    // etc.) has no entry in the resisted set, so it still emits — its ONLY suppression is
+    // Block-Debuff immunity on the turn target (targetImmuneToDebuffs), preserving the prior
+    // standalone-control behaviour. SELF-target controls (Taunt) are self-buffs (never resisted)
+    // and have no enemy debuff target → always emit.
+    const resistedEnemyDebuffNames = new Set([
+        ...resistedTimedEnemyNames,
+        ...resistedScheduledTimedNames,
+    ]);
     for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
         if (ctrl.config.type !== 'control') continue;
-        if (ctrl.target === 'enemy' && targetImmuneToDebuffs) continue; // resist owned by named-status path
+        if (ctrl.target === 'enemy') {
+            // Standalone control with no named status: only Block-Debuff immunity gates it.
+            if (targetImmuneToDebuffs) continue;
+            // Paired named status resisted (affinity / landing-roll) → suppress the success event.
+            if (resistedEnemyDebuffNames.has(controlEffectLabel(ctrl.config.effect))) continue;
+        }
         bus.emit({
             type: 'control-applied',
             casterId: actor.id,

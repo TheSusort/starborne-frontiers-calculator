@@ -85,6 +85,29 @@ const attackerWith = (...abilities: Ability[]): EnemyAttacker =>
         } as ShipSkills,
     }) as EnemyAttacker;
 
+/** Like attackerWith but with a custom `hacking` stat. hacking 150 vs the focus actor's default
+ *  security 100 → live landing chance 0.5. The deterministic back-loaded rate gate fails its
+ *  FIRST draw at 0.5 (acc 0.5 < 1) → an 'inflict' named status is RESISTED by landing roll on
+ *  round 1 (NOT Block-Debuff). */
+const attackerWithHacking = (hacking: number, ...abilities: Ability[]): EnemyAttacker =>
+    ({
+        id: 'e1',
+        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        ...abilities,
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
 /** Focus actor (heal target) shipSkills granting a recurring `Block Debuff` self-buff. */
 const blockDebuffSelfSkills = (): ShipSkills => ({
     slots: [
@@ -158,17 +181,19 @@ const tap = () => {
 };
 
 describe('control-classification emission — resist ownership (Task 4)', () => {
-    // (a) Success: an enemy-targeted control (Provoke) emits control-applied on a normal cast.
-    it('an enemy-targeted Provoke emits control-applied{effect:provoke} on a normal cast', () => {
+    // (a) Success: an enemy-targeted control (Provoke) whose paired named status LANDS emits
+    //     control-applied on a normal cast. Mirrors real builder output (named debuff + control
+    //     ability); default hacking 200 vs security 100 → 100% landing.
+    it('an enemy-targeted Provoke emits control-applied{effect:provoke} when its named status lands', () => {
         const { bus, events } = tap();
-        run({ slots: [] }, bus, attackerWith(controlAb('provoke')));
+        run({ slots: [] }, bus, attackerWith(namedControlDebuff('Provoke'), controlAb('provoke')));
 
         const controls = events.filter((e) => e.type === 'control-applied');
         expect(controls.length).toBeGreaterThan(0);
         expect(controls.some((e) => e.type === 'control-applied' && e.effect === 'provoke')).toBe(
             true
         );
-        // Normal cast → no resist.
+        // 100% landing → no resist.
         expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
     });
 
@@ -203,5 +228,41 @@ describe('control-classification emission — resist ownership (Task 4)', () => 
         expect(provokeResists).toHaveLength(1);
         // Blocked → the control loop emits no success event.
         expect(events.some((e) => e.type === 'control-applied')).toBe(false);
+    });
+
+    // (d) Finding 1: a LANDING-ROLL resist (NOT Block Debuff) of the paired named status must
+    //     suppress control-applied. hacking 150 vs security 100 → 0.5 landing → round-1 'inflict'
+    //     fails the back-loaded gate, so the named Stasis is resisted and the control must NOT
+    //     emit (otherwise on-stasis-applied reactions fire for a Stasis that never landed).
+    it('a landing-roll-resisted Stasis (not Block Debuff) emits NO control-applied', () => {
+        const { bus, events } = tap();
+        run(
+            { slots: [] }, // NO Block Debuff on the target — the resist comes from the landing roll.
+            bus,
+            attackerWithHacking(150, namedControlDebuff('Stasis'), controlAb('stasis'))
+        );
+
+        // The named status was resisted by the landing roll → recorded resisted.
+        expect(events.some((e) => e.type === 'debuff-resisted' && e.buffName === 'Stasis')).toBe(
+            true
+        );
+        // ...and the control loop must NOT emit a success event for the un-landed Stasis.
+        expect(events.some((e) => e.type === 'control-applied' && e.effect === 'stasis')).toBe(
+            false
+        );
+    });
+
+    // (e) Finding 1 counterpart: full landing (hacking 200 → 100%) of the paired named status
+    //     DOES emit control-applied (the gate only suppresses genuine resists).
+    it('a fully-landing Stasis (no resist) emits control-applied{effect:stasis}', () => {
+        const { bus, events } = tap();
+        run({ slots: [] }, bus, attackerWith(namedControlDebuff('Stasis'), controlAb('stasis')));
+
+        expect(events.some((e) => e.type === 'debuff-resisted' && e.buffName === 'Stasis')).toBe(
+            false
+        );
+        expect(events.some((e) => e.type === 'control-applied' && e.effect === 'stasis')).toBe(
+            true
+        );
     });
 });
