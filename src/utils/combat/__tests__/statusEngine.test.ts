@@ -609,6 +609,26 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
         eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
         expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
     });
+
+    it('post-Post-Turn self-buff (applied in the turn-ended/round-ended drain) gets no reprieve', () => {
+        // A self-side write that lands AFTER the carrier's own Post-Turn decrement (engine
+        // turn-ended / round-ended drains run after decrementPlayer) must NOT be flagged for
+        // this turn — its same-turn Post-Turn is already spent, so a reprieve would grant it
+        // an extra turn. decrementPlayer clears the active marker once it has run for the owner.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // owner Post-Turn — clears the active marker
+        // turn-ended/round-ended drain window: application after the carrier's Post-Turn
+        eng.applyTimedAbilityStatus(1, mkStatus(1));
+
+        eng.beginRound(2);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // first decrement for this entry: 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
 });
 
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {

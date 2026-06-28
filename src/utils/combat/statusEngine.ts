@@ -925,6 +925,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 }
             }
         }
+        // The active-turn marker is turn-scoped and consumed here. Clearing it once the owner's
+        // Post-Turn has run prevents later same-turn writes (engine turn-ended / round-ended
+        // drains run after this) from being stamped appliedThisTurn for a turn whose Post-Turn
+        // is already spent — which would otherwise grant them an extra turn. (Pairs with the
+        // round-top reset in beginRound, which guards the start-of-round drain.)
+        if (currentTurnActorId === ownerId) currentTurnActorId = undefined;
         return { expired };
     };
 
