@@ -531,9 +531,11 @@ export type AbilityConfig =
           turns: number;
       };
 
-/** Crowd-control effects a `control` ability can apply. The engine does not simulate
- *  these combat effects; the `control-applied` event (events.ts) only exposes the
- *  application moment so reactions (e.g. Defiant's shield-on-Stasis) can fire. */
+/** Crowd-control effects a `control` ability can apply. The combat effect of each
+ *  (Stasis/Disable turn-lockout, Provoke/Taunt/Concentrate-Fire forced-targeting) is
+ *  simulated via the parallel named-status path; Overload is the sole deferred exception.
+ *  The `control-applied` event (events.ts) additionally exposes the application moment so
+ *  reactions (e.g. Defiant's shield-on-Stasis) can fire. */
 export type ControlEffect =
     | 'provoke'
     | 'taunt'
