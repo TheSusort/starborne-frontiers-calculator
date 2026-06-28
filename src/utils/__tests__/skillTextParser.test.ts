@@ -1545,6 +1545,80 @@ describe('detectReactiveTrigger', () => {
         ).toBe('on-enemy-repaired'));
 });
 
+describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lifecycle side effects)', () => {
+    // The KILL_TRIGGER_RE / APPLYING_DEBUFF_RE patterns added for the Overload lifecycle also
+    // (correctly) reclassify several non-Marauder buff grants from on-cast to reactive triggers.
+    // Each ship's buff genuinely is gated behind a kill / debuff-infliction in docs/ship-skills.csv,
+    // so these are semantically-correct reclassifications. Text below is the real CSV phrasing.
+
+    // --- KILL_TRIGGER_RE → on-enemy-destroyed ---
+    it('Gallant — Legion Discipline I gated on "on kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.',
+                'Legion Discipline I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Gallant — Legion Discipline II gated on "on kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns on kill.',
+                'Legion Discipline II'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Medved — XAOC Swiftness I gated on "On kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
+                'XAOC Swiftness I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Medved — XAOC Swiftness II gated on "On kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
+                'XAOC Swiftness II'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Meiying — Stasis gated on "Upon killing an enemy with a Debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                'Stasis'
+            )
+        ).toBe('on-enemy-destroyed'));
+
+    // --- APPLYING_DEBUFF_RE → on-debuff-inflicted ---
+    it('Torcher — Marauder Rage I gated on "upon inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Marauder Rage I</unit-skill> for 3 turns upon inflicting a debuff.',
+                'Marauder Rage I'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Prospect — Inc. Damage Down I gated on "when inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns when inflicting a debuff.',
+                'Inc. Damage Down I'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Yuyan — Stealth gated on "when applying a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns when applying a debuff.',
+                'Stealth'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Yuyan R2 — Tianchao Precision II gated on "when applying a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.',
+                'Tianchao Precision II'
+            )
+        ).toBe('on-debuff-inflicted'));
+});
+
 describe('parseSelfBuffRemovals', () => {
     it('emits for "loses Overload on kill"', () =>
         expect(

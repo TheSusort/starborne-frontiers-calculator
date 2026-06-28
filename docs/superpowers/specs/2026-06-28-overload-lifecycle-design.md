@@ -155,10 +155,27 @@ The **DPS-calc dummy is indestructible** → lose-on-kill never fires there. Con
 - **Mangler / Ravager:** Marauder Rage was (wrongly) on-cast; it now requires a kill → **Rage
   disappears** from their DPS-calc output. Goldens move.
 - **Butcher:** Rage moves on-cast → `on-debuff-inflicted`. Goldens move.
-- **Non-Marauder side effect of `KILL_TRIGGER_RE`:** the new "on kill" detection in
-  `detectReactiveTrigger` (shared by the buff-merge path) also reclassifies **Gallant** (Legion
-  Discipline) and **Medved** (XAOC Swiftness) buff grants from `on-cast` → `on-enemy-destroyed` —
-  correct kill-gating fixes; their DPS-calc goldens move (buffs vanish vs. the indestructible dummy).
+- **Non-Marauder side effect of `KILL_TRIGGER_RE` / `APPLYING_DEBUFF_RE`:** the new kill and
+  debuff-infliction detection in `detectReactiveTrigger` (shared by the buff-merge path) also
+  reclassifies several **non-Marauder** buff grants from `on-cast` to a reactive trigger. These are
+  all semantically-correct reclassifications (the buff genuinely is gated behind the kill /
+  debuff-infliction in `docs/ship-skills.csv`); **no golden coverage is moved for them** — each is a
+  DPS-calc dummy-inert reclassification, locked instead by `detectReactiveTrigger` parser tests
+  (`skillTextParser.test.ts`, the "non-Marauder reclassifications (Overload-lifecycle side effects)"
+  describe block). The full confirmed set (empirically verified against the CSV):
+  - **`KILL_TRIGGER_RE` → `on-enemy-destroyed`:**
+    - **Gallant** — Legion Discipline I/II ("... on kill.")
+    - **Medved** — XAOC Swiftness I/II ("On kill, it gains ...")
+    - **Meiying** — Stasis ("Upon killing an enemy with a Debuff, ...")
+  - **`APPLYING_DEBUFF_RE` → `on-debuff-inflicted`:**
+    - **Torcher** — Marauder Rage I/II ("... upon inflicting a debuff.")
+    - **Prospect** — Inc. Damage Down I/II ("... when inflicting a debuff.")
+    - **Yuyan** — Stealth (+ Tianchao Precision II at R2) ("... when applying a debuff.")
+
+  Ships that match the kill/debuff phrasing but do **not** reclassify a buff grant (verified — no
+  named buff in the gating clause; the effect is a charge-add / self-repair routed through other
+  parsers): Liberator, Madax, Obsidian, Rikra, Valiant. The intended Marauder targets
+  (Mangler/Ravager/Butcher Marauder Rage) reclassify as designed (§2.3) and DO move goldens.
   The golden review must scan all ships with kill-clause buff grants, not just the Marauders.
 - **Overload's every-turn accumulation** is **unchanged** in the DPS calc (lose-on-kill never
   fires). If an Overload-accumulation golden moves, STOP — something is wrong.
