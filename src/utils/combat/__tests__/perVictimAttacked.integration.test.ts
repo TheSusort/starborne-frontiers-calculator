@@ -27,6 +27,8 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatStatBlock } from '../../../types/calculator';
 
+type AttackedEvent = Extract<CombatEvent, { type: 'attacked' }>;
+
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
@@ -252,5 +254,201 @@ describe('PR7 Task 3 — per-victim attacked at the WALKED-TEAM player→enemy s
         for (const e of anchorEvents) expect(e.attackerId).toBe('team-attacker');
         // The covered enemy is outside a single-target footprint → never attacked.
         expect(attacked.filter((e) => e.targetId === 'enemy-covered').length).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------------------------
+// PR7 Task 4 — the ENEMY→player site. The same per-victim transformation applied at the enemy
+// positional cast-site, where a positioned ENEMY AoE attacker fires at the player roster. BEFORE
+// this task the enemy positional firing emitted ONE `attacked` event for the FOCUS player victim
+// only (positionalShield*/tgt.id capture). Covered player footprint victims took damage silently
+// → their on-attacked reactives never woke, and no `attacked` event ever named them.
+//
+// This task accumulates a per-EVERY-victim signal map inside the enemy positional onVictimResolved
+// hook and emits one `attacked` per victim via `emitPerVictimAttacked` (isPrimaryTarget only on the
+// anchor) — positional-aware, so the NON-positional path keeps its legacy single emit byte-for-byte.
+//
+// Harness mirrors perVictimEnemyDetonation.integration.test.ts: the focus player ('attacker') is
+// parked OUT of the footprint (M1, zero offense, empty slot) so the ONLY damage source is the enemy
+// attacker; two player team victims occupy M4 (anchor) and M3 (covered, inside Line-Range-1).
+// ---------------------------------------------------------------------------------------------
+
+const victimStats = (hp: number): CombatStatBlock => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    defence: 0,
+    hp,
+    hacking: 0,
+});
+
+// A positioned, zero-offense PLAYER team victim (walked so it has real stats/position). Empty active
+// slot → it deals nothing; it is purely a damageable target.
+const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput =>
+    ({
+        id,
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [] } as ShipSkills,
+            stats: victimStats(hp),
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+            healModifier: 0,
+        },
+    }) as TeamActorEngineInput;
+
+// A positioned ENEMY attacker that fires `front` with the supplied pattern + a 100% damage active.
+// attack kept small so the firing hit marks the high-HP victims without killing them.
+const enemyAttackerAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
+    ({
+        id,
+        stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 100 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern,
+        shipSkills: { slots: [basicAttack()] },
+    }) as EnemyAttacker;
+
+// A positional battle where a POSITIONED ENEMY ('enemy-aoe') fires at the player roster. The focus
+// player ('attacker') is parked OUT of the footprint (M1, zero offense, empty slot) so the only
+// damage source is the enemy. Two player victims: anchor at M4 (front) + covered at M3.
+const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [] },
+    enemyDefense: 0,
+    enemyHp: 1_000_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 1_000_000_000,
+    healTargetId: 'attacker',
+    position: 'M1',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    teamActors: [
+        playerVictim('pl-front', 'M4', 1_000_000_000),
+        playerVictim('pl-mid', 'M3', 1_000_000_000),
+    ],
+    enemyAttackers: [enemyAttackerAt('enemy-aoe', 'M4', pattern)],
+});
+
+describe('PR7 Task 4 — per-victim attacked at the ENEMY→player site', () => {
+    it('a COVERED player now receives an attacked event NAMING the enemy actor (it did not before)', () => {
+        const { attacked } = collectAttacked(ENEMY_BASE(lineRange1Pattern()));
+        const anchorEvents = attacked.filter((e) => e.targetId === 'pl-front');
+        const coveredEvents = attacked.filter((e) => e.targetId === 'pl-mid');
+        // The fix: the covered footprint victim now appears as an attacked target.
+        expect(coveredEvents.length).toBeGreaterThan(0);
+        // The anchor still gets its event too.
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        // Both are attributed to the enemy attacker.
+        for (const e of [...anchorEvents, ...coveredEvents]) expect(e.attackerId).toBe('enemy-aoe');
+    });
+
+    it('only the ANCHOR carries isPrimaryTarget; the covered victim does not', () => {
+        const { attacked } = collectAttacked(ENEMY_BASE(lineRange1Pattern()));
+        const anchorEvents = attacked.filter((e) => e.targetId === 'pl-front');
+        const coveredEvents = attacked.filter((e) => e.targetId === 'pl-mid');
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        expect(coveredEvents.length).toBeGreaterThan(0);
+        for (const e of anchorEvents) expect(e.isPrimaryTarget).toBe(true);
+        for (const e of coveredEvents) expect(e.isPrimaryTarget).not.toBe(true);
+    });
+
+    it('NON-VACUOUS control: a single-target (base) pattern emits NO attacked for the covered player', () => {
+        const { attacked } = collectAttacked(ENEMY_BASE(basePattern()));
+        // The anchor (primary target) still gets its event from the enemy attacker.
+        const anchorEvents = attacked.filter((e) => e.targetId === 'pl-front');
+        expect(anchorEvents.length).toBeGreaterThan(0);
+        for (const e of anchorEvents) expect(e.attackerId).toBe('enemy-aoe');
+        // The covered player is outside a single-target footprint → never attacked.
+        expect(attacked.filter((e) => e.targetId === 'pl-mid').length).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------------------------
+// PR7 Task 4 — E5-SYMMETRY pin. The defining team-symmetry assertion: the SAME AoE attacker, with
+// the SAME footprint geometry (Line-Range-1 at M4 anchoring the front victim + covering M3), must
+// emit BYTE-IDENTICAL per-victim `attacked` events whether it acts on the PLAYER side (focus
+// attacker → enemy victims) or the ENEMY side (enemy attacker → player victims). Same number of
+// events, same per-victim damage / crit / shieldWasHit / isPrimaryTarget signals — modulo the
+// attacker/target ids being the mirrored ones. A ship behaves identically on either side.
+// ---------------------------------------------------------------------------------------------
+
+describe('PR7 Task 4 — ENEMY→player per-victim attacked is E5-symmetric with the player→enemy site', () => {
+    it('the SAME AoE footprint emits byte-identical per-victim attacked events on either side', () => {
+        // PLAYER side (focus attacker fires at two enemy victims, anchor=enemy-anchor / covered=enemy-covered).
+        const { attacked: playerAttacked } = collectAttacked(BASE(lineRange1Pattern()));
+        // ENEMY side (enemy attacker fires at two player victims, anchor=pl-front / covered=pl-mid).
+        const { attacked: enemyAttacked } = collectAttacked(ENEMY_BASE(lineRange1Pattern()));
+
+        // Group each side's events by the victim ROLE (anchor vs covered) so we compare like-for-like
+        // regardless of Map-insertion order. Each role-bucket carries the per-event signals stripped
+        // of the (mirrored) attacker/target ids.
+        type Sig = {
+            isPrimaryTarget: boolean;
+            damage: number | undefined;
+            shieldWasHit: boolean | undefined;
+            didCrit: boolean | undefined;
+        };
+        const sigOf = (e: AttackedEvent): Sig => ({
+            isPrimaryTarget: e.isPrimaryTarget === true,
+            damage: e.damage,
+            shieldWasHit: e.shieldWasHit,
+            didCrit: e.didCrit,
+        });
+        const sortSig = (a: Sig, b: Sig) => (a.damage ?? 0) - (b.damage ?? 0);
+        const bucket = (
+            events: AttackedEvent[],
+            anchorId: string,
+            coveredId: string
+        ): { anchor: Sig[]; covered: Sig[] } => ({
+            anchor: events
+                .filter((e) => e.targetId === anchorId)
+                .map(sigOf)
+                .sort(sortSig),
+            covered: events
+                .filter((e) => e.targetId === coveredId)
+                .map(sigOf)
+                .sort(sortSig),
+        });
+
+        const playerBuckets = bucket(playerAttacked, 'enemy-anchor', 'enemy-covered');
+        const enemyBuckets = bucket(enemyAttacked, 'pl-front', 'pl-mid');
+
+        // Non-vacuous: both sides actually produced per-victim events for BOTH roles.
+        expect(playerBuckets.anchor.length).toBeGreaterThan(0);
+        expect(playerBuckets.covered.length).toBeGreaterThan(0);
+
+        // Byte-identical signals, per role, across the side flip.
+        expect(enemyBuckets.anchor).toEqual(playerBuckets.anchor);
+        expect(enemyBuckets.covered).toEqual(playerBuckets.covered);
+
+        // And the total event counts match (no extra/missing events on either side).
+        expect(enemyAttacked.length).toBe(playerAttacked.length);
     });
 });

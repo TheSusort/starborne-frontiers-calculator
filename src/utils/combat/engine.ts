@@ -5456,6 +5456,18 @@ export function runCombat(input: CombatEngineInput): {
                                 // attack's hits so an early shield-denting hit still counts.
                                 let positionalShieldWasHit = false;
                                 let positionalShieldCaptured = false;
+                                // Per-victim `attacked` capture (PR7 Task 4 — enemy→player). Aggregate
+                                // EACH footprint player victim's per-attack damage + OR its shield-hit
+                                // flag across the attack's hits so the post-apply emit (below) wakes
+                                // EVERY hit victim's on-attacked reactives (counters + Second Wind etc.),
+                                // not just the anchor. Declared in the OUTER enemy-turn scope because the
+                                // emit reads it after the if/else block. Populated inside the enemy
+                                // positional onVictimResolved hook; stays empty on the non-positional path
+                                // (which keeps its legacy single emit, byte-identical). Keyed by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    { damage: number; shieldWasHit: boolean }
+                                >();
                                 if (enemyPositional) {
                                     // Opposing roster + victim wrapper from the per-side bindings
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -5509,6 +5521,22 @@ export function runCombat(input: CombatEngineInput): {
                                                         outcome.shieldBefore > 0 &&
                                                         outcome.hpDamage < dmg);
                                             }
+                                            // PR7 Task 4: per-EVERY-victim `attacked` signal. `dmg` is
+                                            // the hook's per-victim damage (the outer `damage` is the turn
+                                            // aggregate — do NOT use it here). OR the shield-hit flag
+                                            // across the attack's hits (mirror of the focus capture above,
+                                            // applied to every footprint victim).
+                                            const prev = attackedSignals.get(victim.id) ?? {
+                                                damage: 0,
+                                                shieldWasHit: false,
+                                            };
+                                            prev.damage += dmg;
+                                            prev.shieldWasHit =
+                                                prev.shieldWasHit ||
+                                                (!outcome.barriered &&
+                                                    outcome.shieldBefore > 0 &&
+                                                    outcome.hpDamage < dmg);
+                                            attackedSignals.set(victim.id, prev);
                                         },
                                     });
                                     // PR3: enemy→player per-victim skill-triggered detonation
@@ -5638,19 +5666,40 @@ export function runCombat(input: CombatEngineInput): {
                                 // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
                                 // Positional path captures the focus victim's per-hit shield outcome
                                 // (Step 3); the non-positional else-branch keeps the aggregate fallback.
-                                const shieldWasHit = positionalShieldCaptured
-                                    ? positionalShieldWasHit
-                                    : !barriered && shieldBefore > 0 && hpDamage < damage;
-                                emitAttacked({
-                                    bus,
-                                    round: r,
-                                    targetId: tgt.id,
-                                    attackerId: actor.id,
-                                    hitOutcomes,
-                                    isPrimaryTarget: true,
-                                    shieldWasHit,
-                                    damage,
-                                });
+                                if (enemyPositional) {
+                                    // PR7 Task 4: per-victim emit. One `attacked` per footprint player
+                                    // victim hit by this enemy cast (isPrimaryTarget only on the anchor,
+                                    // tgt.id) → EVERY covered player's on-attacked reactives wake (enemy
+                                    // counters land back on it / Second Wind etc.), not just the anchor.
+                                    // The gate broadens from "anchor was hit" to "any victim was hit": if
+                                    // the anchor whiffs but a covered victim is hit, emission fires for the
+                                    // covered victim and no isPrimaryTarget event fires that turn — correct.
+                                    if (attackedSignals.size > 0) {
+                                        emitPerVictimAttacked({
+                                            bus,
+                                            round: r,
+                                            attackerId: actor.id,
+                                            primaryId: tgt.id,
+                                            hitOutcomes,
+                                            victims: attackedSignals,
+                                        });
+                                    }
+                                } else {
+                                    // LEGACY non-positional single emit — byte-identical to pre-Task-4.
+                                    const shieldWasHit = positionalShieldCaptured
+                                        ? positionalShieldWasHit
+                                        : !barriered && shieldBefore > 0 && hpDamage < damage;
+                                    emitAttacked({
+                                        bus,
+                                        round: r,
+                                        targetId: tgt.id,
+                                        attackerId: actor.id,
+                                        hitOutcomes,
+                                        isPrimaryTarget: true,
+                                        shieldWasHit,
+                                        damage,
+                                    });
+                                }
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {
