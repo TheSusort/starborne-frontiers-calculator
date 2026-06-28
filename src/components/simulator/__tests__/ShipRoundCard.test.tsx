@@ -21,6 +21,9 @@ const state: ShipRoundState = {
     shieldsAbsorbed: 0,
     shieldGranted: 0,
     currentShieldPool: 0,
+    incomingDamage: 0,
+    incomingShieldAbsorbed: 0,
+    incomingBarrierAbsorbed: 0,
     hpPct: 65,
     alive: true,
     activeBuffs: ['Attack Up'],
@@ -69,5 +72,29 @@ describe('ShipRoundCard', () => {
         expect(screen.getByText('4,500')).toBeInTheDocument();
         expect(screen.getByText('Current shield')).toBeInTheDocument();
         expect(screen.getByText('3,200')).toBeInTheDocument();
+    });
+
+    it('renders per-victim incoming damage-taken StatCards with formatted values', () => {
+        const stateWithIncoming: ShipRoundState = {
+            ...state,
+            // Net HP landed (incomingDamage) is what the card renders; the absorbed
+            // fields are the portions soaked off the same arriving hit (900 + 1200 + 700 = 2800 total).
+            incomingDamage: 900,
+            incomingShieldAbsorbed: 1200,
+            incomingBarrierAbsorbed: 700,
+        };
+        const roundWithIncoming: BattleRound = {
+            round: 6,
+            ships: [stateWithIncoming],
+            events: [],
+            turnOrder: [],
+        };
+        render(<ShipRoundCard actorId="attacker" round={roundWithIncoming} roster={roster} />);
+        expect(screen.getByText('Incoming (HP)')).toBeInTheDocument();
+        expect(screen.getByText('900')).toBeInTheDocument();
+        expect(screen.getByText('Incoming shield absorbed')).toBeInTheDocument();
+        expect(screen.getByText('1,200')).toBeInTheDocument();
+        expect(screen.getByText('Incoming barrier absorbed')).toBeInTheDocument();
+        expect(screen.getByText('700')).toBeInTheDocument();
     });
 });

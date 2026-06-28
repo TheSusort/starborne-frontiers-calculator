@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: the pinned per-ship round detail now shows each ship's own damage taken this round broken down into HP damage, shield absorbed, and barrier absorbed — including for ships caught in an area-of-effect hit, which each carry their own damage-taken figures.",
     "Combat simulator: shields are now fully modeled — shields build an untimed absorption pool capped at a ship's max HP that soaks damage before HP, shield penetration lets attacks punch through a portion of a shield straight to HP, damage-over-time effects (Inferno and Corrosion) bypass shields entirely, and the simulator now shows each ship's shield granted, absorbed, and current shield pool per round.",
     'Combat simulator: ships that grant themselves or allies Incoming Damage Down (Makoli, Salvation, Shelter, Refine) — and allies buffed by the Battlecry implant on death — now actually take reduced direct damage. Previously the buff appeared in the log but had no effect on damage taken.',
     'Combat simulator: lifesteal/leech (heal or shield from damage dealt or taken) now works per ship — each ship heals or shields itself off its own damage, and AoE splash leeches off the reduced (covered-cell) splash damage.',
@@ -58,6 +59,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Skill editor: Provoke, Taunt, Concentrate Fire, Disable and Stasis are now recognized as control effects and no longer marked "Not simulated" — their combat impact is reflected in the battle simulator.',
     'Combat simulator now models the Overload lifecycle: Marauder-family ships (Mangler, Ravager, Butcher, Asphyxiator, Ruiner) lose all their Overload stacks when they kill an enemy and gain Marauder Rage in return (on a kill, on inflicting a debuff, or at the start of the round depending on the ship). With this, Overload is no longer flagged "Not simulated" — closing the last remaining simulation-coverage gap.',
     'Combat & DPS simulators: self-buffs no longer expire one turn too early — a timed buff a ship applies on its own turn now correctly lasts through its next turn, matching the game. Enemy debuffs, damage-over-time effects, and buffs applied off-turn are unchanged.',
+    'Combat simulator: in positioned battles, an area-of-effect attack now breaks Stasis on every ship it hits, not just the primary target — a stasised ship caught in the splash of an AoE hit now wakes and acts on its next turn, on both your fleet and the enemy. Attackers that do not break Stasis still leave every hit ship stasised.',
+    'Combat simulator: in positioned battles, area-of-effect attacks now trigger the on-being-hit reactions of every ship caught in the blast — counter-attacks, retaliation buffs, and on-hit repairs — not just the primary target. Applies to both your fleet and the enemy.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

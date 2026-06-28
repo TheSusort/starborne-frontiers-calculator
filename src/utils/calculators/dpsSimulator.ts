@@ -151,6 +151,14 @@ export interface RoundData {
      *  the legacy RoundData shape, goldens byte-identical). The detonation also lands per-victim via
      *  applyVictimDamage (surfaced in perTargetDamage); this map is the dedicated attribution. */
     perActorDetonation?: Record<string, number>;
+    /** Per-victim incoming-damage accounting for THIS round (PR7), keyed by victim id:
+     *  `incoming` = total damage taken, `shieldAbsorbed` = shield drained, `barrierAbsorbed`
+     *  = barrier-blocked. Set ONLY when at least one actor has a nonzero entry — absent on
+     *  rounds without per-victim intake (legacy RoundData shape preserved, goldens byte-identical). */
+    perActorIncoming?: Record<
+        string,
+        { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }
+    >;
     activeCorrosionStacks: number;
     activeInfernoStacks: number;
     activeBombCount: number;

@@ -3186,7 +3186,11 @@ const DocumentationPage: React.FC = () => {
                                     affected ship takes its own DoT damage against its own HP at the
                                     start of its turn (even while in Stasis), so a DoT can wear down
                                     and kill secondary ships and trigger their on-death effects,
-                                    instead of only counting against the primary target. More
+                                    instead of only counting against the primary target. In
+                                    positioned battles, an area-of-effect attack now triggers the
+                                    on-being-hit reactions of <strong>every</strong> ship caught in
+                                    the blast — counter-attacks, retaliation buffs, and on-hit
+                                    repairs — not just the primary target, on both teams. More
                                     implant and gear-set effects will be added in future updates.
                                 </p>
                             </div>

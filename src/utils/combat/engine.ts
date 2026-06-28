@@ -66,6 +66,7 @@ import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
+import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -3365,7 +3366,13 @@ export function runCombat(input: CombatEngineInput): {
             // ability channels (victimId keys the actor's own self store regardless of side). The
             // SCHEDULED channel reads selfBuffLookup, which today is populated only for player/team
             // actors (enemy runtimes pass an empty map) — a pre-existing gap, irrelevant until an
-            // enemy carries a scheduled self-buff. Direct channel only; incoming-DoT deferred.
+            // enemy carries a scheduled self-buff.
+            // Direct-damage channel ONLY — by design. Per the game rules, incoming/outgoing
+            // damage modifiers (Inc. Damage Down/Up, Out. Damage Up) apply to DIRECT hits
+            // only; DoT ticks (corrosion/inferno) and bombs are EXCLUDED. DoT reduction has a
+            // dedicated channel (incomingDotReductionPct / Vortex Veil); bombs apply through
+            // the detonation/bombPortion path which never reads incomingDamageModifierPct.
+            // Locked by bombModifierExclusion.test.ts.
             const selfIncoming = toSelfIncomingDamageModifier(
                 victimSelfBuffs(statusEngine, victimId, selfBuffLookup)
             );
@@ -4686,15 +4693,27 @@ export function runCombat(input: CombatEngineInput): {
                                 // Opposing roster + victim wrapper come from the per-side bindings
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
                                 const tb = turnBindings(actor.side);
-                                // Player→enemy `attacked` capture: aggregate the FOCUS enemy victim's
-                                // per-attack damage + OR its shield-hit flag across the attack's hits so
-                                // the post-apply emit wakes the enemy's on-attacked reactives (counters +
-                                // self-repairs/defensive buffs). focusEnemyDamage is the per-victim
-                                // analogue of the enemy side's aggregate `damage` (Tenacity's >25%-maxHP
-                                // gate reads it). Matched by victim.id === tgt.id (first-hit-focus victim).
-                                let focusEnemyDamage = 0;
-                                let focusEnemyShieldWasHit = false;
-                                let focusEnemyHit = false;
+                                // Player→enemy `attacked` capture (PR7 Task 2): aggregate EACH footprint
+                                // victim's per-attack damage + OR its shield-hit flag across the attack's
+                                // hits so the post-apply emit wakes EVERY hit victim's on-attacked
+                                // reactives (counters + self-repairs/defensive buffs), not just the anchor.
+                                // Per-victim `damage` is the analogue of the enemy side's aggregate
+                                // `damage` (Tenacity's >25%-maxHP gate reads it). Keyed by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
+                                >();
+                                // PR7 Task 5: per-footprint Stasis-break (player→enemy, focus site).
+                                // Collect EVERY covered footprint victim (≠ anchor) that was stasised at
+                                // hit time so its Stasis is broken too — the anchor break is already
+                                // handled above via turnStasisHitVictims. Covered victims have NO same-turn
+                                // re-apply vector (the turn's debuffs only target tgt.id), so their break
+                                // fires UNCONDITIONALLY (no re-apply guard). Gated on !doesntBreakStasis.
+                                const coveredStasisVictims = new Set<string>();
                                 // Per-victim detonation (positional): collect EVERY footprint victim
                                 // hit by this cast's firing damage (unique by id), so each can detonate
                                 // its OWN containers after the firing hits land. Populated in the
@@ -4714,36 +4733,55 @@ export function runCombat(input: CombatEngineInput): {
                                     // attacker's standing leeches proc off EACH footprint victim's
                                     // role-scaled dealt damage (origin full, covered half) → restoring
                                     // the leech the positional credit-suppression had silenced.
-                                    onVictimResolved: (victim, damage, outcome) => {
+                                    onVictimResolved: (victim, damage, outcome, didCrit) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
-                                        if (victim.id === tgt.id) {
-                                            focusEnemyHit = true;
-                                            focusEnemyDamage += damage;
-                                            focusEnemyShieldWasHit =
-                                                focusEnemyShieldWasHit ||
-                                                (!outcome.barriered &&
-                                                    outcome.shieldBefore > 0 &&
-                                                    outcome.hpDamage < damage);
+                                        const prev = attackedSignals.get(victim.id) ?? {
+                                            damage: 0,
+                                            shieldWasHit: false,
+                                            hitOutcomes: [],
+                                        };
+                                        prev.damage += damage;
+                                        prev.shieldWasHit =
+                                            prev.shieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                        prev.hitOutcomes.push(didCrit);
+                                        attackedSignals.set(victim.id, prev);
+                                        // PR7 Task 5: record covered (non-anchor) victims that were
+                                        // stasised at hit time for the post-apply break.
+                                        if (
+                                            !actor.doesntBreakStasis &&
+                                            victim.id !== tgt.id &&
+                                            isStasised(victim.id)
+                                        ) {
+                                            coveredStasisVictims.add(victim.id);
                                         }
                                     },
                                 });
-                                // Player→enemy `attacked` emit (Task 3 — the symmetric reaction). Fires
-                                // once per hit (mirrors the enemy-turn empty-hitCrits fallback) for the
-                                // focus enemy victim → enemy Stalwart/Nyxen/Centurion counter the player
-                                // attacker, and enemy on-hit reactions (Second Wind, etc.) fire.
-                                if (focusEnemyHit) {
-                                    const hitOutcomes =
-                                        turn.hitCrits.length > 0 ? turn.hitCrits : [turn.roundCrit];
-                                    emitAttacked({
+                                // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
+                                // (unconditional — covered victims have no same-turn re-apply vector).
+                                // Mirrors the anchor's stasisBreakPending mark; the victim's own skip
+                                // branch consumes it (removeTimedEnemyStatus) on its NEXT turn.
+                                for (const victimId of coveredStasisVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
+                                // Player→enemy `attacked` emit (PR7 Task 2 — per-victim). Fires once per
+                                // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
+                                // victim hit → enemy Stalwart/Nyxen/Centurion counter the player attacker
+                                // from any covered cell, and enemy on-hit reactions (Second Wind, etc.)
+                                // fire per victim. isPrimaryTarget is set only on the anchor (tgt.id). The
+                                // gate broadens from "anchor was hit" to "any victim was hit": if the
+                                // anchor whiffs but a covered victim is hit, emission fires for the covered
+                                // victim and no isPrimaryTarget event fires that turn — correct by design.
+                                if (attackedSignals.size > 0) {
+                                    emitPerVictimAttacked({
                                         bus,
                                         round: r,
-                                        targetId: tgt.id,
                                         attackerId: actor.id,
-                                        hitOutcomes,
-                                        isPrimaryTarget: true,
-                                        shieldWasHit: focusEnemyShieldWasHit,
-                                        damage: focusEnemyDamage,
+                                        primaryId: tgt.id,
+                                        victims: attackedSignals,
                                     });
                                 }
 
@@ -4924,11 +4962,25 @@ export function runCombat(input: CombatEngineInput): {
                                 // Same direction as the focus site (player→enemy); keyed to THIS team
                                 // actor's position / parsed target / parsed pattern. Non-null via the gate.
                                 const tb = turnBindings(actor.side);
-                                // Player→enemy `attacked` capture (Task 3) — mirror of the focus site,
-                                // keyed to THIS walked team actor's focus enemy victim (teamTarget tgt).
-                                let teamFocusEnemyDamage = 0;
-                                let teamFocusEnemyShieldWasHit = false;
-                                let teamFocusEnemyHit = false;
+                                // Player→enemy `attacked` capture (PR7 Task 3) — mirror of the focus
+                                // site, keyed to THIS walked team actor. Aggregate EACH footprint
+                                // victim's per-attack damage + OR its shield-hit flag across the hits so
+                                // the post-apply emit wakes EVERY hit victim's on-attacked reactives
+                                // (counters + self-repairs/defensive buffs), not just the anchor. Keyed
+                                // by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
+                                >();
+                                // PR7 Task 5: per-footprint Stasis-break (player→enemy, walked-team site).
+                                // Mirror of the focus site — collect EVERY covered footprint victim
+                                // (≠ anchor) that was stasised at hit time so its Stasis is broken too.
+                                // Covered victims have no same-turn re-apply vector → unconditional break.
+                                const coveredStasisVictims = new Set<string>();
                                 // Per-victim detonation (positional): collect EVERY footprint victim hit
                                 // by this cast's firing damage (unique by id), so each can detonate its
                                 // OWN containers after the firing hits land. Populated in the
@@ -4948,37 +5000,50 @@ export function runCombat(input: CombatEngineInput): {
                                     // E2 Task 3: per-victim standing leech (player→enemy), keyed to
                                     // THIS walked team actor as the acting attacker. Same per-victim
                                     // proc as the focus site.
-                                    onVictimResolved: (victim, damage, outcome) => {
+                                    onVictimResolved: (victim, damage, outcome, didCrit) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
-                                        if (victim.id === tgt.id) {
-                                            teamFocusEnemyHit = true;
-                                            teamFocusEnemyDamage += damage;
-                                            teamFocusEnemyShieldWasHit =
-                                                teamFocusEnemyShieldWasHit ||
-                                                (!outcome.barriered &&
-                                                    outcome.shieldBefore > 0 &&
-                                                    outcome.hpDamage < damage);
+                                        const prev = attackedSignals.get(victim.id) ?? {
+                                            damage: 0,
+                                            shieldWasHit: false,
+                                            hitOutcomes: [],
+                                        };
+                                        prev.damage += damage;
+                                        prev.shieldWasHit =
+                                            prev.shieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                        prev.hitOutcomes.push(didCrit);
+                                        attackedSignals.set(victim.id, prev);
+                                        // PR7 Task 5: record covered (non-anchor) victims that were
+                                        // stasised at hit time for the post-apply break.
+                                        if (
+                                            !actor.doesntBreakStasis &&
+                                            victim.id !== tgt.id &&
+                                            isStasised(victim.id)
+                                        ) {
+                                            coveredStasisVictims.add(victim.id);
                                         }
                                     },
                                 });
-                                // Player→enemy `attacked` emit (Task 3) — one per walked team actor's
-                                // firing turn for its focus enemy victim. Wakes the enemy's on-attacked
-                                // reactives just like the focus site.
-                                if (teamFocusEnemyHit) {
-                                    const hitOutcomes =
-                                        teamTurn.hitCrits.length > 0
-                                            ? teamTurn.hitCrits
-                                            : [teamTurn.roundCrit];
-                                    emitAttacked({
+                                // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
+                                // (unconditional — mirror of the focus site).
+                                for (const victimId of coveredStasisVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
+                                // Player→enemy `attacked` emit (PR7 Task 3 — per-victim). Fires once per
+                                // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
+                                // victim hit by THIS walked team actor → enemy on-attacked reactives
+                                // (counters + Second Wind, etc.) wake from any covered cell, not just the
+                                // anchor. isPrimaryTarget is set only on the anchor (tgt.id).
+                                if (attackedSignals.size > 0) {
+                                    emitPerVictimAttacked({
                                         bus,
                                         round: r,
-                                        targetId: tgt.id,
                                         attackerId: actor.id,
-                                        hitOutcomes,
-                                        isPrimaryTarget: true,
-                                        shieldWasHit: teamFocusEnemyShieldWasHit,
-                                        damage: teamFocusEnemyDamage,
+                                        primaryId: tgt.id,
+                                        victims: attackedSignals,
                                     });
                                 }
 
@@ -5443,6 +5508,29 @@ export function runCombat(input: CombatEngineInput): {
                                 // attack's hits so an early shield-denting hit still counts.
                                 let positionalShieldWasHit = false;
                                 let positionalShieldCaptured = false;
+                                // Per-victim `attacked` capture (PR7 Task 4 — enemy→player). Aggregate
+                                // EACH footprint player victim's per-attack damage + OR its shield-hit
+                                // flag across the attack's hits so the post-apply emit (below) wakes
+                                // EVERY hit victim's on-attacked reactives (counters + Second Wind etc.),
+                                // not just the anchor. Declared in the OUTER enemy-turn scope because the
+                                // emit reads it after the if/else block. Populated inside the enemy
+                                // positional onVictimResolved hook; stays empty on the non-positional path
+                                // (which keeps its legacy single emit, byte-identical). Keyed by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    {
+                                        damage: number;
+                                        shieldWasHit: boolean;
+                                        hitOutcomes: boolean[];
+                                    }
+                                >();
+                                // PR7 Task 5: per-footprint Stasis-break (enemy→player site). Mirror of
+                                // the focus/walked-team sites — collect EVERY covered footprint player
+                                // victim (≠ anchor) that was stasised at hit time so its Stasis is broken
+                                // too. Declared in the OUTER enemy-turn scope (same hoist as
+                                // attackedSignals) because the break-set runs inside the positional block.
+                                // Covered victims have no same-turn re-apply vector → unconditional break.
+                                const coveredStasisVictims = new Set<string>();
                                 if (enemyPositional) {
                                     // Opposing roster + victim wrapper from the per-side bindings
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -5485,7 +5573,7 @@ export function runCombat(input: CombatEngineInput): {
                                         // off the damage IT took, with the per-victim Barrier /
                                         // requiresHpDamage gates — mirroring the non-positional block
                                         // below, per victim.
-                                        onVictimResolved: (victim, dmg, outcome) => {
+                                        onVictimResolved: (victim, dmg, outcome, didCrit) => {
                                             detonationTargets.set(victim.id, victim);
                                             procTakenLeechesPerVictim(victim, dmg, outcome);
                                             if (victim.id === tgt.id) {
@@ -5496,8 +5584,41 @@ export function runCombat(input: CombatEngineInput): {
                                                         outcome.shieldBefore > 0 &&
                                                         outcome.hpDamage < dmg);
                                             }
+                                            // PR7 Task 4: per-EVERY-victim `attacked` signal. `dmg` is
+                                            // the hook's per-victim damage (the outer `damage` is the turn
+                                            // aggregate — do NOT use it here). OR the shield-hit flag
+                                            // across the attack's hits (mirror of the focus capture above,
+                                            // applied to every footprint victim).
+                                            const prev = attackedSignals.get(victim.id) ?? {
+                                                damage: 0,
+                                                shieldWasHit: false,
+                                                hitOutcomes: [],
+                                            };
+                                            prev.damage += dmg;
+                                            prev.shieldWasHit =
+                                                prev.shieldWasHit ||
+                                                (!outcome.barriered &&
+                                                    outcome.shieldBefore > 0 &&
+                                                    outcome.hpDamage < dmg);
+                                            prev.hitOutcomes.push(didCrit);
+                                            attackedSignals.set(victim.id, prev);
+                                            // PR7 Task 5: record covered (non-anchor) player victims
+                                            // stasised at hit time for the post-apply break. isStasised
+                                            // reads the player victim's store — direction-agnostic.
+                                            if (
+                                                !actor.doesntBreakStasis &&
+                                                victim.id !== tgt.id &&
+                                                isStasised(victim.id)
+                                            ) {
+                                                coveredStasisVictims.add(victim.id);
+                                            }
                                         },
                                     });
+                                    // PR7 Task 5: set the DEFERRED Stasis break for every covered
+                                    // player victim (unconditional — mirror of the player→enemy sites).
+                                    for (const victimId of coveredStasisVictims) {
+                                        stasisBreakPending.set(victimId, true);
+                                    }
                                     // PR3: enemy→player per-victim skill-triggered detonation
                                     // (mirror of the player→enemy block, routed through playerSink).
                                     // Each PLAYER victim hit by this enemy cast that is STILL ALIVE
@@ -5625,19 +5746,39 @@ export function runCombat(input: CombatEngineInput): {
                                 // shieldBefore/hpDamage at 0 → false; no fixture threads enemy positions).
                                 // Positional path captures the focus victim's per-hit shield outcome
                                 // (Step 3); the non-positional else-branch keeps the aggregate fallback.
-                                const shieldWasHit = positionalShieldCaptured
-                                    ? positionalShieldWasHit
-                                    : !barriered && shieldBefore > 0 && hpDamage < damage;
-                                emitAttacked({
-                                    bus,
-                                    round: r,
-                                    targetId: tgt.id,
-                                    attackerId: actor.id,
-                                    hitOutcomes,
-                                    isPrimaryTarget: true,
-                                    shieldWasHit,
-                                    damage,
-                                });
+                                if (enemyPositional) {
+                                    // PR7 Task 4: per-victim emit. One `attacked` per footprint player
+                                    // victim hit by this enemy cast (isPrimaryTarget only on the anchor,
+                                    // tgt.id) → EVERY covered player's on-attacked reactives wake (enemy
+                                    // counters land back on it / Second Wind etc.), not just the anchor.
+                                    // The gate broadens from "anchor was hit" to "any victim was hit": if
+                                    // the anchor whiffs but a covered victim is hit, emission fires for the
+                                    // covered victim and no isPrimaryTarget event fires that turn — correct.
+                                    if (attackedSignals.size > 0) {
+                                        emitPerVictimAttacked({
+                                            bus,
+                                            round: r,
+                                            attackerId: actor.id,
+                                            primaryId: tgt.id,
+                                            victims: attackedSignals,
+                                        });
+                                    }
+                                } else {
+                                    // LEGACY non-positional single emit — byte-identical to pre-Task-4.
+                                    const shieldWasHit = positionalShieldCaptured
+                                        ? positionalShieldWasHit
+                                        : !barriered && shieldBefore > 0 && hpDamage < damage;
+                                    emitAttacked({
+                                        bus,
+                                        round: r,
+                                        targetId: tgt.id,
+                                        attackerId: actor.id,
+                                        hitOutcomes,
+                                        isPrimaryTarget: true,
+                                        shieldWasHit,
+                                        damage,
+                                    });
+                                }
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {
@@ -5892,6 +6033,27 @@ export function runCombat(input: CombatEngineInput): {
                     perActorShield[id] = { granted, absorbed, pool };
                 }
                 return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
+            })(),
+            // perActorIncoming (PR7 Task 6): per-victim incoming-damage accounting for THIS round,
+            // keyed by victim id ({incoming, shieldAbsorbed, barrierAbsorbed}). Mirrors
+            // perActorShield's "absent when empty" rule — set ONLY when at least one victim has a
+            // nonzero entry, so legacy / no-intake rounds keep the RoundData shape byte-identical
+            // (perActorIncoming is a fresh per-round map, already this-round, not cumulative).
+            ...(() => {
+                const out: Record<
+                    string,
+                    { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }
+                > = {};
+                for (const [id, v] of perActorIncoming) {
+                    if (v.incoming === 0 && v.shieldAbsorbed === 0 && v.barrierAbsorbed === 0)
+                        continue;
+                    out[id] = {
+                        incoming: v.incoming,
+                        shieldAbsorbed: v.shieldAbsorbed,
+                        barrierAbsorbed: v.barrierAbsorbed,
+                    };
+                }
+                return Object.keys(out).length > 0 ? { perActorIncoming: out } : {};
             })(),
             // perActorReflected (Reflect gear set, Task 5): per-attacker reflected-thorns damage
             // dealt back THIS round. Mirrors perActorShield's "absent when empty" rule so legacy /

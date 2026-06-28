@@ -77,6 +77,17 @@ export interface ShipRoundState {
     shieldGranted: number;
     /** Remaining shield pool at end of this round. */
     currentShieldPool: number;
+    /**
+     * Per-victim incoming damage-taken this round (HP damage actually landed), from
+     * `perRoundPerIncoming[round][victimId].incoming`. Parallel to the shield fields and sourced
+     * from the engine's per-victim `perActorIncoming` map. Covered AoE victims carry their own
+     * bucket. 0 when the actor took no recorded intake this round.
+     */
+    incomingDamage: number;
+    /** Shield drained by this round's incoming damage (perActorIncoming.shieldAbsorbed). */
+    incomingShieldAbsorbed: number;
+    /** Barrier drained by this round's incoming damage (perActorIncoming.barrierAbsorbed). */
+    incomingBarrierAbsorbed: number;
     /** End-of-round HP%, from maxHp - cumulative damageTaken. */
     hpPct: number;
     alive: boolean;
@@ -171,10 +182,21 @@ export function assembleBattleResult(args: {
         number,
         Record<string, { granted: number; absorbed: number; pool: number }>
     >;
+    perRoundPerIncoming?: Record<
+        number,
+        Record<string, { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }>
+    >;
     roster: RosterEntry[];
     numRounds: number;
 }): BattleResult {
-    const { events, perRoundPerTarget, perRoundPerShield = {}, roster, numRounds } = args;
+    const {
+        events,
+        perRoundPerTarget,
+        perRoundPerShield = {},
+        perRoundPerIncoming = {},
+        roster,
+        numRounds,
+    } = args;
 
     // Round of first destruction per actor (earliest ship-destroyed).
     const destroyedAt = new Map<string, number>();
@@ -247,6 +269,7 @@ export function assembleBattleResult(args: {
         // Accumulate this round's per-victim taken damage into the running cumulative.
         const takenThisRound = perRoundPerTarget[round] ?? {};
         const shieldThisRound = perRoundPerShield[round] ?? {};
+        const incomingThisRound = perRoundPerIncoming[round] ?? {};
 
         const ships: ShipRoundState[] = roster.map((entry) => {
             const taken = takenThisRound[entry.actorId] ?? 0;
@@ -257,6 +280,7 @@ export function assembleBattleResult(args: {
             const alive = destroyRound === undefined || round < destroyRound;
 
             const shield = shieldThisRound[entry.actorId];
+            const incoming = incomingThisRound[entry.actorId];
 
             return {
                 actorId: entry.actorId,
@@ -268,6 +292,14 @@ export function assembleBattleResult(args: {
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
                 currentShieldPool: shield?.pool ?? 0,
+                incomingDamage: incoming
+                    ? Math.max(
+                          0,
+                          incoming.incoming - incoming.shieldAbsorbed - incoming.barrierAbsorbed
+                      )
+                    : 0,
+                incomingShieldAbsorbed: incoming?.shieldAbsorbed ?? 0,
+                incomingBarrierAbsorbed: incoming?.barrierAbsorbed ?? 0,
                 hpPct:
                     entry.maxHp > 0
                         ? clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp)
@@ -767,6 +799,17 @@ export function simulateBattle(
         perRoundPerShield[rd.round] = rd.perActorShield ?? {};
     }
 
+    // Per-round per-victim incoming damage-taken (PR7 Task 7): parallel to perRoundPerShield,
+    // built from rd.perActorIncoming (set only when non-empty — absent rounds map to {}). Surfaces
+    // each covered victim's own damage-taken bucket {incoming, shieldAbsorbed, barrierAbsorbed}.
+    const perRoundPerIncoming: Record<
+        number,
+        Record<string, { incoming: number; shieldAbsorbed: number; barrierAbsorbed: number }>
+    > = {};
+    for (const rd of engineRounds) {
+        perRoundPerIncoming[rd.round] = rd.perActorIncoming ?? {};
+    }
+
     // Roster: every placed ship, with maxHp from its derived stats.
     const roster: RosterEntry[] = [
         ...playerPlans.map((plan) => ({
@@ -789,6 +832,7 @@ export function simulateBattle(
         events,
         perRoundPerTarget,
         perRoundPerShield,
+        perRoundPerIncoming,
         roster,
         numRounds,
     });
