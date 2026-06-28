@@ -150,10 +150,11 @@ export function chargeAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'charge') ?? [];
 }
 
-/** Cast-time `control` abilities on the skill (e.g. Defiant's charged Stasis inflict). The engine
- *  does NOT simulate the control effect; the cast path emits `control-applied` so reactions fire.
- *  Filters to `trigger === 'on-cast'` (mirrors extraActionsFromSkill) so a reactive or
- *  annotation-only control ability can't over-emit `control-applied` from the cast path. */
+/** Cast-time `control` abilities on the skill (e.g. Defiant's charged Stasis inflict). The control
+ *  effect itself is simulated via the parallel named-status path (Overload excepted); the cast path
+ *  additionally emits `control-applied` so reactions fire. Filters to `trigger === 'on-cast'`
+ *  (mirrors extraActionsFromSkill) so a reactive or annotation-only control ability can't
+ *  over-emit `control-applied` from the cast path. */
 export function controlAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
     return skill?.abilities.filter((a) => a.type === 'control' && a.trigger === 'on-cast') ?? [];
 }

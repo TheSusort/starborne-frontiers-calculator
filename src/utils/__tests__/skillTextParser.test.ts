@@ -37,6 +37,7 @@ import {
     parsePurge,
     parseHealNoCrit,
     statusEffectCondition,
+    parseControlInflicts,
     detectIgnoresForcedTargeting,
     parseDoesntBreakStasis,
     parseChargeRemoval,
@@ -3919,5 +3920,83 @@ describe('parseCounterAbilities', () => {
     it('returns null for empty/unmatched text', () => {
         expect(parseCounterAbilities(null)).toBeNull();
         expect(parseCounterAbilities('This Unit gains a Shield when attacked.')).toBeNull();
+    });
+});
+
+describe('parseControlInflicts', () => {
+    it('recognizes each inflicted control effect', () => {
+        expect(
+            parseControlInflicts(
+                'Deals damage and applies <unit-skill>Provoke</unit-skill> for 1 turn'
+            )
+        ).toEqual([{ effect: 'provoke', pos: expect.any(Number), side: 'enemy' }]);
+        expect(
+            parseControlInflicts('inflicts <unit-skill>Disable</unit-skill> for 2 turns')[0].effect
+        ).toBe('disable');
+        expect(
+            parseControlInflicts('apply <unit-skill>Concentrate Fire</unit-skill> for 1 turn')[0]
+                .effect
+        ).toBe('concentrate-fire');
+    });
+
+    it('recognizes Taunt as a self-grant', () => {
+        expect(
+            parseControlInflicts('This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn')
+        ).toEqual([{ effect: 'taunt', pos: expect.any(Number), side: 'self' }]);
+    });
+
+    it('does NOT treat an enemy-gains-Taunt condition as a self Taunt grant', () => {
+        expect(
+            parseControlInflicts(
+                'When an enemy defender gains <unit-skill>Taunt</unit-skill>, deal +20% damage'
+            )
+        ).toEqual([]);
+    });
+
+    it('still recognizes a self Taunt grant', () => {
+        expect(
+            parseControlInflicts('This Unit gains <unit-skill>Taunt</unit-skill> for 1 turn')[0]
+                .effect
+        ).toBe('taunt');
+    });
+
+    it('keeps Stasis byte-identical', () => {
+        expect(
+            parseControlInflicts('inflicts <unit-skill>Stasis</unit-skill> for 2 turns')
+        ).toEqual([{ effect: 'stasis', pos: expect.any(Number), side: 'enemy' }]);
+    });
+
+    it('anchors pos to the application tag for the common single-clause case', () => {
+        // 'inflicts ' is 9 chars → the <unit-skill>Stasis tag starts at index 9.
+        const text = 'inflicts <unit-skill>Stasis</unit-skill> for 2 turns';
+        expect(parseControlInflicts(text)[0].pos).toBe(text.indexOf('<unit-skill>Stasis'));
+    });
+
+    it('anchors pos to the APPLICATION clause when the status is named in a prior condition', () => {
+        // Stasis is mentioned first in a condition clause, then APPLIED later. pos must point at
+        // the application-clause tag (the 2nd occurrence), not the 1st (condition) occurrence.
+        const text =
+            'If the target has <unit-skill>Stasis</unit-skill>, this Unit inflicts <unit-skill>Stasis</unit-skill> for 2 turns';
+        const applicationTagPos = text.lastIndexOf('<unit-skill>Stasis');
+        expect(applicationTagPos).not.toBe(text.indexOf('<unit-skill>Stasis'));
+        expect(parseControlInflicts(text)[0].pos).toBe(applicationTagPos);
+    });
+
+    it('recognizes a control effect applied via a shared verb in a coordinated list', () => {
+        const text =
+            'inflicts <unit-skill>Defense Down II</unit-skill> for 2 turns, and <unit-skill>Provoke</unit-skill> for 1 turn';
+        expect(parseControlInflicts(text).map((c) => c.effect)).toContain('provoke');
+    });
+
+    it('does NOT match a control word in a condition clause', () => {
+        expect(
+            parseControlInflicts(
+                'If the target has <unit-skill>Provoke</unit-skill>, deal +20% damage'
+            )
+        ).toEqual([]);
+    });
+
+    it('returns [] for non-control text', () => {
+        expect(parseControlInflicts('Deals 300% damage')).toEqual([]);
     });
 });

@@ -940,9 +940,9 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
             'on-destroyed',
             BATTLECRY_DURATION[rarity]
         ),
-    // Martyrdom: "Applies Disable for N turns on the enemy that killed this Unit." EMIT-ONLY:
-    // Disable is not a modeled turn-effect yet (only Stasis skips turns) — the debuff is applied to
-    // the killer + logged. Killer routing comes from the on-destroyed listener.
+    // Martyrdom: "Applies Disable for N turns on the enemy that killed this Unit."
+    // Disable skips the affected ship's turn (same as Stasis on that axis) — the debuff is applied
+    // to the killer + logged. Killer routing comes from the on-destroyed listener.
     MARTYRDOM: (rarity) => mkNamedDebuff('Disable', 'on-destroyed', MARTYRDOM_DURATION[rarity]),
     // D-PR8: Smokescreen — when directly damaged, X% chance to gain Stealth for 1 turn.
     // Rides `on-attacked` (direct hits only — DoTs route through dot-applied, never on-attacked).

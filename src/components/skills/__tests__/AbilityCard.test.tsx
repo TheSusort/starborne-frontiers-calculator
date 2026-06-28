@@ -82,8 +82,24 @@ describe('AbilityCard', () => {
             config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
         };
 
-        it('shows a not-simulated note for utility types', () => {
+        it('does NOT show a not-simulated note for a modeled control effect (provoke)', () => {
+            // provoke is in SIMULATED_CONTROL_EFFECTS — the badge must be absent.
             render(<AbilityCard ability={control} onChange={() => {}} onRemove={() => {}} />);
+            expect(
+                screen.queryByText(/not simulated in the calculators yet/i)
+            ).not.toBeInTheDocument();
+        });
+
+        it('shows a not-simulated note for an unmodeled control effect (overload)', () => {
+            const overload: Ability = {
+                id: 'a-overload',
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'control', effect: 'overload' },
+            };
+            render(<AbilityCard ability={overload} onChange={() => {}} onRemove={() => {}} />);
             expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
         });
 

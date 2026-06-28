@@ -49,7 +49,7 @@ import {
     detectMostBuffsTarget,
     detectRepairedThisRoundCondition,
     PURGE_MORE_RE,
-    parseControlInflict,
+    parseControlInflicts,
     detectAllyCritTrigger,
     parseNoCrit,
     parseDoesntBreakStasis,
@@ -984,33 +984,31 @@ function abilitiesFromText(
         });
     }
 
-    // Control inflictions — conservative: only Stasis ("inflicts/applies Stasis"). Provoke/Taunt
-    // stay handled as targeting-status CONDITIONS (statusEffectCondition), not control abilities.
-    // The engine does NOT simulate the control (Stasis stays unmodelled); the cast-path emission
-    // (playerTurn.ts) turns this into a `control-applied` event so reactions (Defiant's
-    // shield-on-Stasis) can fire. DPS unchanged: a control ability on a firing skill carries no
-    // damage/modifier, so the damage pipeline ignores it.
-    const controlEffect = parseControlInflict(text);
-    if (controlEffect) {
-        const controlPos = text.search(/<unit-skill>\s*Stasis\b/i);
+    // Control inflictions: emit a `type:'control'` ability per recognized effect (stasis,
+    // provoke, taunt, concentrate-fire, disable). ADDITIVE — the parallel named status
+    // (parseSkillEffects → applyTimedAbilityStatus) still performs the actual lockout/
+    // forced-targeting; the control ability only sources the `control-applied` event
+    // (reaction substrate, e.g. Defiant's shield-on-Stasis). Carries no conditions (see the
+    // gated-control caveat below); no damage/modifier → DPS pipeline ignores it.
+    for (const ctrl of parseControlInflicts(text)) {
         out.push({
             ability: {
                 id: nextId(),
                 type: 'control',
-                target: 'enemy',
+                target: ctrl.side, // 'enemy' for inflicted, 'self' for Taunt
                 trigger: 'on-cast',
-                // Control abilities carry no conditions: a GATED Stasis (e.g. Crocus "if target
-                // has >3 debuffs") therefore emits control-applied unconditionally on the cast
-                // path. Inert today (the only on-stasis-applied reactor, Defiant, has an
-                // UNCONDITIONAL Stasis, and no ship both gates its own Stasis and reacts to it).
-                // If a future ship pairs a gated Stasis with an own-stasis reaction, thread the
-                // inflicting ability's conditions onto the control ability so a gated-off Stasis
-                // doesn't over-fire the shield.
+                // Control abilities carry no conditions: a GATED control (e.g. Crocus's "if
+                // target has >3 debuffs" Stasis) therefore emits control-applied unconditionally
+                // on the cast path. Inert today (the only on-stasis-applied reactor, Defiant, has
+                // an UNCONDITIONAL Stasis, and no ship both gates its own control and reacts to
+                // it). If a future ship pairs a gated control with an own-control reaction, thread
+                // the inflicting ability's conditions onto the control ability so a gated-off
+                // control doesn't over-fire the reaction.
                 conditions: [],
-                config: { type: 'control', effect: controlEffect },
+                config: { type: 'control', effect: ctrl.effect },
                 autoFilled: true,
             },
-            pos: controlPos >= 0 ? controlPos : MAX_POS,
+            pos: ctrl.pos >= 0 ? ctrl.pos : MAX_POS,
         });
     }
 

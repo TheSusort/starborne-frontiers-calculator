@@ -1015,19 +1015,111 @@ export function detectDebuffInflictedTrigger(
     return phrasePosTrigger(text, ENEMY_DEBUFFED_RE, anchorPos, 'on-debuff-inflicted');
 }
 
-// "inflicts/applies Stasis" — a control infliction. Conservative: ONLY Stasis (the one control
-// any ship reacts to today, via Defiant's shield-on-Stasis). Provoke/Taunt stay handled as
-// targeting-status CONDITIONS (statusEffectCondition), NOT control abilities. The <unit-skill>
-// tags don't bracket the verb, so matching on raw text is safe.
-// "applying" deliberately omitted: the infliction verb is always "inflicts/applies"; "applying"
-// only appears in the passive reactive clause ("when applying Stasis"), matched separately below.
+// Control-infliction recognition for the control EVENT. A skill that inflicts/grants one of the
+// five control statuses (Stasis/Provoke/Concentrate Fire/Disable enemy-side, Taunt self-side)
+// produces a `type:'control'` event-only ability so reactions can listen for `control-applied`.
+//
+// This is recognition of the *application* for the control event — it is SEPARATE from:
+//   - `statusEffectCondition` — the read/gate path ("If the target HAS <unit-skill>Provoke…").
+//   - `parseSkillEffects` — the named-status *application* path that actually applies the debuff.
+// The control ability is purely additive; nothing here suppresses those other paths.
+//
+// Stasis keeps its ORIGINAL loose regex verbatim (byte-identity, zero golden churn). The three
+// enemy-side effects (Provoke / Concentrate Fire / Disable) anchor on an application verb that is
+// either immediately tag-adjacent OR governs a coordinated list ("inflicts <Defense Down II> for
+// 2 turns, and <Provoke>" — Kafa): the verb, then zero-or-more "<unit-skill>…</unit-skill> [for N
+// turns]" items joined by commas/"and", then the target tag. This still ignores a control word in
+// a condition clause ("If the target has <unit-skill>Provoke…") — no application verb precedes it.
+// Taunt stays TIGHT (verb-adjacent only): no corpus text grants Taunt via a shared-verb compound
+// list, so the list-tolerant form would be unused surface area. It also carries a negative
+// lookbehind rejecting an `enemy` subject within a short window before the verb, so Amartya's
+// CONDITION clause "When an enemy defender gains <unit-skill>Taunt" (an enemy gaining Taunt, not a
+// self-grant) does not emit a phantom self `taunt` ability, while "This Unit gains/grants Taunt"
+// and "and grants Taunt" still match.
+// "applying" is deliberately omitted: it only appears in the passive reactive clause ("when
+// applying Stasis"), matched separately below.
+//
+// Shared list-prefix between the verb and the target tag (zero-or-more coordinated items).
+const CONTROL_LIST_PREFIX =
+    '(?:\\s+<unit-skill>[^<]*<\\/unit-skill>(?:\\s+for\\s+\\d+\\s+turns?)?,?\\s+and)*';
+const ENEMY_INFLICT_VERB = '\\b(?:inflicts?|appl(?:ies|y)|(?:inflicted|applied) with)\\b';
 const STASIS_INFLICT_RE = /\b(?:inflicts?|applies)\b[^.]*?<unit-skill>\s*Stasis\b/i;
 
-/** Parses a Stasis control infliction → the control effect, or null when absent. Reference data:
- *  docs/ship-skills.csv (Defiant charged "inflicts Stasis for 1 turn"). */
-export function parseControlInflict(text: string | null | undefined): ControlEffect | null {
-    if (!text) return null;
-    return STASIS_INFLICT_RE.test(text) ? 'stasis' : null;
+const CONTROL_INFLICTS: {
+    effect: ControlEffect;
+    tag: string;
+    side: 'enemy' | 'self';
+    re: RegExp;
+}[] = [
+    { effect: 'stasis', tag: 'Stasis', side: 'enemy', re: STASIS_INFLICT_RE },
+    {
+        effect: 'provoke',
+        tag: 'Provoke',
+        side: 'enemy',
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Provoke\\b`,
+            'i'
+        ),
+    },
+    {
+        effect: 'concentrate-fire',
+        tag: 'Concentrate Fire',
+        side: 'enemy',
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Concentrate Fire\\b`,
+            'i'
+        ),
+    },
+    {
+        effect: 'disable',
+        tag: 'Disable',
+        side: 'enemy',
+        re: new RegExp(
+            `${ENEMY_INFLICT_VERB}${CONTROL_LIST_PREFIX}\\s+<unit-skill>\\s*Disable\\b`,
+            'i'
+        ),
+    },
+    {
+        effect: 'taunt',
+        tag: 'Taunt',
+        side: 'self',
+        re: /(?<!\benemy\b[\s\w]{1,20})\b(?:gains?|grants?)\s+<unit-skill>\s*Taunt\b/i,
+    },
+];
+
+/**
+ * Parses ALL control inflictions in `text` → one entry per matched effect. Each entry carries the
+ * control effect, its raw tag position (`text.search(<tag>)`, may be -1 — the builder maps -1 →
+ * MAX_POS), and the side the status lands on (Taunt is a self-grant; the rest hit the enemy).
+ * Recognizes the application for the control EVENT only; see CONTROL_INFLICTS comment above for
+ * how this differs from `statusEffectCondition` (read/gate) and `parseSkillEffects` (apply).
+ * Reference data: docs/ship-skills.csv.
+ */
+export function parseControlInflicts(
+    text: string | null | undefined
+): { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] {
+    if (!text) return [];
+    const out: { effect: ControlEffect; pos: number; side: 'enemy' | 'self' }[] = [];
+    for (const c of CONTROL_INFLICTS) {
+        // Match the APPLICATION clause (c.re anchors on the application verb) and locate the
+        // control tag WITHIN that match — not the first tag anywhere in the row. A status named
+        // in an earlier CONDITION clause ("If the target has <unit-skill>Stasis…") would otherwise
+        // pull `pos` back to the wrong clause, mis-ordering the emitted control ability (the
+        // builder sorts emission order by `pos`).
+        const match = c.re.exec(text);
+        if (!match) continue;
+        const tagRe = new RegExp(
+            `<unit-skill>\\s*${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            'i'
+        );
+        const tagMatch = tagRe.exec(match[0]);
+        out.push({
+            effect: c.effect,
+            pos: tagMatch ? match.index + tagMatch.index : -1,
+            side: c.side,
+        });
+    }
+    return out;
 }
 
 // "when applying Stasis" — the reactive trigger for a grant that procs when THIS unit applies

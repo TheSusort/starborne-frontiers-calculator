@@ -19,7 +19,7 @@ import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
 import {
-    NOT_SIMULATED_TYPES,
+    isAbilityNotSimulated,
     PASSIVE_NOOP_TYPES,
     NOT_SIMULATED_NOTE,
     PASSIVE_NOOP_WARNING,
@@ -763,7 +763,7 @@ export const AbilityCard: React.FC<Props> = ({
             {/* Not-simulated note is independent of the field editor so it always
                 shows for flagged types even when a case provides editable fields
                 (e.g. purge: count is editable for annotation but not yet simulated). */}
-            {NOT_SIMULATED_TYPES.has(ability.type) && (
+            {isAbilityNotSimulated(ability) && (
                 <p className="text-xs text-theme-text-secondary">{NOT_SIMULATED_NOTE}</p>
             )}
 
