@@ -78,33 +78,75 @@ conditional spreads for `isPrimaryTarget` / `shieldWasHit` / `didCrit` / `damage
    - `targetId`: the victim's id; `attackerId`: the acting actor's id.
    - `damage` / `shieldWasHit`: that victim's own collected values.
    - `isPrimaryTarget: true` **only** when `victim.id === tgt.id`.
-3. **Both directions.** Apply the same change at all three cast-sites. The
-   player→enemy and enemy→player emits use the same helper and the same
-   per-victim collection; the only per-site difference is the existing roster /
-   sink binding.
+3. **Both directions, positional branch only.** Apply the same change at all
+   three cast-sites. **Only the positional branch** of each site needs the
+   per-victim loop; the enemy site's emit (engine.ts ~5631) is shared with the
+   non-positional path, which already emits correctly for its single victim and
+   must stay as-is. Do not wrap the shared non-positional emit (would regress
+   non-positional goldens).
 4. **`ability-performed` is untouched** — still one aggregate emit per turn.
+5. **Mid-attack deaths.** `onVictimResolved` fires once per (hit, victim);
+   `applyPositionalDamage` re-resolves the live roster each hit, so a victim
+   killed on hit 1 simply stops appearing on hits 2..N. The accumulation Map
+   handles this naturally. The per-victim `attacked` emit loop MUST run **after
+   all hits resolve** so each victim's `damage` / `shieldWasHit` are final.
 
 ### Per-victim Stasis-break (blocking spike)
 
 Today the on-hit Stasis-break fires inside `runPlayerTurn` for the resolved
 `targetId` only (engine.ts:3454-3458 documents the AoE-footprint deferral). The
-break is **deferred** — it marks the victim rather than removing Stasis
-immediately (engine.ts:3334) — and a same-turn re-apply check skips the break if
-the same turn's `inflictedEnemyDebuffs` re-applied Stasis to that victim.
+mechanism has three load-bearing properties, all of which the footprint path must
+preserve:
 
-Because `runPlayerTurn` does not know the AoE footprint (positional apply happens
-engine-side after it returns), the per-footprint break must fire **engine-side**
-after `drivePositionalApply`, once per hit victim, reusing the **same deferred-mark
-+ same-turn re-apply-check path** the selected-target break uses. This is the
-highest-risk sub-task; the implementation plan MUST open with a spike that:
+- **Deferred removal.** The break does not remove Stasis immediately — it marks
+  the victim `stasisBreakPending` (engine.ts ~3334); the actual removal happens at
+  the victim's own would-act skip branch (engine.ts ~4830 / ~5058 / ~5645). This
+  is what keeps the on-attacked reactive's drainQueue seeing `isStasised = true`
+  at emit time (engine.ts ~3338-3340). **Footprint breaks MUST route through
+  `stasisBreakPending` too** (not immediate removal), or the covered victim's
+  reactive-suppression diverges from the primary's.
+- **Pre-hit stasis capture.** The selected-target break snapshots
+  `isStasised(tgt.id)` *before* `runPlayerTurn` (engine.ts ~4623). Footprint
+  victims aren't known until `drivePositionalApply` runs (post-turn), but the
+  deferred break has not yet removed anything, so their stasis state is still
+  intact then — sample `isStasised(victim.id)` **inside `onVictimResolved`, on the
+  first hit per victim**. The `doesntBreakStasis` attacker exception
+  (engine.ts ~4623, ~4887) MUST be honored for footprints too (a `doesntBreakStasis`
+  attacker breaks no one's Stasis).
+- **Ordering.** Establish the per-victim break-mark, then emit that victim's
+  `attacked` while it is still `isStasised`, with removal deferred — matching the
+  selected-target ordering contract (the :3326-3345 design note).
 
-- locates the existing selected-target break mechanism and its re-apply guard,
-- confirms it can be invoked per-victim engine-side without double-breaking the
-  selected target,
-- verifies ordering vs the ability timed-debuff loop (the break must not remove a
-  Stasis the same attack just re-applied).
+**THE LANDMINE (re-apply guard granularity).** The selected-target break is
+skipped when the same turn re-applied Stasis to the target
+(`turn.inflictedEnemyDebuffs.some(isStasis)`, engine.ts ~4638). But
+`inflictedEnemyDebuffs` is a flat `ActiveBuff[]` carrying **no victim id**
+(playerTurn.ts ~139), and the turn's ability debuffs only ever target `targetId`
+(playerTurn.ts ~977). So:
 
-If the spike finds the break cannot be cleanly invoked per-victim, fall back to
+- The re-apply guard legitimately applies to the **selected target only**.
+- **Covered footprint victims have no same-turn re-apply vector** — nothing in the
+  turn can re-stasis them. Their break must therefore fire **unconditionally**
+  (subject only to the `doesntBreakStasis` exception and "was stasised at hit
+  time"). Reusing the turn-global guard verbatim would wrongly suppress every
+  covered victim's break whenever the *selected* target was re-stasised, leaving
+  covered victims frozen when they should wake.
+
+Because `runPlayerTurn` does not know the AoE footprint, the per-footprint break
+fires **engine-side** after `drivePositionalApply`, once per hit victim. The
+implementation plan MUST open with a spike that:
+
+- confirms the re-apply guard's granularity — verify `inflictedEnemyDebuffs`
+  carries no victim id, so it cannot distinguish which footprint victim was
+  re-stasised (the landmine above);
+- confirms the per-footprint break can route through `stasisBreakPending` without
+  double-breaking the selected target (which already marks it);
+- confirms `doesntBreakStasis` and the pre-hit `isStasised(victim.id)` sample are
+  both honored for footprints;
+- verifies ordering vs the ability timed-debuff loop (the selected-target break
+  must not remove a Stasis the same attack re-applied).
+
+If the spike finds the break cannot be cleanly routed per-victim, fall back to
 landing per-victim `attacked` first and treating Stasis-break-per-footprint as a
 follow-up (surfaced to the maintainer), rather than forcing a fragile change.
 
@@ -132,8 +174,13 @@ runs without the feature keep the legacy shape and goldens stay byte-identical.
    assembly verbatim.
 2. **Wire the UI.** Display covered victims' damage-taken (incoming / shield /
    barrier) in the battle-simulator surfacing, wherever `perActorShield` is
-   currently rendered. Reuse the existing per-actor row UI primitives; do not
-   hand-roll new card/table markup.
+   currently rendered. The plan must first locate the battle-simulator component
+   that consumes `perActorShield` (grep `perActorShield` under `src/pages` /
+   `src/components`) and colocate the `perActorIncoming` display there. Reuse the
+   existing per-actor row UI primitives; do not hand-roll new card/table markup.
+
+   Engine-side reference for the row assembly: `perActorShield` is built at
+   engine.ts ~5870-5894 (`Object.fromEntries` + size guard); mirror it exactly.
 
 This component is purely additive — byte-identical for all non-positional /
 single-victim runs (the field stays absent).
@@ -169,9 +216,12 @@ incoming-DoT deferred"*, implying DoT support was intended.
   carries an on-attacked reactive (e.g. a counter) → the covered victim's reactive
   fires. Non-vacuous: assert the reactive's observable effect, and that flipping
   the emission off drops it.
-- **E5-symmetry pin:** the same AoE attacker fires byte-identical per-victim
-  `attacked` events (count, targets, crit/shield/damage signals) whether on the
-  player or enemy side. The canonical team-symmetry test.
+- **E5-symmetry pin:** the same AoE attacker, with the **same footprint geometry,
+  sides flipped**, fires byte-identical per-victim `attacked` events (count,
+  targets, crit/shield/damage signals) whether on the player or enemy side.
+  Symmetry here means "same attacker + mirror-able roster geometry," not "any two
+  rosters" — use the campaign's E5 mirror-fixture template (the canonical
+  team-symmetry pattern).
 - **Per-footprint Stasis-break:** an AoE cast that hits two stasised footprint
   victims breaks Stasis on **both**, respecting the same-turn re-apply guard.
 - **`perActorIncoming` surface:** a positional round with covered victims exposes
@@ -200,12 +250,21 @@ incoming-DoT deferred"*, implying DoT support was intended.
 | 2 result surface + UI | low | no (additive) | none |
 | 3 modifier closeout | low/none | no (doc + lock) | none (unless a bomb leak is found) |
 
+## Resolved during spec review
+
+1. `onVictimResolved` fires **once per (hit, victim)** — nested inside the per-hit
+   loop and the per-footprint loop (positionalApply.ts ~155-189). The accumulating
+   Map (sum `damage`, OR `shieldWasHit`) is correct for this and matches the
+   existing focus computation (engine.ts ~4722-4727).
+2. The selected-target Stasis-break path, its deferred-removal routing
+   (`stasisBreakPending`), the pre-hit `isStasised` capture, and the
+   turn-global-re-apply-guard landmine are all detailed in Component 1's spike
+   section above.
+3. `perActorIncoming` is currently surfaced on `healingRounds` only
+   (engine.ts ~5951), never on `RoundData` — Component 2 is a genuinely new
+   `RoundData` surface.
+
 ## Open implementation questions (resolve in the plan)
 
-1. Does `onVictimResolved` fire once per victim or once per (victim, hit)? The
-   collection map and `shieldWasHit` OR-accumulation must match. (Confirm against
-   `applyPositionalDamage`.)
-2. The exact selected-target Stasis-break call path and its re-apply guard, so the
-   per-footprint break reuses it without double-breaking the primary target.
-3. Where `perActorShield` is rendered in the battle-simulator UI, to colocate the
-   `perActorIncoming` display.
+1. The battle-simulator component that renders `perActorShield` (grep target for
+   the Component 2 UI seam).
