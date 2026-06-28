@@ -1619,7 +1619,22 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // The trigger IS the gate, so drop the now-redundant self-crit condition (start-of-round
         // and bomb-detonate phrasings produce no condition from detectGrantConditions). Any other
         // conditions (e.g. an enemy-type co-gate) are preserved.
-        const reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
+        let reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
+        // Overload lifecycle guard: a kill never GRANTS a recurring/accumulating buff — it only
+        // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
+        // parseSelfBuffRemovals). The Marauder "gains <buff> every turn … loses it on kill" shape
+        // makes Overload's name appear in BOTH the per-turn grant clause and the kill-removal
+        // clause; resolveBuffClause can pick up the kill phrasing and mis-trigger the accumulating
+        // GRANT on on-enemy-destroyed (Mangler/Ravager), which would gate the every-turn accrual
+        // behind a kill. Strip a kill trigger from an accumulating (recurring) grant so it keeps its
+        // per-round accumulation; the legitimate recurring-grant triggers (Asphyxiator
+        // start-of-round, Ruiner on-enemy-repaired) are unaffected, and finite grants (Marauder Rage
+        // on-kill) keep their kill trigger.
+        const isAccumulatingGrant =
+            ability.config.type === 'buff' && ability.config.duration === 'recurring';
+        if (reactiveTrigger === 'on-enemy-destroyed' && isAccumulatingGrant) {
+            reactiveTrigger = undefined;
+        }
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
         const pos = rowText ? rowText.indexOf(buff.buffName) : -1;

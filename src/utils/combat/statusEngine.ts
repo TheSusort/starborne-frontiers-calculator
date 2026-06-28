@@ -956,7 +956,18 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     const removeSelfBuffByName = (actorId: string, buffName: string): void => {
         selfMaps.get(actorId)?.delete(deriveFamilyKey(buffName).familyKey);
-        accumSelfMaps.get(actorId)?.delete(buffName);
+        // Accumulating (per-round) Overload: RESET stacks to 0 instead of deleting the entry.
+        // The "gains Overload every turn" grant is a single seeded accumulating entry that
+        // beginRound's per-round tick increments; deleting it would stop accrual permanently, but
+        // the Marauder mechanic is "lose all stacks on kill, then keep building again". Zeroing the
+        // entry (and clearing its appliedSeq so the next 0→positive tick re-stamps ordering) makes
+        // it inert THIS round (activeAbilityStatuses excludes stacks<=0) yet lets beginRound resume
+        // accrual next round. Per-active/per-charge entries reset the same way.
+        const accum = accumSelfMaps.get(actorId)?.get(buffName);
+        if (accum) {
+            accum.stacks = 0;
+            accum.appliedSeq = undefined;
+        }
         persistentSelfMaps.get(actorId)?.delete(buffName);
     };
 
