@@ -622,6 +622,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         }
         lastRound = r;
 
+        // The active carrier is turn-scoped: clearing it at round top ensures start-of-round /
+        // pre-turn-body self-buff writes (which run before any beginTurn this round) are not
+        // mis-flagged for the prior round's last actor — they get no own-turn reprieve.
+        currentTurnActorId = undefined;
+
         // (Decrement+expire moved out to decrementPlayer/decrementEnemy, called from each
         //  owner's Post Turn in the engine.)
 

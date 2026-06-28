@@ -593,6 +593,22 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
             eng.snapshot('attacker').activeSelfBuffs.some((b) => b.buffName === 'Attack Up')
         ).toBe(false);
     });
+
+    it('start-of-round self-buff (applied before beginTurn) gets no reprieve (currentTurnActorId reset at round top)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.registerAbilityStatuses([mkStatus(1)]);
+
+        eng.beginRound(1);
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker');
+
+        eng.beginRound(2);
+        // start-of-round application: no beginTurn yet this round
+        eng.applyTimedAbilityStatus(2, mkStatus(1));
+        eng.beginTurn('attacker');
+        eng.decrementPlayer('attacker'); // no reprieve → 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('self')).toHaveLength(0);
+    });
 });
 
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
