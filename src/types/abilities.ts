@@ -21,6 +21,7 @@ export type AbilityType =
     | 'cleanse'
     | 'purge'
     | 'control'
+    | 'remove-self-buff'
     | 'incoming-reduction'
     | 'incoming-block'
     | 'incoming-shield-grant'
@@ -454,6 +455,9 @@ export type AbilityConfig =
           type: 'control';
           effect: ControlEffect;
       }
+    // Overload lifecycle: "loses/removes Overload on kill". Removes a named self-buff family from
+    // ALL of the owner's self stores. target:'self'; trigger carries the reactive moment.
+    | { type: 'remove-self-buff'; buffName: string; scope: 'all' }
     // D-PR3 victim-side incoming-damage reduction (folded at the crit-aware computation sites).
     | {
           type: 'incoming-reduction';
@@ -533,16 +537,10 @@ export type AbilityConfig =
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each
  *  (Stasis/Disable turn-lockout, Provoke/Taunt/Concentrate-Fire forced-targeting) is
- *  simulated via the parallel named-status path; Overload is the sole deferred exception.
+ *  simulated via the parallel named-status path; all control effects are now simulated.
  *  The `control-applied` event (events.ts) additionally exposes the application moment so
  *  reactions (e.g. Defiant's shield-on-Stasis) can fire. */
-export type ControlEffect =
-    | 'provoke'
-    | 'taunt'
-    | 'stasis'
-    | 'overload'
-    | 'concentrate-fire'
-    | 'disable';
+export type ControlEffect = 'provoke' | 'taunt' | 'stasis' | 'concentrate-fire' | 'disable';
 
 export interface Ability {
     id: string;

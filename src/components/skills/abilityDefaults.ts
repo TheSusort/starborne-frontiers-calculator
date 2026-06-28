@@ -52,6 +52,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'purge', count: 1 };
         case 'control':
             return { type: 'control', effect: 'provoke' };
+        case 'remove-self-buff':
+            return { type: 'remove-self-buff', buffName: '', scope: 'all' };
         case 'incoming-reduction':
             return {
                 type: 'incoming-reduction',
@@ -108,6 +110,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     cleanse: 'ally',
     purge: 'enemy',
     control: 'enemy',
+    'remove-self-buff': 'self',
     'incoming-reduction': 'self',
     'incoming-block': 'self',
     'incoming-shield-grant': 'self',

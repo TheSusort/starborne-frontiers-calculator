@@ -25,6 +25,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     cleanse: 'Cleanse',
     purge: 'Purge',
     control: 'Control',
+    'remove-self-buff': 'Remove Self Buff',
     'incoming-reduction': 'Incoming Reduction',
     'incoming-block': 'Incoming Block',
     'incoming-shield-grant': 'Incoming Shield Grant',
