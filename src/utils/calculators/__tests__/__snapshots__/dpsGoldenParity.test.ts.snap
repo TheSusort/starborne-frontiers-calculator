@@ -1071,7 +1071,7 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeSelfBuffs": [
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
         {
           "buffName": "Focus",
@@ -1229,7 +1229,7 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeSelfBuffs": [
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
         {
           "buffName": "Focus",
@@ -1387,7 +1387,7 @@ exports[`dpsGoldenParity > ability buffs/debuffs unconditioned 1`] = `
       "activeSelfBuffs": [
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
         {
           "buffName": "Focus",
@@ -6097,7 +6097,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
         },
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [
@@ -6352,7 +6352,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
         },
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [
@@ -6607,7 +6607,7 @@ exports[`dpsGoldenParity > manual + team buffs with static defPen/dot path 1`] =
         },
         {
           "buffName": "Attack Up",
-          "turnsRemaining": 1,
+          "turnsRemaining": 2,
         },
       ],
       "appliedDoTs": [
@@ -9370,7 +9370,7 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 7,
-      "teamDamage": 28561,
+      "teamDamage": 30781,
       "totalRoundDamage": 24807,
     },
     {
@@ -9411,7 +9411,7 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": true,
       "directDamage": 55568,
       "dotsLanded": true,
-      "enemyHpPct": 45,
+      "enemyHpPct": 44,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 8,
@@ -9452,7 +9452,7 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
       "didCrit": false,
       "directDamage": 9923,
       "dotsLanded": true,
-      "enemyHpPct": 30,
+      "enemyHpPct": 29,
       "infernoDamage": 0,
       "resistedEnemyDebuffs": [],
       "round": 9,
@@ -9507,7 +9507,7 @@ exports[`dpsGoldenParity > walked team actor (full team-skills walk) 1`] = `
   ],
   "summary": {
     "avgDamagePerRound": 22029,
-    "teamTotalDamage": 122962,
+    "teamTotalDamage": 125182,
     "totalConditionalDamage": 0,
     "totalCorrosionDamage": 0,
     "totalDamage": 220286,

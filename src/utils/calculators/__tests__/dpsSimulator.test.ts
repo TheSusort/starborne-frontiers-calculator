@@ -249,10 +249,11 @@ describe('simulateDPS', () => {
             expect(
                 result.rounds[2].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
             ).toBe(true);
-            // Duration 1 means it expires after the charged turn → not present on round 4
+            // Duration 1, but applied during the carrier's OWN turn → the own-turn reprieve keeps
+            // it active through the carrier's next turn, so it is still present on round 4.
             expect(
                 result.rounds[3].activeSelfBuffs.some((b) => b.buffName === 'Attack Up II')
-            ).toBe(false);
+            ).toBe(true);
         });
     });
 
@@ -402,11 +403,13 @@ describe('simulateDPS', () => {
                     },
                 ],
             });
-            // Real charged round 3 → buff present; synthetic round 4 → buff absent.
+            // Real charged round 3 → buff applied. With the own-turn reprieve a duration-1
+            // self-buff applied during the carrier's own (charged) turn survives through the
+            // carrier's next turn, so it is also present on the synthetic round 4.
             expect(result.rounds[2].activeSelfBuffs.map((b) => b.buffName)).toContain(
                 'Attack Up II'
             );
-            expect(result.rounds[3].activeSelfBuffs.map((b) => b.buffName)).not.toContain(
+            expect(result.rounds[3].activeSelfBuffs.map((b) => b.buffName)).toContain(
                 'Attack Up II'
             );
         });
@@ -948,9 +951,11 @@ describe('simulateDPS', () => {
             startCharged: false as const,
         };
 
-        it('charge buff only fires on charge rounds', () => {
-            // Buff applies on 'charge', duration 2 → active during rounds 3, 4 (then expires)
-            // attackBuff of 100 doubles effectiveAttack when active
+        it('charge buff fires on charge rounds and rides its own-turn reprieve', () => {
+            // Buff applies on 'charge', duration 2. It is applied during the carrier's OWN
+            // (charged) turn on round 3, so the own-turn reprieve extends it by one of the
+            // carrier's turns → active during rounds 3, 4 AND 5 (then re-applied at the next
+            // charged round 6). attackBuff of 100 doubles effectiveAttack when active.
             const chargeBuff: SelectedGameBuff = {
                 id: 'cb1',
                 buffName: 'Power Surge',
@@ -976,11 +981,13 @@ describe('simulateDPS', () => {
 
             expect(dmgR1).toBeLessThan(dmgR3);
             expect(dmgR2).toBeLessThan(dmgR3);
-            // Rounds 3 and 4 should have higher damage (buff active)
+            // Rounds 3, 4 and 5 should have higher damage (buff active across the reprieved window)
             expect(dmgR3).toBeGreaterThan(dmgR1);
             expect(dmgR4).toBeGreaterThan(dmgR1);
-            // Round 5: buff expired, back to base active-skill damage
-            expect(dmgR5).toBe(dmgR1);
+            // Round 5: still buffed thanks to the own-turn reprieve (equal to the buffed active
+            // round 4, NOT the base round-1 damage). The buff is then re-applied at round 6.
+            expect(dmgR5).toBeGreaterThan(dmgR1);
+            expect(dmgR5).toBe(dmgR4);
         });
 
         it('RoundData.activeSelfBuffs reflects timeline', () => {

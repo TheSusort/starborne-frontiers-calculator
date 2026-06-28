@@ -368,16 +368,15 @@ describe('extraActions', () => {
         // This PROVES the extra turn does NOT see a stale/expired buff — the buff is
         // freshly re-applied on the extra turn by the active slot firing again.
         //
-        // Bus tap: count buff-expired events for "Attack Up" on 'attacker' in round 1.
-        // Per-turn decrement → buff decrements at post-turn of normal turn AND post-turn
-        // of extra turn → 2 expiry events per round.
-        // Per-round decrement (wrong) → only 1 expiry event per round even with 2 applies.
+        // Bus tap: collect buff-expired events for "Attack Up" on 'attacker'.
+        // With the own-turn reprieve, a 1-turn self-buff applied during the carrier's own
+        // turn survives through the carrier's NEXT turn; both the normal-turn and extra-turn
+        // applications are reprieved, so the buff no longer expires twice within a round.
+        // The reprieved window still elapses, yielding exactly one expiry per round.
         const busWithExtra = createEventBus();
-        let buffExpiredCountRound1 = 0;
+        const expiryRounds: number[] = [];
         busWithExtra.on('buff-expired', (e) => {
-            if (e.round === 1 && e.actorId === 'attacker' && e.buffName === 'Attack Up') {
-                buffExpiredCountRound1++;
-            }
+            if (e.actorId === 'attacker' && e.buffName === 'Attack Up') expiryRounds.push(e.round);
         });
         const withExtra = simulateDPS({
             ...BASE,
@@ -392,9 +391,9 @@ describe('extraActions', () => {
             expect(round.totalRoundDamage).toBe(40000);
             expect(round.extraTurns).toBe(1);
         }
-        // Assertion 2 — per-turn decrement: the 1-turn buff expired exactly twice in
-        // round 1 (once after the normal turn's post-turn, once after the extra turn's
-        // post-turn). A per-round-decrement engine would emit only 1 here.
-        expect(buffExpiredCountRound1).toBe(2);
+        // Assertion 2 — the reprieved 1-turn self-buff still expires exactly once per
+        // round (one per round across all 3 rounds), confirming the extra-action
+        // interaction does not leak/accumulate stale buffs despite double application.
+        expect(expiryRounds).toEqual([1, 2, 3]);
     });
 });
