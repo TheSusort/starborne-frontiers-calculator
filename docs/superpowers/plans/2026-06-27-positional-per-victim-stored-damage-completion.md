@@ -439,7 +439,7 @@ Produce a channel-map: which `creditDamage` channels (`dot-inferno`, `dot-corros
 **Q1 — Which channels feed the `enemy.currentHp` overwrite?**
 
 The overwrite is `engine.ts:5673`:
-```
+```ts
 enemy.currentHp = Math.max(0, enemyHp - enemyHpDecline);   // enemyHpDecline = cumulativeDamage + cumulativeTeamDamage  (:5672)
 ```
 Its two inputs accumulate per round from the `roundDamage` map only:

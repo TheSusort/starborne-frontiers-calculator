@@ -4447,8 +4447,8 @@ export function runCombat(input: CombatEngineInput): {
                                 incomingReductionForHit(incomingAbilitiesOf(healTarget.id), {
                                     didCrit: false,
                                     attackerStealthed: false,
-                                    victimStealthed: false,
-                                    victimStasised: false,
+                                    victimStealthed: isStealthed(healTarget.id),
+                                    victimStasised: isStasised(healTarget.id),
                                     hitIndexThisRound: 0,
                                     dotType,
                                 }),
@@ -4515,8 +4515,8 @@ export function runCombat(input: CombatEngineInput): {
                                     incomingReductionForHit(incomingAbilitiesOf(actor.id), {
                                         didCrit: false,
                                         attackerStealthed: false,
-                                        victimStealthed: false,
-                                        victimStasised: false,
+                                        victimStealthed: isStealthed(actor.id),
+                                        victimStasised: isStasised(actor.id),
                                         hitIndexThisRound: 0,
                                         dotType,
                                     }),

@@ -542,8 +542,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                             target: parsedTarget('front'),
                             pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
                             shipSkills: { slots: [stasisOnlyInflict(9)] },
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        } as any,
+                        } as EnemyAttacker,
                     ],
                     __testTapActors: (actors: CombatActor[]) => {
                         actors
