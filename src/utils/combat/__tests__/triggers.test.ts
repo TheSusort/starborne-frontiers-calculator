@@ -3033,6 +3033,65 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
     });
 });
 
+describe('Overload lifecycle Task 3: executeIntent remove-self-buff branch', () => {
+    const makeRuntime = (id: string): PlayerActorRuntime =>
+        ({
+            actor: { id } as CombatActor,
+            healModifier: 0,
+            attack: 0,
+            defence: 0,
+            hp: 1000,
+        }) as unknown as PlayerActorRuntime;
+
+    const makeRemoveSelfBuffIntent = (ownerId: string): Intent => ({
+        ownerId,
+        sourceSlot: 'passive',
+        ability: {
+            id: 'overload-removal',
+            type: 'remove-self-buff',
+            target: 'self',
+            trigger: 'on-enemy-destroyed',
+            conditions: [],
+            config: { type: 'remove-self-buff', buffName: 'Overload', scope: 'all' },
+        },
+    });
+
+    const buildCtx = (ownerId: string): IntentExecContext => {
+        const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        se.beginRound(1);
+        return {
+            round: 1,
+            enemy: { id: 'enemy-default' } as CombatActor,
+            enemyId: 'enemy-default',
+            statusEngine: se,
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([[ownerId, makeRuntime(ownerId)]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: [ownerId],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+        };
+    };
+
+    it('calls removeSelfBuffByName with (ownerId, buffName)', () => {
+        const ctx = buildCtx('attacker');
+        const spy = vi.spyOn(ctx.statusEngine, 'removeSelfBuffByName');
+
+        executeIntent(makeRemoveSelfBuffIntent('attacker'), ctx);
+
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy).toHaveBeenCalledWith('attacker', 'Overload');
+    });
+});
+
 // ----------------------------------------------------------------------
 // Phase 4c PR 2 Task 5: on-ally-attacked ENGINE integration (scenario 16).
 // Full runCombat in healing mode: a walked TEAM owner carries the reactive
