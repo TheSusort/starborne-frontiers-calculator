@@ -12,8 +12,10 @@
  *
  * - Defense Shred (max 20, -2% Defense/stack) — persists until cleansed.
  * - Blast (max 4, +15% Outgoing/stack) — persists.
- * - Overload (max 10) — persists until the unit kills an enemy; kills never occur
- *   in-sim → permanent here (per-kill removal is a Phase 4 concern).
+ * - Overload (max 10) — persists until the unit kills an enemy. The combat sim
+ *   now models that lose-on-kill via the remove-self-buff path. In the DPS
+ *   calculator it stays permanent: the dummy enemy is indestructible, so the
+ *   kill never fires there.
  * - Titanite Plating (max 5) — persists, loses 1 stack per incoming hit; the attacker
  *   is never hit in-sim → permanent here (per-incoming-hit removal is a Phase 4 concern).
  *

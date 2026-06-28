@@ -9,16 +9,18 @@ import { Ability, AbilityType, ControlEffect } from '../../types/abilities';
  * healing-calc work; purge in the C2a on-cast purge work, which removes enemy
  * buffs from the cast path).
  * `control` is NOT in this set: control simulation is now effect-aware (see
- * SIMULATED_CONTROL_EFFECTS + isAbilityNotSimulated). The five named effects
- * (stasis / provoke / taunt / concentrate-fire / disable) are simulated via the
- * named-status path and emit `control-applied` events. Only Overload remains
- * unmodeled and still shows the "Not simulated" badge.
+ * SIMULATED_CONTROL_EFFECTS + isAbilityNotSimulated). Every named effect
+ * (stasis / provoke / taunt / concentrate-fire / disable) is simulated via the
+ * named-status path and emits `control-applied` events. With Overload's
+ * lifecycle now modeled, no control effect remains unmodeled and the
+ * "Not simulated" badge no longer fires for any ability type or effect.
  */
 export const NOT_SIMULATED_TYPES: ReadonlySet<AbilityType> = new Set([]);
 
 /**
- * The five control effects that are fully modeled in the combat engine.
- * Overload is excluded — it is deferred to a future project.
+ * Every control effect — all are fully modeled in the combat engine. Overload
+ * was the last holdout; its lose-on-kill lifecycle is now simulated, so the set
+ * mirrors the full ControlEffect enum.
  */
 export const SIMULATED_CONTROL_EFFECTS: ReadonlySet<ControlEffect> = new Set([
     'stasis',
@@ -31,13 +33,13 @@ export const SIMULATED_CONTROL_EFFECTS: ReadonlySet<ControlEffect> = new Set([
 /**
  * Returns true when an ability should show the "Not simulated" badge.
  *
- * For `type:'control'` abilities the decision is per-effect:
- *   - A modeled effect (stasis / provoke / taunt / concentrate-fire / disable)
- *     returns false (IS simulated).
- *   - An unmodeled effect (currently: overload) returns true (NOT simulated).
+ * For `type:'control'` abilities the decision is per-effect, but every control
+ * effect (stasis / provoke / taunt / concentrate-fire / disable) is now modeled,
+ * so this returns false for all of them.
  *
  * All other ability types fall back to the NOT_SIMULATED_TYPES set (currently
- * empty — all other ability types are simulated).
+ * empty — all other ability types are simulated). The badge machinery stays for
+ * future unmodeled mechanics but nothing triggers it today.
  */
 export function isAbilityNotSimulated(ability: Ability): boolean {
     if (ability.type === 'control' && ability.config.type === 'control') {

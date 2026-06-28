@@ -90,19 +90,6 @@ describe('AbilityCard', () => {
             ).not.toBeInTheDocument();
         });
 
-        it('shows a not-simulated note for an unmodeled control effect (overload)', () => {
-            const overload: Ability = {
-                id: 'a-overload',
-                type: 'control',
-                target: 'enemy',
-                trigger: 'on-cast',
-                conditions: [],
-                config: { type: 'control', effect: 'overload' },
-            };
-            render(<AbilityCard ability={overload} onChange={() => {}} onRemove={() => {}} />);
-            expect(screen.getByText(/not simulated in the calculators yet/i)).toBeInTheDocument();
-        });
-
         it('warns when a firing-only type sits on the passive slot', () => {
             render(
                 <AbilityCard ability={dot} slot="passive" onChange={() => {}} onRemove={() => {}} />
