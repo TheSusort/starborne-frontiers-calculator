@@ -3366,7 +3366,13 @@ export function runCombat(input: CombatEngineInput): {
             // ability channels (victimId keys the actor's own self store regardless of side). The
             // SCHEDULED channel reads selfBuffLookup, which today is populated only for player/team
             // actors (enemy runtimes pass an empty map) — a pre-existing gap, irrelevant until an
-            // enemy carries a scheduled self-buff. Direct channel only; incoming-DoT deferred.
+            // enemy carries a scheduled self-buff.
+            // Direct-damage channel ONLY — by design. Per the game rules, incoming/outgoing
+            // damage modifiers (Inc. Damage Down/Up, Out. Damage Up) apply to DIRECT hits
+            // only; DoT ticks (corrosion/inferno) and bombs are EXCLUDED. DoT reduction has a
+            // dedicated channel (incomingDotReductionPct / Vortex Veil); bombs apply through
+            // the detonation/bombPortion path which never reads incomingDamageModifierPct.
+            // Locked by bombModifierExclusion.test.ts.
             const selfIncoming = toSelfIncomingDamageModifier(
                 victimSelfBuffs(statusEngine, victimId, selfBuffLookup)
             );
