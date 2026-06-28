@@ -830,7 +830,8 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
 // Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
 // that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
 // Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
-const KILL_TRIGGER_RE = /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
+const KILL_TRIGGER_RE =
+    /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 
@@ -852,9 +853,15 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
  *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
  *    enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is handled by
  *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
+ *  - "when an enemy performs a repair" → 'on-enemy-repaired' (Overload lifecycle, Task 4).
+ *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
+ *  - "on kill" / "upon killing an enemy" / "when an enemy dies" → 'on-enemy-destroyed'
+ *    (Overload lifecycle, Task 4: Mangler/Ravager/Asphyxiator/Butcher).
+ *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
+ *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
  *
- * Other reactive phrasings (when-attacked, ally-crit, on-kill, …) are NOT derivable this phase
- * and stay undefined (manual modelling). Reference data: docs/ship-skills.csv.
+ * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
+ * undefined (manual modelling). Reference data: docs/ship-skills.csv.
  */
 export function detectReactiveTrigger(
     skillText: string | null | undefined,
