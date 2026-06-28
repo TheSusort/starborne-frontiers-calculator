@@ -58,6 +58,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Skill editor: Provoke, Taunt, Concentrate Fire, Disable and Stasis are now recognized as control effects and no longer marked "Not simulated" — their combat impact is reflected in the battle simulator.',
     'Combat simulator now models the Overload lifecycle: Marauder-family ships (Mangler, Ravager, Butcher, Asphyxiator, Ruiner) lose all their Overload stacks when they kill an enemy and gain Marauder Rage in return (on a kill, on inflicting a debuff, or at the start of the round depending on the ship). With this, Overload is no longer flagged "Not simulated" — closing the last remaining simulation-coverage gap.',
     'Combat & DPS simulators: self-buffs no longer expire one turn too early — a timed buff a ship applies on its own turn now correctly lasts through its next turn, matching the game. Enemy debuffs, damage-over-time effects, and buffs applied off-turn are unchanged.',
+    'Combat simulator: in positioned battles, an area-of-effect attack now breaks Stasis on every ship it hits, not just the primary target — a stasised ship caught in the splash of an AoE hit now wakes and acts on its next turn, on both your fleet and the enemy. Attackers that do not break Stasis still leave every hit ship stasised.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

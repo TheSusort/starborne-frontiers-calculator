@@ -4697,6 +4697,13 @@ export function runCombat(input: CombatEngineInput): {
                                     string,
                                     { damage: number; shieldWasHit: boolean }
                                 >();
+                                // PR7 Task 5: per-footprint Stasis-break (player→enemy, focus site).
+                                // Collect EVERY covered footprint victim (≠ anchor) that was stasised at
+                                // hit time so its Stasis is broken too — the anchor break is already
+                                // handled above via turnStasisHitVictims. Covered victims have NO same-turn
+                                // re-apply vector (the turn's debuffs only target tgt.id), so their break
+                                // fires UNCONDITIONALLY (no re-apply guard). Gated on !doesntBreakStasis.
+                                const coveredStasisVictims = new Set<string>();
                                 // Per-victim detonation (positional): collect EVERY footprint victim
                                 // hit by this cast's firing damage (unique by id), so each can detonate
                                 // its OWN containers after the firing hits land. Populated in the
@@ -4730,8 +4737,24 @@ export function runCombat(input: CombatEngineInput): {
                                                 outcome.shieldBefore > 0 &&
                                                 outcome.hpDamage < damage);
                                         attackedSignals.set(victim.id, prev);
+                                        // PR7 Task 5: record covered (non-anchor) victims that were
+                                        // stasised at hit time for the post-apply break.
+                                        if (
+                                            !actor.doesntBreakStasis &&
+                                            victim.id !== tgt.id &&
+                                            isStasised(victim.id)
+                                        ) {
+                                            coveredStasisVictims.add(victim.id);
+                                        }
                                     },
                                 });
+                                // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
+                                // (unconditional — covered victims have no same-turn re-apply vector).
+                                // Mirrors the anchor's stasisBreakPending mark; the victim's own skip
+                                // branch consumes it (removeTimedEnemyStatus) on its NEXT turn.
+                                for (const victimId of coveredStasisVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
                                 // Player→enemy `attacked` emit (PR7 Task 2 — per-victim). Fires once per
                                 // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
                                 // victim hit → enemy Stalwart/Nyxen/Centurion counter the player attacker
@@ -4940,6 +4963,11 @@ export function runCombat(input: CombatEngineInput): {
                                     string,
                                     { damage: number; shieldWasHit: boolean }
                                 >();
+                                // PR7 Task 5: per-footprint Stasis-break (player→enemy, walked-team site).
+                                // Mirror of the focus site — collect EVERY covered footprint victim
+                                // (≠ anchor) that was stasised at hit time so its Stasis is broken too.
+                                // Covered victims have no same-turn re-apply vector → unconditional break.
+                                const coveredStasisVictims = new Set<string>();
                                 // Per-victim detonation (positional): collect EVERY footprint victim hit
                                 // by this cast's firing damage (unique by id), so each can detonate its
                                 // OWN containers after the firing hits land. Populated in the
@@ -4973,8 +5001,22 @@ export function runCombat(input: CombatEngineInput): {
                                                 outcome.shieldBefore > 0 &&
                                                 outcome.hpDamage < damage);
                                         attackedSignals.set(victim.id, prev);
+                                        // PR7 Task 5: record covered (non-anchor) victims that were
+                                        // stasised at hit time for the post-apply break.
+                                        if (
+                                            !actor.doesntBreakStasis &&
+                                            victim.id !== tgt.id &&
+                                            isStasised(victim.id)
+                                        ) {
+                                            coveredStasisVictims.add(victim.id);
+                                        }
                                     },
                                 });
+                                // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
+                                // (unconditional — mirror of the focus site).
+                                for (const victimId of coveredStasisVictims) {
+                                    stasisBreakPending.set(victimId, true);
+                                }
                                 // Player→enemy `attacked` emit (PR7 Task 3 — per-victim). Fires once per
                                 // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
                                 // victim hit by THIS walked team actor → enemy on-attacked reactives
@@ -5468,6 +5510,13 @@ export function runCombat(input: CombatEngineInput): {
                                     string,
                                     { damage: number; shieldWasHit: boolean }
                                 >();
+                                // PR7 Task 5: per-footprint Stasis-break (enemy→player site). Mirror of
+                                // the focus/walked-team sites — collect EVERY covered footprint player
+                                // victim (≠ anchor) that was stasised at hit time so its Stasis is broken
+                                // too. Declared in the OUTER enemy-turn scope (same hoist as
+                                // attackedSignals) because the break-set runs inside the positional block.
+                                // Covered victims have no same-turn re-apply vector → unconditional break.
+                                const coveredStasisVictims = new Set<string>();
                                 if (enemyPositional) {
                                     // Opposing roster + victim wrapper from the per-side bindings
                                     // (enemy→player here). PLAYER-side wrapper: each player victim takes
@@ -5537,8 +5586,23 @@ export function runCombat(input: CombatEngineInput): {
                                                     outcome.shieldBefore > 0 &&
                                                     outcome.hpDamage < dmg);
                                             attackedSignals.set(victim.id, prev);
+                                            // PR7 Task 5: record covered (non-anchor) player victims
+                                            // stasised at hit time for the post-apply break. isStasised
+                                            // reads the player victim's store — direction-agnostic.
+                                            if (
+                                                !actor.doesntBreakStasis &&
+                                                victim.id !== tgt.id &&
+                                                isStasised(victim.id)
+                                            ) {
+                                                coveredStasisVictims.add(victim.id);
+                                            }
                                         },
                                     });
+                                    // PR7 Task 5: set the DEFERRED Stasis break for every covered
+                                    // player victim (unconditional — mirror of the player→enemy sites).
+                                    for (const victimId of coveredStasisVictims) {
+                                        stasisBreakPending.set(victimId, true);
+                                    }
                                     // PR3: enemy→player per-victim skill-triggered detonation
                                     // (mirror of the player→enemy block, routed through playerSink).
                                     // Each PLAYER victim hit by this enemy cast that is STILL ALIVE
