@@ -46,8 +46,10 @@ matches, so trigger patterns operate on PLAIN text; `parseSelfBuffRemovals`/buff
 - **`AbilityType` is a SEPARATE union** (abilities.ts:6-29) from `AbilityConfig`. Adding the new
   type breaks three exhaustive `Record<AbilityType,…>` maps (abilityDefaults.ts:93, AbilityTypePicker.tsx:10,
   AbilityCard.tsx:40) + the `makeDefaultConfig` switch (abilityDefaults.ts:7-90) — all must be updated.
-- **`loses` ∈ `SKIP_VERBS`** (skillTextParser.ts:2668) → `parseSkillEffects` drops "loses Overload".
-  Do NOT change it; add a separate `parseSelfBuffRemovals`.
+- **`loses` AND `removes` ∈ `SKIP_VERBS`** (`['ignoring','loses','removes','resists','when']`,
+  skillTextParser.ts:2668) → `parseSkillEffects` already drops both "loses Overload" and "removes
+  Overload" (and the passive "is lost" has no application verb). Do NOT change it; add a separate
+  `parseSelfBuffRemovals`.
 - **5 ships exist in the CSV; `Marauder Rage I/II/III` + `Overload` in buffs.ts**; `Overload` global
   cap 10 in `PERSISTENT_STACKING_BUFFS` (persistentStackingBuffs.ts:38).
 - **`'overload'` never produced by a real parse** — `ControlEffect` (abilities.ts:543),
@@ -57,8 +59,16 @@ matches, so trigger patterns operate on PLAIN text; `parseSelfBuffRemovals`/buff
 
 - **NEVER** `vitest -u`. Inspect every moved golden.
 - Expected DPS-calc golden churn: Mangler/Ravager lose on-cast Marauder Rage (now kill-gated; dummy
-  is indestructible → never fires); Butcher Rage moves on-cast → on-debuff-inflicted. Overload
-  accumulation is unchanged — if an accumulation golden moves, STOP.
+  is indestructible → never fires); Butcher Rage moves on-cast → on-debuff-inflicted.
+- **Wider churn from `KILL_TRIGGER_RE`:** adding "on kill"/"killing an…" detection to
+  `detectReactiveTrigger` (used by the buff-merge path for ALL ships) also reclassifies NON-Marauder
+  buff grants that sit in a kill clause from `on-cast` → `on-enemy-destroyed` — confirmed:
+  **Gallant** (Legion Discipline) and **Medved** (XAOC Swiftness). These are correct kill-gating
+  fixes (the buffs vanish from the indestructible-dummy DPS calc). Inspect and accept their moved
+  goldens. The Task 10 golden review MUST scan ALL ships with kill-phrasing buff grants, not just
+  the 5 Marauders.
+- **STOP guard:** Overload's every-turn *accumulation* must NOT change in the DPS calc. If an
+  Overload-accumulation golden moves, STOP and investigate.
 - `gh auth switch --hostname github.com --user TheSusort` before `gh`. Branch off `main`.
 
 ---
@@ -223,13 +233,28 @@ const KILL_TRIGGER_RE = /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 ```
 
-In `detectReactiveTrigger` (after the existing checks, ~873):
+In `detectReactiveTrigger` (after the existing checks, ~873). **Order matters — check repair BEFORE kill:**
 
 ```ts
-    if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
+    if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
 ```
+
+> **Why repair-before-kill:** `detectReactiveTrigger` is sentence-scoped (`resolveBuffClause` returns
+> the whole sentence containing the buff name). Ruiner's Overload GRANT and removal share one
+> comma-joined sentence: "gains 1 stack of Overload **when an enemy performs a repair**, **upon
+> killing an enemy**, this Unit removes Overload." The grant buff must resolve to `on-enemy-repaired`,
+> so repair must win the sentence. This is safe: no Marauder Rage clause contains "repair", and
+> Mangler/Ravager/Butcher Overload GRANTS use the "every turn" accumulating path (NOT
+> `detectReactiveTrigger`). Only Ruiner's grant (repair) and Asphyxiator's grant (start-of-round,
+> checked even earlier) use `detectReactiveTrigger`. Verify with `audit:skills` + full suite.
+
+> Add a test for the Ruiner grant clause specifically:
+> ```ts
+> it('routes Ruiner Overload grant to on-enemy-repaired despite a kill clause in the same sentence', () =>
+>   expect(detectReactiveTrigger('gains 1 stack of Overload when an enemy performs a repair, upon killing an enemy, this Unit removes Overload', 'Overload')).toBe('on-enemy-repaired'));
+> ```
 
 (`ENEMY_REPAIRS_RE` is at :441; if a TDZ error appears move the new consts above `detectReactiveTrigger`.)
 
@@ -250,7 +275,8 @@ git commit -m "feat(combat): detectReactiveTrigger recognizes kill / repair / ap
 - Modify: `src/utils/skillTextParser.ts` (new exported `parseSelfBuffRemovals`)
 - Test: `src/utils/__tests__/skillTextParser.test.ts`
 
-- [ ] **Step 1: Write the failing tests** (cover active + passive forms from the CSV):
+- [ ] **Step 1: Write the failing tests** (cover active + passive forms from the CSV, INCLUDING the
+  two position-scoping cases where sentence-level resolution would pick the wrong trigger):
 
 ```ts
 describe('parseSelfBuffRemovals', () => {
@@ -263,6 +289,15 @@ describe('parseSelfBuffRemovals', () => {
   it('emits for passive "Overload is lost" (Butcher R2)', () =>
     expect(parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost'))
       .toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+  // Asphyxiator: Overload also appears in an EARLIER start-of-round GRANT sentence — the removal
+  // trigger must still resolve to on-enemy-destroyed, not start-of-round.
+  it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
+    expect(parseSelfBuffRemovals('At the start of the round, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.'))
+      .toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+  // Ruiner: grant (repair) + removal (kill) in ONE sentence — removal must be on-enemy-destroyed.
+  it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
+    expect(parseSelfBuffRemovals('This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a repair, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'))
+      .toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
   it('returns [] for no-loss text', () =>
     expect(parseSelfBuffRemovals('This Unit gains <unit-skill>Overload</unit-skill> every turn')).toEqual([]));
   it('returns [] for an unknown buff', () =>
@@ -272,25 +307,38 @@ describe('parseSelfBuffRemovals', () => {
 
 - [ ] **Step 2: Run → FAIL.** `npm test -- skillTextParser.test.ts -t parseSelfBuffRemovals`
 
-- [ ] **Step 3: Implement.** Scan tagged text for the three loss forms, each requiring a known
-  self-buff name (`resolveBuffName`, skip unknown). Resolve trigger via `detectReactiveTrigger(text, name)`
-  (default `'on-cast'` if undefined). Return `{ buffName, trigger }[]`. Reuse existing tag helpers;
-  do NOT touch `parseSkillEffects`.
+- [ ] **Step 3: Implement with POSITION-SCOPED trigger resolution.** Scan tagged text for the three
+  loss forms, each requiring a known self-buff name (`resolveBuffName`, skip unknown). For each
+  removal match at index `P`, resolve the trigger from the text NEAR `P` — NOT via
+  `detectReactiveTrigger(text, name)` (which is sentence-scoped by buff name and would pick the
+  GRANT sentence for Asphyxiator and the repair phrase for Ruiner). Return `{ buffName, trigger }[]`.
+  Do NOT touch `parseSkillEffects`.
 
 ```ts
 export function parseSelfBuffRemovals(text: string): { buffName: string; trigger: AbilityTrigger }[] {
     const out: { buffName: string; trigger: AbilityTrigger }[] = [];
-    // active: (loses|removes) <unit-skill>NAME</unit-skill>
-    // passive: <unit-skill>NAME</unit-skill> is lost
-    // for each match: name = resolveBuffName(raw); if !name continue;
-    //   trigger = detectReactiveTrigger(text, name) ?? 'on-cast'; push {buffName:name, trigger}
+    const seen = new Set<string>();
+    // For each match of:  (loses|removes)\s+<unit-skill>NAME</unit-skill>   (active)
+    //                  or <unit-skill>NAME</unit-skill>\s+is\s+lost          (passive)
+    // - name = resolveBuffName(raw); if !name or seen.has(name) → skip
+    // - trigger = detectRemovalTriggerAt(text, matchIndex)  // position-scoped, see below
+    // - push { buffName: name, trigger }; seen.add(name)
     return out;
 }
 ```
 
-> Scope to self: the active form already implies the unit's own action; the named-buff gate
-> (`resolveBuffName` over BUFFS, self-buffs) prevents matching enemy purge text. Add a dedup so a
-> ship naming the same buff in both an active and passive form (none in corpus) doesn't double-emit.
+  Add a position-scoped helper `detectRemovalTriggerAt(text, idx)`: strip tags, then take the
+  WINDOW = the comma-or-sentence segment containing `idx` PLUS the immediately preceding segment
+  (covers both "loses Overload **on kill**" where the trigger trails, and "**upon killing an
+  enemy**, this Unit removes Overload" / Asphyxiator's separate "Upon killing an enemy, …" sentence
+  where it leads). Run `KILL_TRIGGER_RE` / `ENEMY_REPAIRS_RE` / `APPLYING_DEBUFF_RE` / `START_OF_ROUND_RE`
+  on the window (kill first is fine here — a removal window won't contain a competing repair-grant);
+  default `'on-cast'` if none. Mirror the existing `phrasePosTrigger` position-anchoring pattern
+  (skillTextParser.ts) rather than inventing a new convention.
+
+> Scope to self: the active verbs imply the unit's own action; the named-buff gate (`resolveBuffName`
+> over self-buffs) prevents matching enemy purge text. The `seen` dedup stops a ship naming the same
+> buff in both an active and passive form from double-emitting.
 
 - [ ] **Step 4: Run → PASS.** `npm test -- skillTextParser.test.ts -t parseSelfBuffRemovals`
 
@@ -448,8 +496,11 @@ git commit -m "docs(combat): changelog + docs for Overload lifecycle"
 
 ## Task 10: Full-suite verification, golden review, code review, PR
 
-- [ ] **Step 1: Full suite.** `npm test` → green. **Inspect every moved golden** (expect Marauder
-  DPS goldens to move; Overload accumulation must NOT). No `vitest -u`.
+- [ ] **Step 1: Full suite.** `npm test` → green. **Inspect every moved golden.** Expect: the 5
+  Marauders' Rage goldens; AND Gallant/Medved (+ any other ship whose buff grant sits in a kill
+  clause — `grep -iE 'on kill|killing an' docs/ship-skills.csv` to enumerate) reclassified to
+  on-enemy-destroyed. Confirm each is the intended kill-gating correction. Overload *accumulation*
+  goldens must NOT move (STOP if they do). No `vitest -u`.
 - [ ] **Step 2: Lint + types.** `npm run lint` (max-warnings 0); `npx tsc --noEmit`.
 - [ ] **Step 3: `audit:skills`** → 0 failures (the real coverage gate; runs the CSV).
 - [ ] **Step 4: Code review.** Use superpowers:requesting-code-review; address per superpowers:receiving-code-review.

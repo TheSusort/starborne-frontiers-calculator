@@ -88,9 +88,14 @@ No ability removes a self-buff today (only grants). Add a general ability mirror
   - `(loses|removes) <unit-skill>BUFF</unit-skill>`
   - `<unit-skill>BUFF</unit-skill> is lost`
 
-  Resolve the trigger via `detectReactiveTrigger(text, BUFF)` (→ the kill trigger). Do **not** touch
-  `parseSkillEffects` (its `SKIP_VERBS` 'loses' behavior stays so the buff path is byte-identical).
-  Scope to self-buff names so enemy-side "removes a buff" (purge) never matches.
+  Resolve the trigger **position-scoped around the removal verb** (NOT sentence-scoped
+  `detectReactiveTrigger(text, BUFF)`): Overload appears in BOTH a grant clause and the removal
+  clause for Asphyxiator (separate sentences) and Ruiner (same comma-joined sentence), so buff-name
+  sentence lookup would pick the grant's trigger. Mirror the existing `phrasePosTrigger`
+  position-anchoring; window = the removal's segment + the preceding segment (covers trailing "on
+  kill" and leading "upon killing an enemy,"). Do **not** touch `parseSkillEffects` (`SKIP_VERBS`
+  already contains both 'loses' and 'removes', so the buff path is byte-identical). Scope to self-buff
+  names so enemy-side "removes a buff" (purge) never matches.
 
 ### 2.2 Trigger-detection additions (`detectReactiveTrigger`)
 
@@ -104,6 +109,13 @@ No ability removes a self-buff today (only grants). Add a general ability mirror
 - **Debuff-inflict → `on-debuff-inflicted`.** A new `APPLYING_DEBUFF_RE`, e.g.
   `/\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i`
   (`ENEMY_DEBUFFED_RE` at skillTextParser.ts:1003 matches passive "enemy is debuffed", not this).
+
+**Check order: repair BEFORE kill.** `detectReactiveTrigger` is sentence-scoped, and Ruiner's
+Overload GRANT shares one comma-joined sentence with the kill removal ("gains Overload **when an
+enemy performs a repair**, **upon killing an enemy**, this Unit removes Overload"). The grant buff
+must resolve to `on-enemy-repaired`, so repair must win the sentence. Safe: no Marauder Rage clause
+contains "repair", and Mangler/Ravager/Butcher Overload grants use the "every turn" accum path (not
+`detectReactiveTrigger`) — only Ruiner (repair) and Asphyxiator (start-of-round) grants use it.
 
 The buff-grant path resolves its trigger via `detectReactiveTrigger(rowText, buff.buffName)`
 (buildShipAbilities.ts:1602), so Marauder Rage grants auto-route to the right trigger once these
@@ -143,6 +155,11 @@ The **DPS-calc dummy is indestructible** → lose-on-kill never fires there. Con
 - **Mangler / Ravager:** Marauder Rage was (wrongly) on-cast; it now requires a kill → **Rage
   disappears** from their DPS-calc output. Goldens move.
 - **Butcher:** Rage moves on-cast → `on-debuff-inflicted`. Goldens move.
+- **Non-Marauder side effect of `KILL_TRIGGER_RE`:** the new "on kill" detection in
+  `detectReactiveTrigger` (shared by the buff-merge path) also reclassifies **Gallant** (Legion
+  Discipline) and **Medved** (XAOC Swiftness) buff grants from `on-cast` → `on-enemy-destroyed` —
+  correct kill-gating fixes; their DPS-calc goldens move (buffs vanish vs. the indestructible dummy).
+  The golden review must scan all ships with kill-clause buff grants, not just the Marauders.
 - **Overload's every-turn accumulation** is **unchanged** in the DPS calc (lose-on-kill never
   fires). If an Overload-accumulation golden moves, STOP — something is wrong.
 
