@@ -66,6 +66,7 @@ import { isStasis, STASIS_BUFFS } from './stasisBuffs';
 import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
+import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEventBus, createEventBus } from './events';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -4686,15 +4687,16 @@ export function runCombat(input: CombatEngineInput): {
                                 // Opposing roster + victim wrapper come from the per-side bindings
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
                                 const tb = turnBindings(actor.side);
-                                // Player→enemy `attacked` capture: aggregate the FOCUS enemy victim's
-                                // per-attack damage + OR its shield-hit flag across the attack's hits so
-                                // the post-apply emit wakes the enemy's on-attacked reactives (counters +
-                                // self-repairs/defensive buffs). focusEnemyDamage is the per-victim
-                                // analogue of the enemy side's aggregate `damage` (Tenacity's >25%-maxHP
-                                // gate reads it). Matched by victim.id === tgt.id (first-hit-focus victim).
-                                let focusEnemyDamage = 0;
-                                let focusEnemyShieldWasHit = false;
-                                let focusEnemyHit = false;
+                                // Player→enemy `attacked` capture (PR7 Task 2): aggregate EACH footprint
+                                // victim's per-attack damage + OR its shield-hit flag across the attack's
+                                // hits so the post-apply emit wakes EVERY hit victim's on-attacked
+                                // reactives (counters + self-repairs/defensive buffs), not just the anchor.
+                                // Per-victim `damage` is the analogue of the enemy side's aggregate
+                                // `damage` (Tenacity's >25%-maxHP gate reads it). Keyed by victim.id.
+                                const attackedSignals = new Map<
+                                    string,
+                                    { damage: number; shieldWasHit: boolean }
+                                >();
                                 // Per-victim detonation (positional): collect EVERY footprint victim
                                 // hit by this cast's firing damage (unique by id), so each can detonate
                                 // its OWN containers after the firing hits land. Populated in the
@@ -4717,33 +4719,37 @@ export function runCombat(input: CombatEngineInput): {
                                     onVictimResolved: (victim, damage, outcome) => {
                                         procStandingLeechesPerVictim(actor.id, damage);
                                         detonationTargets.set(victim.id, victim);
-                                        if (victim.id === tgt.id) {
-                                            focusEnemyHit = true;
-                                            focusEnemyDamage += damage;
-                                            focusEnemyShieldWasHit =
-                                                focusEnemyShieldWasHit ||
-                                                (!outcome.barriered &&
-                                                    outcome.shieldBefore > 0 &&
-                                                    outcome.hpDamage < damage);
-                                        }
+                                        const prev = attackedSignals.get(victim.id) ?? {
+                                            damage: 0,
+                                            shieldWasHit: false,
+                                        };
+                                        prev.damage += damage;
+                                        prev.shieldWasHit =
+                                            prev.shieldWasHit ||
+                                            (!outcome.barriered &&
+                                                outcome.shieldBefore > 0 &&
+                                                outcome.hpDamage < damage);
+                                        attackedSignals.set(victim.id, prev);
                                     },
                                 });
-                                // Player→enemy `attacked` emit (Task 3 — the symmetric reaction). Fires
-                                // once per hit (mirrors the enemy-turn empty-hitCrits fallback) for the
-                                // focus enemy victim → enemy Stalwart/Nyxen/Centurion counter the player
-                                // attacker, and enemy on-hit reactions (Second Wind, etc.) fire.
-                                if (focusEnemyHit) {
+                                // Player→enemy `attacked` emit (PR7 Task 2 — per-victim). Fires once per
+                                // hit (mirrors the enemy-turn empty-hitCrits fallback) for EVERY footprint
+                                // victim hit → enemy Stalwart/Nyxen/Centurion counter the player attacker
+                                // from any covered cell, and enemy on-hit reactions (Second Wind, etc.)
+                                // fire per victim. isPrimaryTarget is set only on the anchor (tgt.id). The
+                                // gate broadens from "anchor was hit" to "any victim was hit": if the
+                                // anchor whiffs but a covered victim is hit, emission fires for the covered
+                                // victim and no isPrimaryTarget event fires that turn — correct by design.
+                                if (attackedSignals.size > 0) {
                                     const hitOutcomes =
                                         turn.hitCrits.length > 0 ? turn.hitCrits : [turn.roundCrit];
-                                    emitAttacked({
+                                    emitPerVictimAttacked({
                                         bus,
                                         round: r,
-                                        targetId: tgt.id,
                                         attackerId: actor.id,
+                                        primaryId: tgt.id,
                                         hitOutcomes,
-                                        isPrimaryTarget: true,
-                                        shieldWasHit: focusEnemyShieldWasHit,
-                                        damage: focusEnemyDamage,
+                                        victims: attackedSignals,
                                     });
                                 }
 
