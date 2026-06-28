@@ -319,12 +319,17 @@ describe('Block Debuff — cast-side DoT block + resist event (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Block Debuff — cast-side control block + resist event (engine).
+// Block Debuff — cast-side control block (engine).
 //
 // A control infliction (cfg.type 'control', e.g. Stasis) emits `control-applied` so
-// reactions (on-stasis-applied) can fire. When the target carries `Block Debuff` the
-// control is a blocked debuff: NO `control-applied` (so reactions do NOT fire) and a
-// `debuff-resisted` labelled with the control effect — symmetric with the timed/DoT block.
+// reactions (on-stasis-applied) can fire. When the cast target carries `Block Debuff`
+// the control is blocked: NO `control-applied` (so reactions do NOT fire). The
+// control-classification unification moved Block-Debuff RESIST OWNERSHIP off the control
+// loop onto the PARALLEL named-status path (the control's named timed debuff, symmetric
+// with every debuff type) to avoid double-counting. This synthetic fixture carries the
+// control ability ONLY (no parallel named debuff), so a blocked cast emits NO resist here
+// — the named-status resist is asserted end-to-end by the "auto-resists an inflicted
+// Stasis" integration test below (which casts the named 'Stasis' debuff).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const controlEnemy = (): EnemyAttacker =>
@@ -340,8 +345,8 @@ const runControlWith = (focusSkills: ShipSkills, bus: ReturnType<typeof createEv
         })
     );
 
-describe('Block Debuff — cast-side control block + resist event (engine)', () => {
-    it('immune target BLOCKS a control infliction: no control-applied, resisted Stasis event', () => {
+describe('Block Debuff — cast-side control block (engine)', () => {
+    it('immune target BLOCKS a control infliction: no control-applied (resist owned by named path)', () => {
         const bus = createEventBus();
         const events: CombatEvent[] = [];
         bus.on('control-applied', (e) => events.push(e as CombatEvent));
@@ -351,11 +356,10 @@ describe('Block Debuff — cast-side control block + resist event (engine)', () 
 
         // The control was blocked → on-stasis-applied reactions never get the signal.
         expect(events.some((e) => e.type === 'control-applied')).toBe(false);
-        // A debuff-resisted event fired, labelled with the blocked control effect.
-        const resisted = events.filter((e) => e.type === 'debuff-resisted');
-        expect(
-            resisted.map((e) => (e.type === 'debuff-resisted' ? e.buffName : '')).filter(Boolean)
-        ).toContain('Stasis');
+        // The control loop no longer owns the resist — this control-only fixture has no
+        // parallel named-status path, so NO debuff-resisted fires here. (The named-status
+        // resist is covered by the named-'Stasis' integration test below.)
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
     });
 
     it('control: WITHOUT Block Debuff the control fires (control-applied, NO resist) — non-vacuity', () => {

@@ -1,0 +1,207 @@
+import { describe, it, expect } from 'vitest';
+import { runCombat, CombatEngineInput } from '../engine';
+import { ShipSkills, Ability } from '../../../types/abilities';
+import { createEventBus, CombatEvent } from '../events';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Control-classification unification — Task 4: resist OWNERSHIP in the cast-path
+// control emission loop.
+//
+// Control inflictions (Stasis/Provoke/Taunt/CF/Disable) reach the engine BOTH as a
+// named timed debuff (its buffName, routed through the timed landing fold which owns
+// the Block-Debuff resist) AND, additively, as a `type:'control'` ability whose ONLY
+// job on the cast path is to emit `control-applied` so reactions (on-stasis-applied)
+// can fire.
+//
+// This task makes the control loop emit the SUCCESS event only:
+//   (a) a normal enemy-targeted control emits `control-applied`;
+//   (b) a SELF-target control (Taunt) always emits `control-applied` — it has no enemy
+//       debuff target, so it ignores enemy immunity entirely;
+//   (c) on a Block-Debuff-immune enemy target the control loop does NOT emit its own
+//       resist — the named-status path owns it → EXACTLY ONE `debuff-resisted`.
+//
+// Engine is team-symmetric, so we drive these via an enemy attacker casting at the
+// focus actor (the proven Block-Debuff harness direction) — the change applies to both
+// sides uniformly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let idCounter = 0;
+
+const engineBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    attack: 5000,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [] },
+    enemyDefense: 0,
+    enemyHp: 10_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 1_000_000,
+    healTargetId: 'attacker',
+    ...overrides,
+});
+
+type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+    id: `cce${++idCounter}`,
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    ...partial,
+});
+
+/** An enemy attacker (speed 10 → acts AFTER the speed-100 focus actor, so the focus
+ *  actor's recurring Block Debuff self-buff is live before this enemy casts) whose kit
+ *  is a basic attack + the supplied control/debuff abilities. `hacking` omitted →
+ *  defaults to 200 → 100% landing (so the ONLY thing that can resist is Block Debuff). */
+const attackerWith = (...abilities: Ability[]): EnemyAttacker =>
+    ({
+        id: 'e1',
+        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                        ...abilities,
+                    ],
+                },
+            ],
+        } as ShipSkills,
+    }) as EnemyAttacker;
+
+/** Focus actor (heal target) shipSkills granting a recurring `Block Debuff` self-buff. */
+const blockDebuffSelfSkills = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'passive',
+            abilities: [
+                {
+                    id: 'block-debuff-self',
+                    type: 'buff',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'buff',
+                        buffName: 'Block Debuff',
+                        stacks: 1,
+                        isStackable: false,
+                        duration: 'recurring',
+                        parsedEffects: {},
+                    },
+                },
+            ],
+        },
+    ],
+});
+
+const controlAb = (effect: string, target: Ability['target'] = 'enemy'): Ability =>
+    enemyAb({
+        type: 'control',
+        target,
+        config: { type: 'control', effect: effect as never },
+    });
+
+/** A named timed debuff carrying the control effect's buffName — the PARALLEL named-status
+ *  path that owns the Block-Debuff resist (mirrors real builder output: control effects emit
+ *  both a named debuff and a control ability). */
+const namedControlDebuff = (buffName: string): Ability =>
+    enemyAb({
+        type: 'debuff',
+        config: {
+            type: 'debuff',
+            buffName,
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            application: 'inflict',
+            duration: 3,
+        },
+    });
+
+const run = (
+    focusSkills: ShipSkills,
+    bus: ReturnType<typeof createEventBus>,
+    attacker: EnemyAttacker
+) =>
+    runCombat(
+        engineBase({
+            numRounds: 1,
+            enemyAttackers: [attacker],
+            shipSkills: focusSkills,
+            bus,
+        })
+    );
+
+const tap = () => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('control-applied', (e) => events.push(e as CombatEvent));
+    bus.on('debuff-resisted', (e) => events.push(e as CombatEvent));
+    return { bus, events };
+};
+
+describe('control-classification emission — resist ownership (Task 4)', () => {
+    // (a) Success: an enemy-targeted control (Provoke) emits control-applied on a normal cast.
+    it('an enemy-targeted Provoke emits control-applied{effect:provoke} on a normal cast', () => {
+        const { bus, events } = tap();
+        run({ slots: [] }, bus, attackerWith(controlAb('provoke')));
+
+        const controls = events.filter((e) => e.type === 'control-applied');
+        expect(controls.length).toBeGreaterThan(0);
+        expect(controls.some((e) => e.type === 'control-applied' && e.effect === 'provoke')).toBe(
+            true
+        );
+        // Normal cast → no resist.
+        expect(events.some((e) => e.type === 'debuff-resisted')).toBe(false);
+    });
+
+    // (b) Self-target Taunt emits control-applied even against a Block-Debuff-immune target:
+    //     it has no enemy debuff target, so the immune gate is skipped entirely.
+    it('a SELF-target Taunt emits control-applied{effect:taunt} regardless of target immunity', () => {
+        const { bus, events } = tap();
+        // Focus actor is Block-Debuff immune; the enemy still self-grants Taunt successfully.
+        run(blockDebuffSelfSkills(), bus, attackerWith(controlAb('taunt', 'self')));
+
+        const controls = events.filter((e) => e.type === 'control-applied');
+        expect(controls.some((e) => e.type === 'control-applied' && e.effect === 'taunt')).toBe(
+            true
+        );
+    });
+
+    // (c) NO double-resist: a Block-Debuff-immune target receiving Provoke (named debuff +
+    //     control ability, mirroring real builder output) produces EXACTLY ONE debuff-resisted
+    //     for 'Provoke' — from the named-status path, NOT a second from the control loop. And
+    //     because the control was blocked, NO control-applied fires.
+    it('Block-Debuff-immune Provoke → exactly ONE debuff-resisted (named path), no control-applied', () => {
+        const { bus, events } = tap();
+        run(
+            blockDebuffSelfSkills(),
+            bus,
+            attackerWith(namedControlDebuff('Provoke'), controlAb('provoke'))
+        );
+
+        const provokeResists = events.filter(
+            (e) => e.type === 'debuff-resisted' && e.buffName === 'Provoke'
+        );
+        expect(provokeResists).toHaveLength(1);
+        // Blocked → the control loop emits no success event.
+        expect(events.some((e) => e.type === 'control-applied')).toBe(false);
+    });
+});

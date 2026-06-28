@@ -40,12 +40,7 @@ import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
-import {
-    targetCarriesBlockDebuff,
-    emitBlockDebuffResist,
-    dotResistLabel,
-    controlEffectLabel,
-} from './debuffImmunity';
+import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 import { outgoingAmplificationForHit } from './outgoingEffects';
 import { healAmplificationForCast } from './healAmplification';
 // Buff-fold leaf helpers. Imported for in-file use and re-exported to preserve the
@@ -1271,22 +1266,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (on-stasis-applied) can fire. Emission ONLY — the engine does NOT simulate the control's
     // combat effect (Stasis/Taunt stay unmodelled). An emitted-but-unconsumed event changes
     // nothing, so DPS-mode goldens are unaffected.
-    // Block Debuff (D-PR15): a control infliction is a debuff — when the target is immune, BLOCK
-    // it (no `control-applied`, so on-stasis-applied reactions do NOT fire) and record a resist,
-    // symmetric with the timed/persistent/DoT block paths.
+    //
+    // A control effect reaches the engine BOTH as a named timed debuff (its buffName, routed
+    // through the timed landing fold above which OWNS the Block-Debuff resist, symmetric with
+    // every debuff type) AND, additively, as this `type:'control'` ability. So the control loop
+    // does NOT emit its own resist — that would double-count (the named-status path already emits
+    // `debuff-resisted`). On a blocked ENEMY infliction we simply skip the success event (no
+    // `control-applied`, so on-stasis-applied reactions stay dormant). SELF-target controls
+    // (Taunt) have no enemy debuff target → no immune gate; they always emit.
     for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
-        if (ctrl.config.type === 'control') {
-            if (targetImmuneToDebuffs) {
-                emitBlockDebuffResist(bus, enemy.id, r, controlEffectLabel(ctrl.config.effect));
-                continue;
-            }
-            bus.emit({
-                type: 'control-applied',
-                casterId: actor.id,
-                effect: ctrl.config.effect,
-                round: r,
-            });
-        }
+        if (ctrl.config.type !== 'control') continue;
+        if (ctrl.target === 'enemy' && targetImmuneToDebuffs) continue; // resist owned by named-status path
+        bus.emit({
+            type: 'control-applied',
+            casterId: actor.id,
+            effect: ctrl.config.effect,
+            round: r,
+        });
     }
 
     const { multiplier: rawMultiplier, hits, scalingAbility } = damageInputsFromSkill(gatedSkill);
