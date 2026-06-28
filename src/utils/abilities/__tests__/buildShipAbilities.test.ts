@@ -3701,4 +3701,147 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         );
         expect(enemyCharges).toHaveLength(0);
     });
+
+    // Overload lose-on-kill: the 5 Marauder ships must emit a `remove-self-buff` ability
+    // for Overload. Marauder Rage grants ride the existing buff-merge path (Task 4's
+    // detectReactiveTrigger) — verified here, not separately wired.
+    describe('Overload lose-on-kill (remove-self-buff)', () => {
+        const removeSelfBuff = (abilities: Ability[]) =>
+            abilities.find((a) => a.type === 'remove-self-buff');
+
+        it('Mangler p2: remove Overload on kill + Marauder Rage II on kill', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and loses <unit-skill>Overload</unit-skill> on kill. Additionally, it gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns upon killing an opponent.',
+            });
+            const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+
+            const rem = removeSelfBuff(abilities)!;
+            expect(rem.target).toBe('self');
+            expect(rem.trigger).toBe('on-enemy-destroyed');
+            expect(rem.config).toEqual({
+                type: 'remove-self-buff',
+                buffName: 'Overload',
+                scope: 'all',
+            });
+
+            const rage = abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Marauder Rage II'
+            )!;
+            expect(rage).toBeDefined();
+            expect(rage.trigger).toBe('on-enemy-destroyed');
+        });
+
+        it('Ravager p1: remove Overload on kill + Marauder Rage III on kill', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon killing an enemy, loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.',
+                refits: [],
+            });
+            const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+
+            const rem = removeSelfBuff(abilities)!;
+            expect(rem.target).toBe('self');
+            expect(rem.trigger).toBe('on-enemy-destroyed');
+            expect(rem.config).toEqual({
+                type: 'remove-self-buff',
+                buffName: 'Overload',
+                scope: 'all',
+            });
+
+            const rage = abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Marauder Rage III'
+            )!;
+            expect(rage).toBeDefined();
+            expect(rage.trigger).toBe('on-enemy-destroyed');
+        });
+
+        it('Butcher p2: remove Overload on kill + Marauder Rage II on debuff-inflicted', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn. On kill, <unit-skill>Overload</unit-skill> is lost. On inflicting a debuff, this Unit gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns.',
+            });
+            const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+
+            const rem = removeSelfBuff(abilities)!;
+            expect(rem.target).toBe('self');
+            expect(rem.trigger).toBe('on-enemy-destroyed');
+            expect(rem.config).toEqual({
+                type: 'remove-self-buff',
+                buffName: 'Overload',
+                scope: 'all',
+            });
+
+            const rage = abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Marauder Rage II'
+            )!;
+            expect(rage).toBeDefined();
+            expect(rage.trigger).toBe('on-debuff-inflicted');
+        });
+
+        it('Asphyxiator p1: remove Overload on kill (SoR grant verified e2e)', () => {
+            const s = ship({
+                firstPassiveSkillText:
+                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage II</unit-skill> for 3 turns. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.',
+                refits: [],
+            });
+            const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+
+            const rem = removeSelfBuff(abilities)!;
+            expect(rem.target).toBe('self');
+            expect(rem.trigger).toBe('on-enemy-destroyed');
+            expect(rem.config).toEqual({
+                type: 'remove-self-buff',
+                buffName: 'Overload',
+                scope: 'all',
+            });
+
+            // Grant branch: the start-of-round conditional grants Marauder Rage II — assert it is
+            // parsed onto the start-of-round trigger (locks the grant branch against a parser
+            // regression, complementing the removal assertion above).
+            const rage = abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    (a.config as { buffName?: string }).buffName === 'Marauder Rage II'
+            )!;
+            expect(rage).toBeDefined();
+            expect(rage.trigger).toBe('start-of-round');
+        });
+
+        it('Ruiner p2: remove Overload on kill + Overload gain on-enemy-repaired', () => {
+            const s = ship({
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}] as any,
+                secondPassiveSkillText:
+                    'This Unit inflicts <unit-skill>Bomb II</unit-skill> for 2 turns on any enemy performing a <unit-aid>repair</unit-aid>, once per round per enemy.<br /><br />This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a <unit-aid>repair</unit-aid>, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>.',
+            });
+            const abilities = slot(buildShipAbilities(s).slots, 'passive')!.abilities;
+
+            const rem = removeSelfBuff(abilities)!;
+            expect(rem.target).toBe('self');
+            expect(rem.trigger).toBe('on-enemy-destroyed');
+            expect(rem.config).toEqual({
+                type: 'remove-self-buff',
+                buffName: 'Overload',
+                scope: 'all',
+            });
+
+            const overloadGain = abilities.find(
+                (a) =>
+                    a.type === 'buff' && (a.config as { buffName?: string }).buffName === 'Overload'
+            )!;
+            expect(overloadGain).toBeDefined();
+            expect(overloadGain.trigger).toBe('on-enemy-repaired');
+        });
+    });
 });

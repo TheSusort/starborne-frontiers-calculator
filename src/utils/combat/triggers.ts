@@ -61,7 +61,8 @@ export type ReactiveAbilityType =
     | 'extra-action'
     | 'damage'
     | 'counter' // G PR1: counter-attack reactive (on-attacked) — no parser produces it until Task 5
-    | 'purge'; // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
+    | 'purge' // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
+    | 'remove-self-buff'; // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -76,6 +77,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'damage',
     'counter', // G PR1: counter reactive — byte-identical (no fixture carries a counter ability)
     'purge', // C2b-1: purge can be reactive — Sefuba on-enemy-purged chain
+    'remove-self-buff', // Overload lifecycle: reactive self-buff removal
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -1784,6 +1786,14 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         for (const rid of recipients) removed += ctx.statusEngine.cleanse(rid, count);
         // Credit the ACTUAL removed count (was the nominal cfg.count pre-T4).
         ctx.healing.credit(intent.ownerId, 'cleanseCount', removed);
+        return;
+    }
+
+    if (cfg.type === 'remove-self-buff') {
+        // NOTE: cfg.scope is presently descriptive metadata only — the engine always removes the
+        // named family from ALL self stores via removeSelfBuffByName, so scope:'all' is the only
+        // behavior today (a future editor must NOT assume narrower scopes are wired here).
+        ctx.statusEngine.removeSelfBuffByName(intent.ownerId, cfg.buffName);
         return;
     }
 

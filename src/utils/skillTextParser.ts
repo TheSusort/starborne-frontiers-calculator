@@ -826,6 +826,14 @@ const BOMB_DETONATE_RE = /(?:detonates? a bomb|bomb explodes)/i;
 // Arum's Out. Damage Down debuff, Yarrow/Larkspur's Gelecek Contagion buff. Routes the
 // buff/debuff grant onto the LIVE on-enemy-cleansed trigger. Reference data: docs/ship-skills.csv.
 const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuff/i;
+// Overload lifecycle (Task 4) — kill/apply-debuff reactive phrasings for buff grants/removals.
+// Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
+// that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
+// Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
+const KILL_TRIGGER_RE =
+    /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
+// "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
+const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
 
 /**
  * Detects a reactive AbilityTrigger for the buff/debuff/DoT named `buffName`, scoped to the
@@ -845,9 +853,15 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
  *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
  *    enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is handled by
  *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
+ *  - "when an enemy performs a repair" → 'on-enemy-repaired' (Overload lifecycle, Task 4).
+ *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
+ *  - "on kill" / "upon killing an enemy" / "when an enemy dies" → 'on-enemy-destroyed'
+ *    (Overload lifecycle, Task 4: Mangler/Ravager/Asphyxiator/Butcher).
+ *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
+ *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
  *
- * Other reactive phrasings (when-attacked, ally-crit, on-kill, …) are NOT derivable this phase
- * and stay undefined (manual modelling). Reference data: docs/ship-skills.csv.
+ * Other reactive phrasings (when-attacked, ally-crit, …) are NOT derivable this phase and stay
+ * undefined (manual modelling). Reference data: docs/ship-skills.csv.
  */
 export function detectReactiveTrigger(
     skillText: string | null | undefined,
@@ -871,7 +885,96 @@ export function detectReactiveTrigger(
     // for the named buff/debuff grant in its clause (Arum Out. Damage Down I, Yarrow/Larkspur
     // Gelecek Contagion, Arum-refit all-allies Gelecek Contagion II).
     if (ENEMY_CLEANSE_RE.test(clause)) return 'on-enemy-cleansed';
+    // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
+    // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
+    // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
+    // on-enemy-repaired. Safe: no Marauder Rage clause contains "repair", and the Mangler/Ravager/
+    // Butcher Overload grants use the accumulating "every turn" path (not detectReactiveTrigger).
+    if (ENEMY_REPAIRS_RE.test(clause)) return 'on-enemy-repaired';
+    if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
+    if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     return undefined;
+}
+
+// POSITION-scoped trigger resolver for a self-buff REMOVAL (Overload lifecycle, Task 5).
+//
+// Unlike detectReactiveTrigger (which scopes by the buff's NAME clause), the removal trigger must
+// be resolved from text NEAR the removal verb: a buff like Overload often appears in BOTH an
+// earlier GRANT sentence (start-of-round / on-repair) and a separate REMOVAL clause (on-kill).
+// Keying off the buff name would pick the grant's trigger; the removal needs the kill trigger.
+//
+// WINDOW = the comma-or-sentence segment containing `idx` PLUS the immediately preceding segment
+// (the leading trigger phrase often sits in the prior comma-clause, e.g. Ruiner/Asphyxiator's
+// "upon killing an enemy, this Unit removes Overload"). For Ruiner the grant's "performs a repair"
+// segment is TWO segments back, so it is excluded from the removal window and cannot mis-match.
+//
+// INDEX STABILITY: `idx` is a match position into the TAGGED text. We MUST NOT stripUnitTags here —
+// stripUnitTags deletes characters and shifts every downstream position, so a tagged idx would no
+// longer align (off-by-N window). We mirror rawSentenceAround: length-PRESERVING maskAbbrev only,
+// segment on the un-stripped text. Comma/period boundaries never fall inside <unit-skill> tags, so
+// segmentation is identical with or without tags; only the index mapping is fragile.
+const REMOVAL_SEGMENT_BOUNDARY = /[,.;](?=\s|$)|<br\s*\/?>/gi;
+function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
+    const masked = maskAbbrev(text);
+    // Collect segment boundary spans [start,end) keyed by their terminator position so we can find
+    // the segment containing idx plus the one before it.
+    const segments: { start: number; end: number }[] = [];
+    let start = 0;
+    let m: RegExpExecArray | null;
+    REMOVAL_SEGMENT_BOUNDARY.lastIndex = 0;
+    while ((m = REMOVAL_SEGMENT_BOUNDARY.exec(masked)) !== null) {
+        const end = m.index + m[0].length;
+        segments.push({ start, end });
+        start = end;
+    }
+    segments.push({ start, end: masked.length });
+    let containing = segments.length - 1;
+    for (let i = 0; i < segments.length; i++) {
+        if (idx < segments[i].end) {
+            containing = i;
+            break;
+        }
+    }
+    const windowStart = containing > 0 ? segments[containing - 1].start : segments[containing].start;
+    const window = masked.slice(windowStart, segments[containing].end);
+    // Order mirrors detectReactiveTrigger's reactive tail. For a REMOVAL window kill-first is safe:
+    // the window excludes the earlier repair-grant segment (Ruiner), so it cannot match repair.
+    if (KILL_TRIGGER_RE.test(window)) return 'on-enemy-destroyed';
+    if (ENEMY_REPAIRS_RE.test(window)) return 'on-enemy-repaired';
+    if (APPLYING_DEBUFF_RE.test(window)) return 'on-debuff-inflicted';
+    if (START_OF_ROUND_RE.test(window)) return 'start-of-round';
+    return 'on-cast';
+}
+
+// Active removal: "loses/removes <unit-skill>NAME</unit-skill>" (Mangler/Ravager/Asphyxiator/
+// Butcher-R1/Ruiner). Passive removal: "<unit-skill>NAME</unit-skill> is lost" (Butcher-R2).
+const SELF_BUFF_REMOVAL_ACTIVE_RE = /\b(?:loses|removes)\s+<unit-skill>([^<]+)<\/unit-skill>/gi;
+const SELF_BUFF_REMOVAL_PASSIVE_RE = /<unit-skill>([^<]+)<\/unit-skill>\s+is\s+lost\b/gi;
+
+/**
+ * Parses "this Unit loses/removes <buff>" and the passive "<buff> is lost" into self-buff-removal
+ * descriptors, resolving each removal's trigger from text NEAR the removal verb (NOT by buff-name
+ * sentence — see detectRemovalTriggerAt). Unknown buffs are skipped (resolveBuffName gate) and
+ * duplicate buff names are deduped. Operates on the TAGGED text. Reference data: docs/ship-skills.csv.
+ */
+export function parseSelfBuffRemovals(
+    text: string
+): { buffName: string; trigger: AbilityTrigger }[] {
+    const out: { buffName: string; trigger: AbilityTrigger }[] = [];
+    const seen = new Set<string>();
+    const scan = (re: RegExp) => {
+        re.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(text)) !== null) {
+            const name = resolveBuffName(m[1]);
+            if (!name || seen.has(name)) continue;
+            seen.add(name);
+            out.push({ buffName: name, trigger: detectRemovalTriggerAt(text, m.index) });
+        }
+    };
+    scan(SELF_BUFF_REMOVAL_ACTIVE_RE);
+    scan(SELF_BUFF_REMOVAL_PASSIVE_RE);
+    return out;
 }
 
 /**

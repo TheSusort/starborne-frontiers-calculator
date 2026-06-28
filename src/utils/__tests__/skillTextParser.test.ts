@@ -43,6 +43,7 @@ import {
     parseChargeRemoval,
     parseEnemyChargedCastReaction,
     parseCounterAbilities,
+    parseSelfBuffRemovals,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -1508,6 +1509,151 @@ describe('detectReactiveTrigger', () => {
         expect(detectReactiveTrigger(text, 'Out. Damage Down I')).toBe('on-enemy-cleansed');
         expect(detectReactiveTrigger(text, 'Gelecek Contagion II')).toBe('on-enemy-cleansed');
     });
+
+    it('detects on-enemy-destroyed from "on kill"', () =>
+        expect(detectReactiveTrigger('loses Overload on kill', 'Overload')).toBe(
+            'on-enemy-destroyed'
+        ));
+    it('detects on-enemy-destroyed from "killing an opponent"', () =>
+        expect(
+            detectReactiveTrigger(
+                'it gains Marauder Rage I for 2 turns upon killing an opponent',
+                'Marauder Rage I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('detects on-enemy-destroyed from "killing an enemy"', () =>
+        expect(detectReactiveTrigger('upon killing an enemy, loses Overload', 'Overload')).toBe(
+            'on-enemy-destroyed'
+        ));
+    it('detects on-enemy-repaired', () =>
+        expect(
+            detectReactiveTrigger('gains Overload when an enemy performs a repair', 'Overload')
+        ).toBe('on-enemy-repaired'));
+    it('detects on-debuff-inflicted from "On inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'On inflicting a debuff, this Unit gains Marauder Rage II for 3 turns',
+                'Marauder Rage II'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('routes Ruiner Overload grant to on-enemy-repaired despite a kill clause in the same sentence', () =>
+        expect(
+            detectReactiveTrigger(
+                'gains 1 stack of Overload when an enemy performs a repair, upon killing an enemy, this Unit removes Overload',
+                'Overload'
+            )
+        ).toBe('on-enemy-repaired'));
+});
+
+describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lifecycle side effects)', () => {
+    // The KILL_TRIGGER_RE / APPLYING_DEBUFF_RE patterns added for the Overload lifecycle also
+    // (correctly) reclassify several non-Marauder buff grants from on-cast to reactive triggers.
+    // Each ship's buff genuinely is gated behind a kill / debuff-infliction in docs/ship-skills.csv,
+    // so these are semantically-correct reclassifications. Text below is the real CSV phrasing.
+
+    // --- KILL_TRIGGER_RE → on-enemy-destroyed ---
+    it('Gallant — Legion Discipline I gated on "on kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.',
+                'Legion Discipline I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Gallant — Legion Discipline II gated on "on kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Legion Discipline II</unit-skill> for 4 turns on kill.',
+                'Legion Discipline II'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Medved — XAOC Swiftness I gated on "On kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness I</unit-skill> for 2 turns.',
+                'XAOC Swiftness I'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Medved — XAOC Swiftness II gated on "On kill"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit has 20% Shield Penetration. On kill, it gains <unit-skill>XAOC Swiftness II</unit-skill> for 3 turns.',
+                'XAOC Swiftness II'
+            )
+        ).toBe('on-enemy-destroyed'));
+    it('Meiying — Stasis gated on "Upon killing an enemy with a Debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+                'Stasis'
+            )
+        ).toBe('on-enemy-destroyed'));
+
+    // --- APPLYING_DEBUFF_RE → on-debuff-inflicted ---
+    it('Torcher — Marauder Rage I gated on "upon inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Marauder Rage I</unit-skill> for 3 turns upon inflicting a debuff.',
+                'Marauder Rage I'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Prospect — Inc. Damage Down I gated on "when inflicting a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Inc. Damage Down I</unit-skill> for 2 turns when inflicting a debuff.',
+                'Inc. Damage Down I'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Yuyan — Stealth gated on "when applying a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns when applying a debuff.',
+                'Stealth'
+            )
+        ).toBe('on-debuff-inflicted'));
+    it('Yuyan R2 — Tianchao Precision II gated on "when applying a debuff"', () =>
+        expect(
+            detectReactiveTrigger(
+                'This Unit gains <unit-skill>Stealth</unit-skill> for 2 turns and <unit-skill>Tianchao Precision II</unit-skill> for 3 turns when applying a debuff.',
+                'Tianchao Precision II'
+            )
+        ).toBe('on-debuff-inflicted'));
+});
+
+describe('parseSelfBuffRemovals', () => {
+    it('emits for "loses Overload on kill"', () =>
+        expect(
+            parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('emits for "removes Overload" (Ruiner)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('emits for passive "Overload is lost" (Butcher R2)', () =>
+        expect(
+            parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'At the start of the round, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. Upon killing an enemy, this Unit loses <unit-skill>Overload</unit-skill>.'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('resolves the removal trigger by removal position within a shared sentence (Ruiner)', () =>
+        expect(
+            parseSelfBuffRemovals(
+                'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> when an enemy performs a repair, upon killing an enemy, this Unit removes <unit-skill>Overload</unit-skill>'
+            )
+        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+    it('returns [] for no-loss text', () =>
+        expect(
+            parseSelfBuffRemovals('This Unit gains <unit-skill>Overload</unit-skill> every turn')
+        ).toEqual([]));
+    it('returns [] for an unknown buff', () =>
+        expect(
+            parseSelfBuffRemovals('this Unit removes <unit-skill>Nonsense</unit-skill>')
+        ).toEqual([]));
 });
 
 describe('detectCritRepairTrigger', () => {

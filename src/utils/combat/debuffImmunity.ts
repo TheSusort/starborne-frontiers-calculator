@@ -34,7 +34,6 @@ const CONTROL_EFFECT_LABEL: Record<ControlEffect, string> = {
     provoke: 'Provoke',
     taunt: 'Taunt',
     stasis: 'Stasis',
-    overload: 'Overload',
     'concentrate-fire': 'Concentrate Fire',
     disable: 'Disable',
 };

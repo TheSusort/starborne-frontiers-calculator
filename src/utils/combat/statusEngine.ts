@@ -162,6 +162,10 @@ export interface StatusEngine {
      *  co-applied debuffs on the same victim. Used by §4.5 direct-damage Stasis break.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     removeTimedEnemyStatus(targetId: string, buffName: string): void;
+    /** Remove a named buff family from ALL of `actorId`'s self stores (timed selfMaps,
+     *  accumulating accumSelfMaps, persistent persistentSelfMaps). Lazy-empty / unknown id /
+     *  unknown name → safe no-op. */
+    removeSelfBuffByName(actorId: string, buffName: string): void;
     /** Remove up to `count` removable debuffs from `actorId`'s per-victim enemy store, newest
      *  applied first (see removeNewestFirst). `'all'` removes every removable debuff. Returns
      *  the number actually removed. Unknown id → no-op (returns 0). */
@@ -943,6 +947,30 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         map.delete(deriveFamilyKey(buffName).familyKey);
     };
 
+    /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
+     *  doors a buff can arrive through each use a different key:
+     *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
+     *   - accumulating `accumSelfMaps` are keyed by the raw `buffName` (payload.buffName),
+     *   - persistent `persistentSelfMaps` are keyed by the raw `buffName`.
+     *  Clearing all three makes removal robust regardless of which door applied the buff.
+     *  Lazy-empty / unknown id / unknown name → safe no-op. */
+    const removeSelfBuffByName = (actorId: string, buffName: string): void => {
+        selfMaps.get(actorId)?.delete(deriveFamilyKey(buffName).familyKey);
+        // Accumulating (per-round) Overload: RESET stacks to 0 instead of deleting the entry.
+        // The "gains Overload every turn" grant is a single seeded accumulating entry that
+        // beginRound's per-round tick increments; deleting it would stop accrual permanently, but
+        // the Marauder mechanic is "lose all stacks on kill, then keep building again". Zeroing the
+        // entry (and clearing its appliedSeq so the next 0→positive tick re-stamps ordering) makes
+        // it inert THIS round (activeAbilityStatuses excludes stacks<=0) yet lets beginRound resume
+        // accrual next round. Per-active/per-charge entries reset the same way.
+        const accum = accumSelfMaps.get(actorId)?.get(buffName);
+        if (accum) {
+            accum.stacks = 0;
+            accum.appliedSeq = undefined;
+        }
+        persistentSelfMaps.get(actorId)?.delete(buffName);
+    };
+
     /** Remove up to `count` removable statuses for `actorId` on the chosen side, NEWEST-APPLIED
      *  FIRST (highest `appliedSeq` removed first).
      *
@@ -1262,6 +1290,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         decrementEnemy,
         clearRemovable,
         removeTimedEnemyStatus,
+        removeSelfBuffByName,
         cleanse,
         reduceNewestDebuffDuration,
         purge,

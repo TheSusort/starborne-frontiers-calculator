@@ -1650,6 +1650,146 @@ describe('clearRemovable', () => {
     });
 });
 
+describe('removeSelfBuffByName', () => {
+    // Minimal ConditionContext for activeAbilityStatuses reads (accumulating store).
+    const baseCtx: ConditionContext = {
+        selfBuffNames: [],
+        selfDebuffNames: [],
+        enemyBuffNames: [],
+        enemyDebuffCount: 0,
+        effectiveCritRate: 50,
+        adjacentAllyCount: 0,
+        enemyAdjacentCount: 0,
+        enemyDestroyedCount: 0,
+        selfHpPct: 100,
+        enemyHpPct: 100,
+    };
+
+    it('clears an accumulating self buff (accumSelfMaps)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const accum: RegisteredAbilityStatus = {
+            payload: { buffName: 'Overload', stacks: 1, parsedEffects: { attack: 10 } },
+            side: 'self',
+            sourceSlot: 'active',
+            conditions: [],
+            kind: 'accumulating',
+            maxStacks: 10,
+            stackTrigger: 'per-round',
+        };
+        eng.registerAbilityStatuses([accum], 'attacker');
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1); // per-round → stacks 0 → 1
+        // Present before removal.
+        expect(
+            eng
+                .activeAbilityStatuses('self', () => baseCtx, 'attacker')
+                .map((s) => s.active.buffName)
+        ).toEqual(['Overload']);
+
+        eng.removeSelfBuffByName('attacker', 'Overload');
+
+        expect(eng.activeAbilityStatuses('self', () => baseCtx, 'attacker')).toEqual([]);
+    });
+
+    it('clears a persistent-stacking self buff (persistentSelfMaps)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // 'Overload' is a member of PERSISTENT_STACKING_BUFFS — applyTimedAbilityStatus routes
+        // it through the persistent door into persistentSelfMaps (keyed by raw buffName).
+        const persistentOverload: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            kind: 'timed',
+            side: 'self',
+            sourceSlot: 'active',
+            conditions: [],
+            duration: 2, // ignored — name routes to the persistent map
+            payload: { buffName: 'Overload', stacks: 1, parsedEffects: { attack: 10 } },
+        };
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, persistentOverload, 'attacker');
+        // Present before removal (surfaces via timedAbilityStatuses' persistent fold).
+        const before = eng.timedAbilityStatuses('self', 'attacker');
+        expect(before.map((s) => s.active.buffName)).toEqual(['Overload']);
+        expect(before[0].active.turnsRemaining).toBe('permanent');
+
+        eng.removeSelfBuffByName('attacker', 'Overload');
+
+        expect(eng.timedAbilityStatuses('self', 'attacker')).toEqual([]);
+    });
+
+    it('clears a timed self buff family by familyKey, not the literal name (selfMaps)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        // Use a TIERED name so the timed store key (deriveFamilyKey('Attack Up III').familyKey ===
+        // 'Attack Up') differs from the raw buffName. removeSelfBuffByName must delete by the
+        // familyKey: if the implementation wrongly used .delete(buffName) with the raw
+        // 'Attack Up III', the stored 'Attack Up' family entry would survive and this fails.
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up III', 3), 'attacker');
+        expect(eng.timedAbilityStatuses('self', 'attacker').map((s) => s.payload.buffName)).toEqual(
+            ['Attack Up III']
+        );
+
+        eng.removeSelfBuffByName('attacker', 'Attack Up III');
+
+        expect(eng.timedAbilityStatuses('self', 'attacker')).toEqual([]);
+    });
+
+    it('clears the SAME name from two co-holding self stores in one call (idempotent across doors)', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        // 'Overload' co-lands in two distinct self stores on the same actor:
+        //   - the accumulating store (accumSelfMaps) via an accumulating registration, and
+        //   - the persistent-stacking store (persistentSelfMaps) via applyTimedAbilityStatus,
+        //     because 'Overload' is in PERSISTENT_STACKING_BUFFS.
+        // The "clear all doors" contract: a SINGLE removeSelfBuffByName call must empty BOTH.
+        const accum: RegisteredAbilityStatus = {
+            payload: { buffName: 'Overload', stacks: 1, parsedEffects: { attack: 10 } },
+            side: 'self',
+            sourceSlot: 'active',
+            conditions: [],
+            kind: 'accumulating',
+            maxStacks: 10,
+            stackTrigger: 'per-round',
+        };
+        const persistentOverload: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+            kind: 'timed',
+            side: 'self',
+            sourceSlot: 'passive',
+            conditions: [],
+            duration: 2, // ignored — name routes to the persistent map
+            payload: { buffName: 'Overload', stacks: 1, parsedEffects: { defense: 5 } },
+        };
+        eng.registerAbilityStatuses([accum], 'attacker');
+        eng.beginRound(1);
+        eng.sourceFired('attacker', 'active', 1); // per-round → accumulating Overload stacks 0 → 1
+        eng.applyTimedAbilityStatus(1, persistentOverload, 'attacker'); // persistent Overload
+
+        // Both doors hold 'Overload' before removal.
+        expect(
+            eng
+                .activeAbilityStatuses('self', () => baseCtx, 'attacker')
+                .map((s) => s.active.buffName)
+        ).toEqual(['Overload']); // accumulating store
+        expect(eng.timedAbilityStatuses('self', 'attacker').map((s) => s.active.buffName)).toEqual([
+            'Overload',
+        ]); // persistent store (surfaced via the persistent fold)
+
+        eng.removeSelfBuffByName('attacker', 'Overload');
+
+        // One call cleared BOTH stores.
+        expect(eng.activeAbilityStatuses('self', () => baseCtx, 'attacker')).toEqual([]);
+        expect(eng.timedAbilityStatuses('self', 'attacker')).toEqual([]);
+    });
+
+    it('is a safe no-op for an unknown actor id and unknown buff name', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, timedSelfStatus('Attack Up', 3), 'attacker');
+        // Unknown id → lazy-empty maps → no throw, no effect on 'attacker'.
+        expect(() => eng.removeSelfBuffByName('someone-else', 'Attack Up')).not.toThrow();
+        // Unknown name on a known id → no throw, leaves the real buff intact.
+        expect(() => eng.removeSelfBuffByName('attacker', 'Nonexistent')).not.toThrow();
+        expect(eng.timedAbilityStatuses('self', 'attacker')).toHaveLength(1);
+    });
+});
+
 describe('buffDurationExtensionFor (Boost)', () => {
     // Boost gear set: +1 turn on every TIMED SELF-SIDE buff its wearer APPLIES (caster-side).
     // Enemy debuffs and non-finite-duration buffs are excluded. The lookup is keyed by the
