@@ -94,7 +94,9 @@ export type CombatEvent =
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
      *  `critHits` present only when >= 1 (single-draw heals: 0 or 1 per heal ability;
-     *  summed across the cast's heal abilities). */
+     *  summed across the cast's heal abilities). `perTarget` carries the actually-applied
+     *  amount per recipient (raw heal); `overheal` and `didCrit` are present when the
+     *  engine tracks them for that recipient. */
     | {
           type: 'heal-performed';
           casterId: string;
@@ -107,19 +109,30 @@ export type CombatEvent =
            *  on-own-repair-to-ally listener to scale an `overheal`-basis reactive shield
            *  (Abundant Renewal); ignored by every other heal-performed listener. */
           overheal?: number;
+          /** Per-recipient breakdown: one entry per recipient in application order.
+           *  `amount` is the raw heal applied to that recipient; `overheal` is the
+           *  wasted portion (present only when > 0, player-side heal target only);
+           *  `didCrit` is present when the ability crit (player/enemy-side heal).
+           *  Always populated by the engine; absent only in hand-crafted test emits. */
+          perTarget?: { targetId: string; amount: number; overheal?: number; didCrit?: boolean }[];
       }
     /** A shield-application cast resolved (one event per cast, not per recipient).
      *  `granterId` is the acting actor that applied the shield(s) — named granter (not
      *  caster) because Resonating Fury is granter-scoped and listens on this;
      *  `recipientIds` are the recipients whose pool actually grew (actualGranted > 0) —
      *  RF's buff targets; `amount` is the total shield actually granted this cast
-     *  (post-cap). */
+     *  (post-cap). `perTarget` carries the actually-granted amount per recipient
+     *  (post-cap, same filter as recipientIds: only entries where granted > 0). */
     | {
           type: 'shield-applied';
           granterId: string;
           recipientIds: string[];
           round: number;
           amount: number;
+          /** Per-recipient breakdown: one entry per recipient whose pool actually grew
+           *  (mirrors `recipientIds`). `amount` is the post-cap pool growth for that
+           *  recipient. Always populated by the engine; absent only in hand-crafted test emits. */
+          perTarget?: { targetId: string; amount: number }[];
       }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the
      *  number of debuffs actually removed (player-side) or the nominal cfg.count

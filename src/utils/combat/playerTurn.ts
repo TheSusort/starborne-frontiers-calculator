@@ -1904,6 +1904,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Carried on heal-performed.overheal for an `overheal`-basis reactive shield (Abundant Renewal).
         let overhealSum = 0;
         let cleansePerformedCount = 0;
+        // Per-recipient breakdown for heal-performed.perTarget (additive — one entry per recipient).
+        const healPerTarget: {
+            targetId: string;
+            amount: number;
+            overheal?: number;
+            didCrit?: boolean;
+        }[] = [];
 
         for (const ability of healAbilities) {
             const cfg = ability.config;
@@ -1936,6 +1943,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // overheal only on the player heal path above.
                         healTargets.push(rid);
                         healRawSum += raw;
+                        healPerTarget.push({
+                            targetId: rid,
+                            amount: raw,
+                            ...(didCrit ? { didCrit: true } : {}),
+                        });
                     }
                     continue;
                 }
@@ -1957,14 +1969,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                     raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                     healing.credit(actor.id, 'directHeal', raw);
+                    let perTargetOverheal: number | undefined;
                     if (rid === healing.targetId) {
                         const { consumed, overheal } = healing.applyHealToTarget(raw);
                         healing.credit(actor.id, 'effectiveHeal', consumed);
                         healing.credit(actor.id, 'overheal', overheal);
                         overhealSum += overheal;
+                        if (overheal > 0) perTargetOverheal = overheal;
                     }
                     healTargets.push(rid);
                     healRawSum += raw;
+                    healPerTarget.push({
+                        targetId: rid,
+                        amount: raw,
+                        ...(perTargetOverheal !== undefined ? { overheal: perTargetOverheal } : {}),
+                        ...(didCrit ? { didCrit: true } : {}),
+                    });
                 }
             } else if (cfg.type === 'shield') {
                 if (healEventOnly) {
@@ -1976,6 +1996,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     const recipients = recipientsFor(ability.target);
                     const shieldRecipientIds: string[] = [];
                     let shieldGrantedSum = 0;
+                    const shieldPerTarget: { targetId: string; amount: number }[] = [];
                     for (const rid of recipients) {
                         const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                         const recipientActor = healing.recipientActor(rid);
@@ -1984,6 +2005,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             if (granted > 0) {
                                 shieldRecipientIds.push(rid);
                                 shieldGrantedSum += granted;
+                                shieldPerTarget.push({ targetId: rid, amount: granted });
                             }
                         }
                     }
@@ -1994,6 +2016,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             recipientIds: shieldRecipientIds,
                             round: r,
                             amount: shieldGrantedSum,
+                            perTarget: shieldPerTarget,
                         });
                     }
                     continue;
@@ -2005,6 +2028,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // per cast (NOT per recipient) carrying only recipients that actually gained pool.
                 const shieldRecipientIds: string[] = [];
                 let shieldGrantedSum = 0;
+                const shieldPerTarget: { targetId: string; amount: number }[] = [];
                 for (const rid of recipients) {
                     const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                     healing.credit(actor.id, 'shield', raw);
@@ -2020,6 +2044,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         if (granted > 0) {
                             shieldRecipientIds.push(rid);
                             shieldGrantedSum += granted;
+                            shieldPerTarget.push({ targetId: rid, amount: granted });
                         }
                     }
                 }
@@ -2036,6 +2061,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         recipientIds: shieldRecipientIds,
                         round: r,
                         amount: shieldGrantedSum,
+                        perTarget: shieldPerTarget,
                     });
                 }
             } else if (cfg.type === 'cleanse') {
@@ -2068,6 +2094,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 amount: healRawSum,
                 ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
                 ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
+                perTarget: healPerTarget,
             });
         }
 

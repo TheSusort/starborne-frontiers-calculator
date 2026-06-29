@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { createActor, recordDestroyed } from '../state';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -1748,6 +1748,251 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
             expect(roundEvents[0].attackerId).toBe('flat1');
             // crit=0 → didCrit absent
             expect(roundEvents[0].didCrit).toBeUndefined();
+        }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// perTarget on heal-performed and shield-applied events
+// ─────────────────────────────────────────────────────────────────────────────
+describe('heal-performed / shield-applied perTarget breakdown', () => {
+    // Helper: a walked team actor with explicit HP (no skills — just a slot filler).
+    const idleAlly = (id: string, speed: number, hp: number): TeamActorEngineInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('perTarget: AoE heal across 2 allies with DIFFERENT missing HP yields distinct per-recipient amounts', () => {
+        // Focus (hp 10000, speed 200) heals 'all-allies' with basis 'target-hp' (10%) each round.
+        // t1 (hp 8000) and t2 (hp 12000) → raw per recipient differs (800 and 1200).
+        // We use two enemy attackers (speed 80, 60) that wound t1 and t2 BEFORE the focus acts
+        // by running 2 rounds: round 1 enemy attacks → t1 and t2 take damage.
+        // Round 2 focus heals all-allies → each recipient gets its own target-hp-scaled amount.
+        //
+        // Actually: focus (speed 200) acts FIRST each round — so we pre-wound allies.
+        // Simpler: use basis 'target-hp' so that raw = recipient.maxHp × 10% (t1: 800, t2: 1200).
+        // This is already distinct without needing damage — the AMOUNTS differ by definition.
+        idCounter = 0;
+        const bus = createEventBus();
+        const healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+        bus.on('heal-performed', (e) => {
+            if (e.casterId === 'attacker') healPerfs.push(e);
+        });
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            // Speed 200: focus acts before allies (speed 50, 40)
+            speed: 200,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'heal-aoe',
+                                type: 'heal',
+                                // target-hp basis: raw = recipient.maxHp × pct → different per recipient
+                                target: 'all-allies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'heal', pct: 10, basis: 'target-hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            teamActors: [
+                idleAlly('t1', 50, 8000), // raw = 800 (8000 × 10%)
+                idleAlly('t2', 40, 12000), // raw = 1200 (12000 × 10%)
+            ],
+            bus,
+        });
+
+        // Should have exactly 1 heal-performed from the focus actor.
+        expect(healPerfs).toHaveLength(1);
+        const evt = healPerfs[0];
+
+        // perTarget must exist with one entry per recipient.
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        expect(perTarget).toHaveLength(3); // attacker + t1 + t2
+
+        // The amounts must NOT all be equal (distinct per-recipient amounts).
+        const amounts = perTarget.map((e) => e.amount);
+        const allSame = amounts.every((a) => a === amounts[0]);
+        expect(allSame).toBe(false);
+
+        // Each entry must have a targetId.
+        for (const entry of perTarget) {
+            expect(typeof entry.targetId).toBe('string');
+            expect(entry.amount).toBeGreaterThan(0);
+        }
+
+        // Sum of perTarget amounts must equal the summed amount on the event.
+        const sum = perTarget.reduce((acc, e) => acc + e.amount, 0);
+        expect(sum).toBeCloseTo(evt.amount, 5);
+    });
+
+    it('perTarget: single-recipient self-heal has one perTarget entry matching the event amount', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+        bus.on('heal-performed', (e) => healPerfs.push(e));
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'self-heal',
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'heal', pct: 10, basis: 'hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            bus,
+        });
+
+        expect(healPerfs).toHaveLength(1);
+        const evt = healPerfs[0];
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        expect(perTarget).toHaveLength(1);
+        expect(perTarget[0].targetId).toBe('attacker');
+        expect(perTarget[0].amount).toBeCloseTo(evt.amount, 5);
+    });
+
+    it('perTarget: shield-applied has one perTarget entry per recipient with summing amounts', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const shieldEvts: Extract<CombatEvent, { type: 'shield-applied' }>[] = [];
+        bus.on('shield-applied', (e) => {
+            if (e.granterId === 'attacker') shieldEvts.push(e);
+        });
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            speed: 200,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'shield-aoe',
+                                type: 'shield',
+                                target: 'all-allies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'shield', pct: 10, basis: 'hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            teamActors: [idleAlly('t1', 50, 8000), idleAlly('t2', 40, 12000)],
+            bus,
+        });
+
+        expect(shieldEvts).toHaveLength(1);
+        const evt = shieldEvts[0];
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        // All 3 recipients get shields (all at full HP → no cap).
+        expect(perTarget).toHaveLength(3);
+        // Amounts sum to total.
+        const sum = perTarget.reduce((acc, e) => acc + e.amount, 0);
+        expect(sum).toBeCloseTo(evt.amount, 5);
+        // Each entry has a targetId.
+        for (const entry of perTarget) {
+            expect(typeof entry.targetId).toBe('string');
         }
     });
 });

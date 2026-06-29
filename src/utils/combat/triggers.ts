@@ -1691,6 +1691,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
         const shieldRecipientIds: string[] = [];
         let shieldGrantedSum = 0;
+        const shieldPerTarget: { targetId: string; amount: number }[] = [];
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1737,6 +1738,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                     if (granted > 0) {
                         shieldRecipientIds.push(rid);
                         shieldGrantedSum += granted;
+                        shieldPerTarget.push({ targetId: rid, amount: granted });
                     }
                 }
             }
@@ -1757,6 +1759,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 recipientIds: shieldRecipientIds,
                 round: ctx.round,
                 amount: shieldGrantedSum,
+                perTarget: shieldPerTarget,
             });
         }
         return;
