@@ -723,7 +723,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     } else {
         action = 'active';
     }
-    advanceChargeCadence(actor, hasChargedSkill);
+    advanceChargeCadence(actor, hasChargedSkill, bus, r);
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
 
@@ -1379,10 +1379,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'own',
             });
+        const oldChargeManip = actor.charges;
         actor.charges = Math.min(
             actor.charges + bonusCharges + (allyChargePerRound ?? 0),
             chargeCount
         );
+        if (actor.charges !== oldChargeManip) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round: r,
+                oldCharge: oldChargeManip,
+                newCharge: actor.charges,
+                reason: 'manip',
+            });
+        }
     }
     // ALLY charge gains (Task 5): ally/all-allies-targeted charge abilities bump EVERY player
     // actor (incl. this caster), each capped at its OWN chargeCount. Sourced from the FIRING

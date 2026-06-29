@@ -1848,7 +1848,18 @@ export function runCombat(input: CombatEngineInput): {
             grantAllyCharges: (amount: number): void => {
                 for (const a of actors) {
                     if (a.chargeCount <= 0) continue;
+                    const oldCharge = a.charges;
                     a.charges = Math.min(a.charges + amount, a.chargeCount);
+                    if (a.charges !== oldCharge) {
+                        bus.emit({
+                            type: 'charge-changed',
+                            actorId: a.id,
+                            round: currentRound,
+                            oldCharge,
+                            newCharge: a.charges,
+                            reason: 'manip',
+                        });
+                    }
                 }
             },
             // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
@@ -1857,7 +1868,18 @@ export function runCombat(input: CombatEngineInput): {
             removeEnemyCharges: (amount: number): void => {
                 for (const a of actorsBySide(side === 'player' ? 'enemy' : 'player')) {
                     if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
+                    const oldCharge = a.charges;
                     a.charges = Math.max(0, a.charges - amount);
+                    if (a.charges !== oldCharge) {
+                        bus.emit({
+                            type: 'charge-changed',
+                            actorId: a.id,
+                            round: currentRound,
+                            oldCharge,
+                            newCharge: a.charges,
+                            reason: 'manip',
+                        });
+                    }
                 }
             },
             // Single-target charge removal: subtract from ONE opposing actor (floored at 0,
@@ -1866,7 +1888,18 @@ export function runCombat(input: CombatEngineInput): {
             removeChargesFrom: (targetId: string, amount: number): void => {
                 const a = allActorsById.get(targetId);
                 if (!a || a.chargeCount <= 0 || a.chargeLossImmune) return;
+                const oldCharge = a.charges;
                 a.charges = Math.max(0, a.charges - amount);
+                if (a.charges !== oldCharge) {
+                    bus.emit({
+                        type: 'charge-changed',
+                        actorId: a.id,
+                        round: currentRound,
+                        oldCharge,
+                        newCharge: a.charges,
+                        reason: 'manip',
+                    });
+                }
             },
             lowestSpeedIds: (): Set<string> => {
                 if (actors.length === 0) return new Set<string>();
@@ -2561,9 +2594,15 @@ export function runCombat(input: CombatEngineInput): {
     // rebuilt per round and capture it by reference.
     let actingActorId: string | undefined;
 
+    // Engine-scope mutable round tracker: updated at the top of each round so the
+    // buildSideContext closures (defined once outside the loop) can stamp the correct
+    // round onto charge-changed events without rebuilding their parent object each round.
+    let currentRound = 0;
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
+        currentRound = r;
         statusEngine.beginRound(r);
         // Clear the per-round repaired set HERE (not at the round-started emit) so start-of-round
         // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
@@ -5325,7 +5364,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // application events — a dead target is untouched (old short-circuit).
                                 // The `&& actor.chargeCount > 0` term is redundant (hasChargedSkill already
                                 // implies chargeCount >= 1); the helper's internal guard handles it.
-                                advanceChargeCadence(actor, enemyRuntime.hasChargedSkill);
+                                advanceChargeCadence(actor, enemyRuntime.hasChargedSkill, bus, r);
                                 // No enemyTurn → no lastTurnCtxByActor update (parity: the old dead path
                                 // produced no ctx either; this actor has no live DoTs to attribute).
                             } else {

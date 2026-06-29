@@ -87,6 +87,7 @@ const collect = (input: CombatEngineInput) => {
         'control-applied',
         'hp-changed',
         'ship-destroyed',
+        'charge-changed',
     ];
     for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
     const result = runCombat({ ...input, bus });
@@ -1680,6 +1681,42 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
         expect(r2[0].didCrit).toBe(true);
         expect(r2[1].didCrit).toBeUndefined();
         expect(r2[2].didCrit).toBe(true);
+    });
+
+    // ── charge-changed emission ───────────────────────────────────────────────────
+    it('charge-changed gen: emits reason:gen with newCharge = oldCharge+1 each non-charged round', () => {
+        // chargeCount 3, not startCharged → rounds 1,2,3 are active (gen), round 4 is charged
+        // (cast-reset). After reset charges = 0 then gen resumes. In a 6-round sim the
+        // pattern is: gen(1→1), gen(2→2), gen(3→3), cast-reset(3→0), gen(0→1), gen(1→2).
+        const { events } = collect(
+            baseInput({ numRounds: 6, chargeCount: 3, startCharged: false })
+        );
+        const genEvents = events.filter((e) => e.type === 'charge-changed' && e.reason === 'gen');
+        // There must be at least one gen event.
+        expect(genEvents.length).toBeGreaterThan(0);
+        // Every gen event must have newCharge = oldCharge + 1.
+        for (const e of genEvents) {
+            if (e.type !== 'charge-changed') throw new Error('unreachable');
+            expect(e.newCharge).toBe(e.oldCharge + 1);
+            expect(e.actorId).toBe('attacker');
+            expect(e.round).toBeGreaterThanOrEqual(1);
+        }
+    });
+
+    it('charge-changed cast-reset: emits reason:cast-reset with newCharge 0 on a charged-skill fire', () => {
+        // chargeCount 3, not startCharged → round 4 fires charged + resets.
+        const { events } = collect(
+            baseInput({ numRounds: 6, chargeCount: 3, startCharged: false })
+        );
+        const resetEvents = events.filter(
+            (e) => e.type === 'charge-changed' && e.reason === 'cast-reset'
+        );
+        expect(resetEvents.length).toBeGreaterThan(0);
+        for (const e of resetEvents) {
+            if (e.type !== 'charge-changed') throw new Error('unreachable');
+            expect(e.newCharge).toBe(0);
+            expect(e.actorId).toBe('attacker');
+        }
     });
 
     // ── Test 2: manual flat enemy → 1 event per round (unchanged contract) ──────

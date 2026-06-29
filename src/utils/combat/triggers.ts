@@ -1335,7 +1335,18 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
         if (owner.actor.chargeCount === 0) return;
+        const oldChargeManip = owner.actor.charges;
         owner.actor.charges = Math.min(owner.actor.charges + cfg.amount, owner.actor.chargeCount);
+        if (owner.actor.charges !== oldChargeManip) {
+            ctx.bus.emit({
+                type: 'charge-changed',
+                actorId: owner.actor.id,
+                round: ctx.round,
+                oldCharge: oldChargeManip,
+                newCharge: owner.actor.charges,
+                reason: 'manip',
+            });
+        }
         return;
     }
 

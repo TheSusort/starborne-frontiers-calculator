@@ -186,6 +186,20 @@ export type CombatEvent =
     /** Emitted when a Cheat Death passive intercepts what would have been a lethal
      *  hit, keeping the actor alive at 1 HP. `actorId` is the surviving actor. */
     | { type: 'cheat-death-activated'; actorId: string; round: number }
+    /** Emitted at every actor.charges mutation so the log can show charge state and
+     *  manipulation. `oldCharge`/`newCharge` bracket the mutation; `reason` distinguishes
+     *  the three mutation paths:
+     *   - 'gen':        natural per-turn +1 increment (advanceChargeCadence, non-cap branch)
+     *   - 'cast-reset': charge-cap fire that resets counter to 0 (advanceChargeCadence, cap branch)
+     *   - 'manip':      ability-driven grant or removal (engine/triggers/playerTurn) */
+    | {
+          type: 'charge-changed';
+          actorId: string;
+          round: number;
+          oldCharge: number;
+          newCharge: number;
+          reason: 'gen' | 'cast-reset' | 'manip';
+      }
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
      *  (present only when that hit critted). Emitted once PER HIT of the enemy's
