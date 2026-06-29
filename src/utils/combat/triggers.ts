@@ -859,7 +859,7 @@ export interface IntentExecContext {
  * the team walk — buildDrainContext used this same snapshot count before the team-walk PR, and the
  * golden drain fixtures are hand-built around it. There is no `includeAbilityEnemyNames` analogue
  * to the self-side switch because turning it on would change drain gating and churn every locked
- * golden. Tracked as a backlog item in docs/skill-model-coverage.md §6.
+ * golden. Tracked as a backlog item in docs/skill-model-coverage.archived-2026-06-12.md §6.
  */
 export function buildActorConditionContext(
     statusEngine: StatusEngine,
