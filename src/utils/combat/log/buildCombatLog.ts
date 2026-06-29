@@ -40,6 +40,23 @@ interface BuildContext {
      * and consumed by the first action-producing entry (ability-performed).
      */
     pendingSkill: { skillName?: string; slot: 'active' | 'charged' } | undefined;
+    /**
+     * Reaction stamp for the event currently being dispatched. Captured in the
+     * dispatch loop from the event's ReactiveStamp; consumed by attachEntry to
+     * route the produced entry into a trigger entry's `.reactions`.
+     */
+    currentStamp:
+        | {
+              duringTurnOf: string;
+              /** Captured for the render layer (T10 reserved); not read by the builder. */
+              triggerActorId?: string;
+          }
+        | undefined;
+    /**
+     * Tracks which entries are themselves reactions, so a reaction can never be
+     * picked as the trigger for nesting another reaction.
+     */
+    reactiveEntries: WeakSet<CombatLogEntry>;
 
     /** Push a new round and set it as current. */
     openRound(round: number): void;
@@ -47,6 +64,12 @@ interface BuildContext {
     openTurn(actorId: string): void;
     /** Attach an entry to the current turn. */
     attachEntry(entry: CombatLogEntry): void;
+    /**
+     * Route a reaction entry into the trigger turn's most-recent non-reactive
+     * entry's `.reactions[]`, or fall back to `currentRound.endOfRound`.
+     * Only called when `currentStamp` is set.
+     */
+    routeReaction(entry: CombatLogEntry, stamp: { duringTurnOf: string }): void;
     /** Update the running HP map and stamp the most-recent matching target. */
     setHp(actorId: string, pct: number): void;
     /**
@@ -91,6 +114,8 @@ function createBuildContext(
         runningCharge,
         chargeMax: chargeMaxMap,
         pendingSkill: undefined,
+        currentStamp: undefined,
+        reactiveEntries: new WeakSet<CombatLogEntry>(),
 
         openRound(round: number) {
             ctx.closeOpenAttack();
@@ -118,13 +143,64 @@ function createBuildContext(
         },
 
         attachEntry(entry: CombatLogEntry) {
-            if (!ctx.currentTurn) return;
-            ctx.currentTurn.entries.push(entry);
+            if (ctx.currentStamp) {
+                ctx.routeReaction(entry, ctx.currentStamp);
+                return;
+            }
+            if (ctx.currentTurn) {
+                ctx.currentTurn.entries.push(entry);
+                return;
+            }
+            // No current turn and no stamp — round-end drain window.
+            if (ctx.currentRound) ctx.currentRound.endOfRound.push(entry);
+        },
+
+        routeReaction(entry: CombatLogEntry, stamp: { duringTurnOf: string }) {
+            // Mark the entry reactive so it can't itself be a trigger.
+            ctx.reactiveEntries.add(entry);
+            // Find the most-recent turn for `duringTurnOf` in the current round.
+            const round = ctx.currentRound;
+            let triggerTurn: CombatLogTurn | undefined;
+            if (round) {
+                for (let i = round.turns.length - 1; i >= 0; i--) {
+                    if (round.turns[i].actorId === stamp.duringTurnOf) {
+                        triggerTurn = round.turns[i];
+                        break;
+                    }
+                }
+            }
+            // Within that turn, find the most-recent NON-reactive entry.
+            let trigger: CombatLogEntry | undefined;
+            if (triggerTurn) {
+                for (let i = triggerTurn.entries.length - 1; i >= 0; i--) {
+                    if (!ctx.reactiveEntries.has(triggerTurn.entries[i])) {
+                        trigger = triggerTurn.entries[i];
+                        break;
+                    }
+                }
+            }
+            if (trigger) {
+                trigger.reactions.push(entry);
+            } else if (round) {
+                // No matching turn / no non-reactive trigger — fall back to endOfRound.
+                round.endOfRound.push(entry);
+            }
         },
 
         setHp(actorId: string, pct: number) {
             ctx.hpPct.set(actorId, pct);
-            // Stamp the most-recent target with this actorId in the current turn.
+            // Check the currently-open attack entry first. An hp-changed that follows
+            // a reaction's attacked event pertains to the open entry (which may be nested
+            // inside a trigger's .reactions[]) rather than a top-level turn entry.
+            if (ctx.openAttackEntry) {
+                for (let j = ctx.openAttackEntry.targets.length - 1; j >= 0; j--) {
+                    if (ctx.openAttackEntry.targets[j].targetId === actorId) {
+                        ctx.openAttackEntry.targets[j].resultingHpPct = pct;
+                        return;
+                    }
+                }
+            }
+            // Fall back: stamp the most-recent matching target in the current turn's entries.
             if (!ctx.currentTurn) return;
             for (let i = ctx.currentTurn.entries.length - 1; i >= 0; i--) {
                 const e = ctx.currentTurn.entries[i];
@@ -206,8 +282,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // Update running charge for this actor regardless of current turn.
         ctx.runningCharge.set(e.actorId, e.newCharge);
 
-        // Produce a log entry in the current turn.
-        if (!ctx.currentTurn) return;
+        // Produce a log entry (current turn, reaction nesting, or round-end drain).
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         let note: string;
         switch (e.reason) {
             case 'gen':
@@ -231,7 +307,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'ability-performed': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         // Finalize any pending miss entry before opening a new one.
         ctx.finalizeMissEntry();
         // Consume pending skill-fired data (if any) and stamp onto the entry.
@@ -277,7 +353,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'heal-performed': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         let targets: CombatLogTarget[];
         if (e.perTarget && e.perTarget.length > 0) {
             targets = e.perTarget.map((pt) => {
@@ -300,7 +376,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'shield-applied': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         let targets: CombatLogTarget[];
         if (e.perTarget && e.perTarget.length > 0) {
             targets = e.perTarget.map((pt) => ({ targetId: pt.targetId, amount: pt.amount }));
@@ -319,7 +395,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'buff-applied': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'buff',
             actorId: e.actorId,
@@ -332,7 +408,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'debuff-applied': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'debuff',
             actorId: e.sourceId,
@@ -345,7 +421,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'dot-applied': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'dot-applied',
             actorId: e.sourceId,
@@ -358,7 +434,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'dot-ticked': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         // No consumePendingSkill: a tick is not a cast.
         const entry: CombatLogEntry = {
             kind: 'dot-ticked',
@@ -370,7 +446,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'control-applied': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'control',
             actorId: e.casterId,
@@ -383,7 +459,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'cleanse-performed': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'cleanse',
             actorId: e.casterId,
@@ -396,7 +472,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'purge-performed': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
             kind: 'purge',
             actorId: e.casterId,
@@ -409,7 +485,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'ship-destroyed': (e, ctx) => {
-        if (!ctx.currentTurn) return;
+        if (!ctx.currentTurn && !ctx.currentRound) return;
         const note = e.killerId ? `destroyed by ${e.killerId}` : undefined;
         const entry: CombatLogEntry = {
             kind: 'death',
@@ -438,6 +514,13 @@ export function buildCombatLog(
     const ctx = createBuildContext(rosterIds, initialCharge);
 
     for (const event of events) {
+        // Capture the reaction stamp (if any) for attachEntry to consume. Only
+        // events carrying a ReactiveStamp have `duringTurnOf`; others leave it unset.
+        ctx.currentStamp =
+            'duringTurnOf' in event && event.duringTurnOf
+                ? { duringTurnOf: event.duringTurnOf, triggerActorId: event.triggerActorId }
+                : undefined;
+
         const handler = (handlers as Record<string, Handler<CombatEventType> | undefined>)[
             event.type
         ];
@@ -446,6 +529,9 @@ export function buildCombatLog(
             handler(event, ctx);
         }
         // Unknown event types are silently skipped (no-op).
+
+        // Clear the stamp so it never bleeds into the next event.
+        ctx.currentStamp = undefined;
     }
 
     return ctx.rounds;

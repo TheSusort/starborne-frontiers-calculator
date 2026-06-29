@@ -1183,6 +1183,347 @@ describe('buildCombatLog', () => {
         expect(entry.note).toContain('A'); // killerId in note
     });
 
+    // ─── Reaction nesting + endOfRound fallback ───────────────────────────────
+
+    it('reaction nests under the most-recent non-reactive trigger entry in the correct turn', () => {
+        // During A's turn, A attacks B. Then B's reactive counter (ability-performed,
+        // stamped duringTurnOf:'A') hits A back. The counter must NOT be a top-level
+        // entry; it must nest under A's attack with its target/amount populated.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            // B's reactive counterattack — stamped.
+            ev({
+                type: 'ability-performed',
+                actorId: 'B',
+                targetId: 'A',
+                round: 1,
+                abilityType: 'damage',
+                damage: 400,
+                didHit: true,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'B',
+                targetId: 'A',
+                round: 1,
+                damage: 400,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        expect(turn.actorId).toBe('A');
+        // Only ONE top-level entry: A's attack.
+        expect(turn.entries).toHaveLength(1);
+        const attack = turn.entries[0];
+        expect(attack.actorId).toBe('A');
+        // The counter is nested under A's attack.
+        expect(attack.reactions).toHaveLength(1);
+        const counter = attack.reactions[0];
+        expect(counter.kind).toBe('attack');
+        expect(counter.actorId).toBe('B');
+        // Same-object-reference: the following attacked filled the nested entry's target.
+        expect(counter.targets).toHaveLength(1);
+        expect(counter.targets[0].targetId).toBe('A');
+        expect(counter.targets[0].amount).toBe(400);
+    });
+
+    it('round-end-drained reaction still nests under its trigger turn (not endOfRound)', () => {
+        // Same counter, but positioned AFTER turn-ended A / before round-ended.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            // Reaction drained at round-end — no current turn, but stamped duringTurnOf:'A'.
+            ev({
+                type: 'ability-performed',
+                actorId: 'B',
+                targetId: 'A',
+                round: 1,
+                abilityType: 'damage',
+                damage: 400,
+                didHit: true,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'B',
+                targetId: 'A',
+                round: 1,
+                damage: 400,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const round = log[0];
+        expect(round.endOfRound).toHaveLength(0);
+        const turn = round.turns[0];
+        expect(turn.entries).toHaveLength(1);
+        expect(turn.entries[0].reactions).toHaveLength(1);
+        expect(turn.entries[0].reactions[0].actorId).toBe('B');
+        expect(turn.entries[0].reactions[0].targets[0].amount).toBe(400);
+    });
+
+    it('unstamped round-end event → endOfRound (no current turn, no crash)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            // dot-ticked AFTER the last turn-ended — no stamp.
+            ev({
+                type: 'dot-ticked',
+                targetId: 'B',
+                round: 1,
+                dotType: 'inferno',
+                damage: 250,
+            }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const round = log[0];
+        // No turn entries (the dot ticked outside a turn).
+        expect(round.turns[0].entries).toHaveLength(0);
+        // Landed in endOfRound.
+        expect(round.endOfRound).toHaveLength(1);
+        expect(round.endOfRound[0].kind).toBe('dot-ticked');
+        expect(round.endOfRound[0].targets[0].amount).toBe(250);
+    });
+
+    it('ordering invariant: re-homing a reaction does not reorder parent entries', () => {
+        // Two non-reactive parents in A's turn. A reaction stamped duringTurnOf:'A'
+        // re-homes onto the most-recent non-reactive parent (parent 2). The two parents
+        // keep their original order.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            // Parent 1
+            ev({ type: 'buff-applied', actorId: 'A', round: 1, buffName: 'Inspire', duration: 2 }),
+            // Parent 2
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 500,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 500,
+                isPrimaryTarget: true,
+            }),
+            // Reaction — nests under most-recent non-reactive entry (parent 2).
+            ev({
+                type: 'buff-applied',
+                actorId: 'B',
+                round: 1,
+                buffName: 'Counter',
+                duration: 1,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        expect(turn.entries).toHaveLength(2);
+        // Parents keep original order.
+        expect(turn.entries[0].kind).toBe('buff');
+        expect(turn.entries[0].note).toBe('Inspire');
+        expect(turn.entries[1].kind).toBe('attack');
+        // Reaction nested under parent 2 (most-recent non-reactive).
+        expect(turn.entries[0].reactions).toHaveLength(0);
+        expect(turn.entries[1].reactions).toHaveLength(1);
+        expect(turn.entries[1].reactions[0].kind).toBe('buff');
+        expect(turn.entries[1].reactions[0].note).toBe('Counter');
+    });
+
+    it('stamped event whose turn has no non-reactive trigger → endOfRound (no crash)', () => {
+        // A turn opens for A but produces NO non-reactive entry, then a stamped
+        // reaction arrives. With no trigger entry, it falls back to endOfRound.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'buff-applied',
+                actorId: 'B',
+                round: 1,
+                buffName: 'Counter',
+                duration: 1,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const round = log[0];
+        expect(round.turns[0].entries).toHaveLength(0);
+        expect(round.endOfRound).toHaveLength(1);
+        expect(round.endOfRound[0].kind).toBe('buff');
+        expect(round.endOfRound[0].note).toBe('Counter');
+    });
+
+    it('unknown stamped event type is a no-op (no entry, no throw)', () => {
+        // buff-expired has no handler. Stamped — the stamp logic must not throw.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 100,
+                didHit: true,
+            }),
+            ev({
+                type: 'buff-expired',
+                actorId: 'A',
+                round: 1,
+                buffName: 'Inspire',
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        // The attack entry exists; the stamped buff-expired produced nothing.
+        expect(turn.entries).toHaveLength(1);
+        expect(turn.entries[0].reactions).toHaveLength(0);
+        expect(log[0].endOfRound).toHaveLength(0);
+    });
+
+    // ─── Fix 1: resultingHpPct on nested reaction targets ────────────────────
+
+    it('counterattack hp-changed stamps the nested reaction target, not the original attacker entry', () => {
+        // A attacks B (B's hp drops). B reactive-counters A (A's hp drops to 75%).
+        // The nested counter entry's target (A) must have resultingHpPct === 75.
+        // A's original attack entry's target (B) must still have its own resultingHpPct.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            // A attacks B
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 500,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 500,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'hp-changed', targetId: 'B', round: 1, oldPct: 100, newPct: 60 }),
+            // B's reactive counterattack targets A
+            ev({
+                type: 'ability-performed',
+                actorId: 'B',
+                targetId: 'A',
+                round: 1,
+                abilityType: 'damage',
+                damage: 300,
+                didHit: true,
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'B',
+                targetId: 'A',
+                round: 1,
+                damage: 300,
+                isPrimaryTarget: true,
+            }),
+            // hp-changed for A — must stamp the nested counter entry, not B's target in the outer entry
+            ev({ type: 'hp-changed', targetId: 'A', round: 1, oldPct: 100, newPct: 75 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        // Only one top-level entry: A's attack.
+        expect(turn.entries).toHaveLength(1);
+        const outerAttack = turn.entries[0];
+        expect(outerAttack.actorId).toBe('A');
+        // B's HP stamped on the outer attack's target.
+        expect(outerAttack.targets[0].targetId).toBe('B');
+        expect(outerAttack.targets[0].resultingHpPct).toBe(60);
+        // Counter is nested.
+        expect(outerAttack.reactions).toHaveLength(1);
+        const counter = outerAttack.reactions[0];
+        expect(counter.actorId).toBe('B');
+        expect(counter.targets).toHaveLength(1);
+        expect(counter.targets[0].targetId).toBe('A');
+        // Key assertion: A's hp-changed must stamp the NESTED counter target, not bleed elsewhere.
+        expect(counter.targets[0].resultingHpPct).toBe(75);
+    });
+
     it('ship-destroyed: no killerId — no note or note without killer reference', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
