@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: destroyed ships no longer keep triggering their passive reactions — once a ship is dead, its on-hit/on-crit/on-enemy-charge and similar passives stop firing. Effects that are meant to fire from a ship's own death (such as the Martyrdom implant's Disable on the killer) still resolve correctly.",
     "Combat simulator: the pinned per-ship round detail now shows each ship's own damage taken this round broken down into HP damage, shield absorbed, and barrier absorbed — including for ships caught in an area-of-effect hit, which each carry their own damage-taken figures.",
     "Combat simulator: shields are now fully modeled — shields build an untimed absorption pool capped at a ship's max HP that soaks damage before HP, shield penetration lets attacks punch through a portion of a shield straight to HP, damage-over-time effects (Inferno and Corrosion) bypass shields entirely, and the simulator now shows each ship's shield granted, absorbed, and current shield pool per round.",
     'Combat simulator: ships that grant themselves or allies Incoming Damage Down (Makoli, Salvation, Shelter, Refine) — and allies buffed by the Battlecry implant on death — now actually take reduced direct damage. Previously the buff appeared in the log but had no effect on damage taken.',

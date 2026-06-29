@@ -145,6 +145,13 @@ export interface Intent {
          *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
          *  rather than the owner/whole team (Resonating Fury — buff every recipient of the cast). */
         shieldRecipientIds?: string[];
+        /** True when this intent is the owner's OWN death reaction (a self-scoped
+         *  `on-destroyed` enqueue — Martyrdom's killer-Disable, Salvation's self-destruct
+         *  heal). The dead-owner drain gate skips every reactive whose owner is already
+         *  destroyed EXCEPT these: a self-death reaction is born of the death itself and
+         *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
+         *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
+        fromOwnDeath?: boolean;
     };
 }
 
@@ -569,6 +576,9 @@ export function registerReactiveListeners(args: {
                         // Salvation's self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
+                        // fromOwnDeath: marks this as the owner's OWN death reaction so the
+                        // dead-owner drain gate (executeIntent) lets it through even though the
+                        // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal).
                         if (
                             ra.ability.config.type === 'purge' ||
                             ra.ability.config.type === 'debuff'
@@ -576,10 +586,17 @@ export function registerReactiveListeners(args: {
                             if (!e.byDirectDamage) return;
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, counterTargetId: e.killerId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    counterTargetId: e.killerId,
+                                    fromOwnDeath: true,
+                                },
                             });
                         } else {
-                            enqueue(intent);
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, fromOwnDeath: true },
+                            });
                         }
                     });
                     break;
@@ -1373,6 +1390,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 `listener registration and the runtimes map are out of sync`
         );
     }
+
+    // Dead-owner gate (combat-sim finding #1): a DESTROYED owner's stale reactives are
+    // suppressed — a listener that fired on a LATER event (e.g. a dead Curator reacting to an
+    // enemy charge rounds after dying) must not resolve. `destroyedRound` is the canonical
+    // aliveness signal (state.recordDestroyed). The owner's OWN death reaction is EXEMPT
+    // (eventCtx.fromOwnDeath, stamped by the self-scoped on-destroyed listener) so Martyrdom's
+    // killer-Disable and Salvation's self-destruct heal — born of the death itself — still fire.
+    // Single, team-symmetric gate: the one drain feeds both sides, so this covers enemy-owner
+    // reactives identically. Listeners only ENQUEUE (pure), so a skip leaves no partial state.
+    if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;
 
     // The self hp-threshold condition on an on-hp-threshold-crossed ability is TRIGGER
     // CONFIG (the listener read N from it), NOT a drain-time gate — scrub it before gating.
