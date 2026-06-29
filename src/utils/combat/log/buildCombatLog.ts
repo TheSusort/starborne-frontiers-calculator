@@ -275,6 +275,151 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     'hp-changed': (e, ctx) => {
         ctx.setHp(e.targetId, e.newPct);
     },
+
+    'heal-performed': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        let targets: CombatLogTarget[];
+        if (e.perTarget && e.perTarget.length > 0) {
+            targets = e.perTarget.map((pt) => {
+                const t: CombatLogTarget = { targetId: pt.targetId, amount: pt.amount };
+                if (pt.didCrit !== undefined) t.didCrit = pt.didCrit;
+                return t;
+            });
+        } else {
+            // Fallback: one synthetic target per id in targets[], no amount.
+            targets = e.targets.map((id) => ({ targetId: id }));
+        }
+        const entry: CombatLogEntry = {
+            kind: 'heal',
+            actorId: e.casterId,
+            targets,
+            reactions: [],
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'shield-applied': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        let targets: CombatLogTarget[];
+        if (e.perTarget && e.perTarget.length > 0) {
+            targets = e.perTarget.map((pt) => ({ targetId: pt.targetId, amount: pt.amount }));
+        } else {
+            // Fallback: one synthetic target per id in recipientIds[], no amount.
+            targets = e.recipientIds.map((id) => ({ targetId: id }));
+        }
+        const entry: CombatLogEntry = {
+            kind: 'shield',
+            actorId: e.granterId,
+            targets,
+            reactions: [],
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'buff-applied': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'buff',
+            actorId: e.actorId,
+            targets: [],
+            reactions: [],
+            note: e.buffName,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'debuff-applied': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'debuff',
+            actorId: e.sourceId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: e.buffName,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'dot-applied': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'dot-applied',
+            actorId: e.sourceId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: `${e.dotType} ×${e.stacks}`,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'dot-ticked': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        // No consumePendingSkill: a tick is not a cast.
+        const entry: CombatLogEntry = {
+            kind: 'dot-ticked',
+            actorId: e.targetId,
+            targets: [{ targetId: e.targetId, amount: e.damage }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'control-applied': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'control',
+            actorId: e.casterId,
+            targets: [],
+            reactions: [],
+            note: e.effect,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'cleanse-performed': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'cleanse',
+            actorId: e.casterId,
+            targets: [],
+            reactions: [],
+            note: `cleansed ${e.count}`,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'purge-performed': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const entry: CombatLogEntry = {
+            kind: 'purge',
+            actorId: e.casterId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: `purged ${e.count}`,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'ship-destroyed': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        const note = e.killerId ? `destroyed by ${e.killerId}` : undefined;
+        const entry: CombatLogEntry = {
+            kind: 'death',
+            actorId: e.actorId,
+            targets: [],
+            reactions: [],
+            ...(note !== undefined ? { note } : {}),
+        };
+        ctx.attachEntry(entry);
+    },
 };
 
 /**

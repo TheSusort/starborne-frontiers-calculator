@@ -104,8 +104,8 @@ describe('buildCombatLog', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            // buff-applied has no handler yet — should not throw
-            ev({ type: 'buff-applied', actorId: 'A', round: 1, buffName: 'Inspire', duration: 2 }),
+            // buff-expired has no handler — should not throw and produce no entry
+            ev({ type: 'buff-expired', actorId: 'A', round: 1, buffName: 'Inspire' }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -835,5 +835,372 @@ describe('buildCombatLog', () => {
         const entry = turnB.entries[0];
         expect(entry.skillName).toBeUndefined();
         expect(entry.slot).toBeUndefined();
+    });
+
+    // ─── Effect event handlers ────────────────────────────────────────────────
+
+    it('heal-performed: perTarget fan-out produces one target per recipient with amount', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B', 'C'],
+                round: 1,
+                amount: 450,
+                perTarget: [
+                    { targetId: 'B', amount: 300, didCrit: true },
+                    { targetId: 'C', amount: 150 },
+                ],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('heal');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toHaveLength(2);
+        const targetB = entry.targets.find((t) => t.targetId === 'B');
+        const targetC = entry.targets.find((t) => t.targetId === 'C');
+        expect(targetB).toBeDefined();
+        expect(targetB!.amount).toBe(300);
+        expect(targetB!.didCrit).toBe(true);
+        expect(targetC).toBeDefined();
+        expect(targetC!.amount).toBe(150);
+        expect(targetC!.didCrit).toBeUndefined();
+    });
+
+    it('heal-performed: skill-fired stamps skillName and slot on heal entry', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'active',
+                skillName: 'Restore',
+            }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B'],
+                round: 1,
+                amount: 200,
+                perTarget: [{ targetId: 'B', amount: 200 }],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.kind).toBe('heal');
+        expect(entry.skillName).toBe('Restore');
+        expect(entry.slot).toBe('active');
+    });
+
+    it('heal-performed: falls back gracefully when perTarget is absent (uses targets array)', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B'],
+                round: 1,
+                amount: 100,
+                // perTarget intentionally omitted (older/hand-crafted event)
+            } as CombatEvent),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.kind).toBe('heal');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toHaveLength(1);
+        expect(entry.targets[0].targetId).toBe('B');
+    });
+
+    it('shield-applied: perTarget fan-out produces one target per recipient with amount', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'shield-applied',
+                granterId: 'A',
+                recipientIds: ['B', 'C'],
+                round: 1,
+                amount: 800,
+                perTarget: [
+                    { targetId: 'B', amount: 500 },
+                    { targetId: 'C', amount: 300 },
+                ],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('shield');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toHaveLength(2);
+        const targetB = entry.targets.find((t) => t.targetId === 'B');
+        const targetC = entry.targets.find((t) => t.targetId === 'C');
+        expect(targetB!.amount).toBe(500);
+        expect(targetC!.amount).toBe(300);
+    });
+
+    it('shield-applied: falls back to recipientIds when perTarget is absent', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'shield-applied',
+                granterId: 'A',
+                recipientIds: ['B'],
+                round: 1,
+                amount: 400,
+                // perTarget intentionally omitted
+            } as CombatEvent),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.kind).toBe('shield');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toHaveLength(1);
+        expect(entry.targets[0].targetId).toBe('B');
+    });
+
+    it('buff-applied: self-buff — actorId is the buff receiver, targets is empty, note has buffName', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'buff-applied', actorId: 'A', round: 1, buffName: 'Inspire', duration: 2 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('buff');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toEqual([]);
+        expect(entry.note).toBe('Inspire');
+    });
+
+    it('debuff-applied: actorId is sourceId (the INFLICTER), not the victim; target contains victim', () => {
+        // Correctness point: debuff actor = inflicter, NOT victim.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'debuff-applied',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                buffName: 'Defense Shred',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('debuff');
+        expect(entry.actorId).toBe('A'); // inflicter, NOT 'B'
+        expect(entry.targets).toHaveLength(1);
+        expect(entry.targets[0].targetId).toBe('B');
+        expect(entry.note).toBe('Defense Shred');
+    });
+
+    it('dot-applied: sourceId → actorId (inflicter), targetId → targets, note has dotType', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'dot-applied',
+                sourceId: 'A',
+                targetId: 'B',
+                round: 1,
+                dotType: 'corrosion',
+                stacks: 2,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('dot-applied');
+        expect(entry.actorId).toBe('A'); // sourceId, inflicter
+        expect(entry.targets).toHaveLength(1);
+        expect(entry.targets[0].targetId).toBe('B');
+        expect(entry.note).toContain('corrosion');
+    });
+
+    it('dot-ticked: targetId is both the actorId and target; amount is the damage; no skill consumed', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            // skill-fired before dot-ticked — should NOT be consumed (dot-ticked is not a cast)
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'active',
+                skillName: 'Strike',
+            }),
+            ev({
+                type: 'dot-ticked',
+                targetId: 'B',
+                round: 1,
+                dotType: 'inferno',
+                damage: 250,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        // 2 entries: charge/skill-consumed-by-ability? No — skill-fired doesn't produce
+        // an entry; dot-ticked is 1 entry + charge-changed (if any). Just 1 entry here.
+        const dotEntry = entries.find((e) => e.kind === 'dot-ticked');
+        expect(dotEntry).toBeDefined();
+        expect(dotEntry!.actorId).toBe('B'); // ticked target is the actor
+        expect(dotEntry!.targets).toHaveLength(1);
+        expect(dotEntry!.targets[0].targetId).toBe('B');
+        expect(dotEntry!.targets[0].amount).toBe(250);
+        // skill-fired must NOT have been consumed by dot-ticked
+        expect(dotEntry!.skillName).toBeUndefined();
+        expect(dotEntry!.slot).toBeUndefined();
+    });
+
+    it('control-applied: casterId → actorId, targets empty, note has effect', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'control-applied',
+                casterId: 'A',
+                effect: 'stasis',
+                round: 1,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('control');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toEqual([]);
+        expect(entry.note).toBe('stasis');
+    });
+
+    it('cleanse-performed: casterId → actorId, targets empty, note has count', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'cleanse-performed',
+                casterId: 'A',
+                count: 2,
+                round: 1,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('cleanse');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toEqual([]);
+        expect(entry.note).toContain('2');
+    });
+
+    it('purge-performed: casterId → actorId, targetId in targets, note has count', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'purge-performed',
+                casterId: 'A',
+                targetId: 'B',
+                count: 3,
+                round: 1,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('purge');
+        expect(entry.actorId).toBe('A');
+        expect(entry.targets).toHaveLength(1);
+        expect(entry.targets[0].targetId).toBe('B');
+        expect(entry.note).toContain('3');
+    });
+
+    it('ship-destroyed: actorId is the destroyed ship, killerId appears in note', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ship-destroyed',
+                actorId: 'B',
+                round: 1,
+                killerId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        expect(entries).toHaveLength(1);
+        const entry = entries[0];
+        expect(entry.kind).toBe('death');
+        expect(entry.actorId).toBe('B'); // the destroyed ship
+        expect(entry.targets).toEqual([]);
+        expect(entry.note).toContain('A'); // killerId in note
+    });
+
+    it('ship-destroyed: no killerId — no note or note without killer reference', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ship-destroyed',
+                actorId: 'B',
+                round: 1,
+                // killerId intentionally absent
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, initialCharge)).not.toThrow();
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.kind).toBe('death');
+        expect(entry.actorId).toBe('B');
+        expect(entry.targets).toEqual([]);
     });
 });
