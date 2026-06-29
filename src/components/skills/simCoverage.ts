@@ -54,7 +54,7 @@ export function isAbilityNotSimulated(ability: Ability): boolean {
  * so real ship passives can still be documented ahead of sim support.
  * `charge` is NOT in this set: passive charge auras are sourced into the charge
  * cadence on active rounds (see src/utils/combat/engine.ts).
- * See docs/skill-model-coverage.md section 4 (slot sourcing).
+ * See docs/skill-model-coverage.archived-2026-06-12.md section 4 (slot sourcing).
  */
 export const PASSIVE_NOOP_TYPES: ReadonlySet<AbilityType> = new Set([
     'dot',
