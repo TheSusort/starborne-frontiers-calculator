@@ -50,20 +50,6 @@ const battleResult: BattleResult = {
                     activeDebuffs: [],
                 },
             ],
-            events: [
-                {
-                    round: 1,
-                    kind: 'turn',
-                    actorId: 'attacker',
-                },
-                {
-                    round: 1,
-                    kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
-                    amount: 1000,
-                },
-            ],
             turnOrder: ['attacker', 'e:enemy:0'],
         },
         {
@@ -106,20 +92,6 @@ const battleResult: BattleResult = {
                     activeDebuffs: [],
                 },
             ],
-            events: [
-                {
-                    round: 2,
-                    kind: 'turn',
-                    actorId: 'attacker',
-                },
-                {
-                    round: 2,
-                    kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
-                    amount: 1500,
-                },
-            ],
             turnOrder: ['attacker', 'e:enemy:0'],
         },
     ],
@@ -128,6 +100,9 @@ const battleResult: BattleResult = {
         { actorId: 'attacker', side: 'player', name: 'Nova', position: 'T1' },
         { actorId: 'e:enemy:0', side: 'enemy', name: 'Hexa', position: 'T4' },
     ],
+    // T9: combatLog is additive; the RoundEventLog renderer rewrite (T10) re-asserts its text.
+    // This playback test covers outcome/boards/HP/stepper — none of which read combatLog.
+    combatLog: [],
 };
 
 vi.mock('../../utils/calculators/battleSimulator', async () => {
@@ -202,15 +177,12 @@ describe('SimulatorPage playback', () => {
         // HP bars present (player full, enemy at 40%).
         expect(screen.getByTestId('hp-bar-T1')).toHaveStyle({ width: '100%' });
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '40%' });
-        // Event log line (attacker-centric "X → Y: N").
-        expect(screen.getByText('Nova → Enemy Hexa: 1,000')).toBeInTheDocument();
         // Stepper reports two rounds, starting on round 1.
         expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
 
-        // Step to round 2: the enemy is destroyed (HP 0%) and the event line + total change.
+        // Step to round 2: the enemy is destroyed (HP 0%).
         fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
         expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
-        expect(screen.getByText('Nova → Enemy Hexa: 1,500')).toBeInTheDocument();
     });
 });

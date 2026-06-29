@@ -34,7 +34,6 @@ describe('overlaysForRound', () => {
             ships: [
                 shipState({ actorId: 'attacker', side: 'player', hpPct: 30, damageTaken: 500 }),
             ],
-            events: [],
             turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
@@ -51,7 +50,6 @@ describe('overlaysForRound', () => {
         const round: BattleRound = {
             round: 2,
             ships: [shipState({ actorId: 'attacker', side: 'player', hpPct: 0, alive: false })],
-            events: [],
             turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
@@ -64,7 +62,6 @@ describe('overlaysForRound', () => {
             ships: [
                 shipState({ actorId: 'attacker', side: 'player', healingReceived: 200, hpPct: 80 }),
             ],
-            events: [],
             turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);
@@ -82,7 +79,6 @@ describe('overlaysForRound', () => {
                     healingReceived: 200,
                 }),
             ],
-            events: [],
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('damage');
@@ -92,7 +88,6 @@ describe('overlaysForRound', () => {
         const round: BattleRound = {
             round: 5,
             ships: [shipState({ actorId: 'attacker', side: 'player' })],
-            events: [],
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBeUndefined();
@@ -102,7 +97,6 @@ describe('overlaysForRound', () => {
         const round: BattleRound = {
             round: 7,
             ships: [shipState({ actorId: 'attacker', side: 'player', shieldsAbsorbed: 300 })],
-            events: [],
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('shield');
@@ -119,7 +113,6 @@ describe('overlaysForRound', () => {
                     shieldsAbsorbed: 300,
                 }),
             ],
-            events: [],
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('damage');
@@ -136,7 +129,6 @@ describe('overlaysForRound', () => {
                     shieldsAbsorbed: 300,
                 }),
             ],
-            events: [],
             turnOrder: [],
         };
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('heal');
@@ -153,7 +145,6 @@ describe('overlaysForRound', () => {
                     activeDebuffs: ['Defense Shred'],
                 }),
             ],
-            events: [],
             turnOrder: [],
         };
         const overlay = overlaysForRound(round, 'player', roster).T1;
@@ -168,7 +159,6 @@ describe('overlaysForRound', () => {
                 shipState({ actorId: 'attacker', side: 'player', hpPct: 50 }),
                 shipState({ actorId: 'e:s3:0', side: 'enemy', hpPct: 70 }),
             ],
-            events: [],
             turnOrder: [],
         };
         const enemy = overlaysForRound(round, 'enemy', roster);
@@ -183,7 +173,6 @@ describe('overlaysForRound', () => {
             round: 1,
             // Only one of two player ships has a state this round.
             ships: [shipState({ actorId: 'attacker', side: 'player' })],
-            events: [],
             turnOrder: [],
         };
         const overlays = overlaysForRound(round, 'player', roster);

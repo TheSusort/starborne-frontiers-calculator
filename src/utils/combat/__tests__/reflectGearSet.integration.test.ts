@@ -26,6 +26,7 @@ import { computeAffinityModifiers } from '../../calculators/affinityUtils';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { GEAR_SETS } from '../../../constants/gearSets';
 import type { Position } from '../../../types/encounters';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 // ---------------------------------------------------------------------------
 // Harness helpers (mirrored from equipmentAbilities.integration.test.ts)
@@ -169,6 +170,9 @@ function totalDamageTaken(result: ReturnType<typeof simulateBattle>, actorId: st
 function enemyId(result: ReturnType<typeof simulateBattle>): string {
     return result.roster.find((r) => r.side === 'enemy')!.actorId;
 }
+
+/** All combatLog entries across every round, flattened over turns + nested reactions + endOfRound. */
+const allLogEntries = flattenCombatLog;
 
 // ---------------------------------------------------------------------------
 // (a) Attacker HP drops by the reflected amount when it hits a Reflect wearer
@@ -382,10 +386,10 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
 
         const foe = enemyId(result);
         // The bomb actually landed on the wearer at least once. `dot-applied` events surface
-        // as `BattleLogEvent { kind: 'dot', label: dotType }` in the round event log. This
-        // proves the scenario is non-trivial — a bomb DID apply, but zero reflection fires.
-        const bombApplied = result.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        // as `CombatLogEntry { kind: 'dot-applied', note: 'bomb ×N' }` in the hierarchical log.
+        // This proves the scenario is non-trivial — a bomb DID apply, but zero reflection fires.
+        const bombApplied = allLogEntries(result).some(
+            (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
         // The enemy attacker took ZERO reflected damage — the pure-bomb hit reflects nothing
@@ -434,8 +438,8 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         const foeMixed = enemyId(mixed);
 
         // The bomb DID land (mixed scenario is non-trivial: a bomb detonates on the wearer).
-        const bombApplied = mixed.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        const bombApplied = allLogEntries(mixed).some(
+            (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
 
@@ -557,9 +561,9 @@ describe('REFLECT gear set — reflected kill', () => {
         );
 
         const foe = enemyId(result);
-        // A death event was emitted for the enemy attacker.
-        const enemyDied = result.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'death' && ev.actorId === foe)
+        // A death entry was emitted for the enemy attacker.
+        const enemyDied = allLogEntries(result).some(
+            (e) => e.kind === 'death' && e.actorId === foe
         );
         expect(enemyDied).toBe(true);
     });

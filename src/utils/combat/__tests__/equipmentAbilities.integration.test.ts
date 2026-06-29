@@ -37,6 +37,7 @@ import { makeConditionContext } from '../../abilities/__tests__/conditionContext
 import { SelectedGameBuff, TeamActorInput } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 // ---------------------------------------------------------------------------
 // Shared test harness helpers
@@ -2864,13 +2865,11 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
 
     const ROUNDS = 16; // carrier repairs each round → floor(16 × 0.16) = 2 proc fires
 
-    /** Collect every actorId that ever received a Power Infused Nanobots GRANT (buff log). */
+    /** Collect every actorId that ever received a Power Infused Nanobots GRANT (combatLog). */
     function buffedActors(result: ReturnType<typeof simulateBattle>): Set<string> {
         const set = new Set<string>();
-        for (const round of result.rounds) {
-            for (const ev of round.events) {
-                if (ev.kind === 'buff' && ev.label === NANOBOTS) set.add(ev.actorId);
-            }
+        for (const entry of flattenCombatLog(result)) {
+            if (entry.kind === 'buff' && entry.note === NANOBOTS) set.add(entry.actorId);
         }
         return set;
     }
@@ -3216,12 +3215,11 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
         // unreliable for the carrier here: the carrier grants the 1-turn buff on its OWN turn,
         // so it has already expired by the round-end snapshot — but the application still
         // happened (and folded into that turn's damage). The buff log captures every recipient.
-        const buffedActors = new Set<string>();
-        for (const round of result.rounds) {
-            for (const ev of round.events) {
-                if (ev.kind === 'buff' && ev.label === ATTACK_UP_I) buffedActors.add(ev.actorId);
-            }
-        }
+        const buffedActors = new Set(
+            flattenCombatLog(result)
+                .filter((e) => e.kind === 'buff' && e.note === ATTACK_UP_I)
+                .map((e) => e.actorId)
+        );
 
         // Every player ally — including the carrier — got the buff at least once.
         for (const id of playerIds) {
@@ -3273,8 +3271,8 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
             getGearPiece
         );
 
-        const grantedAttackUp = result.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'buff' && ev.label === ATTACK_UP_I)
+        const grantedAttackUp = flattenCombatLog(result).some(
+            (e) => e.kind === 'buff' && e.note === ATTACK_UP_I
         );
         expect(grantedAttackUp).toBe(false);
     });

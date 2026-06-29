@@ -39,6 +39,7 @@ import type { Ship } from '../../../types/ship';
 import type { ShipSkills } from '../../../types/abilities';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import type { Position } from '../../../types/encounters';
+import { flattenRound } from '../log/__testutils__/flattenCombatLog';
 
 // ── Real-skill-text ship builder ────────────────────────────────────────────
 // Skill text is the source of truth (docs/ship-skills.csv). buildShipAbilities resolves the
@@ -66,7 +67,10 @@ const ship = (id: string, over: Partial<Ship>): Ship =>
 const skillsFor = (s: Ship): ShipSkills => buildShipAbilities(s);
 
 // ── Channel (A): runCombat DPS-mode base ────────────────────────────────────
-const dpsBase = (shipSkills: ShipSkills, over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+const dpsBase = (
+    shipSkills: ShipSkills,
+    over: Partial<CombatEngineInput> = {}
+): CombatEngineInput => ({
     attack: 1000,
     crit: 0,
     critDamage: 0,
@@ -123,17 +127,19 @@ const place = (s: Ship, position: Position, attack: number, hp: number): BattleP
     },
 });
 
-// Actor ids that received a buff-applied for `label` (the per-round battle log).
+// Flatten a combatLog round's entries (turns + nested reactions + endOfRound) in order.
+
+// Actor ids that received a buff-applied for `label` (the hierarchical combatLog).
 const buffActorRounds = (
     r: ReturnType<typeof simulateBattle>,
     label: string
 ): { rounds: number[]; actors: Set<string> } => {
     const rounds: number[] = [];
     const actors = new Set<string>();
-    for (const rd of r.rounds) {
+    for (const rd of r.combatLog) {
         let hit = false;
-        for (const ev of rd.events) {
-            if (ev.kind === 'buff' && ev.label === label) {
+        for (const ev of flattenRound(rd)) {
+            if (ev.kind === 'buff' && ev.note === label) {
                 actors.add(ev.actorId);
                 hit = true;
             }
@@ -143,12 +149,16 @@ const buffActorRounds = (
     return { rounds, actors };
 };
 const focusDamageByRound = (r: ReturnType<typeof simulateBattle>): number[] =>
-    r.rounds.map((rd) => Math.round(rd.ships.find((s) => s.actorId === 'attacker')?.damageDealt ?? 0));
+    r.rounds.map((rd) =>
+        Math.round(rd.ships.find((s) => s.actorId === 'attacker')?.damageDealt ?? 0)
+    );
 // Per-round outgoing damage for an arbitrary actor (used for the enemy-side footprint proxy).
 const damageByRoundFor = (r: ReturnType<typeof simulateBattle>, actorId: string): number[] =>
     r.rounds.map((rd) => Math.round(rd.ships.find((s) => s.actorId === actorId)?.damageDealt ?? 0));
 const deathRounds = (r: ReturnType<typeof simulateBattle>): number[] =>
-    r.rounds.filter((rd) => rd.events.some((e) => e.kind === 'death')).map((rd) => rd.round);
+    r.combatLog
+        .filter((rd) => flattenRound(rd).some((e) => e.kind === 'death'))
+        .map((rd) => rd.round);
 
 // A trivial chip enemy / defender wall (real, destructible ships).
 const dummy = (id: string, type: Ship['type'] = 'Attacker'): Ship =>
@@ -199,12 +209,18 @@ describe('Overload lifecycle — engine fixtures', () => {
             });
             const killRun = simulateBattle({
                 playerTeam: [place(butcher, 'M4', 100, 1e12)],
-                enemyTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12), place(dummy('chip'), 'M4', 1, 250)],
+                enemyTeam: [
+                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('chip'), 'M4', 1, 250),
+                ],
                 rounds: 8,
             });
             const noKillRun = simulateBattle({
                 playerTeam: [place(butcher, 'M4', 100, 1e12)],
-                enemyTeam: [place(dummy('wall2', 'Defender'), 'M3', 1, 1e12), place(dummy('chip2'), 'M4', 1, 1e12)],
+                enemyTeam: [
+                    place(dummy('wall2', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('chip2'), 'M4', 1, 1e12),
+                ],
                 rounds: 8,
             });
 
@@ -249,7 +265,10 @@ describe('Overload lifecycle — engine fixtures', () => {
             });
             const r = simulateBattle({
                 playerTeam: [place(mangler, 'M4', 100, 1e12)],
-                enemyTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12), place(dummy('chip'), 'M4', 1, 250)],
+                enemyTeam: [
+                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('chip'), 'M4', 1, 250),
+                ],
                 rounds: 6,
             });
             const mr = buffActorRounds(r, 'Marauder Rage I');
@@ -267,7 +286,10 @@ describe('Overload lifecycle — engine fixtures', () => {
             });
             const r = simulateBattle({
                 playerTeam: [place(ravager, 'M4', 100, 1e12)],
-                enemyTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12), place(dummy('chip'), 'M4', 1, 250)],
+                enemyTeam: [
+                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('chip'), 'M4', 1, 250),
+                ],
                 rounds: 6,
             });
             const mr = buffActorRounds(r, 'Marauder Rage III');
@@ -401,7 +423,9 @@ describe('Overload lifecycle — engine fixtures', () => {
             );
             // Every round the gate passes → Overload accrues and Marauder Rage II is granted.
             expect(overloadStacks(r)).toEqual([1, 2, 3, 4]);
-            expect(selfBuffNames(r).every((round) => round.includes('Marauder Rage II'))).toBe(true);
+            expect(selfBuffNames(r).every((round) => round.includes('Marauder Rage II'))).toBe(
+                true
+            );
         });
 
         it('with only 2 enemy debuffs the gate fails — no Overload, no Marauder Rage (non-vacuous)', () => {
@@ -434,15 +458,25 @@ describe('Overload lifecycle — engine fixtures', () => {
                     1,
                     1e12
                 ),
-                place(ship('Victim', { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.' }), 'M4', 1, 250),
+                place(
+                    ship('Victim', {
+                        activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.',
+                    }),
+                    'M4',
+                    1,
+                    250
+                ),
             ],
             enemyTeam: [place(enemyMangler, 'M4', 100, 1e12)],
             rounds: 6,
         });
 
         // A PLAYER ship was killed by the enemy.
-        const deaths = r.rounds
-            .flatMap((rd) => rd.events.filter((e) => e.kind === 'death').map((e) => e.actorId));
+        const deaths = r.combatLog.flatMap((rd) =>
+            flattenRound(rd)
+                .filter((e) => e.kind === 'death')
+                .map((e) => e.actorId)
+        );
         expect(deaths.some((id) => id.startsWith('p:'))).toBe(true);
 
         // Marauder Rage I landed — and ONLY on the enemy Marauder's own actor id (team-agnostic
@@ -484,7 +518,9 @@ describe('Overload lifecycle — engine fixtures', () => {
             playerTeam: [
                 anchor(),
                 place(
-                    ship('Victim', { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.' }),
+                    ship('Victim', {
+                        activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.',
+                    }),
                     'M4',
                     1,
                     250
@@ -497,7 +533,9 @@ describe('Overload lifecycle — engine fixtures', () => {
             playerTeam: [
                 anchor(),
                 place(
-                    ship('Victim2', { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.' }),
+                    ship('Victim2', {
+                        activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.',
+                    }),
                     'M4',
                     1,
                     1e12

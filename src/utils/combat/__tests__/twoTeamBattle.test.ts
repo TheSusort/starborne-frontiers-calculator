@@ -74,6 +74,8 @@ import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
+import type { CombatLogEntry } from '../log/types';
+import { flattenRound } from '../log/__testutils__/flattenCombatLog';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
@@ -931,39 +933,57 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
             rounds: 3,
         });
 
-        const r1 = result.rounds[0];
+        const r1 = result.combatLog.find((r) => r.round === 1)!;
+        expect(r1).toBeDefined();
 
-        // Only the modelled log kinds appear — `attacked` (no amount) is NOT logged.
-        for (const e of r1.events) {
-            expect(['turn', 'damage', 'heal', 'buff', 'debuff', 'dot', 'death']).toContain(e.kind);
+        // Flatten round-1 entries (turns + nested reactions + endOfRound) preserving order.
+        const r1Entries: CombatLogEntry[] = flattenRound(r1);
+
+        // Only modelled entry kinds appear (the hierarchical CombatLogEntryKind set).
+        const validKinds: CombatLogEntry['kind'][] = [
+            'attack',
+            'heal',
+            'shield',
+            'buff',
+            'debuff',
+            'dot-applied',
+            'dot-ticked',
+            'control',
+            'cleanse',
+            'purge',
+            'charge-changed',
+            'death',
+            'detonation',
+            'bomb',
+        ];
+        for (const e of r1Entries) {
+            expect(validKinds).toContain(e.kind);
         }
 
-        // Damage is ATTACKER-centric (from ability-performed): the focus player fires `front`
-        // and anchors the front enemy, so a damage line is keyed by the ATTACKER's actorId
-        // with the firing amount and a targetId.
-        const attackerDamage = r1.events.find(
-            (e) => e.kind === 'damage' && e.actorId === 'attacker'
+        // Damage is ATTACKER-centric: the focus player fires `front` and anchors the front
+        // enemy, so its turn carries an `attack` entry whose primary target took the firing
+        // amount (5000) with a resolved targetId.
+        const attackerTurn = r1.turns.find((t) => t.actorId === 'attacker');
+        expect(attackerTurn).toBeDefined();
+        const attackEntry = attackerTurn!.entries.find(
+            (e) => e.kind === 'attack' && e.actorId === 'attacker'
         );
-        expect(attackerDamage).toBeDefined();
-        expect(attackerDamage?.amount).toBe(5000);
-        expect(attackerDamage?.targetId).toBeDefined();
+        expect(attackEntry).toBeDefined();
+        expect(attackEntry!.targets.length).toBeGreaterThan(0);
+        const primaryTarget = attackEntry!.targets[0];
+        expect(primaryTarget.amount).toBe(5000);
+        expect(primaryTarget.targetId).toBeDefined();
 
-        // The log is chronological: a turn delimiter for the attacker precedes its damage line.
-        const attackerTurnIdx = r1.events.findIndex(
-            (e) => e.kind === 'turn' && e.actorId === 'attacker'
-        );
-        const attackerDamageIdx = r1.events.findIndex(
-            (e) => e.kind === 'damage' && e.actorId === 'attacker'
-        );
-        expect(attackerTurnIdx).toBeGreaterThanOrEqual(0);
-        expect(attackerTurnIdx).toBeLessThan(attackerDamageIdx);
+        // Hierarchy is the chronology guarantee: the attack entry lives INSIDE the attacker's
+        // turn (the turn opens before any of its entries by construction).
+        expect(attackerTurn!.entries).toContain(attackEntry);
 
-        // The wiped front enemy produces exactly one death line that round.
-        const deaths = r1.events.filter((e) => e.kind === 'death');
+        // The wiped front enemy produces exactly one death entry that round.
+        const deaths = r1Entries.filter((e) => e.kind === 'death');
         expect(deaths.map((e) => e.actorId)).toContain('e:e1:0');
         expect(deaths.filter((e) => e.actorId === 'e:e1:0')).toHaveLength(1);
 
-        // No spurious death line for a ship that did NOT die this round (the back enemy / players).
+        // No spurious death entry for a ship that did NOT die this round (back enemy / players).
         const deathIds = new Set(deaths.map((e) => e.actorId));
         expect(deathIds.has('e:e2:1')).toBe(false);
         expect(deathIds.has('attacker')).toBe(false);

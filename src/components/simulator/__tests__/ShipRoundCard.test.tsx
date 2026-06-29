@@ -31,7 +31,7 @@ const state: ShipRoundState = {
 };
 
 describe('ShipRoundCard', () => {
-    const round: BattleRound = { round: 4, ships: [state], events: [], turnOrder: [] };
+    const round: BattleRound = { round: 4, ships: [state], turnOrder: [] };
 
     it('shows the pinned ship name and current-round stats', () => {
         render(<ShipRoundCard actorId="attacker" round={round} roster={roster} />);
@@ -48,7 +48,7 @@ describe('ShipRoundCard', () => {
     });
 
     it('renders nothing when the actor has no state this round', () => {
-        const empty: BattleRound = { round: 4, ships: [], events: [], turnOrder: [] };
+        const empty: BattleRound = { round: 4, ships: [], turnOrder: [] };
         const { container } = render(
             <ShipRoundCard actorId="attacker" round={empty} roster={roster} />
         );
@@ -64,7 +64,6 @@ describe('ShipRoundCard', () => {
         const roundWithShield: BattleRound = {
             round: 5,
             ships: [stateWithShield],
-            events: [],
             turnOrder: [],
         };
         render(<ShipRoundCard actorId="attacker" round={roundWithShield} roster={roster} />);
@@ -86,7 +85,6 @@ describe('ShipRoundCard', () => {
         const roundWithIncoming: BattleRound = {
             round: 6,
             ships: [stateWithIncoming],
-            events: [],
             turnOrder: [],
         };
         render(<ShipRoundCard actorId="attacker" round={roundWithIncoming} roster={roster} />);
