@@ -541,4 +541,299 @@ describe('buildCombatLog', () => {
         const entry = log[0].turns[0].entries[0];
         expect(entry.targets).toHaveLength(0);
     });
+
+    // ─── Behavior 1: Charge header reconstruction ─────────────────────────────
+
+    it('chargeBefore is seeded from initialCharge and read at turn-started (before later charge-changed)', () => {
+        // Actor A seeded {charge:1, max:3}.
+        // turn-started A fires first — chargeBefore should be 1.
+        // charge-changed A (old:1, new:2, reason:'gen') fires AFTER turn-started — must NOT change chargeBefore.
+        const ic = new Map([['A', { charge: 1, max: 3 }]]);
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 1,
+                newCharge: 2,
+                reason: 'gen',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, ic);
+        const turn = log[0].turns[0];
+        expect(turn.chargeBefore).toBe(1);
+        expect(turn.chargeMax).toBe(3);
+    });
+
+    it('actor seeded with charge:0, max:0 → chargeMax is 0', () => {
+        const ic = new Map([['A', { charge: 0, max: 0 }]]);
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, ic);
+        const turn = log[0].turns[0];
+        expect(turn.chargeBefore).toBe(0);
+        expect(turn.chargeMax).toBe(0);
+    });
+
+    it('actor NOT in initialCharge → chargeBefore 0, chargeMax 0 (no throw)', () => {
+        // Empty initialCharge map — actor A not present.
+        const ic = new Map<string, { charge: number; max: number }>();
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        expect(() => buildCombatLog(events, roster, ic)).not.toThrow();
+        const log = buildCombatLog(events, roster, ic);
+        const turn = log[0].turns[0];
+        expect(turn.chargeBefore).toBe(0);
+        expect(turn.chargeMax).toBe(0);
+    });
+
+    it('running charge accumulates across turns (second turn sees updated charge)', () => {
+        // Round 1: A turn → charge-changed(1→2). Round 2: A turn → chargeBefore should be 2.
+        const ic = new Map([['A', { charge: 1, max: 3 }]]);
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 1,
+                newCharge: 2,
+                reason: 'gen',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+            ev({ type: 'round-started', round: 2 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 2 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 2 }),
+            ev({ type: 'round-ended', round: 2 }),
+        ];
+        const log = buildCombatLog(events, roster, ic);
+        expect(log[0].turns[0].chargeBefore).toBe(1);
+        expect(log[1].turns[0].chargeBefore).toBe(2);
+    });
+
+    // ─── Behavior 2: charge-changed log entry ────────────────────────────────
+
+    it('charge-changed with reason gen produces an entry with note "charge 1→2"', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 1,
+                newCharge: 2,
+                reason: 'gen',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entries = log[0].turns[0].entries;
+        const chargeEntry = entries.find((e) => e.kind === 'charge-changed');
+        expect(chargeEntry).toBeDefined();
+        expect(chargeEntry!.actorId).toBe('A');
+        expect(chargeEntry!.note).toBe('charge 1→2');
+        expect(chargeEntry!.targets).toEqual([]);
+        expect(chargeEntry!.reactions).toEqual([]);
+    });
+
+    it('charge-changed with reason cast-reset produces note "charge reset (2→0)"', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 2,
+                newCharge: 0,
+                reason: 'cast-reset',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const chargeEntry = log[0].turns[0].entries.find((e) => e.kind === 'charge-changed');
+        expect(chargeEntry).toBeDefined();
+        expect(chargeEntry!.note).toBe('charge reset (2→0)');
+    });
+
+    it('charge-changed with reason manip produces note containing "manip" and "1→2"', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 1,
+                newCharge: 2,
+                reason: 'manip',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const chargeEntry = log[0].turns[0].entries.find((e) => e.kind === 'charge-changed');
+        expect(chargeEntry).toBeDefined();
+        expect(chargeEntry!.note).toContain('manip');
+        expect(chargeEntry!.note).toContain('1→2');
+    });
+
+    // ─── Behavior 3: skill-fired correlation ─────────────────────────────────
+
+    it('skill-fired then ability-performed → attack entry has skillName and slot stamped', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'charged',
+                skillName: 'Devastation',
+            }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.kind).toBe('attack');
+        expect(entry.skillName).toBe('Devastation');
+        expect(entry.slot).toBe('charged');
+    });
+
+    it('no skill-fired before ability-performed → entry skillName and slot are undefined', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 500,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 500,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        expect(entry.skillName).toBeUndefined();
+        expect(entry.slot).toBeUndefined();
+    });
+
+    // ─── Fix 4: pre-turn-started charge-changed IS included in chargeBefore ───
+
+    it('charge-changed immediately before turn-started is included in chargeBefore', () => {
+        // Actor A seeded {charge:1, max:3}.
+        // charge-changed(A, old:1→new:2) fires BEFORE turn-started(A).
+        // chargeBefore should be 2 (the pre-turn change folded into runningCharge before openTurn).
+        const ic = new Map([['A', { charge: 1, max: 3 }]]);
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'A',
+                round: 1,
+                oldCharge: 1,
+                newCharge: 2,
+                reason: 'gen',
+            }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, ic);
+        const turn = log[0].turns[0];
+        // Pre-turn-started change IS included: chargeBefore reflects the updated runningCharge.
+        expect(turn.chargeBefore).toBe(2);
+        expect(turn.chargeMax).toBe(3);
+    });
+
+    it('skill-fired in turn A does not stamp an entry in turn B', () => {
+        // skill-fired fires in turn A (no ability-performed follows in that turn).
+        // Turn B has ability-performed — it should NOT pick up turn A's pending skill.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'skill-fired',
+                actorId: 'A',
+                round: 1,
+                slot: 'active',
+                skillName: 'Strike',
+            }),
+            // No ability-performed for A — pending should be cleared at turn boundary.
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'B', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'B',
+                targetId: 'A',
+                round: 1,
+                abilityType: 'damage',
+                damage: 200,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'B',
+                targetId: 'A',
+                round: 1,
+                damage: 200,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'turn-ended', actorId: 'B', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turnB = log[0].turns[1];
+        expect(turnB.actorId).toBe('B');
+        const entry = turnB.entries[0];
+        expect(entry.skillName).toBeUndefined();
+        expect(entry.slot).toBeUndefined();
+    });
 });

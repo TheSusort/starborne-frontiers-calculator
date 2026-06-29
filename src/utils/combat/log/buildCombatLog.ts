@@ -26,6 +26,20 @@ interface BuildContext {
     hpPct: Map<string, number>;
     /** Set of actorIds present in the roster (for filtering). */
     rosterIds: Set<string>;
+    /**
+     * Running charge level per actor. Seeded from initialCharge at construction;
+     * updated whenever a charge-changed event is processed.
+     */
+    runningCharge: Map<string, number>;
+    /**
+     * Max charge per actor, sourced from initialCharge. Immutable after seeding.
+     */
+    chargeMax: Map<string, number>;
+    /**
+     * Pending skill-fired data for the current turn, cleared at turn boundaries
+     * and consumed by the first action-producing entry (ability-performed).
+     */
+    pendingSkill: { skillName?: string; slot: 'active' | 'charged' } | undefined;
 
     /** Push a new round and set it as current. */
     openRound(round: number): void;
@@ -45,9 +59,25 @@ interface BuildContext {
      * Called at every boundary (openRound, openTurn, turn-ended, round-ended).
      */
     closeOpenAttack(): void;
+    /**
+     * Returns-and-clears the pending skill-fired data (or undefined if none).
+     * Call when creating an action-producing entry so it picks up the skill tag.
+     */
+    consumePendingSkill(): { skillName?: string; slot: 'active' | 'charged' } | undefined;
 }
 
-function createBuildContext(rosterIds: Set<string>): BuildContext {
+function createBuildContext(
+    rosterIds: Set<string>,
+    initialCharge: Map<string, { charge: number; max: number }>
+): BuildContext {
+    // Seed running charge and max from initialCharge.
+    const runningCharge = new Map<string, number>();
+    const chargeMaxMap = new Map<string, number>();
+    for (const [actorId, { charge, max }] of initialCharge) {
+        runningCharge.set(actorId, charge);
+        chargeMaxMap.set(actorId, max);
+    }
+
     const ctx: BuildContext = {
         rounds: [],
         currentRound: undefined,
@@ -58,6 +88,9 @@ function createBuildContext(rosterIds: Set<string>): BuildContext {
         openAttackAbilityDidHit: undefined,
         hpPct: new Map(),
         rosterIds,
+        runningCharge,
+        chargeMax: chargeMaxMap,
+        pendingSkill: undefined,
 
         openRound(round: number) {
             ctx.closeOpenAttack();
@@ -69,11 +102,15 @@ function createBuildContext(rosterIds: Set<string>): BuildContext {
 
         openTurn(actorId: string) {
             if (!ctx.currentRound) return;
-            ctx.closeOpenAttack();
+            ctx.closeOpenAttack(); // also clears pendingSkill
             const t: CombatLogTurn = {
                 actorId,
-                chargeBefore: 0,
-                chargeMax: 0,
+                // Read chargeBefore from the running map at the moment the turn opens.
+                // Assumes the engine emits turn-started BEFORE any in-turn charge-changed
+                // for this actor; pre-turn-started changes ARE included (already folded
+                // into runningCharge before openTurn is called).
+                chargeBefore: ctx.runningCharge.get(actorId) ?? 0,
+                chargeMax: ctx.chargeMax.get(actorId) ?? 0,
                 entries: [],
             };
             ctx.currentRound.turns.push(t);
@@ -122,6 +159,14 @@ function createBuildContext(rosterIds: Set<string>): BuildContext {
             ctx.openAttackAbilityDamage = undefined;
             ctx.openAttackAbilityTargetId = undefined;
             ctx.openAttackAbilityDidHit = undefined;
+            // Clear pending skill at every turn/round boundary so it never bleeds.
+            ctx.pendingSkill = undefined;
+        },
+
+        consumePendingSkill() {
+            const pending = ctx.pendingSkill;
+            ctx.pendingSkill = undefined;
+            return pending;
         },
     };
     return ctx;
@@ -148,19 +193,54 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     },
 
     'turn-ended': (_e, ctx) => {
-        ctx.closeOpenAttack();
+        ctx.closeOpenAttack(); // also clears pendingSkill
         ctx.currentTurn = undefined;
+    },
+
+    'skill-fired': (e, ctx) => {
+        if (!ctx.currentTurn) return;
+        ctx.pendingSkill = { skillName: e.skillName, slot: e.slot };
+    },
+
+    'charge-changed': (e, ctx) => {
+        // Update running charge for this actor regardless of current turn.
+        ctx.runningCharge.set(e.actorId, e.newCharge);
+
+        // Produce a log entry in the current turn.
+        if (!ctx.currentTurn) return;
+        let note: string;
+        switch (e.reason) {
+            case 'gen':
+                note = `charge ${e.oldCharge}→${e.newCharge}`;
+                break;
+            case 'cast-reset':
+                note = `charge reset (${e.oldCharge}→${e.newCharge})`;
+                break;
+            case 'manip':
+                note = `charge ${e.oldCharge}→${e.newCharge} (manip)`;
+                break;
+        }
+        const entry: CombatLogEntry = {
+            kind: 'charge-changed',
+            actorId: e.actorId,
+            targets: [],
+            reactions: [],
+            note,
+        };
+        ctx.attachEntry(entry);
     },
 
     'ability-performed': (e, ctx) => {
         if (!ctx.currentTurn) return;
         // Finalize any pending miss entry before opening a new one.
         ctx.finalizeMissEntry();
+        // Consume pending skill-fired data (if any) and stamp onto the entry.
         const entry: CombatLogEntry = {
             kind: 'attack',
             actorId: e.actorId,
             targets: [],
             reactions: [],
+            ...(ctx.consumePendingSkill() ?? {}),
         };
         ctx.attachEntry(entry);
         ctx.openAttackEntry = entry;
@@ -200,17 +280,17 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
 /**
  * Folds a flat CombatEvent stream into a hierarchical view-model.
  *
- * @param events     Raw event stream from the combat engine.
- * @param roster     Actor roster — maps actorIds to name/side. Used to filter dummy actors.
- * @param _initialCharge  Initial charge state per actor (populated by a later task; ignored here).
+ * @param events         Raw event stream from the combat engine.
+ * @param roster         Actor roster — maps actorIds to name/side. Used to filter dummy actors.
+ * @param initialCharge  Initial charge state per actor — seeds chargeBefore/chargeMax on turns.
  */
 export function buildCombatLog(
     events: CombatEvent[],
     roster: RosterEntry[],
-    _initialCharge: Map<string, { charge: number; max: number }>
+    initialCharge: Map<string, { charge: number; max: number }>
 ): CombatLogRound[] {
     const rosterIds = new Set(roster.map((r) => r.actorId));
-    const ctx = createBuildContext(rosterIds);
+    const ctx = createBuildContext(rosterIds, initialCharge);
 
     for (const event of events) {
         const handler = (handlers as Record<string, Handler<CombatEventType> | undefined>)[
