@@ -2608,6 +2608,9 @@ export function runCombat(input: CombatEngineInput): {
         // reactive heals fired by that emit correctly count toward THIS round (C2b-3).
         repairedThisRound.clear();
         hitThisRound.clear();
+        // Reset per round so a start-of-round reactive drain (round 2+) stamps duringTurnOf
+        // as turn-less (undefined) rather than the previous round's last acting actor.
+        actingActorId = undefined;
 
         // Forced-targeting/stealth lookup for a roster (phase 3). Reads the status engine
         // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
@@ -4073,6 +4076,13 @@ export function runCombat(input: CombatEngineInput): {
                         enemyId: enemy.id,
                         statusEngine,
                         bus,
+                        // Combat-log attribution: the actor whose turn is active when this
+                        // reactive intent drains. Set per turn (actingActorId); undefined for a
+                        // round-1 start-of-round reactive or a post-round death-drain reaction
+                        // (no turn active). The executor's stamping bus brands every reactive
+                        // emission with this so a later builder nests the reaction under the
+                        // triggering turn, not the reactor's own turn.
+                        duringTurnOf: actingActorId,
                         corrosionEntries,
                         infernoEntries,
                         pendingBombs,

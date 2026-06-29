@@ -4,6 +4,8 @@ import { createEventBus, CombatEvent } from '../events';
 import { createActor, recordDestroyed } from '../state';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { Ship } from '../../../types/ship';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -1993,6 +1995,192 @@ describe('heal-performed / shield-applied perTarget breakdown', () => {
         // Each entry has a targetId.
         for (const entry of perTarget) {
             expect(typeof entry.targetId).toBe('string');
+        }
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Reactive stamp: events emitted while resolving a REACTIVE intent carry
+// reactive:true + duringTurnOf (the actor whose turn was active when the
+// reaction fired) so a later log builder can nest the reaction under the
+// triggering turn, NOT under the reactor's own turn.
+//
+// Harness mirrors counterAttack.integration.test.ts: the FOCUS ('attacker')
+// carries Stalwart's parsed first passive (an on-attacked counter co-located
+// with a `Legion Discipline II` self-buff grant). A single enemy attacker
+// ('foe') lands a primary hit each round; the reactive grant emits a
+// `buff-applied` event during the FOE's turn.
+// ───────────────────────────────────────────────────────────────────────────
+describe('reactive stamp — reactive emissions carry duringTurnOf', () => {
+    const STALWART_P1 =
+        'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.';
+
+    const stalwartShip = (): Ship =>
+        ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            firstPassiveSkillText: STALWART_P1,
+        }) as Ship;
+
+    const basicEnemy = (
+        id: string,
+        attack: number
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
+        ({
+            id,
+            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
+            chargeCount: 0,
+            startCharged: false,
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    it('B counterattack buff grant carries reactive:true and duringTurnOf === attacker turn', () => {
+        const skills = buildShipAbilities(stalwartShip());
+
+        const bus = createEventBus();
+        const buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => buffEvents.push(e));
+
+        runCombat({
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: skills,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000,
+            healTargetId: 'attacker',
+            enemyAttackers: [basicEnemy('foe', 3_000)],
+            bus,
+        });
+
+        const ld2 = buffEvents.filter((e) => e.buffName === 'Legion Discipline II');
+        // The reactive grant fires (it lands on the focus 'attacker').
+        expect(ld2.length).toBeGreaterThan(0);
+        for (const e of ld2) {
+            // The grant is a REACTION to the foe's attack → stamped during the foe's turn.
+            expect(e.reactive).toBe(true);
+            expect(e.duringTurnOf).toBe('foe');
+            expect(e.triggerActorId).toBe('foe');
+        }
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Round-2 start-of-round reactive: duringTurnOf must be undefined (turn-less)
+//
+// A start-of-round reactive fires BEFORE any turn in the round. In round 1
+// actingActorId is undefined (no prior turn), so duringTurnOf is correctly
+// undefined. WITHOUT the per-round reset, round 2's start-of-round drain reads
+// the previous round's last acting actor and wrongly stamps duringTurnOf with
+// that id. WITH the fix, actingActorId is reset to undefined at the top of
+// every round so the start-of-round drain always sees undefined.
+//
+// Harness: the focus ('attacker') carries a start-of-round passive buff ability
+// (Attack Up, 1 turn). The enemy attacker ('foe') goes LAST in each round
+// (speed 20 vs attacker speed default), ensuring actingActorId is set to 'foe'
+// at the END of round 1. If the reset is missing, round 2's start-of-round
+// buff-applied would carry duringTurnOf === 'foe'. With the fix it is undefined.
+// ───────────────────────────────────────────────────────────────────────────
+describe('start-of-round reactive stamp — duringTurnOf is undefined (turn-less)', () => {
+    idCounter = 0;
+    const startOfRoundBuffSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'start-of-round',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Attack Up',
+                            stacks: 1,
+                            parsedEffects: { attack: 20 },
+                            isStackable: false,
+                            duration: 1,
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    const basicEnemy = (
+        id: string,
+        speed: number
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
+        ({
+            id,
+            stats: { attack: 100, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
+            chargeCount: 0,
+            startCharged: false,
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    it('start-of-round buff-applied in round 2+ carries duringTurnOf === undefined (not the prior round last actor)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => buffEvents.push(e));
+
+        runCombat({
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: startOfRoundBuffSkills(),
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000,
+            healTargetId: 'attacker',
+            // Enemy speed=20 (low) → goes LAST in every round; sets actingActorId='foe'
+            // at end of round 1. Without the reset fix, round 2's start-of-round drain
+            // would stamp duringTurnOf:'foe' instead of undefined.
+            enemyAttackers: [basicEnemy('foe', 20)],
+            bus,
+        });
+
+        // The start-of-round buff fires every round — collect round-2+ events.
+        const attackUpEvents = buffEvents.filter((e) => e.buffName === 'Attack Up');
+        // Must have fired in multiple rounds (at minimum rounds 1, 2, 3).
+        expect(attackUpEvents.length).toBeGreaterThanOrEqual(2);
+
+        // Every start-of-round buff-applied must carry duringTurnOf === undefined:
+        // the drain fires before any turn, so no actor was active.
+        for (const e of attackUpEvents) {
+            expect(e.reactive).toBe(true);
+            // KEY assertion: turn-less reactive — must NOT be stamped with a prior actor.
+            expect(e.duringTurnOf).toBeUndefined();
         }
     });
 });
