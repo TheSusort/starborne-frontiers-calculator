@@ -3070,8 +3070,44 @@ const DocumentationPage: React.FC = () => {
                                         breakdown for that round
                                     </li>
                                     <li>
-                                        The event log lists the turn-by-turn actions — attacks,
-                                        heals, and effects — for the selected round
+                                        The event log lists every turn-by-turn action, reaction, and
+                                        effect for the selected round — see below for details
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Combat Log</h4>
+                                <p className="text-theme-text mb-2">
+                                    The combat log shows a complete, hierarchical record of
+                                    everything that happens each round — nothing is omitted or
+                                    approximated.
+                                </p>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        <strong>Area-of-effect attacks and heals:</strong> Every
+                                        affected ship is listed individually with its own damage or
+                                        heal amount and resulting HP percentage — not just the
+                                        primary target.
+                                    </li>
+                                    <li>
+                                        <strong>Reactions shown in context:</strong> Counterattacks,
+                                        on-crit heals, reflects, reactive shields, and other
+                                        triggered effects appear nested under the action that caused
+                                        them, in the correct turn — not attributed to the reacting
+                                        ship&apos;s own turn.
+                                    </li>
+                                    <li>
+                                        <strong>Accurate per-ally heals:</strong> When a ship heals
+                                        multiple allies, each ally&apos;s individual heal amount is
+                                        shown rather than an even split.
+                                    </li>
+                                    <li>
+                                        <strong>Charge state and skill tags:</strong> Each turn
+                                        shows the acting ship&apos;s current charge (e.g.
+                                        &quot;charge 2/3&quot;) and whether it used its active or
+                                        charged skill variant. Charge gains, resets, and
+                                        manipulations each appear as explicit lines.
                                     </li>
                                 </ul>
                             </div>
