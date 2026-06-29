@@ -148,6 +148,9 @@ const EntryView: React.FC<{ entry: CombatLogEntry; ctx: FormatterCtx }> = ({ ent
     <li className={colorForKind(entry.kind)}>
         {formatEntry(entry, ctx)}
         {entry.reactions.length > 0 && (
+            // buildCombatLog guarantees reactions are at most ONE level deep (a reaction is marked
+            // reactive and can never be picked as the trigger for nesting another reaction), so we
+            // intentionally render entry.reactions as flat `↳` lines rather than recursing.
             <ul className="ml-6 space-y-0.5">
                 {entry.reactions.map((reaction, i) => (
                     <li key={i} className={colorForKind(reaction.kind)}>
