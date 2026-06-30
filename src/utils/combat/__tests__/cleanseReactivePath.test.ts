@@ -1,10 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
-import { makeRateGate } from '../../calculators/rateAccumulator';
+import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import type { CombatActor } from '../state';
 
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
@@ -356,6 +356,8 @@ describe('Task 4: reactive cleanse executor — reduce-duration mode', () => {
 });
 
 describe('Task 3: reactive cleanse executor — procChance + crit-count', () => {
+    afterEach(() => resetRateGateRng());
+
     it('A. remove-mode, no procChance: cleanses cfg.count debuffs (preserved behavior)', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         seedDebuffs(se, 3);
@@ -391,12 +393,9 @@ describe('Task 3: reactive cleanse executor — procChance + crit-count', () => 
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         seedDebuffs(se, 3);
         const creditSpy = vi.fn();
-        // A gate with procChance 0.5 over the makeRateGate accumulator: fires on calls 2,4,6...
-        // Drive the gate 1 time first (call 1 = no fire), then our executeIntent is call 2 (fires).
-        // To get a non-fire: pre-drain the gate so the NEXT call is a fire, then test the FIRST call.
-        // Actually: gate fires on calls where floor(n*rate) > floor((n-1)*rate).
-        // rate=0.5: fires on even calls (2,4,6,...), not odd calls (1,3,5,...).
-        // So call 1 → no fire. We just call executeIntent once (first call = odd = no fire).
+        // procChance 0.5 gate. Force the RNG to never fire (draw 0.999999 ≥ rate)
+        // to exercise the "gate does NOT fire" path deterministically.
+        setRateGateRng(() => 0.999999);
         const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
         const intent = makeCleanseIntent({ count: 1, procChance: 0.5 });
         const ctx = makeCtx({ statusEngine: se, creditSpy, procChanceGates });
@@ -410,6 +409,9 @@ describe('Task 3: reactive cleanse executor — procChance + crit-count', () => 
         seedDebuffs(se, 2);
         const creditSpy = vi.fn();
         // Use a shared gate map with a procChance so we can verify gate is not consumed.
+        // Force never-fire so that, even after restoring healing, the gate would not fire —
+        // the early-return assertion is about the gate NOT being consumed, not about firing.
+        setRateGateRng(() => 0.999999);
         const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
         const intent = makeCleanseIntent({ count: 1, procChance: 0.5 });
         const ctx = makeCtx({ statusEngine: se, creditSpy, procChanceGates });

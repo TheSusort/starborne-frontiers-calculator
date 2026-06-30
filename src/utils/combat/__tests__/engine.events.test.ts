@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { createActor, recordDestroyed } from '../state';
@@ -1572,6 +1573,8 @@ const healBase = (): CombatEngineInput => ({
 });
 
 describe('Phase 4c Task 3 — per-hit attacked emission', () => {
+    afterEach(() => resetRateGateRng());
+
     // ── Test 1: ship-backed enemy with 3-hit ability → 3 events per round ───────
     // The enemy fires a 3-hit damage ability at 100% crit → hitCrits=[true,true,true].
     // With 2 rounds of combat the engine emits 3×2 = 6 `attacked` events total,
@@ -1605,30 +1608,31 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
     // correct implementations emit identical events. This test uses crit:50 with a
     // 3-hit ability to produce a MIXED per-hit pattern that can distinguish the two.
     //
-    // Gate behaviour (rate accumulator): see makeRateGate in its source module — trace below is implementation-derived.
-    // makeRateGate rule (from rateAccumulator.ts):
-    //   acc starts at 0; each call: acc += rate; if acc >= 1-EPS → fire, acc -= 1.
-    //   Rate = 50/100 = 0.5. Back-loaded: first fire on call 2.
+    // The gate now draws from the module RNG and fires a crit iff `draw < rate`. To recover
+    // the ORIGINAL mixed-per-hit intent deterministically, we script the per-draw stream.
+    // Rate = 50/100 = 0.5.
     //
-    // Round 1 (fresh gate, acc=0):
-    //   h1: acc = 0.0 + 0.5 = 0.5 → no fire → false  (didCrit absent)
-    //   h2: acc = 0.5 + 0.5 = 1.0 → fire, acc=0 → true   (didCrit:true)
-    //   h3: acc = 0.0 + 0.5 = 0.5 → no fire → false  (didCrit absent)
-    //   roundCrit = true (≥1 hit critted)
-    //
-    // Round 2 (acc continues at 0.5):
-    //   h1: acc = 0.5 + 0.5 = 1.0 → fire, acc=0 → true   (didCrit:true)
-    //   h2: acc = 0.0 + 0.5 = 0.5 → no fire → false  (didCrit absent)
-    //   h3: acc = 0.5 + 0.5 = 1.0 → fire, acc=0 → true   (didCrit:true)
-    //   roundCrit = true
+    // ORDER-SENSITIVE: the seeded crit-gate consumes one draw per crit check, in this order
+    // for the 2-round sim (verified empirically). The player focus (crit:0) makes one crit
+    // check per round that never fires (rate 0) but still consumes a draw:
+    //   draw1 → player focus R1 (don't-care)   draw5 → player focus R2 (don't-care)
+    //   draw2 → enemy R1 hit1   draw3 → enemy R1 hit2   draw4 → enemy R1 hit3
+    //   draw6 → enemy R2 hit1   draw7 → enemy R2 hit2   draw8 → enemy R2 hit3
+    // Sequence below reproduces the legacy pattern (<0.5 = crit, ≥0.5 = no crit):
+    //   Round 1 enemy hits: [false, true,  false]
+    //   Round 2 enemy hits: [true,  false, true ]
     //
     // Buggy implementation (uses [enemyTurnDidCrit, enemyTurnDidCrit, enemyTurnDidCrit]):
     //   Round 1: [true, true, true] — all three carry the round-level binary (true).
     //   Round 2: [true, true, true] — same.
     // Correct implementation (uses per-hit hitCrits):
-    //   Round 1: [undefined, true, undefined] — matches the gate trace above.
+    //   Round 1: [undefined, true, undefined] — matches the scripted trace above.
     //   Round 2: [true, undefined, true].
     it('ship-backed 3-hit enemy at crit:50 emits mixed per-hit didCrit matching gate trace', () => {
+        //          d1   d2(h1) d3(h2) d4(h3) d5   d6(h1) d7(h2) d8(h3)
+        const seq = [0.9, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9, 0.1];
+        let i = 0;
+        setRateGateRng(() => seq[i++ % seq.length]);
         const attacked = collectAttacked({
             ...healBase(),
             numRounds: 2,

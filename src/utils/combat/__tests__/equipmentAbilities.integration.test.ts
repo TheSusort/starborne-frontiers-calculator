@@ -21,7 +21,8 @@
  *   enemyDefense=0 → directDamage = 5000 * 1.0 * 1.0 = 5000. Each fire: pct=20 →
  *   directHeal = 5000 × 0.20 = 1000. 2 fires → 2000 total.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { CombatActor } from '../state';
 import { createEventBus, CombatEvent } from '../events';
@@ -116,6 +117,43 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
     healTargetId: 'attacker',
     ...overrides,
 });
+
+// ---------------------------------------------------------------------------
+// RNG forcing helper — recovers the legacy back-loaded accumulator schedule.
+//
+// The gate now fires iff `rng() < rate`. These integration tests were written
+// against the OLD deterministic accumulator (acc += rate each call; fires when
+// acc >= 1, i.e. on the floor((n)·rate) > floor((n-1)·rate) calls). To preserve
+// their exact intent we install an RNG that reproduces that schedule for ONE
+// "gate of interest" (the proc gate under test) while letting every OTHER draw
+// always fire (value 0 → fires any rate, e.g. the always-on crit:100 gate).
+//
+// Draws alternate per round: the probe shows the engine issues the crit-gate
+// draw first, then the proc-gate draw. So the proc gate is every `everyN`-th
+// draw at the given 1-based `offset`. For the gate-of-interest draws we run a
+// local accumulator at `rate` and return 0 (fire) on cross, 0.99 (no fire)
+// otherwise. ORDER-SENSITIVE: relies on the probed per-round draw interleave.
+// ---------------------------------------------------------------------------
+function installBackloadedAccumulator(opts: {
+    rate: number;
+    isGateOfInterest: (drawIdx: number) => boolean; // drawIdx is 1-based
+    nonGate?: number; // value returned for non-target draws (default 0 → fires crit:100)
+}): void {
+    let drawIdx = 0;
+    let acc = 0;
+    const EPS = 1e-9;
+    const nonGate = opts.nonGate ?? 0;
+    setRateGateRng(() => {
+        drawIdx += 1;
+        if (!opts.isGateOfInterest(drawIdx)) return nonGate;
+        acc += opts.rate;
+        if (acc >= 1 - EPS) {
+            acc -= 1;
+            return 0; // fire
+        }
+        return 0.99; // no fire
+    });
+}
 
 // ---------------------------------------------------------------------------
 // Gear stubs shared across tests
@@ -216,6 +254,8 @@ describe('D-PR1 integration — Leech set standing leech', () => {
 // ---------------------------------------------------------------------------
 
 describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
+    afterEach(() => resetRateGateRng());
+
     /**
      * Setup:
      *   - Ship equipped with legendary Bloodthirst implant (procChance 0.20, pct 20).
@@ -235,6 +275,10 @@ describe('D-PR1 integration — Bloodthirst implant proc frequency', () => {
      *   (b) summed directHeal = 2000.
      */
     it('Bloodthirst legendary: fires floor(10 × 0.20)=2 times over 10 crits; total directHeal = 2×1000', () => {
+        // Per round the engine draws crit (draw 1,3,5,… always-fire crit:100) then the
+        // Bloodthirst proc gate (draws 2,4,6,…). Reproduce the legacy rate-0.2 back-loaded
+        // accumulator on the proc gate → fires on rounds 5 and 10.
+        installBackloadedAccumulator({ rate: 0.2, isGateOfInterest: (d) => d % 2 === 0 });
         const ship = makeShip({
             implants: { implant_major: 'bt-legendary' },
         });
@@ -826,6 +870,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
 // engine on-attacked reactive-heal path.
 
 describe('D-PR5 integration — Second Wind reactive self-heal on crit-received', () => {
+    afterEach(() => resetRateGateRng());
     const ATTACKER_HP = 10_000;
     const NUM_ROUNDS = 10;
     const SW_PROC = 0.5; // deterministic: floor(10 × 0.5) = 5 fires (calls 2,4,6,8,10)
@@ -934,6 +979,10 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
         'A. Crit attacker: Second Wind fires 5 times (rate 0.5 × 10 crits); ' +
             'total directHeal = 5000, effectiveHeal = 0 (full HP → all overheal)',
         () => {
+            // Per round the engine draws 3 gates; the Second Wind proc gate is the 3rd
+            // (draws 3,6,9,…). Reproduce the legacy rate-0.5 back-loaded accumulator on it
+            // → fires on rounds 2,4,6,8,10.
+            installBackloadedAccumulator({ rate: SW_PROC, isGateOfInterest: (d) => d % 3 === 0 });
             const result = runCombat(
                 SW_BASE({
                     shipSkills: shipSkillsWithSW,
@@ -1001,6 +1050,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
 // targetHpPct = the heal target's live HP% (healTargetHpPctNow()).
 
 describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Vivacious)', () => {
+    afterEach(() => resetRateGateRng());
     const HEALER_HP = 10_000;
     const TANK_HP = 10_000;
     const HEAL_PCT = 10; // repair = HEALER_HP × 10% = 1000 per cast (basis 'hp', no other folds)
@@ -1184,6 +1234,15 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         const NUM_ROUNDS = 10;
         const VIV_PROC = 0.5; // floor(10 × 0.5) = 5 fires (back-loaded at rate 0.5)
         const VIV_AMP = 100; // +100% → ×2 when it fires
+        // ORDER-SENSITIVE: the heal-amp proc gate draws at indices [4, 7, 9, 11, … 23]
+        // (verified empirically; startup transient then every-other). The test sums total
+        // heal so only the FIVE-fire count matters. Reproduce the legacy rate-0.5 back-loaded
+        // accumulator on the proc gate → exactly 5 of the 10 casts double.
+        installBackloadedAccumulator({
+            rate: VIV_PROC,
+            isGateOfInterest: (d) => d === 4 || (d >= 7 && d % 2 === 1),
+            nonGate: 0.99, // non-proc draws: enemy crit is rate 0 (never fires); no crit on the noCrit heal
+        });
         // Enemy hits hard enough to keep tank below 25% (heal basis 'hp' restores only 1000/round
         // into a 10000 tank → with 8000 dmg/round the tank stays pinned far below 25%).
         const withAmp = runCombat(
@@ -1249,6 +1308,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
 // EXACTLY (number of procs) × baseRaw × (ampPct/100).
 
 describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplification', () => {
+    afterEach(() => resetRateGateRng());
     const SELF_HP = 10_000;
     const HEAL_PCT = 10; // self-repair = SELF_HP × 10% = 1000 per cast (basis 'hp', no other folds)
     const BASE_PER_CAST = SELF_HP * (HEAL_PCT / 100); // 1000
@@ -1318,6 +1378,9 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             const NUM_ROUNDS = 10;
             const EXPECTED_PROCS = Math.floor(NUM_ROUNDS * EXU_PROC); // 5
 
+            // The Exuberance gate is the 2nd draw each round (draws 2,4,…,20). Reproduce the
+            // legacy rate-0.5 back-loaded accumulator → boosts rounds 2,4,6,8,10 (5 procs).
+            installBackloadedAccumulator({ rate: EXU_PROC, isGateOfInterest: (d) => d % 2 === 0 });
             const withExu = runCombat(
                 EXU_BASE({
                     numRounds: NUM_ROUNDS,
@@ -1426,6 +1489,9 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
             const NUM_ROUNDS = 10;
             // Reactive heal fires every round (procChance 1.0) → a repair lands each round →
             // the recipient gate is rolled once per landed reactive repair.
+            // The Exuberance gate is the 3rd draw each round (draws 3,6,…,30). Reproduce the
+            // legacy rate-0.5 back-loaded accumulator → boosts 5 of the 10 landed repairs.
+            installBackloadedAccumulator({ rate: EXU_PROC, isGateOfInterest: (d) => d % 3 === 0 });
             const withExu = runCombat(
                 EXU_BASE({
                     numRounds: NUM_ROUNDS,
@@ -3107,6 +3173,10 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
 });
 
 describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
+    // Spearhead's all-allies grant is procChance-gated (0.32). Force always-fire so the grant
+    // fans on each charged cast — recovers the deterministic "fires ≥ once" intent. crit:0 gates
+    // never fire regardless (0 < 0 is false).
+    afterEach(() => resetRateGateRng());
     const ATTACK_UP_I = 'Attack Up I';
 
     /** Legendary SPEARHEAD implant piece (proc 0.32). */
@@ -3208,6 +3278,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
     }
 
     it('after charged-skill casts, the accumulator fires and grants Attack Up I to EVERY player ally (focus + ally)', () => {
+        setRateGateRng(() => 0); // always-fire the Spearhead procChance gate
         const result = runBattle(true);
 
         // Player roster ids: focus is the reserved 'attacker'; the ally is a minted p:… id.
@@ -3247,6 +3318,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
             return total;
         };
 
+        setRateGateRng(() => 0); // always-fire the Spearhead procChance gate
         const withSpear = sumPlayerDamage(runBattle(true));
         const without = sumPlayerDamage(runBattle(false));
 
