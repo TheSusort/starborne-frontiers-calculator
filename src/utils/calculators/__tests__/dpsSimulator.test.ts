@@ -2141,6 +2141,8 @@ describe('simulateDPS', () => {
         });
 
         it('charged hits crit at the crit rate regardless of cadence (per-stream, no aliasing)', () => {
+            // ORDER-SENSITIVE: assumes charged-round crit draws land on odd indices given the
+            // active-round filler draws; re-derive if engine draw order changes.
             // chargeCount 1 → charged on the even rounds (draw indices 1,3,5,7,9,11).
             // 1 crit draw per round. Force the charged-round draws (odd indices) to
             // alternate 0.1 (crit) / 0.9 (no crit) so exactly half the charged rounds crit,

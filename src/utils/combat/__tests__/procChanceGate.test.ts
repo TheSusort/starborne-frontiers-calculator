@@ -89,6 +89,9 @@ describe('D-PR1: procChance gate — per-proc rate gate for equipment reactive p
 
     it('procChance 0.5 over 10 on-crit triggers fires the reactive heal exactly 5 times (scripted RNG)', () => {
         idCounter = 0;
+        // ORDER-SENSITIVE: assumes the crit gate draws before the proc gate each round (crit
+        // on even indices, proc on odd). If the engine's per-round gate draw order changes,
+        // this sequence must be re-derived.
         // Each round draws twice: the crit gate (rate 1.0, fires on any draw < 1) then the
         // proc gate (rate 0.5). So proc draws land on odd indices. Force those to alternate
         // 0.1 (fires, < 0.5) / 0.9 (skips, >= 0.5) → 5 fires of 10. Crit-gate draws (even
