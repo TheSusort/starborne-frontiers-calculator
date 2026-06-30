@@ -243,14 +243,14 @@ export type CombatEvent =
      *   - 'gen':        natural per-turn +1 increment (advanceChargeCadence, non-cap branch)
      *   - 'cast-reset': charge-cap fire that resets counter to 0 (advanceChargeCadence, cap branch)
      *   - 'manip':      ability-driven grant or removal (engine/triggers/playerTurn) */
-    | {
+    | ({
           type: 'charge-changed';
           actorId: string;
           round: number;
           oldCharge: number;
           newCharge: number;
           reason: 'gen' | 'cast-reset' | 'manip';
-      }
+      } & ReactiveStamp)
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
      *  (present only when that hit critted). Emitted once PER HIT of the enemy's

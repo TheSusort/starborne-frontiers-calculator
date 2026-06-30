@@ -1282,6 +1282,7 @@ function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean
 /** The CombatEvent `type` tags whose variant intersects ReactiveStamp (events.ts). */
 type StampedEventType =
     | 'ability-performed'
+    | 'charge-changed'
     | 'heal-performed'
     | 'shield-applied'
     | 'buff-applied'
@@ -1297,6 +1298,12 @@ type StampedEventType =
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>([
     'ability-performed',
+    // Owner-only reactive charge-manip (executeIntent's charge branch) emits through THIS
+    // wrapped bus, so stamping it nests the charge delta under the triggering action. NOTE:
+    // the delegated grant/removeEnemy/removeChargesFrom helpers emit on the engine's raw bus
+    // (captured by reference), so ally/enemy reactive charge changes are NOT stamped here —
+    // those remain attributed to the active turn (acceptable; tracked as a follow-up).
+    'charge-changed',
     'heal-performed',
     'shield-applied',
     'buff-applied',

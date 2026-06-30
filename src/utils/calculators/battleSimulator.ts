@@ -178,6 +178,8 @@ export const LOG_EVENT_TYPES = [
     'debuff-applied',
     'dot-applied',
     'dot-ticked',
+    'dot-detonated',
+    'bomb-detonated',
     'control-applied',
     'cleanse-performed',
     'purge-performed',

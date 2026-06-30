@@ -639,24 +639,30 @@ describe('combatLog #4 — reaction attribution nests under the triggering turn 
         expect(triggerWithCounterReaction!.kind).toBe('attack');
         expect(triggerWithCounterReaction!.actorId).toBe('attacker');
 
-        // (2) The reaction must NOT also appear as a TOP-LEVEL entry in the reactor's own turn.
-        // Walk the enemy's own turns: none of their TOP-LEVEL entries is the counter's buff.
-        const reactorTopLevelEntries = result.combatLog
-            .flatMap((round) => round.turns)
-            .filter((turn) => turn.actorId === foe)
-            .flatMap((turn) => turn.entries);
-        const buffSurfacedAtTopLevel = reactorTopLevelEntries.some(
-            (entry) => entry.kind === 'buff' && entry.note === 'Legion Discipline II'
-        );
-        expect(buffSurfacedAtTopLevel).toBe(false);
+        // (2) The reaction must NOT also appear as a TOP-LEVEL turn entry ANYWHERE (not just the
+        // reactor's own turns) — it lives exclusively under its trigger's `.reactions[]`.
+        const topLevelBuffOccurrences = result.combatLog
+            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .filter(
+                (entry) =>
+                    entry.kind === 'buff' &&
+                    entry.actorId === foe &&
+                    entry.note === 'Legion Discipline II'
+            );
+        expect(topLevelBuffOccurrences).toHaveLength(0);
 
-        // Cross-check via the flattened view: the nested reaction is reachable ONLY through a
-        // trigger's `.reactions[]`, never as a standalone turn entry — the flatten helper finds it
-        // exactly once (the nested copy), confirming there is no duplicate top-level placement.
+        // Cross-check via the flattened view: every occurrence of the buff is reachable ONLY
+        // through a trigger's `.reactions[]`. The flattened count (which recurses into reactions)
+        // must EQUAL the nested-reaction count exactly — proving no duplicate top-level placement
+        // inflates the total.
+        const nestedBuffReactions = entriesWithReactions
+            .flatMap((entry) => entry.reactions)
+            .filter((re) => re.actorId === foe && re.note === 'Legion Discipline II');
         const buffOccurrences = allLogEntries(result).filter(
             (e) => e.kind === 'buff' && e.actorId === foe && e.note === 'Legion Discipline II'
         );
-        expect(buffOccurrences.length).toBeGreaterThan(0);
+        expect(nestedBuffReactions.length).toBeGreaterThan(0);
+        expect(buffOccurrences).toHaveLength(nestedBuffReactions.length);
     });
 });
 

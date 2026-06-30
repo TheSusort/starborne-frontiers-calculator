@@ -94,9 +94,12 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/Enemy Selenite: miss/)).toBeInTheDocument();
     });
 
-    it('renders the nested reaction line with the reactor name', () => {
+    it('renders the nested reaction line with the reactor name (no duplicate name)', () => {
         render(<RoundEventLog round={round} roster={roster} />);
-        expect(screen.getByText(/Enemy Hexa reacts:/)).toBeInTheDocument();
+        // The `↳ reacts:` marker omits the actor name; the reactor's name comes from the
+        // formatted reaction body only (so it appears exactly once on the line).
+        expect(screen.getByText(/↳ reacts:/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Hexa → Nova: 1,200 → 88%/)).toBeInTheDocument();
     });
 
     it('renders an effect entry using its note', () => {

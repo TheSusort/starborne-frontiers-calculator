@@ -445,6 +445,34 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.attachEntry(entry);
     },
 
+    'dot-detonated': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        // A detonation is not a fresh cast (the source skill already logged its own entry),
+        // so no consumePendingSkill — the damage is attributed to the victim it lands on.
+        const entry: CombatLogEntry = {
+            kind: 'detonation',
+            actorId: e.targetId,
+            targets: [{ targetId: e.targetId, amount: e.damage }],
+            reactions: [],
+            note: 'DoT detonated',
+        };
+        ctx.attachEntry(entry);
+    },
+
+    'bomb-detonated': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'bomb',
+            actorId: e.actorId,
+            // Aggregate burst — no per-victim breakdown on the event; carry the total
+            // payout on a single self-keyed target so the renderer can format it.
+            targets: [{ targetId: e.actorId, amount: e.damage }],
+            reactions: [],
+            note: `bombs detonated ×${e.stacks}`,
+        };
+        ctx.attachEntry(entry);
+    },
+
     'control-applied': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {

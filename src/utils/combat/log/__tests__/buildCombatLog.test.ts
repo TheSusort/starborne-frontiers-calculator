@@ -145,6 +145,40 @@ describe('buildCombatLog', () => {
         expect(turn.entries[0].targets[0].resultingHpPct).toBe(55);
     });
 
+    it('stamps equal-percent hp-changed events from fully absorbed hits', () => {
+        // The engine intentionally emits hp-changed even when oldPct === newPct (a fully
+        // shield-absorbed hit), so the builder must still match it onto the open target
+        // rather than dropping it or spawning a standalone entry.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 500,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 500,
+                isPrimaryTarget: true,
+            }),
+            ev({ type: 'hp-changed', targetId: 'B', round: 1, oldPct: 80, newPct: 80 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        expect(turn.entries).toHaveLength(1);
+        expect(turn.entries[0].targets[0].resultingHpPct).toBe(80);
+    });
+
     it('sets chargeBefore and chargeMax to 0 (placeholder for later task)', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
@@ -1089,6 +1123,38 @@ describe('buildCombatLog', () => {
         expect(dotEntry!.slot).toBeUndefined();
     });
 
+    it('dot-detonated: maps to a detonation entry on the victim carrying the burst damage', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'dot-detonated', targetId: 'B', round: 1, damage: 5000 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries.find((e) => e.kind === 'detonation');
+        expect(entry).toBeDefined();
+        expect(entry!.actorId).toBe('B');
+        expect(entry!.targets).toEqual([{ targetId: 'B', amount: 5000 }]);
+        expect(entry!.note).toBe('DoT detonated');
+    });
+
+    it('bomb-detonated: maps to a bomb entry on the detonator with stacks note and total damage', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({ type: 'bomb-detonated', actorId: 'A', round: 1, stacks: 3, damage: 9000 }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries.find((e) => e.kind === 'bomb');
+        expect(entry).toBeDefined();
+        expect(entry!.actorId).toBe('A');
+        expect(entry!.note).toBe('bombs detonated ×3');
+        expect(entry!.targets[0].amount).toBe(9000);
+    });
+
     it('control-applied: casterId → actorId, targets empty, note has effect', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
@@ -1305,6 +1371,55 @@ describe('buildCombatLog', () => {
         expect(turn.entries[0].reactions).toHaveLength(1);
         expect(turn.entries[0].reactions[0].actorId).toBe('B');
         expect(turn.entries[0].reactions[0].targets[0].amount).toBe(400);
+    });
+
+    it('a reactive (stamped) charge-changed nests under its trigger instead of the active turn', () => {
+        // A's attack triggers B's on-attacked self-charge-gain reactive. The charge-changed is
+        // emitted through the reactive-stamping bus (duringTurnOf:'A'), so it must nest under
+        // A's attack — not surface as a top-level charge entry in A's turn.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'ability-performed',
+                actorId: 'A',
+                targetId: 'B',
+                round: 1,
+                abilityType: 'damage',
+                damage: 1000,
+                didHit: true,
+            }),
+            ev({
+                type: 'attacked',
+                attackerId: 'A',
+                targetId: 'B',
+                round: 1,
+                damage: 1000,
+                isPrimaryTarget: true,
+            }),
+            ev({
+                type: 'charge-changed',
+                actorId: 'B',
+                round: 1,
+                oldCharge: 0,
+                newCharge: 1,
+                reason: 'manip',
+                reactive: true,
+                duringTurnOf: 'A',
+                triggerActorId: 'A',
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const turn = log[0].turns[0];
+        // Only A's attack is top-level; the charge delta is NOT a sibling entry.
+        expect(turn.entries).toHaveLength(1);
+        expect(turn.entries[0].kind).toBe('attack');
+        expect(turn.entries[0].reactions).toHaveLength(1);
+        const reaction = turn.entries[0].reactions[0];
+        expect(reaction.kind).toBe('charge-changed');
+        expect(reaction.actorId).toBe('B');
     });
 
     it('unstamped round-end event → endOfRound (no current turn, no crash)', () => {

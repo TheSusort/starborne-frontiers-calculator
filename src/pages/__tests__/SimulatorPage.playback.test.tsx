@@ -100,7 +100,10 @@ const battleResult: BattleResult = {
         { actorId: 'attacker', side: 'player', name: 'Nova', position: 'T1' },
         { actorId: 'e:enemy:0', side: 'enemy', name: 'Hexa', position: 'T4' },
     ],
-    // Hierarchical combat log rendered by RoundEventLog (T10). Round 1: Nova attacks Hexa.
+    // Hierarchical combat log rendered by RoundEventLog (T10). `assembleBattleResult` derives
+    // `rounds` and `combatLog` from the same event stream, so a two-round result carries a
+    // combatLog round per battle round. Round 1: Nova chips Hexa to 40%. Round 2: Nova lands
+    // the kill (Hexa → 0%).
     combatLog: [
         {
             round: 1,
@@ -120,6 +123,33 @@ const battleResult: BattleResult = {
                                     amount: 1000,
                                     didHit: true,
                                     resultingHpPct: 40,
+                                },
+                            ],
+                            reactions: [],
+                        },
+                    ],
+                },
+            ],
+            endOfRound: [],
+        },
+        {
+            round: 2,
+            turns: [
+                {
+                    actorId: 'attacker',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [
+                        {
+                            kind: 'attack',
+                            actorId: 'attacker',
+                            slot: 'active',
+                            targets: [
+                                {
+                                    targetId: 'e:enemy:0',
+                                    amount: 1500,
+                                    didHit: true,
+                                    resultingHpPct: 0,
                                 },
                             ],
                             reactions: [],
@@ -216,5 +246,7 @@ describe('SimulatorPage playback', () => {
         fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
         expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
+        // The event log re-renders for round 2 (the killing blow), not the round-1 content.
+        expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,500 → 0%/)).toBeInTheDocument();
     });
 });

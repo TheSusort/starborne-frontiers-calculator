@@ -470,14 +470,19 @@ describe('assembleBattleResult — hierarchical combatLog (buildCombatLog)', () 
     });
 
     it('carries combatLog its OWN round numbers across rounds (independent of trimmed rounds)', () => {
+        // BOTH enemies die in round 1 → the assembler terminates the battle there (player win,
+        // lastRound=1) and trims `rounds` to [1]. The event stream STILL carries round-2 events,
+        // so combatLog — built from the full stream — must keep [1, 2] independently of the trim.
         const events: CombatEvent[] = [
             { type: 'round-started', round: 1 },
             { type: 'turn-started', actorId: 'attacker', round: 1 },
+            { type: 'ship-destroyed', actorId: 'enemy-front', round: 1 },
+            { type: 'ship-destroyed', actorId: 'enemy-back', round: 1 },
             { type: 'turn-ended', actorId: 'attacker', round: 1 },
             { type: 'round-ended', round: 1 },
             { type: 'round-started', round: 2 },
-            { type: 'turn-started', actorId: 'enemy-front', round: 2 },
-            { type: 'turn-ended', actorId: 'enemy-front', round: 2 },
+            { type: 'turn-started', actorId: 'attacker', round: 2 },
+            { type: 'turn-ended', actorId: 'attacker', round: 2 },
             { type: 'round-ended', round: 2 },
         ];
         const result = assembleBattleResult({
@@ -486,6 +491,10 @@ describe('assembleBattleResult — hierarchical combatLog (buildCombatLog)', () 
             roster: roster(),
             numRounds: 2,
         });
+        // `rounds` is trimmed at the round-1 wipe...
+        expect(result.outcome).toEqual({ winner: 'player', lastRound: 1 });
+        expect(result.rounds.map((r) => r.round)).toEqual([1]);
+        // ...but combatLog keeps its own, untrimmed round numbers.
         expect(result.combatLog.map((r) => r.round)).toEqual([1, 2]);
     });
 

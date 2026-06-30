@@ -5885,6 +5885,11 @@ export function runCombat(input: CombatEngineInput): {
             // mis-dispatch the post-round drain as Path A. Any extra-action grant from here on (the
             // post-round enemy-death drain below) sees inTurnLoop=false → Path B (buffered for next round).
             inTurnLoop = false;
+            // Same rationale for combat-log attribution: the post-round death-drain and round-ended
+            // reactives that follow are turn-less, so clear actingActorId here. Otherwise their
+            // reactive emissions would stamp duringTurnOf with the round's last acting actor and
+            // buildCombatLog would nest them under that actor's turn instead of the endOfRound group.
+            actingActorId = undefined;
         }
 
         // The row's attacker fields come from the LAST focus turn this round. Rounds

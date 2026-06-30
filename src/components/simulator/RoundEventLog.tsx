@@ -117,13 +117,7 @@ const formatters: Record<
         return renderTargets(entry, ctx, bits.join(' '));
     },
     heal: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} heals`),
-    shield: (entry, ctx) => {
-        const targets = entry.targets.map((t) => ctx.nameOf(t.targetId)).join(', ');
-        const header = targets
-            ? `${ctx.nameOf(entry.actorId)} shields ${targets}`
-            : `${ctx.nameOf(entry.actorId)} shields`;
-        return renderTargets(entry, ctx, header);
-    },
+    shield: (entry, ctx) => renderTargets(entry, ctx, `${ctx.nameOf(entry.actorId)} shields`),
     buff: noteLine,
     debuff: noteLine,
     'dot-applied': noteLine,
@@ -133,8 +127,16 @@ const formatters: Record<
     purge: noteLine,
     'charge-changed': noteLine,
     death: noteLine,
-    detonation: noteLine,
-    bomb: noteLine,
+    detonation: (entry, ctx) => {
+        const amount = entry.targets[0]?.amount;
+        const head = noteLine(entry, ctx) as string;
+        return amount !== undefined ? `${head}: ${fmt(amount)}` : head;
+    },
+    bomb: (entry, ctx) => {
+        const amount = entry.targets[0]?.amount;
+        const head = noteLine(entry, ctx) as string;
+        return amount !== undefined ? `${head}: ${fmt(amount)}` : head;
+    },
 };
 
 /** Format any entry's body via its kind formatter, falling back to the neutral note line. */
@@ -154,8 +156,10 @@ const EntryView: React.FC<{ entry: CombatLogEntry; ctx: FormatterCtx }> = ({ ent
             <ul className="ml-6 space-y-0.5">
                 {entry.reactions.map((reaction, i) => (
                     <li key={i} className={colorForKind(reaction.kind)}>
-                        <span className="text-theme-text-secondary">↳ </span>
-                        {ctx.nameOf(reaction.actorId)} reacts: {formatEntry(reaction, ctx)}
+                        {/* `formatEntry` already prefixes the reacting actor's name, so the
+                            `↳ reacts:` marker omits it to avoid duplicating the name. */}
+                        <span className="text-theme-text-secondary">↳ reacts: </span>
+                        {formatEntry(reaction, ctx)}
                     </li>
                 ))}
             </ul>
