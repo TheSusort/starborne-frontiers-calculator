@@ -214,7 +214,10 @@ export interface PlayerActorRuntime {
      *  heal crit never shifts a heal-carrying ship's damage-crit schedule. */
     activeHealCritGate: RateGate;
     chargedHealCritGate: RateGate;
-    landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
+    landsTimedEnemyApplication: (
+        application?: 'inflict' | 'apply',
+        targetAffinity?: AffinityName
+    ) => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
@@ -247,15 +250,24 @@ export interface PlayerTurnArgs {
      *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
      *  banking). Called from the CASTER's active-round charge step (mirrors own gains). Optional
      *  so statusEngine/standalone callers without a team need not supply it — when absent the
-     *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities). */
-    grantAllyCharges?: (amount: number) => void;
+     *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities).
+     *  The optional `emitBus` overrides the captured outer bus for the `charge-changed` emission;
+     *  the on-turn (cast-path) caller never supplies it, so on-turn charge changes stay unstamped. */
+    grantAllyCharges?: (amount: number, emitBus?: CombatEventBus) => void;
     /** Remove `amount` charges from every OPPOSING-side actor (Task 7 enemy-target charge
      *  removal). Supplied by the engine, which loops the opposing side flooring each actor at 0
      *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
      *  charge step for enemy/all-enemies-targeted charge abilities. Optional so standalone callers
      *  without an opposing roster need not supply it — when absent enemy-target removal is a no-op
-     *  (a self-only run never has enemy-targeted charge abilities). */
-    removeEnemyCharges?: (amount: number) => void;
+     *  (a self-only run never has enemy-targeted charge abilities). The optional `applierAffinity`
+     *  enforces the Charge Manipulation affinity gate (skip targets with affinity advantage over
+     *  the applier); omit it to disable the gate. The optional `emitBus` is unused on the on-turn
+     *  cast path (charge changes here are NOT reactions) — it exists only for signature parity. */
+    removeEnemyCharges?: (
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
@@ -1430,7 +1442,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'enemy',
             });
-        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval);
+        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval, attackerAffinity);
     }
 
     // Extra-action grants (game-verified: a full extra turn; the engine re-inserts

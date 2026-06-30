@@ -79,7 +79,17 @@ interface AbilityStatusBase {
  *    scheduled statuses). `duration` is guaranteed to be a number on this variant.
  */
 export type RegisteredAbilityStatus =
-    | (AbilityStatusBase & { kind: 'timed'; duration: number })
+    | (AbilityStatusBase & {
+          kind: 'timed';
+          duration: number;
+          /** Enemy-side own-turn reprieve opt-in (Martyrdom Disable). When true AND this status
+           *  lands on the actor whose turn is currently executing (recipient === currentTurnActorId),
+           *  the enemy-side write is flagged appliedThisTurn so decrementEnemy skips the first tick
+           *  — exactly as decrementPlayer protects same-turn self-buffs. Set ONLY by an on-destroyed
+           *  own-death reaction (a debuff born of the applier's death, landing on the killer during
+           *  the killer's own turn). Absent/false → unchanged (every other enemy debuff). */
+          reprieveOnRecipientTurn?: boolean;
+      })
     | (AbilityStatusBase & { kind: 'aura' })
     | (AbilityStatusBase & {
           kind: 'accumulating';
@@ -292,11 +302,14 @@ interface BuffState {
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
     appliedSeq: number;
-    /** Set true when this timed self-buff was applied during the carrier's OWN turn (the
-     *  carrier was the active actor — see beginTurn). Granted a one-turn reprieve at that
-     *  turn's Post-Turn (skipped + flipped false by decrementPlayer), then decrements
-     *  normally from the carrier's next Post-Turn. Off-turn and enemy-side writes leave it
-     *  falsy. */
+    /** Set true when this timed status was applied during the recipient's OWN turn (the
+     *  recipient was the active actor — see beginTurn). Granted a one-turn reprieve at that
+     *  turn's Post-Turn (skipped + flipped false by decrementPlayer/decrementEnemy), then
+     *  decrements normally from the recipient's next Post-Turn. Two cases set it:
+     *   - self-buffs a ship grants itself on its own turn (the original reprieve), and
+     *   - an on-destroyed own-death debuff landing on the killer during the killer's own turn
+     *     (`reprieveOnRecipientTurn`, #6b — legendary Martyrdom Disable). Every other off-turn
+     *     and enemy-side write leaves it falsy. */
     appliedThisTurn?: boolean;
 }
 
@@ -944,6 +957,14 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const expired: string[] = [];
         if (map) {
             for (const [key, s] of map) {
+                // Own-turn reprieve (Martyrdom Disable): an on-destroyed debuff that landed on this
+                // actor DURING its own turn is skipped once (flag flips false), so it first
+                // decrements at this actor's NEXT Post-Turn and runs its full window. Mirrors
+                // decrementPlayer's self-side reprieve. All other enemy debuffs leave the flag falsy.
+                if (s.appliedThisTurn) {
+                    s.appliedThisTurn = false; // reprieve consumed; next Post-Turn decrements
+                    continue;
+                }
                 s.turnsRemaining -= 1;
                 if (s.turnsRemaining <= 0) {
                     expired.push(s.buffName);
@@ -1228,7 +1249,16 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             payload: status.payload,
             casterId: status.casterId,
             appliedSeq: nextAppliedSeq(),
-            appliedThisTurn: status.side === 'self' && selfEffectiveId === currentTurnActorId,
+            // Own-turn reprieve. Self-side: any timed self-buff applied while its carrier is the
+            // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
+            // Disable) landing on the actor whose turn is executing — so decrementEnemy skips the
+            // first same-turn tick, mirroring the self-side protection. All other enemy debuffs
+            // (no flag) stay falsy → decrement immediately, byte-identical.
+            appliedThisTurn:
+                status.side === 'self'
+                    ? selfEffectiveId === currentTurnActorId
+                    : status.reprieveOnRecipientTurn === true &&
+                      enemyEffectiveId === currentTurnActorId,
         });
     };
 

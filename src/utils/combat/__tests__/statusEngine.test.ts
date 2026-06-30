@@ -631,6 +631,77 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
     });
 });
 
+describe('createStatusEngine — enemy-side own-turn reprieve (#6b Martyrdom Disable)', () => {
+    const enemyDisable = (
+        duration: number,
+        reprieve: boolean
+    ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+        payload: { buffName: 'Disable', stacks: 1, parsedEffects: {} },
+        side: 'enemy',
+        sourceSlot: 'active',
+        duration,
+        conditions: [],
+        kind: 'timed',
+        reprieveOnRecipientTurn: reprieve,
+    });
+
+    it('an on-destroyed Disable(2) landing on the CURRENT turn actor survives its own Post-Turn, lasts two turns', () => {
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('killer'); // the killer is the active actor
+        // Martyrdom lands the Disable on the killer (enemyTargetId = 'killer') during its own turn.
+        eng.applyTimedAbilityStatus(1, enemyDisable(2, true), undefined, 'killer');
+        eng.decrementEnemy('killer'); // reprieve: skipped, flag flips false
+        expect(eng.timedAbilityStatuses('enemy', 'attacker', 'killer')).toHaveLength(1);
+        expect(
+            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
+        ).toBe(2);
+
+        eng.beginRound(2);
+        eng.beginTurn('killer');
+        eng.decrementEnemy('killer'); // 2 → 1
+        expect(
+            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
+        ).toBe(1);
+
+        eng.beginRound(3);
+        eng.beginTurn('killer');
+        eng.decrementEnemy('killer'); // 1 → 0 → expired
+        expect(eng.timedAbilityStatuses('enemy', 'attacker', 'killer')).toHaveLength(0);
+    });
+
+    it('SCOPE GUARD: a NON-reprieve enemy debuff applied during the recipient turn gets no reprieve (decrements immediately)', () => {
+        // The on-attacked/Provoke case: an ordinary enemy debuff (no reprieveOnRecipientTurn flag)
+        // landing on the actor whose turn is executing must NOT be flagged appliedThisTurn — its
+        // window is unchanged. Guards against the fix broadening beyond on-destroyed Martyrdom.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('killer');
+        eng.applyTimedAbilityStatus(1, enemyDisable(2, /* reprieve */ false), undefined, 'killer');
+        eng.decrementEnemy('killer'); // no reprieve → 2 → 1 immediately
+        expect(
+            eng.timedAbilityStatuses('enemy', 'attacker', 'killer')[0].active.turnsRemaining
+        ).toBe(1);
+    });
+
+    it('SCOPE GUARD: a reprieve-flagged debuff landing on a NON-current actor gets no reprieve', () => {
+        // The normal-debuff timing (recipient ≠ current turn actor): even a reprieve-flagged status
+        // is not protected when it lands on an actor other than the one currently acting.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+
+        eng.beginRound(1);
+        eng.beginTurn('killer');
+        // Lands on 'victim', not the acting 'killer' → not own-turn for 'victim'.
+        eng.applyTimedAbilityStatus(1, enemyDisable(2, true), undefined, 'victim');
+        eng.decrementEnemy('victim'); // no reprieve → 2 → 1
+        expect(
+            eng.timedAbilityStatuses('enemy', 'attacker', 'victim')[0].active.turnsRemaining
+        ).toBe(1);
+    });
+});
+
 describe('same-family overwrite rule (game-verified 2026-06-04)', () => {
     // Rule: a new application within a buff family (name minus the I/II/III tier suffix)
     // wins only if (a) its tier is higher, or (b) same tier AND its duration > the existing

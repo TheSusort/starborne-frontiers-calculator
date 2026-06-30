@@ -65,9 +65,10 @@ const removeFromRepairerEvery2nd = (id: string): Ability => ({
  *  false → it never re-banks its own charges (the seeded value is stable barring removals). */
 const repairingEnemy = (
     id: string,
-    opts: { chargeCount: number; speed: number }
+    opts: { chargeCount: number; speed: number; affinity?: EnemyAttacker['affinity'] }
 ): EnemyAttacker => ({
     id,
+    affinity: opts.affinity,
     stats: { attack: 1, crit: 0, critDamage: 0, hp: 1_000_000, speed: opts.speed },
     chargeCount: opts.chargeCount,
     startCharged: true, // seed charges == chargeCount
@@ -92,11 +93,19 @@ const repairingEnemy = (
 
 // ─── Engine input (Zosimos = focus) ─────────────────────────────────────────────────
 
-const buildZosimosInput = (enemies: EnemyAttacker[], numRounds: number): CombatEngineInput => ({
+const buildZosimosInput = (
+    enemies: EnemyAttacker[],
+    numRounds: number,
+    applierAffinity?: CombatEngineInput['affinity']
+): CombatEngineInput => ({
     attack: 1000,
     crit: 0,
     critDamage: 0,
     defensePenetration: 0,
+    // Applier (Zosimos) affinity — drives the charge-manipulation affinity gate on the
+    // single-target removeChargesFrom path. Undefined → antimatter/neutral → gate never skips
+    // (every existing case in this file omits it → byte-identical).
+    affinity: applierAffinity,
     // Zosimos needs chargeCount > 0 for the self-gain (it caps at chargeCount). 10 = headroom.
     chargeCount: 10,
     shipSkills: {
@@ -240,5 +249,39 @@ describe('repair-driven enemy charge removal — every-2nd-repair (Zosimos-style
         // (`${owner}:${ability}:${repairerId}`). Direct assertion (no reference run) — B is
         // untouched by A's drain.
         expect(chargesOf(actors, 'e-rep-b')).toBe(1);
+    });
+
+    // ─── Single-target affinity gate (removeChargesFrom) ─────────────────────────────
+    // Charge Manipulation does not affect enemies with affinity advantage over the applier
+    // (buffs.ts). The all-enemies path is covered in chargeRemovalAffinityGate.integration.test;
+    // this pins the SINGLE-TARGET removeChargesFrom path (Zosimos "that enemy" drain).
+    it('every-2nd-repair drain SKIPS a repairer with affinity advantage over the applier', () => {
+        // Applier (Zosimos) THERMAL; repairer ELECTRIC (electric beats thermal → applier
+        // disadvantaged → getAffinityMatchup(thermal, electric) === 'disadvantage' → SKIP). Same
+        // 2-round, every-2nd-repair setup as the −1 case above, so absent the gate the electric
+        // enemy WOULD be drained 4 → 3. With the gate it keeps all 4.
+        const electric = repairingEnemy('e-electric', {
+            chargeCount: 4,
+            speed: 40,
+            affinity: 'electric',
+        });
+        const actors = runAndTap(buildZosimosInput([electric], 2, 'thermal'));
+
+        expect(chargesOf(actors, 'e-electric')).toBe(4); // gated → not drained
+        expect(chargesOf(actors, 'attacker')).toBe(2); // self-gain (ally grant) is NOT gated
+    });
+
+    it('every-2nd-repair drain still removes from a repairer the applier is advantaged over', () => {
+        // Control: applier THERMAL, repairer CHEMICAL (thermal beats chemical → advantage, NOT
+        // disadvantage) → the gate does NOT skip → drained 4 → 3 exactly as the neutral case.
+        const chemical = repairingEnemy('e-chemical', {
+            chargeCount: 4,
+            speed: 40,
+            affinity: 'chemical',
+        });
+        const actors = runAndTap(buildZosimosInput([chemical], 2, 'thermal'));
+
+        expect(chargesOf(actors, 'e-chemical')).toBe(3); // not gated → drained on the 2nd repair
+        expect(chargesOf(actors, 'attacker')).toBe(2);
     });
 });

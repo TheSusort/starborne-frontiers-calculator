@@ -2,6 +2,7 @@ import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abili
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
+import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
@@ -145,6 +146,13 @@ export interface Intent {
          *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
          *  rather than the owner/whole team (Resonating Fury — buff every recipient of the cast). */
         shieldRecipientIds?: string[];
+        /** True when this intent is the owner's OWN death reaction (a self-scoped
+         *  `on-destroyed` enqueue — Martyrdom's killer-Disable, Salvation's self-destruct
+         *  heal). The dead-owner drain gate skips every reactive whose owner is already
+         *  destroyed EXCEPT these: a self-death reaction is born of the death itself and
+         *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
+         *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
+        fromOwnDeath?: boolean;
     };
 }
 
@@ -569,6 +577,9 @@ export function registerReactiveListeners(args: {
                         // Salvation's self-destruct HEAL (and any other on-destroyed reaction) fires on ANY
                         // death, unchanged.
                         if (e.actorId !== ownerId) return;
+                        // fromOwnDeath: marks this as the owner's OWN death reaction so the
+                        // dead-owner drain gate (executeIntent) lets it through even though the
+                        // owner is now destroyed (Martyrdom's killer-Disable, Salvation's heal).
                         if (
                             ra.ability.config.type === 'purge' ||
                             ra.ability.config.type === 'debuff'
@@ -576,10 +587,17 @@ export function registerReactiveListeners(args: {
                             if (!e.byDirectDamage) return;
                             enqueue({
                                 ...intent,
-                                eventCtx: { ...intent.eventCtx, counterTargetId: e.killerId },
+                                eventCtx: {
+                                    ...intent.eventCtx,
+                                    counterTargetId: e.killerId,
+                                    fromOwnDeath: true,
+                                },
                             });
                         } else {
-                            enqueue(intent);
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, fromOwnDeath: true },
+                            });
                         }
                     });
                     break;
@@ -715,17 +733,34 @@ export interface IntentExecContext {
     runtimes: Map<string, PlayerActorRuntime>;
     /** Delegate for ally-charge grants — the engine's own `grantAllyCharges` closure, threaded
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
-     *  already iterates `allPlayerActors` with the correct chargeCount guard. */
-    grantAllyCharges: (amount: number) => void;
+     *  already iterates `allPlayerActors` with the correct chargeCount guard. The optional
+     *  `emitBus` overrides the captured outer bus for the `charge-changed` emission — the executor
+     *  passes `ctx.bus` (the reactive stamping wrapper) so the change brands `reactive`/`duringTurnOf`
+     *  and the log nests it under the triggering turn. */
+    grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
     /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
      *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
      *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
-     *  and chargeCount-0 actors. The closure flips to the opposing side internally. */
-    removeEnemyCharges: (amount: number) => void;
+     *  and chargeCount-0 actors. The closure flips to the opposing side internally. The optional
+     *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip targets with affinity
+     *  advantage over the applier); omit it to disable the gate. The optional `emitBus` stamps the
+     *  `charge-changed` when called during a reactive intent — see grantAllyCharges. */
+    removeEnemyCharges: (
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Delegate for single-target charge removal — the engine's own `removeChargesFrom` closure.
      *  Subtracts from ONE actor by id (floored at 0), skipping chargeLossImmune / chargeCount-0
-     *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId. */
-    removeChargesFrom: (targetId: string, amount: number) => void;
+     *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId.
+     *  Same optional `applierAffinity` charge-manip gate as removeEnemyCharges, and the same
+     *  optional `emitBus`. */
+    removeChargesFrom: (
+        targetId: string,
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
@@ -822,6 +857,12 @@ export interface IntentExecContext {
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
      *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** Task A: resolve any actor's RAW affinity by id (from the combat-wide allActorsById map).
+     *  Used by the reactive `apply`-debuff branch to re-resolve landing vs the ACTUAL target's
+     *  affinity instead of the applier's precomputed-vs-representative static disadvantage flag.
+     *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
+     *  flag, byte-identical for single-opponent fixtures). */
+    affinityOf?: (actorId: string) => AffinityName | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on the drain owner's side (recomputed each drain),
@@ -1298,12 +1339,6 @@ type StampedEventType =
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>([
     'ability-performed',
-    // Owner-only reactive charge-manip (executeIntent's charge branch) emits through THIS
-    // wrapped bus, so stamping it nests the charge delta under the triggering action. NOTE:
-    // the delegated grant/removeEnemy/removeChargesFrom helpers emit on the engine's raw bus
-    // (captured by reference), so ally/enemy reactive charge changes are NOT stamped here —
-    // those remain attributed to the active turn (acceptable; tracked as a follow-up).
-    'charge-changed',
     'heal-performed',
     'shield-applied',
     'buff-applied',
@@ -1316,6 +1351,14 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     'purge-performed',
     'ship-destroyed',
     'cheat-death-activated',
+    // Reactive charge changes (Liberator's on-enemy-death "all allies add charge",
+    // Zosimos's on-repair removal, etc.) flow through grantAllyCharges/removeEnemyCharges/
+    // removeChargesFrom when those delegates are called with `ctx.bus` (the stamping wrapper)
+    // during a reactive intent. Branding the emission `reactive` keeps the log builder from
+    // treating the charge-changed as a NON-reactive turn entry (a trigger candidate) and nests
+    // it under the triggering turn instead. On-turn charge emissions use the captured outer bus
+    // (unstamped) → unchanged.
+    'charge-changed',
 ]);
 
 /** Wrap a bus so every reactive-capable event emitted through it is branded with
@@ -1374,6 +1417,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         );
     }
 
+    // Dead-owner gate (combat-sim finding #1): a DESTROYED owner's stale reactives are
+    // suppressed — a listener that fired on a LATER event (e.g. a dead Curator reacting to an
+    // enemy charge rounds after dying) must not resolve. `destroyedRound` is the canonical
+    // aliveness signal (state.recordDestroyed). The owner's OWN death reaction is EXEMPT
+    // (eventCtx.fromOwnDeath, stamped by the self-scoped on-destroyed listener) so Martyrdom's
+    // killer-Disable and Salvation's self-destruct heal — born of the death itself — still fire.
+    // Single, team-symmetric gate: the one drain feeds both sides, so this covers enemy-owner
+    // reactives identically. Listeners only ENQUEUE (pure), so a skip leaves no partial state.
+    if (owner.actor.destroyedRound !== undefined && !intent.eventCtx?.fromOwnDeath) return;
+
     // The self hp-threshold condition on an on-hp-threshold-crossed ability is TRIGGER
     // CONFIG (the listener read N from it), NOT a drain-time gate — scrub it before gating.
     // The crossing already proved the threshold; re-gating at drain time would WRONGLY BLOCK
@@ -1406,20 +1459,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
                 ctx.repairCountBySource.set(key, n);
                 if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                ctx.removeChargesFrom(repairerId, cfg.amount); // "that enemy" only
+                ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
                 return;
             }
             // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
             // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
             // here and fall through to the owner-only gain below. Unreachable for parsed charge
             // abilities today.
-            ctx.removeEnemyCharges(cfg.amount);
+            ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
             return;
         }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
-            ctx.grantAllyCharges(cfg.amount);
+            ctx.grantAllyCharges(cfg.amount, ctx.bus);
             return;
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
@@ -1588,6 +1641,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             casterId: intent.ownerId,
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
+            // #6b: an on-destroyed OWN-DEATH reaction (Martyrdom's killer-Disable) lands on the
+            // killer DURING the killer's own turn, so the killer's same-turn Post-Turn would eat
+            // the first tick (a legendary Disable(2) would block only one turn). Opt this debuff
+            // into the enemy-side own-turn reprieve — decrementEnemy then skips the first tick when
+            // the recipient is the current turn actor, so it runs its full window. Scoped to
+            // own-death reactions (eventCtx.fromOwnDeath, stamped by the on-destroyed listener);
+            // every other enemy debuff (on-attacked/Provoke, applied on the ATTACKER's turn) is
+            // unaffected.
+            reprieveOnRecipientTurn:
+                intent.ability.trigger === 'on-destroyed' && intent.eventCtx?.fromOwnDeath === true,
         };
         // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
@@ -1609,7 +1672,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
-        if (!blockedByImmunity && owner.landsTimedEnemyApplication(cfg.application)) {
+        // Task A: re-resolve an 'apply' debuff's landing vs the ACTUAL target's affinity (not the
+        // applier's precomputed-vs-representative static flag). affinityOf is absent in unit-test
+        // ctxs → undefined target affinity → static fallback (byte-identical for single-opponent).
+        if (
+            !blockedByImmunity &&
+            owner.landsTimedEnemyApplication(cfg.application, ctx.affinityOf?.(debuffTargetId))
+        ) {
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
             // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({
