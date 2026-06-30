@@ -1579,7 +1579,12 @@ describe('healingGoldenParity', () => {
             0.99, 0.1, 0.1, 0.99, // R4: 2 crits
         ];
         let drawIdx = 0;
-        setRateGateRng(() => seq[drawIdx++ % seq.length]);
+        setRateGateRng(() => {
+            if (drawIdx >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[drawIdx++];
+        });
         const result = simulateHealing(scenario21Input());
         expect(result.rounds.map((r) => r.directHeal)).toEqual([12000, 15000, 12000, 15000]);
         expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([12000, 15000, 12000, 15000]);

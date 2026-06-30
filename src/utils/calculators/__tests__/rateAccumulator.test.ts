@@ -43,7 +43,12 @@ describe('makeRateGate (random draws)', () => {
     it('each gate from makeRateGate draws independently from the same RNG', () => {
         const seq = [0.1, 0.9];
         let i = 0;
-        setRateGateRng(() => seq[i++ % seq.length]);
+        setRateGateRng(() => {
+            if (i >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[i++];
+        });
         const a = makeRateGate();
         const b = makeRateGate();
         expect(a(0.5)).toBe(true); // draw 0.1

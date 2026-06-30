@@ -1632,7 +1632,12 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
         //          d1   d2(h1) d3(h2) d4(h3) d5   d6(h1) d7(h2) d8(h3)
         const seq = [0.9, 0.9, 0.1, 0.9, 0.9, 0.1, 0.9, 0.1];
         let i = 0;
-        setRateGateRng(() => seq[i++ % seq.length]);
+        setRateGateRng(() => {
+            if (i >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[i++];
+        });
         const attacked = collectAttacked({
             ...healBase(),
             numRounds: 2,

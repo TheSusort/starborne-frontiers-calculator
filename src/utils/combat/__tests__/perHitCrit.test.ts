@@ -118,9 +118,15 @@ describe('perHitCrit', () => {
     // directDamage = 20000 * 1.5 = 30000
     it('50% crit 2-hit: every round has exactly 1 of 2 critting → constant damage', () => {
         idCounter = 0;
-        const seq = [0.9, 0.1];
+        // 2 crit draws per round over 4 rounds (full trace = 8 draws).
+        const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
         let drawIdx = 0;
-        setRateGateRng(() => seq[drawIdx++ % seq.length]);
+        setRateGateRng(() => {
+            if (drawIdx >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[drawIdx++];
+        });
         const result = simulateDPS({
             ...BASE,
             crit: 50,
@@ -217,7 +223,12 @@ describe('perHitCrit', () => {
         idCounter = 0;
         const seq = [0.9, 0.1, 0.9, 0.1];
         let drawIdx = 0;
-        setRateGateRng(() => seq[drawIdx++ % seq.length]);
+        setRateGateRng(() => {
+            if (drawIdx >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[drawIdx++];
+        });
         const bus = createEventBus();
         const performed: { didCrit?: boolean; critHits?: number }[] = [];
         bus.on('ability-performed', (e) => {

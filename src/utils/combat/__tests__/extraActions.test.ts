@@ -196,7 +196,12 @@ describe('extraActions', () => {
     it('per-hit crit draw continues across extra turn (critHits [1, 2])', () => {
         const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
         let i = 0;
-        setRateGateRng(() => seq[i++ % seq.length]);
+        setRateGateRng(() => {
+            if (i >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[i++];
+        });
         const bus = createEventBus();
         const performed: { critHits?: number }[] = [];
         bus.on('ability-performed', (e) => {

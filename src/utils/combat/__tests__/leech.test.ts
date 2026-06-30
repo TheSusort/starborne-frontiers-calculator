@@ -710,7 +710,12 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
         // rounds 2,4 → 0.1 (crit, < 0.5). Reproduces the alternating non/crit pattern.
         const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1];
         let drawIdx = 0;
-        setRateGateRng(() => seq[drawIdx++ % seq.length]);
+        setRateGateRng(() => {
+            if (drawIdx >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[drawIdx++];
+        });
         const result = runCombat(
             BASE({
                 numRounds: 4,

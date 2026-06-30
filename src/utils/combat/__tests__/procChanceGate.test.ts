@@ -100,7 +100,12 @@ describe('D-PR1: procChance gate — per-proc rate gate for equipment reactive p
             0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9,
         ];
         let drawIdx = 0;
-        setRateGateRng(() => seq[drawIdx++ % seq.length]);
+        setRateGateRng(() => {
+            if (drawIdx >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[drawIdx++];
+        });
         // Each fire credits directHeal = 10000 (hp) × 50% = 5000.
         // 5 fires → 25000 total; 10 fires (no gate) → 50000 total.
         const gatedAbility = makeHealAbility(0.5);

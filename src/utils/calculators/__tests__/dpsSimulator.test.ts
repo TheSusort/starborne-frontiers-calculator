@@ -2107,11 +2107,17 @@ describe('simulateDPS', () => {
         afterEach(() => resetRateGateRng());
 
         it('crit 50 / critDamage 100 doubles damage on exactly half the active rounds', () => {
-            // 1 crit draw per round. Force a [0.9, 0.1] cycle so rounds 2,4,6,8,10 crit
-            // (0.1 < 0.5) and odd rounds skip (0.9 >= 0.5) → exactly 5 of 10 rounds crit.
-            const seq = [0.9, 0.1];
+            // 1 crit draw per round over 10 rounds (full trace = 10 draws). Force a [0.9, 0.1]
+            // cadence so rounds 2,4,6,8,10 crit (0.1 < 0.5) and odd rounds skip
+            // (0.9 >= 0.5) → exactly 5 of 10 rounds crit.
+            const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
             let drawIdx = 0;
-            setRateGateRng(() => seq[drawIdx++ % seq.length]);
+            setRateGateRng(() => {
+                if (drawIdx >= seq.length) {
+                    throw new Error('Unexpected extra rate-gate draw');
+                }
+                return seq[drawIdx++];
+            });
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2149,7 +2155,12 @@ describe('simulateDPS', () => {
             // regardless of cadence; active-round draws (even indices) are 0.9 (don't matter).
             const seq = [0.9, 0.1, 0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9, 0.1, 0.9, 0.9];
             let drawIdx = 0;
-            setRateGateRng(() => seq[drawIdx++ % seq.length]);
+            setRateGateRng(() => {
+                if (drawIdx >= seq.length) {
+                    throw new Error('Unexpected extra rate-gate draw');
+                }
+                return seq[drawIdx++];
+            });
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2224,7 +2235,12 @@ describe('simulateDPS', () => {
             // odd rounds → 0.9 (resist), even rounds → 0.1 (land) → lands on even rounds.
             const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1];
             let drawIdx = 0;
-            setRateGateRng(() => seq[drawIdx++ % seq.length]);
+            setRateGateRng(() => {
+                if (drawIdx >= seq.length) {
+                    throw new Error('Unexpected extra rate-gate draw');
+                }
+                return seq[drawIdx++];
+            });
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2823,7 +2839,12 @@ describe('simulateDPS', () => {
             // R5 0.9 → resist, land, resist, land, resist.
             const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9];
             let drawIdx = 0;
-            setRateGateRng(() => seq[drawIdx++ % seq.length]);
+            setRateGateRng(() => {
+                if (drawIdx >= seq.length) {
+                    throw new Error('Unexpected extra rate-gate draw');
+                }
+                return seq[drawIdx++];
+            });
             const result = simulateDPS(timedDebuffFixture(5));
 
             // Draw schedule (rate 0.5, one timed-application draw per round):
