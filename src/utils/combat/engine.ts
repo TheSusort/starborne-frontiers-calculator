@@ -2140,8 +2140,8 @@ export function runCombat(input: CombatEngineInput): {
     // and used to trigger removal only on the Nth event (e.g. Zosimos "every second repair").
     const repairCountBySource = new Map<string, number>();
     // Combat-lifetime proc-chance gates for equipment reactive procs (D-PR1). Keyed
-    // `${ownerId}:${abilityId}`; each gate is a RateGate accumulator that fires at the
-    // ability's procChance rate across all rounds, deterministically (like crit/landing gates).
+    // `${ownerId}:${abilityId}`; each gate is a RateGate that fires with the ability's
+    // procChance probability on each draw (random, like the crit/landing gates).
     const procChanceGates = new Map<string, RateGate>();
     // G PR1: dedicated crit-gate for counterattacks. A NEW map (NOT any existing per-actor
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
