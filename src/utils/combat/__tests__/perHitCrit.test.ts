@@ -1,14 +1,11 @@
 /**
  * Per-hit crit checks for multi-hit skills.
  *
- * makeRateGate rule (from rateAccumulator.ts):
- *   acc starts at 0; each call: acc += rate; if acc >= 1-EPS → fire, acc -= 1.
- *   The gate is back-loaded: a 0.5-rate gate first fires on call 2, then every 2 calls.
- *
- * Key derivation for 50% crit, 2-hit skill (gate starts fresh per simulateDPS call):
- *   R1 h1: acc=0.5 (no), h2: acc=1.0 → fire, acc=0. critHits=1.
- *   R2 h1: acc=0.5 (no), h2: acc=1.0 → fire, acc=0. critHits=1.
- *   Every round: exactly 1 of 2 hits crits → critFraction=0.5 every round.
+ * The crit gate now draws from a random RNG (rng() < rate). Tests that assert an exact
+ * crit pattern at a fractional crit rate force a scripted RNG sequence to recover the
+ * original intent (e.g. a 50% gate that fires on the 2nd of every 2 draws → 1 of 2 hits).
+ * Tests at crit 100/0 (rate >= 1 / rate <= 0) and the runPlayerTurn tests that inject
+ * explicit ()=>true/false gates are RNG-independent and left unchanged.
  *
  * Damage formula (0 defence, 0 buffs):
  *   effectiveMultiplier = multiplier × hits   (folded in playerTurn.ts line 968)
@@ -20,13 +17,17 @@
  *    0% crit (critFraction=0.0): 30000 × 1.0 = 30000
  *   50% crit 2-hit (critFraction=0.5): 30000 × 1.5 = 45000
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
-import { makeRateGate } from '../../calculators/rateAccumulator';
+import {
+    makeRateGate,
+    setRateGateRng,
+    resetRateGateRng,
+} from '../../calculators/rateAccumulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
 
 let idCounter = 0;
@@ -66,6 +67,8 @@ const BASE: DPSSimulationInput = {
 };
 
 describe('perHitCrit', () => {
+    afterEach(() => resetRateGateRng());
+
     // ── Test 1: 100% crit, 3-hit skill ──────────────────────────────────────
     // effectiveMultiplier = 100 × 3 = 300 → preCritDamage = 10000 × 3.0 = 30000
     // critHits=3, critFraction=1.0, damageCritMultiplier = 1 + 1.0*(100/100) = 2.0
@@ -107,15 +110,17 @@ describe('perHitCrit', () => {
     });
 
     // ── Test 3: 50% crit, 2-hit skill ───────────────────────────────────────
-    // Gate (rate=0.5, 2 draws per round):
-    //   R1: h1 acc=0.5 (no), h2 acc=1.0 → fire acc=0. critHits=1.
-    //   R2: h1 acc=0.5 (no), h2 acc=1.0 → fire acc=0. critHits=1.
-    //   ...same every round. critFraction=0.5 always, didCrit=true always.
+    // 2 crit draws per round (one per hit). Force a [0.9, 0.1] cycle so hit1 skips
+    // (0.9 >= 0.5) and hit2 crits (0.1 < 0.5) → exactly 1 of 2 hits crits every round,
+    // critFraction=0.5 always, didCrit=true always.
     // effectiveMultiplier = 100 × 2 = 200 → preCritDamage = 10000 × 2.0 = 20000
     // critFraction=0.5 → damageCritMultiplier = 1 + 0.5 × (100/100) = 1.5
     // directDamage = 20000 * 1.5 = 30000
     it('50% crit 2-hit: every round has exactly 1 of 2 critting → constant damage', () => {
         idCounter = 0;
+        const seq = [0.9, 0.1];
+        let drawIdx = 0;
+        setRateGateRng(() => seq[drawIdx++ % seq.length]);
         const result = simulateDPS({
             ...BASE,
             crit: 50,
@@ -206,14 +211,13 @@ describe('perHitCrit', () => {
     });
 
     // ── Test 6: single-hit 50% crit — events with didCrit carry critHits: 1 ─
-    // (existing test — unchanged)
-    // Gate (rate=0.5, 1 draw per round):
-    //   R1: acc=0.5 (no) → didCrit=false
-    //   R2: acc=1.0 → fire, acc=0 → didCrit=true, critHits=1
-    //   R3: acc=0.5 (no) → didCrit=false
-    //   R4: acc=1.0 → fire, acc=0 → didCrit=true, critHits=1
+    // 1 crit draw per round. Force a [0.9, 0.1] cycle so rounds 1,3 skip (0.9 >= 0.5)
+    // and rounds 2,4 crit (0.1 < 0.5) → didCrit pattern false,true,false,true.
     it('single-hit 50% crit: every ability-performed with didCrit=true carries critHits: 1', () => {
         idCounter = 0;
+        const seq = [0.9, 0.1, 0.9, 0.1];
+        let drawIdx = 0;
+        setRateGateRng(() => seq[drawIdx++ % seq.length]);
         const bus = createEventBus();
         const performed: { didCrit?: boolean; critHits?: number }[] = [];
         bus.on('ability-performed', (e) => {
@@ -227,7 +231,8 @@ describe('perHitCrit', () => {
             bus,
         });
         expect(performed.length).toBe(4);
-        // R1: didCrit=false (acc=0.5, no fire), R2: didCrit=true, R3: false, R4: true
+        // Forced RNG [0.9,0.1,0.9,0.1]: draw 0.9 ≥ 0.5 → no crit, draw 0.1 < 0.5 → crit.
+        // R1: didCrit=false, R2: didCrit=true, R3: false, R4: true.
         expect(performed[0].didCrit).toBe(false);
         expect(performed[0].critHits).toBeUndefined();
         expect(performed[1].didCrit).toBe(true);

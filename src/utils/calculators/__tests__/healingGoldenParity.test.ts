@@ -34,11 +34,12 @@
 //     caps at the target's max HP.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { TeamActorInput } from '../../../types/calculator';
 import { simulateHealing, HealingSimulationInput, HealerStats } from '../healingEngineAdapter';
 import { CombatEvent, createEventBus } from '../../combat/events';
+import { setRateGateRng, resetRateGateRng } from '../rateAccumulator';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -90,6 +91,8 @@ const snap = (name: string, mkInput: () => HealingSimulationInput) =>
     });
 
 describe('healingGoldenParity', () => {
+    afterEach(() => resetRateGateRng());
+
     // ── Scenario 1: plain heal cadence ───────────────────────────────────────
     // HAND-VERIFIED. healer hp 10000, active heal 10% hp → raw 1000/round. Healer IS
     // the target, no enemies → full HP every round → all overheal, effectiveHealing 0.
@@ -1565,6 +1568,18 @@ describe('healingGoldenParity', () => {
     // (the heals drain AFTER each round's hits, into a full deficit).
     it('scenario 21: per-round reactive heals are 2×3% + 1×6% then 1×3% + 2×6% of max HP', () => {
         idCounter = 0;
+        // 4 draws per round: [healer crit gate (rate 0, ignorable), enemy hit1, hit2, hit3]
+        // crit draws at rate 0.5. Force the three hit draws so R1/R3 crit exactly 1 of 3
+        // ([F,T,F] shape → 2×3% + 1×6% = 12000) and R2/R4 crit exactly 2 of 3 ([T,T,F] →
+        // 1×3% + 2×6% = 15000). 0.1 fires (< 0.5), 0.99 skips (>= 0.5).
+        const seq = [
+            0.99, 0.1, 0.99, 0.99, // R1: 1 crit
+            0.99, 0.1, 0.1, 0.99, // R2: 2 crits
+            0.99, 0.1, 0.99, 0.99, // R3: 1 crit
+            0.99, 0.1, 0.1, 0.99, // R4: 2 crits
+        ];
+        let drawIdx = 0;
+        setRateGateRng(() => seq[drawIdx++ % seq.length]);
         const result = simulateHealing(scenario21Input());
         expect(result.rounds.map((r) => r.directHeal)).toEqual([12000, 15000, 12000, 15000]);
         expect(result.rounds.map((r) => r.effectiveHealing)).toEqual([12000, 15000, 12000, 15000]);

@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { createEventBus, CombatEvent } from '../events';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task 6: standing-leech credit hook (engine.ts procStandingLeeches).
@@ -606,9 +607,11 @@ describe('damage-taken procs — passive on the heal target', () => {
 //
 // Parity formula (bare neutral enemy): incoming = attack × (mult × hits / 100) × critMult
 //   × (1 − dr(targetDefence)/100), critMult = 1 + (critHits/drawHits) × (critDamage/100).
-// The enemy uses its OWN crit gate (back-loaded at rate 0.5: first draw does NOT fire).
+// The enemy uses its OWN crit gate, fed a forced RNG sequence (gate fires when rng() < rate;
+// at rate 0.5 a draw of 0.9 does NOT fire, a draw of 0.1 fires).
 // ─────────────────────────────────────────────────────────────────────────────
 describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () => {
+    afterEach(() => resetRateGateRng());
     type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
     const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
         id: `pe${++idCounter}`,
@@ -698,9 +701,16 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
         expect(incoming(result, 1)).toBeCloseTo(5000, 4);
     });
 
-    // ── Crit gate schedule (back-loaded rate 0.5): crits on draws 2, 4, … ─────────
-    it('crit 50 enemy: crits on every 2nd attack (back-loaded gate)', () => {
+    // ── Crit gate schedule: force the enemy to crit on the 2nd and 4th attacks ─────
+    it('crit 50 enemy: crits on every 2nd attack (scripted RNG)', () => {
         idCounter = 0;
+        // Each round draws twice (the focus ship's crit gate at rate 0 + the enemy's crit
+        // gate at rate 0.5). Keep both draws in a round equal so the enemy gets the intended
+        // value regardless of intra-round order: rounds 1,3 → 0.9 (no crit, >= 0.5);
+        // rounds 2,4 → 0.1 (crit, < 0.5). Reproduces the alternating non/crit pattern.
+        const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1];
+        let drawIdx = 0;
+        setRateGateRng(() => seq[drawIdx++ % seq.length]);
         const result = runCombat(
             BASE({
                 numRounds: 4,

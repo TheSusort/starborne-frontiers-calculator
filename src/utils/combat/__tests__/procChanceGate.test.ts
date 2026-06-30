@@ -1,19 +1,16 @@
 /**
- * D-PR1: procChance gate — deterministic accumulator for equipment reactive procs.
+ * D-PR1: procChance gate — per-proc rate gate for equipment reactive procs.
  *
- * A passive on-crit reactive heal with procChance 0.5 over 10 rounds fires exactly 5 times
- * (back-loaded: rounds 2, 4, 6, 8, 10). A control ability without procChance fires all 10.
- *
- * The rateAccumulator fires when acc >= 1. With rate 0.5 per call:
- *   call 1: acc=0.5 → no fire
- *   call 2: acc=1.0 → fire (acc→0)
- *   call 3: acc=0.5 → no fire
- *   call 4: acc=1.0 → fire (acc→0)
- *   ... → fires on even-numbered calls: 2,4,6,8,10 → exactly 5 of 10.
+ * A passive on-crit reactive heal with procChance 0.5 over 10 rounds should fire exactly 5
+ * times. The rate gate now draws from a random RNG (rng() < rate). To keep this test
+ * deterministic and preserve its intent (5 of 10 fires), we force a scripted RNG sequence
+ * that alternates fire/no-fire (0.1 < 0.5 fires; 0.9 >= 0.5 skips) → 5 fires of 10. A control
+ * ability without procChance fires all 10 (gate bypassed).
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 
 let idCounter = 0;
 const nextId = (): string => `proc-test-${++idCounter}`;
@@ -88,8 +85,19 @@ const sumHeal = (
     );
 
 describe('D-PR1: procChance gate — per-proc rate gate for equipment reactive procs', () => {
-    it('procChance 0.5 over 10 on-crit triggers fires the reactive heal exactly 5 times (deterministic accumulator)', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('procChance 0.5 over 10 on-crit triggers fires the reactive heal exactly 5 times (scripted RNG)', () => {
         idCounter = 0;
+        // Each round draws twice: the crit gate (rate 1.0, fires on any draw < 1) then the
+        // proc gate (rate 0.5). So proc draws land on odd indices. Force those to alternate
+        // 0.1 (fires, < 0.5) / 0.9 (skips, >= 0.5) → 5 fires of 10. Crit-gate draws (even
+        // indices) are 0.0 so they always fire (crit=100) without affecting proc parity.
+        const seq = [
+            0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9, 0, 0.1, 0, 0.9,
+        ];
+        let drawIdx = 0;
+        setRateGateRng(() => seq[drawIdx++ % seq.length]);
         // Each fire credits directHeal = 10000 (hp) × 50% = 5000.
         // 5 fires → 25000 total; 10 fires (no gate) → 50000 total.
         const gatedAbility = makeHealAbility(0.5);

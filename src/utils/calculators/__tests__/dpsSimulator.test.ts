@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
+import { setRateGateRng, resetRateGateRng, mulberry32 } from '../rateAccumulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import {
     SelectedGameBuff,
@@ -1648,7 +1649,10 @@ describe('simulateDPS', () => {
     });
 
     describe('ShipSkills adapter equivalence', () => {
+        afterEach(() => resetRateGateRng());
         it('flat input and its flatInputToAbilities form produce identical results', () => {
+            // Both runs draw from the same RNG stream; re-seed before each so the flat and
+            // ShipSkills forms see identical crit/landing draws and stay byte-for-byte equal.
             const flat = {
                 ...baseInput,
                 attack: 22000,
@@ -1688,7 +1692,9 @@ describe('simulateDPS', () => {
                 enemyDebuffs: [makeAlwaysBuff('defDown', { defense: -30 } as ParsedBuffEffects)],
             };
 
+            setRateGateRng(mulberry32(0x5eed1234));
             const fromFlat = simulateDPS(flat);
+            setRateGateRng(mulberry32(0x5eed1234));
             const fromSkills = simulateDPS({ ...flat, shipSkills: flatInputToAbilities(flat) });
 
             expect(fromSkills.rounds).toEqual(fromFlat.rounds);
@@ -2098,7 +2104,14 @@ describe('simulateDPS', () => {
     });
 
     describe('deterministic crit schedule', () => {
+        afterEach(() => resetRateGateRng());
+
         it('crit 50 / critDamage 100 doubles damage on exactly half the active rounds', () => {
+            // 1 crit draw per round. Force a [0.9, 0.1] cycle so rounds 2,4,6,8,10 crit
+            // (0.1 < 0.5) and odd rounds skip (0.9 >= 0.5) → exactly 5 of 10 rounds crit.
+            const seq = [0.9, 0.1];
+            let drawIdx = 0;
+            setRateGateRng(() => seq[drawIdx++ % seq.length]);
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2110,7 +2123,7 @@ describe('simulateDPS', () => {
                 rounds: 10,
             });
             const damages = result.rounds.map((r) => r.directDamage);
-            // accumulator: rounds 2,4,6,8,10 crit (acc reaches 1 on even rounds)
+            // Forced schedule: rounds 2,4,6,8,10 crit.
             expect(result.rounds.map((r) => r.didCrit)).toEqual([
                 false,
                 true,
@@ -2128,8 +2141,13 @@ describe('simulateDPS', () => {
         });
 
         it('charged hits crit at the crit rate regardless of cadence (per-stream, no aliasing)', () => {
-            // 50% crit + charged every 2nd round: with a single accumulator the charged
-            // hit would ALWAYS or NEVER crit; per-stream guarantees half do.
+            // chargeCount 1 → charged on the even rounds (draw indices 1,3,5,7,9,11).
+            // 1 crit draw per round. Force the charged-round draws (odd indices) to
+            // alternate 0.1 (crit) / 0.9 (no crit) so exactly half the charged rounds crit,
+            // regardless of cadence; active-round draws (even indices) are 0.9 (don't matter).
+            const seq = [0.9, 0.1, 0.9, 0.9, 0.9, 0.1, 0.9, 0.9, 0.9, 0.1, 0.9, 0.9];
+            let drawIdx = 0;
+            setRateGateRng(() => seq[drawIdx++ % seq.length]);
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2195,8 +2213,16 @@ describe('simulateDPS', () => {
     });
 
     describe('deterministic debuff landing', () => {
+        afterEach(() => resetRateGateRng());
+
         it('50% landing chance lands DoTs on exactly half the rounds, evenly spaced', () => {
-            // hacking 150 vs security 100 → 50% landing chance
+            // hacking 150 vs security 100 → 50% landing chance.
+            // 2 draws per round (crit gate at rate 1.0 + landing gate at rate 0.5). Keep both
+            // draws in a round equal so landing gets the intended value regardless of order:
+            // odd rounds → 0.9 (resist), even rounds → 0.1 (land) → lands on even rounds.
+            const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1];
+            let drawIdx = 0;
+            setRateGateRng(() => seq[drawIdx++ % seq.length]);
             const result = simulateDPS({
                 ...baseInput,
                 attack: 10000,
@@ -2211,7 +2237,7 @@ describe('simulateDPS', () => {
                 activeDoTs: [{ id: 'd', type: 'corrosion', tier: 6, stacks: 1, duration: 1 }],
             });
             const landedRounds = result.rounds.map((r) => r.dotsLanded);
-            // back-loaded accumulator at rate 0.5: lands on even rounds
+            // Forced schedule: lands on even rounds.
             expect(landedRounds).toEqual([
                 false,
                 true,
@@ -2244,7 +2270,12 @@ describe('simulateDPS', () => {
                     { id: 'd', type: 'corrosion' as const, tier: 6, stacks: 1, duration: 2 },
                 ],
             };
-            expect(simulateDPS(input).summary).toEqual(simulateDPS(input).summary);
+            // Re-seed before each run so both draw the identical RNG stream → identical totals.
+            setRateGateRng(mulberry32(0x5eed1234));
+            const a = simulateDPS(input).summary;
+            setRateGateRng(mulberry32(0x5eed1234));
+            const b = simulateDPS(input).summary;
+            expect(a).toEqual(b);
         });
     });
 
@@ -2740,9 +2771,9 @@ describe('simulateDPS', () => {
         // recorded in resistedEnemyDebuffs; a later re-application draws fresh.
         //
         // hacking 150 / security 100 (neutral affinity) → landing chance 0.5.
-        // The shared debuffLandingGate is a back-loaded fractional accumulator: at rate
-        // 0.5 the draw sequence is [resist, land, resist, land, resist, ...] (the first
-        // draw resists). The fixture has NO recurring enemy debuffs and NO DoTs, so the
+        // The shared debuffLandingGate is fed a forced RNG sequence (gate lands when
+        // rng() < rate; at rate 0.5 a draw ≥ 0.5 resists, a draw < 0.5 lands), yielding
+        // [resist, land, resist, land, resist, ...]. The fixture has NO recurring enemy debuffs and NO DoTs, so the
         // per-round recurring draw is skipped — the ONLY gate draws are the one timed
         // APPLICATION event per round. The schedule is therefore trivially round-aligned:
         //   R1 draw#1 → RESIST   R2 draw#2 → LAND   R3 draw#3 → RESIST
@@ -2781,7 +2812,16 @@ describe('simulateDPS', () => {
         const wasResisted = (round: { resistedEnemyDebuffs: { buffName: string }[] }) =>
             round.resistedEnemyDebuffs.some((ab) => ab.buffName === 'Armor Pierce');
 
+        afterEach(() => resetRateGateRng());
+
         it('a landed timed debuff persists its full window; a resisted re-application does not clear it', () => {
+            // 2 draws per round (crit gate at rate 0 + the one timed-application landing draw
+            // at rate 0.5). Keep both draws in a round equal so landing gets the intended
+            // value regardless of order: R1 0.9 (resist), R2 0.1 (land), R3 0.9, R4 0.1,
+            // R5 0.9 → resist, land, resist, land, resist.
+            const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9];
+            let drawIdx = 0;
+            setRateGateRng(() => seq[drawIdx++ % seq.length]);
             const result = simulateDPS(timedDebuffFixture(5));
 
             // Draw schedule (rate 0.5, one timed-application draw per round):
@@ -2818,7 +2858,9 @@ describe('simulateDPS', () => {
             // Fire the timed debuff exactly ONCE, on round 1: a charged skill that starts
             // charged with a chargeCount so high it never re-charges. The debuff is
             // charge-sourced, so it is only attempted on the single round-1 charged turn.
-            // Draw #1 (rate 0.5) resists → the debuff never lands and never appears.
+            // Force every draw to 0.9 so the lone landing draw (rate 0.5) resists → the
+            // debuff never lands and never appears.
+            setRateGateRng(() => 0.9);
             const result = simulateDPS({
                 attack: 15000,
                 crit: 0,
