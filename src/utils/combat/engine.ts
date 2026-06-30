@@ -1602,9 +1602,18 @@ export function runCombat(input: CombatEngineInput): {
         // Reads this team actor's runtime LIVE per-target landing chance (A2 Task 4 — set each
         // turn by runPlayerTurn). Invoked only at turn time (after `runtime` below is defined),
         // so the forward reference is safe. `?? 1` is a neutral guard for a pre-first-turn read.
-        const teamLandsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
+        const teamLandsTimedEnemyApplication = (
+            application?: 'inflict' | 'apply',
+            targetAffinity?: AffinityName
+        ): boolean =>
             application === 'apply'
-                ? !teamAffinityDisadvantage
+                ? // Target-aware (mirrors the attacker closure): when the ACTUAL target's affinity
+                  // is supplied, re-resolve THIS team actor's RAW affinity (w.affinity) vs that
+                  // target — an 'apply' lands UNLESS this actor is at a disadvantage. Absent
+                  // (DPS/unit mode, single representative opponent) → the static flag, byte-identical.
+                  targetAffinity !== undefined
+                    ? getAffinityMatchup(w.affinity, targetAffinity) !== 'disadvantage'
+                    : !teamAffinityDisadvantage
                 : teamDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1);
         const runtime: PlayerActorRuntime = {
             actor: teamActor,
