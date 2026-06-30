@@ -733,20 +733,34 @@ export interface IntentExecContext {
     runtimes: Map<string, PlayerActorRuntime>;
     /** Delegate for ally-charge grants — the engine's own `grantAllyCharges` closure, threaded
      *  here so the executor does not need to re-implement the per-actor cap loop. The closure
-     *  already iterates `allPlayerActors` with the correct chargeCount guard. */
-    grantAllyCharges: (amount: number) => void;
+     *  already iterates `allPlayerActors` with the correct chargeCount guard. The optional
+     *  `emitBus` overrides the captured outer bus for the `charge-changed` emission — the executor
+     *  passes `ctx.bus` (the reactive stamping wrapper) so the change brands `reactive`/`duringTurnOf`
+     *  and the log nests it under the triggering turn. */
+    grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
     /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
      *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
      *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
      *  and chargeCount-0 actors. The closure flips to the opposing side internally. The optional
      *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip targets with affinity
-     *  advantage over the applier); omit it to disable the gate. */
-    removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
+     *  advantage over the applier); omit it to disable the gate. The optional `emitBus` stamps the
+     *  `charge-changed` when called during a reactive intent — see grantAllyCharges. */
+    removeEnemyCharges: (
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Delegate for single-target charge removal — the engine's own `removeChargesFrom` closure.
      *  Subtracts from ONE actor by id (floored at 0), skipping chargeLossImmune / chargeCount-0
      *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId.
-     *  Same optional `applierAffinity` charge-manip gate as removeEnemyCharges. */
-    removeChargesFrom: (targetId: string, amount: number, applierAffinity?: AffinityName) => void;
+     *  Same optional `applierAffinity` charge-manip gate as removeEnemyCharges, and the same
+     *  optional `emitBus`. */
+    removeChargesFrom: (
+        targetId: string,
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
@@ -1321,7 +1335,8 @@ type StampedEventType =
     | 'cleanse-performed'
     | 'purge-performed'
     | 'ship-destroyed'
-    | 'cheat-death-activated';
+    | 'cheat-death-activated'
+    | 'charge-changed';
 
 const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>([
     'ability-performed',
@@ -1343,6 +1358,14 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     'purge-performed',
     'ship-destroyed',
     'cheat-death-activated',
+    // Reactive charge changes (Liberator's on-enemy-death "all allies add charge",
+    // Zosimos's on-repair removal, etc.) flow through grantAllyCharges/removeEnemyCharges/
+    // removeChargesFrom when those delegates are called with `ctx.bus` (the stamping wrapper)
+    // during a reactive intent. Branding the emission `reactive` keeps the log builder from
+    // treating the charge-changed as a NON-reactive turn entry (a trigger candidate) and nests
+    // it under the triggering turn instead. On-turn charge emissions use the captured outer bus
+    // (unstamped) → unchanged.
+    'charge-changed',
 ]);
 
 /** Wrap a bus so every reactive-capable event emitted through it is branded with
@@ -1443,20 +1466,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
                 ctx.repairCountBySource.set(key, n);
                 if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity); // "that enemy" only
+                ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
                 return;
             }
             // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
             // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
             // here and fall through to the owner-only gain below. Unreachable for parsed charge
             // abilities today.
-            ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity);
+            ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
             return;
         }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
-            ctx.grantAllyCharges(cfg.amount);
+            ctx.grantAllyCharges(cfg.amount, ctx.bus);
             return;
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.

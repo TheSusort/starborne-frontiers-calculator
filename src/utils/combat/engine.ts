@@ -1079,16 +1079,26 @@ interface ReactiveSideCtx {
     runtimes: Map<string, PlayerActorRuntime>;
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
-    grantAllyCharges: (amount: number) => void;
+    grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
     /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
      *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). The optional
      *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip affinity-advantaged
-     *  targets); omit it to disable the gate. */
-    removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
+     *  targets); omit it to disable the gate. The optional `emitBus` stamps the `charge-changed`
+     *  when called during a reactive intent (pass ctx.bus). */
+    removeEnemyCharges: (
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Single-target charge removal for this drain side — bySide(side).removeChargesFrom, which
      *  subtracts from ONE actor by id (floored at 0, immune actors skipped). Same optional
-     *  `applierAffinity` charge-manip gate as removeEnemyCharges. */
-    removeChargesFrom: (targetId: string, amount: number, applierAffinity?: AffinityName) => void;
+     *  `applierAffinity` charge-manip gate as removeEnemyCharges, and the same optional `emitBus`. */
+    removeChargesFrom: (
+        targetId: string,
+        amount: number,
+        applierAffinity?: AffinityName,
+        emitBus?: CombatEventBus
+    ) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
@@ -1839,8 +1849,11 @@ export function runCombat(input: CombatEngineInput): {
 
     interface SideContext {
         /** Bump every same-side actor's charges by `amount` (capped at each actor's own
-         *  chargeCount; chargeCount 0 skipped — no charge skill to bank). */
-        grantAllyCharges: (amount: number) => void;
+         *  chargeCount; chargeCount 0 skipped — no charge skill to bank). The optional `emitBus`
+         *  overrides the captured outer bus for the `charge-changed` emission — reactive callers
+         *  pass the stamping wrapper (ctx.bus) so the change is branded `reactive`/`duringTurnOf`
+         *  and the log nests it under the triggering turn; on-turn callers omit it (unstamped). */
+        grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
         /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
          *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
          *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
@@ -1849,17 +1862,25 @@ export function runCombat(input: CombatEngineInput): {
          *  Charge Manipulation affinity gate: when `applierAffinity` is supplied, an opposing
          *  actor with affinity ADVANTAGE over the applier (applier disadvantaged vs it) is SKIPPED
          *  ("Does not affect enemies with affinity advantage over the applying unit"). Undefined →
-         *  no gate (byte-identical to pre-gate behaviour); antimatter/neutral matchups never skip. */
-        removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
+         *  no gate (byte-identical to pre-gate behaviour); antimatter/neutral matchups never skip.
+         *  The optional `emitBus` overrides the captured outer bus for the `charge-changed`
+         *  emission — see grantAllyCharges. */
+        removeEnemyCharges: (
+            amount: number,
+            applierAffinity?: AffinityName,
+            emitBus?: CombatEventBus
+        ) => void;
         /** Single-target charge removal: subtract `amount` from ONE actor by id (floored at 0,
          *  chargeLossImmune / chargeCount-0 actors skipped). Used for "decrease THAT enemy's
          *  charge" (Zosimos), routed by eventCtx.repairerId. Does NOT require the opposing-side
          *  filter — the caller passes a known-opposing id. Same `applierAffinity` charge-manip gate
-         *  as removeEnemyCharges: an affinity-advantaged target is skipped when the affinity is supplied. */
+         *  as removeEnemyCharges: an affinity-advantaged target is skipped when the affinity is
+         *  supplied. The optional `emitBus` overrides the captured outer bus — see grantAllyCharges. */
         removeChargesFrom: (
             targetId: string,
             amount: number,
-            applierAffinity?: AffinityName
+            applierAffinity?: AffinityName,
+            emitBus?: CombatEventBus
         ) => void;
         /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
          *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
@@ -1877,13 +1898,13 @@ export function runCombat(input: CombatEngineInput): {
     const buildSideContext = (side: Side): SideContext => {
         const actors = actorsBySide(side);
         return {
-            grantAllyCharges: (amount: number): void => {
+            grantAllyCharges: (amount: number, emitBus?: CombatEventBus): void => {
                 for (const a of actors) {
                     if (a.chargeCount <= 0) continue;
                     const oldCharge = a.charges;
                     a.charges = Math.min(a.charges + amount, a.chargeCount);
                     if (a.charges !== oldCharge) {
-                        bus.emit({
+                        (emitBus ?? bus).emit({
                             type: 'charge-changed',
                             actorId: a.id,
                             round: currentRound,
@@ -1897,7 +1918,11 @@ export function runCombat(input: CombatEngineInput): {
             // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
             // skipping immune actors and those with no charged skill. Mirror of grantAllyCharges
             // but on the opposing side, and subtractive.
-            removeEnemyCharges: (amount: number, applierAffinity?: AffinityName): void => {
+            removeEnemyCharges: (
+                amount: number,
+                applierAffinity?: AffinityName,
+                emitBus?: CombatEventBus
+            ): void => {
                 for (const a of actorsBySide(side === 'player' ? 'enemy' : 'player')) {
                     if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
                     // Charge-manip affinity gate: skip an actor with affinity advantage over the
@@ -1910,7 +1935,7 @@ export function runCombat(input: CombatEngineInput): {
                     const oldCharge = a.charges;
                     a.charges = Math.max(0, a.charges - amount);
                     if (a.charges !== oldCharge) {
-                        bus.emit({
+                        (emitBus ?? bus).emit({
                             type: 'charge-changed',
                             actorId: a.id,
                             round: currentRound,
@@ -1927,7 +1952,8 @@ export function runCombat(input: CombatEngineInput): {
             removeChargesFrom: (
                 targetId: string,
                 amount: number,
-                applierAffinity?: AffinityName
+                applierAffinity?: AffinityName,
+                emitBus?: CombatEventBus
             ): void => {
                 const a = allActorsById.get(targetId);
                 if (!a || a.chargeCount <= 0 || a.chargeLossImmune) return;
@@ -1941,7 +1967,7 @@ export function runCombat(input: CombatEngineInput): {
                 const oldCharge = a.charges;
                 a.charges = Math.max(0, a.charges - amount);
                 if (a.charges !== oldCharge) {
-                    bus.emit({
+                    (emitBus ?? bus).emit({
                         type: 'charge-changed',
                         actorId: a.id,
                         round: currentRound,

@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import type { CombatLogEntry } from '../log/types';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 
@@ -165,6 +166,105 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
                 e.targets.some((t) => t.targetId === enemyId)
         );
         expect(disableOnKiller.length).toBeGreaterThan(0);
+    });
+
+    it('combat-log #6: a reactive on-enemy-death charge-grant is NESTED under the kill, not surfaced as a turn action that the Martyrdom Disable wrongly nests under', () => {
+        // Bug repro (combat-sim finding #6 secondary). A killer kills a Martyrdom victim. A killer-
+        // side ALLY carries an on-enemy-death "grants 1 charge to all allies" passive — that reaction
+        // fires on the death, DURING the killer's turn, and routes through the engine's
+        // grantAllyCharges delegate. Pre-fix the delegate emitted `charge-changed` on the UNSTAMPED
+        // outer bus, so the log builder surfaced it as a NON-reactive TOP-LEVEL entry in the killer's
+        // turn — both a wrong attribution (a reaction shown as a turn action) AND a stray trigger
+        // candidate the victim's Disable could wrongly nest under. Post-fix the executor passes the
+        // stamping bus (ctx.bus), so the charge-changed is branded reactive/`duringTurnOf=killer` and
+        // the builder NESTS it under the death/attack (and never treats it as a Disable trigger).
+        const carrier = makeShip('carrier', 'Carrier', {
+            implants: { implant_ultimate: 'mart' },
+        });
+        const killer = makeShip('killer', 'Liberator-kit', {
+            activeSkillText: 'This Unit deals <unit-damage>100000% damage</unit-damage>.',
+        });
+        // A SEPARATE killer-side ally owns the on-enemy-death charge-grant (so the grant is NOT
+        // suppressed by the Disable that lands on the killer) and has a REAL charged skill so the
+        // grant moves a charge counter and emits `charge-changed` during the killer's turn.
+        const chargedAlly = makeShip('ally', 'Charged Ally', {
+            chargeSkillCharge: 3,
+            chargeSkillText: 'This Unit deals <unit-damage>200% damage</unit-damage>.',
+            firstPassiveSkillText: 'When an enemy dies, this unit grants 1 charge to all allies.',
+        });
+
+        const result = simulateBattle(
+            {
+                playerTeam: [placement(carrier, 'M4', 100, 100, /* slow */ 10)],
+                enemyTeam: [
+                    placement(killer, 'M4', 1000, 1_000_000_000, /* fast */ 1000),
+                    placement(chargedAlly, 'M3', 1, 1_000_000_000, /* slow */ 5),
+                ],
+                rounds: 3,
+            },
+            getGearPiece
+        );
+
+        const killerId = 'e:killer:0';
+        const allyId = 'e:ally:1';
+        expect(result.roster.some((r) => r.actorId === killerId && r.side === 'enemy')).toBe(true);
+
+        const allEntries = flattenCombatLog(result);
+
+        // Sanity: the Disable lands at all (Fix A) — without it the nesting question is moot.
+        const disableOnKiller = allEntries.filter(
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Disable' &&
+                e.targets.some((t) => t.targetId === killerId)
+        );
+        expect(disableOnKiller.length).toBeGreaterThan(0);
+
+        // The reactive on-death charge grant on the ally (`reason: manip` → note contains "manip").
+        // It must exist (otherwise the bug can't reproduce) — it is the entry the fix re-attributes.
+        const reactiveChargeGrants = allEntries.filter(
+            (e) =>
+                e.kind === 'charge-changed' &&
+                e.actorId === allyId &&
+                (e.note?.includes('manip') ?? false)
+        );
+        expect(reactiveChargeGrants.length).toBeGreaterThan(0);
+
+        // (1) The reactive charge-grant must NOT appear as a TOP-LEVEL entry in any turn. Pre-fix it
+        // surfaced as a top-level entry in the killer's turn (unstamped); post-fix it is a nested
+        // reaction under the kill. The ally's OWN per-turn cadence charge changes ('gen') stay
+        // top-level and are correctly excluded by the `manip` filter above.
+        const topLevelReactiveCharge = result.combatLog
+            .flatMap((round) => round.turns.flatMap((t) => t.entries))
+            .some(
+                (e) =>
+                    e.kind === 'charge-changed' &&
+                    e.actorId === allyId &&
+                    (e.note?.includes('manip') ?? false)
+            );
+        expect(topLevelReactiveCharge).toBe(false);
+
+        // Helper: find the parent entry (the one whose `.reactions[]` contains `child`).
+        const parentOf = (child: CombatLogEntry): CombatLogEntry | undefined =>
+            result.combatLog
+                .flatMap((round) => [...round.turns.flatMap((t) => t.entries), ...round.endOfRound])
+                .flatMap(function collect(e): CombatLogEntry[] {
+                    return [e, ...e.reactions.flatMap(collect)];
+                })
+                .find((e) => e.reactions.includes(child));
+
+        // (2) The reactive charge-grant is nested under the kill — its parent is the killer's
+        // attack or the death entry, never a free-floating turn action.
+        const grantParent = parentOf(reactiveChargeGrants[0]);
+        expect(grantParent).toBeDefined();
+        expect(['attack', 'death']).toContain(grantParent!.kind);
+
+        // (3) The victim's Disable must NOT nest under the charge-changed (the original mis-nesting):
+        // its parent is the kill (attack or death entry), reflecting the real `↳ reacts` chain.
+        const disableParent = parentOf(disableOnKiller[0]);
+        expect(disableParent).toBeDefined();
+        expect(disableParent!.kind).not.toBe('charge-changed');
+        expect(['attack', 'death']).toContain(disableParent!.kind);
     });
 
     it('mixed-affinity: Martyrdom lands on the ACTUAL killer (neutral), not gated by the representative opponent (disadvantage)', () => {
