@@ -45,6 +45,8 @@ import type { ShipSkills } from '../../types/abilities';
 import type { GearPiece } from '../../types/gear';
 import { selectFiringSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting } from '../targetingParser';
+import { buildCombatLog } from '../combat/log/buildCombatLog';
+import type { CombatLogRound } from '../combat/log/types';
 import { computeAffinityModifiers } from './affinityUtils';
 
 export interface ShipRoundState {
@@ -101,33 +103,9 @@ export interface ShipRoundState {
     activeDebuffs: string[];
 }
 
-/**
- * A single render-ready line in a round's event log, emitted in CHRONOLOGICAL
- * (bus-emission) order. `actorId` is the SUBJECT of the line.
- *
- *   - turn:   `actorId`'s turn began — a delimiter line (no amount/label/target).
- *   - damage: `actorId` (ATTACKER) dealt `amount` to `targetId` (from `ability-performed`;
- *     a `targetId` not on the roster — the dummy 'enemy' — renders as "enemy").
- *   - heal:   `actorId` (caster) heals `targetId` for `amount` (even-split per recipient).
- *   - buff:   `actorId` gains `label` (buff name).
- *   - debuff: `actorId` (victim) afflicted with `label` (debuff name).
- *   - dot:    `actorId` (victim) afflicted with `label` (dot type name).
- *   - death:  `actorId` (victim) destroyed.
- */
-export interface BattleLogEvent {
-    round: number;
-    kind: 'turn' | 'damage' | 'heal' | 'buff' | 'debuff' | 'dot' | 'death';
-    actorId: string;
-    targetId?: string;
-    amount?: number;
-    /** Buff/debuff/dot name. */
-    label?: string;
-}
-
 export interface BattleRound {
     round: number;
     ships: ShipRoundState[];
-    events: BattleLogEvent[];
     /**
      * Distinct acting `actorId`s for this round in true speed order (emission order of
      * `turn-started`). Only roster actorIds — the dummy player-offense `'enemy'` id is
@@ -141,6 +119,12 @@ export interface BattleResult {
     rounds: BattleRound[];
     outcome: { winner: 'player' | 'enemy' | 'draw'; lastRound: number };
     roster: Array<{ actorId: string; side: 'player' | 'enemy'; name: string; position: Position }>;
+    /**
+     * Rich, hierarchical play-by-play folded from the raw CombatEvent stream by
+     * `buildCombatLog`. Spans ALL rounds and carries its own `round` numbers (NOT
+     * trimmed in lockstep with `rounds`). Additive — does not affect DPS/healing math.
+     */
+    combatLog: CombatLogRound[];
 }
 
 interface RosterEntry {
@@ -154,9 +138,10 @@ interface RosterEntry {
 const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
 
 /**
- * The CombatEvent types `assembleBattleResult` actually consumes. The `simulateBattle`
- * adapter subscribes its event bus from THIS list, so adding a consumed event type here
- * can't silently leave the adapter unsubscribed (the two would otherwise drift apart).
+ * The CombatEvent types `assembleBattleResult` folds into its per-round damage/heal/buff
+ * aggregates. `simulateBattle` subscribes from the broader `LOG_EVENT_TYPES` (a superset of
+ * this list) so the combatLog builder also gets its events; this list documents — and a
+ * `satisfies` guards — the assembler's own consumed subset so the two never drift apart.
  */
 export const ASSEMBLED_EVENT_TYPES = [
     'ability-performed',
@@ -168,6 +153,45 @@ export const ASSEMBLED_EVENT_TYPES = [
     'dot-applied',
     'turn-started',
 ] as const satisfies readonly CombatEvent['type'][];
+
+/**
+ * The full set of event types captured for the hierarchical `combatLog` builder
+ * (`buildCombatLog`). Superset of `ASSEMBLED_EVENT_TYPES` — adds the round/turn boundaries,
+ * per-hit (`attacked`/`hp-changed`), charge, shield, and effect events the builder folds.
+ * `simulateBattle` subscribes from THIS list so the builder sees the complete stream while
+ * the assembler's own type-guarded loops simply ignore the extra event types.
+ */
+export const LOG_EVENT_TYPES = [
+    'round-started',
+    'round-ended',
+    'turn-started',
+    'turn-ended',
+    'skill-fired',
+    'charge-changed',
+    'ability-performed',
+    'attacked',
+    'hp-changed',
+    'heal-performed',
+    'shield-applied',
+    'buff-applied',
+    'buff-expired',
+    'debuff-applied',
+    'dot-applied',
+    'dot-ticked',
+    'dot-detonated',
+    'bomb-detonated',
+    'control-applied',
+    'cleanse-performed',
+    'purge-performed',
+    'ship-destroyed',
+] as const satisfies readonly CombatEvent['type'][];
+
+// Compile-time proof that LOG_EVENT_TYPES ⊇ ASSEMBLED_EVENT_TYPES (bus subscribes to LOG;
+// assembler reads ASSEMBLED). If an ASSEMBLED type is removed from LOG this becomes `never`
+// and the assignment below fails to compile.
+type _AssertLogSupersetOfAssembled =
+    (typeof ASSEMBLED_EVENT_TYPES)[number] extends (typeof LOG_EVENT_TYPES)[number] ? true : never;
+const _checkLogSuperset: _AssertLogSupersetOfAssembled = true;
 
 /**
  * Precondition: expects BOTH sides of `roster` to be non-empty. The wipe checks guard
@@ -188,6 +212,13 @@ export function assembleBattleResult(args: {
     >;
     roster: RosterEntry[];
     numRounds: number;
+    /**
+     * Per-actor pre-combat charge state for the hierarchical `combatLog`:
+     * `charge` = initial/seeded charges (0 if none), `max` = charge-skill cap (0 if no
+     * charge skill). Cosmetic (drives the per-turn charge header); defaults to an empty
+     * map (all actors render charge 0/0) when omitted.
+     */
+    initialCharge?: Map<string, { charge: number; max: number }>;
 }): BattleResult {
     const {
         events,
@@ -196,6 +227,7 @@ export function assembleBattleResult(args: {
         perRoundPerIncoming = {},
         roster,
         numRounds,
+        initialCharge = new Map<string, { charge: number; max: number }>(),
     } = args;
 
     // Round of first destruction per actor (earliest ship-destroyed).
@@ -310,63 +342,6 @@ export function assembleBattleResult(args: {
             };
         });
 
-        // Readable per-round log, in CHRONOLOGICAL (bus-emission) order — a turn-by-turn
-        // play-by-play. We walk `roundEvents` ONCE (it preserves emission order) and emit
-        // one line per relevant event. Damage is ATTACKER-centric (from `ability-performed`:
-        // actorId=attacker, targetId, amount) — dummy-'enemy' target lines are KEPT (they
-        // render as "X → enemy"; the per-victim unification is a deferred follow-up).
-        const log: BattleLogEvent[] = [];
-        for (const e of roundEvents) {
-            switch (e.type) {
-                case 'turn-started':
-                    // Turn delimiter. Skip the dummy player-offense 'enemy' (not on the board).
-                    if (rosterIds.has(e.actorId)) {
-                        log.push({ round, kind: 'turn', actorId: e.actorId });
-                    }
-                    break;
-                case 'ability-performed':
-                    if (typeof e.damage === 'number') {
-                        log.push({
-                            round,
-                            kind: 'damage',
-                            actorId: e.actorId,
-                            targetId: e.targetId,
-                            amount: e.damage,
-                        });
-                    }
-                    break;
-                case 'heal-performed':
-                    if (e.targets.length > 0) {
-                        for (const tid of e.targets) {
-                            log.push({
-                                round,
-                                kind: 'heal',
-                                actorId: e.casterId,
-                                targetId: tid,
-                                amount: e.amount / e.targets.length,
-                            });
-                        }
-                    } else {
-                        // Empty-targets heal: surface a single full-amount line so the heal
-                        // is still visible (it credits nobody's healingReceived above).
-                        log.push({ round, kind: 'heal', actorId: e.casterId, amount: e.amount });
-                    }
-                    break;
-                case 'buff-applied':
-                    log.push({ round, kind: 'buff', actorId: e.actorId, label: e.buffName });
-                    break;
-                case 'debuff-applied':
-                    log.push({ round, kind: 'debuff', actorId: e.targetId, label: e.buffName });
-                    break;
-                case 'dot-applied':
-                    log.push({ round, kind: 'dot', actorId: e.targetId, label: e.dotType });
-                    break;
-                case 'ship-destroyed':
-                    log.push({ round, kind: 'death', actorId: e.actorId });
-                    break;
-            }
-        }
-
         // Per-round turn order: distinct acting roster actorIds in `turn-started` emission
         // order (true speed order). Dummy/non-roster ids are dropped.
         const turnOrder: string[] = [];
@@ -382,7 +357,7 @@ export function assembleBattleResult(args: {
             }
         }
 
-        rounds.push({ round, ships, events: log, turnOrder });
+        rounds.push({ round, ships, turnOrder });
 
         // Termination: first round where ALL of one side's actors are destroyed.
         // A side counts as wiped only if it has >=1 member AND all are destroyed —
@@ -412,6 +387,11 @@ export function assembleBattleResult(args: {
     // Trim any rounds after termination (break already stops appending, but guard anyway).
     const trimmed = rounds.filter((r) => r.round <= lastRound);
 
+    // Rich hierarchical play-by-play folded from the SAME raw event stream. `roster`
+    // (RosterEntry) is a structural superset of the builder's `{actorId, side, name}`
+    // RosterEntry, so it passes directly. `initialCharge` seeds the per-turn charge header.
+    const combatLog = buildCombatLog(events, roster, initialCharge);
+
     return {
         rounds: trimmed,
         outcome: { winner, lastRound },
@@ -421,6 +401,7 @@ export function assembleBattleResult(args: {
             name,
             position,
         })),
+        combatLog,
     };
 }
 
@@ -729,8 +710,11 @@ export function simulateBattle(
     // ----- Capture the event stream + run -----
     const bus = createEventBus();
     const events: CombatEvent[] = [];
-    // Subscribe exactly the events the assembler consumes (shared list — can't drift).
-    for (const t of ASSEMBLED_EVENT_TYPES) {
+    // Subscribe the SUPERSET of (a) the events `assembleBattleResult` folds for its damage/
+    // heal/buff aggregates and (b) the events `buildCombatLog` folds into the hierarchical
+    // combatLog (round/turn boundaries, attacked/hp-changed, charge, shields, effects). The
+    // assembler's own loops guard by `e.type`, so the extra builder-only events are inert there.
+    for (const t of LOG_EVENT_TYPES) {
         bus.on(t, (e) => events.push(e as CombatEvent));
     }
 
@@ -828,6 +812,18 @@ export function simulateBattle(
         })),
     ];
 
+    // Pre-combat charge state per actor for the combatLog's per-turn charge header.
+    //   - max    = the ship's charge cap (chargeCount) ONLY when it actually has a usable
+    //              charged skill (hasCharged); 0 otherwise so non-charge ships render 0/0.
+    //   - charge = seeded initial charge. Every actor here is built with `startCharged: false`
+    //              (focus, teamActors, enemyAttackers all hard-code it), so the initial charge
+    //              is 0 across the board. (When a startCharged path is wired in PR2 this becomes
+    //              `max` for seeded actors.)
+    const initialCharge = new Map<string, { charge: number; max: number }>();
+    for (const plan of [...playerPlans, ...enemyPlans]) {
+        initialCharge.set(plan.id, { charge: 0, max: hasCharged(plan) ? plan.chargeCount : 0 });
+    }
+
     return assembleBattleResult({
         events,
         perRoundPerTarget,
@@ -835,5 +831,6 @@ export function simulateBattle(
         perRoundPerIncoming,
         roster,
         numRounds,
+        initialCharge,
     });
 }

@@ -320,12 +320,42 @@ export function selectNextBySpeed(
  *   - engine team branch:  pass `teamHasCharged` (= actor.chargeCount > 0)
  *   - engine dead-target:  pass `hasChargedSkill` (the redundant `&& chargeCount>0`
  *                          is absorbed by the internal guard below)
+ *
+ * `bus` and `round` are optional — when provided the function emits a `charge-changed`
+ * event (reason: 'cast-reset' on cap-fire, 'gen' on +1 increment). Call sites that
+ * have a bus and round in scope should always pass them.
  */
-export function advanceChargeCadence(actor: CombatActor, hasChargedSkill: boolean): void {
+export function advanceChargeCadence(
+    actor: CombatActor,
+    hasChargedSkill: boolean,
+    bus?: CombatEventBus,
+    round?: number
+): void {
     if (!hasChargedSkill || actor.chargeCount <= 0) return;
+    const oldCharge = actor.charges;
     if (actor.charges >= actor.chargeCount) {
         actor.charges = 0;
+        if (bus && round !== undefined) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round,
+                oldCharge,
+                newCharge: actor.charges,
+                reason: 'cast-reset',
+            });
+        }
     } else {
         actor.charges += 1;
+        if (bus && round !== undefined) {
+            bus.emit({
+                type: 'charge-changed',
+                actorId: actor.id,
+                round,
+                oldCharge,
+                newCharge: actor.charges,
+                reason: 'gen',
+            });
+        }
     }
 }

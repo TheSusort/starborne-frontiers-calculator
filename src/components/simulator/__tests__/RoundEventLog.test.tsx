@@ -1,70 +1,121 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import RoundEventLog from '../RoundEventLog';
-import type { BattleRound, BattleResult } from '../../../utils/calculators/battleSimulator';
+import type { BattleResult } from '../../../utils/calculators/battleSimulator';
+import type { CombatLogRound } from '../../../utils/combat/log/types';
 
 const roster: BattleResult['roster'] = [
-    { actorId: 'attacker', side: 'player', name: 'Graphite', position: 'T1' },
-    { actorId: 'p:judge:1', side: 'player', name: 'Judge', position: 'T2' },
-    { actorId: 'e:s3:0', side: 'enemy', name: 'Selenite', position: 'T4' },
-    { actorId: 'e:s3:1', side: 'enemy', name: 'Curator', position: 'B4' },
+    { actorId: 'nova', side: 'player', name: 'Nova', position: 'T1' },
+    { actorId: 'graphite', side: 'player', name: 'Graphite', position: 'T2' },
+    { actorId: 'hexa', side: 'enemy', name: 'Hexa', position: 'T3' },
+    { actorId: 'selenite', side: 'enemy', name: 'Selenite', position: 'T4' },
 ];
 
-const renderRound = (events: BattleRound['events']) => {
-    const round: BattleRound = { round: 1, ships: [], events, turnOrder: [] };
-    render(<RoundEventLog round={round} roster={roster} />);
+// A representative round: a charged AoE attack (crit + resulting HP on one victim, a miss on
+// another) that triggers a reaction, a buff entry with a note, and an end-of-round DoT tick.
+const round: CombatLogRound = {
+    round: 3,
+    turns: [
+        {
+            actorId: 'nova',
+            chargeBefore: 2,
+            chargeMax: 3,
+            entries: [
+                {
+                    kind: 'attack',
+                    actorId: 'nova',
+                    skillName: 'Nova Burst',
+                    slot: 'charged',
+                    targets: [
+                        {
+                            targetId: 'hexa',
+                            amount: 4321,
+                            didCrit: true,
+                            didHit: true,
+                            resultingHpPct: 55,
+                        },
+                        { targetId: 'selenite', didHit: false },
+                    ],
+                    reactions: [
+                        {
+                            kind: 'attack',
+                            actorId: 'hexa',
+                            targets: [
+                                {
+                                    targetId: 'nova',
+                                    amount: 1200,
+                                    didHit: true,
+                                    resultingHpPct: 88,
+                                },
+                            ],
+                            reactions: [],
+                            note: undefined,
+                        },
+                    ],
+                },
+                {
+                    kind: 'buff',
+                    actorId: 'graphite',
+                    targets: [],
+                    reactions: [],
+                    note: 'Attack Up',
+                },
+            ],
+        },
+    ],
+    endOfRound: [
+        {
+            kind: 'dot-ticked',
+            actorId: 'selenite',
+            targets: [],
+            reactions: [],
+            note: 'corrosion ×3',
+        },
+    ],
 };
 
 describe('RoundEventLog', () => {
-    it('renders attacker-centric damage "X → Y: N" with the enemy "Enemy " prefix on the target', () => {
-        renderRound([
-            { round: 1, kind: 'damage', actorId: 'p:judge:1', targetId: 'e:s3:0', amount: 435312 },
-        ]);
-        expect(screen.getByText('Judge → Enemy Selenite: 435,312')).toBeInTheDocument();
-    });
-
-    it('renders a damage line targeting the dummy "enemy" verbatim', () => {
-        renderRound([
-            { round: 1, kind: 'damage', actorId: 'attacker', targetId: 'enemy', amount: 900 },
-        ]);
-        expect(screen.getByText('Graphite → enemy: 900')).toBeInTheDocument();
-    });
-
-    it('renders a turn delimiter line', () => {
-        renderRound([{ round: 1, kind: 'turn', actorId: 'e:s3:1' }]);
-        expect(screen.getByText("— Enemy Curator's turn —")).toBeInTheDocument();
-    });
-
-    it('renders a heal line with caster + target', () => {
-        renderRound([
-            { round: 1, kind: 'heal', actorId: 'attacker', targetId: 'p:judge:1', amount: 1411 },
-        ]);
-        expect(screen.getByText('Graphite heals Judge for 1,411')).toBeInTheDocument();
-    });
-
-    it('renders a buff line', () => {
-        renderRound([{ round: 1, kind: 'buff', actorId: 'p:judge:1', label: 'Attack Up' }]);
-        expect(screen.getByText('Judge gains Attack Up')).toBeInTheDocument();
-    });
-
-    it('renders a debuff line with the enemy prefix', () => {
-        renderRound([{ round: 1, kind: 'debuff', actorId: 'e:s3:1', label: 'Def Down' }]);
-        expect(screen.getByText('Enemy Curator afflicted with Def Down')).toBeInTheDocument();
-    });
-
-    it('renders a dot line with a title-cased label', () => {
-        renderRound([{ round: 1, kind: 'dot', actorId: 'e:s3:0', label: 'corrosion' }]);
-        expect(screen.getByText('Enemy Selenite afflicted with Corrosion')).toBeInTheDocument();
-    });
-
-    it('renders a death line with the enemy prefix', () => {
-        renderRound([{ round: 1, kind: 'death', actorId: 'e:s3:0' }]);
-        expect(screen.getByText('Enemy Selenite destroyed')).toBeInTheDocument();
-    });
-
-    it('shows an empty message when there are no events', () => {
-        const round: BattleRound = { round: 3, ships: [], events: [], turnOrder: [] };
+    it('renders the turn header with a charge annotation', () => {
         render(<RoundEventLog round={round} roster={roster} />);
-        expect(screen.getByText(/no events this round/i)).toBeInTheDocument();
+        expect(screen.getByText(/Nova's turn · charge 2\/3/)).toBeInTheDocument();
+    });
+
+    it('shows the attack header with the charged slot tag and skill name', () => {
+        render(<RoundEventLog round={round} roster={roster} />);
+        expect(screen.getByText(/Nova Burst/)).toBeInTheDocument();
+        expect(screen.getByText(/\[charged\]/)).toBeInTheDocument();
+    });
+
+    it('breaks out every AoE victim with amounts, crit, HP%, and miss', () => {
+        render(<RoundEventLog round={round} roster={roster} />);
+        // Hit victim: amount + crit + resulting HP.
+        expect(screen.getByText(/Enemy Hexa: 4,321 \(crit\) → 55%/)).toBeInTheDocument();
+        // Missed victim.
+        expect(screen.getByText(/Enemy Selenite: miss/)).toBeInTheDocument();
+    });
+
+    it('renders the nested reaction line with the reactor name (no duplicate name)', () => {
+        render(<RoundEventLog round={round} roster={roster} />);
+        // The `↳ reacts:` marker omits the actor name; the reactor's name comes from the
+        // formatted reaction body only (so it appears exactly once on the line).
+        expect(screen.getByText(/↳ reacts:/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Hexa → Nova: 1,200 → 88%/)).toBeInTheDocument();
+    });
+
+    it('renders an effect entry using its note', () => {
+        render(<RoundEventLog round={round} roster={roster} />);
+        expect(screen.getByText(/Graphite: Attack Up/)).toBeInTheDocument();
+    });
+
+    it('renders the end-of-round group with its drained entries', () => {
+        render(<RoundEventLog round={round} roster={roster} />);
+        expect(screen.getByText(/— end of round —/)).toBeInTheDocument();
+        expect(screen.getByText(/Enemy Selenite: corrosion ×3/)).toBeInTheDocument();
+    });
+
+    it('shows a fallback message when the round has no content', () => {
+        const empty: CombatLogRound = { round: 1, turns: [], endOfRound: [] };
+        render(<RoundEventLog round={empty} roster={roster} />);
+        expect(screen.getByText('No events this round.')).toBeInTheDocument();
     });
 });

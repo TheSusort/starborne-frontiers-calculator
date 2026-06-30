@@ -1731,6 +1731,9 @@ describe('healingGoldenParity', () => {
             if (e.buffName === 'Corrosion I') applied.push(e);
         });
         simulateHealing({ ...scenario23Input(), bus });
+        // The counter-debuff is a REACTION to the enemy 'e1' attack → stamped reactive with
+        // duringTurnOf/triggerActorId = 'e1' (the active-turn attacker that provoked it). The
+        // sourceId/targetId/round/buffName are unchanged (no math/routing change).
         expect(applied).toEqual([
             {
                 type: 'debuff-applied',
@@ -1738,6 +1741,9 @@ describe('healingGoldenParity', () => {
                 targetId: 'e1',
                 round: 1,
                 buffName: 'Corrosion I',
+                reactive: true,
+                duringTurnOf: 'e1',
+                triggerActorId: 'e1',
             },
             {
                 type: 'debuff-applied',
@@ -1745,6 +1751,9 @@ describe('healingGoldenParity', () => {
                 targetId: 'e1',
                 round: 2,
                 buffName: 'Corrosion I',
+                reactive: true,
+                duringTurnOf: 'e1',
+                triggerActorId: 'e1',
             },
             {
                 type: 'debuff-applied',
@@ -1752,6 +1761,9 @@ describe('healingGoldenParity', () => {
                 targetId: 'e1',
                 round: 3,
                 buffName: 'Corrosion I',
+                reactive: true,
+                duringTurnOf: 'e1',
+                triggerActorId: 'e1',
             },
             {
                 type: 'debuff-applied',
@@ -1759,6 +1771,9 @@ describe('healingGoldenParity', () => {
                 targetId: 'e1',
                 round: 4,
                 buffName: 'Corrosion I',
+                reactive: true,
+                duringTurnOf: 'e1',
+                triggerActorId: 'e1',
             },
         ]);
     });

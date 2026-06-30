@@ -69,6 +69,7 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) =
                     onClick={() => go(round - 1)}
                     disabled={atStart}
                     aria-label="Previous round"
+                    className="flex items-center gap-2"
                 >
                     <ChevronLeftIcon aria-hidden="true" />
                     Prev
@@ -84,6 +85,7 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) =
                     onClick={() => go(round + 1)}
                     disabled={atEnd}
                     aria-label="Next round"
+                    className="flex items-center gap-2"
                 >
                     Next
                     <ChevronRightIcon aria-hidden="true" />
@@ -94,6 +96,7 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) =
                     onClick={() => go(total)}
                     disabled={atEnd}
                     aria-label="Last round"
+                    className="flex items-center gap-2"
                 >
                     Last
                 </Button>
@@ -103,6 +106,7 @@ const RoundStepper: React.FC<RoundStepperProps> = ({ round, total, onChange }) =
                     size="sm"
                     onClick={togglePlay}
                     aria-label={playing ? 'Pause' : 'Play'}
+                    className="flex items-center gap-2"
                 >
                     {playing ? <PauseIcon aria-hidden="true" /> : <PlayIcon aria-hidden="true" />}
                     {playing ? 'Pause' : 'Play'}

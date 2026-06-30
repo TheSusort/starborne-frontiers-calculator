@@ -26,6 +26,7 @@ import { computeAffinityModifiers } from '../../calculators/affinityUtils';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { GEAR_SETS } from '../../../constants/gearSets';
 import type { Position } from '../../../types/encounters';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 // ---------------------------------------------------------------------------
 // Harness helpers (mirrored from equipmentAbilities.integration.test.ts)
@@ -169,6 +170,9 @@ function totalDamageTaken(result: ReturnType<typeof simulateBattle>, actorId: st
 function enemyId(result: ReturnType<typeof simulateBattle>): string {
     return result.roster.find((r) => r.side === 'enemy')!.actorId;
 }
+
+/** All combatLog entries across every round, flattened over turns + nested reactions + endOfRound. */
+const allLogEntries = flattenCombatLog;
 
 // ---------------------------------------------------------------------------
 // (a) Attacker HP drops by the reflected amount when it hits a Reflect wearer
@@ -382,10 +386,10 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
 
         const foe = enemyId(result);
         // The bomb actually landed on the wearer at least once. `dot-applied` events surface
-        // as `BattleLogEvent { kind: 'dot', label: dotType }` in the round event log. This
-        // proves the scenario is non-trivial — a bomb DID apply, but zero reflection fires.
-        const bombApplied = result.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        // as `CombatLogEntry { kind: 'dot-applied', note: 'bomb ×N' }` in the hierarchical log.
+        // This proves the scenario is non-trivial — a bomb DID apply, but zero reflection fires.
+        const bombApplied = allLogEntries(result).some(
+            (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
         // The enemy attacker took ZERO reflected damage — the pure-bomb hit reflects nothing
@@ -434,8 +438,8 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
         const foeMixed = enemyId(mixed);
 
         // The bomb DID land (mixed scenario is non-trivial: a bomb detonates on the wearer).
-        const bombApplied = mixed.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'dot' && ev.label === 'bomb')
+        const bombApplied = allLogEntries(mixed).some(
+            (e) => e.kind === 'dot-applied' && e.note?.startsWith('bomb')
         );
         expect(bombApplied).toBe(true);
 
@@ -557,10 +561,212 @@ describe('REFLECT gear set — reflected kill', () => {
         );
 
         const foe = enemyId(result);
-        // A death event was emitted for the enemy attacker.
-        const enemyDied = result.rounds.some((round) =>
-            round.events.some((ev) => ev.kind === 'death' && ev.actorId === foe)
+        // A death entry was emitted for the enemy attacker.
+        const enemyDied = allLogEntries(result).some(
+            (e) => e.kind === 'death' && e.actorId === foe
         );
         expect(enemyDied).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// (combatLog #4) Reaction attribution — END-TO-END through simulateBattle.
+//
+// A reviewer found the combat-log's reaction-nesting (#4) was unit-tested in
+// buildCombatLog's own suite but never proven through the REAL engine. This case
+// closes that gap with no hand-built CombatEvent fixtures: a ship carrying
+// Stalwart's verbatim on-attacked counter passive is run through simulateBattle.
+// When it is directly hit, its on-attacked reactive grants `Legion Discipline II`
+// to itself — a genuine reaction the engine STAMPS with the triggering turn
+// (`duringTurnOf`). The builder must therefore NEST that buff inside the
+// triggering attack entry's `.reactions[]`, NOT surface it as a top-level entry
+// in the reactor's OWN turn (which is where a naive builder would place it).
+// ---------------------------------------------------------------------------
+
+const STALWART_P1_COUNTER =
+    'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.';
+
+/** A counter-bearing ship: a self-repair active (no offence) + Stalwart's on-attacked counter
+ *  passive. The 4 refits make the (refit-active) first passive apply. When this ship is hit it
+ *  retaliates AND grants itself Legion Discipline II — the latter is the reaction the log nests. */
+function makeCounterShip(id: string, name: string, affinity: AffinityName): Ship {
+    return {
+        id,
+        name,
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {} as Ship['equipment'],
+        implants: {},
+        refits: [{}, {}, {}, {}],
+        affinity,
+        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+        firstPassiveSkillText: STALWART_P1_COUNTER,
+        chargeSkillCharge: 0,
+        activeTarget: 'allies',
+        activePattern: 'Pattern-Base',
+    } as Partial<Ship> as Ship;
+}
+
+describe('combatLog #4 — reaction attribution nests under the triggering turn (e2e via simulateBattle)', () => {
+    it('an on-attacked counter reaction is NESTED in the triggering attack entry, not a top-level entry in the reactor turn', () => {
+        // Player focus is a plain ATTACKER; the ENEMY carries the counter passive. Each round the
+        // focus directly hits the enemy → the enemy's on-attacked reactive grants itself Legion
+        // Discipline II. That buff is stamped with the focus's turn and must nest under the focus's
+        // attack entry.
+        const result = simulateBattle({
+            playerTeam: [place(makeAttacker('hero', 'Hero', 'thermal'), 'M4')],
+            enemyTeam: [place(makeCounterShip('foe', 'Foe', 'antimatter'), 'M4')],
+            rounds: 4,
+        });
+
+        const foe = enemyId(result);
+
+        // (1) At least one entry carries a genuinely nested reaction produced by the engine.
+        const entriesWithReactions = result.combatLog
+            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .filter((entry) => entry.reactions.length > 0);
+        expect(entriesWithReactions.length).toBeGreaterThan(0);
+
+        // The nested reaction is the enemy's on-attacked self-buff, attributed to the enemy
+        // (the reactor) but living under the TRIGGERING (player focus) attack entry.
+        const triggerWithCounterReaction = entriesWithReactions.find((entry) =>
+            entry.reactions.some((re) => re.actorId === foe && re.note === 'Legion Discipline II')
+        );
+        expect(triggerWithCounterReaction).toBeDefined();
+        // The trigger is the FOCUS player's attack (not the reactor's own turn).
+        expect(triggerWithCounterReaction!.kind).toBe('attack');
+        expect(triggerWithCounterReaction!.actorId).toBe('attacker');
+
+        // (2) The reaction must NOT also appear as a TOP-LEVEL turn entry ANYWHERE (not just the
+        // reactor's own turns) — it lives exclusively under its trigger's `.reactions[]`.
+        const topLevelBuffOccurrences = result.combatLog
+            .flatMap((round) => round.turns.flatMap((turn) => turn.entries))
+            .filter(
+                (entry) =>
+                    entry.kind === 'buff' &&
+                    entry.actorId === foe &&
+                    entry.note === 'Legion Discipline II'
+            );
+        expect(topLevelBuffOccurrences).toHaveLength(0);
+
+        // Cross-check via the flattened view: every occurrence of the buff is reachable ONLY
+        // through a trigger's `.reactions[]`. The flattened count (which recurses into reactions)
+        // must EQUAL the nested-reaction count exactly — proving no duplicate top-level placement
+        // inflates the total.
+        const nestedBuffReactions = entriesWithReactions
+            .flatMap((entry) => entry.reactions)
+            .filter((re) => re.actorId === foe && re.note === 'Legion Discipline II');
+        const buffOccurrences = allLogEntries(result).filter(
+            (e) => e.kind === 'buff' && e.actorId === foe && e.note === 'Legion Discipline II'
+        );
+        expect(nestedBuffReactions.length).toBeGreaterThan(0);
+        expect(buffOccurrences).toHaveLength(nestedBuffReactions.length);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// (combatLog #3) AoE per-victim breakdown — END-TO-END through simulateBattle.
+//
+// The other half the reviewer flagged: an AoE attack must surface ONE attack
+// entry whose `targets[]` carries EVERY victim it hit (primary + splash), each
+// with its own per-victim amount. This was unit-tested in buildCombatLog and the
+// per-victim `attacked` emission was covered at the engine (runCombat) seam, but
+// never JOINTLY through simulateBattle's `combatLog`.
+//
+// No hand-built CombatEvent fixtures: a real player FOCUS attacker fires `front`
+// with a Line-Range-1 footprint (Pattern-Line-Range-1) at two stacked enemies
+// (anchor at M4, covered at M3). The engine resolves a primary hit on the anchor
+// and a (halved) splash hit on the covered enemy; the builder folds BOTH victims
+// into the firing attack entry's `targets[]`.
+// ---------------------------------------------------------------------------
+
+/** A player attacker firing `front` with an AoE Line-Range-1 footprint (covers the cell behind the
+ *  anchor). 100% direct damage, no passives — the simplest real multi-victim cast. */
+function makeAoeAttacker(id: string, name: string, affinity: AffinityName): Ship {
+    return {
+        id,
+        name,
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'ATTACKER',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {} as Ship['equipment'],
+        implants: {},
+        refits: [],
+        affinity,
+        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+        chargeSkillCharge: 0,
+        activeTarget: 'front',
+        activePattern: 'Pattern-Line-Range-1',
+    } as Partial<Ship> as Ship;
+}
+
+/** An inert, huge-HP, zero-offence enemy victim — stays alive so it resolves as a footprint victim. */
+function makeDummyEnemy(id: string, name: string, affinity: AffinityName): Ship {
+    return {
+        id,
+        name,
+        rarity: 'legendary',
+        faction: 'AURELIAN_SOVEREIGNTY',
+        type: 'DEFENDER',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {} as Ship['equipment'],
+        implants: {},
+        refits: [],
+        affinity,
+        activeSkillText: 'This Unit repairs 30% of its Max HP.',
+        chargeSkillCharge: 0,
+        activeTarget: 'allies',
+        activePattern: 'Pattern-Base',
+    } as Partial<Ship> as Ship;
+}
+
+describe('combatLog #3 — AoE per-victim breakdown (e2e via simulateBattle)', () => {
+    it('an AoE attack produces ONE attack entry with targets.length > 1, each victim with its own amount', () => {
+        const result = simulateBattle({
+            // Focus fires a Line-Range-1 AoE at the front enemy; the footprint also covers the
+            // enemy directly behind it.
+            playerTeam: [place(makeAoeAttacker('hero', 'Hero', 'thermal'), 'M4')],
+            enemyTeam: [
+                // Anchor (front, M4) + covered (M3). Huge HP / zero offence → both survive the
+                // hit and resolve as footprint victims; affinity neutral keeps it deterministic.
+                place(makeDummyEnemy('foe-front', 'FoeFront', 'thermal'), 'M4', {
+                    hp: 1_000_000_000,
+                    attack: 0,
+                }),
+                place(makeDummyEnemy('foe-mid', 'FoeMid', 'thermal'), 'M3', {
+                    hp: 1_000_000_000,
+                    attack: 0,
+                }),
+            ],
+            rounds: 2,
+        });
+
+        // SOME attack entry hit more than one victim (the AoE footprint).
+        const aoeEntries = allLogEntries(result).filter(
+            (e) => e.kind === 'attack' && e.targets.length > 1
+        );
+        expect(aoeEntries.length).toBeGreaterThan(0);
+
+        const aoe = aoeEntries[0];
+        // It is the FOCUS player's firing attack (not an enemy's).
+        expect(aoe.actorId).toBe('attacker');
+        // Two distinct victims appear under the SAME entry.
+        const victimIds = aoe.targets.map((t) => t.targetId);
+        expect(new Set(victimIds).size).toBe(aoe.targets.length);
+        expect(aoe.targets.length).toBeGreaterThanOrEqual(2);
+        // Every victim carries its OWN per-victim amount (primary + splash are independent numbers).
+        for (const t of aoe.targets) {
+            expect(typeof t.amount).toBe('number');
+            expect(t.amount!).toBeGreaterThan(0);
+        }
+        // The footprint covers the anchor (front) AND the enemy behind it — both surface as victims
+        // of the SAME attack entry. (Roster ids are slot-suffixed: e:<id>:<index>.)
+        const hasFront = victimIds.some((id) => id.includes('foe-front'));
+        const hasMid = victimIds.some((id) => id.includes('foe-mid'));
+        expect(hasFront).toBe(true);
+        expect(hasMid).toBe(true);
     });
 });

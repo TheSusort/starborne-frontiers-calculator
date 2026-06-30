@@ -50,20 +50,6 @@ const battleResult: BattleResult = {
                     activeDebuffs: [],
                 },
             ],
-            events: [
-                {
-                    round: 1,
-                    kind: 'turn',
-                    actorId: 'attacker',
-                },
-                {
-                    round: 1,
-                    kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
-                    amount: 1000,
-                },
-            ],
             turnOrder: ['attacker', 'e:enemy:0'],
         },
         {
@@ -106,20 +92,6 @@ const battleResult: BattleResult = {
                     activeDebuffs: [],
                 },
             ],
-            events: [
-                {
-                    round: 2,
-                    kind: 'turn',
-                    actorId: 'attacker',
-                },
-                {
-                    round: 2,
-                    kind: 'damage',
-                    actorId: 'attacker',
-                    targetId: 'e:enemy:0',
-                    amount: 1500,
-                },
-            ],
             turnOrder: ['attacker', 'e:enemy:0'],
         },
     ],
@@ -127,6 +99,66 @@ const battleResult: BattleResult = {
     roster: [
         { actorId: 'attacker', side: 'player', name: 'Nova', position: 'T1' },
         { actorId: 'e:enemy:0', side: 'enemy', name: 'Hexa', position: 'T4' },
+    ],
+    // Hierarchical combat log rendered by RoundEventLog (T10). `assembleBattleResult` derives
+    // `rounds` and `combatLog` from the same event stream, so a two-round result carries a
+    // combatLog round per battle round. Round 1: Nova chips Hexa to 40%. Round 2: Nova lands
+    // the kill (Hexa → 0%).
+    combatLog: [
+        {
+            round: 1,
+            turns: [
+                {
+                    actorId: 'attacker',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [
+                        {
+                            kind: 'attack',
+                            actorId: 'attacker',
+                            slot: 'active',
+                            targets: [
+                                {
+                                    targetId: 'e:enemy:0',
+                                    amount: 1000,
+                                    didHit: true,
+                                    resultingHpPct: 40,
+                                },
+                            ],
+                            reactions: [],
+                        },
+                    ],
+                },
+            ],
+            endOfRound: [],
+        },
+        {
+            round: 2,
+            turns: [
+                {
+                    actorId: 'attacker',
+                    chargeBefore: 0,
+                    chargeMax: 0,
+                    entries: [
+                        {
+                            kind: 'attack',
+                            actorId: 'attacker',
+                            slot: 'active',
+                            targets: [
+                                {
+                                    targetId: 'e:enemy:0',
+                                    amount: 1500,
+                                    didHit: true,
+                                    resultingHpPct: 0,
+                                },
+                            ],
+                            reactions: [],
+                        },
+                    ],
+                },
+            ],
+            endOfRound: [],
+        },
     ],
 };
 
@@ -202,15 +234,19 @@ describe('SimulatorPage playback', () => {
         // HP bars present (player full, enemy at 40%).
         expect(screen.getByTestId('hp-bar-T1')).toHaveStyle({ width: '100%' });
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '40%' });
-        // Event log line (attacker-centric "X → Y: N").
-        expect(screen.getByText('Nova → Enemy Hexa: 1,000')).toBeInTheDocument();
         // Stepper reports two rounds, starting on round 1.
         expect(screen.getByText('Round 1 / 2')).toBeInTheDocument();
 
-        // Step to round 2: the enemy is destroyed (HP 0%) and the event line + total change.
+        // Event log renders the real combat-log content for the current round: the turn
+        // header for the acting ship and the attack line against the enemy.
+        expect(screen.getByText(/Nova's turn/)).toBeInTheDocument();
+        expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,000 → 40%/)).toBeInTheDocument();
+
+        // Step to round 2: the enemy is destroyed (HP 0%).
         fireEvent.click(screen.getByRole('button', { name: /Next round/i }));
         expect(screen.getByText('Round 2 / 2')).toBeInTheDocument();
         expect(screen.getByTestId('hp-bar-T4')).toHaveStyle({ width: '0%' });
-        expect(screen.getByText('Nova → Enemy Hexa: 1,500')).toBeInTheDocument();
+        // The event log re-renders for round 2 (the killing blow), not the round-1 content.
+        expect(screen.getByText(/Nova \[active\] → Enemy Hexa: 1,500 → 0%/)).toBeInTheDocument();
     });
 });

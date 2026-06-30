@@ -29,6 +29,7 @@ import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Position } from '../../../types/encounters';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -443,16 +444,14 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
         },
     });
 
-    /** Every actorId that ever received a GRANT of `label` (buff event log). */
+    /** Every actorId that ever received a GRANT of `label` (hierarchical combatLog). */
     const buffedActors = (
         result: ReturnType<typeof simulateBattle>,
         label: string
     ): Set<string> => {
         const set = new Set<string>();
-        for (const round of result.rounds) {
-            for (const ev of round.events) {
-                if (ev.kind === 'buff' && ev.label === label) set.add(ev.actorId);
-            }
+        for (const entry of flattenCombatLog(result)) {
+            if (entry.kind === 'buff' && entry.note === label) set.add(entry.actorId);
         }
         return set;
     };

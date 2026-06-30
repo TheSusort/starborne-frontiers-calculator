@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { runCombat, CombatEngineInput } from '../engine';
+import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { createActor, recordDestroyed } from '../state';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { Ship } from '../../../types/ship';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -87,6 +89,7 @@ const collect = (input: CombatEngineInput) => {
         'control-applied',
         'hp-changed',
         'ship-destroyed',
+        'charge-changed',
     ];
     for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
     const result = runCombat({ ...input, bus });
@@ -1682,6 +1685,42 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
         expect(r2[2].didCrit).toBe(true);
     });
 
+    // ── charge-changed emission ───────────────────────────────────────────────────
+    it('charge-changed gen: emits reason:gen with newCharge = oldCharge+1 each non-charged round', () => {
+        // chargeCount 3, not startCharged → rounds 1,2,3 are active (gen), round 4 is charged
+        // (cast-reset). After reset charges = 0 then gen resumes. In a 6-round sim the
+        // pattern is: gen(1→1), gen(2→2), gen(3→3), cast-reset(3→0), gen(0→1), gen(1→2).
+        const { events } = collect(
+            baseInput({ numRounds: 6, chargeCount: 3, startCharged: false })
+        );
+        const genEvents = events.filter((e) => e.type === 'charge-changed' && e.reason === 'gen');
+        // There must be at least one gen event.
+        expect(genEvents.length).toBeGreaterThan(0);
+        // Every gen event must have newCharge = oldCharge + 1.
+        for (const e of genEvents) {
+            if (e.type !== 'charge-changed') throw new Error('unreachable');
+            expect(e.newCharge).toBe(e.oldCharge + 1);
+            expect(e.actorId).toBe('attacker');
+            expect(e.round).toBeGreaterThanOrEqual(1);
+        }
+    });
+
+    it('charge-changed cast-reset: emits reason:cast-reset with newCharge 0 on a charged-skill fire', () => {
+        // chargeCount 3, not startCharged → round 4 fires charged + resets.
+        const { events } = collect(
+            baseInput({ numRounds: 6, chargeCount: 3, startCharged: false })
+        );
+        const resetEvents = events.filter(
+            (e) => e.type === 'charge-changed' && e.reason === 'cast-reset'
+        );
+        expect(resetEvents.length).toBeGreaterThan(0);
+        for (const e of resetEvents) {
+            if (e.type !== 'charge-changed') throw new Error('unreachable');
+            expect(e.newCharge).toBe(0);
+            expect(e.actorId).toBe('attacker');
+        }
+    });
+
     // ── Test 2: manual flat enemy → 1 event per round (unchanged contract) ──────
     // A manual flat enemy (no shipSkills) synthesizes a single-hit basic attack.
     // The engine falls back to [enemyTurnDidCrit] (hitCrits=[]) → exactly 1
@@ -1711,6 +1750,437 @@ describe('Phase 4c Task 3 — per-hit attacked emission', () => {
             expect(roundEvents[0].attackerId).toBe('flat1');
             // crit=0 → didCrit absent
             expect(roundEvents[0].didCrit).toBeUndefined();
+        }
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// perTarget on heal-performed and shield-applied events
+// ─────────────────────────────────────────────────────────────────────────────
+describe('heal-performed / shield-applied perTarget breakdown', () => {
+    // Helper: a walked team actor with explicit HP (no skills — just a slot filler).
+    const idleAlly = (id: string, speed: number, hp: number): TeamActorEngineInput => ({
+        id,
+        speed,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [] },
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 1000,
+                hp,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    it('perTarget: AoE heal across 2 allies with DIFFERENT missing HP yields distinct per-recipient amounts', () => {
+        // Focus (hp 10000, speed 200) heals 'all-allies' with basis 'target-hp' (10%) each round.
+        // t1 (hp 8000) and t2 (hp 12000) → raw per recipient differs (800 and 1200).
+        // We use two enemy attackers (speed 80, 60) that wound t1 and t2 BEFORE the focus acts
+        // by running 2 rounds: round 1 enemy attacks → t1 and t2 take damage.
+        // Round 2 focus heals all-allies → each recipient gets its own target-hp-scaled amount.
+        //
+        // Actually: focus (speed 200) acts FIRST each round — so we pre-wound allies.
+        // Simpler: use basis 'target-hp' so that raw = recipient.maxHp × 10% (t1: 800, t2: 1200).
+        // This is already distinct without needing damage — the AMOUNTS differ by definition.
+        idCounter = 0;
+        const bus = createEventBus();
+        const healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+        bus.on('heal-performed', (e) => {
+            if (e.casterId === 'attacker') healPerfs.push(e);
+        });
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            // Speed 200: focus acts before allies (speed 50, 40)
+            speed: 200,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'heal-aoe',
+                                type: 'heal',
+                                // target-hp basis: raw = recipient.maxHp × pct → different per recipient
+                                target: 'all-allies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'heal', pct: 10, basis: 'target-hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            teamActors: [
+                idleAlly('t1', 50, 8000), // raw = 800 (8000 × 10%)
+                idleAlly('t2', 40, 12000), // raw = 1200 (12000 × 10%)
+            ],
+            bus,
+        });
+
+        // Should have exactly 1 heal-performed from the focus actor.
+        expect(healPerfs).toHaveLength(1);
+        const evt = healPerfs[0];
+
+        // perTarget must exist with one entry per recipient.
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        expect(perTarget).toHaveLength(3); // attacker + t1 + t2
+
+        // The amounts must NOT all be equal (distinct per-recipient amounts).
+        const amounts = perTarget.map((e) => e.amount);
+        const allSame = amounts.every((a) => a === amounts[0]);
+        expect(allSame).toBe(false);
+
+        // Each entry must have a targetId.
+        for (const entry of perTarget) {
+            expect(typeof entry.targetId).toBe('string');
+            expect(entry.amount).toBeGreaterThan(0);
+        }
+
+        // Sum of perTarget amounts must equal the summed amount on the event.
+        const sum = perTarget.reduce((acc, e) => acc + e.amount, 0);
+        expect(sum).toBeCloseTo(evt.amount, 5);
+    });
+
+    it('perTarget: single-recipient self-heal has one perTarget entry matching the event amount', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+        bus.on('heal-performed', (e) => healPerfs.push(e));
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'self-heal',
+                                type: 'heal',
+                                target: 'self',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'heal', pct: 10, basis: 'hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            bus,
+        });
+
+        expect(healPerfs).toHaveLength(1);
+        const evt = healPerfs[0];
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        expect(perTarget).toHaveLength(1);
+        expect(perTarget[0].targetId).toBe('attacker');
+        expect(perTarget[0].amount).toBeCloseTo(evt.amount, 5);
+    });
+
+    it('perTarget: shield-applied has one perTarget entry per recipient with summing amounts', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const shieldEvts: Extract<CombatEvent, { type: 'shield-applied' }>[] = [];
+        bus.on('shield-applied', (e) => {
+            if (e.granterId === 'attacker') shieldEvts.push(e);
+        });
+
+        runCombat({
+            attack: 5000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            speed: 200,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            {
+                                id: 'shield-aoe',
+                                type: 'shield',
+                                target: 'all-allies',
+                                trigger: 'on-cast',
+                                conditions: [],
+                                config: { type: 'shield', pct: 10, basis: 'hp' },
+                            },
+                        ],
+                    },
+                ],
+            },
+            enemyDefense: 0,
+            enemyHp: 10_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 2000,
+            hp: 10000,
+            healTargetId: 'attacker',
+            teamActors: [idleAlly('t1', 50, 8000), idleAlly('t2', 40, 12000)],
+            bus,
+        });
+
+        expect(shieldEvts).toHaveLength(1);
+        const evt = shieldEvts[0];
+        expect(evt.perTarget).toBeDefined();
+        const perTarget = evt.perTarget!;
+        // All 3 recipients get shields (all at full HP → no cap).
+        expect(perTarget).toHaveLength(3);
+        // Amounts sum to total.
+        const sum = perTarget.reduce((acc, e) => acc + e.amount, 0);
+        expect(sum).toBeCloseTo(evt.amount, 5);
+        // Each entry has a targetId.
+        for (const entry of perTarget) {
+            expect(typeof entry.targetId).toBe('string');
+        }
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Reactive stamp: events emitted while resolving a REACTIVE intent carry
+// reactive:true + duringTurnOf (the actor whose turn was active when the
+// reaction fired) so a later log builder can nest the reaction under the
+// triggering turn, NOT under the reactor's own turn.
+//
+// Harness mirrors counterAttack.integration.test.ts: the FOCUS ('attacker')
+// carries Stalwart's parsed first passive (an on-attacked counter co-located
+// with a `Legion Discipline II` self-buff grant). A single enemy attacker
+// ('foe') lands a primary hit each round; the reactive grant emits a
+// `buff-applied` event during the FOE's turn.
+// ───────────────────────────────────────────────────────────────────────────
+describe('reactive stamp — reactive emissions carry duringTurnOf', () => {
+    const STALWART_P1 =
+        'When this Unit is directly damaged as a primary target, it deals <unit-damage>30% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.';
+
+    const stalwartShip = (): Ship =>
+        ({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            firstPassiveSkillText: STALWART_P1,
+        }) as Ship;
+
+    const basicEnemy = (
+        id: string,
+        attack: number
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
+        ({
+            id,
+            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
+            chargeCount: 0,
+            startCharged: false,
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    it('B counterattack buff grant carries reactive:true and duringTurnOf === attacker turn', () => {
+        const skills = buildShipAbilities(stalwartShip());
+
+        const bus = createEventBus();
+        const buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => buffEvents.push(e));
+
+        runCombat({
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: skills,
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000,
+            healTargetId: 'attacker',
+            enemyAttackers: [basicEnemy('foe', 3_000)],
+            bus,
+        });
+
+        const ld2 = buffEvents.filter((e) => e.buffName === 'Legion Discipline II');
+        // The reactive grant fires (it lands on the focus 'attacker').
+        expect(ld2.length).toBeGreaterThan(0);
+        for (const e of ld2) {
+            // The grant is a REACTION to the foe's attack → stamped during the foe's turn.
+            expect(e.reactive).toBe(true);
+            expect(e.duringTurnOf).toBe('foe');
+            expect(e.triggerActorId).toBe('foe');
+        }
+    });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Round-2 start-of-round reactive: duringTurnOf must be undefined (turn-less)
+//
+// A start-of-round reactive fires BEFORE any turn in the round. In round 1
+// actingActorId is undefined (no prior turn), so duringTurnOf is correctly
+// undefined. WITHOUT the per-round reset, round 2's start-of-round drain reads
+// the previous round's last acting actor and wrongly stamps duringTurnOf with
+// that id. WITH the fix, actingActorId is reset to undefined at the top of
+// every round so the start-of-round drain always sees undefined.
+//
+// Harness: the focus ('attacker') carries a start-of-round passive buff ability
+// (Attack Up, 1 turn). The enemy attacker ('foe') goes LAST in each round
+// (speed 20 vs attacker speed default), ensuring actingActorId is set to 'foe'
+// at the END of round 1. If the reset is missing, round 2's start-of-round
+// buff-applied would carry duringTurnOf === 'foe'. With the fix it is undefined.
+// ───────────────────────────────────────────────────────────────────────────
+describe('start-of-round reactive stamp — duringTurnOf is undefined (turn-less)', () => {
+    idCounter = 0;
+    const startOfRoundBuffSkills = (): ShipSkills => ({
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'start-of-round',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Attack Up',
+                            stacks: 1,
+                            parsedEffects: { attack: 20 },
+                            isStackable: false,
+                            duration: 1,
+                        },
+                    }),
+                ],
+            },
+        ],
+    });
+
+    const basicEnemy = (
+        id: string,
+        speed: number
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
+        ({
+            id,
+            stats: { attack: 100, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
+            chargeCount: 0,
+            startCharged: false,
+        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+    it('start-of-round buff-applied in round 2+ carries duringTurnOf === undefined (not the prior round last actor)', () => {
+        idCounter = 0;
+        const bus = createEventBus();
+        const buffEvents: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+        bus.on('buff-applied', (e) => buffEvents.push(e));
+
+        runCombat({
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: startOfRoundBuffSkills(),
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 3,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000,
+            healTargetId: 'attacker',
+            // Enemy speed=20 (low) → goes LAST in every round; sets actingActorId='foe'
+            // at end of round 1. Without the reset fix, round 2's start-of-round drain
+            // would stamp duringTurnOf:'foe' instead of undefined.
+            enemyAttackers: [basicEnemy('foe', 20)],
+            bus,
+        });
+
+        // The start-of-round buff fires every round — collect round-2+ events.
+        const attackUpEvents = buffEvents.filter((e) => e.buffName === 'Attack Up');
+        // Must have fired in multiple rounds (at minimum rounds 1, 2, 3).
+        expect(attackUpEvents.length).toBeGreaterThanOrEqual(2);
+
+        // Every start-of-round buff-applied must carry duringTurnOf === undefined:
+        // the drain fires before any turn, so no actor was active.
+        for (const e of attackUpEvents) {
+            expect(e.reactive).toBe(true);
+            // KEY assertion: turn-less reactive — must NOT be stamped with a prior actor.
+            expect(e.duringTurnOf).toBeUndefined();
         }
     });
 });

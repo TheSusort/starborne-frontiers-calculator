@@ -15,7 +15,7 @@ import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from 
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { liveGateConditions } from './abilityStatusGating';
-import { CombatEventBus } from './events';
+import { CombatEvent, CombatEventBus, CombatEventType } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
 import {
     ActiveBuff,
@@ -698,6 +698,14 @@ export interface IntentExecContext {
     enemyId: string;
     statusEngine: StatusEngine;
     bus: CombatEventBus;
+    /** Combat-log attribution (reactive stamping): the actorId whose turn was active when
+     *  the engine began draining this reactive intent. Every event the executor emits is
+     *  stamped `reactive:true` + `duringTurnOf` (this id) + `triggerActorId` (this id — the
+     *  active-turn actor provoked the reaction) so a later log builder nests the reaction
+     *  under the triggering turn, not the reactor's own turn. Undefined when no turn was
+     *  active (round-1 start-of-round reactive, post-round death drain) → events carry
+     *  `reactive:true` with an undefined `duringTurnOf`. */
+    duringTurnOf?: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
@@ -1271,7 +1279,88 @@ function passesOncePerRoundGate(intent: Intent, ctx: IntentExecContext): boolean
  * skip — NOT a resist (a condition-gated skip mirrors the cast path's "application
  * skipped" semantics; no resisted record is produced).
  */
-export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
+/** The CombatEvent `type` tags whose variant intersects ReactiveStamp (events.ts). */
+type StampedEventType =
+    | 'ability-performed'
+    | 'charge-changed'
+    | 'heal-performed'
+    | 'shield-applied'
+    | 'buff-applied'
+    | 'buff-expired'
+    | 'debuff-applied'
+    | 'debuff-resisted'
+    | 'dot-applied'
+    | 'control-applied'
+    | 'cleanse-performed'
+    | 'purge-performed'
+    | 'ship-destroyed'
+    | 'cheat-death-activated';
+
+const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>([
+    'ability-performed',
+    // Owner-only reactive charge-manip (executeIntent's charge branch) emits through THIS
+    // wrapped bus, so stamping it nests the charge delta under the triggering action. NOTE:
+    // the delegated grant/removeEnemy/removeChargesFrom helpers emit on the engine's raw bus
+    // (captured by reference), so ally/enemy reactive charge changes are NOT stamped here —
+    // those remain attributed to the active turn (acceptable; tracked as a follow-up).
+    'charge-changed',
+    'heal-performed',
+    'shield-applied',
+    'buff-applied',
+    'buff-expired',
+    'debuff-applied',
+    'debuff-resisted',
+    'dot-applied',
+    'control-applied',
+    'cleanse-performed',
+    'purge-performed',
+    'ship-destroyed',
+    'cheat-death-activated',
+]);
+
+/** Wrap a bus so every reactive-capable event emitted through it is branded with
+ *  `reactive:true` + `duringTurnOf` + `triggerActorId`. Used ONLY for the lifetime of a single
+ *  reactive-intent resolution (executeIntent builds a fresh wrapper per call from the underlying
+ *  bus, so nothing needs clearing and re-entrant drains are independent). On-turn (cast-path)
+ *  emissions never pass through this wrapper, so they stay unstamped. An already-stamped event
+ *  (re-entrant reaction emitting through a second wrapper) keeps its original stamp — the inner
+ *  wrapper does not overwrite an existing `reactive` flag. */
+function makeReactiveStampingBus(bus: CombatEventBus, duringTurnOf?: string): CombatEventBus {
+    // The union members that carry a ReactiveStamp — selected by their `type` tags (the
+    // ReactiveStamp fields are all-optional, so Extract<…, ReactiveStamp> matches the whole
+    // union; selecting by tag picks exactly the stamp-carrying variants).
+    type StampedEvent = Extract<CombatEvent, { type: StampedEventType }>;
+    return {
+        on: bus.on.bind(bus),
+        emit(event: CombatEvent) {
+            if (!REACTIVE_STAMPED_EVENT_TYPES.has(event.type) || 'reactive' in event) {
+                bus.emit(event);
+                return;
+            }
+            // The Set membership above guarantees `event` is a stamp-carrying member; narrow to
+            // it so the spread + stamp fields type-check (the broad union includes members that
+            // forbid `reactive`).
+            const stamped: StampedEvent = {
+                ...(event as StampedEvent),
+                reactive: true,
+                duringTurnOf,
+                triggerActorId: duringTurnOf,
+            };
+            bus.emit(stamped);
+        },
+    };
+}
+
+export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
+    // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
+    // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
+    // route through it, so non-reactive events stay unstamped; nested/re-entrant drains each
+    // build their own wrapper (no shared state to clear).
+    // Some unit-test ctxs omit the bus entirely (they exercise non-emitting branches); only
+    // wrap when a real bus is present so those calls keep working untouched.
+    const ctx: IntentExecContext = rawCtx.bus
+        ? { ...rawCtx, bus: makeReactiveStampingBus(rawCtx.bus, rawCtx.duringTurnOf) }
+        : rawCtx;
     const cfg = intent.ability.config;
 
     // Resolve the firing owner's runtime (its charges, landing gates, sourceId, last-turn
@@ -1335,7 +1424,18 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
         if (owner.actor.chargeCount === 0) return;
+        const oldChargeManip = owner.actor.charges;
         owner.actor.charges = Math.min(owner.actor.charges + cfg.amount, owner.actor.chargeCount);
+        if (owner.actor.charges !== oldChargeManip) {
+            ctx.bus.emit({
+                type: 'charge-changed',
+                actorId: owner.actor.id,
+                round: ctx.round,
+                oldCharge: oldChargeManip,
+                newCharge: owner.actor.charges,
+                reason: 'manip',
+            });
+        }
         return;
     }
 
@@ -1680,6 +1780,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
         // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
         const shieldRecipientIds: string[] = [];
         let shieldGrantedSum = 0;
+        const shieldPerTarget: { targetId: string; amount: number }[] = [];
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
             // an `all-allies` ON-DESTROYED heal (Salvation) fires when its OWN caster is
@@ -1726,6 +1827,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                     if (granted > 0) {
                         shieldRecipientIds.push(rid);
                         shieldGrantedSum += granted;
+                        shieldPerTarget.push({ targetId: rid, amount: granted });
                     }
                 }
             }
@@ -1746,6 +1848,7 @@ export function executeIntent(intent: Intent, ctx: IntentExecContext): void {
                 recipientIds: shieldRecipientIds,
                 round: ctx.round,
                 amount: shieldGrantedSum,
+                perTarget: shieldPerTarget,
             });
         }
         return;

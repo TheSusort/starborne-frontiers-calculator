@@ -87,7 +87,10 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result }) => {
                         <ShipRoundCard actorId={pinned} round={curRound} roster={result.roster} />
                     )}
 
-                    <RoundEventLog round={curRound} roster={result.roster} />
+                    <RoundEventLog
+                        round={result.combatLog.find((r) => r.round === curRound.round)}
+                        roster={result.roster}
+                    />
                 </>
             )}
         </>
