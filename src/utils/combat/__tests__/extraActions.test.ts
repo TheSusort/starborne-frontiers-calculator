@@ -15,10 +15,11 @@
  *                      (same-turn decrement rule: apply in step d, read in step e,
  *                      decrement at post-turn → expires before next actor).
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { createEventBus } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -67,6 +68,7 @@ const BASE: DPSSimulationInput = {
 };
 
 describe('extraActions', () => {
+    afterEach(() => resetRateGateRng());
     // ── Test 1: Doubling ─────────────────────────────────────────────────────
     // attack=10000, multiplier=100%, defense=0 → base turn damage = 10000.
     // Once-per-round extra action → 2 attacker turns per round → 20000/round.
@@ -182,27 +184,24 @@ describe('extraActions', () => {
     // Setup: 3-hit active (multiplier=100, hits=3), crit=50, critDamage=100,
     //        once-per-round extra-action passive, rounds=1.
     //
-    // makeRateGate rule (from rateAccumulator.ts):
-    //   acc starts at 0; each call: acc += rate; if acc >= 1-EPS → fire, acc -= 1.
-    //   Rate = crit/100 = 0.5. Back-loaded: first fire on call 2.
+    // The crit gate now draws from the module RNG (fires iff draw < rate). The crit hits
+    // are the ONLY chance-gate consumers here (single DPS actor, 6 hits over 2 turns, no
+    // debuff/proc gates) — verified empirically: exactly 6 draws, consumed in hit order.
     //
-    // Draw trace (acc starts at 0, rate=0.5, gate is shared across both turns):
-    //
-    //   Turn 1 (normal), 3 hits:
-    //     h1: acc = 0.0 + 0.5 = 0.5 → 0.5 < 1 → F (no crit)
-    //     h2: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
-    //     h3: acc = 0.0 + 0.5 = 0.5 → F
-    //   critHits turn 1 = 1
-    //
-    //   Turn 2 (extra turn), 3 hits — acc continues from 0.5:
-    //     h1: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
-    //     h2: acc = 0.0 + 0.5 = 0.5 → F
-    //     h3: acc = 0.5 + 0.5 = 1.0 → fire → T (crit), acc = 0.0
-    //   critHits turn 2 = 2
-    //
-    // If the gate reset between turns both turns would yield critHits=1 (the 2-hit
-    // fire pattern restarts). The asymmetric [1, 2] pair proves continuity.
+    // ORDER-SENSITIVE: scripted draw stream (rate=0.5 → crit iff draw < 0.5):
+    //   Turn 1 (normal),    hits h1,h2,h3: [0.9, 0.1, 0.9] → [F, T, F] → critHits=1
+    //   Turn 2 (extra turn), hits h1,h2,h3: [0.1, 0.9, 0.1] → [T, F, T] → critHits=2
+    // The asymmetric [1, 2] pair still proves the per-hit draw STREAM is shared/continued
+    // across the extra turn rather than reset (a reset would re-run an identical pattern).
     it('per-hit crit draw continues across extra turn (critHits [1, 2])', () => {
+        const seq = [0.9, 0.1, 0.9, 0.1, 0.9, 0.1];
+        let i = 0;
+        setRateGateRng(() => {
+            if (i >= seq.length) {
+                throw new Error('Unexpected extra rate-gate draw');
+            }
+            return seq[i++];
+        });
         const bus = createEventBus();
         const performed: { critHits?: number }[] = [];
         bus.on('ability-performed', (e) => {

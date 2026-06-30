@@ -22,7 +22,8 @@
  * registered, so the executor's "no runtime for intent ownerId" path is never reached.)
  * After Task 2 the buff folds in and the buffed enemy hits harder → PASS.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
@@ -465,6 +466,9 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
 
     // ── Spearhead mirror ───────────────────────────────────────────────────
     describe('Spearhead on the ENEMY side', () => {
+        // Spearhead's all-allies grant is procChance-gated (0.32). Force always-fire so the
+        // grant fans on each charged cast, recovering the deterministic "fires ≥ once" intent.
+        afterEach(() => resetRateGateRng());
         const ATTACK_UP_I = 'Attack Up I';
         const getGearPiece = (id: string): GearPiece | undefined =>
             id === 'spearhead-legendary'
@@ -505,6 +509,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
             } as Partial<Ship>);
 
         it('an enemy carrier firing its CHARGED skill grants Attack Up I to every ENEMY ally; no PLAYER actor gets it', () => {
+            setRateGateRng(() => 0); // always-fire the Spearhead procChance gate
             // Carrier + a plain ally on the ENEMY team. A plain ship anchors the PLAYER team.
             // Over 16 rounds the carrier fires CHARGED on even rounds → 8 charged casts →
             // floor(8 × 0.32) = 2 accumulator fires. Each fire fans the all-allies grant to

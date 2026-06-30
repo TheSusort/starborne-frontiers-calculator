@@ -27,7 +27,8 @@
  * and the engine wires up the `on-debuff-resisted` listener. The control (same setup, NO
  * Lockdown) proves non-vacuity: with no Lockdown there are ZERO Buff Protection self-buffs.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import { ShipSkills } from '../../../types/abilities';
@@ -224,6 +225,13 @@ function buildLockdownSkills(opts: { withBlockDebuff?: boolean } = {}): ShipSkil
 }
 
 describe('D-PR16 Lockdown (on-debuff-resisted → all-ally Buff Protection)', () => {
+    // Lockdown's all-ally grant is procChance-gated (legendary 0.16). Force always-fire so a
+    // qualifying debuff-resisted event grants Buff Protection — recovers the deterministic
+    // "fires ≥ once over the run" intent. Debuff-landing gates are unaffected: a hacking-0
+    // attacker resists at rate 0 (0 < 0 is false), and Block Debuff auto-resists outside the gate.
+    beforeEach(() => setRateGateRng(() => 0));
+    afterEach(() => resetRateGateRng());
+
     it('DIRECT: grants the team Buff Protection when the carrier resists incoming debuffs (registry path)', () => {
         const lockdownSkills = buildLockdownSkills();
 

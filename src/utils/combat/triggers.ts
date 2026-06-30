@@ -807,8 +807,8 @@ export interface IntentExecContext {
      *  key makes cross-side collisions impossible by construction. */
     repairCountBySource?: Map<string, number>;
     /** Combat-lifetime per-ability proc-chance gates (e.g. Bloodthirst's 12% chance).
-     *  Keyed `${ownerId}:${abilityId}`; the RateGate accumulates across all rounds and all
-     *  reactive fires of the same ability so the proc lands at its true frequency. */
+     *  Keyed `${ownerId}:${abilityId}`; the RateGate fires with the proc's probability on
+     *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
      *  PR 1). The engine closes over the heal target's current/max HP (healing mode);

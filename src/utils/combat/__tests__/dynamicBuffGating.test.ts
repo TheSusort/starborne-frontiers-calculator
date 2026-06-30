@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, afterEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../../calculators/dpsSimulator';
 import { Ability, ShipSkills } from '../../../types/abilities';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 
 let idCounter = 0;
 const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -36,8 +37,13 @@ const buffNamesByRound = (skills: ShipSkills, overrides: Partial<DPSSimulationIn
     }));
 
 describe('dynamic per-round condition gating', () => {
+    afterEach(() => resetRateGateRng());
+
     it('1. ramping on: enemy-debuff threshold switches a buff on mid-fight', () => {
         idCounter = 0;
+        // crit:50 — force never-crit so crit variance is identical (zero) across the
+        // gated vs control runs, isolating the +30% Attack Up effect on round-6 damage.
+        setRateGateRng(() => 0.999999);
         // Corrosion (dur 3) applied each active round → pre-Step-3 entry count ramps
         // 0,1,2,2,… The buff is gated on enemy-debuff ≥ 2, so it flips on once the count
         // reaches 2 (round 3 onward) and stays on while the count holds.

@@ -1226,7 +1226,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const didCritHit = critGate(effectiveCrit / 100);
         if (didCritHit) critHits += 1;
         // Only collect per-hit outcomes when a damage ability actually exists.
-        // The draw still advances the gate regardless (determinism preserved).
+        // The draw still happens regardless, so the per-hit RNG draw count is stable.
         if (hasDamageAbility) hitCrits.push(didCritHit);
         // Only call outgoingAmplificationForHit when amplification is actually present AND a
         // proc gate is supplied — keeps the critGate sequence and behaviour untouched otherwise.

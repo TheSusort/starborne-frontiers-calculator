@@ -66,7 +66,8 @@
  *     HP first reaches 0. Fires for BOTH sides as HP allows.
  * ================================================================================
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
+import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
@@ -1052,6 +1053,7 @@ const enemyWithSecurityAt = (
     }) as EnemyAttacker;
 
 describe('Two-team battle — per-target debuff landing resolves against the ACTUAL target (holistic review #2)', () => {
+    afterEach(() => resetRateGateRng());
     // Focus 'attacker' at M4 hacking 200, neutral affinity, fires `front` and inflicts a debuff.
     // Two enemies on the roster with DIFFERING security: the FRONT-most one is the focus's actual
     // target; the other (held at security 100 throughout) is a decoy that the OLD representative-
@@ -1125,9 +1127,26 @@ describe('Two-team battle — per-target debuff landing resolves against the ACT
 
     it('a PARTIAL-security actual target lands at the per-target rate (0.5 → 3 of 6)', () => {
         idc = 0;
-        // Front target security 150 vs focus hacking 200 → live chance clamp(200-150)/100 = 0.5 →
-        // the deterministic RateGate lands on calls 2,4,6 → exactly 3 of 6 rounds. The decoy stays
-        // at security 100, so only the actual target's 150 can produce this 0.5 rate.
+        // Front target security 150 vs focus hacking 200 → live chance clamp(200-150)/100 = 0.5.
+        // The landing gate now draws from the module RNG (lands iff draw < rate). The enemy-front
+        // landing gate is the FIRST of the 4 per-round draws (draws 1,5,9,13,17,21 — verified
+        // empirically; the other 3 are crit:0 gates that never fire). Reproduce the legacy
+        // rate-0.5 back-loaded accumulator on it → lands on rounds 2,4,6 → exactly 3 of 6.
+        // ORDER-SENSITIVE: relies on the probed per-round draw interleave.
+        let drawIdx = 0;
+        let acc = 0;
+        const EPS = 1e-9;
+        setRateGateRng(() => {
+            drawIdx += 1;
+            const isLandingGate = (drawIdx - 1) % 4 === 0; // draws 1,5,9,…
+            if (!isLandingGate) return 0.99; // crit:0 gates never fire regardless
+            acc += 0.5;
+            if (acc >= 1 - EPS) {
+                acc -= 1;
+                return 0; // land
+            }
+            return 0.99; // no land
+        });
         const landed = countAppliedOnTarget(focusInflictBattle(150), 'enemy-front');
         expect(landed).toBe(3);
     });
