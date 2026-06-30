@@ -302,11 +302,14 @@ interface BuffState {
      *  the initial create and any family-rule refresh that re-sets the same key). Drives
      *  cleanse/purge newest-applied-first removal ordering. */
     appliedSeq: number;
-    /** Set true when this timed self-buff was applied during the carrier's OWN turn (the
-     *  carrier was the active actor — see beginTurn). Granted a one-turn reprieve at that
-     *  turn's Post-Turn (skipped + flipped false by decrementPlayer), then decrements
-     *  normally from the carrier's next Post-Turn. Off-turn and enemy-side writes leave it
-     *  falsy. */
+    /** Set true when this timed status was applied during the recipient's OWN turn (the
+     *  recipient was the active actor — see beginTurn). Granted a one-turn reprieve at that
+     *  turn's Post-Turn (skipped + flipped false by decrementPlayer/decrementEnemy), then
+     *  decrements normally from the recipient's next Post-Turn. Two cases set it:
+     *   - self-buffs a ship grants itself on its own turn (the original reprieve), and
+     *   - an on-destroyed own-death debuff landing on the killer during the killer's own turn
+     *     (`reprieveOnRecipientTurn`, #6b — legendary Martyrdom Disable). Every other off-turn
+     *     and enemy-side write leaves it falsy. */
     appliedThisTurn?: boolean;
 }
 
