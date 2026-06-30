@@ -1648,6 +1648,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             casterId: intent.ownerId,
             kind: 'timed',
             duration: typeof cfg.duration === 'number' ? cfg.duration : 1,
+            // #6b: an on-destroyed OWN-DEATH reaction (Martyrdom's killer-Disable) lands on the
+            // killer DURING the killer's own turn, so the killer's same-turn Post-Turn would eat
+            // the first tick (a legendary Disable(2) would block only one turn). Opt this debuff
+            // into the enemy-side own-turn reprieve — decrementEnemy then skips the first tick when
+            // the recipient is the current turn actor, so it runs its full window. Scoped to
+            // own-death reactions (eventCtx.fromOwnDeath, stamped by the on-destroyed listener);
+            // every other enemy debuff (on-attacked/Provoke, applied on the ATTACKER's turn) is
+            // unaffected.
+            reprieveOnRecipientTurn:
+                intent.ability.trigger === 'on-destroyed' && intent.eventCtx?.fromOwnDeath === true,
         };
         // Counter-infliction routing (Phase 4c PR 1): an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target

@@ -66,8 +66,27 @@ const placement = (
 // A minimal implant gear piece: buildEquipmentAbilities reads only piece.setBonus + piece.rarity.
 const martyrdomPiece = (): GearPiece =>
     ({ id: 'mart', setBonus: 'MARTYRDOM', rarity: 'legendary' }) as unknown as GearPiece;
+// Rare Martyrdom: same set bonus, rare rarity → Disable(1).
+const rareMartyrdomPiece = (): GearPiece =>
+    ({ id: 'mart-rare', setBonus: 'MARTYRDOM', rarity: 'rare' }) as unknown as GearPiece;
 const getGearPiece = (id: string): GearPiece | undefined =>
-    id === 'mart' ? martyrdomPiece() : undefined;
+    id === 'mart' ? martyrdomPiece() : id === 'mart-rare' ? rareMartyrdomPiece() : undefined;
+
+// Count the killer's TOP-LEVEL attack entries (not nested reactions) in a given 1-based round.
+// A turn-blocked (Disabled) actor produces no attack entry that round.
+const killerAttacksInRound = (
+    result: {
+        combatLog: { round: number; turns: { actorId: string; entries: { kind: string }[] }[] }[];
+    },
+    killerId: string,
+    round: number
+): number => {
+    const r = result.combatLog.find((cr) => cr.round === round);
+    if (!r) return 0;
+    return r.turns
+        .filter((t) => t.actorId === killerId)
+        .reduce((n, t) => n + t.entries.filter((e) => e.kind === 'attack').length, 0);
+};
 
 describe('implant real-path repro — Martyrdom through planPlacement -> simulateBattle', () => {
     it('a ship with a Martyrdom implant, killed by a DIRECT hit, applies Disable to its killer', () => {
@@ -334,5 +353,89 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
                 e.targets.some((t) => t.targetId === playerKillerId)
         );
         expect(disableOnPlayer.length).toBeGreaterThan(0);
+    });
+
+    it('#6b: LEGENDARY Martyrdom Disables its killer for TWO full turns (not one)', () => {
+        // Repro for the duration bug. A fast killer one-shots a front-positioned LEGENDARY-Martyrdom
+        // carrier in R1; the Disable(2) lands on the killer DURING the killer's own turn. A SECOND
+        // immortal enemy keeps the killer with a live target every round — so if the killer is NOT
+        // blocked it WILL attack. Legendary Disable lasts 2 turns → the killer is turn-blocked in R2
+        // AND R3 (no attack). Pre-fix the killer's own-turn Post-Turn eats the first tick, so it is
+        // blocked only in R2 and attacks again in R3.
+        const carrier = makeShip('carrier', 'Enemy Carrier', {
+            implants: { implant_ultimate: 'mart' },
+        });
+        const wall = makeShip('wall', 'Immortal Wall');
+        const killer = makeShip('killer', 'Player Killer');
+
+        const result = simulateBattle(
+            {
+                playerTeam: [placement(killer, 'M4', 1_000_000, 1_000_000_000, /* fast */ 1000)],
+                enemyTeam: [
+                    placement(carrier, 'M4', 100, 1, /* slow */ 10),
+                    placement(wall, 'M3', 1, 1_000_000_000, /* slow */ 5),
+                ],
+                rounds: 4,
+            },
+            getGearPiece
+        );
+
+        const killerId = result.roster.find((r) => r.side === 'player')?.actorId;
+        expect(killerId).toBeDefined();
+
+        // The Disable actually lands (sanity).
+        const disableOnKiller = flattenCombatLog(result).filter(
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Disable' &&
+                e.targets.some((t) => t.targetId === killerId)
+        );
+        expect(disableOnKiller.length).toBeGreaterThan(0);
+
+        // R1: killer attacks (lands the kill). R2 & R3: turn-blocked → no attack. R4: free again.
+        expect(killerAttacksInRound(result, killerId!, 1)).toBeGreaterThan(0);
+        expect(killerAttacksInRound(result, killerId!, 2)).toBe(0);
+        expect(killerAttacksInRound(result, killerId!, 3)).toBe(0); // pre-fix: > 0 (one turn too short)
+        expect(killerAttacksInRound(result, killerId!, 4)).toBeGreaterThan(0);
+    });
+
+    it('#6b: RARE Martyrdom Disables its killer for exactly ONE full turn', () => {
+        // Same shape but RARE Martyrdom → Disable(1). Same own-turn-reprieve fix applies: the
+        // Disable lands during the killer's own turn, so without the reprieve its first (and only)
+        // tick was eaten by the killer's same-turn Post-Turn → ZERO blocked turns pre-fix. Post-fix
+        // the reprieve gives it its single turn: blocked in R2 only, free in R3.
+        const carrier = makeShip('carrier', 'Enemy Carrier', {
+            implants: { implant_ultimate: 'mart-rare' },
+        });
+        const wall = makeShip('wall', 'Immortal Wall');
+        const killer = makeShip('killer', 'Player Killer');
+
+        const result = simulateBattle(
+            {
+                playerTeam: [placement(killer, 'M4', 1_000_000, 1_000_000_000, /* fast */ 1000)],
+                enemyTeam: [
+                    placement(carrier, 'M4', 100, 1, /* slow */ 10),
+                    placement(wall, 'M3', 1, 1_000_000_000, /* slow */ 5),
+                ],
+                rounds: 4,
+            },
+            getGearPiece
+        );
+
+        const killerId = result.roster.find((r) => r.side === 'player')?.actorId;
+        expect(killerId).toBeDefined();
+
+        const disableOnKiller = flattenCombatLog(result).filter(
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Disable' &&
+                e.targets.some((t) => t.targetId === killerId)
+        );
+        expect(disableOnKiller.length).toBeGreaterThan(0);
+
+        // R1: kill. R2: blocked. R3: free again (one-turn block, unchanged).
+        expect(killerAttacksInRound(result, killerId!, 1)).toBeGreaterThan(0);
+        expect(killerAttacksInRound(result, killerId!, 2)).toBe(0);
+        expect(killerAttacksInRound(result, killerId!, 3)).toBeGreaterThan(0);
     });
 });

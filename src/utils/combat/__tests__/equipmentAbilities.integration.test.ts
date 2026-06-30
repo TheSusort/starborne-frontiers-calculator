@@ -1743,7 +1743,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
 
     const MARTYR_HP = 1_000; // tiny → the front origin hit one-shots the martyr
     const TANK_HP = 1_000_000_000; // huge → the tank survives every round it is hit
-    const SKIP_NUM_ROUNDS = 3;
+    const SKIP_NUM_ROUNDS = 4;
 
     /** Martyr team-actor slots: a basic attack footprint + the legendary Martyrdom passive. */
     function buildMartyrdomSlots(): ShipSkills['slots'] {
@@ -1796,7 +1796,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
 
     it(
         'C. End-to-end: after killing a Martyrdom carrier the killer is Disabled and SKIPS its turn ' +
-            '(acts round 1, suppressed round 2, resumes round 3) — non-Martyrdom control proves non-vacuity',
+            '(acts round 1, suppressed rounds 2 AND 3 for legendary Disable(2), resumes round 4) — non-Martyrdom control proves non-vacuity',
         () => {
             // --- Main run: martyr carries legendary Martyrdom -----------------
             const main = runSkip(buildMartyrdomSlots());
@@ -1819,10 +1819,14 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
             expect(disableOnKiller.length).toBeGreaterThanOrEqual(1);
 
             // The CONSEQUENCE: the killer acts in round 1 (the kill), is SUPPRESSED in
-            // round 2 (Disabled), and acts again in round 3 (Disable expired).
+            // rounds 2 AND 3 (legendary Disable lasts its FULL two turns — #6b: the Disable
+            // landed during the killer's own turn but is given an own-turn reprieve so its
+            // first tick is not eaten by the same-turn Post-Turn), and acts again in round 4
+            // (Disable expired).
             expect(killerActedInRound(main, 1)).toBe(true);
             expect(killerActedInRound(main, 2)).toBe(false);
-            expect(killerActedInRound(main, 3)).toBe(true);
+            expect(killerActedInRound(main, 3)).toBe(false);
+            expect(killerActedInRound(main, 4)).toBe(true);
 
             // --- Control run: martyr carries NO Martyrdom (plain basic attack only) ---
             // No Disable is ever applied → the killer must keep acting every round it
