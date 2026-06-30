@@ -1081,11 +1081,14 @@ interface ReactiveSideCtx {
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
     grantAllyCharges: (amount: number) => void;
     /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
-     *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). */
-    removeEnemyCharges: (amount: number) => void;
+     *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). The optional
+     *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip affinity-advantaged
+     *  targets); omit it to disable the gate. */
+    removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
     /** Single-target charge removal for this drain side — bySide(side).removeChargesFrom, which
-     *  subtracts from ONE actor by id (floored at 0, immune actors skipped). */
-    removeChargesFrom: (targetId: string, amount: number) => void;
+     *  subtracts from ONE actor by id (floored at 0, immune actors skipped). Same optional
+     *  `applierAffinity` charge-manip gate as removeEnemyCharges. */
+    removeChargesFrom: (targetId: string, amount: number, applierAffinity?: AffinityName) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
      *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
@@ -1841,13 +1844,23 @@ export function runCombat(input: CombatEngineInput): {
         /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
          *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
          *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
-         *  THIS side's context (never pre-flipped). */
-        removeEnemyCharges: (amount: number) => void;
+         *  THIS side's context (never pre-flipped).
+         *
+         *  Charge Manipulation affinity gate: when `applierAffinity` is supplied, an opposing
+         *  actor with affinity ADVANTAGE over the applier (applier disadvantaged vs it) is SKIPPED
+         *  ("Does not affect enemies with affinity advantage over the applying unit"). Undefined →
+         *  no gate (byte-identical to pre-gate behaviour); antimatter/neutral matchups never skip. */
+        removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
         /** Single-target charge removal: subtract `amount` from ONE actor by id (floored at 0,
          *  chargeLossImmune / chargeCount-0 actors skipped). Used for "decrease THAT enemy's
          *  charge" (Zosimos), routed by eventCtx.repairerId. Does NOT require the opposing-side
-         *  filter — the caller passes a known-opposing id. */
-        removeChargesFrom: (targetId: string, amount: number) => void;
+         *  filter — the caller passes a known-opposing id. Same `applierAffinity` charge-manip gate
+         *  as removeEnemyCharges: an affinity-advantaged target is skipped when the affinity is supplied. */
+        removeChargesFrom: (
+            targetId: string,
+            amount: number,
+            applierAffinity?: AffinityName
+        ) => void;
         /** Same-side ids sharing the minimum LIVE effective speed (ties → all). Empty side → ∅
          *  (DPS / no enemy attackers). Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
@@ -1884,9 +1897,16 @@ export function runCombat(input: CombatEngineInput): {
             // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
             // skipping immune actors and those with no charged skill. Mirror of grantAllyCharges
             // but on the opposing side, and subtractive.
-            removeEnemyCharges: (amount: number): void => {
+            removeEnemyCharges: (amount: number, applierAffinity?: AffinityName): void => {
                 for (const a of actorsBySide(side === 'player' ? 'enemy' : 'player')) {
                     if (a.chargeCount <= 0 || a.chargeLossImmune) continue;
+                    // Charge-manip affinity gate: skip an actor with affinity advantage over the
+                    // applier (applier disadvantaged vs it). No-op when affinity undefined/neutral.
+                    if (
+                        applierAffinity &&
+                        getAffinityMatchup(applierAffinity, a.affinity) === 'disadvantage'
+                    )
+                        continue;
                     const oldCharge = a.charges;
                     a.charges = Math.max(0, a.charges - amount);
                     if (a.charges !== oldCharge) {
@@ -1904,9 +1924,20 @@ export function runCombat(input: CombatEngineInput): {
             // Single-target charge removal: subtract from ONE opposing actor (floored at 0,
             // immune actors skipped). Used for "decrease THAT enemy's charge" (Zosimos), routed
             // by eventCtx.repairerId. Mirror of removeEnemyCharges but one actor, not all.
-            removeChargesFrom: (targetId: string, amount: number): void => {
+            removeChargesFrom: (
+                targetId: string,
+                amount: number,
+                applierAffinity?: AffinityName
+            ): void => {
                 const a = allActorsById.get(targetId);
                 if (!a || a.chargeCount <= 0 || a.chargeLossImmune) return;
+                // Charge-manip affinity gate: skip a target with affinity advantage over the
+                // applier (applier disadvantaged vs it). No-op when affinity undefined/neutral.
+                if (
+                    applierAffinity &&
+                    getAffinityMatchup(applierAffinity, a.affinity) === 'disadvantage'
+                )
+                    return;
                 const oldCharge = a.charges;
                 a.charges = Math.max(0, a.charges - amount);
                 if (a.charges !== oldCharge) {

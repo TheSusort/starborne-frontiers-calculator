@@ -738,12 +738,15 @@ export interface IntentExecContext {
     /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
      *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
      *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
-     *  and chargeCount-0 actors. The closure flips to the opposing side internally. */
-    removeEnemyCharges: (amount: number) => void;
+     *  and chargeCount-0 actors. The closure flips to the opposing side internally. The optional
+     *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip targets with affinity
+     *  advantage over the applier); omit it to disable the gate. */
+    removeEnemyCharges: (amount: number, applierAffinity?: AffinityName) => void;
     /** Delegate for single-target charge removal — the engine's own `removeChargesFrom` closure.
      *  Subtracts from ONE actor by id (floored at 0), skipping chargeLossImmune / chargeCount-0
-     *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId. */
-    removeChargesFrom: (targetId: string, amount: number) => void;
+     *  actors. Used for "decrease THAT enemy's charge" (Zosimos), routed by eventCtx.repairerId.
+     *  Same optional `applierAffinity` charge-manip gate as removeEnemyCharges. */
+    removeChargesFrom: (targetId: string, amount: number, applierAffinity?: AffinityName) => void;
     /** Delegate for a reactive extra-action grant (Task 10). The executor passes the granter's
      *  id, the granting ability id, and oncePerRound; the engine decides Path A (splice into the
      *  current round's live queue via the round-scoped cursor) vs Path B (buffer for the next
@@ -1440,14 +1443,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
                 ctx.repairCountBySource.set(key, n);
                 if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                ctx.removeChargesFrom(repairerId, cfg.amount); // "that enemy" only
+                ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity); // "that enemy" only
                 return;
             }
             // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
             // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
             // here and fall through to the owner-only gain below. Unreachable for parsed charge
             // abilities today.
-            ctx.removeEnemyCharges(cfg.amount);
+            ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity);
             return;
         }
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps

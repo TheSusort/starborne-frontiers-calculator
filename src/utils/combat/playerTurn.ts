@@ -257,8 +257,10 @@ export interface PlayerTurnArgs {
      *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
      *  charge step for enemy/all-enemies-targeted charge abilities. Optional so standalone callers
      *  without an opposing roster need not supply it — when absent enemy-target removal is a no-op
-     *  (a self-only run never has enemy-targeted charge abilities). */
-    removeEnemyCharges?: (amount: number) => void;
+     *  (a self-only run never has enemy-targeted charge abilities). The optional `applierAffinity`
+     *  enforces the Charge Manipulation affinity gate (skip targets with affinity advantage over
+     *  the applier); omit it to disable the gate. */
+    removeEnemyCharges?: (amount: number, applierAffinity?: AffinityName) => void;
     /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
      *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
      *  goldens byte-identical. */
@@ -1433,7 +1435,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'enemy',
             });
-        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval);
+        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval, attackerAffinity);
     }
 
     // Extra-action grants (game-verified: a full extra turn; the engine re-inserts

@@ -6,6 +6,7 @@ export const CURRENT_VERSION = '1.64.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: charge manipulation (charge removal) now respects affinity — it no longer removes charges from enemies that have an affinity advantage over the ship applying it, matching the in-game rule. Charge removal against neutral or disadvantaged enemies is unchanged.',
     "Combat simulator: affinity-based debuffs (such as the Martyrdom implant's Disable on a killer) now check affinity against the ship they actually land on, rather than always against the first enemy on the opposing team. Previously a debuff could be wrongly resisted when the first enemy had an unfavourable affinity, even though the real target did not.",
     "Combat simulator: destroyed ships no longer keep triggering their passive reactions — once a ship is dead, its on-hit/on-crit/on-enemy-charge and similar passives stop firing. Effects that are meant to fire from a ship's own death (such as the Martyrdom implant's Disable on the killer) still resolve correctly.",
     "Combat simulator: the pinned per-ship round detail now shows each ship's own damage taken this round broken down into HP damage, shield absorbed, and barrier absorbed — including for ships caught in an area-of-effect hit, which each carry their own damage-taken figures.",
