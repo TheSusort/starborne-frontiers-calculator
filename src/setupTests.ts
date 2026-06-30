@@ -3,9 +3,10 @@
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom';
-import { expect, afterEach } from 'vitest';
+import { expect, afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
+import { setRateGateRng, resetRateGateRng, mulberry32 } from './utils/calculators/rateAccumulator';
 
 // Create proper types for the matchers
 type Matchers = typeof matchers & {
@@ -20,6 +21,17 @@ expect.extend(matchers as unknown as Matchers);
 // Cleanup after each test case
 afterEach(() => {
     cleanup();
+});
+
+// Make the combat RNG deterministic per test. Production uses real Math.random;
+// tests install a fixed-seed mulberry32 so crit/proc/landing outcomes — and the
+// golden snapshots that depend on them — are reproducible regardless of test order.
+const RATE_GATE_TEST_SEED = 0x5eed1234;
+beforeEach(() => {
+    setRateGateRng(mulberry32(RATE_GATE_TEST_SEED));
+});
+afterEach(() => {
+    resetRateGateRng();
 });
 
 // Proper TextEncoder/Decoder interface definitions

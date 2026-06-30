@@ -1,33 +1,60 @@
 /**
- * Deterministic stand-in for a probabilistic event: a fractional accumulator that
- * fires at exactly the supplied rate (a 70% rate over 10 calls fires 7 times).
- * Steady-state spacing is ~1/rate calls, but the schedule is back-loaded: the
- * accumulator starts at 0, so the FIRST fire lands only once the rate has fully
- * accumulated (rate 0.2 first fires on call 5, not call 1).
+ * Probabilistic event resolution for the combat engine and DPS/healing calculators:
+ * crit, debuff landing (hacking vs security), charge manipulation, proc chances, and
+ * counter crits all flow through these gates.
  *
- * The rate is supplied per call so callers whose probability changes between events
- * (e.g. crit rate shifting with buffs round-to-round) accumulate correctly. Rates are
- * clamped to [0, 1]. EPS absorbs float drift so e.g. ten 0.1 steps fire exactly once.
+ * Each draw is a real random sample: a gate fires when `rng() < rate`, so a 70% rate
+ * fires ~70% of the time with natural variance (no back-loading — the first hit can
+ * crit). Rates are clamped to [0, 1]; rate >= 1 always fires (rng() is [0,1)), rate <= 0
+ * never fires.
  *
- * Used by the DPS simulator for crit scheduling, debuff landing, and chance-based
- * DoT extension — replacing Math.random() so identical inputs give identical output.
+ * `rng` defaults to `Math.random` (production is truly random, no seed). Tests override
+ * it via `setRateGateRng` — `src/setupTests.ts` installs a seeded mulberry32 per test so
+ * the suite (including golden snapshots) stays deterministic. Production never calls the
+ * setters.
  */
-const EPS = 1e-9;
 
-export function makeRateGate(): (rate: number) => boolean {
-    let acc = 0;
-    return (rate: number): boolean => {
-        acc += Math.min(1, Math.max(0, rate));
-        if (acc >= 1 - EPS) {
-            acc -= 1;
-            return true;
-        }
-        return false;
+/** The active RNG. Production leaves this as Math.random; tests override it. */
+let rng: () => number = Math.random;
+
+/** Test-only: override the RNG used by all gates. Never called in production. */
+export function setRateGateRng(fn: () => number): void {
+    rng = fn;
+}
+
+/** Test-only: restore the default Math.random RNG. */
+export function resetRateGateRng(): void {
+    rng = Math.random;
+}
+
+/** Deterministic, seedable PRNG (mulberry32). Used by the test bootstrap to make the
+ *  suite reproducible; not used in production. */
+export function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+        a |= 0;
+        a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
 
-/** Get-or-create a per-key rate gate in `gates` and roll it at `chance`. Absent map → pass-through
- *  (true). Backs the engine's per-(owner,ability) proc closures (D-PR4 outgoing amplification). */
+/**
+ * Returns a gate closure: `gate(rate)` is true with probability `rate` (a fresh random
+ * draw per call). The closure reads the live module `rng` at call time, so a mid-run
+ * `setRateGateRng` takes effect on gates created earlier (used by tests).
+ *
+ * Each `makeRateGate()` returns its own closure for signature compatibility with the
+ * engine's many gate instances; the closures are stateless and draw independently.
+ */
+export function makeRateGate(): (rate: number) => boolean {
+    return (rate: number): boolean => rng() < Math.min(1, Math.max(0, rate));
+}
+
+/** Get-or-create a per-key gate in `gates` and roll it at `chance`. Absent map → pass-through
+ *  (true). Backs the engine's per-(owner,ability) proc closures (D-PR4 outgoing amplification).
+ *  The per-key map is retained for call-site compatibility; gates are now stateless random draws. */
 export function rollRateGate(
     gates: Map<string, ReturnType<typeof makeRateGate>> | undefined,
     key: string,

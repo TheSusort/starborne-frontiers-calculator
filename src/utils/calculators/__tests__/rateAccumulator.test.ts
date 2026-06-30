@@ -1,55 +1,71 @@
-import { describe, it, expect } from 'vitest';
-import { makeRateGate } from '../rateAccumulator';
+import { describe, it, expect, afterEach } from 'vitest';
+import { makeRateGate, setRateGateRng, resetRateGateRng, mulberry32 } from '../rateAccumulator';
 
-const fires = (rate: number, calls: number): boolean[] => {
-    const gate = makeRateGate();
-    return Array.from({ length: calls }, () => gate(rate));
-};
+// setupTests installs a seeded RNG before each test; these tests override it
+// explicitly and reset afterward so they never depend on the global default.
+afterEach(() => resetRateGateRng());
 
-describe('makeRateGate', () => {
-    it('rate 1 fires on every call', () => {
-        expect(fires(1, 5)).toEqual([true, true, true, true, true]);
-    });
-
-    it('rate 0 never fires', () => {
-        expect(fires(0, 5)).toEqual([false, false, false, false, false]);
-    });
-
-    it('rate 0.999 over 1000 calls fires exactly 999 times (EPS sanity)', () => {
-        expect(fires(0.999, 1000).filter(Boolean)).toHaveLength(999);
-    });
-
-    it('rate 0.7 over 10 calls fires exactly 7 times, max gap 2', () => {
-        const result = fires(0.7, 10);
-        expect(result.filter(Boolean)).toHaveLength(7);
-        // No stretch of 2+ consecutive misses at 70%
-        for (let i = 0; i < result.length - 1; i++) {
-            expect(result[i] || result[i + 1]).toBe(true);
-        }
-    });
-
-    it('rate 0.5 alternates starting on the second call', () => {
-        expect(fires(0.5, 6)).toEqual([false, true, false, true, false, true]);
-    });
-
-    it('rate 0.1 over 10 calls fires exactly once (float drift)', () => {
-        expect(fires(0.1, 10).filter(Boolean)).toHaveLength(1);
-    });
-
-    it('back-loads the first fire: rate 0.2 first fires on call 5', () => {
-        expect(fires(0.2, 5)).toEqual([false, false, false, false, true]);
-    });
-
-    it('clamps rates outside [0, 1]', () => {
-        expect(fires(1.5, 3)).toEqual([true, true, true]);
-        expect(fires(-0.5, 3)).toEqual([false, false, false]);
-    });
-
-    it('handles a varying rate per call', () => {
+describe('makeRateGate (random draws)', () => {
+    it('fires when the RNG draw is below the rate', () => {
+        setRateGateRng(() => 0.3);
         const gate = makeRateGate();
-        expect(gate(0.5)).toBe(false); // acc 0.5
-        expect(gate(0.6)).toBe(true); // acc 1.1 → fire, 0.1
-        expect(gate(0.5)).toBe(false); // acc 0.6
-        expect(gate(0.5)).toBe(true); // acc 1.1 → fire
+        expect(gate(0.5)).toBe(true); // 0.3 < 0.5
+    });
+
+    it('does not fire when the RNG draw is at or above the rate', () => {
+        setRateGateRng(() => 0.5);
+        const gate = makeRateGate();
+        expect(gate(0.5)).toBe(false); // 0.5 < 0.5 is false
+    });
+
+    it('rate >= 1 always fires (RNG is [0,1))', () => {
+        setRateGateRng(() => 0.999999);
+        const gate = makeRateGate();
+        expect(gate(1)).toBe(true);
+        expect(gate(1.5)).toBe(true); // clamped to 1
+    });
+
+    it('rate <= 0 never fires', () => {
+        setRateGateRng(() => 0);
+        const gate = makeRateGate();
+        expect(gate(0)).toBe(false);
+        expect(gate(-0.5)).toBe(false); // clamped to 0
+    });
+
+    it('reads the live module RNG at call time, not creation time', () => {
+        const gate = makeRateGate();
+        setRateGateRng(() => 0.1);
+        expect(gate(0.5)).toBe(true);
+        setRateGateRng(() => 0.9);
+        expect(gate(0.5)).toBe(false);
+    });
+
+    it('each gate from makeRateGate draws independently from the same RNG', () => {
+        const seq = [0.1, 0.9];
+        let i = 0;
+        setRateGateRng(() => seq[i++ % seq.length]);
+        const a = makeRateGate();
+        const b = makeRateGate();
+        expect(a(0.5)).toBe(true); // draw 0.1
+        expect(b(0.5)).toBe(false); // draw 0.9
+    });
+
+    // Statistical check MUST use raw Math.random with a loose tolerance so it
+    // cannot flake — it must NOT run under the seeded default.
+    it('under real Math.random, ~rate fraction fires over many draws', () => {
+        setRateGateRng(Math.random);
+        const gate = makeRateGate();
+        const N = 100_000;
+        let fires = 0;
+        for (let i = 0; i < N; i++) if (gate(0.7)) fires++;
+        const frac = fires / N;
+        expect(frac).toBeGreaterThan(0.68);
+        expect(frac).toBeLessThan(0.72);
+    });
+
+    it('mulberry32 is deterministic for a given seed', () => {
+        const r1 = mulberry32(12345);
+        const r2 = mulberry32(12345);
+        expect([r1(), r1(), r1()]).toEqual([r2(), r2(), r2()]);
     });
 });
