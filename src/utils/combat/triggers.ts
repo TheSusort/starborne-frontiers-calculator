@@ -2,6 +2,7 @@ import { Ability, LIVE_TRIGGERS, ShipSkills, SkillSlot } from '../../types/abili
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { EnemyBaseClass, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
+import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext } from '../abilities/roundContext';
@@ -839,6 +840,12 @@ export interface IntentExecContext {
      *  Returns undefined when no opposing actor exists (DPS dummy) → executor falls back to
      *  ctx.enemyId. Optional — absent in unit-test ctxs that don't drive most-buffs purges. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
+    /** Task A: resolve any actor's RAW affinity by id (from the combat-wide allActorsById map).
+     *  Used by the reactive `apply`-debuff branch to re-resolve landing vs the ACTUAL target's
+     *  affinity instead of the applier's precomputed-vs-representative static disadvantage flag.
+     *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
+     *  flag, byte-identical for single-opponent fixtures). */
+    affinityOf?: (actorId: string) => AffinityName | undefined;
     /** D-PR14: id of the round's first real (non-Stasis/Disable-skipped) activator. */
     firstActivatorId?: string;
     /** D-PR16: id of the sole living actor on the drain owner's side (recomputed each drain),
@@ -1636,7 +1643,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
         // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
         // NOT a global one — a team ship's debuff lands at ITS landing chance.
-        if (!blockedByImmunity && owner.landsTimedEnemyApplication(cfg.application)) {
+        // Task A: re-resolve an 'apply' debuff's landing vs the ACTUAL target's affinity (not the
+        // applier's precomputed-vs-representative static flag). affinityOf is absent in unit-test
+        // ctxs → undefined target affinity → static fallback (byte-identical for single-opponent).
+        if (
+            !blockedByImmunity &&
+            owner.landsTimedEnemyApplication(cfg.application, ctx.affinityOf?.(debuffTargetId))
+        ) {
             ctx.statusEngine.applyTimedAbilityStatus(ctx.round, status, undefined, counterTargetId);
             // Discrete infliction event — sourceId = the owner so the application is chainable.
             ctx.bus.emit({

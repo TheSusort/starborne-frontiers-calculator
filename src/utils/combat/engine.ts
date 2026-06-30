@@ -12,7 +12,7 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
 import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
-import { computeAffinityModifiers } from '../calculators/affinityUtils';
+import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
     type ExtraActionGrant,
@@ -558,9 +558,19 @@ export function buildEnemyPlayerActorRuntime(
         chargedHealCritGate: enemyChargedHealCritGate,
         debuffLandingGate: enemyDebuffLandingGate,
         extendChanceGate: enemyExtendChanceGate,
-        landsTimedEnemyApplication: (application?: 'inflict' | 'apply'): boolean =>
+        landsTimedEnemyApplication: (
+            application?: 'inflict' | 'apply',
+            targetAffinity?: AffinityName
+        ): boolean =>
             application === 'apply'
-                ? !affinityDisadvantage
+                ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve
+                  // the applier's RAW affinity (e.affinity, same value fed to attackerAffinity) vs
+                  // that target — an 'apply' lands UNLESS the applier is at a disadvantage. Absent
+                  // (DPS/unit mode, single representative opponent) → the static flag, which already
+                  // equals the target-aware result there → byte-identical.
+                  targetAffinity !== undefined
+                    ? getAffinityMatchup(e.affinity, targetAffinity) !== 'disadvantage'
+                    : !affinityDisadvantage
                 : enemyDebuffLandingGate(runtime.liveDebuffLandingChance ?? 1), // fresh timed inflictions draw against this enemy's LIVE hacking-vs-security landing chance (?? 1 — neutral guard for a read before the owner's first turn)
         selfBuffLookup: new Map(),
         enemyDebuffLookup,
@@ -1423,9 +1433,18 @@ export function runCombat(input: CombatEngineInput): {
     // Reads the attacker runtime's LIVE per-target landing chance (A2 Task 4 — set each turn by
     // runPlayerTurn). Only invoked at turn time (after attackerRuntime is defined below), so the
     // forward reference is safe. `?? 1` is a neutral guard for a read before the first turn.
-    const landsTimedEnemyApplication = (application?: 'inflict' | 'apply'): boolean =>
+    const landsTimedEnemyApplication = (
+        application?: 'inflict' | 'apply',
+        targetAffinity?: AffinityName
+    ): boolean =>
         application === 'apply'
-            ? !affinityDisadvantage
+            ? // Target-aware (Task A): when the ACTUAL target's affinity is supplied, re-resolve the
+              // applier's RAW affinity (input.affinity, same value fed to attackerAffinity) vs that
+              // target — an 'apply' lands UNLESS the applier is at a disadvantage. Absent
+              // (DPS/unit mode, single representative opponent) → the static flag, byte-identical.
+              targetAffinity !== undefined
+                ? getAffinityMatchup(input.affinity, targetAffinity) !== 'disadvantage'
+                : !affinityDisadvantage
             : debuffLandingGate(attackerRuntime.liveDebuffLandingChance ?? 1);
 
     // Boost gear set: per-owner buff-duration extension. Built from the RAW ShipSkills (which
@@ -4159,6 +4178,11 @@ export function runCombat(input: CombatEngineInput): {
                         // side: 100 for every owner until PR5. byte-identical to the old inline spread.
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
+                        // Task A: resolve any actor's RAW affinity (combat-wide map, both sides) so
+                        // the reactive 'apply'-debuff branch lands vs the ACTUAL target's affinity
+                        // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
+                        // precomputed-vs-representative static disadvantage flag.
+                        affinityOf: (id) => allActorsById.get(id)?.affinity,
                         // D-PR14: Doomsayer enemy-highest-attack resolver, the round's first
                         // real activator id, and the shared once-per-round consume set. All
                         // inert today — only consumed by the next task's executor branch.

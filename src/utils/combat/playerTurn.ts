@@ -214,7 +214,10 @@ export interface PlayerActorRuntime {
      *  heal crit never shifts a heal-carrying ship's damage-crit schedule. */
     activeHealCritGate: RateGate;
     chargedHealCritGate: RateGate;
-    landsTimedEnemyApplication: (application?: 'inflict' | 'apply') => boolean;
+    landsTimedEnemyApplication: (
+        application?: 'inflict' | 'apply',
+        targetAffinity?: AffinityName
+    ) => boolean;
     // Lookups: attacker carries the global merged lookups; team runtimes get empty maps
     selfBuffLookup: Map<string, SelectedGameBuff[]>;
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;

@@ -167,6 +167,47 @@ describe('implant real-path repro — Martyrdom through planPlacement -> simulat
         expect(disableOnKiller.length).toBeGreaterThan(0);
     });
 
+    it('mixed-affinity: Martyrdom lands on the ACTUAL killer (neutral), not gated by the representative opponent (disadvantage)', () => {
+        // Task A repro. The victim's affinity matchup is precomputed ONCE vs the FIRST opposing
+        // placement (the representative). Here the representative DISADVANTAGES the victim, but the
+        // ACTUAL killer is a NEUTRAL matchup → the `apply` Disable MUST land on the killer.
+        //
+        // Affinity directions (electric beats thermal; thermal-vs-thermal neutral):
+        //   - victim carrier: thermal
+        //   - representative player[0] (focus, does NOT land the kill): electric → victim DISADVANTAGED
+        //   - killer (fast teammate, lands the kill): thermal → NEUTRAL → Disable should land
+        //
+        // Pre-fix: landing is gated by the victim's disadvantage vs the electric representative →
+        // RESISTED. Post-fix: re-resolved vs the actual thermal killer → NEUTRAL → lands.
+        const focus = makeShip('focus', 'Focus', { affinity: 'electric' });
+        const liberator = makeShip('liberator', 'Liberator', { affinity: 'thermal' });
+        const graphite = makeShip('graphite', 'Enemy Graphite', {
+            affinity: 'thermal',
+            implants: { implant_ultimate: 'mart' },
+        });
+
+        const result = simulateBattle(
+            {
+                playerTeam: [
+                    placement(focus, 'M3', 1, 1_000_000_000, /* slow */ 5),
+                    placement(liberator, 'M4', 1_000_000, 1_000_000_000, /* fast */ 1000),
+                ],
+                enemyTeam: [placement(graphite, 'M4', 1, 1, /* slow */ 10)],
+                rounds: 3,
+            },
+            getGearPiece
+        );
+
+        const killerId = 'p:liberator:1';
+        const disableOnKiller = flattenCombatLog(result).filter(
+            (e) =>
+                e.kind === 'debuff' &&
+                e.note === 'Disable' &&
+                e.targets.some((t) => t.targetId === killerId)
+        );
+        expect(disableOnKiller.length).toBeGreaterThan(0);
+    });
+
     it('ENEMY-side symmetry: an enemy ship with Martyrdom, killed by the player, Disables the player killer', () => {
         // Mirror of case 1 with sides swapped: the Martyrdom carrier is on the ENEMY team.
         const carrier = makeShip('carrier', 'Enemy Carrier', {
