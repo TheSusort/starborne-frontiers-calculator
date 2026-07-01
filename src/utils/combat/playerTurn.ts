@@ -807,12 +807,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/security
     // buffs that move landing) fold lookup-free from the status engine. Cached once per turn here
     // — every landing consumer below reads this value.
+    // SP2a: positional casts re-resolve affinity vs the bound anchor; non-positional keeps
+    // representative scalars (DPS byte-identical).
+    const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
+    const positionalLanding = args.deferAbilityPerformedToEngine === true;
+    const landingAffinityMod = positionalLanding
+        ? computeAffinityModifiers(attackerAff, enemy.affinity ?? 'antimatter').damageModifier
+        : affinityDamageModifier;
+    const landingAtDisadvantage = positionalLanding ? landingAffinityMod < 0 : affinityDisadvantage;
     const liveLandingChance = liveDebuffLandingChance(
         statusEngine,
         selfBuffLookup,
         actor,
         enemy,
-        affinityDamageModifier
+        landingAffinityMod
     );
     // Block Debuff: an immune turn-target auto-resists every timed/persistent application.
     // Computed ONCE per turn (the turn target `enemy` is fixed for this turn) — the immune
@@ -830,7 +838,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetImmuneToDebuffs
             ? false
             : application === 'apply'
-              ? !affinityDisadvantage
+              ? !landingAtDisadvantage
               : debuffLandingGate(liveLandingChance);
     // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
     // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
@@ -919,7 +927,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const recurringEnemy = resolveEnemyDebuffs({
         activeEnemyDebuffs: recurringEnemySnap,
         enemyDebuffLookup,
-        affinityDisadvantage,
+        affinityDisadvantage: landingAtDisadvantage,
         roundDebuffLanded,
         emitResisted: emitDebuffResisted,
         // No emitApplied: recurring/aura per-round re-applications are NOT discrete inflictions.
@@ -1106,7 +1114,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const s of recurringAbilityEnemy) {
         const sb = payloadToSelectedBuff(s.payload);
         const isApply = sb.application === 'apply';
-        const lands = isApply ? !affinityDisadvantage : roundDebuffLanded();
+        const lands = isApply ? !landingAtDisadvantage : roundDebuffLanded();
         if (!lands) {
             resistedAbilityEnemy.push(s.active);
             emitDebuffResisted(s.payload.buffName);
@@ -1259,7 +1267,6 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // attacker is at an affinity disadvantage against crits less often. The UNCAPPED crit total
     // (before any affinity cap) is `crit + dmgStats.totals.critBuff`; we cap it against THIS
     // victim's matchup (NOT the representative cappedCrit, which uses the bound target's cap).
-    const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
     const uncappedCritTotal = crit + dmgStats.totals.critBuff;
     const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
         // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
