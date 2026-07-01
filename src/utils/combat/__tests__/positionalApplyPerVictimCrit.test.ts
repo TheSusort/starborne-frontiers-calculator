@@ -145,6 +145,64 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
     });
 
     /**
+     * Return value: anchor no-crit, covered crits via rollVictimCrit.
+     * anyCrit must be true; critPairs must be 1.
+     */
+    it('returns { anyCrit: true, critPairs: 1 } when only the covered victim crits', () => {
+        const pattern = parsePattern('Pattern-Line-Range-1');
+        const target = parseTarget('front');
+        const anchorActor = actor('origin', 'M4');
+        const coveredActor = actor('covered', 'M3');
+        const opposingLiving = [anchorActor, coveredActor];
+
+        const result = applyPositionalDamage({
+            hitCrits: [false], // anchor does NOT crit
+            scalars: scalars(),
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving,
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            rollVictimCrit: (v) => v.id === 'covered', // only covered crits
+        });
+
+        expect(result).toEqual({ anyCrit: true, critPairs: 1 });
+    });
+
+    /**
+     * Return value: nobody crits (hitCrits=[false], no rollVictimCrit).
+     * anyCrit must be false; critPairs must be 0.
+     */
+    it('returns { anyCrit: false, critPairs: 0 } when nobody crits', () => {
+        const pattern = parsePattern('Pattern-Line-Range-1');
+        const target = parseTarget('front');
+        const anchorActor = actor('origin', 'M4');
+        const coveredActor = actor('covered', 'M3');
+        const opposingLiving = [anchorActor, coveredActor];
+
+        const result = applyPositionalDamage({
+            hitCrits: [false],
+            scalars: scalars(),
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving,
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            // No rollVictimCrit → fallback to hitCrits[h]=false → nobody crits
+        });
+
+        expect(result).toEqual({ anyCrit: false, critPairs: 0 });
+    });
+
+    /**
      * When hitCrits[h]=true (anchor crits) and rollVictimCrit returns false for covered,
      * the anchor crits and the covered does NOT.
      */
