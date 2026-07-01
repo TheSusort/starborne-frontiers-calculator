@@ -359,7 +359,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
                     {
                         id: 'supporter',
                         speed: 300,
-                        chargeCount: 0,
+                        chargeCount: 3,
                         startCharged: false,
                         selfBuffs: [],
                         enemyDebuffs: [],
@@ -384,7 +384,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
                             affinityDamageModifier: 0,
                             affinityCritCap: 100,
                             affinityCritPenalty: 0,
-                            hasChargedSkill: false,
+                            hasChargedSkill: true,
                         },
                     },
                     {
@@ -476,6 +476,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
             )
             .map((e) => e.actorId);
         expect(charged).toContain('inpattern');
+        expect(charged).toContain('supporter');
         expect(charged).not.toContain('offpattern');
         expect(charged).not.toContain('attacker');
     });

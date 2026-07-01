@@ -1043,12 +1043,7 @@ function abilitiesFromText(
     // damage-reactive and revive shapes emit nothing, see parseHealAbilities). The combat engine
     // ignores these types for now (DPS unchanged); they carry the model for the healing calculator.
     const healNoCrit = parseHealNoCrit(text);
-    const coCastAllAlliesGrant =
-        (slot === 'active' || slot === 'charged') &&
-        mult === 0 &&
-        parseSkillEffects(text, slot === 'charged' ? 'charge' : 'active').some(
-            (eff) => eff.target === 'all-allies'
-        );
+    const skillEffectsForSlot = parseSkillEffects(text, slot === 'charged' ? 'charge' : 'active');
     for (const h of parseHealAbilities(text)) {
         // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
         // heal components share the same pct the regex may hit the wrong tag — acceptable, since
@@ -1114,6 +1109,16 @@ function abilitiesFromText(
         const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
+        const shieldCoCastAllAlliesGrant =
+            h.kind === 'shield' &&
+            (slot === 'active' || slot === 'charged') &&
+            mult === 0 &&
+            healSentence !== '' &&
+            skillEffectsForSlot.some(
+                (eff) =>
+                    eff.target === 'all-allies' &&
+                    healSentence.toLowerCase().includes(eff.buffName.toLowerCase())
+            );
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
         // Bare support shields route to all-allies (Graphite co-cast); heals use flipBareSupportTarget.
@@ -1133,7 +1138,7 @@ function abilitiesFromText(
                         h.explicitTarget,
                         slot,
                         mult > 0,
-                        coCastAllAlliesGrant
+                        shieldCoCastAllAlliesGrant
                     )
                   : h.target;
         out.push({

@@ -1501,11 +1501,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
             ctx.grantAllyCharges(cfg.amount, {
-                recipientIds: footprintFilteredRecipients(
-                    intent,
-                    ctx,
-                    intent.ability.target === 'all-allies' ? ctx.playerIds : [intent.ownerId]
-                ),
+                recipientIds: footprintFilteredRecipients(intent, ctx, ctx.playerIds),
                 emitBus: ctx.bus,
             });
             return;
