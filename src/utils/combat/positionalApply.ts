@@ -131,6 +131,10 @@ export function applyPositionalDamage(args: {
      * byte-identical (inert for attackers without an outgoing-amplification ability).
      */
     outgoingAmplificationFor?: (victim: CombatActor, didCrit: boolean) => number;
+    /** OPTIONAL per-victim crit resolver. Anchor (origin) victim reuses hitCrits[h]; each
+     *  covered (non-anchor) victim resolves via this callback. Unsupplied → every victim
+     *  uses hitCrits[h] → byte-identical. */
+    rollVictimCrit?: (victim: CombatActor) => boolean;
 }): void {
     const {
         hitCrits,
@@ -147,6 +151,7 @@ export function applyPositionalDamage(args: {
         onVictimResolved,
         incomingReductionFor,
         outgoingAmplificationFor,
+        rollVictimCrit,
     } = args;
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
@@ -167,13 +172,16 @@ export function applyPositionalDamage(args: {
             continue;
         }
 
-        const didCrit = hitCrits[h] ?? false;
+        const anchorCrit = hitCrits[h] ?? false;
 
         for (const { victim, roleScale } of footprintVictims(
             pattern,
             anchorActor.position,
             opposingLiving
         )) {
+            // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
+            const isAnchor = victim.id === anchorActor.id;
+            const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim) ?? anchorCrit);
             const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
             const dmgBase = victimHitDamage(
                 scalars,
