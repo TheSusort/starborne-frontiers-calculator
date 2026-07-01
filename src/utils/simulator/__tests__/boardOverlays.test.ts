@@ -134,6 +134,15 @@ describe('overlaysForRound', () => {
         expect(overlaysForRound(round, 'player', roster).T1?.effect).toBe('heal');
     });
 
+    it('carries currentShieldPool from the ship state', () => {
+        const round: BattleRound = {
+            round: 10,
+            ships: [shipState({ actorId: 'attacker', side: 'player', currentShieldPool: 18106 })],
+            turnOrder: [],
+        };
+        expect(overlaysForRound(round, 'player', roster).T1?.currentShieldPool).toBe(18106);
+    });
+
     it('carries buffs and debuffs from the ship state', () => {
         const round: BattleRound = {
             round: 6,

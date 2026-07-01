@@ -4,6 +4,7 @@ import { buildRoundContext } from '../abilities/roundContext';
 import { DoTApplicationConfig, EnemyBaseClass, SelectedGameBuff } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
+import type { ParsedPattern } from '../targetingParser';
 import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
     selectFiringSkill,
@@ -39,6 +40,8 @@ import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import { buildActorConditionContext, type ReactiveAbility } from './triggers';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+import { resolveSupportRecipients } from './supportRecipients';
+import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
@@ -275,7 +278,10 @@ export interface PlayerTurnArgs {
      *  caster's own gains still apply (a self-only run never has ally-targeted charge abilities).
      *  The optional `emitBus` overrides the captured outer bus for the `charge-changed` emission;
      *  the on-turn (cast-path) caller never supplies it, so on-turn charge changes stay unstamped. */
-    grantAllyCharges?: (amount: number, emitBus?: CombatEventBus) => void;
+    grantAllyCharges?: (
+        amount: number,
+        opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
+    ) => void;
     /** Remove `amount` charges from every OPPOSING-side actor (Task 7 enemy-target charge
      *  removal). Supplied by the engine, which loops the opposing side flooring each actor at 0
      *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
@@ -375,6 +381,12 @@ export interface PlayerTurnArgs {
      *  damage ability → runPlayerTurn emits inline exactly as before (non-positional / DPS / healing
      *  path byte-identical). */
     deferAbilityPerformedToEngine?: boolean;
+    /** Active-skill parsed pattern (support footprint for on-cast grants/heals/shields/buffs). */
+    activePattern?: ParsedPattern;
+    /** Charged-skill parsed pattern when it differs from active; falls back to activePattern. */
+    chargedPattern?: ParsedPattern;
+    /** Living same-side roster for support footprint resolution (positional mode). */
+    sameSideLiving?: CombatActor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -723,6 +735,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         aoeVictimIds,
         opposingVictimById,
         positional,
+        activePattern,
+        chargedPattern,
+        sameSideLiving,
     } = args;
 
     const {
@@ -774,6 +789,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     advanceChargeCadence(actor, hasChargedSkill, bus, r);
 
     bus.emit({ type: 'skill-fired', actorId: actor.id, round: r, slot: action });
+
+    const firingPattern = action === 'charged' ? (chargedPattern ?? activePattern) : activePattern;
+    const footprintAllyIds = supportFootprintAllyIds({
+        pattern: firingPattern,
+        anchor: actor.position,
+        sameSideLiving: sameSideLiving ?? [],
+    });
+    const supportRecipients = (target: Ability['target'], base: string[]): string[] =>
+        resolveSupportRecipients({
+            target,
+            casterId: actor.id,
+            baseRecipients: base,
+            footprintAllyIds,
+        });
 
     // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
     // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
@@ -1222,7 +1251,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!conditionsMet(status.conditions, postDebuffGateCtx)) continue;
         // recipients is set by the engine helper for every timed-by-slot status; default to
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
-        for (const rid of status.recipients ?? [actor.id]) {
+        for (const rid of supportRecipients('all-allies', status.recipients ?? [actor.id])) {
             // Block Buff: a recipient carrying it cannot receive new buffs. Covers self-buffs,
             // single-ally grants, and all-allies grants (each recipient guarded independently);
             // covers BOTH sides (enemies run this same path). Silent skip — no buff-applied emit.
@@ -1553,7 +1582,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'ally',
             });
-        if (allyCharges > 0) grantAllyCharges(allyCharges);
+        if (allyCharges > 0) {
+            const isEnemyCaster = actor.side === 'enemy';
+            const allyRoster = args.healing
+                ? isEnemyCaster
+                    ? args.healing.enemyIds
+                    : args.healing.playerIds
+                : (sameSideLiving ?? []).map((a) => a.id);
+            const chargeRecipients = supportRecipients('all-allies', allyRoster);
+            grantAllyCharges(
+                allyCharges,
+                footprintAllyIds !== undefined ? { recipientIds: chargeRecipients } : undefined
+            );
+        }
     }
 
     // ENEMY charge removal (Task 7): enemy/all-enemies-targeted charge abilities REMOVE charges
@@ -1899,14 +1940,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             return best ?? actor.id;
         };
         const recipientsFor = (target: Ability['target']): string[] => {
-            if (target === 'self') return [actor.id];
-            if (target === 'all-allies')
-                return isEnemyCaster ? healing.enemyIds : healing.playerIds;
-            if (isEnemyCaster) {
+            let base: string[];
+            if (target === 'self') base = [actor.id];
+            else if (target === 'all-allies')
+                base = isEnemyCaster ? healing.enemyIds : healing.playerIds;
+            else if (isEnemyCaster) {
                 const rid = lowestHpEnemyAllyId();
-                return rid ? [rid] : [];
-            }
-            return [healing.targetId];
+                base = rid ? [rid] : [];
+            } else base = [healing.targetId];
+            return supportRecipients(target, base);
         };
         // Basis value for a heal/shield ability against recipient `rid`.
         const basisValue = (

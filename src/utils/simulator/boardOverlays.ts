@@ -22,6 +22,8 @@ export interface CellOverlay {
     name: string;
     hpPct: number;
     alive: boolean;
+    /** Remaining shield pool at end of this round (0 when none). */
+    currentShieldPool: number;
     buffs: string[];
     debuffs: string[];
     /** This-round visual cue: 'damage' if the ship took damage, 'heal' if healed, 'shield' if shield absorbed. Damage/heal win over shield when co-occurring. */
@@ -59,6 +61,7 @@ export function overlaysForRound(
             name: entry.name,
             hpPct: state.hpPct,
             alive: state.alive,
+            currentShieldPool: state.currentShieldPool,
             buffs: state.activeBuffs,
             debuffs: state.activeDebuffs,
             effect,

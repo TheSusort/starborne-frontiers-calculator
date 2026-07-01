@@ -3077,6 +3077,21 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Support skill patterns
+                                </h4>
+                                <p className="text-theme-text mb-2">
+                                    Ships with friendly targeting (Allies + a support pattern on
+                                    their skill board) grant heals, shields, buffs, and ally charges
+                                    only to allies standing on that pattern&apos;s footprint — not
+                                    the entire team. This applies to active and charged skill casts
+                                    and to reactive passives (such as start-of-round charge grants).
+                                    Text that says &quot;(All) allies&quot; means all allies{' '}
+                                    <em>in the pattern</em>, not every ship on your roster.
+                                </p>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Combat Log</h4>
                                 <p className="text-theme-text mb-2">
                                     The combat log shows a complete, hierarchical record of

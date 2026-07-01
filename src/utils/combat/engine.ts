@@ -93,6 +93,7 @@ import {
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
+import { supportFootprintAllyIds } from './supportFootprint';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
  *  conditions stay true re-fires on the extra turn it granted). Real texts are
@@ -408,6 +409,8 @@ export interface EnemyActorInput {
     target?: ParsedTarget;
     /** Pre-parsed positional pattern for this enemy (positional plumbing — set but not yet consumed by apply). */
     pattern?: ParsedPattern;
+    /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
+    chargedPattern?: ParsedPattern;
     /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
      *  computeAffinityModifiers to produce `affinityDamageModifier` above (positional plumbing —
      *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
@@ -855,6 +858,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Pre-parsed positional pattern for this team actor. Consumed by the Task 8b positional
      *  apply at the team damage site (origin/covered footprint expansion). */
     pattern?: ParsedPattern;
+    /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
+    chargedPattern?: ParsedPattern;
 };
 
 export interface CombatEngineInput {
@@ -961,6 +966,8 @@ export interface CombatEngineInput {
         target?: ParsedTarget;
         /** Pre-parsed positional pattern for this enemy attacker (positional plumbing — set but not yet consumed by apply). */
         pattern?: ParsedPattern;
+        /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
+        chargedPattern?: ParsedPattern;
         /** RAW affinity of this enemy attacker — the SAME affinity the adapter fed to
          *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
          *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
@@ -984,6 +991,8 @@ export interface CombatEngineInput {
     /** Pre-parsed positional pattern for the focus attacker. Consumed by the Task 8b positional
      *  apply at the focus damage site (origin/covered footprint expansion). */
     pattern?: ParsedPattern;
+    /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
+    chargedPattern?: ParsedPattern;
     /** RAW affinity of the focus attacker — the SAME affinity matchup the page resolved into the
      *  pre-resolved `affinityDamageModifier` above, so the two never disagree (positional plumbing
      *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
@@ -1079,7 +1088,10 @@ interface ReactiveSideCtx {
     runtimes: Map<string, PlayerActorRuntime>;
     recipientIds: string[];
     isLowestSpeedAllyFor: (ownerId: string) => boolean;
-    grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
+    grantAllyCharges: (
+        amount: number,
+        opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
+    ) => void;
     /** Enemy-targeted charge removal for this drain side — bySide(side).removeEnemyCharges, which
      *  subtracts from the OPPOSING side (floored at 0, immune actors skipped). The optional
      *  `applierAffinity` enforces the Charge Manipulation affinity gate (skip affinity-advantaged
@@ -1115,6 +1127,8 @@ interface ReactiveSideCtx {
     oncePerRoundConsumed?: Set<string>;
     /** Per-side adjacent-allies resolver (Fortifying Shroud). See IntentExecContext. */
     adjacentAllyIdsFor: (ownerId: string) => string[];
+    /** Per-side support footprint resolver (pattern-scoped reactive grants). See IntentExecContext. */
+    footprintAllyIdsFor: (ownerId: string) => string[] | undefined;
 }
 
 /** Per-victim incoming accounting bucket (PR5a foundation — written in parallel with the
@@ -1394,6 +1408,11 @@ export function runCombat(input: CombatEngineInput): {
             teamPatternById.set(t.id, t.pattern);
         }
     }
+    const teamChargedPatternById = new Map<string, ParsedPattern>();
+    for (const t of teamActors) {
+        const cp = t.chargedPattern ?? t.pattern;
+        if (cp) teamChargedPatternById.set(t.id, cp);
+    }
 
     // Per-enemy-attacker parsed positional target (Task C3, side-symmetric). The enemy's
     // `position` already rides on its CombatActor (buildEnemyPlayerActorRuntime → createActor),
@@ -1416,6 +1435,11 @@ export function runCombat(input: CombatEngineInput): {
         if (e.pattern) {
             enemyPatternById.set(e.id, e.pattern);
         }
+    }
+    const enemyChargedPatternById = new Map<string, ParsedPattern>();
+    for (const e of input.enemyAttackers ?? []) {
+        const cp = e.chargedPattern ?? e.pattern;
+        if (cp) enemyChargedPatternById.set(e.id, cp);
     }
 
     // Deterministic event gates — replace Math.random / expected-value math so
@@ -1862,7 +1886,10 @@ export function runCombat(input: CombatEngineInput): {
          *  overrides the captured outer bus for the `charge-changed` emission — reactive callers
          *  pass the stamping wrapper (ctx.bus) so the change is branded `reactive`/`duringTurnOf`
          *  and the log nests it under the triggering turn; on-turn callers omit it (unstamped). */
-        grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
+        grantAllyCharges: (
+            amount: number,
+            opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
+        ) => void;
         /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
          *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
          *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
@@ -1902,18 +1929,33 @@ export function runCombat(input: CombatEngineInput): {
         /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
          *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
         adjacentAllyIdsFor: (ownerId: string) => string[];
+        /** Living ally ids on the owner's ACTIVE support pattern footprint. */
+        footprintAllyIdsFor: (ownerId: string) => string[] | undefined;
     }
+
+    const parsedPatternForActor = (a: CombatActor): ParsedPattern | undefined => {
+        if (a.side === 'enemy') return enemyPatternById.get(a.id);
+        if (a.kind === 'attacker') return input.pattern;
+        return teamPatternById.get(a.id);
+    };
 
     const buildSideContext = (side: Side): SideContext => {
         const actors = actorsBySide(side);
         return {
-            grantAllyCharges: (amount: number, emitBus?: CombatEventBus): void => {
-                for (const a of actors) {
+            grantAllyCharges: (
+                amount: number,
+                opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
+            ): void => {
+                const targets =
+                    opts?.recipientIds !== undefined
+                        ? actors.filter((a) => opts.recipientIds!.includes(a.id))
+                        : actors;
+                for (const a of targets) {
                     if (a.chargeCount <= 0) continue;
                     const oldCharge = a.charges;
                     a.charges = Math.min(a.charges + amount, a.chargeCount);
                     if (a.charges !== oldCharge) {
-                        (emitBus ?? bus).emit({
+                        (opts?.emitBus ?? bus).emit({
                             type: 'charge-changed',
                             actorId: a.id,
                             round: currentRound,
@@ -2009,6 +2051,15 @@ export function runCombat(input: CombatEngineInput): {
                         : undefined
                     : (): number => 100,
             adjacentAllyIdsFor: (ownerId: string): string[] => adjacentAllyIds(ownerId, actors),
+            footprintAllyIdsFor: (ownerId: string): string[] | undefined => {
+                const owner = allActorsById.get(ownerId);
+                if (!owner) return undefined;
+                return supportFootprintAllyIds({
+                    pattern: parsedPatternForActor(owner),
+                    anchor: owner.position,
+                    sameSideLiving: actors.filter((a) => a.currentHp > 0),
+                });
+            },
         };
     };
 
@@ -3686,6 +3737,15 @@ export function runCombat(input: CombatEngineInput): {
             return teamPatternById.get(a.id);
         };
 
+        const parsedChargedPatternFor = (a: CombatActor): ParsedPattern | undefined => {
+            if (a.side === 'enemy') return enemyChargedPatternById.get(a.id);
+            if (a.kind === 'attacker') return input.chargedPattern ?? input.pattern;
+            return teamChargedPatternById.get(a.id);
+        };
+
+        const sameSideLivingFor = (a: CombatActor): CombatActor[] =>
+            actorsBySide(a.side).filter((x) => x.currentHp > 0);
+
         // ── Unified per-side turn bindings (bySide unification PR6a) ────────────────
         // Per-side values the three runPlayerTurn sites diverge on. Each reproduces the
         // exact value its site used before → byte-identical. PR6b (DONE): decline is now
@@ -3989,6 +4049,9 @@ export function runCombat(input: CombatEngineInput): {
                 targetEffectiveAttack: effectiveStatsOf(statusEngine, selfBuffLookup, tgt).attack,
                 rollOutgoingProc: (abilityId: string, chance: number) =>
                     rollRateGate(procChanceGates, `${a.id}:${abilityId}`, chance),
+                activePattern: parsedPatternFor(a),
+                chargedPattern: parsedChargedPatternFor(a),
+                sameSideLiving: sameSideLivingFor(a),
             };
         };
 
@@ -4303,6 +4366,7 @@ export function runCombat(input: CombatEngineInput): {
                         // D-PR11: live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
+                        footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
                     });
                 }
             }
@@ -4366,6 +4430,7 @@ export function runCombat(input: CombatEngineInput): {
                 lastStandingId: soleSurvivorOf(allPlayerActors),
                 oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
+                footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
             });
 
         // Enemy drain (enemy-team PR1) — binds the SEPARATE enemy queue + enemy-side ctx.
@@ -4394,6 +4459,7 @@ export function runCombat(input: CombatEngineInput): {
                 lastStandingId: soleSurvivorOf(enemyAttackerActors),
                 oncePerRoundConsumed,
                 adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
+                footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
             });
         };
 

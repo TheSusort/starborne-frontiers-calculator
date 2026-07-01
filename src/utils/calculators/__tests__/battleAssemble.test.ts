@@ -9,7 +9,8 @@
  *   - heals = heal-performed { casterId, targets[], amount }
  *   - death = ship-destroyed { actorId }
  *   - buffs = buff-applied / buff-expired / debuff-applied / dot-applied
- *   - hpPct = maxHp - cumulative(damageTaken) over rounds <= r
+ *   - hpPct = maxHp minus cumulative actual HP loss (perRoundPerIncoming when present,
+ *     else perRoundPerTarget fallback), net of healing received
  *
  * The lossy per-round `BattleLogEvent[]` (`BattleRound.events`) was REMOVED (T9). The
  * play-by-play now lives in the hierarchical `result.combatLog` (`CombatLogRound[]`) folded
@@ -131,6 +132,38 @@ describe('assembleBattleResult — hpPct from cumulative taken', () => {
             numRounds: 1,
         });
         expect(find(result, 1, 'attacker').hpPct).toBe(0);
+    });
+
+    it('derives hpPct from actual HP damage (post-shield), not raw perTargetDamage', () => {
+        // Mirrors the combat-simulator bug: raw damage (49945) exceeds maxHp (50000) when
+        // shields absorb 18106, but only 31839 lands on HP — the ship is still alive.
+        const perRoundPerTarget = { 1: { 'enemy-front': 49945 } };
+        const perRoundPerIncoming = {
+            1: {
+                'enemy-front': {
+                    incoming: 49945,
+                    shieldAbsorbed: 18106,
+                    barrierAbsorbed: 0,
+                },
+            },
+        };
+        const customRoster = roster().map((r) =>
+            r.actorId === 'enemy-front' ? { ...r, maxHp: 50000 } : r
+        );
+        const result = assembleBattleResult({
+            events: [],
+            perRoundPerTarget,
+            perRoundPerIncoming,
+            roster: customRoster,
+            numRounds: 1,
+        });
+        const state = find(result, 1, 'enemy-front');
+        // 50000 - 31839 = 18161 remaining => ~36% (UI rounds via Math.round)
+        expect(Math.round(state.hpPct)).toBe(36);
+        expect(state.alive).toBe(true);
+        // Raw damageTaken still reports the full hit for the stat card.
+        expect(state.damageTaken).toBe(49945);
+        expect(state.incomingDamage).toBe(31839);
     });
 
     it('yields hpPct 0 (not NaN) for an actor with maxHp 0', () => {

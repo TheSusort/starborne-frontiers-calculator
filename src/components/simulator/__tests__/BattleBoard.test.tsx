@@ -7,6 +7,7 @@ import type { Position } from '../../../types/encounters';
 const overlay = (over: Partial<CellOverlay> & { actorId: string; name: string }): CellOverlay => ({
     hpPct: 100,
     alive: true,
+    currentShieldPool: 0,
     buffs: [],
     debuffs: [],
     ...over,
@@ -50,5 +51,13 @@ describe('BattleBoard', () => {
         render(<BattleBoard title="Your Team" overlays={shieldOverlays} onPinShip={vi.fn()} />);
         expect(screen.getByLabelText('shield absorbed')).toBeInTheDocument();
         expect(screen.getByText('shield')).toBeInTheDocument();
+    });
+
+    it('shows current shield pool when greater than zero', () => {
+        const shieldOverlays: Partial<Record<Position, CellOverlay>> = {
+            T1: overlay({ actorId: 'attacker', name: 'Nova', currentShieldPool: 18106 }),
+        };
+        render(<BattleBoard title="Your Team" overlays={shieldOverlays} onPinShip={vi.fn()} />);
+        expect(screen.getByText('18,106 shield')).toBeInTheDocument();
     });
 });
