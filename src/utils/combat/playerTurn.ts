@@ -19,6 +19,7 @@ import {
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
+import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import {
     ActiveDoTStack,
     ActorHealing,
@@ -157,10 +158,31 @@ export interface PlayerTurnResult {
      *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
      *  Present whenever a damage ability fired this cast (else undefined). */
     positionalScalars?: AttackerDamageScalars;
+    /** Per-victim crit resolver for the positional AoE apply path (per-victim crit).
+     *  Rolls THIS attacker's crit gate at the given victim's affinity-capped rate, so a
+     *  covered victim the attacker is at an affinity disadvantage against crits less often
+     *  than the anchor. Uses the SAME `critGate` closure as the anchor's per-hit draws, so
+     *  covered-victim draws continue the same RNG stream AFTER the anchor's per-hit draws.
+     *  Read ONLY by the positional engine branch; non-positional callers ignore it. */
+    rollVictimCrit: (victimAffinity: AffinityName) => boolean;
     /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
      *  `positional` arg was set (the engine then detonates each footprint victim's own containers
      *  via detonateContainers). Absent for non-positional callers → byte-identical. */
     positionalDetonation?: DetonationRecipe;
+    /** Deferred `ability-performed` payload (Task 5). Present ONLY when `deferAbilityPerformedToEngine`
+     *  was set AND a damage ability fired this cast — in that case runPlayerTurn does NOT emit the
+     *  aggregate `ability-performed` and the ENGINE emits it after its positional per-victim apply,
+     *  overriding `didCrit`/`critHits` with the true per-victim aggregate (anyCrit / critPairs). The
+     *  ANCHOR-based `didCrit`/`critHits` carried here are a defensive fallback only (if the engine
+     *  somehow does not run positional apply). Absent → runPlayerTurn already emitted inline. */
+    deferredAbilityPerformed?: {
+        actorId: string;
+        targetId: string;
+        round: number;
+        damage: number;
+        didCrit: boolean;
+        critHits: number;
+    };
     turnCtx: PlayerRoundCtx; // round-scoped context for the enemy's DoT tick (this actor)
 }
 
@@ -340,6 +362,16 @@ export interface PlayerTurnArgs {
     /** D-PR4: engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
      *  ability id under this actor. Absent → no amplification rolled (byte-identical). */
     rollOutgoingProc?: (abilityId: string, chance: number) => boolean;
+    /** Per-victim crit signal (Task 5). When true AND a damage ability fires this cast, runPlayerTurn
+     *  does NOT emit the aggregate `ability-performed` event itself — instead it returns
+     *  `deferredAbilityPerformed` for the engine to emit AFTER its positional per-victim apply, with
+     *  the true per-victim crit signal (didCrit = anyCrit OR, critHits = critPairs). The engine sets
+     *  this ONLY on the positional-apply branch (its `positional` gate is `... && positionalScalars
+     *  != null`, i.e. exactly `hasDamageAbility` — so the suppression condition here matches EXACTLY
+     *  which turns the engine will resolve positionally). Absent/false, OR set on a cast with no
+     *  damage ability → runPlayerTurn emits inline exactly as before (non-positional / DPS / healing
+     *  path byte-identical). */
+    deferAbilityPerformedToEngine?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -1208,6 +1240,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // parser output today (gate conditions never land on active/charged damage).
     const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
     const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
+    // Per-victim crit resolver for the positional AoE path (per-victim crit). The anchor's
+    // own hitCrits are still rolled by the per-hit loop below (using the SAME critGate); a
+    // covered victim resolves via this closure at ITS OWN affinity-capped rate — a victim the
+    // attacker is at an affinity disadvantage against crits less often. The UNCAPPED crit total
+    // (before any affinity cap) is `crit + dmgStats.totals.critBuff`; we cap it against THIS
+    // victim's matchup (NOT the representative cappedCrit, which uses the bound target's cap).
+    const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
+    const uncappedCritTotal = crit + dmgStats.totals.critBuff;
+    const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
+        // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
+        // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
+        // identical to the pre-per-victim behavior for noCrit AoE.
+        if (damageNoCrit) return false;
+        const { critCap, critPenalty } = computeAffinityModifiers(attackerAff, victimAffinity);
+        const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
+        return critGate(rate);
+    };
     // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
@@ -1506,17 +1555,30 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const conditionalDamage = effectiveAttack * (conditionalBonusPct / 100) * postDefenseFactor;
 
     // ability-performed: ONE event for the firing damage hit, full directDamage.
-    bus.emit({
-        type: 'ability-performed',
-        actorId: actor.id,
-        targetId: enemy.id,
-        round: r,
-        abilityType: 'damage',
-        damage: directDamage,
-        didCrit: roundCrit,
-        ...(critHits > 0 ? { critHits } : {}),
-        didHit: true,
-    });
+    // Task 5 (per-victim crit signal): when the ENGINE will resolve this cast POSITIONALLY
+    // (deferAbilityPerformedToEngine set AND a damage ability fired — the exact condition under
+    // which the engine runs its per-victim apply, since its `positional` gate requires
+    // positionalScalars != null ⟺ hasDamageAbility), DO NOT emit here. The engine emits ONE
+    // aggregate `ability-performed` AFTER its per-victim apply so `didCrit`/`critHits` reflect the
+    // TRUE per-victim outcomes (anyCrit OR / critPairs count) rather than the anchor-only values.
+    // Emitting once, later, keeps exactly ONE ability-performed per positional cast (no combat-log
+    // pollution) and preserves the ability-performed → per-victim `attacked` bus order.
+    // Non-positional / DPS / healing (flag absent, or no damage ability) → emit inline as before
+    // → byte-identical.
+    const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
+    if (!deferAbilityPerformed) {
+        bus.emit({
+            type: 'ability-performed',
+            actorId: actor.id,
+            targetId: enemy.id,
+            round: r,
+            abilityType: 'damage',
+            damage: directDamage,
+            didCrit: roundCrit,
+            ...(critHits > 0 ? { critHits } : {}),
+            didHit: true,
+        });
+    }
 
     extendDoTs({
         abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
@@ -2186,7 +2248,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
+        // Task 5: when the inline emit was SUPPRESSED (engine will resolve positionally), hand the
+        // engine the payload to emit post-apply with the true per-victim crit signal. anchor-based
+        // didCrit/critHits are a defensive fallback; the engine overrides them with anyCrit/critPairs.
+        ...(deferAbilityPerformed
+            ? {
+                  deferredAbilityPerformed: {
+                      actorId: actor.id,
+                      targetId: enemy.id,
+                      round: r,
+                      damage: directDamage,
+                      didCrit: roundCrit,
+                      critHits,
+                  },
+              }
+            : {}),
         turnCtx,
     };
 }

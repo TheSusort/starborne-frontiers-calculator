@@ -87,6 +87,9 @@ export function footprintVictims(
  *
  * PURE module: `applyToVictim` / `emitHit` are injected callbacks (engine wiring lives in
  * Task 8); this file imports no engine state.
+ *
+ * @returns `anyCrit` — true if at least one (hit, victim) pair critted this call;
+ *          `critPairs` — the count of critting (hit, victim) pairs.
  */
 export function applyPositionalDamage(args: {
     hitCrits: boolean[];
@@ -131,7 +134,14 @@ export function applyPositionalDamage(args: {
      * byte-identical (inert for attackers without an outgoing-amplification ability).
      */
     outgoingAmplificationFor?: (victim: CombatActor, didCrit: boolean) => number;
-}): void {
+    /**
+     * OPTIONAL per-victim crit resolver.
+     * The anchor victim (the resolved target, `victim.id === anchorActor.id`) reuses
+     * hitCrits[h]; each other footprint victim resolves via this callback.
+     * Unsupplied → every victim uses hitCrits[h] → byte-identical.
+     */
+    rollVictimCrit?: (victim: CombatActor) => boolean;
+}): { anyCrit: boolean; critPairs: number } {
     const {
         hitCrits,
         scalars,
@@ -147,7 +157,11 @@ export function applyPositionalDamage(args: {
         onVictimResolved,
         incomingReductionFor,
         outgoingAmplificationFor,
+        rollVictimCrit,
     } = args;
+
+    let anyCrit = false;
+    let critPairs = 0;
 
     // Canonical hit count: derive the loop count from `scalars.hits` (the single source of
     // truth that victimHitDamage also reads), avoiding silent under/over-application from a
@@ -167,13 +181,20 @@ export function applyPositionalDamage(args: {
             continue;
         }
 
-        const didCrit = hitCrits[h] ?? false;
+        const anchorCrit = hitCrits[h] ?? false;
 
         for (const { victim, roleScale } of footprintVictims(
             pattern,
             anchorActor.position,
             opposingLiving
         )) {
+            // Anchor reuses the pre-rolled hitCrits[h]; covered victims resolve via callback.
+            const isAnchor = victim.id === anchorActor.id;
+            const didCrit = isAnchor ? anchorCrit : (rollVictimCrit?.(victim) ?? anchorCrit);
+            if (didCrit) {
+                anyCrit = true;
+                critPairs += 1;
+            }
             const equipReductionPct = incomingReductionFor?.(victim, didCrit) ?? 0;
             const dmgBase = victimHitDamage(
                 scalars,
@@ -189,4 +210,5 @@ export function applyPositionalDamage(args: {
             onVictimResolved?.(victim, dmg, outcome, didCrit);
         }
     }
+    return { anyCrit, critPairs };
 }
