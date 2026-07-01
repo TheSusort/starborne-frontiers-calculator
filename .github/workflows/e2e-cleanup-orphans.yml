@@ -5,7 +5,7 @@
 # crashed or timed-out runs may leak users. This cron bounds the orphan
 # count at <7 per week.
 #
-# Required GitHub Secrets (same as e2e-post-deploy.yml):
+# Required GitHub Secrets:
 #   - SUPABASE_URL
 #   - SUPABASE_SERVICE_ROLE_KEY
 #   - E2E_TEST_EMAIL_PREFIX
