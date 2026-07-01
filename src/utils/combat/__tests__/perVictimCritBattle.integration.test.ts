@@ -25,6 +25,10 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
+import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
+import { Ability, ShipSkills } from '../../../types/abilities';
+import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Ship, AffinityName } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import type { CombatLogTarget } from '../log/types';
@@ -214,5 +218,280 @@ describe('per-victim crit — end-to-end battle (per-victim crit, Task 3)', () =
         );
         expect(byId.get('e:e1:0')!.didCrit).toBe(true); // anchor crits
         expect(byId.get('e:e2:1')!.didCrit).toBe(true); // neutral covered ALSO crits
+    });
+});
+
+/**
+ * Task 5 — the ATTACKER's aggregate crit signal (the `ability-performed` event) must reflect the
+ * PER-VICTIM outcomes on the sim/positional path:
+ *   - didCrit  = anyCrit   (OR across all footprint victims — Lev-style "if crit, hit all enemies")
+ *   - critHits = critPairs (count of critting (hit, victim) pairs — Bloodthirst rolls its proc per
+ *                critting victim)
+ *
+ * BEFORE Task 5 the event carried ANCHOR-based values (critHits ≤ 1 for a single-hit ability), so
+ * a single-hit AoE that crit 2 of its 3 covered victims still reported critHits ≤ 1 — this block
+ * FAILS on the pre-Task-5 engine and PASSES once the engine emits from {anyCrit, critPairs}.
+ *
+ * Uses the raw `runCombat` event stream (not the assembled combat log) because critHits is only
+ * carried on the `ability-performed` event, not surfaced on the combat-log attack entry.
+ */
+
+let ttIdc = 0;
+const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
+    id: `pvc${++ttIdc}`,
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    ...p,
+});
+
+// A single-hit basic attack: multiplier 100% (1x), 1 hit, crit-eligible.
+const basicAttack = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+    ],
+});
+
+const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
+    raw: selection,
+    side: 'enemy',
+    selection,
+});
+
+// Whole-team footprint: every occupied enemy cell is an origin (full-scale) victim of the single
+// firing hit — so a 1-hit AoE resolves against all three enemies in one cast.
+const allPattern = (): ParsedPattern => ({ raw: 'all', shape: 'all', range: 'all', modifiers: {} });
+
+// A positioned enemy with a chosen affinity, no offence (never fires back — irrelevant here).
+const passiveEnemyAt = (id: string, position: Position, affinity: AffinityName) =>
+    ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        affinity,
+        shipSkills: { slots: [] },
+    }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+// Focus attacker (chemical, crit 100) at M1 firing a whole-team AoE. healTargetId unlocks the
+// positioned enemy roster; numRounds 1 so the focus fires exactly once.
+const aoeBattle = (
+    enemyAffinities: {
+        anchor: AffinityName;
+        coveredA: AffinityName;
+        coveredB: AffinityName;
+    },
+    crit = 100
+): CombatEngineInput => ({
+    attack: 5000,
+    crit,
+    critDamage: 100,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: { slots: [basicAttack()] },
+    enemyDefense: 0,
+    enemyHp: 1_000_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    affinity: 'chemical',
+    defence: 0,
+    hp: 1_000_000_000,
+    healTargetId: 'attacker',
+    position: 'M1',
+    target: parsedTarget('front'),
+    pattern: allPattern(),
+    enemyAttackers: [
+        passiveEnemyAt('anchor', 'M4', enemyAffinities.anchor),
+        passiveEnemyAt('covered-a', 'M3', enemyAffinities.coveredA),
+        passiveEnemyAt('covered-b', 'M2', enemyAffinities.coveredB),
+    ],
+});
+
+const runEvents = (input: CombatEngineInput) => {
+    const bus = createEventBus();
+    const events: CombatEvent[] = [];
+    bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+    runCombat({ ...input, bus });
+    return events;
+};
+
+describe('per-victim crit — attacker ability-performed crit signal (Task 5)', () => {
+    afterEach(() => resetRateGateRng());
+
+    it('single-hit AoE that crits 2 of 3 victims emits critHits=2 and didCrit=true', () => {
+        ttIdc = 0;
+        // RNG 0.9. Attacker chemical crit 100 vs each victim:
+        //   anchor  antimatter → neutral      → rate 1.0  → CRITS  (anchor hitCrits path)
+        //   coveredA antimatter → neutral      → rate 1.0  → CRITS  (rollVictimCrit path)
+        //   coveredB thermal    → disadvantage → rate 0.75 → NO CRIT
+        // => anyCrit true, critPairs 2.
+        setRateGateRng(() => 0.9);
+        const events = runEvents(
+            aoeBattle({ anchor: 'antimatter', coveredA: 'antimatter', coveredB: 'thermal' })
+        );
+
+        const focusPerf = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === 'attacker'
+        );
+        expect(focusPerf.length).toBe(1); // exactly one ability-performed per positional cast
+        const perf = focusPerf[0];
+
+        // The heart of Task 5: the attacker signal reflects the per-victim outcomes.
+        expect(perf.didCrit).toBe(true); // anyCrit (2 victims critted)
+        expect(perf.critHits).toBe(2); // critPairs (anchor + coveredA critted; coveredB did not)
+    });
+
+    it('single-hit AoE where all 3 victims crit emits critHits=3', () => {
+        ttIdc = 0;
+        // All three neutral (antimatter) → rate 1.0 → all crit → critPairs 3.
+        setRateGateRng(() => 0.9);
+        const events = runEvents(
+            aoeBattle({ anchor: 'antimatter', coveredA: 'antimatter', coveredB: 'antimatter' })
+        );
+        const perf = events.find(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === 'attacker'
+        )!;
+        expect(perf.didCrit).toBe(true);
+        expect(perf.critHits).toBe(3);
+    });
+
+    it('single-hit AoE where no victim crits emits didCrit=false and no critHits', () => {
+        ttIdc = 0;
+        // Attacker base crit 0 → every victim's rate is 0 → the gate never fires regardless of
+        // RNG or affinity → anyCrit false, critPairs 0.
+        setRateGateRng(() => 0.9);
+        const events = runEvents(
+            aoeBattle({ anchor: 'antimatter', coveredA: 'antimatter', coveredB: 'antimatter' }, 0)
+        );
+        const perf = events.find(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === 'attacker'
+        )!;
+        expect(perf.didCrit).toBe(false); // anyCrit false — no victim critted
+        expect(perf.critHits).toBeUndefined(); // critPairs 0 → field omitted
+    });
+
+    it('SYMMETRY: an ENEMY-side AoE that crits all 3 player victims emits critHits=3 (not anchor-only 1)', () => {
+        ttIdc = 0;
+        // A positioned ENEMY (crit 100) fires a whole-team AoE at the PLAYER roster (3 victims).
+        // With every victim critting, the enemy's ability-performed reports critPairs = 3 — proving
+        // the per-victim crit AGGREGATE is emitted TEAM-SYMMETRICALLY (an enemy attacker's signal is
+        // built from its per-victim apply exactly like a player's). Pre-Task-5 this was the anchor-
+        // only binary (critHits ≤ 1), so 3 here is the load-bearing assertion. (Per-victim affinity
+        // GATING is exercised by the player-side tests above; enemy-attacker affinity resolution is
+        // out of Task 5's scope — this test locks the aggregation/emission symmetry.)
+        // The focus player fires a whole-team AoE so a normal round schedules; the enemy (speed 200)
+        // acts first and its per-victim crit signal is what we assert.
+        setRateGateRng(() => 0.9);
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+        const teamVictim = (
+            id: string,
+            position: Position,
+            affinity: AffinityName
+        ): NonNullable<CombatEngineInput['teamActors']>[number] =>
+            ({
+                id,
+                speed: 90,
+                chargeCount: 0,
+                startCharged: false,
+                selfBuffs: [],
+                enemyDebuffs: [],
+                position,
+                affinity,
+                walk: {
+                    shipSkills: { slots: [] },
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                    },
+                    selfDotModifier: 0,
+                    defensePenetrationBuff: 0,
+                    affinityDamageModifier: 0,
+                    affinityCritCap: 100,
+                    affinityCritPenalty: 0,
+                    hasChargedSkill: false,
+                },
+            }) as NonNullable<CombatEngineInput['teamActors']>[number];
+        runCombat({
+            // Focus player at M4 (the enemy AoE's anchor): antimatter → neutral vs chemical.
+            // It fires a whole-team AoE at the enemy (damage 5000) so a normal round schedules.
+            attack: 5000,
+            crit: 0,
+            critDamage: 100,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            affinity: 'antimatter',
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: allPattern(),
+            teamActors: [
+                teamVictim('team-a', 'M3', 'antimatter'),
+                teamVictim('team-b', 'M2', 'antimatter'),
+            ],
+            enemyAttackers: [
+                {
+                    id: 'enemy-aoe',
+                    stats: {
+                        attack: 5000,
+                        crit: 100,
+                        critDamage: 100,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 200,
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M4',
+                    affinity: 'chemical',
+                    target: parsedTarget('front'),
+                    pattern: allPattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+            ],
+            bus,
+        });
+
+        const enemyPerf = events.find(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === 'enemy-aoe'
+        )!;
+        expect(enemyPerf).toBeDefined();
+        expect(enemyPerf.didCrit).toBe(true); // anyCrit
+        expect(enemyPerf.critHits).toBe(3); // critPairs across all 3 player victims (not anchor-only 1)
     });
 });

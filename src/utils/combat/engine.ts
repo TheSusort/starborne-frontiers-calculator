@@ -4782,8 +4782,19 @@ export function runCombat(input: CombatEngineInput): {
                             // to compute the re-apply check, then stored in `stasisBreakPending` for the
                             // victim's skip branch to consume.
                             const turnStasisHitVictims = new Set<string>();
+                            // Task 5: predict whether the engine will resolve this cast POSITIONALLY.
+                            // The full `positional` gate below adds `turn.positionalScalars != null`
+                            // (⟺ a damage ability fired). runPlayerTurn suppresses its inline
+                            // ability-performed emit ONLY when this flag AND hasDamageAbility both
+                            // hold — so the suppression condition matches the `positional` gate
+                            // EXACTLY. A non-damage cast keeps its inline emit (flag ignored).
+                            const willApplyPositionally =
+                                isPositional(actor.position, enemyAttackerActors) &&
+                                target != null &&
+                                pattern != null;
                             const turn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
+                                deferAbilityPerformedToEngine: willApplyPositionally,
                                 onHitBreakStasis: tgtWasStasised
                                     ? (targetId: string) => {
                                           turnStasisHitVictims.add(targetId);
@@ -4868,7 +4879,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // its OWN containers after the firing hits land. Populated in the
                                 // onVictimResolved hook below alongside the standing-leech proc.
                                 const detonationTargets = new Map<string, CombatActor>();
-                                drivePositionalApply({
+                                const critAgg = drivePositionalApply({
                                     scalars: turn.positionalScalars!,
                                     hitCrits: turn.hitCrits,
                                     pattern: pattern,
@@ -4913,6 +4924,31 @@ export function runCombat(input: CombatEngineInput): {
                                         }
                                     },
                                 });
+                                // Task 5 (per-victim crit signal): emit the attacker's ONE aggregate
+                                // ability-performed NOW — after the per-victim apply, but BEFORE the
+                                // per-victim `attacked` emits — with the TRUE per-victim crit signal:
+                                // didCrit = anyCrit (OR across footprint victims → Lev-style "if crit,
+                                // hit all"), critHits = critPairs (count of critting (hit,victim) pairs →
+                                // Bloodthirst rolls its proc per critting victim). runPlayerTurn
+                                // suppressed its inline emit for this positional cast; deferredAbilityPerformed
+                                // is present ⟺ positional === true here (same condition). damage/targetId
+                                // carry the anchor firing-hit values for the combat log.
+                                if (turn.deferredAbilityPerformed) {
+                                    const dap = turn.deferredAbilityPerformed;
+                                    bus.emit({
+                                        type: 'ability-performed',
+                                        actorId: dap.actorId,
+                                        targetId: dap.targetId,
+                                        round: dap.round,
+                                        abilityType: 'damage',
+                                        damage: dap.damage,
+                                        didCrit: critAgg.anyCrit,
+                                        ...(critAgg.critPairs > 0
+                                            ? { critHits: critAgg.critPairs }
+                                            : {}),
+                                        didHit: true,
+                                    });
+                                }
                                 // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
                                 // (unconditional — covered victims have no same-turn re-apply vector).
                                 // Mirrors the anchor's stasisBreakPending mark; the victim's own skip
@@ -5077,8 +5113,15 @@ export function runCombat(input: CombatEngineInput): {
                             const teamTgtWasStasised =
                                 !actor.doesntBreakStasis && isStasised(tgt.id);
                             const teamTurnStasisHitVictims = new Set<string>();
+                            // Task 5 (per-victim crit signal): predict positional apply (mirror of the
+                            // focus site) so runPlayerTurn defers its inline ability-performed emit.
+                            const teamWillApplyPositionally =
+                                isPositional(actor.position, enemyAttackerActors) &&
+                                teamTarget != null &&
+                                teamPattern != null;
                             const teamTurn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
+                                deferAbilityPerformedToEngine: teamWillApplyPositionally,
                                 onHitBreakStasis: teamTgtWasStasised
                                     ? (targetId: string) => {
                                           teamTurnStasisHitVictims.add(targetId);
@@ -5140,7 +5183,7 @@ export function runCombat(input: CombatEngineInput): {
                                 // onVictimResolved hook below alongside the standing-leech proc (mirror
                                 // of the focus site).
                                 const detonationTargets = new Map<string, CombatActor>();
-                                drivePositionalApply({
+                                const teamCritAgg = drivePositionalApply({
                                     scalars: teamTurn.positionalScalars!,
                                     hitCrits: teamTurn.hitCrits,
                                     pattern: teamPattern,
@@ -5184,6 +5227,25 @@ export function runCombat(input: CombatEngineInput): {
                                         }
                                     },
                                 });
+                                // Task 5 (per-victim crit signal): emit THIS walked team actor's ONE
+                                // aggregate ability-performed after the per-victim apply, before the
+                                // per-victim `attacked` emits — mirror of the focus site.
+                                if (teamTurn.deferredAbilityPerformed) {
+                                    const dap = teamTurn.deferredAbilityPerformed;
+                                    bus.emit({
+                                        type: 'ability-performed',
+                                        actorId: dap.actorId,
+                                        targetId: dap.targetId,
+                                        round: dap.round,
+                                        abilityType: 'damage',
+                                        damage: dap.damage,
+                                        didCrit: teamCritAgg.anyCrit,
+                                        ...(teamCritAgg.critPairs > 0
+                                            ? { critHits: teamCritAgg.critPairs }
+                                            : {}),
+                                        didHit: true,
+                                    });
+                                }
                                 // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
                                 // (unconditional — mirror of the focus site).
                                 for (const victimId of coveredStasisVictims) {
@@ -5470,6 +5532,24 @@ export function runCombat(input: CombatEngineInput): {
                             // site consumes it. Stays undefined on the dead-target path and for any bare
                             // enemy with no detonate() → the loop never runs (byte-identical).
                             let enemyPositionalDetonation: DetonationRecipe | undefined;
+                            // Task 5 (per-victim crit signal): the enemy turn's deferred ability-performed
+                            // payload, hoisted out of the else block (enemyTurn is scoped inside it) so the
+                            // enemy drivePositionalApply site can emit it post-apply with the true per-victim
+                            // crit signal. Present ⟺ enemyPositional true (same suppression condition).
+                            let enemyDeferredAbilityPerformed: PlayerTurnResult['deferredAbilityPerformed'];
+                            // Task 5: the per-victim crit aggregate from the enemy positional apply, hoisted
+                            // out of the `if (damage > 0)` block. Present only when the positional apply
+                            // actually ran; when the enemy turn is positional but deals 0 damage (apply
+                            // skipped), the deferred emit below falls back to the anchor-based crit values
+                            // (byte-identical to the pre-Task-5 inline emit for that 0-damage edge case).
+                            let enemyCritAgg: { anyCrit: boolean; critPairs: number } | undefined;
+                            // Task 5: predict enemy positional apply (mirror of focus/team) so runPlayerTurn
+                            // defers its inline ability-performed emit. The opposing roster from the enemy's
+                            // view is the PLAYER team (allPlayerActors).
+                            const enemyWillApplyPositionally =
+                                isPositional(actor.position, allPlayerActors) &&
+                                enemyTarget != null &&
+                                enemyPattern != null;
                             // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
                             // focus/team sites). Captured BEFORE runPlayerTurn so Stasis re-applied
                             // by the same attack's debuff ability is not inadvertently broken.
@@ -5524,6 +5604,7 @@ export function runCombat(input: CombatEngineInput): {
                                     incomingReductionCritAll - incomingReductionNonCritPct;
                                 const enemyTurn = runPlayerTurn({
                                     ...buildTurnArgs(actor, tgt),
+                                    deferAbilityPerformedToEngine: enemyWillApplyPositionally,
                                     onHitBreakStasis: enemyBreakHook,
                                     incomingReductionNonCritPct,
                                     incomingReductionCritFamilyPct,
@@ -5565,6 +5646,9 @@ export function runCombat(input: CombatEngineInput): {
                                 enemyScalars = enemyTurn.positionalScalars;
                                 // Per-victim crit: capture the enemy turn's per-victim crit resolver.
                                 enemyRollVictimCrit = enemyTurn.rollVictimCrit;
+                                // Task 5: capture the deferred ability-performed payload (present ⟺ the
+                                // enemy inline emit was suppressed, i.e. enemyPositional true).
+                                enemyDeferredAbilityPerformed = enemyTurn.deferredAbilityPerformed;
                                 // PR3: capture the per-victim detonation recipe (returned whenever
                                 // `positional: true` was set for this enemy turn — see the positional
                                 // hint gate). Consumed by the enemy-site per-victim detonation loop below.
@@ -5724,7 +5808,7 @@ export function runCombat(input: CombatEngineInput): {
                                     // containers after the firing hits land. Populated in the
                                     // onVictimResolved hook below alongside the per-victim taken leech.
                                     const detonationTargets = new Map<string, CombatActor>();
-                                    drivePositionalApply({
+                                    enemyCritAgg = drivePositionalApply({
                                         scalars: enemyScalars!,
                                         hitCrits: enemyHitCrits,
                                         pattern: enemyPattern!,
@@ -5785,6 +5869,26 @@ export function runCombat(input: CombatEngineInput): {
                                             }
                                         },
                                     });
+                                    // Task 5 (per-victim crit signal): emit THIS enemy attacker's ONE
+                                    // aggregate ability-performed after the per-victim apply, before the
+                                    // per-victim `attacked` emits — mirror of the player→enemy sites.
+                                    // deferredAbilityPerformed is present ⟺ enemyPositional true.
+                                    if (enemyDeferredAbilityPerformed && enemyCritAgg) {
+                                        const dap = enemyDeferredAbilityPerformed;
+                                        bus.emit({
+                                            type: 'ability-performed',
+                                            actorId: dap.actorId,
+                                            targetId: dap.targetId,
+                                            round: dap.round,
+                                            abilityType: 'damage',
+                                            damage: dap.damage,
+                                            didCrit: enemyCritAgg.anyCrit,
+                                            ...(enemyCritAgg.critPairs > 0
+                                                ? { critHits: enemyCritAgg.critPairs }
+                                                : {}),
+                                            didHit: true,
+                                        });
+                                    }
                                     // PR7 Task 5: set the DEFERRED Stasis break for every covered
                                     // player victim (unconditional — mirror of the player→enemy sites).
                                     for (const victimId of coveredStasisVictims) {
@@ -5950,6 +6054,27 @@ export function runCombat(input: CombatEngineInput): {
                                         damage,
                                     });
                                 }
+                            }
+                            // Task 5 (per-victim crit signal): a positional enemy turn that dealt 0
+                            // damage skips the `if (damage > 0)` apply block entirely — so no per-victim
+                            // apply ran (enemyCritAgg undefined) and the deferred ability-performed was
+                            // never emitted above. Emit it here with the anchor-based FALLBACK crit values
+                            // (didCrit/critHits carried on the deferred payload), byte-identical to the
+                            // pre-Task-5 inline emit for this 0-damage edge case. Only reachable when the
+                            // enemy is positional (deferred payload present) AND the apply was skipped.
+                            if (enemyDeferredAbilityPerformed && !enemyCritAgg) {
+                                const dap = enemyDeferredAbilityPerformed;
+                                bus.emit({
+                                    type: 'ability-performed',
+                                    actorId: dap.actorId,
+                                    targetId: dap.targetId,
+                                    round: dap.round,
+                                    abilityType: 'damage',
+                                    damage: dap.damage,
+                                    didCrit: dap.didCrit,
+                                    ...(dap.critHits > 0 ? { critHits: dap.critHits } : {}),
+                                    didHit: true,
+                                });
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {
