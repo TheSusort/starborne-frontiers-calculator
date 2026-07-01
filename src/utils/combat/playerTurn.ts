@@ -861,18 +861,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const entry = statusEngine.snapshot(actor.id);
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
-    // Positional casts (deferAbilityPerformedToEngine): cap/penalty from the bound anchor's
-    // real affinity — the engine passes `enemy: tgt` via buildTurnArgs. Non-positional (DPS,
-    // healing): keep the representative scalars from battleSimulator (byte-identical).
-    const cappedCrit = (critBuffTotal: number) => {
-        if (args.deferAbilityPerformedToEngine === true) {
-            const { critCap, critPenalty } = computeAffinityModifiers(
-                attackerAffinity ?? actor.affinity ?? 'antimatter',
-                enemy.affinity ?? 'antimatter'
-            );
-            return Math.min(critCap, Math.max(0, crit + critBuffTotal - critPenalty));
-        }
-        return Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+    // Gate/context estimates use representative scalars (byte-identical to pre-SP1). The actual
+    // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
+    const cappedCrit = (critBuffTotal: number) =>
+        Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+
+    const realAffinityCappedCrit = (critBuffTotal: number) => {
+        const { critCap, critPenalty } = computeAffinityModifiers(
+            attackerAffinity ?? actor.affinity ?? 'antimatter',
+            enemy.affinity ?? 'antimatter'
+        );
+        return Math.min(critCap, Math.max(0, crit + critBuffTotal - critPenalty));
     };
 
     // --- Scheduled (manual + team) statuses: same path as before ---
@@ -1235,7 +1234,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     });
     const effectiveAttack = dmgStats.attack;
     // Full buff total at the final fold; equals the prior staged critBuff (layers 1+2+3+4).
-    const effectiveCrit = cappedCrit(dmgStats.totals.critBuff);
+    const effectiveCrit =
+        args.deferAbilityPerformedToEngine === true
+            ? realAffinityCappedCrit(dmgStats.totals.critBuff)
+            : cappedCrit(dmgStats.totals.critBuff);
     const effectiveCritDamage = dmgStats.critDamage;
     // Per-hit crit checks (game-verified 2026-06-06): each hit of a multi-hit skill
     // draws the deterministic crit gate INDIVIDUALLY. Draw count = the UNGATED firing

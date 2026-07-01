@@ -154,7 +154,7 @@ describe('anchor crit at real affinity (deferAbilityPerformedToEngine)', () => {
 
         setRateGateRng(() => draw);
 
-        const nonPositional = runPlayerTurn(makeArgs(runtime, false));
+        const nonPositional = runPlayerTurn(makeArgs(makeRuntime(crit), false));
         expect(nonPositional.hitCrits).toEqual([true]);
     });
 });
