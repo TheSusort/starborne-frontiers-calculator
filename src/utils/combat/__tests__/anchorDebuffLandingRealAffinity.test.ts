@@ -9,6 +9,7 @@ import { createEventBus } from '../events';
 import { makeRateGate, setRateGateRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { ShipSkills } from '../../../types/abilities';
 import { computeAffinityModifiers } from '../../calculators/affinityUtils';
+import { liveDebuffLandingChance } from '../effectiveStats';
 
 const applyDebuffSkill: ShipSkills = {
     slots: [
@@ -209,9 +210,57 @@ describe('anchor debuff landing at real affinity (SP2a)', () => {
 
     it("'inflict' debuff lands at representative rate but resists at anchor disadvantage rate", () => {
         const security = 150;
-        const repRate = Math.min(1, Math.max(0, (200 - security) / 100));
+        const landingAttacker = createActor({
+            id: 'attacker',
+            side: 'player',
+            kind: 'attacker',
+            stats: {
+                attack: 1000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 20000,
+                speed: 100,
+                hacking: 200,
+            },
+            affinity: 'chemical',
+        });
+        const landingDefender = createActor({
+            id: 'anchor',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 1e9,
+                speed: 50,
+                security,
+            },
+            affinity: 'thermal',
+        });
+        const landingEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        landingEngine.beginRound(1);
+        const repRate = liveDebuffLandingChance(
+            landingEngine,
+            new Map(),
+            landingAttacker,
+            landingDefender,
+            0
+        );
         const anchorMod = computeAffinityModifiers('chemical', 'thermal').damageModifier;
-        const anchorRate = Math.min(1, Math.max(0, (200 * (1 + anchorMod / 100) - security) / 100));
+        const anchorRate = liveDebuffLandingChance(
+            landingEngine,
+            new Map(),
+            landingAttacker,
+            landingDefender,
+            anchorMod
+        );
         expect(repRate).toBeGreaterThan(anchorRate);
         const draw = (repRate + anchorRate) / 2;
         expect(draw).toBeLessThan(repRate);

@@ -1064,11 +1064,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         );
         const isAllEnemies = matchingAbility?.target === 'all-enemies';
         const recipientIds: (string | undefined)[] =
-            isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
-                ? aoeVictimIds
-                : targetId !== undefined
-                  ? [targetId]
-                  : [undefined];
+            positionalLanding && isAllEnemies
+                ? (aoeVictimIds ?? [])
+                : isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
+                  ? aoeVictimIds
+                  : targetId !== undefined
+                    ? [targetId]
+                    : positionalLanding
+                      ? []
+                      : [undefined];
 
         let anyLanded = false;
         for (const vid of recipientIds) {
