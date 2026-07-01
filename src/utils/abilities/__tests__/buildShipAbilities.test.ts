@@ -1330,13 +1330,34 @@ describe('buildShipAbilities', () => {
             expect(damageCleanse).toMatchObject({ type: 'cleanse', target: 'self' });
         });
 
-        it('bare shield on a pure-support active stays self (shields not flipped)', () => {
+        it('bare shield on a pure-support active stays self (no co-cast grant)', () => {
             const s = ship({
                 activeSkillText: 'This Unit gains a Shield equal to 30% of its Max HP.',
             });
             const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
             const shield = active?.abilities.find((a) => a.type === 'shield');
             expect(shield).toMatchObject({ type: 'shield', target: 'self' });
+        });
+
+        it('Graphite active: co-cast Overclock buff and shield both target all-allies', () => {
+            const s = ship({
+                activeSkillText:
+                    'This unit grants <unit-skill>Overclock III</unit-skill> for 2 turns and a <unit-damage>shield equal to 120%</unit-damage> of its attack.',
+            });
+            const active = buildShipAbilities(s).slots.find((x) => x.slot === 'active');
+            const buff = active?.abilities.find(
+                (a) =>
+                    a.type === 'buff' &&
+                    a.config.type === 'buff' &&
+                    a.config.buffName === 'Overclock III'
+            );
+            const shield = active?.abilities.find((a) => a.type === 'shield');
+            expect(buff).toMatchObject({ target: 'all-allies' });
+            expect(shield).toMatchObject({
+                type: 'shield',
+                target: 'all-allies',
+                config: { type: 'shield', pct: 120, basis: 'attack' },
+            });
         });
 
         // User-verified 2026-06-07: a bare repair whose OWN sentence is gated on a self-damage

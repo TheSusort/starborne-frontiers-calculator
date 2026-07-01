@@ -15,6 +15,7 @@ import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './bu
 import { targetCarriesBlockDebuff, emitBlockDebuffResist, dotResistLabel } from './debuffImmunity';
 // eslint-disable-next-line import/no-cycle
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
+import { resolveSupportRecipients } from './supportRecipients';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
@@ -738,7 +739,10 @@ export interface IntentExecContext {
      *  `emitBus` overrides the captured outer bus for the `charge-changed` emission — the executor
      *  passes `ctx.bus` (the reactive stamping wrapper) so the change brands `reactive`/`duringTurnOf`
      *  and the log nests it under the triggering turn. */
-    grantAllyCharges: (amount: number, emitBus?: CombatEventBus) => void;
+    grantAllyCharges: (
+        amount: number,
+        opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
+    ) => void;
     /** Delegate for enemy-targeted charge removal — the engine's own `removeEnemyCharges`
      *  closure, threaded here so the executor does not re-implement the per-actor floor loop.
      *  Subtracts from every OPPOSING-side actor (floored at 0), skipping chargeLossImmune actors
@@ -825,6 +829,9 @@ export interface IntentExecContext {
      *  `adjacent-allies` buff target. Engine-populated per side. Absent / undefined → the
      *  recipient resolver falls back to ctx.playerIds (all same-side allies). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
+    /** Living ally ids on the owner's ACTIVE support pattern footprint (reactives). Absent when
+     *  non-positional or the owner has no support pattern → legacy team-wide routing. */
+    footprintAllyIdsFor?: (ownerId: string) => string[] | undefined;
     /** Whether `ownerId` was hit by a direct attack this round, feeding the
      *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
@@ -1248,11 +1255,31 @@ export function reactiveRecipients(
     ctx: IntentExecContext,
     fallbackTargetId: string
 ): string[] {
-    return intent.ability.target === 'ally'
-        ? [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
-        : intent.ability.target === 'all-allies'
-          ? ctx.playerIds
-          : [intent.ownerId];
+    const base =
+        intent.ability.target === 'ally'
+            ? [intent.eventCtx?.damagedAllyId ?? fallbackTargetId]
+            : intent.ability.target === 'all-allies'
+              ? ctx.playerIds
+              : intent.ability.target === 'adjacent-allies'
+                ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
+                : [intent.ownerId];
+    return footprintFilteredRecipients(intent, ctx, base);
+}
+
+/** Intersect reactive support recipients with the owner's active support footprint. */
+export function footprintFilteredRecipients(
+    intent: Intent,
+    ctx: IntentExecContext,
+    baseRecipients: string[]
+): string[] {
+    const footprint = ctx.footprintAllyIdsFor?.(intent.ownerId);
+    if (footprint === undefined) return baseRecipients;
+    return resolveSupportRecipients({
+        target: intent.ability.target,
+        casterId: intent.ownerId,
+        baseRecipients,
+        footprintAllyIds: footprint,
+    });
 }
 
 /**
@@ -1473,7 +1500,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
         // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
         if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
-            ctx.grantAllyCharges(cfg.amount, ctx.bus);
+            ctx.grantAllyCharges(cfg.amount, {
+                recipientIds: footprintFilteredRecipients(
+                    intent,
+                    ctx,
+                    intent.ability.target === 'all-allies' ? ctx.playerIds : [intent.ownerId]
+                ),
+                emitBus: ctx.bus,
+            });
             return;
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
@@ -1519,7 +1553,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // lives on another recipient.
         const isAllyTarget =
             intent.ability.target === 'ally' || intent.ability.target === 'all-allies';
-        const recipients: string[] =
+        const recipients = footprintFilteredRecipients(
+            intent,
+            ctx,
             intent.ability.target === 'adjacent-allies'
                 ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
                 : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
@@ -1540,7 +1576,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       ? [intent.eventCtx.damagedAllyId]
                       : isAllyTarget
                         ? ctx.playerIds
-                        : [intent.ownerId];
+                        : [intent.ownerId]
+        );
         // D-PR10: dynamic caster-attack snapshot. A buff carrying the `attackFlatPctOfCaster`
         // sentinel ("N% of the caster's attack") freezes a concrete `attackFlat` from the
         // CASTER's effective attack at grant time (the same last-turn ctx value that

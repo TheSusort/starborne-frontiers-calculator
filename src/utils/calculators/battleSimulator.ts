@@ -23,8 +23,9 @@
  * targeting ships means some damage lines read as "X → enemy"; that's accepted — the
  * per-victim unification is a deferred follow-up.)
  *
- * HP% is derived as maxHp - cumulative(damageTaken over rounds <= r), uniform for both
- * sides (ignores healing/shields on the HP curve — acceptable for PR1's surface).
+ * HP% is derived as maxHp minus cumulative actual HP loss (from perRoundPerIncoming when
+ * present — post-shield/barrier HP damage — plus healing received), falling back to raw
+ * perTargetDamage only when no incoming bucket exists for that actor (legacy goldens).
  *
  * Debuff persistence: `activeDebuffs` is infliction-only — there is no `debuff-expired`
  * event in the stream, so once a debuff is added it accumulates and persists for the rest
@@ -90,7 +91,7 @@ export interface ShipRoundState {
     incomingShieldAbsorbed: number;
     /** Barrier drained by this round's incoming damage (perActorIncoming.barrierAbsorbed). */
     incomingBarrierAbsorbed: number;
-    /** End-of-round HP%, from maxHp - cumulative damageTaken. */
+    /** End-of-round HP%, from maxHp minus cumulative HP loss (incoming HP damage, net of healing). */
     hpPct: number;
     alive: boolean;
     activeBuffs: string[];
@@ -251,8 +252,12 @@ export function assembleBattleResult(args: {
         return set;
     };
 
-    // Cumulative damage taken per actor across rounds (for HP% derivation).
+    // Cumulative raw perTargetDamage per actor (damageTaken stat only — not used for HP%).
     const cumulativeTaken = new Map<string, number>();
+    // Cumulative actual HP loss per actor (post-shield/barrier incoming, or raw fallback).
+    const cumulativeHpLost = new Map<string, number>();
+    // Cumulative healing received per actor (approximation from heal-performed splits).
+    const cumulativeHealed = new Map<string, number>();
 
     // Roster id set: turn-started for a non-roster id (the dummy player-offense 'enemy')
     // is filtered out of turnOrder since it's not on the board.
@@ -305,14 +310,25 @@ export function assembleBattleResult(args: {
 
         const ships: ShipRoundState[] = roster.map((entry) => {
             const taken = takenThisRound[entry.actorId] ?? 0;
-            const cumulative = (cumulativeTaken.get(entry.actorId) ?? 0) + taken;
-            cumulativeTaken.set(entry.actorId, cumulative);
+            const cumulativeRaw = (cumulativeTaken.get(entry.actorId) ?? 0) + taken;
+            cumulativeTaken.set(entry.actorId, cumulativeRaw);
 
             const destroyRound = destroyedAt.get(entry.actorId);
             const alive = destroyRound === undefined || round < destroyRound;
 
             const shield = shieldThisRound[entry.actorId];
             const incoming = incomingThisRound[entry.actorId];
+            const incomingHpThisRound = incoming
+                ? Math.max(
+                      0,
+                      incoming.incoming - incoming.shieldAbsorbed - incoming.barrierAbsorbed
+                  )
+                : taken;
+            const hpLost = (cumulativeHpLost.get(entry.actorId) ?? 0) + incomingHpThisRound;
+            cumulativeHpLost.set(entry.actorId, hpLost);
+            const healedThisRound = healReceived.get(entry.actorId) ?? 0;
+            const healed = (cumulativeHealed.get(entry.actorId) ?? 0) + healedThisRound;
+            cumulativeHealed.set(entry.actorId, healed);
 
             return {
                 actorId: entry.actorId,
@@ -320,21 +336,16 @@ export function assembleBattleResult(args: {
                 damageDealt: dealt.get(entry.actorId) ?? 0,
                 damageTaken: taken,
                 healingDone: healDone.get(entry.actorId) ?? 0,
-                healingReceived: healReceived.get(entry.actorId) ?? 0,
+                healingReceived: healedThisRound,
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
                 currentShieldPool: shield?.pool ?? 0,
-                incomingDamage: incoming
-                    ? Math.max(
-                          0,
-                          incoming.incoming - incoming.shieldAbsorbed - incoming.barrierAbsorbed
-                      )
-                    : 0,
+                incomingDamage: incomingHpThisRound,
                 incomingShieldAbsorbed: incoming?.shieldAbsorbed ?? 0,
                 incomingBarrierAbsorbed: incoming?.barrierAbsorbed ?? 0,
                 hpPct:
                     entry.maxHp > 0
-                        ? clampPct((100 * (entry.maxHp - cumulative)) / entry.maxHp)
+                        ? clampPct((100 * (entry.maxHp - hpLost + healed)) / entry.maxHp)
                         : 0,
                 alive,
                 activeBuffs: [...(activeBuffs.get(entry.actorId) ?? [])],
@@ -555,6 +566,8 @@ interface PlacementPlan {
     affinity: AffinityName | undefined;
     /** Parsed ACTIVE targeting ({ target, pattern }); undefined if the ship has no targeting data. */
     targeting: SkillTargeting | undefined;
+    /** Parsed CHARGED targeting when it differs from active; otherwise same as active. */
+    chargedTargeting: SkillTargeting | undefined;
     chargeCount: number;
 }
 
@@ -564,9 +577,8 @@ function planPlacement(
     getGearPiece?: (id: string) => GearPiece | undefined
 ): PlacementPlan {
     const targeting = parseShipTargeting(p.ship);
-    // Use the ACTIVE targeting (target + pattern). The engine input takes ONE target/pattern
-    // per actor, so charged-skill targeting is a follow-up (PR2) — when a ship's charged
-    // skill targets differently the active selection is used for every turn here.
+    // Use the ACTIVE targeting (target + pattern). Charged targeting is threaded separately
+    // for support footprint resolution when the charged skill fires.
     return {
         id,
         name: p.ship.name,
@@ -577,6 +589,7 @@ function planPlacement(
             : buildShipAbilities(p.ship),
         affinity: p.ship.affinity,
         targeting: targeting.active,
+        chargedTargeting: targeting.charged ?? targeting.active,
         chargeCount: p.ship.chargeSkillCharge ?? 0,
     };
 }
@@ -665,6 +678,7 @@ export function simulateBattle(
             position: plan.position,
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
+            chargedPattern: plan.chargedTargeting?.pattern,
             // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
@@ -702,6 +716,7 @@ export function simulateBattle(
                 position: plan.position,
                 target: plan.targeting?.target,
                 pattern: plan.targeting?.pattern,
+                chargedPattern: plan.chargedTargeting?.pattern,
                 affinity: plan.affinity,
             };
         }
@@ -755,6 +770,7 @@ export function simulateBattle(
         position: focus.position,
         target: focus.targeting?.target,
         pattern: focus.targeting?.pattern,
+        chargedPattern: focus.chargedTargeting?.pattern,
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,

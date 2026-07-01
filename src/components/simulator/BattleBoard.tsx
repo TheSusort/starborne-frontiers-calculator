@@ -1,6 +1,6 @@
 import React from 'react';
 import { Position } from '../../types/encounters';
-import { CellOverlay, LOW_HP_PCT } from '../../utils/simulator/boardOverlays';
+import { CellOverlay, LOW_HP_PCT, fmt } from '../../utils/simulator/boardOverlays';
 import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons';
 
 interface BattleBoardProps {
@@ -58,6 +58,10 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                             const pinned = pinnedActorId === overlay.actorId;
                             const hpClass =
                                 overlay.hpPct < LOW_HP_PCT ? 'bg-red-500' : 'bg-green-500';
+                            const shieldLabel =
+                                overlay.currentShieldPool > 0
+                                    ? `, ${fmt(overlay.currentShieldPool)} shield`
+                                    : '';
 
                             return (
                                 <button
@@ -65,7 +69,7 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                                     type="button"
                                     role="gridcell"
                                     onClick={() => onPinShip(overlay.actorId)}
-                                    aria-label={`${overlay.name} at ${position}, ${Math.round(overlay.hpPct)}% HP${overlay.alive ? '' : ', destroyed'}`}
+                                    aria-label={`${overlay.name} at ${position}, ${Math.round(overlay.hpPct)}% HP${shieldLabel}${overlay.alive ? '' : ', destroyed'}`}
                                     aria-pressed={pinned}
                                     className={`min-h-[3.5rem] p-1 text-left border rounded transition-colors ${
                                         pinned
@@ -109,6 +113,14 @@ const BattleBoard: React.FC<BattleBoardProps> = ({
                                             data-testid={`hp-bar-${position}`}
                                         />
                                     </div>
+                                    {overlay.currentShieldPool > 0 && (
+                                        <div
+                                            className="text-[10px] text-blue-400 mt-0.5 truncate"
+                                            aria-label={`${fmt(overlay.currentShieldPool)} shield remaining`}
+                                        >
+                                            {fmt(overlay.currentShieldPool)} shield
+                                        </div>
+                                    )}
                                     {!overlay.alive && (
                                         <div className="text-[10px] text-theme-text-secondary mt-0.5">
                                             destroyed

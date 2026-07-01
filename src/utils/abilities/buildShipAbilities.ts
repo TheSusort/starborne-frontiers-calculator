@@ -603,8 +603,12 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
  * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
- * repair is a self rider), passive repairs, and explicit recipients are unaffected. Shields are
- * deliberately NOT flipped ("gains a Shield" stays self).
+ * Damage-rider repairs (skill has a damage component → it targets an enemy, the
+ * repair is a self rider), passive repairs, and explicit recipients are unaffected.
+ *
+ * Shields use {@link flipBareSupportShieldTarget} instead — a bare shield co-cast beside an
+ * all-allies buff grant routes to `all-allies` (Graphite's Overclock + shield); standalone
+ * self shields stay on the caster.
  *
  * Exception (user-verified 2026-06-07): a bare repair whose own sentence is gated on a
  * SELF-DAMAGE condition ("if this unit has been directly damaged this round") is a SELF-heal —
@@ -663,6 +667,28 @@ function flipBareSupportTarget(
         }
     }
 
+    return target;
+}
+
+/** Bare shield on a pure-support active/charged co-cast beside an all-allies buff grant routes
+ *  to all allies (Graphite: Overclock + shield). Standalone self shields ("gains a shield…")
+ *  stay self. Explicit recipients and damage-rider skills are unchanged. */
+function flipBareSupportShieldTarget(
+    target: 'self' | 'ally' | 'all-allies',
+    explicitTarget: boolean,
+    slot: SkillSlot,
+    hasDamage: boolean,
+    hasCoCastAllAlliesGrant: boolean
+): 'self' | 'ally' | 'all-allies' {
+    if (
+        hasCoCastAllAlliesGrant &&
+        !explicitTarget &&
+        target === 'self' &&
+        (slot === 'active' || slot === 'charged') &&
+        !hasDamage
+    ) {
+        return 'all-allies';
+    }
     return target;
 }
 
@@ -1017,6 +1043,12 @@ function abilitiesFromText(
     // damage-reactive and revive shapes emit nothing, see parseHealAbilities). The combat engine
     // ignores these types for now (DPS unchanged); they carry the model for the healing calculator.
     const healNoCrit = parseHealNoCrit(text);
+    const coCastAllAlliesGrant =
+        (slot === 'active' || slot === 'charged') &&
+        mult === 0 &&
+        parseSkillEffects(text, slot === 'charged' ? 'charge' : 'active').some(
+            (eff) => eff.target === 'all-allies'
+        );
     for (const h of parseHealAbilities(text)) {
         // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
         // heal components share the same pct the regex may hit the wrong tag — acceptable, since
@@ -1079,17 +1111,12 @@ function abilitiesFromText(
                       },
                   ]
                 : [];
-        // Shields are NOT flipped (only heals); pass hasDamage so a damage-rider repair stays self.
-        // For heals, also pass the sentence at the heal match so the self-damage-conditional guard
-        // in flipBareSupportTarget can scope its check to that clause only (Meatshield; see jsdoc).
         const healPlain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
         const healPlainPos = healPlain.search(new RegExp(`${escNum(h.pct)}%`, 'i'));
         const healSentence = healPlainPos >= 0 ? sentenceContaining(healPlain, healPlainPos) : '';
-        // "Once per battle" reactive repair (Yazid): the engine fires it at most once per combat.
-        // Scoped to a cheat-death-activated trigger so an unrelated "once per battle" elsewhere
-        // doesn't flag a generic heal.
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
+        // Bare support shields route to all-allies (Graphite co-cast); heals use flipBareSupportTarget.
         const healTarget =
             h.kind === 'heal'
                 ? flipBareSupportTarget(
@@ -1100,7 +1127,15 @@ function abilitiesFromText(
                       healSentence,
                       role
                   )
-                : h.target;
+                : h.kind === 'shield'
+                  ? flipBareSupportShieldTarget(
+                        h.target,
+                        h.explicitTarget,
+                        slot,
+                        mult > 0,
+                        coCastAllAlliesGrant
+                    )
+                  : h.target;
         out.push({
             ability: {
                 id: nextId(),
