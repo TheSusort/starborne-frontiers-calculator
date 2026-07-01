@@ -861,8 +861,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const entry = statusEngine.snapshot(actor.id);
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
-    const cappedCrit = (critBuffTotal: number) =>
-        Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+    // Positional casts (deferAbilityPerformedToEngine): cap/penalty from the bound anchor's
+    // real affinity — the engine passes `enemy: tgt` via buildTurnArgs. Non-positional (DPS,
+    // healing): keep the representative scalars from battleSimulator (byte-identical).
+    const cappedCrit = (critBuffTotal: number) => {
+        if (args.deferAbilityPerformedToEngine === true) {
+            const { critCap, critPenalty } = computeAffinityModifiers(
+                attackerAffinity ?? actor.affinity ?? 'antimatter',
+                enemy.affinity ?? 'antimatter'
+            );
+            return Math.min(critCap, Math.max(0, crit + critBuffTotal - critPenalty));
+        }
+        return Math.min(affinityCritCap, Math.max(0, crit + critBuffTotal - affinityCritPenalty));
+    };
 
     // --- Scheduled (manual + team) statuses: same path as before ---
     // Scheduled self-buff names + totals.
