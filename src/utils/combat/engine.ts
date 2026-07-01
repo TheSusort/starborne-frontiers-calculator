@@ -3921,6 +3921,8 @@ export function runCombat(input: CombatEngineInput): {
                           (h) => h.victim.id
                       )
                     : undefined;
+            const opposingVictimById =
+                tgt.position != null ? new Map(tb.opposingRoster.map((v) => [v.id, v])) : undefined;
             return {
                 runtime: rt,
                 enemy: tgt,
@@ -3960,6 +3962,7 @@ export function runCombat(input: CombatEngineInput): {
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
+                ...(opposingVictimById ? { opposingVictimById } : {}),
                 // Positional detonation hint: when the engine will take the positional apply path
                 // (same predicate that computes aoeVictimIds — pattern + target + position all set),
                 // runPlayerTurn SKIPS the anchor detonation (no consume/credit/emit) and instead
