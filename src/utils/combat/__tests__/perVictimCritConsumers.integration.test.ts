@@ -405,8 +405,6 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
         setRateGateRng(() => 0.9);
         const menaceAttacked = collectAttacked(baseInput([menaceAbility], enemies));
 
-        setRateGateRng(() => 0.9); // reset between runs (resetRateGateRng resets draw state)
-        resetRateGateRng();
         setRateGateRng(() => 0.9);
         const controlAttacked = collectAttacked(baseInput([], enemies));
 
