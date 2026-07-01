@@ -483,3 +483,70 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
         expect(menaceCoveredDmg / controlCoveredDmg).toBeCloseTo(1.45, 1);
     });
 });
+
+// ---------------------------------------------------------------------------
+// 4. noCrit guard — a noCrit AoE never crits ANY victim (anchor OR covered)
+// ---------------------------------------------------------------------------
+
+describe('per-victim crit consumers — noCrit AoE guard (CodeRabbit #183)', () => {
+    afterEach(() => resetRateGateRng());
+
+    /** A whole-team AoE attack flagged noCrit (e.g. a guaranteed-non-crit hit). */
+    function noCritAttackSlot(): ShipSkills['slots'][number] {
+        return {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'dmg-nocrit',
+                    type: 'damage',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'damage', multiplier: 100, noCrit: true },
+                },
+            ],
+        };
+    }
+
+    /**
+     * Regression for the per-victim crit seam: before the fix, covered (non-anchor) victims
+     * resolved crit via `rollVictimCrit`, which ignored the attack's `noCrit` flag — so a
+     * noCrit AoE could still crit covered victims (and, worse, advance the crit RNG for them,
+     * desyncing the schedule). The anchor was already safe (drawHits=0 → hitCrits empty).
+     *
+     * With rng=0 EVERY rate-gate would fire, so any un-guarded roll WOULD crit. We assert that
+     * neither anchor nor covered crits, and the ability-performed critHits is 0.
+     */
+    it('noCrit AoE never crits any victim even when rng=0 (all gates would fire)', () => {
+        const enemies = [
+            passiveEnemy('anchor', 'M4', 'antimatter'), // neutral — would crit if allowed
+            passiveEnemy('covered', 'M3', 'antimatter'), // neutral — the previously-buggy slot
+        ];
+
+        // Build a noCrit variant of the base input (swap the active slot).
+        const base = baseInput([], enemies);
+        const noCritInput: CombatEngineInput = {
+            ...base,
+            shipSkills: { slots: [noCritAttackSlot()] },
+        };
+
+        setRateGateRng(() => 0); // all gates fire → any unguarded crit roll would succeed
+
+        const attacked = collectAttacked(noCritInput);
+        const anchor = attacked.find((e) => e.targetId === 'anchor');
+        const covered = attacked.find((e) => e.targetId === 'covered');
+
+        expect(anchor).toBeDefined();
+        expect(covered).toBeDefined();
+        // Both took damage but NEITHER critted.
+        expect(anchor!.damage ?? 0).toBeGreaterThan(0);
+        expect(covered!.damage ?? 0).toBeGreaterThan(0);
+        expect(anchor!.didCrit).toBeFalsy();
+        expect(covered!.didCrit).toBeFalsy();
+
+        // ability-performed reports zero critting pairs.
+        const perf = collectAbilityPerformed(noCritInput);
+        expect(perf.length).toBeGreaterThan(0);
+        expect(perf[0].critHits ?? 0).toBe(0);
+    });
+});

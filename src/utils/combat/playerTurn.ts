@@ -1249,6 +1249,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
     const uncappedCritTotal = crit + dmgStats.totals.critBuff;
     const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
+        // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
+        // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
+        // identical to the pre-per-victim behavior for noCrit AoE.
+        if (damageNoCrit) return false;
         const { critCap, critPenalty } = computeAffinityModifiers(attackerAff, victimAffinity);
         const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
         return critGate(rate);
