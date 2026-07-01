@@ -320,10 +320,11 @@ export function registerReactiveListeners(args: {
                     bus.on('ability-performed', (e) => {
                         // Warpstrike duration-reduction: fires on the OWNER's own damage-dealing
                         // turn. runPlayerTurn emits exactly ONE aggregate ability-performed per
-                        // turn (positional path emits none — engine.ts ~2887), so this is
-                        // once-per-turn for single-hit, multi-hit, and AoE alike — no
-                        // once-per-turn guard needed. The while-debuffed requirement is an
-                        // ability condition (self-debuff), enforced at drain via gateConditions.
+                        // turn (positional path defers its emit; the engine emits exactly one
+                        // ability-performed post-apply), so this is once-per-turn for single-hit,
+                        // multi-hit, and AoE alike — no once-per-turn guard needed. The
+                        // while-debuffed requirement is an ability condition (self-debuff),
+                        // enforced at drain via gateConditions.
                         if (e.actorId !== ownerId) return;
                         if ((e.damage ?? 0) <= 0) return;
                         enqueue(intent);

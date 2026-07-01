@@ -383,6 +383,114 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
         expect(perf.critHits).toBeUndefined(); // critPairs 0 → field omitted
     });
 
+    it('enemy POSITIONAL attack with 0 damage still emits one ability-performed (0-damage fallback path)', () => {
+        ttIdc = 0;
+        // Force 0 damage: set the enemy attacker's attack to 0. The player victims have enormous
+        // HP so even a non-zero attack would not kill them, but attack=0 means the firing hit
+        // resolves to 0 damage before the `if (damage > 0)` apply block — enemyCritAgg stays
+        // undefined and the 0-damage fallback branch (engine.ts) must emit exactly one
+        // ability-performed for the enemy attacker.
+        setRateGateRng(() => 0.9);
+        const bus = createEventBus();
+        const events: CombatEvent[] = [];
+        bus.on('ability-performed', (e) => events.push(e as CombatEvent));
+        const teamVictim0 = (
+            id: string,
+            position: Position,
+            affinity: AffinityName
+        ): NonNullable<CombatEngineInput['teamActors']>[number] =>
+            ({
+                id,
+                speed: 90,
+                chargeCount: 0,
+                startCharged: false,
+                selfBuffs: [],
+                enemyDebuffs: [],
+                position,
+                affinity,
+                walk: {
+                    shipSkills: { slots: [] },
+                    stats: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 0,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                    },
+                    selfDotModifier: 0,
+                    defensePenetrationBuff: 0,
+                    affinityDamageModifier: 0,
+                    affinityCritCap: 100,
+                    affinityCritPenalty: 0,
+                    hasChargedSkill: false,
+                },
+            }) as NonNullable<CombatEngineInput['teamActors']>[number];
+        runCombat({
+            // Focus player fires an all-pattern AoE so a normal round schedules (the enemy
+            // acts via its speed). The focus has crit 0 so it does not emit its own crit signal
+            // (and attack 0 so no damage, keeping the enemy alive for its own turn).
+            attack: 0,
+            crit: 0,
+            critDamage: 100,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [basicAttack()] },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            affinity: 'antimatter',
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'attacker',
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: allPattern(),
+            teamActors: [
+                teamVictim0('team-a', 'M3', 'antimatter'),
+                teamVictim0('team-b', 'M2', 'antimatter'),
+            ],
+            enemyAttackers: [
+                {
+                    id: 'enemy-zero',
+                    stats: {
+                        attack: 0, // 0 damage → positional apply skipped → 0-damage fallback branch
+                        crit: 100,
+                        critDamage: 100,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 200, // acts before the player focus
+                    },
+                    chargeCount: 0,
+                    startCharged: false,
+                    position: 'M4',
+                    affinity: 'chemical',
+                    target: parsedTarget('front'),
+                    pattern: allPattern(),
+                    shipSkills: { slots: [basicAttack()] },
+                } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+            ],
+            bus,
+        });
+
+        const enemyPerf = events.filter(
+            (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
+                e.type === 'ability-performed' && e.actorId === 'enemy-zero'
+        );
+        // The 0-damage fallback branch must emit exactly one ability-performed for the enemy.
+        expect(enemyPerf.length).toBe(1);
+    });
+
     it('SYMMETRY: an ENEMY-side AoE that crits all 3 player victims emits critHits=3 (not anchor-only 1)', () => {
         ttIdc = 0;
         // A positioned ENEMY (crit 100) fires a whole-team AoE at the PLAYER roster (3 victims).

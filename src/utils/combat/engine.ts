@@ -3643,6 +3643,29 @@ export function runCombat(input: CombatEngineInput): {
             });
         };
 
+        // ── Deferred ability-performed emit helper ────────────────────────────────────
+        // Extracted from the four structurally identical bus.emit sites (focus positional,
+        // walked-team positional, enemy positional, enemy 0-damage fallback). The caller
+        // supplies the per-victim crit aggregate (anyCrit / critPairs) — or the anchor-based
+        // fallback values for the 0-damage path — so each site only passes what it knows.
+        const emitDeferredAbilityPerformed = (
+            dap: NonNullable<PlayerTurnResult['deferredAbilityPerformed']>,
+            didCrit: boolean,
+            critHits: number
+        ) => {
+            bus.emit({
+                type: 'ability-performed',
+                actorId: dap.actorId,
+                targetId: dap.targetId,
+                round: dap.round,
+                abilityType: 'damage',
+                damage: dap.damage,
+                didCrit,
+                ...(critHits > 0 ? { critHits } : {}),
+                didHit: true,
+            });
+        };
+
         // ── Unified per-actor turn resolvers (bySide unification PR6a) ──────────────
         // Resolve the per-actor runtime / parsed target / parsed pattern uniformly so the
         // three runPlayerTurn sites stop hard-coding their own lookups. Each reproduces the
@@ -4935,19 +4958,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // carry the anchor firing-hit values for the combat log.
                                 if (turn.deferredAbilityPerformed) {
                                     const dap = turn.deferredAbilityPerformed;
-                                    bus.emit({
-                                        type: 'ability-performed',
-                                        actorId: dap.actorId,
-                                        targetId: dap.targetId,
-                                        round: dap.round,
-                                        abilityType: 'damage',
-                                        damage: dap.damage,
-                                        didCrit: critAgg.anyCrit,
-                                        ...(critAgg.critPairs > 0
-                                            ? { critHits: critAgg.critPairs }
-                                            : {}),
-                                        didHit: true,
-                                    });
+                                    emitDeferredAbilityPerformed(
+                                        dap,
+                                        critAgg.anyCrit,
+                                        critAgg.critPairs
+                                    );
                                 }
                                 // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
                                 // (unconditional — covered victims have no same-turn re-apply vector).
@@ -5232,19 +5247,11 @@ export function runCombat(input: CombatEngineInput): {
                                 // per-victim `attacked` emits — mirror of the focus site.
                                 if (teamTurn.deferredAbilityPerformed) {
                                     const dap = teamTurn.deferredAbilityPerformed;
-                                    bus.emit({
-                                        type: 'ability-performed',
-                                        actorId: dap.actorId,
-                                        targetId: dap.targetId,
-                                        round: dap.round,
-                                        abilityType: 'damage',
-                                        damage: dap.damage,
-                                        didCrit: teamCritAgg.anyCrit,
-                                        ...(teamCritAgg.critPairs > 0
-                                            ? { critHits: teamCritAgg.critPairs }
-                                            : {}),
-                                        didHit: true,
-                                    });
+                                    emitDeferredAbilityPerformed(
+                                        dap,
+                                        teamCritAgg.anyCrit,
+                                        teamCritAgg.critPairs
+                                    );
                                 }
                                 // PR7 Task 5: set the DEFERRED Stasis break for every covered victim
                                 // (unconditional — mirror of the focus site).
@@ -5875,19 +5882,11 @@ export function runCombat(input: CombatEngineInput): {
                                     // deferredAbilityPerformed is present ⟺ enemyPositional true.
                                     if (enemyDeferredAbilityPerformed && enemyCritAgg) {
                                         const dap = enemyDeferredAbilityPerformed;
-                                        bus.emit({
-                                            type: 'ability-performed',
-                                            actorId: dap.actorId,
-                                            targetId: dap.targetId,
-                                            round: dap.round,
-                                            abilityType: 'damage',
-                                            damage: dap.damage,
-                                            didCrit: enemyCritAgg.anyCrit,
-                                            ...(enemyCritAgg.critPairs > 0
-                                                ? { critHits: enemyCritAgg.critPairs }
-                                                : {}),
-                                            didHit: true,
-                                        });
+                                        emitDeferredAbilityPerformed(
+                                            dap,
+                                            enemyCritAgg.anyCrit,
+                                            enemyCritAgg.critPairs
+                                        );
                                     }
                                     // PR7 Task 5: set the DEFERRED Stasis break for every covered
                                     // player victim (unconditional — mirror of the player→enemy sites).
@@ -6064,17 +6063,7 @@ export function runCombat(input: CombatEngineInput): {
                             // enemy is positional (deferred payload present) AND the apply was skipped.
                             if (enemyDeferredAbilityPerformed && !enemyCritAgg) {
                                 const dap = enemyDeferredAbilityPerformed;
-                                bus.emit({
-                                    type: 'ability-performed',
-                                    actorId: dap.actorId,
-                                    targetId: dap.targetId,
-                                    round: dap.round,
-                                    abilityType: 'damage',
-                                    damage: dap.damage,
-                                    didCrit: dap.didCrit,
-                                    ...(dap.critHits > 0 ? { critHits: dap.critHits } : {}),
-                                    didHit: true,
-                                });
+                                emitDeferredAbilityPerformed(dap, dap.didCrit, dap.critHits ?? 0);
                             }
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {
