@@ -248,4 +248,34 @@ describe('applyPositionalDamage — rollVictimCrit callback (per-victim crit sea
         // → covered = anchor / 4
         expect(coveredCall.damage).toBeCloseTo(anchorCall.damage * 0.25, 6);
     });
+
+    /**
+     * critPairs accumulates across multiple HITS: a 2-hit AoE where the covered victim
+     * crits on both hits AND the anchor crits on both → 4 critting (hit, victim) pairs.
+     */
+    it('critPairs counts every critting (hit, victim) pair across multiple hits', () => {
+        const pattern = parsePattern('Pattern-Line-Range-1');
+        const target = parseTarget('front');
+        const anchorActor = actor('origin', 'M4');
+        const coveredActor = actor('covered', 'M3');
+        const opposingLiving = [anchorActor, coveredActor];
+
+        const result = applyPositionalDamage({
+            hitCrits: [true, true], // anchor crits on both hits
+            scalars: { ...scalars(), hits: 2 }, // 2-hit AoE, footprint stable
+            pattern,
+            actorPosition: 'M2',
+            target,
+            opposingLiving,
+            defenseProfileOf: profile,
+            applyToVictim: (victim, damage) => {
+                victim.currentHp -= damage;
+                return { shieldBefore: 0, hpDamage: damage, barriered: false };
+            },
+            rollVictimCrit: (_v) => true, // covered crits on both hits too
+        });
+
+        // 2 hits × 2 victims, all crit → 4 critting pairs.
+        expect(result).toEqual({ anyCrit: true, critPairs: 4 });
+    });
 });

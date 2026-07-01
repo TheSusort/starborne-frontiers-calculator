@@ -3553,8 +3553,13 @@ export function runCombat(input: CombatEngineInput): {
                 outcome: VictimDamageOutcome,
                 didCrit: boolean
             ) => void;
-        }): void => {
-            applyPositionalDamage({
+            // Per-victim crit resolver (per-victim crit). The anchor victim reuses hitCrits[h];
+            // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
+            // capped rate via this callback. Unsupplied → every victim uses hitCrits[h] →
+            // byte-identical. Each call site supplies the firing turn's rollVictimCrit.
+            rollVictimCrit?: (victim: CombatActor) => boolean;
+        }): { anyCrit: boolean; critPairs: number } => {
+            return applyPositionalDamage({
                 hitCrits: args.hitCrits ?? [],
                 scalars: args.scalars,
                 pattern: args.pattern,
@@ -3598,6 +3603,8 @@ export function runCombat(input: CombatEngineInput): {
                 },
                 // E2: forward the per-direction leech hook (unsupplied by all current callers).
                 onVictimResolved: args.onVictimResolved,
+                // Per-victim crit: forward the firing turn's per-victim crit resolver.
+                rollVictimCrit: args.rollVictimCrit,
                 // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
                 // across all three sites (focus / walked-team / enemy) since drivePositionalApply
                 // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
@@ -4045,6 +4052,9 @@ export function runCombat(input: CombatEngineInput): {
                 conditionalDamage: 0,
                 detonationDamage: 0,
                 extraActionGrants: [],
+                // Synthesized skip turn fires no positional attack (no positionalScalars) → this
+                // resolver is never invoked; a no-op keeps the required-field shape.
+                rollVictimCrit: () => false,
                 turnCtx: lastKnownCtx ?? {
                     effectiveAttack: 0,
                     dotMult: 1,
@@ -4868,6 +4878,10 @@ export function runCombat(input: CombatEngineInput): {
                                     actingId: actor.id,
                                     opposingLiving: tb.opposingRoster,
                                     applyToVictim: tb.applyToVictim,
+                                    // Per-victim crit: each covered footprint victim rolls at ITS own
+                                    // affinity-capped rate against THIS attacker.
+                                    rollVictimCrit: (v) =>
+                                        turn.rollVictimCrit(v.affinity ?? 'antimatter'),
                                     // E2 Task 3: per-victim standing leech (player→enemy). The ACTING
                                     // attacker's standing leeches proc off EACH footprint victim's
                                     // role-scaled dealt damage (origin full, covered half) → restoring
@@ -5136,6 +5150,10 @@ export function runCombat(input: CombatEngineInput): {
                                     actingId: actor.id,
                                     opposingLiving: tb.opposingRoster,
                                     applyToVictim: tb.applyToVictim,
+                                    // Per-victim crit: each covered footprint victim rolls at ITS own
+                                    // affinity-capped rate against THIS walked team attacker.
+                                    rollVictimCrit: (v) =>
+                                        teamTurn.rollVictimCrit(v.affinity ?? 'antimatter'),
                                     // E2 Task 3: per-victim standing leech (player→enemy), keyed to
                                     // THIS walked team actor as the acting attacker. Same per-victim
                                     // proc as the focus site.
@@ -5438,6 +5456,13 @@ export function runCombat(input: CombatEngineInput): {
                             // dead-target path and whenever the enemy is non-positional → legacy single-apply.
                             let enemyPositional = false;
                             let enemyScalars: AttackerDamageScalars | undefined;
+                            // Per-victim crit: the enemy turn's per-victim crit resolver, hoisted out
+                            // of the else block (enemyTurn is scoped inside it) so the enemy
+                            // drivePositionalApply site can pass it. Undefined on the dead-target /
+                            // non-positional paths → covered victims fall back to hitCrits (byte-identical).
+                            let enemyRollVictimCrit:
+                                | ((victimAffinity: AffinityName) => boolean)
+                                | undefined;
                             // PR3: the per-victim detonation recipe for the enemy positional path,
                             // hoisted out of the else block (enemyTurn is scoped inside it). When the
                             // enemy fires a positional detonate skill, runPlayerTurn returns the recipe
@@ -5538,6 +5563,8 @@ export function runCombat(input: CombatEngineInput): {
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;
                                 enemyScalars = enemyTurn.positionalScalars;
+                                // Per-victim crit: capture the enemy turn's per-victim crit resolver.
+                                enemyRollVictimCrit = enemyTurn.rollVictimCrit;
                                 // PR3: capture the per-victim detonation recipe (returned whenever
                                 // `positional: true` was set for this enemy turn — see the positional
                                 // hint gate). Consumed by the enemy-site per-victim detonation loop below.
@@ -5707,6 +5734,11 @@ export function runCombat(input: CombatEngineInput): {
                                         actingId: actor.id,
                                         opposingLiving: tb.opposingRoster,
                                         applyToVictim: tb.applyToVictim,
+                                        // Per-victim crit: each covered footprint victim rolls at ITS own
+                                        // affinity-capped rate against THIS enemy attacker.
+                                        rollVictimCrit: enemyRollVictimCrit
+                                            ? (v) => enemyRollVictimCrit(v.affinity ?? 'antimatter')
+                                            : undefined,
                                         // E2 Task 5: per-victim taken leech (enemy→player). Each
                                         // player victim procs its OWN damage-taken heal/shield leech
                                         // off the damage IT took, with the per-victim Barrier /

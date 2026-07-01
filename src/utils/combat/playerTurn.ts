@@ -19,6 +19,7 @@ import {
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
+import { computeAffinityModifiers } from '../calculators/affinityUtils';
 import {
     ActiveDoTStack,
     ActorHealing,
@@ -157,6 +158,13 @@ export interface PlayerTurnResult {
      *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
      *  Present whenever a damage ability fired this cast (else undefined). */
     positionalScalars?: AttackerDamageScalars;
+    /** Per-victim crit resolver for the positional AoE apply path (per-victim crit).
+     *  Rolls THIS attacker's crit gate at the given victim's affinity-capped rate, so a
+     *  covered victim the attacker is at an affinity disadvantage against crits less often
+     *  than the anchor. Uses the SAME `critGate` closure as the anchor's per-hit draws, so
+     *  covered-victim draws continue the same RNG stream AFTER the anchor's per-hit draws.
+     *  Read ONLY by the positional engine branch; non-positional callers ignore it. */
+    rollVictimCrit: (victimAffinity: AffinityName) => boolean;
     /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
      *  `positional` arg was set (the engine then detonates each footprint victim's own containers
      *  via detonateContainers). Absent for non-positional callers → byte-identical. */
@@ -1208,6 +1216,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // parser output today (gate conditions never land on active/charged damage).
     const drawHits = damageNoCrit ? 0 : damageInputsFromSkill(firingSkill).hits;
     const critGate = action === 'charged' ? chargedCritGate : activeCritGate;
+    // Per-victim crit resolver for the positional AoE path (per-victim crit). The anchor's
+    // own hitCrits are still rolled by the per-hit loop below (using the SAME critGate); a
+    // covered victim resolves via this closure at ITS OWN affinity-capped rate — a victim the
+    // attacker is at an affinity disadvantage against crits less often. The UNCAPPED crit total
+    // (before any affinity cap) is `crit + dmgStats.totals.critBuff`; we cap it against THIS
+    // victim's matchup (NOT the representative cappedCrit, which uses the bound target's cap).
+    const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
+    const uncappedCritTotal = crit + dmgStats.totals.critBuff;
+    const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
+        const { critCap, critPenalty } = computeAffinityModifiers(attackerAff, victimAffinity);
+        const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
+        return critGate(rate);
+    };
     // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
@@ -2186,6 +2207,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
         turnCtx,
     };
