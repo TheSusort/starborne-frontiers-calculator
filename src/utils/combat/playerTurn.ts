@@ -346,6 +346,9 @@ export interface PlayerTurnArgs {
      * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
      */
     aoeVictimIds?: string[];
+    /** SP2b: living opposing actors keyed by id — per-victim debuff landing/application in
+     *  positional mode. Supplied from the side's opposing roster. Absent → anchor-only path. */
+    opposingVictimById?: Map<string, CombatActor>;
     /** Positional mode (per-victim detonation): when true, runPlayerTurn does NOT detonate the
      *  anchor enemy's containers (no consume, no credit, no bomb-detonated emit) and instead
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
@@ -718,6 +721,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         healEventOnly = false,
         onHitBreakStasis,
         aoeVictimIds,
+        opposingVictimById,
         positional,
     } = args;
 
@@ -791,13 +795,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         damageInputsFromSkill(firingSkill);
     const hasDamageAbility = damageAbility !== undefined;
 
-    const emitDebuffResisted = (buffName: string) =>
-        bus.emit({ type: 'debuff-resisted', targetId: enemy.id, round: r, buffName });
+    const emitDebuffResisted = (buffName: string, victimId: string = enemy.id) =>
+        bus.emit({ type: 'debuff-resisted', targetId: victimId, round: r, buffName });
     // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
-    const emitDebuffApplied = (sourceId: string, buffName: string) =>
-        bus.emit({ type: 'debuff-applied', sourceId, targetId: enemy.id, round: r, buffName });
+    const emitDebuffApplied = (sourceId: string, buffName: string, victimId: string = enemy.id) =>
+        bus.emit({ type: 'debuff-applied', sourceId, targetId: victimId, round: r, buffName });
 
     // LIVE per-target debuff-landing chance (A2 Task 4 / A-closeout). The sole producer of
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
@@ -840,6 +844,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             : application === 'apply'
               ? !landingAtDisadvantage
               : debuffLandingGate(liveLandingChance);
+    const landsDebuffOnVictim = (
+        application: 'inflict' | 'apply' | undefined,
+        victim: CombatActor
+    ): boolean => {
+        if (targetCarriesBlockDebuff(statusEngine, victim.id)) return false;
+        const victimAff = victim.affinity ?? 'antimatter';
+        const victimAffinityMod = computeAffinityModifiers(attackerAff, victimAff).damageModifier;
+        if (application === 'apply') {
+            return victimAffinityMod >= 0;
+        }
+        const chance = liveDebuffLandingChance(
+            statusEngine,
+            selfBuffLookup,
+            actor,
+            victim,
+            victimAffinityMod
+        );
+        return debuffLandingGate(chance);
+    };
     // Publish the live chance onto the runtime so the REACTIVE (triggers.ts) path — which draws
     // the OWNER's landing gate via owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1) —
     // uses the same live value. Always set now (the live path is unconditional).
@@ -1035,22 +1058,55 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const status of timedEnemyBySlot) {
         if (status.sourceSlot !== action) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
-        if (landsTimedEnemyApplicationLive(status.payload.application)) {
-            statusEngine.applyTimedAbilityStatus(r, status, actor.id, targetId);
-            // Discrete infliction event — emit ONCE at this application site.
-            emitDebuffApplied(actor.id, status.payload.buffName);
-            inflictedEnemyDebuffs.push({
-                buffName: status.payload.buffName,
-                turnsRemaining: status.duration,
-            });
-        } else {
-            // status.duration is guaranteed numeric by the timed variant.
+
+        const matchingAbility = firingSkill?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
+        );
+        const isAllEnemies = matchingAbility?.target === 'all-enemies';
+        const recipientIds: (string | undefined)[] =
+            isAllEnemies && aoeVictimIds && aoeVictimIds.length > 0
+                ? aoeVictimIds
+                : targetId !== undefined
+                  ? [targetId]
+                  : [undefined];
+
+        let anyLanded = false;
+        for (const vid of recipientIds) {
+            const victim =
+                vid !== undefined
+                    ? (opposingVictimById?.get(vid) ?? (vid === enemy.id ? enemy : undefined))
+                    : enemy;
+            const usePerVictim =
+                positionalLanding && opposingVictimById != null && vid !== undefined;
+            if (usePerVictim && victim === undefined) continue;
+            const resolvedVictim = victim ?? enemy;
+            const emitTargetId = vid ?? resolvedVictim.id;
+
+            const lands = usePerVictim
+                ? landsDebuffOnVictim(status.payload.application, resolvedVictim)
+                : landsTimedEnemyApplicationLive(status.payload.application);
+
+            if (lands) {
+                statusEngine.applyTimedAbilityStatus(r, status, actor.id, vid);
+                emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
+                if (!anyLanded) {
+                    inflictedEnemyDebuffs.push({
+                        buffName: status.payload.buffName,
+                        turnsRemaining: status.duration,
+                    });
+                }
+                anyLanded = true;
+            } else {
+                emitDebuffResisted(status.payload.buffName, emitTargetId);
+            }
+        }
+
+        if (!anyLanded && recipientIds.length > 0) {
             resistedAbilityTimedEnemy.push({
                 buffName: status.payload.buffName,
                 turnsRemaining: status.duration,
             });
             resistedTimedEnemyNames.push(status.payload.buffName);
-            emitDebuffResisted(status.payload.buffName);
         }
     }
 
