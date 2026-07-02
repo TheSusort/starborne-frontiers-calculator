@@ -58,6 +58,20 @@ export interface VictimDefenseProfile {
     affinity: AffinityName;
     /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar — B1/PR7b */
     incomingDamageModifierPct?: number;
+    /**
+     * Sub-project I, PR I2 (Layer 3) — this victim's outgoing-damage-modifier DELTA vs the
+     * attacker-fixed `s.outgoingDamageBuffPct`. `s.outgoingDamageBuffPct` is folded ONCE per
+     * turn against the primary (bound) target's enemy-status; an enemy-status-gated modifier
+     * (Tygr's "+30% to enemies with Stasis/Disable", Incinerator's "+30% to Inferno enemies",
+     * Lodolite's "+15% to enemies with Concentrate Fire") must instead vary PER FOOTPRINT
+     * VICTIM in an AoE. Rather than re-deriving the full outgoing term per victim, the engine
+     * computes ONLY the delta between that victim's own enemy-status ctx and the primary
+     * target's ctx (non-enemy-status modifiers cancel identically in both folds, isolating the
+     * per-victim enemy-status variation) and passes it here. Defaults to 0 → byte-identical
+     * for the primary target (delta is 0 by construction) and for any attacker with no
+     * enemy-status-gated outgoing modifier.
+     */
+    outgoingDamageDeltaPct?: number;
 }
 
 /**
@@ -100,11 +114,13 @@ export function victimHitDamage(
     const incoming =
         (v.incomingDamageModifierPct ?? s.incomingDamageModifierPct) - equipReductionPct;
 
+    // PR I2: fold the per-victim enemy-status-gated delta additively into the same
+    // percentage term as the attacker-fixed outgoing buff — both are additive-percentage
+    // contributions to the SAME `(1 + x/100)` multiplier, so there is no rounding
+    // divergence from a single-victim (delta === 0) evaluation.
+    const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const nonCritFactor =
-        (1 - damageReduction / 100) *
-        (1 + s.outgoingDamageBuffPct / 100) *
-        (1 + incoming / 100) *
-        affinityMult;
+        (1 - damageReduction / 100) * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
 
     const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
 

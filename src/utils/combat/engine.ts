@@ -18,8 +18,9 @@ import {
     type ExtraActionGrant,
     selectFiringSkill,
     damageInputsFromSkill,
+    modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
-import { conditionsMet } from '../abilities/evaluateConditions';
+import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 import { foldActorBuffTotals, effectiveStatsOf } from './effectiveStats';
 import {
     ActiveDoTStack,
@@ -3617,6 +3618,94 @@ export function runCombat(input: CombatEngineInput): {
         input.__testTapVictimEnemyModifiers?.(victimIncomingModifiers);
         input.__testTapIsStasised?.(isStasised);
 
+        // Sub-project I, PR I2 (Layer 3) — per-victim OUTGOING modifier delta for enemy-
+        // status-gated auras (Tygr "+30% to Stasis/Disable enemies", Incinerator "+30% to
+        // Inferno enemies", Lodolite "+15% to Concentrate Fire/Stealth enemies"). The firing
+        // turn's `positionalScalars.outgoingDamageBuffPct` already folds `modifierAbilities`
+        // ONCE against `primaryCtx` (the bound/primary target's enemy-status, I1). Here we
+        // re-fold the SAME abilities against a per-victim ctx (only the enemy-status fields
+        // swapped to THIS victim's own status) and subtract the primary-ctx fold — every
+        // non-enemy-status modifier (attack/crit/self-buff-gated outgoing, etc.) contributes
+        // identically to both folds and cancels, isolating the pure per-victim delta.
+        //
+        // CAUSALITY: the per-victim status MUST be a PRE-TURN snapshot, not a live re-read at
+        // apply time. `drivePositionalApply` runs AFTER `runPlayerTurn` returns, by which point
+        // this turn's OWN debuff-inflict ability has already mutated the status engine — a live
+        // read at that point would let a skill's own same-turn infliction retroactively satisfy
+        // its own per-victim gate (exactly the anti-causality bug I1 guards against for the
+        // PRIMARY target via buildTurnArgs's pre-turn `enemyDebuffNamesForTarget(tgt)` call).
+        // `snapshotPreTurnVictimStatus` is called by each of the three turn sites BEFORE their
+        // `runPlayerTurn` call, capturing every living opposing actor's status at that moment;
+        // `perVictimOutgoingDeltaPct` below reads ONLY from that frozen snapshot.
+        //
+        //  - enemyDebuffNames: rebuilt from the snapshot (I1's per-target name read,
+        //    `enemyDebuffNamesForTarget`), but ONLY when primaryCtx already carries the array
+        //    (the DPS-parity sentinel: undefined means "not opted in" and must stay undefined
+        //    here too — though this path only runs from the positional apply branch, where the
+        //    primary ctx is always real/positional and the array is always populated).
+        //  - enemyBuffNames: rebuilt from the snapshot for JUST this victim (the per-turn
+        //    primaryCtx uses a UNION across every living enemy attacker — see
+        //    enemyBuffNamesUnion above — which is correct for "does an enemy have X" REACTIVE
+        //    gates but not for a per-victim OUTGOING-damage aura; the locked game rule (spec §2)
+        //    requires each victim's OWN status here).
+        //  - enemyHpPct: rebuilt from the snapshot's pre-turn currentHp/stats.hp reading (the
+        //    primary ctx's value is a turn-start snapshot of the BOUND target only).
+        //  - enemyType: NOT rebuilt — no per-enemy-attacker class field is plumbed on
+        //    positional inputs today (only one fight-wide `input.enemyType`), so every victim
+        //    reuses the primary ctx's value. Inert for every I2-scoped ship (none gate their
+        //    outgoing modifier on `enemy-type`); a future enemy-type-gated per-victim aura
+        //    needs real per-actor class plumbing first (deferred, not modeled here).
+        //
+        // For the PRIMARY target in a single-enemy fight this ctx is IDENTICAL to primaryCtx
+        // (delta = 0) — byte-identical to I1. A ship with no enemy-status-gated outgoing
+        // modifier also gets delta = 0 for every victim (the fold never differs by ctx).
+        interface PreTurnVictimStatusSnapshot {
+            enemyDebuffNames: string[];
+            enemyBuffNames: string[];
+            enemyHpPct: number;
+        }
+        const snapshotPreTurnVictimStatus = (
+            opposingLiving: CombatActor[]
+        ): Map<string, PreTurnVictimStatusSnapshot> =>
+            new Map(
+                opposingLiving.map((v) => [
+                    v.id,
+                    {
+                        enemyDebuffNames: enemyDebuffNamesForTarget(v),
+                        enemyBuffNames: selfBuffNamesForOwners(statusEngine, [v.id]),
+                        enemyHpPct:
+                            v.stats.hp > 0
+                                ? Math.max(0, Math.min(100, (100 * v.currentHp) / v.stats.hp))
+                                : 100,
+                    },
+                ])
+            );
+        const perVictimOutgoingDeltaPct = (
+            perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'],
+            preTurnStatus: Map<string, PreTurnVictimStatusSnapshot> | undefined,
+            victim: CombatActor
+        ): number => {
+            if (!perVictimOutgoing) return 0;
+            const { modifierAbilities, primaryCtx } = perVictimOutgoing;
+            if (modifierAbilities.length === 0) return 0; // fast path — nothing to re-fold
+            // Defensive fallback: a victim absent from the snapshot (should never happen — the
+            // snapshot covers the FULL opposing roster captured pre-turn) contributes delta 0
+            // rather than crashing.
+            const snap = preTurnStatus?.get(victim.id);
+            if (!snap) return 0;
+            const victimCtx: ConditionContext = {
+                ...primaryCtx,
+                ...(primaryCtx.enemyDebuffNames !== undefined
+                    ? { enemyDebuffNames: snap.enemyDebuffNames }
+                    : {}),
+                enemyBuffNames: snap.enemyBuffNames,
+                enemyHpPct: snap.enemyHpPct,
+            };
+            const full = modifierTotalsFromAbilities(modifierAbilities, victimCtx).outgoingDamage;
+            const base = modifierTotalsFromAbilities(modifierAbilities, primaryCtx).outgoingDamage;
+            return full - base;
+        };
+
         // Shared positional-apply driver (Task 9, Step A) — the ONE place the three attack
         // sites (focus / walked-team / enemy) drive `applyPositionalDamage`. Each site has
         // already GATED (isPositional + non-null target/pattern/positionalScalars) and computed
@@ -3662,6 +3751,16 @@ export function runCombat(input: CombatEngineInput): {
             // capped rate via this callback. Unsupplied → every victim uses hitCrits[h] →
             // byte-identical. Each call site supplies the firing turn's rollVictimCrit.
             rollVictimCrit?: (victim: CombatActor) => boolean;
+            // Sub-project I, PR I2: this turn's enemy-status-gated outgoing-modifier ingredients
+            // (modifierAbilities + primaryCtx), forwarded from `turn.perVictimOutgoing`.
+            // Unsupplied/undefined → perVictimOutgoingDeltaPct short-circuits to 0 for every
+            // victim → byte-identical.
+            perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
+            // Sub-project I, PR I2: the PRE-TURN per-victim status snapshot (captured by the
+            // call site via `snapshotPreTurnVictimStatus` BEFORE `runPlayerTurn` ran this turn),
+            // keyed by victim id. Required for a non-zero delta — see the causality note above
+            // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
+            preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
         }): { anyCrit: boolean; critPairs: number } => {
             return applyPositionalDamage({
                 hitCrits: args.hitCrits ?? [],
@@ -3688,6 +3787,13 @@ export function runCombat(input: CombatEngineInput): {
                         // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
                         incomingDamageModifierPct: m.incomingDamageModifier,
                         affinity: v.affinity ?? 'antimatter',
+                        // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
+                        // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
+                        outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
+                            args.perVictimOutgoing,
+                            args.preTurnVictimStatus,
+                            v
+                        ),
                     };
                 },
                 applyToVictim: args.applyToVictim,
@@ -4968,6 +5074,12 @@ export function runCombat(input: CombatEngineInput): {
                                 isPositional(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null;
+                            // Sub-project I, PR I2: snapshot the opposing roster's enemy-status
+                            // BEFORE this turn runs (see the causality note above
+                            // perVictimOutgoingDeltaPct) — this turn's own debuff-inflict must
+                            // not retroactively satisfy its own per-victim outgoing gate.
+                            const preTurnVictimStatus =
+                                snapshotPreTurnVictimStatus(enemyAttackerActors);
                             const turn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
                                 deferAbilityPerformedToEngine: willApplyPositionally,
@@ -5065,6 +5177,8 @@ export function runCombat(input: CombatEngineInput): {
                                     actingId: actor.id,
                                     opposingLiving: tb.opposingRoster,
                                     applyToVictim: tb.applyToVictim,
+                                    perVictimOutgoing: turn.perVictimOutgoing,
+                                    preTurnVictimStatus,
                                     // Per-victim crit: each covered footprint victim rolls at ITS own
                                     // affinity-capped rate against THIS attacker.
                                     rollVictimCrit: (v) =>
@@ -5287,6 +5401,9 @@ export function runCombat(input: CombatEngineInput): {
                                 isPositional(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null;
+                            // Sub-project I, PR I2: pre-turn snapshot (mirrors the focus site).
+                            const teamPreTurnVictimStatus =
+                                snapshotPreTurnVictimStatus(enemyAttackerActors);
                             const teamTurn = runPlayerTurn({
                                 ...buildTurnArgs(actor, tgt),
                                 deferAbilityPerformedToEngine: teamWillApplyPositionally,
@@ -5361,6 +5478,8 @@ export function runCombat(input: CombatEngineInput): {
                                     actingId: actor.id,
                                     opposingLiving: tb.opposingRoster,
                                     applyToVictim: tb.applyToVictim,
+                                    perVictimOutgoing: teamTurn.perVictimOutgoing,
+                                    preTurnVictimStatus: teamPreTurnVictimStatus,
                                     // Per-victim crit: each covered footprint victim rolls at ITS own
                                     // affinity-capped rate against THIS walked team attacker.
                                     rollVictimCrit: (v) =>
@@ -5678,6 +5797,18 @@ export function runCombat(input: CombatEngineInput): {
                             // dead-target path and whenever the enemy is non-positional → legacy single-apply.
                             let enemyPositional = false;
                             let enemyScalars: AttackerDamageScalars | undefined;
+                            // Sub-project I, PR I2: the enemy turn's per-victim outgoing-modifier
+                            // ingredients, hoisted out of the else block (enemyTurn is scoped inside
+                            // it) so the enemy drivePositionalApply site can pass it. Undefined on the
+                            // dead-target / non-positional paths → perVictimOutgoingDeltaPct returns 0
+                            // for every victim (byte-identical).
+                            let enemyPerVictimOutgoing: PlayerTurnResult['perVictimOutgoing'];
+                            // Sub-project I, PR I2: the pre-turn per-victim status snapshot
+                            // (team-symmetric mirror of the focus/team sites' preTurnVictimStatus),
+                            // captured just before `runPlayerTurn` below mutates the status engine.
+                            let enemyPreTurnVictimStatus:
+                                | Map<string, PreTurnVictimStatusSnapshot>
+                                | undefined;
                             // Per-victim crit: the enemy turn's per-victim crit resolver, hoisted out
                             // of the else block (enemyTurn is scoped inside it) so the enemy
                             // drivePositionalApply site can pass it. Undefined on the dead-target /
@@ -5774,6 +5905,10 @@ export function runCombat(input: CombatEngineInput): {
                                     incomingReductionCritAll -
                                     incomingReductionNonCritPct +
                                     preFightCritFamilyPct;
+                                // Sub-project I, PR I2: snapshot BEFORE runPlayerTurn (the enemy's
+                                // opposing roster is the PLAYER team — allPlayerActors).
+                                enemyPreTurnVictimStatus =
+                                    snapshotPreTurnVictimStatus(allPlayerActors);
                                 const enemyTurn = runPlayerTurn({
                                     ...buildTurnArgs(actor, tgt),
                                     deferAbilityPerformedToEngine: enemyWillApplyPositionally,
@@ -5816,6 +5951,10 @@ export function runCombat(input: CombatEngineInput): {
                                     enemyPattern != null &&
                                     enemyTurn.positionalScalars != null;
                                 enemyScalars = enemyTurn.positionalScalars;
+                                // Sub-project I, PR I2: capture the enemy turn's per-victim
+                                // outgoing-modifier ingredients (team-symmetric mirror of the
+                                // focus/team sites).
+                                enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
                                 // Per-victim crit: capture the enemy turn's per-victim crit resolver.
                                 enemyRollVictimCrit = enemyTurn.rollVictimCrit;
                                 // Task 5: capture the deferred ability-performed payload (present ⟺ the
@@ -5990,6 +6129,8 @@ export function runCombat(input: CombatEngineInput): {
                                         actingId: actor.id,
                                         opposingLiving: tb.opposingRoster,
                                         applyToVictim: tb.applyToVictim,
+                                        perVictimOutgoing: enemyPerVictimOutgoing,
+                                        preTurnVictimStatus: enemyPreTurnVictimStatus,
                                         // Per-victim crit: each covered footprint victim rolls at ITS own
                                         // affinity-capped rate against THIS enemy attacker.
                                         rollVictimCrit: enemyRollVictimCrit
