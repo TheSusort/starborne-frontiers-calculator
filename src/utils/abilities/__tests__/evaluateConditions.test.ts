@@ -35,6 +35,55 @@ describe('evaluateCondition', () => {
         ).toBe(3);
     });
 
+    describe("'enemy-debuff' name-specific gating (sub-project I, PR I1)", () => {
+        it('buffName + populated enemyDebuffNames → counts matches by name', () => {
+            const c = makeConditionContext({
+                enemyDebuffCount: 5, // legacy count present but must NOT be used on this path
+                enemyDebuffNames: ['Stasis', 'Stasis', 'Concentrate Fire'],
+            });
+            expect(
+                evaluateCondition(
+                    cond({ subject: 'enemy-debuff', derivable: true, buffName: 'Stasis' }),
+                    c
+                )
+            ).toBe(2);
+        });
+
+        it('buffName + populated enemyDebuffNames NOT containing it → 0 (does NOT fall back to count)', () => {
+            const c = makeConditionContext({
+                enemyDebuffCount: 3,
+                enemyDebuffNames: ['Concentrate Fire'],
+            });
+            expect(
+                evaluateCondition(
+                    cond({ subject: 'enemy-debuff', derivable: true, buffName: 'Stasis' }),
+                    c
+                )
+            ).toBe(0);
+        });
+
+        it('buffName present but enemyDebuffNames undefined (DPS-parity sentinel) → falls back to enemyDebuffCount', () => {
+            const c = makeConditionContext({ enemyDebuffCount: 4 });
+            expect(c.enemyDebuffNames).toBeUndefined();
+            expect(
+                evaluateCondition(
+                    cond({ subject: 'enemy-debuff', derivable: true, buffName: 'Stasis' }),
+                    c
+                )
+            ).toBe(4);
+        });
+
+        it('no buffName, even with enemyDebuffNames populated → legacy enemyDebuffCount', () => {
+            const c = makeConditionContext({
+                enemyDebuffCount: 4,
+                enemyDebuffNames: ['Stasis'],
+            });
+            expect(evaluateCondition(cond({ subject: 'enemy-debuff', derivable: true }), c)).toBe(
+                4
+            );
+        });
+    });
+
     it("'enemy-buff' by name is 1 when present, else 0", () => {
         expect(
             evaluateCondition(

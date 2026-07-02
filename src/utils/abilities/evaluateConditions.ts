@@ -6,6 +6,18 @@ export interface ConditionContext {
     selfDebuffNames: string[];
     enemyBuffNames: string[];
     enemyDebuffCount: number;
+    /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for `enemy-debuff`
+     *  conditions that carry a `buffName` (e.g. Tygr's "to enemies with Stasis or Disable",
+     *  Incinerator's "to enemies afflicted with Inferno"). OPTIONAL SENTINEL: `undefined` means
+     *  the caller has NOT opted in — evaluateCondition falls back to the legacy name-agnostic
+     *  `enemyDebuffCount`. An empty array IS a real "no debuffs present" signal (a name-gate
+     *  correctly evaluates to 0), which is why callers that want the legacy count path must
+     *  leave this key OUT entirely rather than pass `[]`. The DPS simulator (byte-identical
+     *  requirement) never populates this; only the live combat engine (real/positional target)
+     *  opts in. Control/marker debuff names come from `ownerDebuffNamesFor`; DoT names (Inferno/
+     *  Corrosion/Bomb) are synthesized base-type names since DoTs are tracked as counted entry
+     *  arrays with no names of their own (see roundContext.ts). */
+    enemyDebuffNames?: string[];
     enemyType?: EnemyBaseClass;
     effectiveCritRate: number; // 0..100
     /** This round's binary crit outcome from the deterministic schedule. When set,
@@ -57,9 +69,15 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         case 'enemy-buff':
             return countNames(ctx.enemyBuffNames, cond.buffName);
         case 'enemy-debuff':
-            // Name-agnostic by design (mirrors dpsSimulator): counts ALL landed enemy
-            // debuffs + DoTs, ignoring cond.buffName. A buffName on an enemy-debuff
-            // condition is not a filter here — unlike self-buff/enemy-buff above.
+            // Sub-project I, PR I1: name-specific when the caller opts in (both a buffName
+            // on the condition AND a populated enemyDebuffNames array are present) — counts
+            // matches by name, e.g. Tygr's "to enemies with Stasis or Disable". Otherwise
+            // (no buffName, OR the caller left enemyDebuffNames undefined — the DPS-parity
+            // sentinel) falls back to the legacy name-agnostic count of ALL landed enemy
+            // debuffs + DoTs. See the ConditionContext.enemyDebuffNames doc for the sentinel
+            // rationale.
+            if (cond.buffName && ctx.enemyDebuffNames)
+                return countNames(ctx.enemyDebuffNames, cond.buffName);
             return ctx.enemyDebuffCount;
         case 'enemy-type': {
             if (!ctx.enemyType) return 0; // unknown type → cannot confirm either way

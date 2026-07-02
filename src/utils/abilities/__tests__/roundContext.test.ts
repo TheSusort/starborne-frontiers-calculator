@@ -106,6 +106,35 @@ describe('buildRoundContext', () => {
         expect(ctx.enemyBuffNames).toEqual([]);
         expect(ctx.selfDebuffNames).toEqual([]);
     });
+
+    describe('enemyDebuffNames sentinel (sub-project I, PR I1 — DPS-parity invariant)', () => {
+        const base = {
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 2,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+        };
+
+        it('omitting enemyDebuffNames leaves it undefined on the returned context (DPS-simulator path)', () => {
+            const ctx = buildRoundContext(base);
+            expect(ctx.enemyDebuffNames).toBeUndefined();
+            // the key must not even exist on the object (not an explicit `undefined` value) —
+            // guards against a future refactor accidentally materializing the sentinel as `[]`.
+            expect(Object.prototype.hasOwnProperty.call(ctx, 'enemyDebuffNames')).toBe(false);
+        });
+
+        it('passing a real (possibly empty) array threads it through untouched', () => {
+            expect(buildRoundContext({ ...base, enemyDebuffNames: [] }).enemyDebuffNames).toEqual(
+                []
+            );
+            expect(
+                buildRoundContext({ ...base, enemyDebuffNames: ['Stasis', 'Stasis'] })
+                    .enemyDebuffNames
+            ).toEqual(['Stasis', 'Stasis']);
+        });
+    });
 });
 
 describe('buildActorConditionContext – condition-context plumbing', () => {

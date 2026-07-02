@@ -1791,6 +1791,49 @@ describe('simulateDPS', () => {
             );
         });
 
+        it('DPS-parity sentinel (sub-project I, PR I1): a buffName-tagged enemy-debuff gate stays name-AGNOSTIC in the DPS simulator', () => {
+            // Mirrors Tygr's "+30% damage to enemies with Stasis or Disable" — a buffName-
+            // tagged enemy-debuff condition. The live combat engine now resolves this by NAME
+            // (only Stasis/Disable satisfy it), but the DPS simulator must NEVER populate
+            // ConditionContext.enemyDebuffNames (the opt-in sentinel) — it stays on the legacy
+            // name-agnostic enemyDebuffCount path, so ANY landed enemy debuff (even one named
+            // something else entirely) still satisfies the gate. This protects byte-identical
+            // DPS output across this change.
+            const stasisNamedModifier: Ability = {
+                id: 'm',
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'enemy-debuff', derivable: true, buffName: 'Stasis' }],
+                config: {
+                    type: 'modifier',
+                    channel: 'outgoingDamage',
+                    value: 30,
+                    isMultiplicative: true,
+                },
+            };
+            const skills = activeSkills([damageAbility('d', 100), stasisNamedModifier]);
+            // Deliberately UNRELATED debuff name — never 'Stasis'.
+            const unrelatedDebuff = makeAlwaysBuff('security-down', { defense: -10 });
+
+            const withUnrelatedDebuff = simulateDPS({
+                ...baseInput,
+                shipSkills: skills,
+                enemyDebuffs: [unrelatedDebuff],
+            });
+            const withNoDebuff = simulateDPS({
+                ...baseInput,
+                shipSkills: skills,
+                enemyDebuffs: [],
+            });
+
+            // Legacy/name-agnostic behavior preserved: presence of ANY enemy debuff satisfies
+            // the gate, not just one literally named 'Stasis'.
+            expect(withUnrelatedDebuff.rounds[0].directDamage).toBeGreaterThan(
+                withNoDebuff.rounds[0].directDamage
+            );
+        });
+
         it('multi-hit damage equals a single hit with the summed multiplier', () => {
             const multiHit = simulateDPS({
                 ...baseInput,
@@ -2233,7 +2276,10 @@ describe('simulateDPS', () => {
             // 2 draws per round (crit gate at rate 1.0 + landing gate at rate 0.5). Keep both
             // draws in a round equal so landing gets the intended value regardless of order:
             // odd rounds → 0.9 (resist), even rounds → 0.1 (land) → lands on even rounds.
-            const seq = [0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1];
+            const seq = [
+                0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9, 0.9, 0.1, 0.1, 0.9,
+                0.9, 0.1, 0.1,
+            ];
             let drawIdx = 0;
             setRateGateRng(() => {
                 if (drawIdx >= seq.length) {

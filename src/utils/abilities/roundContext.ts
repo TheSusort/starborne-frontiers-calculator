@@ -28,6 +28,12 @@ export function buildRoundContext(state: {
     targetHpPct?: number;
     /** Active buff names on the enemy. Default [] (DPS-assumption: no enemy buffs). */
     enemyBuffNames?: string[];
+    /** Sub-project I, PR I1 — NAMES on the opposing (primary) target, for name-specific
+     *  `enemy-debuff` gates. SENTINEL: leave `undefined` (do NOT pass `[]`) to keep the legacy
+     *  name-agnostic `enemyDebuffCount` path — this is the DPS-parity invariant (the DPS
+     *  simulator never supplies this param). Only the live combat engine (real/positional
+     *  target) opts in with a real (possibly empty) array. See ConditionContext.enemyDebuffNames. */
+    enemyDebuffNames?: string[];
     /** Active debuff names on self. Default [] (DPS-assumption: no self-debuffs). */
     selfDebuffNames?: string[];
     /** Owner has the lowest Speed among its (player) team. Default true (lone-actor /
@@ -74,5 +80,12 @@ export function buildRoundContext(state: {
         isLastStanding: state.lastStanding ?? false,
         turnsTaken: state.turnsTaken ?? 0,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
+        // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
+        // real array — an explicit `undefined` value would collapse to the same runtime
+        // behaviour, but omitting the key entirely keeps this symmetric with roundCrit above
+        // and avoids ever materializing an accidental `[]` default.
+        ...(state.enemyDebuffNames !== undefined
+            ? { enemyDebuffNames: state.enemyDebuffNames }
+            : {}),
     };
 }
