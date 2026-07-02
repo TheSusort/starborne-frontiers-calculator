@@ -62,6 +62,7 @@ const ABILITY_TYPE_LABELS: Record<Ability['type'], string> = {
     'outgoing-amplification': 'Outgoing Amplification',
     'heal-amplification': 'Heal Amplification',
     'incoming-heal-amplification': 'Incoming Heal Amplification',
+    'pre-combat-stat': 'Pre-Combat Stat',
 };
 
 const TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
@@ -128,6 +129,22 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
     { value: 'DEFENDER', label: 'Defender' },
     { value: 'DEBUFFER', label: 'Debuffer' },
     { value: 'SUPPORTER', label: 'Supporter' },
+];
+
+const PRE_COMBAT_STAT_OPTIONS: { value: 'hp' | 'attack' | 'crit' | 'hacking'; label: string }[] = [
+    { value: 'hp', label: 'HP' },
+    { value: 'attack', label: 'Attack' },
+    { value: 'crit', label: 'Crit Rate' },
+    { value: 'hacking', label: 'Hacking' },
+];
+
+const PRE_COMBAT_VALUE_KIND_OPTIONS: {
+    value: 'flat' | 'percent-of-own' | 'percent-of-donor';
+    label: string;
+}[] = [
+    { value: 'flat', label: 'Flat points' },
+    { value: 'percent-of-own', label: "% of recipient's stat" },
+    { value: 'percent-of-donor', label: "% of granting ship's stat" },
 ];
 
 const TRIGGER_OPTIONS: { value: AbilityTrigger; label: string }[] = [
@@ -690,6 +707,76 @@ export const AbilityCard: React.FC<Props> = ({
                             updateConfig({ ...config, count: toNumber(e.target.value) })
                         }
                     />
+                );
+
+            case 'pre-combat-stat':
+                return (
+                    <div className="space-y-2">
+                        <p className="text-xs text-theme-text-secondary">
+                            Permanent base-stat grant applied before round 1 (battle simulator
+                            only). Hidden and non-purgeable — never a timed status.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                            <Select
+                                label="Stat"
+                                value={config.stat}
+                                options={PRE_COMBAT_STAT_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        stat: value as 'hp' | 'attack' | 'crit' | 'hacking',
+                                    })
+                                }
+                            />
+                            <Input
+                                label="Value"
+                                type="number"
+                                step="0.01"
+                                value={config.value}
+                                onChange={(e) =>
+                                    updateConfig({ ...config, value: toNumber(e.target.value) })
+                                }
+                            />
+                            <Select
+                                label="Value kind"
+                                helpLabel="Flat = absolute points (crit rate is always flat). % of recipient = scales the receiving ship's own pre-fight stat. % of granting ship = scales the donor's stat (Lionheart)."
+                                value={config.valueKind}
+                                options={PRE_COMBAT_VALUE_KIND_OPTIONS}
+                                onChange={(value) =>
+                                    updateConfig({
+                                        ...config,
+                                        valueKind: value as
+                                            | 'flat'
+                                            | 'percent-of-own'
+                                            | 'percent-of-donor',
+                                    })
+                                }
+                            />
+                        </div>
+                        <Checkbox
+                            label="Multiply by adjacent-ally count"
+                            checked={config.perAdjacentAlly ?? false}
+                            onChange={(checked) =>
+                                updateConfig({
+                                    ...config,
+                                    perAdjacentAlly: checked ? true : undefined,
+                                })
+                            }
+                        />
+                        <Select
+                            label="Requires adjacent role"
+                            helpLabel="Grant applies only while adjacent to at least one living ally of this role category. None = unconditional."
+                            value={config.requiresAdjacentRole ?? 'none'}
+                            options={[{ value: 'none', label: 'None' }, ...ROLE_FILTER_OPTIONS]}
+                            onChange={(value) =>
+                                updateConfig({
+                                    ...config,
+                                    requiresAdjacentRole:
+                                        value === 'none' ? undefined : (value as ShipRoleCategory),
+                                })
+                            }
+                        />
+                    </div>
                 );
 
             default:

@@ -95,9 +95,11 @@ export const LODOLITE: ShipSkills = {
     ],
 };
 
-// Lionheart: ILLUSTRATIVE hand-built shape only (a +10% HP all-allies aura) to
-// lock the `modifier` shape. The real Lionheart text is a start-of-combat grant
-// of 10% HP to *adjacent* allies — do NOT use this as a parser-output assertion.
+// Lionheart: the REAL parser-output shape (PR F4) for the pre-fight passive
+// "At the start of combat, this Unit grants all adjacent allies 10% of its HP."
+// — a donor-scaled permanent HP grant to adjacent allies, applied to plan stats
+// by the battle sim's pre-fight layer (F5). Asserted equal to buildShipAbilities
+// output (modulo generated id) in src/types/__tests__/abilities.test.ts.
 export const LIONHEART: ShipSkills = {
     slots: [
         {
@@ -105,11 +107,17 @@ export const LIONHEART: ShipSkills = {
             abilities: [
                 {
                     id: 'h1',
-                    type: 'modifier',
-                    target: 'all-allies',
-                    trigger: 'on-cast',
+                    type: 'pre-combat-stat',
+                    target: 'adjacent-allies',
+                    trigger: 'pre-combat',
                     conditions: [],
-                    config: { type: 'modifier', channel: 'hp', value: 10, isMultiplicative: true },
+                    config: {
+                        type: 'pre-combat-stat',
+                        stat: 'hp',
+                        value: 10,
+                        valueKind: 'percent-of-donor',
+                    },
+                    autoFilled: true,
                 },
             ],
         },

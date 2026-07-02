@@ -55,6 +55,14 @@ interface ShipRow {
     slots: { slot: string; text: string }[];
 }
 
+// KNOWN GAP (pre-existing, verified 2026-07-02): this reader is line-per-record, but six
+// CSV records (Centurion, Enforcer, Chimei, …) carry literal newlines inside quoted passive
+// texts and are silently dropped (141 of 147 records audited). A quote-parity record-joining
+// fix recovers them but surfaces two pre-existing findings on the recovered ships (Chimei
+// active: the detonation keyword false-positives on the "Out. Detonation Damage Up III" buff
+// NAME; Lingshe passive1: ungated bomb→Stealth grant) — fix those first, then join records.
+// The pre-combat-stat rule below was verified out-of-band against all 147 records: it hits
+// exactly Lionheart/Centurion/Enforcer/Defiant/Stalwart, all handled.
 function readShips(): ShipRow[] {
     const lines = readFileSync(CSV_PATH, 'utf8').split('\n').filter(Boolean);
     const rows: ShipRow[] = [];
@@ -169,6 +177,30 @@ const RULES: Rule[] = [
         severity: 'high',
         keyword: (t) => /echoing burst/i.test(t),
         handled: (a) => hasType(a, 'accumulate-detonate'),
+    },
+    {
+        id: 'pre-combat-stat',
+        severity: 'high',
+        // PR F4: permanent pre-fight base-stat passives. Hits exactly the corpus shapes —
+        // start-of-combat attack-per-adjacent-ally (Centurion), start-of-combat %-of-HP
+        // grant to adjacent allies (Lionheart), and role-gated "adjacent to a <role> …
+        // gains" self grants in either ordering (Enforcer trailing gate, Defiant/Stalwart
+        // leading gate). Madax's "receives 30% more Repairs" carries no "gains" list and
+        // is deliberately out of scope.
+        keyword: (t) =>
+            /at the start of combat,?\s*this unit gains \d[\d,]*\s*attack per adjacent ally/i.test(
+                t
+            ) ||
+            /at the start of combat,?\s*this unit grants all adjacent allies \d+(?:\.\d+)?%\s*of its (?:max\s*)?hp/i.test(
+                t
+            ) ||
+            /this unit gains [^.;]+?\s(?:if|when|while)\s+adjacent to an?\s+(?:supporter|defender|attacker|debuffer)\b/i.test(
+                t
+            ) ||
+            /when (?:this unit is )?adjacent to an?\s+(?:supporter|defender|attacker|debuffer),\s*this unit gains \d/i.test(
+                t
+            ),
+        handled: (a) => hasType(a, 'pre-combat-stat'),
     },
 ];
 

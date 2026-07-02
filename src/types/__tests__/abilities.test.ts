@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Ability } from '../abilities';
 import { SELENITE, LODOLITE, LIONHEART } from '../../utils/abilities/abilityFixtures';
+import { buildShipAbilities } from '../../utils/abilities/buildShipAbilities';
+import { Ship } from '../ship';
 
 describe('ability model shape', () => {
     it('Selenite has a conditional self charge ability gated on enemy Stealth', () => {
@@ -17,15 +19,19 @@ describe('ability model shape', () => {
         expect(dmg.scaling).toEqual({ conditionIndex: 0, perUnit: 10, cap: 30 });
     });
 
-    it('Lionheart is an unconditional all-allies HP modifier', () => {
-        const mod = LIONHEART.slots[0].abilities[0];
-        expect(mod.target).toBe('all-allies');
-        expect(mod.config).toEqual({
-            type: 'modifier',
-            channel: 'hp',
-            value: 10,
-            isMultiplicative: true,
-        });
+    it('Lionheart fixture equals the parser output for the real passive text (PR F4)', () => {
+        const ship = {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [],
+            firstPassiveSkillText:
+                'At the start of combat, this Unit grants all adjacent allies 10% of its HP.',
+        } as Ship;
+        const passive = buildShipAbilities(ship).slots.find((s) => s.slot === 'passive');
+        expect(passive).toBeDefined();
+        // Generated ids differ per run — compare everything else.
+        const stripIds = (abilities: Ability[]) => abilities.map(({ id: _id, ...rest }) => rest);
+        expect(stripIds(passive!.abilities)).toEqual(stripIds(LIONHEART.slots[0].abilities));
     });
 
     it('buff ability wraps a game-buff payload', () => {

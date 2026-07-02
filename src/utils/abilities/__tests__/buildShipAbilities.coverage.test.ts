@@ -22,9 +22,17 @@ const VALID_TYPES: AbilityType[] = [
     'cleanse',
     'purge',
     'control',
+    'pre-combat-stat',
 ];
 
-const VALID_TARGETS: AbilityTarget[] = ['self', 'ally', 'all-allies', 'enemy', 'all-enemies'];
+const VALID_TARGETS: AbilityTarget[] = [
+    'self',
+    'ally',
+    'all-allies',
+    'adjacent-allies',
+    'enemy',
+    'all-enemies',
+];
 
 const VALID_TRIGGERS: AbilityTrigger[] = [
     'on-cast',
@@ -33,6 +41,7 @@ const VALID_TRIGGERS: AbilityTrigger[] = [
     'on-attacked',
     'on-ally-destroyed',
     'on-destroyed',
+    'pre-combat',
 ];
 
 /**

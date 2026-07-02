@@ -1709,10 +1709,24 @@ describe('buildShipAbilities', () => {
                 requireDamagedAllyAdjacent: true,
             });
 
-            // M1 non-regression: the co-located "750 attack per adjacent ally" start-of-combat
-            // clause produces NO spurious damage/buff ability (it is unparsed today and stays so).
+            // Non-regression: the co-located "750 attack per adjacent ally" start-of-combat
+            // clause produces NO spurious damage/buff ability — since PR F4 it parses as a
+            // pre-combat-stat grant instead (flat 750 attack × adjacent-ally count, self).
             expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
             expect(all.filter((a) => a.type === 'buff')).toHaveLength(0);
+            expect(all.filter((a) => a.type === 'pre-combat-stat')).toMatchObject([
+                {
+                    target: 'self',
+                    trigger: 'pre-combat',
+                    config: {
+                        type: 'pre-combat-stat',
+                        stat: 'attack',
+                        value: 750,
+                        valueKind: 'flat',
+                        perAdjacentAlly: true,
+                    },
+                },
+            ]);
         });
 
         it('Centurion third passive (100%): self/adjacent-ally counters at multiplier 100', () => {
@@ -1732,6 +1746,18 @@ describe('buildShipAbilities', () => {
             });
             expect(all.filter((a) => a.type === 'damage')).toHaveLength(0);
             expect(all.filter((a) => a.type === 'buff')).toHaveLength(0);
+            // PR F4: the start-of-combat clause parses as a flat 1000-attack per-adjacent grant.
+            expect(all.filter((a) => a.type === 'pre-combat-stat')).toMatchObject([
+                {
+                    config: {
+                        type: 'pre-combat-stat',
+                        stat: 'attack',
+                        value: 1000,
+                        valueKind: 'flat',
+                        perAdjacentAlly: true,
+                    },
+                },
+            ]);
         });
 
         it('false-positive guard: a "directly damaged" passive that HEALS does not produce a counter', () => {
@@ -2441,7 +2467,7 @@ describe('buildShipAbilities', () => {
             });
         });
 
-        it('R2 passive parses ONLY the shield-on-Stasis clause (adjacency HP grant left unparsed)', () => {
+        it('R2 passive parses the shield-on-Stasis clause AND the adjacency HP grant (PR F4)', () => {
             const s = ship({
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 refits: [{}, {}] as any,
@@ -2455,6 +2481,23 @@ describe('buildShipAbilities', () => {
                 target: 'self',
                 trigger: 'on-stasis-applied',
                 config: { type: 'shield', pct: 30, basis: 'hp' },
+            });
+            // PR F4: "When adjacent to a Supporter, this Unit gains 20% HP" is now parsed as a
+            // permanent pre-fight stat grant (percent-of-own, Supporter-gated), applied by the
+            // battle sim's pre-fight layer in F5.
+            const preCombat = passive?.abilities.find((a) => a.type === 'pre-combat-stat');
+            expect(preCombat).toMatchObject({
+                type: 'pre-combat-stat',
+                target: 'self',
+                trigger: 'pre-combat',
+                conditions: [],
+                config: {
+                    type: 'pre-combat-stat',
+                    stat: 'hp',
+                    value: 20,
+                    valueKind: 'percent-of-own',
+                    requiresAdjacentRole: 'SUPPORTER',
+                },
             });
         });
     });
