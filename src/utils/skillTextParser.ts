@@ -487,7 +487,9 @@ function classifyChargeCondition(
     // on-ally-debuff-inflicted), not as a per-standing enemy-debuff count condition. They never
     // reach classifyChargeCondition. Any other "inflict … debuff" charge text that slips through
     // falls to the always-true default below (a safe per-cast baseline).
-    if (p.includes('stealth')) return { condition: 'enemy-buff', derivable: false };
+    // Stealth-gated self charge (Selenite): live enemy-buff gate — derivable so the cast path
+    // reads the opposing side's current Stealth holders, not a static manualCount.
+    if (p.includes('stealth')) return { condition: 'enemy-buff', derivable: true };
     if (
         p.includes('buffs on the target') ||
         p.includes('buff on the target') ||
@@ -935,7 +937,8 @@ function detectRemovalTriggerAt(text: string, idx: number): AbilityTrigger {
             break;
         }
     }
-    const windowStart = containing > 0 ? segments[containing - 1].start : segments[containing].start;
+    const windowStart =
+        containing > 0 ? segments[containing - 1].start : segments[containing].start;
     const window = masked.slice(windowStart, segments[containing].end);
     // Order mirrors detectReactiveTrigger's reactive tail. For a REMOVAL window kill-first is safe:
     // the window excludes the earlier repair-grant segment (Ruiner), so it cannot match repair.

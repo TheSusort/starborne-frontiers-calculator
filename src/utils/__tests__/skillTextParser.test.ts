@@ -1260,13 +1260,13 @@ describe('parseChargeGain', () => {
         });
     });
 
-    it('parses stealth condition as enemy-buff (manual) — Selenite', () => {
+    it('parses stealth condition as live enemy-buff — Selenite', () => {
         const text =
             "If any target is <unit-aid>Stealthed</unit-aid>, it <unit-aid>adds 1 charge</unit-aid> to this Unit's Charged Skill.";
         expect(parseChargeGain(text)).toEqual({
             amount: 1,
             condition: 'enemy-buff',
-            derivable: false,
+            derivable: true,
         });
     });
 
@@ -1621,9 +1621,9 @@ describe('detectReactiveTrigger — non-Marauder reclassifications (Overload-lif
 
 describe('parseSelfBuffRemovals', () => {
     it('emits for "loses Overload on kill"', () =>
-        expect(
-            parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+        expect(parseSelfBuffRemovals('loses <unit-skill>Overload</unit-skill> on kill')).toEqual([
+            { buffName: 'Overload', trigger: 'on-enemy-destroyed' },
+        ]));
     it('emits for "removes Overload" (Ruiner)', () =>
         expect(
             parseSelfBuffRemovals(
@@ -1631,9 +1631,9 @@ describe('parseSelfBuffRemovals', () => {
             )
         ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
     it('emits for passive "Overload is lost" (Butcher R2)', () =>
-        expect(
-            parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')
-        ).toEqual([{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]));
+        expect(parseSelfBuffRemovals('On kill, <unit-skill>Overload</unit-skill> is lost')).toEqual(
+            [{ buffName: 'Overload', trigger: 'on-enemy-destroyed' }]
+        ));
     it('resolves the removal trigger by removal position, not first buff-name sentence (Asphyxiator)', () =>
         expect(
             parseSelfBuffRemovals(

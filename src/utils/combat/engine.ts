@@ -1839,8 +1839,12 @@ export function runCombat(input: CombatEngineInput): {
     //    by its id — the tank carries the enemy attacker's debuffs).
     //  - ENEMY actor's `enemy-buff` gate → opposing side = the player team (union of player
     //    self-buff names). `self-debuff` → its own per-target debuff store keyed by its id.
+    const livingEnemyAttackerIds = (): string[] =>
+        enemyAttackerActorIds.filter((id) => allActorsById.get(id)?.destroyedRound === undefined);
+    const isActorAlive = (actorId: string): boolean =>
+        allActorsById.get(actorId)?.destroyedRound === undefined;
     const playerEnemyBuffNames = (): string[] =>
-        selfBuffNamesForOwners(statusEngine, enemyAttackerActorIds);
+        selfBuffNamesForOwners(statusEngine, livingEnemyAttackerIds());
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
@@ -4279,6 +4283,7 @@ export function runCombat(input: CombatEngineInput): {
                         // Task 7: drain `enemy-buff` gates read the union of enemy attackers'
                         // self-buffs (names only). Empty in DPS mode → byte-identical.
                         enemyAttackerIds: enemyAttackerActorIds,
+                        isActorAlive,
                         lastTurnCtxByActor,
                         enemyType,
                         enemyHp,

@@ -784,6 +784,10 @@ export interface IntentExecContext {
      *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
      *  here. Empty/omitted in DPS mode (no enemy attackers) → drain `enemyBuffNames` stays []. */
     enemyAttackerIds?: string[];
+    /** When supplied, filters `enemyAttackerIds` to living opposing actors for the
+     *  drain-time `enemy-buff` gate (Graphite start-of-round Stealth check). Absent →
+     *  all ids pass through (byte-identical for callers that omit it). */
+    isActorAlive?: (actorId: string) => boolean;
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
@@ -1012,7 +1016,10 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both empty in DPS mode
         // (no enemy attackers, no debuffs on player actors) → drain gating byte-identical.
-        enemyBuffNames: selfBuffNamesForOwners(ctx.statusEngine, ctx.enemyAttackerIds ?? []),
+        enemyBuffNames: selfBuffNamesForOwners(
+            ctx.statusEngine,
+            (ctx.enemyAttackerIds ?? []).filter((id) => ctx.isActorAlive?.(id) ?? true)
+        ),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
         // Phase 4c PR 6: live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
         // paths keep the lone-actor assumption and stay byte-identical.
@@ -1477,6 +1484,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (!conditionsMet(gateConditions, buildDrainContext(ctx, intent.ownerId))) return;
 
     if (cfg.type === 'charge') {
+        if (!passesOncePerRoundGate(intent, ctx)) return;
         if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
             // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
             // repairer); only act on the Nth event. Requires a repairer id and the counter map.

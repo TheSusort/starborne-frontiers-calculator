@@ -14,6 +14,8 @@ interface BuildContext {
     currentRound: CombatLogRound | undefined;
     /** Mutable current-turn pointer — undefined outside a turn. */
     currentTurn: CombatLogTurn | undefined;
+    /** True from round-started until the first turn-started of that round. */
+    beforeFirstTurn: boolean;
     /** The most-recently opened attack entry (ability-performed → attacked window). */
     openAttackEntry: CombatLogEntry | undefined;
     /** The `damage` from the most-recent `ability-performed` (used for primary-target amount). */
@@ -105,6 +107,7 @@ function createBuildContext(
         rounds: [],
         currentRound: undefined,
         currentTurn: undefined,
+        beforeFirstTurn: false,
         openAttackEntry: undefined,
         openAttackAbilityDamage: undefined,
         openAttackAbilityTargetId: undefined,
@@ -119,14 +122,16 @@ function createBuildContext(
 
         openRound(round: number) {
             ctx.closeOpenAttack();
-            const r: CombatLogRound = { round, turns: [], endOfRound: [] };
+            const r: CombatLogRound = { round, startOfRound: [], turns: [], endOfRound: [] };
             ctx.rounds.push(r);
             ctx.currentRound = r;
             ctx.currentTurn = undefined;
+            ctx.beforeFirstTurn = true;
         },
 
         openTurn(actorId: string) {
             if (!ctx.currentRound) return;
+            ctx.beforeFirstTurn = false;
             ctx.closeOpenAttack(); // also clears pendingSkill
             const t: CombatLogTurn = {
                 actorId,
@@ -151,8 +156,11 @@ function createBuildContext(
                 ctx.currentTurn.entries.push(entry);
                 return;
             }
-            // No current turn and no stamp — round-end drain window.
-            if (ctx.currentRound) ctx.currentRound.endOfRound.push(entry);
+            // No current turn and no stamp — round-start vs round-end drain window.
+            if (ctx.currentRound) {
+                if (ctx.beforeFirstTurn) ctx.currentRound.startOfRound.push(entry);
+                else ctx.currentRound.endOfRound.push(entry);
+            }
         },
 
         routeReaction(entry: CombatLogEntry, stamp: { duringTurnOf: string }) {

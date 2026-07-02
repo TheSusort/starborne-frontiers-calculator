@@ -409,14 +409,17 @@ describe('accumulatorsFromSkill', () => {
 });
 
 describe('chargeAbilitiesFromSkill', () => {
-    it('extracts all charge abilities', () => {
+    it('extracts on-cast charge abilities only', () => {
         const c1 = charge('c1', 1);
-        const c2 = charge('c2', 2);
+        const reactive: Ability = {
+            ...charge('c2', 2),
+            trigger: 'on-enemy-destroyed',
+        };
         const skill: Skill = {
             slot: 'active',
-            abilities: [damage('a', 100), c1, c2],
+            abilities: [damage('a', 100), c1, reactive],
         };
-        expect(chargeAbilitiesFromSkill(skill)).toEqual([c1, c2]);
+        expect(chargeAbilitiesFromSkill(skill)).toEqual([c1]);
     });
 
     it('returns empty array when no charge abilities', () => {

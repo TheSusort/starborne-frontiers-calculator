@@ -145,9 +145,11 @@ export function dotsFromSkill(skill: Skill | undefined): DoTApplicationConfig {
     return config;
 }
 
-/** All `charge` abilities on the skill. */
+/** Cast-time `charge` abilities on the skill. Reactive charge grants (start-of-round,
+ *  on-enemy-destroyed, etc.) are partitioned out of castSkills — mirroring
+ *  controlAbilitiesFromSkill so the cast path never double-fires them. */
 export function chargeAbilitiesFromSkill(skill: Skill | undefined): Ability[] {
-    return skill?.abilities.filter((a) => a.type === 'charge') ?? [];
+    return skill?.abilities.filter((a) => a.type === 'charge' && a.trigger === 'on-cast') ?? [];
 }
 
 /** Cast-time `control` abilities on the skill (e.g. Defiant's charged Stasis inflict). The control

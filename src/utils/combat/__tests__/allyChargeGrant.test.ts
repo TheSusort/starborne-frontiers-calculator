@@ -393,6 +393,32 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
         // pins exactly-one grant per round.
         expect(amt1Charged).toBe(2);
     });
+
+    it('gate OFF in a later round when the only Stealth holder died (corpse buff ignored)', () => {
+        // Positional kill: focus one-shots the stealthed enemy attacker in round 1. Later rounds
+        // must NOT treat the corpse's lingering Stealth as a live gate.
+        const positional = (enemy: EnemyAttacker): CombatEngineInput => ({
+            ...buildInput(2, enemy, 4),
+            attack: 50_000,
+            numRounds: 6,
+            position: 'M4',
+            target: { raw: 'front', side: 'enemy', selection: 'front' },
+            pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+            enemyAttackers: [{ ...enemy, position: 'M4', stats: { ...enemy.stats, hp: 5000 } }],
+        });
+        const afterKill = runCombat(positional(stealthEnemy()));
+        const noStealthAlive = runCombat(
+            positional({
+                ...plainEnemy(),
+                id: 'e-plain-pos',
+            })
+        );
+
+        const chargedAfterKill = firstChargedRound(afterKill.rounds);
+        const chargedNoStealth = firstChargedRound(noStealthAlive.rounds);
+
+        expect(chargedAfterKill).toBe(chargedNoStealth);
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
