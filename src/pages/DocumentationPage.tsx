@@ -3049,6 +3049,39 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Squad Leaders</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Pick one squad leader per team beneath each placement board
+                                        — faction, leader, and upgrade stage (stages are additive:
+                                        stage III includes stages I and II)
+                                    </li>
+                                    <li>
+                                        Ally bonuses apply only to ships of the leader&apos;s
+                                        faction — a leader with no faction ship on its own team
+                                        grants nothing
+                                    </li>
+                                    <li>
+                                        Enemy-targeting effects exist only on legendary leaders at
+                                        stage III; they hit every opposing ship, but also require at
+                                        least one leader-faction ship on the leader&apos;s own team
+                                    </li>
+                                    <li>
+                                        Leader bonuses are hidden pre-fight modifiers: they fold
+                                        into each ship&apos;s fully geared stats before round 1, are
+                                        permanent, never appear as buffs, and are never purged,
+                                        cleansed, or reset on death
+                                    </li>
+                                    <li>
+                                        Effects the simulator cannot model yet (conditional bonuses,
+                                        per-round effects, and damage/heal/shield modifiers) are
+                                        marked &quot;Not simulated&quot; in the picker preview and
+                                        listed after each run
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
                                     Watching the Battle
                                 </h4>

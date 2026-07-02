@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.64.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: positioned board battles with skill-pattern targeting; shields and damage absorption; implants and gear set effects; control effects (Disable, Stasis, stealth); DoT, bombs, and detonations; counterattacks and enemy reactions; detailed combat log; affinity and charge rules; random crit/proc variance. DPS calculator now includes implant and gear set effects.',
     'Combat sim charge fixes: Selenite only gains charge vs live Stealth; Graphite start-of-round grant requires a living stealthed enemy and logs at round start; Liberator ally-charge on enemy death fires once per round for any kill (including ally kills).',
+    "Battle Simulator: pick a squad leader for each team (faction, leader, and upgrade stage, remembered between visits) — faction-scoped stat bonuses, and legendary stage-3 enemy debuffs, now apply in the simulation. A live preview under each board shows which placed ships each effect hits, and effects the sim can't model yet are marked 'Not simulated'.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

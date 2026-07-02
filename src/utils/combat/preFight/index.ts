@@ -15,7 +15,13 @@ export type {
     SquadLeaderSelection,
 } from './types';
 export { emptyPreFightModifiers } from './types';
-export { squadLeaderPass } from './squadLeaderPass';
+export {
+    squadLeaderPass,
+    activeSquadLeaderEffects,
+    squadLeaderEffectTargeting,
+    isSquadLeaderEffectSimulated,
+} from './squadLeaderPass';
+export type { SquadLeaderEffectTargeting } from './squadLeaderPass';
 
 /** Run the pre-fight passes in order over both sides' units. */
 export function runPreFight(
