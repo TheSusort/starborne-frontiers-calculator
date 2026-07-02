@@ -20,7 +20,12 @@
  * break side symmetry.
  */
 import { SQUAD_LEADERS } from '../../../constants/squadLeaders';
-import type { SquadLeaderModifierChannel } from '../../../constants/squadLeaders';
+import type {
+    SquadLeader,
+    SquadLeaderEffect,
+    SquadLeaderModifierChannel,
+} from '../../../constants/squadLeaders';
+import type { FactionName } from '../../../constants/factions';
 import type {
     PreFightCombatModifiers,
     PreFightPass,
@@ -70,6 +75,59 @@ const MODIFIER_FIELD_BY_CHANNEL: Partial<
 type StatAccumulator = Map<PreFightStatKey, { pct: number; flat: number }>;
 type SideStatAcc = Map<PreFightUnit, StatAccumulator>;
 
+// ---------------------------------------------------------------------------
+// Shared targeting/classification helpers — the SINGLE source of truth for both
+// the pass below and UI previews (SquadLeaderPicker). Keep in lock-step with
+// `applyLeaderForSide`; any rule change must land in exactly one place here.
+// ---------------------------------------------------------------------------
+
+/** The effects active at a stage. Stages are ADDITIVE deltas: stage III = I+II+III. */
+export function activeSquadLeaderEffects(
+    leader: SquadLeader,
+    stage: 1 | 2 | 3
+): SquadLeaderEffect[] {
+    return leader.stages.slice(0, stage).flat();
+}
+
+/** Who a squad-leader effect targets, given the leader's OWN side's units.
+ *  - 'allies'  : the own-side units of the leader's faction ('self' has no deployed
+ *                unit and attributes to the same set — see the pass comment below).
+ *  - 'enemies' : ALL opposing units, but only while `gateMet` (>=1 leader-faction
+ *                ship on the leader's own team) — gate unmet means inactive by game rule. */
+export type SquadLeaderEffectTargeting<T> =
+    | { scope: 'allies'; recipients: T[] }
+    | { scope: 'enemies'; gateMet: boolean };
+
+export function squadLeaderEffectTargeting<T extends { faction: FactionName }>(
+    effect: SquadLeaderEffect,
+    leaderFaction: FactionName,
+    own: readonly T[]
+): SquadLeaderEffectTargeting<T> {
+    if (effect.target === 'all-enemies') {
+        return { scope: 'enemies', gateMet: own.some((u) => u.faction === leaderFaction) };
+    }
+    return { scope: 'allies', recipients: own.filter((u) => u.faction === leaderFaction) };
+}
+
+/** Whether the pass SIMULATES an effect (folds it into stats) or surfaces it via
+ *  `unsimulated`. Mirrors the pass's branch order exactly: conditional / 'other' /
+ *  per-round / 'self' effects are unsimulated; stat effects are simulated iff the
+ *  stat is in the pre-fight block; ALL modifier-channel effects are unsimulated
+ *  until PR F3 wires the engine consumers (they still accumulate in the pass). */
+export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean {
+    if (
+        effect.condition !== undefined ||
+        effect.kind === 'other' ||
+        effect.recurrence === 'per-round' ||
+        effect.target === 'self'
+    ) {
+        return false;
+    }
+    if (effect.kind === 'stat') return isPreFightStat(effect.stat);
+    // kind === 'modifier': accumulated but consumed only from PR F3 on.
+    return false;
+}
+
 /** Resolve ONE side's leader selection and fold its active effects into that side's
  *  (and, for enemy effects, the opposing side's) units. Shared by both sides. Stat
  *  contributions accumulate into `statAcc` — OWNED BY THE PASS and shared across both
@@ -90,22 +148,21 @@ function applyLeaderForSide(
     }
 
     // Stages are additive deltas: everything up to and including the selected stage is live.
-    const effects = leader.stages.slice(0, sel.stage).flat();
-
-    // The all-enemies gate: enemy effects are live only while the leader's own team
-    // fields at least one ship of the leader's faction.
-    const factionPresent = own.some((u) => u.faction === sel.faction);
+    const effects = activeSquadLeaderEffects(leader, sel.stage);
 
     for (const effect of effects) {
-        // Recipients by targeting rule. 'self' has no deployed unit to land on (squad
-        // leaders are not on the board — 0 occurrences in data), so it attributes its
-        // unsimulated text to the own-side faction units, same as 'all-allies'.
+        // Recipients by the shared targeting rule. 'self' has no deployed unit to land on
+        // (squad leaders are not on the board — 0 occurrences in data), so it attributes
+        // its unsimulated text to the own-side faction units, same as 'all-allies'. The
+        // all-enemies gate: enemy effects are live only while the leader's own team
+        // fields at least one ship of the leader's faction.
+        const targeting = squadLeaderEffectTargeting(effect, sel.faction, own);
         let recipients: PreFightUnit[];
-        if (effect.target === 'all-enemies') {
-            if (!factionPresent) continue; // gate unmet → inactive by game rule, record nothing
+        if (targeting.scope === 'enemies') {
+            if (!targeting.gateMet) continue; // gate unmet → inactive by game rule, record nothing
             recipients = opposing;
         } else {
-            recipients = own.filter((u) => u.faction === sel.faction);
+            recipients = targeting.recipients;
         }
 
         // Not simulated in F1: conditional effects, the 'other' escape hatch, per-round
