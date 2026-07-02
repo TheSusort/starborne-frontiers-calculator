@@ -70,7 +70,7 @@ const { SYNTHETIC_LEADER } = vi.hoisted(() => {
                     value: 5,
                     text: '+5% Damage Reduction',
                 },
-                // unconditional mapped modifier → accumulates AND is unsimulated (F1 caveat).
+                // unconditional mapped modifier → accumulates silently (simulated since F3).
                 {
                     kind: 'modifier',
                     target: 'all-allies',
@@ -317,7 +317,9 @@ describe('squadLeaderPass — skip rules (synthetic leader)', () => {
         expect(marauder.stats).toEqual({ ...BASE_STATS });
         expect(offFaction.stats).toEqual({ ...BASE_STATS });
 
-        // Every skipped effect surfaced verbatim on the faction recipient.
+        // Every skipped effect surfaced verbatim on the faction recipient. The unconditional
+        // MAPPED modifier ('+7% Outgoing direct damage') is SIMULATED since F3 — it
+        // accumulates silently and must NOT appear here.
         expect(marauder.unsimulated).toEqual([
             '+10% Attack while below 50% HP',
             'un-modelled weirdness',
@@ -325,11 +327,10 @@ describe('squadLeaderPass — skip rules (synthetic leader)', () => {
             'Self +5% Attack',
             '+10% Heal Modifier',
             '+5% Damage Reduction',
-            '+7% Outgoing direct damage',
         ]);
         expect(offFaction.unsimulated).toEqual([]);
 
-        // The unconditional mapped modifier accumulated (F1 caveat: ALSO unsimulated above);
+        // The unconditional mapped modifier accumulated (consumed by the engine since F3);
         // the per-round shieldGeneration did NOT.
         expect(marauder.modifiers.outgoingDamage).toBe(7);
         expect(marauder.modifiers.startingShieldPctOfHp).toBe(0);
@@ -346,13 +347,13 @@ describe('squadLeaderPass — skip rules (synthetic leader)', () => {
         expect(player[0].modifiers.outgoingDamage).toBe(0);
     });
 
-    it('an unconditional modifier (Malachi stage 2 outgoing repair) accumulates AND reports unsimulated', () => {
+    it('an unconditional modifier (Malachi stage 2 outgoing repair) accumulates WITHOUT reporting unsimulated (simulated since F3)', () => {
         const player = [makeUnit('p1', 'player', 'EVERLIVING')];
         runPass(player, [], {
             player: { faction: 'EVERLIVING', name: 'Malachi', stage: 2 },
         });
         expect(player[0].modifiers.outgoingHeal).toBe(15);
-        expect(player[0].unsimulated).toContain('+15% Outgoing repair');
+        expect(player[0].unsimulated).not.toContain('+15% Outgoing repair');
     });
 });
 
@@ -386,18 +387,20 @@ describe('squadLeaderPass — full-data sweep (real, unmocked SQUAD_LEADERS)', (
                         effect.kind === 'other' ||
                         effect.recurrence === 'per-round' ||
                         effect.target === 'self';
-                    if (skipped || effect.kind === 'modifier') {
-                        // Skipped and (F1 caveat) modifier effects must surface verbatim.
+                    if (skipped) {
+                        // Skipped effects must surface verbatim.
                         expect(surfaced, `${faction}/${leader.name}: "${effect.text}"`).toContain(
                             effect.text
                         );
                     } else {
-                        // Pure stat effects must FOLD (never fall to the defensive
-                        // unsimulated path) — proves every data stat name maps onto
-                        // PreFightStatBlock.
+                        // Everything else is SIMULATED (F3): stat effects fold into the
+                        // pre-fight block, unconditional modifier effects accumulate into
+                        // consumed channels — proving every real data stat name AND every
+                        // real modifier channel is mapped (the defensive unknown-stat /
+                        // unmapped-channel paths are covered by the synthetic leader above).
                         expect(
                             surfaced,
-                            `${faction}/${leader.name}: "${effect.text}" should have folded`
+                            `${faction}/${leader.name}: "${effect.text}" should be simulated`
                         ).not.toContain(effect.text);
                     }
                 }

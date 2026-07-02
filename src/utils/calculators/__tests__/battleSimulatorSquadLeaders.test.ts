@@ -8,7 +8,8 @@
  *
  * Leader under test: MPL "Midas" (legendary). Stage III active set =
  *   I:  +10% HP & +10% Attack (all MPL allies — stat fold),
- *   II: -7.5% incoming direct damage (MPL allies — protection modifier, unsimulated until F3),
+ *   II: -7.5% incoming direct damage (MPL allies — protection modifier, SIMULATED since F3
+ *       via the per-victim incomingDamage channel),
  *   III: enemies lose 15% crit rate (stat fold; inert here — fixture crit is 0).
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -145,12 +146,18 @@ describe('simulateBattle squad leaders — stat effects reach the battle', () =>
         );
         expect(round1(withLeader, 'p:p2:1').hpPct).toBe(round1(baseline, 'p:p2:1').hpPct);
 
-        // The stage-II ally protection modifier is NOT consumed in F1 → surfaced as
-        // unsimulated on the MPL ship only (F3 will remove this and apply the channel).
-        expect(withLeader.preFight).toBeDefined();
-        expect(withLeader.preFight?.unsimulated).toEqual([
-            { actorId: 'attacker', name: 'Player Front', texts: ['-7.5% incoming direct damage'] },
-        ]);
+        // Stage-II "-7.5% incoming direct damage" is CONSUMED since F3 (per-victim
+        // incomingDamage channel): the MPL ship's round-1 damage taken scales ×0.925
+        // exactly, the off-faction teammate's is untouched.
+        expect(round1(withLeader, 'attacker').damageTaken).toBeCloseTo(
+            0.925 * round1(baseline, 'attacker').damageTaken
+        );
+        expect(round1(withLeader, 'p:p2:1').damageTaken).toBe(
+            round1(baseline, 'p:p2:1').damageTaken
+        );
+
+        // With every Midas effect simulated, nothing is left to report → no preFight block.
+        expect('preFight' in withLeader).toBe(false);
     });
 
     it('faction gate integration: with no MPL ship on the player team, Midas changes NOTHING', () => {

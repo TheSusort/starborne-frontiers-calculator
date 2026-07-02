@@ -29,8 +29,12 @@ export interface PreFightStatBlock {
  * percentage points (0 = inert): outgoing/incoming damage, crit-damage and heal
  * scaling, plus `startingShieldPctOfHp` (starting shield pool as % of max HP).
  *
- * F1 accumulates these; the engine consumes them in PR F3. Until then any effect that
- * lands here is ALSO surfaced via `PreFightUnit.unsimulated`.
+ * The squad-leader pass accumulates these (F1); the battle simulator attaches the
+ * block to each unit's engine actor (`CombatActor.preFight`) and the engine folds
+ * every channel at its consumption site (F3): outgoingDamage/outgoingHeal/incomingHeal
+ * into the self-buff totals, incomingDamage into the per-victim incoming channel,
+ * incoming/outgoingCritDamage at the crit-family damage sites (crit-conditional damage
+ * modifiers — NOT the Crit Power stat), startingShieldPctOfHp as the starting shieldPool.
  */
 export interface PreFightCombatModifiers {
     outgoingDamage: number;
@@ -53,6 +57,13 @@ export function emptyPreFightModifiers(): PreFightCombatModifiers {
         incomingHeal: 0,
         startingShieldPctOfHp: 0,
     };
+}
+
+/** True when at least one modifier channel is non-zero. The battle simulator attaches a
+ *  unit's block to its engine actor ONLY in that case, so an all-zero block never rides
+ *  along (keeps stat-only-leader runs structurally identical to no-modifier runs). */
+export function hasAnyPreFightModifier(m: PreFightCombatModifiers): boolean {
+    return Object.values(m).some((v) => v !== 0);
 }
 
 /** One placed unit as the pre-fight passes see it. */

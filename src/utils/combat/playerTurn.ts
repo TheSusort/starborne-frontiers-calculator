@@ -43,6 +43,7 @@ import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { resolveSupportRecipients } from './supportRecipients';
 import { supportFootprintAllyIds } from './supportFootprint';
 import type { AttackerDamageScalars } from './victimDamage';
+import type { PreFightCombatModifiers } from './preFight/types';
 import { effectiveDamageStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
     targetCarriesBlockDebuff,
@@ -387,6 +388,14 @@ export interface PlayerTurnArgs {
     chargedPattern?: ParsedPattern;
     /** Living same-side roster for support footprint resolution (positional mode). */
     sameSideLiving?: CombatActor[];
+    /** Pre-fight combat-modifier baseline for THIS acting actor (sub-project F, PR F3).
+     *  outgoingDamage/outgoingHeal/incomingHeal fold additively into the scheduled self-buff
+     *  totals right after resolveSelfBuffTotals, flowing through effectiveDamageStatsOf into
+     *  every existing damage/heal consumer (incl. turnCtx + positionalScalars). NOTE:
+     *  outgoingCritDamage is NOT folded here — "outgoing crit damage" is a crit-conditional
+     *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
+     *  damage sites. Absent → byte-identical. */
+    preFight?: PreFightCombatModifiers;
 }
 
 // ---------------------------------------------------------------------------
@@ -948,6 +957,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         activeSelfBuffs: entry.activeSelfBuffs,
         selfBuffLookup,
     });
+    // F3: fold the actor's pre-fight modifier baseline (squad leaders) into the layer-1
+    // totals — outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
+    // buffs. All three flow through effectiveDamageStatsOf into the existing consumers
+    // (damage assembly, heal block, turnCtx, positionalScalars) with buff-channel semantics
+    // (direct damage only; additive pct points). outgoingCritDamage is deliberately NOT
+    // folded (crit-conditional damage modifier — consumed at the engine's crit-family
+    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → byte-identical.
+    if (args.preFight) {
+        scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
+        scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
+        scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
+    }
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
     let critBuffForGates = scheduledTotals.critBuff;

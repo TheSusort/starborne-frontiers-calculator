@@ -109,11 +109,12 @@ export function squadLeaderEffectTargeting<T extends { faction: FactionName }>(
     return { scope: 'allies', recipients: own.filter((u) => u.faction === leaderFaction) };
 }
 
-/** Whether the pass SIMULATES an effect (folds it into stats) or surfaces it via
- *  `unsimulated`. Mirrors the pass's branch order exactly: conditional / 'other' /
- *  per-round / 'self' effects are unsimulated; stat effects are simulated iff the
- *  stat is in the pre-fight block; ALL modifier-channel effects are unsimulated
- *  until PR F3 wires the engine consumers (they still accumulate in the pass). */
+/** Whether the pass SIMULATES an effect (folds it into stats / a consumed modifier
+ *  channel) or surfaces it via `unsimulated`. Mirrors the pass's branch order exactly:
+ *  conditional / 'other' / per-round / 'self' effects are unsimulated; stat effects are
+ *  simulated iff the stat is in the pre-fight block; modifier effects are simulated iff
+ *  their channel maps onto a `PreFightCombatModifiers` field (the engine consumes every
+ *  mapped channel since PR F3 — unmapped channels stay unsimulated). */
 export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean {
     if (
         effect.condition !== undefined ||
@@ -124,8 +125,8 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
         return false;
     }
     if (effect.kind === 'stat') return isPreFightStat(effect.stat);
-    // kind === 'modifier': accumulated but consumed only from PR F3 on.
-    return false;
+    // kind === 'modifier': mapped channels are consumed by the engine (PR F3).
+    return MODIFIER_FIELD_BY_CHANNEL[effect.channel] !== undefined;
 }
 
 /** Resolve ONE side's leader selection and fold its active effects into that side's
@@ -204,12 +205,12 @@ function applyLeaderForSide(
                 for (const unit of recipients) unit.unsimulated.push(effect.text);
                 continue;
             }
+            // SIMULATED (PR F3): every mapped channel is consumed by the engine — the
+            // battle simulator attaches the accumulated block to the unit's actor and
+            // the folds fire at the buff-channel/crit-family/shield-seed sites. Only
+            // conditional effects (filtered above) and unmapped channels stay unsimulated.
             for (const unit of recipients) {
                 unit.modifiers[field] += effect.value;
-                // TODO(F3): modifiers accumulate but nothing consumes them until PR F3
-                // wires the engine channels — report as unsimulated until then. F3
-                // removes this push (only conditional effects stay unsimulated).
-                unit.unsimulated.push(effect.text);
             }
         }
     }
