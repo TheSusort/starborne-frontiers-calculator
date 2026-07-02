@@ -58,6 +58,10 @@ import {
     type PreFightUnit,
     type SquadLeaderSelection,
 } from '../combat/preFight';
+import { applyPreCombatShipPassives } from '../combat/preCombatPassives';
+import { detectFullyCharged } from '../skillTextParser';
+import { getShipSkillRows } from '../ship/skillRows';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { computeAffinityModifiers } from './affinityUtils';
 
 export interface ShipRoundState {
@@ -584,6 +588,8 @@ interface PlacementPlan {
     position: Position;
     /** Ship faction — drives the pre-fight squad-leader aura's faction gating. */
     faction: FactionName;
+    /** Ship role — gates role-conditional pre-fight ship passives (Enforcer/Defiant/Stalwart). */
+    role: ShipTypeName | undefined;
     stats: DerivedCombatStats;
     shipSkills: ShipSkills;
     affinity: AffinityName | undefined;
@@ -592,6 +598,9 @@ interface PlacementPlan {
     /** Parsed CHARGED targeting when it differs from active; otherwise same as active. */
     chargedTargeting: SkillTargeting | undefined;
     chargeCount: number;
+    /** True when a refit-active skill row declares the ship "starts combat fully charged"
+     *  (Chimei). Seeds `charges = chargeCount` on the engine actor + the initialCharge map. */
+    startCharged: boolean;
 }
 
 function planPlacement(
@@ -607,6 +616,7 @@ function planPlacement(
         name: p.ship.name,
         position: p.position,
         faction: p.ship.faction,
+        role: p.ship.type,
         stats: resolveStats(p),
         shipSkills: getGearPiece
             ? buildShipAbilitiesWithEquipment(p.ship, getGearPiece)
@@ -615,6 +625,10 @@ function planPlacement(
         targeting: targeting.active,
         chargedTargeting: targeting.charged ?? targeting.active,
         chargeCount: p.ship.chargeSkillCharge ?? 0,
+        // Chimei "starts combat fully charged": detected over the REFIT-RESOLVED skill rows
+        // (getShipSkillRows returns only the refit-active passive), so a below-threshold
+        // refit count automatically drops the declaring passive and the ship starts at 0.
+        startCharged: detectFullyCharged(getShipSkillRows(p.ship).map((r) => r.text)),
     };
 }
 
@@ -670,7 +684,7 @@ export function simulateBattle(
         planPlacement(p, `e:${p.ship.id}:${i}`, getGearPiece)
     );
 
-    // ----- Pre-fight layer (sub-project F): squad-leader auras -----
+    // ----- Pre-fight layer (sub-project F): squad-leader auras, then ship passives -----
     // Each PreFightUnit shares its PLAN's stats object BY REFERENCE, so the pass mutates
     // the plan stats in place — actor construction, roster maxHp, and turn order below
     // all inherit the modified values automatically. With neither leader selected the
@@ -688,6 +702,13 @@ export function simulateBattle(
     runPreFight({ player: preFightPlayer, enemy: preFightEnemy }, [
         squadLeaderPass({ player: input.playerSquadLeader, enemy: input.enemySquadLeader }),
     ]);
+    // Pre-fight step 2 (F5) — ship passives (Lionheart/Centurion/Enforcer/Defiant/Stalwart),
+    // run per side (passives never cross sides) AFTER the squad-leader pass per the spec's
+    // ordering rule: each grant computes from the frozen POST-LEADER snapshot (simultaneous —
+    // no grant sees another's output). Mutates the same by-reference plan stats; a squad with
+    // no pre-combat passives is an exact no-op (golden safety).
+    applyPreCombatShipPassives(playerPlans);
+    applyPreCombatShipPassives(enemyPlans);
     // Kept for the modifier attachment below (F3) and the result's `preFight.unsimulated` block.
     const preFightById = new Map<string, PreFightUnit>(
         [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
@@ -729,7 +750,7 @@ export function simulateBattle(
             id: plan.id,
             speed: plan.stats.speed,
             chargeCount: plan.chargeCount,
-            startCharged: false,
+            startCharged: plan.startCharged,
             selfBuffs: [],
             enemyDebuffs: [],
             ...preFightModifiersFor(plan.id),
@@ -762,7 +783,7 @@ export function simulateBattle(
                 id: plan.id,
                 stats: toEnemyStats(plan.stats),
                 chargeCount: plan.chargeCount,
-                startCharged: false,
+                startCharged: plan.startCharged,
                 shipSkills: plan.shipSkills,
                 ...preFightModifiersFor(plan.id),
                 // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
@@ -810,7 +831,7 @@ export function simulateBattle(
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: hasCharged(focus),
-        startCharged: false,
+        startCharged: focus.startCharged,
         affinityDamageModifier: focusAff.damageModifier,
         affinityCritCap: focusAff.critCap,
         affinityCritPenalty: focusAff.critPenalty,
@@ -891,13 +912,14 @@ export function simulateBattle(
     // Pre-combat charge state per actor for the combatLog's per-turn charge header.
     //   - max    = the ship's charge cap (chargeCount) ONLY when it actually has a usable
     //              charged skill (hasCharged); 0 otherwise so non-charge ships render 0/0.
-    //   - charge = seeded initial charge. Every actor here is built with `startCharged: false`
-    //              (focus, teamActors, enemyAttackers all hard-code it), so the initial charge
-    //              is 0 across the board. (When a startCharged path is wired in PR2 this becomes
-    //              `max` for seeded actors.)
+    //   - charge = seeded initial charge: `max` for ships whose refit-active skill rows
+    //              declare "starts combat fully charged" (plan.startCharged — Chimei), 0
+    //              otherwise. Mirrors the engine seed (state.ts: charges = startCharged ?
+    //              chargeCount : 0), gated on `max` so a charge-less ship still renders 0/0.
     const initialCharge = new Map<string, { charge: number; max: number }>();
     for (const plan of [...playerPlans, ...enemyPlans]) {
-        initialCharge.set(plan.id, { charge: 0, max: hasCharged(plan) ? plan.chargeCount : 0 });
+        const max = hasCharged(plan) ? plan.chargeCount : 0;
+        initialCharge.set(plan.id, { charge: plan.startCharged ? max : 0, max });
     }
 
     const result = assembleBattleResult({
