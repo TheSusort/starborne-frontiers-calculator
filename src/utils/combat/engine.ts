@@ -1864,6 +1864,26 @@ export function runCombat(input: CombatEngineInput): {
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
+    // Sub-project I, PR I1: NAMES on a resolved (real) opposing target for name-specific
+    // `enemy-debuff` gates (Tygr's "to enemies with Stasis or Disable", Incinerator's "to
+    // enemies afflicted with Inferno"). Control/marker debuff names come from the same
+    // ownerDebuffNamesFor read used for selfDebuffNames above, keyed by the TARGET's id
+    // (not the actor's). DoTs (Inferno/Corrosion/Bomb) carry no names of their own in the
+    // status-engine's named stores — they are tracked as counted entry arrays only (see
+    // roundContext.ts's landedEnemyDebuffCount fold) — so their base-type name is synthesized
+    // here from entry-array presence on the target, matching the exact `buffName` strings
+    // `enemyEffectConditions` extracts from the raw skill text (base type, no tier suffix —
+    // verified empirically: Incinerator's "afflicted with Inferno" clause parses to
+    // buffName:'Inferno', never 'Inferno III'). Called ONLY from buildTurnArgs, gated by the
+    // same targetId guard (real/positional target) that already protects DPS parity below —
+    // this function itself is side-agnostic (team-symmetric: works for a player actor's enemy
+    // target or an enemy actor's player target).
+    const enemyDebuffNamesForTarget = (target: CombatActor): string[] => [
+        ...ownerDebuffNamesFor(statusEngine, target.id),
+        ...(target.infernoEntries.length > 0 ? ['Inferno'] : []),
+        ...(target.corrosionEntries.length > 0 ? ['Corrosion'] : []),
+        ...(target.pendingBombs.length > 0 ? ['Bomb'] : []),
+    ];
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
     /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
@@ -3585,8 +3605,7 @@ export function runCombat(input: CombatEngineInput): {
             // Sign convention matches the buff channel: negative = takes less damage
             // (leader protections use negative values). Absent → 0 → byte-identical. Like
             // the buff channel, this is DIRECT damage only (DoTs/bombs never read it).
-            const preFightIncoming =
-                allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
+            const preFightIncoming = allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
             return {
                 enemyDefenseModifier: enemy.enemyDefenseModifier,
                 incomingDamageModifier:
@@ -4070,6 +4089,15 @@ export function runCombat(input: CombatEngineInput): {
                 // repaired enemy → false → byte-identical (the purge block guards on targetId).
                 targetRepairedThisRound: repairedThisRound.has(tgt.id),
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
+                // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
+                // `enemy-debuff` gates — SAME guard as targetId above (real/positional target
+                // only). When tgt is the dummy `enemy` sink (DPS mode / no positional
+                // resolution), this key is OMITTED entirely so buildRoundContext leaves
+                // enemyDebuffNames undefined (the DPS-parity sentinel) and the round contexts
+                // fall back to the legacy name-agnostic enemyDebuffCount path — byte-identical.
+                ...(a.side === 'enemy' || tgt.id !== enemy.id
+                    ? { enemyDebuffNames: enemyDebuffNamesForTarget(tgt) }
+                    : {}),
                 selfDebuffNames: ownerDebuffNames(a.id),
                 ...(aoeVictimIds ? { aoeVictimIds } : {}),
                 ...(opposingVictimById ? { opposingVictimById } : {}),

@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim charge fixes: Selenite only gains charge vs live Stealth; Graphite start-of-round grant requires a living stealthed enemy and logs at round start; Liberator ally-charge on enemy death fires once per round for any kill (including ally kills).',
     "Battle Simulator: pick a squad leader for each team (faction, leader, and upgrade stage, remembered between visits) — faction-scoped stat bonuses, and legendary stage-3 enemy debuffs, now apply in the simulation. A live preview under each board shows which placed ships each effect hits, and effects the sim can't model yet are marked 'Not simulated'.",
     "Battle Simulator: pre-fight ship passives are now simulated — Lionheart grants adjacent allies 10% of its HP, Centurion gains attack per adjacent ally, and Enforcer/Defiant/Stalwart gain their bonuses when placed next to a Supporter. Bonuses fold in after squad-leader auras, before round 1, and are permanent (they survive the granting ship's death). Ships whose skills say they start combat fully charged (e.g. Chimei) now begin the battle fully charged and fire their charged skill on round 1.",
+    'Combat sim: damage bonuses that target enemies with a specific status now check for that exact status. Tygr, Rikra, Incinerator, and Wrecker only get their bonus damage against the named debuff (Stasis/Disable, Taunt/Provoke, or Inferno) rather than against any debuffed enemy.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

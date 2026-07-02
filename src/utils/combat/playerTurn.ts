@@ -335,6 +335,15 @@ export interface PlayerTurnArgs {
      *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
      *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
+    /** Sub-project I, PR I1 — NAMES on the opposing (primary) target for this actor's
+     *  name-specific `enemy-debuff` condition gates (Tygr's "to enemies with Stasis or
+     *  Disable", Incinerator's "to enemies afflicted with Inferno"). SENTINEL: `undefined`
+     *  (the default — simply omit this key) means the caller has NOT opted in, so the round
+     *  contexts fall back to the legacy name-agnostic `enemyDebuffCount` path — this is the
+     *  DPS-parity invariant; the DPS simulator never supplies this. Only the live combat
+     *  engine's real/positional target resolution opts in (engine.ts `buildTurnArgs`, gated
+     *  by the same targetId guard immediately below). */
+    enemyDebuffNames?: string[];
     /** Active debuff names on THIS actor (Task 7) for its `self-debuff` condition gates. For a
      *  player heal target these are the enemy-applied debuffs in its per-target store (keyed by
      *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
@@ -738,6 +747,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
+        // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
+        enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg = [],
         healEventOnly = false,
         onHitBreakStasis,
@@ -1064,6 +1075,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
     });
@@ -1258,6 +1270,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
     });
@@ -1331,6 +1344,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
         turnsTaken: actor.turnsTaken,
@@ -1456,6 +1470,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg,
         targetRepairedThisRound: targetRepairedThisRoundArg,
         enemyBuffNames: enemyBuffNamesArg,
+        enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         // Thread the acting actor's live own-turn counter so cast-path `every-n-turns` gates
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
