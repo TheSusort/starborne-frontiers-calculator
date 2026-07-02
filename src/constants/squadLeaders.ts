@@ -246,11 +246,13 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         kind: 'modifier',
                         target: 'all-allies',
                         channel: 'shieldGeneration',
-                        value: 2,
-                        text: 'Start combat shielded for 2% of max HP',
+                        value: 25,
+                        text: 'Start combat shielded for 25% of max HP',
                     },
                 ],
                 // III - Enemy units lose 15 speed and 10% crit damage
+                // ("crit damage" here is the crit-conditional damage MODIFIER — enemies'
+                // crits deal 10% less — not the critDamage stat; that would be "Crit Power")
                 [
                     {
                         kind: 'stat',
@@ -261,11 +263,10 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         text: 'Enemy units lose 15 speed',
                     },
                     {
-                        kind: 'stat',
+                        kind: 'modifier',
                         target: 'all-enemies',
-                        stat: 'critDamage',
+                        channel: 'outgoingCritDamage',
                         value: -10,
-                        valueType: 'percentage',
                         text: 'Enemy units lose 10% crit damage',
                     },
                 ],
@@ -347,14 +348,13 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — Gain security equal to 0.8% of the units defense value
-                // TODO: add an effect for this
+                // TODO: needs a derived-value shape (flat security from % of the unit's
+                // OWN defence) before it can be structured; 'other' surfaces it as
+                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'stat',
+                        kind: 'other',
                         target: 'all-allies',
-                        stat: 'security',
-                        value: 0.8,
-                        valueType: 'percentage',
                         text: 'Gain security equal to of 0.8% defense',
                     },
                 ],
@@ -384,13 +384,13 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // II — Gain security equal to 1.2% of the units defense value
+                // TODO: needs a derived-value shape (flat security from % of the unit's
+                // OWN defence) before it can be structured; 'other' surfaces it as
+                // unsimulated instead of mis-folding it as a % security increase.
                 [
                     {
-                        kind: 'stat',
+                        kind: 'other',
                         target: 'all-allies',
-                        stat: 'security',
-                        value: 1.2,
-                        valueType: 'percentage',
                         text: 'Gain security equal to 1.2% of the units defense value',
                     },
                 ],
@@ -876,11 +876,11 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         text: '+8% Attack',
                     },
                 ],
-                // III — -5% incoming direct damage
+                // III — -5% incoming direct damage (protection: MPL allies take 5% less)
                 [
                     {
                         kind: 'modifier',
-                        target: 'all-enemies',
+                        target: 'all-allies',
                         channel: 'incomingDamage',
                         value: -5,
                         text: '-5% incoming direct damage',
@@ -911,11 +911,11 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         text: '+10% Attack',
                     },
                 ],
-                // II - -7.5% incoming direct damage
+                // II - -7.5% incoming direct damage (protection: MPL allies take 7.5% less)
                 [
                     {
                         kind: 'modifier',
-                        target: 'all-enemies',
+                        target: 'all-allies',
                         channel: 'incomingDamage',
                         value: -7.5,
                         text: '-7.5% incoming direct damage',
@@ -1152,12 +1152,12 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         text: '+20 Security',
                     },
                 ],
-                // III — -10% incoming crit damage
-                // TODO: add an effect for this
+                // III — -10% incoming crit damage (protection: Terran allies take 10%
+                // smaller crits — a crit-conditional damage modifier, NOT the critDamage stat)
                 [
                     {
                         kind: 'modifier',
-                        target: 'all-enemies',
+                        target: 'all-allies',
                         channel: 'incomingCritDamage',
                         value: -10,
                         text: '-10% incoming crit damage',
@@ -1188,11 +1188,12 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                         text: '+25 Security',
                     },
                 ],
-                // II — -15% incoming crit damage
+                // II — -15% incoming crit damage (protection: Terran allies take 15%
+                // smaller crits — a crit-conditional damage modifier, NOT the critDamage stat)
                 [
                     {
                         kind: 'modifier',
-                        target: 'all-enemies',
+                        target: 'all-allies',
                         channel: 'incomingCritDamage',
                         value: -15,
                         text: '-15% incoming crit damage',
@@ -1287,13 +1288,13 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // III — +10% outgoing crit damage while in Stealth.
-                // TODO: add an effect for this
                 [
                     {
                         kind: 'modifier',
                         target: 'all-allies',
                         channel: 'outgoingCritDamage',
                         value: 10,
+                        condition: { text: 'while in Stealth' },
                         text: '+10% outgoing crit damage while in Stealth.',
                     },
                 ],
@@ -1323,13 +1324,13 @@ export const SQUAD_LEADERS: Record<FactionName, SquadLeader[]> = {
                     },
                 ],
                 // II — +15% outgoing crit damage while in Stealth.
-                // TODO: add an effect for this
                 [
                     {
                         kind: 'modifier',
                         target: 'all-allies',
                         channel: 'outgoingCritDamage',
                         value: 15,
+                        condition: { text: 'while in Stealth' },
                         text: '+15% outgoing crit damage while in Stealth.',
                     },
                 ],
