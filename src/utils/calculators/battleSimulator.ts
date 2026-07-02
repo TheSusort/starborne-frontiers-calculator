@@ -48,6 +48,14 @@ import { selectFiringSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting } from '../targetingParser';
 import { buildCombatLog } from '../combat/log/buildCombatLog';
 import type { CombatLogRound } from '../combat/log/types';
+import type { FactionName } from '../../constants/factions';
+import {
+    runPreFight,
+    squadLeaderPass,
+    emptyPreFightModifiers,
+    type PreFightUnit,
+    type SquadLeaderSelection,
+} from '../combat/preFight';
 import { computeAffinityModifiers } from './affinityUtils';
 
 export interface ShipRoundState {
@@ -126,6 +134,13 @@ export interface BattleResult {
      * trimmed in lockstep with `rounds`). Additive — does not affect DPS/healing math.
      */
     combatLog: CombatLogRound[];
+    /**
+     * Pre-fight effects that landed on an actor but are NOT simulated (yet): squad-leader
+     * conditional/'other'/per-round lines, plus — until PR F3 consumes them — the modifier-
+     * channel lines. Present ONLY when a squad leader was selected AND at least one such
+     * text was recorded, so a no-leader run's result stays deep-equal to the pre-F shape.
+     */
+    preFight?: { unsimulated: { actorId: string; name: string; texts: string[] }[] };
 }
 
 interface RosterEntry {
@@ -444,6 +459,10 @@ export interface BattleSimulationInput {
     enemyTeam: BattlePlacement[];
     /** Fixed round cap. Default 30. The result is trimmed at the first wipe. */
     rounds?: number;
+    /** Player-side squad leader (pre-fight faction aura). Absent → no pre-fight change. */
+    playerSquadLeader?: SquadLeaderSelection;
+    /** Enemy-side squad leader (pre-fight faction aura). Absent → no pre-fight change. */
+    enemySquadLeader?: SquadLeaderSelection;
 }
 
 /** The combat stats simulateBattle resolves per placement. Derived from the ship's
@@ -561,6 +580,8 @@ interface PlacementPlan {
     id: string;
     name: string;
     position: Position;
+    /** Ship faction — drives the pre-fight squad-leader aura's faction gating. */
+    faction: FactionName;
     stats: DerivedCombatStats;
     shipSkills: ShipSkills;
     affinity: AffinityName | undefined;
@@ -583,6 +604,7 @@ function planPlacement(
         id,
         name: p.ship.name,
         position: p.position,
+        faction: p.ship.faction,
         stats: resolveStats(p),
         shipSkills: getGearPiece
             ? buildShipAbilitiesWithEquipment(p.ship, getGearPiece)
@@ -644,6 +666,30 @@ export function simulateBattle(
     );
     const enemyPlans = input.enemyTeam.map((p, i) =>
         planPlacement(p, `e:${p.ship.id}:${i}`, getGearPiece)
+    );
+
+    // ----- Pre-fight layer (sub-project F): squad-leader auras -----
+    // Each PreFightUnit shares its PLAN's stats object BY REFERENCE, so the pass mutates
+    // the plan stats in place — actor construction, roster maxHp, and turn order below
+    // all inherit the modified values automatically. With neither leader selected the
+    // pass touches nothing, keeping a no-leader run byte-identical (golden safety).
+    const toPreFightUnit = (plan: PlacementPlan, side: 'player' | 'enemy'): PreFightUnit => ({
+        id: plan.id,
+        side,
+        faction: plan.faction,
+        stats: plan.stats,
+        modifiers: emptyPreFightModifiers(),
+        unsimulated: [],
+    });
+    const preFightPlayer = playerPlans.map((plan) => toPreFightUnit(plan, 'player'));
+    const preFightEnemy = enemyPlans.map((plan) => toPreFightUnit(plan, 'enemy'));
+    runPreFight({ player: preFightPlayer, enemy: preFightEnemy }, [
+        squadLeaderPass({ player: input.playerSquadLeader, enemy: input.enemySquadLeader }),
+    ]);
+    // Kept for later PRs (F3 threads `modifiers` into the actors) and for the result's
+    // `preFight.unsimulated` block below.
+    const preFightById = new Map<string, PreFightUnit>(
+        [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
     );
 
     // Representative opposing affinity for each side's matchup resolution (first opponent).
@@ -840,7 +886,7 @@ export function simulateBattle(
         initialCharge.set(plan.id, { charge: 0, max: hasCharged(plan) ? plan.chargeCount : 0 });
     }
 
-    return assembleBattleResult({
+    const result = assembleBattleResult({
         events,
         perRoundPerTarget,
         perRoundPerShield,
@@ -849,4 +895,21 @@ export function simulateBattle(
         numRounds,
         initialCharge,
     });
+
+    // Attach the pre-fight unsimulated report ONLY when a leader was actually selected
+    // AND at least one effect text was recorded — a no-leader run returns the assembler's
+    // result untouched, so it stays deep-equal to the pre-F shape (golden safety).
+    if (input.playerSquadLeader === undefined && input.enemySquadLeader === undefined) {
+        return result;
+    }
+    const unsimulated = [...playerPlans, ...enemyPlans].flatMap((plan) => {
+        const unit = preFightById.get(plan.id);
+        return unit && unit.unsimulated.length > 0
+            ? [{ actorId: plan.id, name: plan.name, texts: [...unit.unsimulated] }]
+            : [];
+    });
+    return {
+        ...result,
+        ...(unsimulated.length > 0 ? { preFight: { unsimulated } } : {}),
+    };
 }
