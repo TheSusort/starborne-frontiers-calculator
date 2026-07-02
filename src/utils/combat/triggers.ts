@@ -1848,11 +1848,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
         // Owner outgoing-repair %; and recipient incoming-repair % (self → owner's own ctx,
         // any other recipient → its last-turn ctx via the runtime accessor). Mirrors the cast
-        // path's incomingPctFor (playerTurn.ts).
-        const ownerOutgoing = ownerCtx?.outgoingHealPct ?? 0;
+        // path's incomingPctFor (playerTurn.ts). F3: pre-first-turn (no ctx yet), fall back
+        // to the owner's pre-fight heal baseline — FALLBACK ONLY, never added to a ctx value
+        // (the ctx already folds preFight via playerTurn's scheduledTotals fold), so no
+        // double-count. The non-self recipient path inherits the same fallback from the
+        // engine's recipientIncomingHealPct.
+        const ownerOutgoing = ownerCtx?.outgoingHealPct ?? owner.actor.preFight?.outgoingHeal ?? 0;
         const incomingPctFor = (rid: string): number =>
             rid === intent.ownerId
-                ? (ownerCtx?.incomingHealPct ?? 0)
+                ? (ownerCtx?.incomingHealPct ?? owner.actor.preFight?.incomingHeal ?? 0)
                 : healing.recipientIncomingHealPct(rid);
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so

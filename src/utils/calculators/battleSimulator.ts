@@ -53,6 +53,8 @@ import {
     runPreFight,
     squadLeaderPass,
     emptyPreFightModifiers,
+    hasAnyPreFightModifier,
+    type PreFightCombatModifiers,
     type PreFightUnit,
     type SquadLeaderSelection,
 } from '../combat/preFight';
@@ -686,11 +688,20 @@ export function simulateBattle(
     runPreFight({ player: preFightPlayer, enemy: preFightEnemy }, [
         squadLeaderPass({ player: input.playerSquadLeader, enemy: input.enemySquadLeader }),
     ]);
-    // Kept for later PRs (F3 threads `modifiers` into the actors) and for the result's
-    // `preFight.unsimulated` block below.
+    // Kept for the modifier attachment below (F3) and the result's `preFight.unsimulated` block.
     const preFightById = new Map<string, PreFightUnit>(
         [...preFightPlayer, ...preFightEnemy].map((u) => [u.id, u])
     );
+    // F3: a unit's accumulated modifier channels ride onto its engine actor as the
+    // `preFight` baseline — but ONLY when at least one channel is non-zero, so a no-leader
+    // or stat-only-leader run passes NO preFight key anywhere (all engine folds inert →
+    // byte-identical to pre-F3 by construction).
+    const preFightModifiersFor = (
+        id: string
+    ): { preFight: PreFightCombatModifiers } | Record<string, never> => {
+        const m = preFightById.get(id)?.modifiers;
+        return m && hasAnyPreFightModifier(m) ? { preFight: m } : {};
+    };
 
     // Representative opposing affinity for each side's matchup resolution (first opponent).
     const enemyRepAffinity = enemyPlans[0]?.affinity;
@@ -721,6 +732,7 @@ export function simulateBattle(
             startCharged: false,
             selfBuffs: [],
             enemyDebuffs: [],
+            ...preFightModifiersFor(plan.id),
             position: plan.position,
             target: plan.targeting?.target,
             pattern: plan.targeting?.pattern,
@@ -752,6 +764,7 @@ export function simulateBattle(
                 chargeCount: plan.chargeCount,
                 startCharged: false,
                 shipSkills: plan.shipSkills,
+                ...preFightModifiersFor(plan.id),
                 // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
                 // engine input so the break-mark gate reads the flag from the CombatActor.
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
@@ -820,6 +833,7 @@ export function simulateBattle(
         // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
+        ...preFightModifiersFor(focus.id),
         // VESTIGIAL: enemyAttackers only populate (and enemies only fire on players) when
         // healTargetId is set — the engine throws otherwise. Point it at the focus player id.
         healTargetId: focus.id,

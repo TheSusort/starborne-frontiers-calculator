@@ -1,0 +1,297 @@
+/**
+ * Sub-project F, PR F3 — engine-level tests for the `CombatActor.preFight` modifier
+ * baseline, exercising the fold sites the battle-sim integration tests cannot isolate:
+ *
+ *   1. createActor shield seeding (`startingShieldPctOfHp` → shieldPool; absent → 0).
+ *   2. Victim-side `incomingDamage` riding the per-victim D-PR12 channel, observed
+ *      through `__testTapVictimEnemyModifiers`.
+ *   3. Heal channels: caster `outgoingHeal` and recipient `incomingHeal` (incl. the
+ *      PRE-FIRST-TURN receipt via the engine's recipientIncomingHealPct fallback, and
+ *      the no-double-count proof once the recipient has a turn ctx).
+ *   4. The AGGREGATE (non-positional, legacy healing path) crit-family mirror for
+ *      `outgoingCritDamage` (attacker-side) and `incomingCritDamage` (victim-side).
+ *
+ * Harness patterns: shieldGrantBattleSim.test.ts (heal/team walk + __testTapActors) and
+ * victimEnemyModifiers.test.ts (modifier tap).
+ */
+import { describe, it, expect } from 'vitest';
+import { CombatActor, createActor } from '../state';
+import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus, CombatEvent } from '../events';
+import { deriveTeamEngineActors } from '../../calculators/dpsSimulator';
+import { emptyPreFightModifiers } from '../preFight';
+import type { PreFightCombatModifiers } from '../preFight';
+import { ShipSkills } from '../../../types/abilities';
+import { TeamActorInput } from '../../../types/calculator';
+
+const preFight = (overrides: Partial<PreFightCombatModifiers>): PreFightCombatModifiers => ({
+    ...emptyPreFightModifiers(),
+    ...overrides,
+});
+
+const BASE_STATS = {
+    attack: 0,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    shieldPenetration: 0,
+    defence: 0,
+    hp: 40_000,
+    speed: 100,
+};
+
+describe('F3 — createActor pre-fight shield seeding', () => {
+    it('seeds shieldPool = startingShieldPctOfHp% of max HP', () => {
+        const actor = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...BASE_STATS },
+            preFight: preFight({ startingShieldPctOfHp: 20 }),
+        });
+        expect(actor.shieldPool).toBe(8_000);
+    });
+
+    it('absent preFight (and an all-zero block) → shieldPool 0 (byte-identical seeding)', () => {
+        const bare = createActor({
+            id: 'x',
+            side: 'player',
+            kind: 'attacker',
+            stats: { ...BASE_STATS },
+        });
+        expect(bare.shieldPool).toBe(0);
+        expect(bare.preFight).toBeUndefined();
+        const zeroed = createActor({
+            id: 'y',
+            side: 'enemy',
+            kind: 'enemy',
+            stats: { ...BASE_STATS },
+            preFight: emptyPreFightModifiers(),
+        });
+        expect(zeroed.shieldPool).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Shared runCombat harness
+// ---------------------------------------------------------------------------
+
+const emptySkills = (): ShipSkills => ({ slots: [{ slot: 'active', abilities: [] }] });
+
+const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
+    attack: 1000,
+    crit: 0,
+    critDamage: 0,
+    defensePenetration: 0,
+    chargeCount: 0,
+    shipSkills: emptySkills(),
+    enemyDefense: 0,
+    enemyHp: 10_000_000,
+    numRounds: 1,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    selfDotModifier: 0,
+    defensePenetrationBuff: 0,
+    hasChargedSkill: false,
+    startCharged: false,
+    affinityDamageModifier: 0,
+    affinityCritCap: 100,
+    affinityCritPenalty: 0,
+    defence: 0,
+    hp: 40_000,
+    ...overrides,
+});
+
+describe('F3 — victim-side incomingDamage rides the per-victim modifier channel', () => {
+    it('folds the actor’s preFight.incomingDamage into victimIncomingModifiers (its own id only)', () => {
+        let captured:
+            | ((victimId: string) => {
+                  enemyDefenseModifier: number;
+                  incomingDamageModifier: number;
+              })
+            | undefined;
+        runCombat(
+            BASE_INPUT({
+                preFight: preFight({ incomingDamage: -5 }),
+                __testTapVictimEnemyModifiers: (fn) => {
+                    captured = fn;
+                },
+            })
+        );
+        expect(captured).toBeDefined();
+        // The focus actor's own per-victim read carries its pre-fight protection…
+        expect(captured!('attacker')).toEqual({
+            enemyDefenseModifier: 0,
+            incomingDamageModifier: -5,
+        });
+        // …and does NOT bleed onto other actors (the dummy enemy has no preFight).
+        expect(captured!('enemy')).toEqual({
+            enemyDefenseModifier: 0,
+            incomingDamageModifier: 0,
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Heal channels (healing mode: focus = heal target; a fast team healer casts an
+// ally-targeted 25%-of-own-HP repair each round → base heal 50,000 × 0.25 = 12,500).
+// ---------------------------------------------------------------------------
+
+const HEAL_ALLY_SKILLS = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'team-heal',
+                    type: 'heal',
+                    target: 'ally',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'heal', pct: 25, basis: 'hp' },
+                },
+            ],
+        },
+    ],
+});
+
+const healerTeamInput = (): TeamActorInput[] => [
+    {
+        id: 'team1',
+        speed: 200, // acts BEFORE the focus heal target every round
+        selfBuffs: [],
+        enemyDebuffs: [],
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: HEAL_ALLY_SKILLS(),
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            shieldPenetration: 0,
+            hacking: 175,
+            defence: 0,
+            hp: 50_000,
+        },
+    },
+];
+
+/** Run a 2-round healing battle and return the round-order heal-performed amounts. */
+const healAmounts = (args: {
+    healerPreFight?: PreFightCombatModifiers;
+    focusPreFight?: PreFightCombatModifiers;
+}): number[] => {
+    const engineTeam = deriveTeamEngineActors(healerTeamInput(), undefined)!;
+    if (args.healerPreFight) {
+        engineTeam[0] = { ...engineTeam[0], preFight: args.healerPreFight };
+    }
+    const bus = createEventBus();
+    const amounts: number[] = [];
+    bus.on('heal-performed', (e) => amounts.push((e as CombatEvent & { amount: number }).amount));
+    runCombat(
+        BASE_INPUT({
+            numRounds: 2,
+            healTargetId: 'attacker',
+            teamActors: engineTeam,
+            ...(args.focusPreFight ? { preFight: args.focusPreFight } : {}),
+            bus,
+        })
+    );
+    return amounts;
+};
+
+describe('F3 — heal channels fold at heal time', () => {
+    it('baseline: the ally repair is 12,500 each round (no preFight)', () => {
+        expect(healAmounts({})).toEqual([12_500, 12_500]);
+    });
+
+    it('caster outgoingHeal (+15) scales the repair ×1.15', () => {
+        const amounts = healAmounts({ healerPreFight: preFight({ outgoingHeal: 15 }) });
+        expect(amounts).toHaveLength(2);
+        for (const a of amounts) expect(a).toBeCloseTo(14_375);
+    });
+
+    it('recipient incomingHeal (+20) applies from the PRE-FIRST-TURN receipt on, with no double-count once the ctx exists', () => {
+        // Round 1: the healer (speed 200) casts BEFORE the focus's first turn — the
+        // recipient has no turn ctx yet, so the engine's recipientIncomingHealPct falls
+        // back to preFight.incomingHeal. Round 2: the focus HAS a ctx, whose
+        // incomingHealPct now FOLDS the pre-fight baseline (playerTurn scheduledTotals).
+        // Equal amounts across rounds prove fallback and fold agree (a double-count
+        // would make round 2 land 12,500 × 1.4).
+        expect(healAmounts({ focusPreFight: preFight({ incomingHeal: 20 }) })).toEqual([
+            15_000, 15_000,
+        ]);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Aggregate (non-positional legacy healing path) crit-family mirror: a bare enemy
+// attacker bombards the heal target with 1 hit of 100% × attack 1000, critDamage 50.
+// crit 100 → hit = 1000 × 1.5 = 1,500; a -10 crit-family modifier → ×0.9 = 1,350.
+// ---------------------------------------------------------------------------
+
+type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+
+const bareEnemy = (crit: number, pf?: PreFightCombatModifiers): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit, critDamage: 50, speed: 50, defence: 0, hp: 10_000 },
+    chargeCount: 0,
+    startCharged: false,
+    ...(pf ? { preFight: pf } : {}),
+});
+
+const focusDamageTaken = (args: {
+    enemyCrit: number;
+    enemyPreFight?: PreFightCombatModifiers;
+    focusPreFight?: PreFightCombatModifiers;
+}): number => {
+    let captured: CombatActor[] = [];
+    runCombat(
+        BASE_INPUT({
+            healTargetId: 'attacker',
+            enemyAttackers: [bareEnemy(args.enemyCrit, args.enemyPreFight)],
+            ...(args.focusPreFight ? { preFight: args.focusPreFight } : {}),
+            __testTapActors: (actors) => {
+                captured = actors;
+            },
+        })
+    );
+    const focus = captured.find((a) => a.id === 'attacker');
+    if (!focus) throw new Error('no focus actor captured');
+    return 40_000 - focus.currentHp;
+};
+
+describe('F3 — aggregate crit-family mirror (legacy non-positional enemy path)', () => {
+    it('baseline: a critting bare enemy lands 1,500', () => {
+        expect(focusDamageTaken({ enemyCrit: 100 })).toBeCloseTo(1_500);
+    });
+
+    it('attacker-side outgoingCritDamage -10 → its crits deal exactly 10% less', () => {
+        expect(
+            focusDamageTaken({
+                enemyCrit: 100,
+                enemyPreFight: preFight({ outgoingCritDamage: -10 }),
+            })
+        ).toBeCloseTo(1_350);
+    });
+
+    it('victim-side incomingCritDamage -10 → the target takes exactly 10% smaller crits', () => {
+        expect(
+            focusDamageTaken({
+                enemyCrit: 100,
+                focusPreFight: preFight({ incomingCritDamage: -10 }),
+            })
+        ).toBeCloseTo(1_350);
+    });
+
+    it('both crit-family modifiers are INERT on non-crit hits', () => {
+        expect(
+            focusDamageTaken({
+                enemyCrit: 0,
+                enemyPreFight: preFight({ outgoingCritDamage: -10 }),
+                focusPreFight: preFight({ incomingCritDamage: -10 }),
+            })
+        ).toBeCloseTo(1_000);
+    });
+});

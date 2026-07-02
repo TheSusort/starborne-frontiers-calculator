@@ -14,7 +14,7 @@ export type {
     PreFightPass,
     SquadLeaderSelection,
 } from './types';
-export { emptyPreFightModifiers } from './types';
+export { emptyPreFightModifiers, hasAnyPreFightModifier } from './types';
 export {
     squadLeaderPass,
     activeSquadLeaderEffects,

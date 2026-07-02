@@ -1,6 +1,7 @@
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { CombatEventBus } from './events';
+import type { PreFightCombatModifiers } from './preFight/types';
 
 /** Per-actor damage contributions within one round (spec: per-actor accounting —
  *  the simulator-page seam). secondary/conditional are sub-buckets of direct
@@ -153,6 +154,12 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
+    /** Pre-fight combat-modifier baseline (sub-project F, PR F3): squad-leader modifier
+     *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,
+     *  non-purgeable — deliberately NOT statuses (they would leak into logs/purge/cleanse).
+     *  Consumed via `?? 0` folds at the exact sites the regular buff channels are read;
+     *  absent on every existing caller (DPS/healing sims, fixtures) → all folds inert. */
+    preFight?: PreFightCombatModifiers;
 }
 
 export function createActor(
@@ -166,6 +173,7 @@ export function createActor(
         affinity?: AffinityName;
         indestructible?: boolean;
         chargeLossImmune?: boolean;
+        preFight?: PreFightCombatModifiers;
     }
 ): CombatActor {
     // startCharged is a one-shot initialiser (it seeds `charges`), deliberately NOT
@@ -174,7 +182,10 @@ export function createActor(
     return {
         ...rest,
         currentHp: partial.stats.hp,
-        shieldPool: 0,
+        // Pre-fight shield seeding (F3): "Start combat shielded for N% of max HP" — hp is
+        // already post-leader (the pre-fight stat pass mutated plan stats before actor
+        // construction). Absent preFight → 0 → byte-identical to the old literal 0.
+        shieldPool: partial.stats.hp * ((partial.preFight?.startingShieldPctOfHp ?? 0) / 100),
         turnMeter: 0,
         charges: startCharged ? chargeCount : 0,
         chargeCount,
@@ -189,6 +200,7 @@ export function createActor(
         indestructible: partial.indestructible,
         turnsTaken: 0,
         chargeLossImmune: partial.chargeLossImmune ?? false,
+        preFight: partial.preFight,
     };
 }
 

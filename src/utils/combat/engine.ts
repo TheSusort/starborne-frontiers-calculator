@@ -94,6 +94,7 @@ import {
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
 import { supportFootprintAllyIds } from './supportFootprint';
+import type { PreFightCombatModifiers } from './preFight/types';
 
 /** Backstop for pathological extra-action loops (a non-once-per-round grant whose
  *  conditions stay true re-fires on the extra turn it granted). Real texts are
@@ -416,6 +417,9 @@ export interface EnemyActorInput {
      *  set but not yet consumed by apply). Threaded onto the runtime's attackerAffinity + the
      *  CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
     affinity?: AffinityName;
+    /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
+     *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
+    preFight?: PreFightCombatModifiers;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -507,6 +511,7 @@ export function buildEnemyPlayerActorRuntime(
         doesntBreakStasis: e.doesntBreakStasis,
         chargeLossImmune: e.chargeLossImmune,
         affinity: e.affinity,
+        preFight: e.preFight,
     });
 
     // Resolved affinity fields — pre-computed by the adapter via computeAffinityModifiers
@@ -860,6 +865,9 @@ export type TeamActorEngineInput = TeamActorInput & {
     pattern?: ParsedPattern;
     /** Pre-parsed charged-skill pattern when it differs from active; falls back to `pattern`. */
     chargedPattern?: ParsedPattern;
+    /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
+     *  channels for this team actor. Absent → all folds inert (byte-identical). */
+    preFight?: PreFightCombatModifiers;
 };
 
 export interface CombatEngineInput {
@@ -972,6 +980,9 @@ export interface CombatEngineInput {
          *  computeAffinityModifiers for `affinityDamageModifier` above (positional plumbing —
          *  set but not yet consumed by apply). Absent → neutral default ('antimatter') downstream. */
         affinity?: AffinityName;
+        /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
+         *  channels for this enemy attacker. Absent → all folds inert (byte-identical). */
+        preFight?: PreFightCombatModifiers;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -998,6 +1009,9 @@ export interface CombatEngineInput {
      *  — set but not yet consumed by apply). Threaded onto the attacker runtime's attackerAffinity
      *  + the CombatActor.affinity. Absent → neutral default ('antimatter') downstream. */
     affinity?: AffinityName;
+    /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
+     *  channels for the focus attacker. Absent → all folds inert (byte-identical). */
+    preFight?: PreFightCombatModifiers;
     /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
      *  once on the first round it is built, so unit tests can exercise the player→enemy victim
      *  wrapper against a hand-built enemy actor. Never set by production code; the closure runs the
@@ -1304,6 +1318,7 @@ export function runCombat(input: CombatEngineInput): {
         doesntBreakStasis: input.doesntBreakStasis,
         chargeLossImmune: input.chargeLossImmune,
         affinity: input.affinity,
+        preFight: input.preFight,
     });
     const enemy = createActor({
         id: 'enemy',
@@ -1384,6 +1399,7 @@ export function runCombat(input: CombatEngineInput): {
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
             affinity: t.walk?.affinity,
+            preFight: t.preFight,
         })
     );
 
@@ -2124,11 +2140,16 @@ export function runCombat(input: CombatEngineInput): {
     let perActorDot = new Map<string, { corrosion: number; inferno: number }>();
 
     // Recipient's CURRENT effective max HP: prefer the actor's last-turn ctx (live buffs),
-    // else its base HP (pre-first-turn). Same pattern for incoming-heal % (ctx value ?? 0).
+    // else its base HP (pre-first-turn). Same pattern for incoming-heal %: the ctx value
+    // already folds the actor's pre-fight incomingHeal baseline (playerTurn folds it into
+    // scheduledTotals), so the preFight fallback below fires ONLY before the actor's first
+    // turn — never double-counted (F3).
     const recipientMaxHp = (id: string): number =>
         lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? baseHpFor(id);
     const recipientIncomingHealPct = (id: string): number =>
-        lastTurnCtxByActor.get(id)?.incomingHealPct ?? 0;
+        lastTurnCtxByActor.get(id)?.incomingHealPct ??
+        allActorsById.get(id)?.preFight?.incomingHeal ??
+        0;
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
@@ -3558,9 +3579,18 @@ export function runCombat(input: CombatEngineInput): {
             const selfIncoming = toSelfIncomingDamageModifier(
                 victimSelfBuffs(statusEngine, victimId, selfBuffLookup)
             );
+            // F3: the victim's pre-fight incomingDamage baseline (squad-leader "±N% incoming
+            // direct damage") folds ADDITIVELY into the same per-victim channel the D-PR12
+            // self-buff term rides (consumed via defenseProfileOf → incomingDamageModifierPct).
+            // Sign convention matches the buff channel: negative = takes less damage
+            // (leader protections use negative values). Absent → 0 → byte-identical. Like
+            // the buff channel, this is DIRECT damage only (DoTs/bombs never read it).
+            const preFightIncoming =
+                allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
             return {
                 enemyDefenseModifier: enemy.enemyDefenseModifier,
-                incomingDamageModifier: enemy.incomingDamageModifier + selfIncoming,
+                incomingDamageModifier:
+                    enemy.incomingDamageModifier + selfIncoming + preFightIncoming,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term,
@@ -3664,14 +3694,30 @@ export function runCombat(input: CombatEngineInput): {
                 // across all three sites (focus / walked-team / enemy) since drivePositionalApply
                 // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
                 // with no incoming-reduction ability → byte-identical when no such equipment exists.
-                incomingReductionFor: (victim, didCrit) =>
-                    incomingReductionForHit(incomingAbilitiesOf(victim.id), {
+                incomingReductionFor: (victim, didCrit) => {
+                    const equip = incomingReductionForHit(incomingAbilitiesOf(victim.id), {
                         didCrit,
                         attackerStealthed: isStealthed(args.actingId),
                         victimStealthed: isStealthed(victim.id),
                         victimStasised: isStasised(victim.id),
                         hitIndexThisRound: 0, // unused by reduction (only block reads it)
-                    }),
+                    });
+                    if (!didCrit) return equip;
+                    // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
+                    // didCrit — the SAME crit-family mechanism as the equip reduction above
+                    // (a hit that crits sees the extra reduction on its whole damage).
+                    // SIGN CONVENTION: this channel is a REDUCTION (positive = less damage),
+                    // while the leader data is benefit/penalty-phrased pct points:
+                    //   victim incomingCritDamage  -10 → takes 10% smaller crits → +10 reduction;
+                    //   attacker outgoingCritDamage -10 (Negotiator III on enemies) → its crits
+                    //   deal 10% less → +10 reduction; positive values invert symmetrically.
+                    // Hence both terms are NEGATED. Absent → 0 → byte-identical.
+                    const victimCritTerm = -(victim.preFight?.incomingCritDamage ?? 0);
+                    const attackerCritTerm = -(
+                        allActorsById.get(args.actingId)?.preFight?.outgoingCritDamage ?? 0
+                    );
+                    return equip + victimCritTerm + attackerCritTerm;
+                },
                 // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
                 // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
                 // outgoing-amplification ability → byte-identical when no such equipment exists.
@@ -4056,6 +4102,11 @@ export function runCombat(input: CombatEngineInput): {
                 activePattern: parsedPatternFor(a),
                 chargedPattern: parsedChargedPatternFor(a),
                 sameSideLiving: sameSideLivingFor(a),
+                // F3: the acting actor's pre-fight modifier baseline (outgoingDamage /
+                // outgoingHeal / incomingHeal fold into its self-buff totals inside
+                // runPlayerTurn). Side-agnostic — enemy attackers walk the same path.
+                // Conditional spread → absent for every existing caller (byte-identical).
+                ...(a.preFight ? { preFight: a.preFight } : {}),
             };
         };
 
@@ -5681,8 +5732,20 @@ export function runCombat(input: CombatEngineInput): {
                                           hitIndexThisRound: 0,
                                       })
                                     : 0;
+                                // F3: crit-conditional pre-fight damage modifiers, mirrored from
+                                // the positional incomingReductionFor site (crit hits only, via
+                                // the crit-family delta). Same sign convention: the channel is a
+                                // REDUCTION, leader values are benefit/penalty-phrased, so both
+                                // terms are negated (victim incomingCritDamage -10 → +10 reduction
+                                // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
+                                // less). Absent → 0 → byte-identical.
+                                const preFightCritFamilyPct =
+                                    -(tgt.preFight?.incomingCritDamage ?? 0) -
+                                    (actor.preFight?.outgoingCritDamage ?? 0);
                                 const incomingReductionCritFamilyPct =
-                                    incomingReductionCritAll - incomingReductionNonCritPct;
+                                    incomingReductionCritAll -
+                                    incomingReductionNonCritPct +
+                                    preFightCritFamilyPct;
                                 const enemyTurn = runPlayerTurn({
                                     ...buildTurnArgs(actor, tgt),
                                     deferAbilityPerformedToEngine: enemyWillApplyPositionally,
