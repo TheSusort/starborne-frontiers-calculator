@@ -417,6 +417,16 @@ export interface PlayerTurnArgs {
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
      *  damage sites. Absent → byte-identical. */
     preFight?: PreFightCombatModifiers;
+    /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
+     *  gathered from THIS actor's living same-side allies (source excluded — see
+     *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
+     *  actor's own firing + passive abilities, so a team aura (Lodolite's "+15% to enemies
+     *  with Concentrate Fire", Panguan's "+40% to Stealthed allies") folds into the
+     *  RECIPIENT's own dmgStats fold AND (PR I2) `perVictimOutgoing`, evaluated against the
+     *  recipient's OWN ctx (self-buff/enemy-status gates resolve from the recipient's
+     *  perspective, not the source's). Defaults to `[]` — absent/empty is byte-identical to
+     *  pre-I3 behavior (no ship's all-allies modifier reaches teammates without this). */
+    allyModifierAbilities?: Ability[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,9 +1372,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         turnsTaken: actor.turnsTaken,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
+    // Sub-project I, PR I3 (Layer 1): distributed all-allies auras (Lodolite/Panguan-shape)
+    // append AFTER this actor's own firing + passive abilities — array order only affects
+    // scaling-condition positional context (ctxFor in gateFiringAbilities, which this list
+    // does not feed), so ordering is inert here; every ability folds independently in
+    // modifierTotalsFromAbilities. Defaults to [] (pre-I3 callers / no ally aura present)
+    // → byte-identical.
     const modifierAbilities = [
         ...(firingSkill?.abilities ?? []),
         ...(passiveSkill?.abilities ?? []),
+        ...(args.allyModifierAbilities ?? []),
     ];
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor

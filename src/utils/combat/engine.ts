@@ -1512,6 +1512,30 @@ export function runCombat(input: CombatEngineInput): {
         ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
     ]);
 
+    // Sub-project I, PR I3 (Layer 1) — per-actor-id map of this actor's PASSIVE `all-allies`-
+    // targeted `modifier` abilities (Lodolite's "+15% to enemies with Concentrate Fire/
+    // Stealth", Panguan's "+40% to Stealthed allies"). Only PASSIVE-slot abilities are
+    // gathered — an aura is a standing kit property, not tied to the owner's firing skill
+    // this turn (mirrors how runPlayerTurn reads its OWN modifierAbilities from
+    // firingSkill + passiveSkill, but a non-acting ally never has a "firing skill" this
+    // round). Filtered to `target === 'all-allies'` — a `self`-targeted modifier already
+    // lives only in its owner's own list and must not leak to teammates. Keyed by the SAME
+    // actor set as `buffDurationExtensionByOwner` immediately above (attacker + walked team
+    // + enemy attackers) so distribution covers both sides symmetrically. `buildTurnArgs`
+    // below unions each acting actor's LIVING same-side allies (excluding itself, via
+    // `sameSideLivingFor`) through this map every turn.
+    const allAlliesModifierAbilitiesOf = (skills?: ShipSkills): Ability[] =>
+        (skills?.slots.find((s) => s.slot === 'passive')?.abilities ?? []).filter(
+            (a) => a.type === 'modifier' && a.target === 'all-allies'
+        );
+    const allAlliesModifierAbilitiesById = new Map<string, Ability[]>(
+        [
+            { id: 'attacker', shipSkills: input.shipSkills },
+            ...teamActors.map((t) => ({ id: t.id, shipSkills: t.walk?.shipSkills })),
+            ...(input.enemyAttackers ?? []).map((e) => ({ id: e.id, shipSkills: e.shipSkills })),
+        ].map(({ id, shipSkills }) => [id, allAlliesModifierAbilitiesOf(shipSkills)] as const)
+    );
+
     // Incremental status machine — replaces the precomputed computeBuffTimeline array.
     const statusEngine = createStatusEngine({
         selfBuffs,
@@ -4241,6 +4265,17 @@ export function runCombat(input: CombatEngineInput): {
                 // runPlayerTurn). Side-agnostic — enemy attackers walk the same path.
                 // Conditional spread → absent for every existing caller (byte-identical).
                 ...(a.preFight ? { preFight: a.preFight } : {}),
+                // Sub-project I, PR I3 (Layer 1): team-aura distribution. Union THIS actor's
+                // LIVING same-side allies' `all-allies` passive modifier abilities, EXCLUDING
+                // the actor's own id (its own aura is already in its own modifierAbilities —
+                // no double-count) — reuses `sameSideLivingFor` (the SAME same-side-living
+                // roster the support-footprint path uses; team-symmetric via `a.side`). Merged
+                // into `modifierAbilities` in playerTurn.ts, so it folds into BOTH the per-turn
+                // dmgStats AND (PR I2) perVictimOutgoing for free. Absent-source case → the
+                // flatMap is [] → byte-identical.
+                allyModifierAbilities: sameSideLivingFor(a)
+                    .filter((x) => x.id !== a.id)
+                    .flatMap((x) => allAlliesModifierAbilitiesById.get(x.id) ?? []),
             };
         };
 
