@@ -3428,6 +3428,75 @@ describe('buildShipAbilities — Rhodium end-of-round most-buffs purge (C2b-2 T4
 });
 
 // ---------------------------------------------------------------------------
+// I6: Lodolite charged purge (passive-voice "is Purged of all buffs") + legendary-refit
+// shield strip. RAW strings verbatim from docs/ship-skills.csv (Lodolite row).
+// ---------------------------------------------------------------------------
+describe('buildShipAbilities — Lodolite charged purge + shield strip (I6)', () => {
+    const LODOLITE_CHARGED_RAW =
+        "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+    const LODOLITE_R4_PASSIVE_RAW =
+        "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+
+    // Default `ship()` helper seeds refits: [{}, {}, {}, {}] (4 refits) → thirdPassiveSkillText
+    // (R4, legendary refit) is the active passive per getShipSkillRows.
+    const lodolite = () =>
+        ship({
+            chargeSkillText: LODOLITE_CHARGED_RAW,
+            chargeSkillCharge: 3,
+            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+        });
+
+    it('charged skill emits a purge ability: target enemy-most-buffs, count all, trigger on-cast', () => {
+        const charged = slot(buildShipAbilities(lodolite()).slots, 'charged')!;
+        const purges = charged.abilities.filter((a) => a.type === 'purge');
+        expect(purges).toHaveLength(1);
+        const purge = purges[0];
+        expect(purge.trigger).toBe('on-cast');
+        expect(purge.target).toBe('enemy-most-buffs');
+        expect(purge.config).toMatchObject({ type: 'purge', count: 'all' });
+    });
+
+    it('the charged purge config carries stripsShield (from the R4 legendary passive clause)', () => {
+        const charged = slot(buildShipAbilities(lodolite()).slots, 'charged')!;
+        const purge = charged.abilities.find((a) => a.type === 'purge')!;
+        expect(purge.config).toMatchObject({ stripsShield: true });
+    });
+
+    it('the R4 passive itself does NOT ALSO emit a spurious purge ability', () => {
+        const passive = slot(buildShipAbilities(lodolite()).slots, 'passive');
+        const purges = (passive?.abilities ?? []).filter((a) => a.type === 'purge');
+        expect(purges).toHaveLength(0);
+    });
+
+    it('WITHOUT the R4 legendary refit (2 refits, R2 passive without the shield clause) the charged purge has NO stripsShield', () => {
+        const nonLegendary = ship({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            refits: [{}, {}] as any,
+            chargeSkillText: LODOLITE_CHARGED_RAW,
+            chargeSkillCharge: 3,
+            secondPassiveSkillText:
+                'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
+            thirdPassiveSkillText: LODOLITE_R4_PASSIVE_RAW,
+        });
+        const charged = slot(buildShipAbilities(nonLegendary).slots, 'charged')!;
+        const purge = charged.abilities.find((a) => a.type === 'purge')!;
+        expect(purge.config).toMatchObject({ type: 'purge', count: 'all' });
+        expect((purge.config as { stripsShield?: boolean }).stripsShield).toBeUndefined();
+    });
+
+    describe('guard: a passive slot that merely MENTIONS being purged does NOT emit a spurious purge', () => {
+        it('a hypothetical "When this Unit is Purged of a buff, it repairs 10% Max HP" passive yields NO purge ability', () => {
+            const s = ship({
+                firstPassiveSkillText: 'When this Unit is Purged of a buff, it repairs 10% Max HP.',
+            });
+            const { slots } = buildShipAbilities(s);
+            const allAbilities = slots.flatMap((sk) => sk.abilities);
+            expect(allAbilities.filter((a) => a.type === 'purge')).toHaveLength(0);
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
 // C2b-2 T6: Faust on-destroyed killed-by-direct-damage purge build tests.
 // RAW strings from docs/ship-skills.csv (Faust row, passive 1 & 2).
 // ---------------------------------------------------------------------------

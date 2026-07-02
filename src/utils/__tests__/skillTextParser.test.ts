@@ -35,6 +35,8 @@ import {
     parseHealAbilities,
     parseCleanse,
     parsePurge,
+    detectPassiveVoicePurge,
+    detectPurgeStripsShield,
     parseHealNoCrit,
     statusEffectCondition,
     parseControlInflicts,
@@ -3601,6 +3603,90 @@ describe('parsePurge — E4 crit-power scaling', () => {
         const [p] = parsePurge('This Unit purges 2 buffs from the enemy.');
         expect(p.count).toBe(2);
         expect(p.countScaling).toBeUndefined();
+    });
+});
+
+// I6: Lodolite charged purge + legendary-refit shield strip. RAW strings verbatim from
+// docs/ship-skills.csv (Lodolite row).
+const LODOLITE_CHARGED_RAW =
+    "This Unit deals <unit-damage>310% damage</unit-damage> and additional damage equal to <unit-damage>10%</unit-damage> of this Unit's max HP. Then, the enemy with the most <unit-aid>Buffs</unit-aid> is Purged of all buffs.<br />This attack can target <unit-aid>Stealthed</unit-aid> enemies.";
+const LODOLITE_R4_PASSIVE_RAW =
+    "This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders, all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill> or <unit-skill>Stealth</unit-skill>.<br /><br />When this Unit <unit-aid>Purges a buff</unit-aid> from an enemy, it <unit-damage>removes 100%</unit-damage> of the enemy's shield.";
+
+describe('detectPassiveVoicePurge (I6 — Lodolite charged purge)', () => {
+    it('parses the bare phrase "is Purged of all buffs" → count all, target enemy', () => {
+        expect(detectPassiveVoicePurge('is Purged of all buffs')).toEqual([
+            { count: 'all', target: 'enemy', explicitTarget: true },
+        ]);
+    });
+
+    it('parses a numeric count: "is purged of 2 buffs"', () => {
+        expect(detectPassiveVoicePurge('is purged of 2 buffs')).toEqual([
+            { count: 2, target: 'enemy', explicitTarget: true },
+        ]);
+    });
+
+    it('parses Lodolite charged RAW text (with tags) → count all, target enemy', () => {
+        expect(detectPassiveVoicePurge(LODOLITE_CHARGED_RAW)).toEqual([
+            { count: 'all', target: 'enemy', explicitTarget: true },
+        ]);
+    });
+
+    it('returns [] for text with no passive-voice purge phrase', () => {
+        expect(detectPassiveVoicePurge('This Unit purges 1 buff from the enemy.')).toEqual([]);
+        expect(detectPassiveVoicePurge('This Unit deals 100% damage.')).toEqual([]);
+    });
+
+    it('returns [] for null/undefined', () => {
+        expect(detectPassiveVoicePurge(null)).toEqual([]);
+        expect(detectPassiveVoicePurge(undefined)).toEqual([]);
+    });
+});
+
+describe('detectPurgeStripsShield (I6 — Lodolite legendary refit)', () => {
+    it('recognizes the RAW Lodolite R4 passive clause ("removes 100% of the enemy\'s shield")', () => {
+        expect(detectPurgeStripsShield(LODOLITE_R4_PASSIVE_RAW)).toBe(true);
+    });
+
+    it('recognizes the bare clause without surrounding text', () => {
+        expect(
+            detectPurgeStripsShield(
+                "When this Unit purges a buff from an enemy, it removes 100% of the enemy's shield."
+            )
+        ).toBe(true);
+    });
+
+    it('does NOT fire for a shield-removal clause with no purge language (guard against false positives)', () => {
+        // Real corpus lines (docs/ship-skills.csv) — "removes N% … Shield" with no self-purge trigger.
+        expect(
+            detectPurgeStripsShield(
+                'removes 30% of the enemy Shield, and inflicts Speed Down II and Crit Power Down III for 2 turns'
+            )
+        ).toBe(false);
+        expect(
+            detectPurgeStripsShield('removes 40% of the enemy Shield and deals 150% damage')
+        ).toBe(false);
+    });
+
+    it('does NOT fire for a purge-self clause with no shield-removal consequence (guard)', () => {
+        expect(
+            detectPurgeStripsShield(
+                'When this Unit purges a buff from an enemy, it repairs itself for 8% Max HP.'
+            )
+        ).toBe(false);
+    });
+
+    it('does NOT fire when the removed percentage is not 100 (locked game rule: full strip only)', () => {
+        expect(
+            detectPurgeStripsShield(
+                "When this Unit purges a buff from an enemy, it removes 50% of the enemy's shield."
+            )
+        ).toBe(false);
+    });
+
+    it('returns false for null/undefined', () => {
+        expect(detectPurgeStripsShield(null)).toBe(false);
+        expect(detectPurgeStripsShield(undefined)).toBe(false);
     });
 });
 

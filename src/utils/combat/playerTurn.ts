@@ -423,6 +423,15 @@ export interface PlayerTurnArgs {
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
      *  damage sites. Absent → byte-identical. */
     preFight?: PreFightCombatModifiers;
+    /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
+     *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
+     *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
+     *  (end-of-round/on-attacked triggers, e.g. Rhodium) resolves this itself via
+     *  triggers.ts's `ctx.enemyWithMostBuffs`, which this on-cast path never reaches. Undefined
+     *  when no living opposing actor carries a buff, or for non-positional/DPS callers that never
+     *  supply it — the purge loop then falls back to the anchor `targetId` (byte-identical to
+     *  pre-I6 behavior for every ship without an enemy-most-buffs on-cast purge). */
+    enemyMostBuffsId?: string;
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
@@ -774,6 +783,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetHpPct: targetHpPctArg = 100,
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
+        enemyMostBuffsId,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -1915,8 +1925,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // `targetId`. Each victim emits its own purge-performed (Salvation/Sefuba are
                 // victim-scoped). (Amartya's per-victim COUNT scaling is E4; this ships at the
                 // parsed count.)
+                // I6: an 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
+                // engine-supplied enemyMostBuffsId instead of the normal positional anchor
+                // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
+                // itself via triggers.ts and never reaches this on-cast path. Falls back to the
+                // anchor when no living opposing actor carries a buff (mostBuffsAmong's
+                // no-buffs-anywhere case) or for a non-positional/DPS caller that never supplies
+                // enemyMostBuffsId — byte-identical to pre-I6 behavior in both cases.
                 const recipients =
-                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                    ab.target === 'all-enemies' && aoeVictimIds
+                        ? aoeVictimIds
+                        : ab.target === 'enemy-most-buffs' && enemyMostBuffsId !== undefined
+                          ? [enemyMostBuffsId]
+                          : [targetId];
                 // E4: when the purge scales on crit power, total purged per victim =
                 // count × floor(live effectiveCritDamage / per). effectiveCritDamage (~line 1104 =
                 // dmgStats.critDamage) is the caster's LIVE crit power (buffs/debuffs folded),
@@ -1945,6 +1966,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             count: removed,
                             round: r,
                         });
+                        // I6: Lodolite legendary refit — "When this Unit Purges a buff from an
+                        // enemy, it removes 100% of the enemy's shield." Gated on the parsed
+                        // ability config (stripsShield), never a hardcoded ship name — see
+                        // detectPurgeStripsShield/buildShipAbilities. Strips AFTER the purge
+                        // resolves, on the SAME victim id (vid). Team-symmetric for free: this
+                        // function runs identically for player and enemy casters (see the
+                        // "side-symmetric" note above), so an enemy-side ship carrying this
+                        // config strips a player shield the same way. Mirrors the victim-lookup
+                        // fallback used by the per-victim debuff-landing loop above (opposingVictimById
+                        // in positional mode; the anchor `enemy` actor otherwise).
+                        if (ab.config.stripsShield) {
+                            const victim =
+                                opposingVictimById?.get(vid) ??
+                                (vid === enemy.id ? enemy : undefined);
+                            if (victim) victim.shieldPool = 0;
+                        }
                     }
                 }
             }

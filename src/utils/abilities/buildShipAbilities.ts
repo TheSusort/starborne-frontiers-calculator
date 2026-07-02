@@ -65,6 +65,8 @@ import {
     parseHealAbilities,
     parseCleanse,
     parsePurge,
+    detectPassiveVoicePurge,
+    detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
     classifyEnemyEffect,
@@ -740,7 +742,13 @@ function flipBareSupportShieldTarget(
 function abilitiesFromText(
     text: string,
     slot: SkillSlot,
-    role?: ShipTypeName
+    role?: ShipTypeName,
+    // I6: true when ANY of this ship's skill rows carries the "when this Unit Purges a buff
+    // from an enemy, it removes 100% of the enemy's shield" clause (Lodolite legendary refit).
+    // Computed ONCE by the caller (buildShipAbilities, which alone sees all rows via
+    // getShipSkillRows) and threaded down so every 'purge'-type config built here — regardless
+    // of WHICH slot's text produced it — carries the flag. Absent/false → byte-identical.
+    purgeStripsShield?: boolean
 ): PositionedAbility[] {
     // Build the list in construction order first (so out[0]?.type === 'damage' checks work
     // for condition/scaling attachment). Positions are computed in parallel and applied
@@ -1251,10 +1259,16 @@ function abilitiesFromText(
     // Task 3 populates targetRepairedThisRound on ConditionContext. Until then the condition
     // always evaluates false, keeping production byte-identical (no Nayra fixture in any golden).
     //
-    // C2a under-approximation (still open): the passive-voice "is Purged of all buffs" form
-    // (Lodolite charged) is NOT matched by PURGE_RE and therefore not emitted here — deferred.
-    // Amartya count-scaling under-counts to 1 — SAFE under direction.
-    for (const p of parsePurge(text)) {
+    // I6: the passive-voice "is Purged of all buffs" form (Lodolite charged) is picked up by
+    // detectPassiveVoicePurge, merged in ONLY for the on-cast (active/charged) slots — the
+    // passive-slot trigger-detection loop below never sees it (see detectPassiveVoicePurge's
+    // doc comment for why that separation matters). Amartya count-scaling under-counts to 1 —
+    // SAFE under direction.
+    const purgeMatches =
+        slot === 'active' || slot === 'charged'
+            ? [...parsePurge(text), ...detectPassiveVoicePurge(text)]
+            : parsePurge(text);
+    for (const p of purgeMatches) {
         const purgePos = text.search(/purge/i);
         const passiveTrigger: AbilityTrigger | undefined =
             // Iridium: self-subject "when directly damaged" → on-attacked. (Ignore the
@@ -1283,6 +1297,7 @@ function abilitiesFromText(
                     type: 'purge',
                     count: p.count,
                     ...(p.countScaling ? { countScaling: p.countScaling } : {}),
+                    ...(purgeStripsShield ? { stripsShield: true } : {}),
                 },
                 autoFilled: true,
             },
@@ -1311,7 +1326,11 @@ function abilitiesFromText(
                         target: 'enemy',
                         trigger: 'on-enemy-purged',
                         conditions: [],
-                        config: { type: 'purge', count },
+                        config: {
+                            type: 'purge',
+                            count,
+                            ...(purgeStripsShield ? { stripsShield: true } : {}),
+                        },
                         autoFilled: true,
                     },
                     pos: purgeMorePos,
@@ -1690,11 +1709,18 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     const dotsForSlot = (slot: SkillSlot): DoTApplicationEntry[] =>
         slot === 'active' ? activeDoTs : slot === 'charged' ? chargedDoTs : [];
 
+    // I6: computed once across ALL of the ship's (refit-resolved) skill rows so it applies to
+    // every 'purge'-type ability this ship's kit emits, regardless of which slot's text produced
+    // the purge (Lodolite's is on the charged slot; the declaring clause lives on the passive).
+    const purgeStripsShield = getShipSkillRows(ship).some((row) =>
+        detectPurgeStripsShield(row.text)
+    );
+
     const bySlot = new Map<SkillSlot, PositionedAbility[]>();
     for (const row of getShipSkillRows(ship)) {
         const slot = slotFor(row.label);
         if (!slot) continue;
-        const positioned = abilitiesFromText(row.text, slot, ship.type);
+        const positioned = abilitiesFromText(row.text, slot, ship.type, purgeStripsShield);
         pushToSlot(bySlot, slot, positioned);
     }
 
