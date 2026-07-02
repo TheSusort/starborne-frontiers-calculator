@@ -75,7 +75,7 @@ export const BUFFS: Buff[] = [
     {
         name: 'Disable',
         description:
-            'Prevents activation of passive and active skills. Charge skill charges do not generate.',
+            'Prevents activation of this Units active, charged and passive skills and charge gain.',
         type: 'debuff',
     },
     {
