@@ -216,7 +216,7 @@ export const BUFFS: Buff[] = [
     {
         name: 'Stasis',
         description:
-            'Prevents activation of passive and active skills. Charge skill charges do not generate. Effect removed upon taking damage',
+            'Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage.',
         type: 'debuff',
     },
     {
