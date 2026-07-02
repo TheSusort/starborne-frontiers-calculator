@@ -15,6 +15,7 @@ const roster: BattleResult['roster'] = [
 // another) that triggers a reaction, a buff entry with a note, and an end-of-round DoT tick.
 const round: CombatLogRound = {
     round: 3,
+    startOfRound: [],
     turns: [
         {
             actorId: 'nova',
@@ -114,7 +115,7 @@ describe('RoundEventLog', () => {
     });
 
     it('shows a fallback message when the round has no content', () => {
-        const empty: CombatLogRound = { round: 1, turns: [], endOfRound: [] };
+        const empty: CombatLogRound = { round: 1, startOfRound: [], turns: [], endOfRound: [] };
         render(<RoundEventLog round={empty} roster={roster} />);
         expect(screen.getByText('No events this round.')).toBeInTheDocument();
     });

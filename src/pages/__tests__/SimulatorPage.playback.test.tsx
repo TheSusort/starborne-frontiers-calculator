@@ -107,6 +107,7 @@ const battleResult: BattleResult = {
     combatLog: [
         {
             round: 1,
+            startOfRound: [],
             turns: [
                 {
                     actorId: 'attacker',
@@ -134,6 +135,7 @@ const battleResult: BattleResult = {
         },
         {
             round: 2,
+            startOfRound: [],
             turns: [
                 {
                     actorId: 'attacker',

@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.64.0';
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: positioned board battles with skill-pattern targeting; shields and damage absorption; implants and gear set effects; control effects (Disable, Stasis, stealth); DoT, bombs, and detonations; counterattacks and enemy reactions; detailed combat log; affinity and charge rules; random crit/proc variance. DPS calculator now includes implant and gear set effects.',
+    'Combat sim charge fixes: Selenite only gains charge vs live Stealth; Graphite start-of-round grant requires a living stealthed enemy and logs at round start; Liberator ally-charge on enemy death fires once per round for any kill (including ally kills).',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

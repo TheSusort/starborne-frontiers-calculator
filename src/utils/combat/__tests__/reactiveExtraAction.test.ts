@@ -185,6 +185,7 @@ describe('reactive death-triggered bridge', () => {
                             type: 'charge',
                             target: 'all-allies',
                             trigger: 'on-enemy-destroyed',
+                            oncePerRound: true,
                             config: { type: 'charge', amount: 1 },
                         }),
                     ],
@@ -224,7 +225,89 @@ describe('reactive death-triggered bridge', () => {
         expect(result.rounds[0].charges).toBeGreaterThan(baseline.rounds[0].charges);
     });
 
-    // ── Path A: Harvester on-ally-destroyed → SAME-round extra action ────────
+    it('Liberator on-enemy-death charge fires when an ally kills, once per round (not killer-scoped)', () => {
+        idCounter = 0;
+        const liberatorSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'charge',
+                            target: 'all-allies',
+                            trigger: 'on-enemy-destroyed',
+                            oncePerRound: true,
+                            config: { type: 'charge', amount: 1 },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const killerWalk: TeamActorEngineInput = {
+            id: 'killer',
+            speed: 100,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position: 'M4',
+            target: frontTarget(),
+            pattern: basePattern(),
+            walk: {
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'damage',
+                                    target: 'enemy',
+                                    config: { type: 'damage', multiplier: 100 },
+                                }),
+                            ],
+                        },
+                    ],
+                },
+                stats: {
+                    attack: 5000,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 100_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        };
+        const withAllyKill = runCombat(
+            positionalKillBase(liberatorSkills, {
+                attack: 100,
+                speed: 50,
+                chargeCount: 4,
+                hasChargedSkill: true,
+                teamActors: [killerWalk],
+            })
+        );
+        const noPassive = runCombat(
+            positionalKillBase(
+                { slots: [] },
+                {
+                    attack: 100,
+                    speed: 50,
+                    chargeCount: 4,
+                    hasChargedSkill: true,
+                    teamActors: [killerWalk],
+                }
+            )
+        );
+        expect(withAllyKill.rounds[0].charges).toBeGreaterThan(noPassive.rounds[0].charges);
+    });
     // Path A fires when a death happens DURING a turn while the round queue is still walked.
     // In normal DPS the only death is the post-round enemy reconciliation (Path B); a PLAYER
     // ally dies mid-round only in HEALING mode, when an enemy attacker kills the heal target.

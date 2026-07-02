@@ -55,7 +55,7 @@ describe('buildShipAbilities', () => {
         });
         expect(charge!.conditions[0]).toMatchObject({
             subject: 'enemy-buff',
-            derivable: false,
+            derivable: true,
             buffName: 'Stealth',
         });
     });
@@ -3015,6 +3015,7 @@ describe('buildShipAbilities — all-allies charge-bar grants (Hayyan / Graphite
             type: 'charge',
             target: 'all-allies',
             trigger: 'on-enemy-destroyed',
+            oncePerRound: true,
             config: { type: 'charge', amount: 1 },
         });
         // No spurious on-cast charge from parseAllyChargeGrant.

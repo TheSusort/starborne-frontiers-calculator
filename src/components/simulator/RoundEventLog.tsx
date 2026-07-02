@@ -206,8 +206,9 @@ const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
     const ctx: FormatterCtx = { nameOf };
 
     const turns = round?.turns ?? [];
+    const startOfRound = round?.startOfRound ?? [];
     const endOfRound = round?.endOfRound ?? [];
-    const hasContent = turns.length > 0 || endOfRound.length > 0;
+    const hasContent = startOfRound.length > 0 || turns.length > 0 || endOfRound.length > 0;
 
     return (
         <div className="card">
@@ -216,6 +217,18 @@ const RoundEventLog: React.FC<RoundEventLogProps> = ({ round, roster }) => {
                 <p className="text-sm text-theme-text-secondary">No events this round.</p>
             ) : (
                 <ul className="max-h-[500px] overflow-y-auto space-y-1 text-sm">
+                    {startOfRound.length > 0 && (
+                        <li>
+                            <div className="text-theme-text-secondary font-semibold border-b border-dark-border mb-1 pb-1">
+                                — start of round —
+                            </div>
+                            <ul className="ml-2 space-y-1">
+                                {startOfRound.map((entry, i) => (
+                                    <EntryView key={i} entry={entry} ctx={ctx} />
+                                ))}
+                            </ul>
+                        </li>
+                    )}
                     {turns.map((turn, i) => (
                         <TurnView key={i} turn={turn} ctx={ctx} />
                     ))}

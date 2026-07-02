@@ -1,5 +1,7 @@
 export interface CombatLogRound {
     round: number;
+    /** Entries drained after round-started but before the first turn (start-of-round reactives). */
+    startOfRound: CombatLogEntry[];
     turns: CombatLogTurn[];
     endOfRound: CombatLogEntry[]; // round-end-drained entries with no enclosing turn (filled by a later task)
 }
