@@ -2734,6 +2734,129 @@ export function detectFullyCharged(texts: (string | undefined)[]): boolean {
     return texts.some((t) => t?.toLowerCase().includes('fully charged') ?? false);
 }
 
+/**
+ * PR F4: a permanent pre-fight base-stat grant parsed from a ship passive. Consumed by
+ * buildShipAbilities into a `pre-combat-stat` ability (trigger 'pre-combat'); the battle
+ * sim's pre-fight layer (F5) applies it to plan stats before round 1. Corpus (docs/
+ * ship-skills.csv): Lionheart, Centurion, Enforcer, Defiant, Stalwart.
+ */
+export interface PreCombatStatGrant {
+    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    value: number;
+    /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
+     *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */
+    valueKind: 'flat' | 'percent-of-own' | 'percent-of-donor';
+    target: 'self' | 'adjacent-allies';
+    /** Multiply value by count of adjacent living allies (Centurion). */
+    perAdjacentAlly?: boolean;
+    /** Gate: at least one adjacent ally of this role category (Enforcer/Defiant/Stalwart). */
+    requiresAdjacentRole?: ShipRoleCategory;
+    /** Match index in the tag-stripped text — stable ability ordering in buildShipAbilities. */
+    pos: number;
+}
+
+// Pattern A (Lionheart): "At the start of combat, this Unit grants all adjacent allies
+// 10% of its HP." — donor-scaled HP grant to adjacent allies.
+const PRE_COMBAT_DONOR_HP_RE =
+    /at the start of combat,?\s*this unit grants all adjacent allies (\d+(?:\.\d+)?)%\s*of its (?:max\s*)?hp/gi;
+
+// Pattern B (Centurion): "At the start of combat, this Unit gains 500 attack per adjacent
+// ally." — flat attack × adjacent-ally count, self. Number may carry thousands commas.
+const PRE_COMBAT_PER_ADJACENT_ATTACK_RE =
+    /at the start of combat,?\s*this unit gains (\d[\d,]*)\s*attack per adjacent ally/gi;
+
+// Pattern C: role-gated self grants, both orderings. The stat-list capture is bounded to its
+// own sentence ([^.;]+?) so it can't swallow neighbouring clauses in multi-sentence passives.
+//   C1 trailing gate (Enforcer): "… this Unit gains +15% crit rate and +10% hacking if
+//   adjacent to a supporter."
+//   C2 leading gate (Defiant/Stalwart): "When (this Unit is) adjacent to a Supporter, this
+//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" and
+//   deliberately stays unparsed (out of scope).
+const PRE_COMBAT_ROLE_GATE_TRAILING_RE =
+    /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
+const PRE_COMBAT_ROLE_GATE_LEADING_RE =
+    /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),\s*this unit gains ([^.;]+?)(?=[.;]|$)/gi;
+
+// Stat-list splitter for pattern C: "+15% crit rate and +10% hacking" / "20% HP" / "20% Attack".
+// crit rate is a percentage-only stat, so "+15% crit rate" is a FLAT 15-point grant; hacking/
+// hp/attack scale the recipient's own stat (percent-of-own).
+const PRE_COMBAT_STAT_LIST_RE = /\+?(\d+(?:\.\d+)?)%\s*(crit(?:ical)?\s*rate|hacking|hp|attack)/gi;
+
+function preCombatStatFromKeyword(keyword: string): {
+    stat: 'hp' | 'attack' | 'crit' | 'hacking';
+    valueKind: 'flat' | 'percent-of-own';
+} {
+    const k = keyword.toLowerCase();
+    if (k.startsWith('crit')) return { stat: 'crit', valueKind: 'flat' };
+    if (k === 'hacking') return { stat: 'hacking', valueKind: 'percent-of-own' };
+    if (k === 'hp') return { stat: 'hp', valueKind: 'percent-of-own' };
+    return { stat: 'attack', valueKind: 'percent-of-own' };
+}
+
+/**
+ * Parses permanent pre-fight base-stat passives ("At the start of combat, …" grants and
+ * role-gated adjacency grants). Reference data: docs/ship-skills.csv — matches exactly
+ * Lionheart (A), Centurion (B), Enforcer (C1), Defiant/Stalwart (C2). Timed start-of-combat
+ * statuses ("gains N stacks of X", "gains a Shield/Taunt…") and Centurion's charged
+ * Core-Charge grant have no matching shape here and stay with their existing parsers.
+ */
+export function parsePreCombatStatGrants(text: string | null | undefined): PreCombatStatGrant[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: PreCombatStatGrant[] = [];
+    let m: RegExpExecArray | null;
+
+    PRE_COMBAT_DONOR_HP_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_DONOR_HP_RE.exec(plain)) !== null) {
+        results.push({
+            stat: 'hp',
+            value: parseFloat(m[1]),
+            valueKind: 'percent-of-donor',
+            target: 'adjacent-allies',
+            pos: m.index,
+        });
+    }
+
+    PRE_COMBAT_PER_ADJACENT_ATTACK_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_PER_ADJACENT_ATTACK_RE.exec(plain)) !== null) {
+        results.push({
+            stat: 'attack',
+            value: parseInt(m[1].replace(/,/g, ''), 10),
+            valueKind: 'flat',
+            target: 'self',
+            perAdjacentAlly: true,
+            pos: m.index,
+        });
+    }
+
+    const emitRoleGated = (list: string, listPos: number, role: string) => {
+        const requiresAdjacentRole = role.toUpperCase() as ShipRoleCategory;
+        PRE_COMBAT_STAT_LIST_RE.lastIndex = 0;
+        let sm: RegExpExecArray | null;
+        while ((sm = PRE_COMBAT_STAT_LIST_RE.exec(list)) !== null) {
+            results.push({
+                ...preCombatStatFromKeyword(sm[2]),
+                value: parseFloat(sm[1]),
+                target: 'self',
+                requiresAdjacentRole,
+                pos: listPos + sm.index,
+            });
+        }
+    };
+
+    PRE_COMBAT_ROLE_GATE_TRAILING_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_ROLE_GATE_TRAILING_RE.exec(plain)) !== null) {
+        emitRoleGated(m[1], m.index + m[0].indexOf(m[1]), m[2]);
+    }
+
+    PRE_COMBAT_ROLE_GATE_LEADING_RE.lastIndex = 0;
+    while ((m = PRE_COMBAT_ROLE_GATE_LEADING_RE.exec(plain)) !== null) {
+        emitRoleGated(m[2], m.index + m[0].indexOf(m[2]), m[1]);
+    }
+
+    return results;
+}
+
 export type SkillSource = 'active' | 'charge' | 'passive1' | 'passive2' | 'passive3';
 
 export interface SkillEffect {

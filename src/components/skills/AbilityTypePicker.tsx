@@ -32,6 +32,7 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'outgoing-amplification': 'Outgoing Amplification',
     'heal-amplification': 'Heal Amplification',
     'incoming-heal-amplification': 'Incoming Heal Amplification',
+    'pre-combat-stat': 'Pre-Combat Stat',
 };
 
 const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
@@ -53,6 +54,11 @@ const CATEGORIES: { label: string; types: AbilityType[]; note?: string }[] = [
         label: 'Utility',
         types: ['heal', 'shield', 'cleanse', 'purge', 'control'],
         note: NOT_SIMULATED_NOTE,
+    },
+    {
+        label: 'Pre-Combat',
+        types: ['pre-combat-stat'],
+        note: 'Permanent base-stat grant applied before round 1 — battle simulator only.',
     },
 ];
 

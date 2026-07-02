@@ -27,7 +27,12 @@ export type AbilityType =
     | 'incoming-shield-grant'
     | 'outgoing-amplification'
     | 'heal-amplification'
-    | 'incoming-heal-amplification';
+    | 'incoming-heal-amplification'
+    // PR F4: permanent pre-fight base-stat grant, adjacency-conditioned (Lionheart/Centurion/
+    // Enforcer/Defiant/Stalwart "At the start of combat …" / "when adjacent to a Supporter …"
+    // passives). Applied ONCE to PlacementPlan stats by the battle sim's pre-fight layer (F5) —
+    // never a status (hidden, non-purgeable, not reset on death). DPS calculators ignore it.
+    | 'pre-combat-stat';
 
 export type AbilityTarget =
     | 'self'
@@ -111,7 +116,12 @@ export type AbilityTrigger =
     // Fired once per shield-application CAST. Reaction is keyed on the granter (acting actor)
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
-    | 'on-shield-applied';
+    | 'on-shield-applied'
+    // PR F4: annotation-only marker for pre-fight stat grants ("At the start of combat, …").
+    // Deliberately NOT in LIVE_TRIGGERS — there is no combat event for it; the battle sim's
+    // pre-fight layer (F5) reads these abilities off the plan BEFORE actors exist, so the
+    // engine's reactive listener machinery must never bind it.
+    | 'pre-combat';
 
 /**
  * Triggers the combat engine consumes via listeners (the machinery lives in
@@ -533,6 +543,22 @@ export type AbilityConfig =
           type: 'buff-duration-extension';
           /** Extra turns added to buffs this wearer applies (Boost = 1). */
           turns: number;
+      }
+    // PR F4: pre-fight base-stat grant (trigger 'pre-combat', target 'self'/'adjacent-allies').
+    // Consumed ONCE by the battle sim's pre-fight layer (F5), which mutates plan stats from a
+    // frozen post-leader snapshot; adjacency gates live HERE (evaluated against board geometry
+    // at apply time), so `conditions` stays empty.
+    | {
+          type: 'pre-combat-stat';
+          stat: 'hp' | 'attack' | 'crit' | 'hacking';
+          value: number;
+          /** 'flat': absolute points. 'percent-of-own': % of the RECIPIENT's pre-fight stat.
+           *  'percent-of-donor': % of the GRANTING ship's pre-fight stat (Lionheart). */
+          valueKind: 'flat' | 'percent-of-own' | 'percent-of-donor';
+          /** Multiply value by count of adjacent living allies (Centurion). */
+          perAdjacentAlly?: boolean;
+          /** Gate: at least one adjacent ally of this role category (Enforcer/Defiant/Stalwart). */
+          requiresAdjacentRole?: ShipRoleCategory;
       };
 
 /** Crowd-control effects a `control` ability can apply. The combat effect of each

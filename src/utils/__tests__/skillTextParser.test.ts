@@ -44,6 +44,7 @@ import {
     parseEnemyChargedCastReaction,
     parseCounterAbilities,
     parseSelfBuffRemovals,
+    parsePreCombatStatGrants,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 
@@ -143,6 +144,176 @@ describe('detectFullyCharged', () => {
 
     it('returns false when all entries are undefined', () => {
         expect(detectFullyCharged([undefined, undefined])).toBe(false);
+    });
+});
+
+// PR F4: permanent pre-fight base-stat passives. Every positive case below is the EXACT
+// docs/ship-skills.csv text (markup included) — the CSV is the parser's source of truth.
+describe('parsePreCombatStatGrants', () => {
+    it('returns [] for null/undefined/empty', () => {
+        expect(parsePreCombatStatGrants(null)).toEqual([]);
+        expect(parsePreCombatStatGrants(undefined)).toEqual([]);
+        expect(parsePreCombatStatGrants('')).toEqual([]);
+    });
+
+    it('Lionheart P1: donor-scaled HP grant to adjacent allies', () => {
+        const grants = parsePreCombatStatGrants(
+            'At the start of combat, this Unit grants all adjacent allies 10% of its HP.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'hp',
+                value: 10,
+                valueKind: 'percent-of-donor',
+                target: 'adjacent-allies',
+                pos: 0,
+            },
+        ]);
+    });
+
+    it('Lionheart P2 (multi-sentence with Protection stacks): only the HP grant parses', () => {
+        const grants = parsePreCombatStatGrants(
+            'At the start of combat, this Unit grants all adjacent allies 10% of its HP.<br /><br />At the start of the round, this Unit gains 10 stacks of <unit-skill>Protection</unit-skill>.<br />After taking damage redirected through <unit-skill>Protection</unit-skill>, all <unit-skill>Protection</unit-skill> is removed.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'hp',
+                value: 10,
+                valueKind: 'percent-of-donor',
+                target: 'adjacent-allies',
+                pos: 0,
+            },
+        ]);
+    });
+
+    it('Centurion P1: flat attack per adjacent ally, self', () => {
+        const grants = parsePreCombatStatGrants(
+            'At the start of combat, this Unit gains 500 attack per adjacent ally.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'attack',
+                value: 500,
+                valueKind: 'flat',
+                target: 'self',
+                perAdjacentAlly: true,
+                pos: 0,
+            },
+        ]);
+    });
+
+    it('Centurion P2 (with retaliate clause + embedded newlines): 750 attack per adjacent ally', () => {
+        const grants = parsePreCombatStatGrants(
+            'At the start of combat, this Unit gains 750 attack per adjacent ally.\n<br /><br />\nWhen this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>50%</unit-damage>.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'attack',
+                value: 750,
+                valueKind: 'flat',
+                target: 'self',
+                perAdjacentAlly: true,
+                pos: 0,
+            },
+        ]);
+    });
+
+    it('Centurion P3: 1000 attack per adjacent ally', () => {
+        const grants = parsePreCombatStatGrants(
+            'At the start of combat, this Unit gains 1000 attack per adjacent ally.\n<br /><br />\nWhen this Unit or an adjacent ally is directly damaged, this Unit retaliates dealing <unit-damage>100%</unit-damage>.'
+        );
+        expect(grants).toHaveLength(1);
+        expect(grants[0]).toMatchObject({
+            stat: 'attack',
+            value: 1000,
+            valueKind: 'flat',
+            target: 'self',
+            perAdjacentAlly: true,
+        });
+    });
+
+    it('Enforcer P2 (full multi-sentence row): trailing supporter gate yields crit (flat) + hacking (percent-of-own)', () => {
+        const grants = parsePreCombatStatGrants(
+            'When this Unit critically hits an enemy it inflicts <unit-skill>Defense Shred</unit-skill> for 3 turns.<br /><br />\nIf an attack destroys an enemy, then this Units remaining attacks that turn will target a new enemy.<br /><br />\nAt the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.'
+        );
+        expect(grants).toHaveLength(2);
+        expect(grants[0]).toMatchObject({
+            stat: 'crit',
+            value: 15,
+            valueKind: 'flat',
+            target: 'self',
+            requiresAdjacentRole: 'SUPPORTER',
+        });
+        expect(grants[1]).toMatchObject({
+            stat: 'hacking',
+            value: 10,
+            valueKind: 'percent-of-own',
+            target: 'self',
+            requiresAdjacentRole: 'SUPPORTER',
+        });
+        // pos anchors keep the crit grant before the hacking grant (stable ability order).
+        expect(grants[0].pos).toBeLessThan(grants[1].pos);
+    });
+
+    it('Defiant P2 (full row): leading supporter gate yields HP percent-of-own; shield clause untouched', () => {
+        const grants = parsePreCombatStatGrants(
+            'When adjacent to a Supporter, this Unit gains 20% HP. This Unit gains <unit-damage>Shield equal to 30%</unit-damage> of its Max HP when applying Stasis.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'hp',
+                value: 20,
+                valueKind: 'percent-of-own',
+                target: 'self',
+                requiresAdjacentRole: 'SUPPORTER',
+                pos: expect.any(Number),
+            },
+        ]);
+    });
+
+    it('Stalwart P2 (full row): leading "this Unit is adjacent" gate yields attack percent-of-own', () => {
+        const grants = parsePreCombatStatGrants(
+            'When this Unit is directly damaged as a primary target, it deals <unit-damage>70% damage</unit-damage> to that enemy and gains <unit-skill>Legion Discipline II</unit-skill> for 3 turns.<br /><br />Additionally, when this Unit is adjacent to a Supporter, this Unit gains 20% Attack.'
+        );
+        expect(grants).toEqual([
+            {
+                stat: 'attack',
+                value: 20,
+                valueKind: 'percent-of-own',
+                target: 'self',
+                requiresAdjacentRole: 'SUPPORTER',
+                pos: expect.any(Number),
+            },
+        ]);
+    });
+
+    it('does NOT match Centurion charged Core-Charge adjacent-ally grant', () => {
+        expect(
+            parsePreCombatStatGrants(
+                'This Unit gains 4 stacks of <unit-skill>Core Charge I</unit-skill> and grants all adjacent allies 2 stacks of <unit-skill>Core Charge I</unit-skill> then deals <unit-damage>150% damage</unit-damage> wth an additional <unit-damage>30%</unit-damage> for each adjacent ally.'
+            )
+        ).toEqual([]);
+    });
+
+    it('does NOT match Tier-B start-of-combat timed statuses ("gains N stacks of X")', () => {
+        expect(
+            parsePreCombatStatGrants(
+                'At the start of combat, this Unit gains 2 stacks of <unit-skill>Blast</unit-skill>.'
+            )
+        ).toEqual([]);
+        expect(
+            parsePreCombatStatGrants(
+                'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([]);
+    });
+
+    it('does NOT match Madax P2 ("receives 30% more Repairs" — deliberately out of scope)', () => {
+        expect(
+            parsePreCombatStatGrants(
+                "This Unit <unit-damage>repairs itself for 13%</unit-damage> of its Max HP when an enemy dies.<br /><br />When adjacent to a Supporter, this Unit receives 30% more Repairs and increases that Supporter's Defense by 20% of this Unit's Defense."
+            )
+        ).toEqual([]);
     });
 });
 

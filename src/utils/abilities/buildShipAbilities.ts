@@ -69,6 +69,7 @@ import {
     parseSkillEffects,
     classifyEnemyEffect,
     statusEffectCondition,
+    parsePreCombatStatGrants,
 } from '../skillTextParser';
 import {
     buildDoTAutoFill,
@@ -1499,6 +1500,38 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: critRedPos >= 0 ? critRedPos : MAX_POS,
+        });
+    }
+
+    // PR F4: permanent pre-fight base-stat passives ("At the start of combat, …" /
+    // role-gated adjacency grants — Lionheart/Centurion/Enforcer/Defiant/Stalwart).
+    // Annotation-only until the battle sim's pre-fight layer (F5) applies them to plan
+    // stats; the DPS pipeline ignores the type by construction (modifierTotalsFromAbilities
+    // type-filters, no firing-skill extractor / status registration / reactive listener
+    // matches 'pre-combat-stat', and 'pre-combat' is not in LIVE_TRIGGERS). No slot gate —
+    // passive-slot refit resolution is already handled by getSkillRowForSlot. The grant's
+    // pos indexes the TAG-STRIPPED text (≤ raw index) — cosmetic editor order only.
+    for (const grant of parsePreCombatStatGrants(text)) {
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'pre-combat-stat',
+                target: grant.target,
+                trigger: 'pre-combat',
+                conditions: [],
+                config: {
+                    type: 'pre-combat-stat',
+                    stat: grant.stat,
+                    value: grant.value,
+                    valueKind: grant.valueKind,
+                    ...(grant.perAdjacentAlly ? { perAdjacentAlly: true } : {}),
+                    ...(grant.requiresAdjacentRole
+                        ? { requiresAdjacentRole: grant.requiresAdjacentRole }
+                        : {}),
+                },
+                autoFilled: true,
+            },
+            pos: grant.pos,
         });
     }
 

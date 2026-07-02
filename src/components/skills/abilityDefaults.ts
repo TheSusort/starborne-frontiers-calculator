@@ -89,6 +89,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'heal-amplification', condition: 'target-hp-below-self', ampPct: 0 };
         case 'incoming-heal-amplification':
             return { type, ampPct: 0, procChance: 0 };
+        case 'pre-combat-stat':
+            return { type, stat: 'attack', value: 0, valueKind: 'flat' };
     }
 };
 
@@ -117,6 +119,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'outgoing-amplification': 'self',
     'heal-amplification': 'self',
     'incoming-heal-amplification': 'self',
+    'pre-combat-stat': 'self',
 };
 
 /**
@@ -131,8 +134,11 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
     // A counter only ever fires on the victim-side `on-attacked` path (the parser builds it
     // that way and the combat executor reads that trigger), so default it correctly — the
     // helper should always yield a semantically valid ability, even though counters are
-    // currently parser-generated rather than authored via the picker.
-    trigger: type === 'counter' ? 'on-attacked' : 'on-cast',
+    // currently parser-generated rather than authored via the picker. Likewise a
+    // pre-combat-stat grant only ever rides the annotation-only 'pre-combat' trigger
+    // (the battle sim's pre-fight layer reads it before any combat event exists).
+    trigger:
+        type === 'counter' ? 'on-attacked' : type === 'pre-combat-stat' ? 'pre-combat' : 'on-cast',
     conditions: [],
     config: makeDefaultConfig(type),
 });
