@@ -15,6 +15,13 @@ import {
 } from '../utils/calculators/battleSimulator';
 import PlacementBoard, { BoardState } from '../components/simulator/PlacementBoard';
 import BattlePlayback from '../components/simulator/BattlePlayback';
+import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
+import { SquadLeaderSelection } from '../utils/combat/preFight';
+import {
+    SQUAD_LEADER_STORAGE_KEYS,
+    readStoredSquadLeaderSelection,
+    writeStoredSquadLeaderSelection,
+} from '../utils/simulator/squadLeaderSelection';
 
 type Side = 'player' | 'enemy';
 
@@ -32,6 +39,19 @@ const SimulatorPage: React.FC = () => {
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
+    // Per-side squad-leader selections (pre-fight faction auras), persisted to
+    // localStorage (validated on read — stale/hand-edited values fall back to none).
+    const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
+        () => readStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS.player)
+    );
+    const [enemySquadLeader, setEnemySquadLeader] = useState<SquadLeaderSelection | undefined>(
+        () => readStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS.enemy)
+    );
+
+    const handleSquadLeaderChange = (side: Side, selection: SquadLeaderSelection | undefined) => {
+        (side === 'player' ? setPlayerSquadLeader : setEnemySquadLeader)(selection);
+        writeStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS[side], selection);
+    };
 
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
@@ -126,6 +146,8 @@ const SimulatorPage: React.FC = () => {
                 {
                     playerTeam: buildTeam(playerBoard),
                     enemyTeam: buildTeam(enemyBoard),
+                    playerSquadLeader,
+                    enemySquadLeader,
                 },
                 getGearPiece
             );
@@ -150,27 +172,43 @@ const SimulatorPage: React.FC = () => {
             >
                 <div className="space-y-6">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <PlacementBoard
-                            title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
-                            formation={playerFormation}
-                            selectedPosition={playerSelected}
-                            onSelectPosition={(pos) => handleSelectPosition('player', pos)}
-                            onRemoveShip={(pos) => handleRemoveShip('player', pos)}
-                            onPickShip={(ship) => handlePickShip('player', ship)}
-                            onCloseSelector={() => setPlayerSelected(undefined)}
-                            onLoadEncounter={(board) => handleLoadEncounter('player', board)}
-                        />
-                        <PlacementBoard
-                            title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
-                            formation={enemyFormation}
-                            selectedPosition={enemySelected}
-                            onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
-                            onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
-                            onPickShip={(ship) => handlePickShip('enemy', ship)}
-                            onCloseSelector={() => setEnemySelected(undefined)}
-                            onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
-                            mirrored
-                        />
+                        <div className="space-y-4">
+                            <PlacementBoard
+                                title={`Your Team${playerCount > 0 ? ` (${playerCount})` : ''}`}
+                                formation={playerFormation}
+                                selectedPosition={playerSelected}
+                                onSelectPosition={(pos) => handleSelectPosition('player', pos)}
+                                onRemoveShip={(pos) => handleRemoveShip('player', pos)}
+                                onPickShip={(ship) => handlePickShip('player', ship)}
+                                onCloseSelector={() => setPlayerSelected(undefined)}
+                                onLoadEncounter={(board) => handleLoadEncounter('player', board)}
+                            />
+                            <SquadLeaderPicker
+                                side="player"
+                                selection={playerSquadLeader}
+                                onChange={(sel) => handleSquadLeaderChange('player', sel)}
+                                board={playerBoard}
+                            />
+                        </div>
+                        <div className="space-y-4">
+                            <PlacementBoard
+                                title={`Enemy Team${enemyCount > 0 ? ` (${enemyCount})` : ''}`}
+                                formation={enemyFormation}
+                                selectedPosition={enemySelected}
+                                onSelectPosition={(pos) => handleSelectPosition('enemy', pos)}
+                                onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
+                                onPickShip={(ship) => handlePickShip('enemy', ship)}
+                                onCloseSelector={() => setEnemySelected(undefined)}
+                                onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                mirrored
+                            />
+                            <SquadLeaderPicker
+                                side="enemy"
+                                selection={enemySquadLeader}
+                                onChange={(sel) => handleSquadLeaderChange('enemy', sel)}
+                                board={enemyBoard}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -186,6 +224,29 @@ const SimulatorPage: React.FC = () => {
 
                     {runError && (
                         <div className="card text-red-400">Simulation error: {runError}</div>
+                    )}
+
+                    {/* Squad-leader effects the sim could not model this run (conditional /
+                        per-round / modifier-channel effects) — surfaced so the outcome is
+                        never mistaken for a full simulation of the selected leaders. */}
+                    {battleResult?.preFight && battleResult.preFight.unsimulated.length > 0 && (
+                        <div className="card border-amber-500/40 space-y-1">
+                            <p className="text-sm font-semibold text-amber-400">
+                                Squad leader effects not simulated this run
+                            </p>
+                            <ul className="text-sm space-y-1">
+                                {battleResult.preFight.unsimulated.map((entry) => (
+                                    <li key={entry.actorId}>
+                                        <span className="text-theme-text-secondary">
+                                            {entry.name}:{' '}
+                                        </span>
+                                        <span className="text-amber-400">
+                                            {entry.texts.join('; ')}
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     )}
 
                     {battleResult && <BattlePlayback result={battleResult} />}
