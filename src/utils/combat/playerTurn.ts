@@ -162,6 +162,18 @@ export interface PlayerTurnResult {
      *  engine branch (Task 8); non-positional callers ignore it → goldens byte-identical.
      *  Present whenever a damage ability fired this cast (else undefined). */
     positionalScalars?: AttackerDamageScalars;
+    /** Sub-project I, PR I2 (Layer 3) — ingredients for the engine's per-victim outgoing-
+     *  modifier delta (Tygr/Incinerator/Lodolite-shape "+N% to enemies with <named status>"
+     *  gates). `primaryCtx` is the SAME `modifierCtx` folded into `positionalScalars.
+     *  outgoingDamageBuffPct` above (built against the primary/bound target's enemy-status);
+     *  `modifierAbilities` is the same list folded into `dmgStats`. The engine rebuilds a
+     *  per-victim ConditionContext (enemy-status fields only) from `primaryCtx`, re-folds
+     *  `modifierAbilities` against it, and subtracts the primary-ctx fold to isolate the
+     *  per-victim enemy-status delta (non-enemy-status modifiers cancel identically in both
+     *  folds). Present ONLY when a damage ability fired this cast (mirrors positionalScalars).
+     *  Absent → the engine skips the per-victim fold (byte-identical to I1's single-ctx
+     *  behavior); read ONLY by the positional engine branch. */
+    perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
     /** Per-victim crit resolver for the positional AoE apply path (per-victim crit).
      *  Rolls THIS attacker's crit gate at the given victim's affinity-capped rate, so a
      *  covered victim the attacker is at an affinity disadvantage against crits less often
@@ -2389,6 +2401,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
           }
         : undefined;
 
+    // PR I2: same guard as positionalScalars — only meaningful when a damage ability fired.
+    // Carries the exact ingredients (modifierAbilities + the per-turn modifierCtx) the engine
+    // needs to re-fold outgoingDamage against each footprint victim's OWN enemy-status.
+    const perVictimOutgoing: PlayerTurnResult['perVictimOutgoing'] = hasDamageAbility
+        ? { modifierAbilities, primaryCtx: modifierCtx }
+        : undefined;
+
     return {
         action,
         roundCrit,
@@ -2406,6 +2425,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         detonationDamage,
         extraActionGrants,
         positionalScalars,
+        perVictimOutgoing,
         rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
         // Task 5: when the inline emit was SUPPRESSED (engine will resolve positionally), hand the
