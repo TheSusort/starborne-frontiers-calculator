@@ -3083,6 +3083,37 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
+                                    Pre-Fight Ship Passives
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Some ships have permanent start-of-combat passives that are
+                                        applied before round 1: Lionheart grants all adjacent allies
+                                        10% of its HP, Centurion gains attack per adjacent ally, and
+                                        Enforcer, Defiant, and Stalwart gain their bonuses when
+                                        placed adjacent to a Supporter
+                                    </li>
+                                    <li>
+                                        Adjacency uses the placement board&apos;s hex neighbours, so
+                                        where you place these ships matters
+                                    </li>
+                                    <li>
+                                        These passives apply after squad-leader bonuses (a leader
+                                        that boosts Lionheart&apos;s HP also boosts what it grants),
+                                        are hidden and permanent like leader bonuses, and are not
+                                        lost when the granting ship is destroyed
+                                    </li>
+                                    <li>
+                                        Ships whose skills state they start combat fully charged
+                                        (e.g. Chimei, with enough refits for the passive) begin the
+                                        battle with a full charge bar and fire their charged skill
+                                        on round 1
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
                                     Watching the Battle
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
