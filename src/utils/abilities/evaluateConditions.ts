@@ -53,6 +53,15 @@ export interface ConditionContext {
     /** The condition owner's own-turn counter (CombatActor.turnsTaken). Live-derived by
      *  the engine drain context; defaults 0 (DPS / no-delegate → period>=2 never met). */
     turnsTaken?: number;
+    /** Sub-project I, PR I5 — count of living OPPOSING actors whose self-buff set includes
+     *  'Stealth' (Selenite's "10% more direct damage for every enemy with Stealth" count-
+     *  scaling). Distinct from `enemyBuffNames`, which is a DEDUPED UNION of buff names
+     *  across every opposing actor — it can answer "does at least one enemy have Stealth"
+     *  but can never distinguish 1 stealthed enemy from N. Live-derived by the combat
+     *  engine (count of living opposing actors carrying Stealth); defaults to 0 elsewhere
+     *  (DPS mode has no enemy attackers to count) — the scaling contributes 0, byte-
+     *  identical to today. */
+    stealthedEnemyCount?: number;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -95,6 +104,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyAdjacentCount;
         case 'enemy-destroyed':
             return ctx.enemyDestroyedCount;
+        case 'enemy-stealth-count':
+            return ctx.stealthedEnemyCount ?? 0;
         case 'hp-threshold':
             return evalHpThreshold(cond, ctx) ? 1 : 0;
         // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as

@@ -231,7 +231,15 @@ export type ConditionSubject =
     // Binary periodic gate: met when the owner's own-turn counter satisfies
     // turnsTaken % period === (offset ?? 0). period/offset live on Condition.
     // Used by Chrono Reaver (every other/third turn). Always derivable:true.
-    | 'every-n-turns';
+    | 'every-n-turns'
+    // COUNT subject (sub-project I, PR I5): the number of living OPPOSING actors
+    // currently holding the Stealth self-buff. Distinct from 'enemy-buff' (which reads
+    // `enemyBuffNames`, a DEDUPED UNION — it can tell "is at least one enemy Stealthed"
+    // but never "how many"). Used as a SCALING source, e.g. Selenite's "10% more direct
+    // damage for every enemy with Stealth" (perUnit 10, no cap). Live-derived by the
+    // combat engine from ConditionContext.stealthedEnemyCount; defaults to 0 (DPS mode
+    // has no enemy attackers to count) — inert/byte-identical there. Always derivable:true.
+    | 'enemy-stealth-count';
 
 export interface Condition {
     subject: ConditionSubject;

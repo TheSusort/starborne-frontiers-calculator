@@ -53,6 +53,10 @@ export function buildRoundContext(state: {
     /** The condition owner's own-turn counter. Default 0 (DPS-assumption: inert for
      *  period>=2 conditions). Populated live by the engine drain context. */
     turnsTaken?: number;
+    /** Sub-project I, PR I5 — count of living opposing actors currently holding the Stealth
+     *  self-buff. Default 0 (DPS-assumption: no enemy attackers to count). Populated live by
+     *  the combat engine. See ConditionContext.stealthedEnemyCount. */
+    stealthedEnemyCount?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -79,6 +83,7 @@ export function buildRoundContext(state: {
         firstActivator: state.firstActivator ?? false,
         isLastStanding: state.lastStanding ?? false,
         turnsTaken: state.turnsTaken ?? 0,
+        stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime

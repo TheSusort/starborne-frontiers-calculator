@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat sim: damage bonuses that target enemies with a specific status now check for that exact status. Tygr, Rikra, Incinerator, Wrecker, and Lodolite only get their bonus damage against the named status (Stasis/Disable, Taunt/Provoke, Inferno, or Concentrate Fire) rather than against any debuffed enemy.',
     "Combat sim: in a multi-target attack, a damage bonus gated on a named enemy status (e.g. Tygr's bonus vs Stasis/Disable) is now checked against each hit target individually — a target without the status no longer gets the bonus just because another target in the same attack has it.",
     "Combat sim: team-wide damage auras now actually reach the team. Lodolite's +15% damage vs Concentrate Fire (or Stealth) and Panguan's +40% damage for Stealthed units apply to every living ally who qualifies, not just the caster's own attacks.",
+    "Combat sim: Selenite's bonus direct damage now scales with the number of Stealthed enemies (10% per enemy), instead of a flat 10% whenever at least one enemy was Stealthed.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

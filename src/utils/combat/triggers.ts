@@ -1100,6 +1100,35 @@ export function selfBuffNamesForOwners(statusEngine: StatusEngine, ownerIds: str
     return [...names];
 }
 
+/** Sub-project I, PR I5 — count of DISTINCT owners (out of the given owner ids) currently
+ *  holding the named self-buff. Reads the SAME three sources as {@link selfBuffNamesForOwners}
+ *  (scheduled activeSelfBuffs + timed ability statuses + aura/accum ability statuses) but per
+ *  OWNER rather than as a deduped name union — this is what lets Selenite's "10% more direct
+ *  damage for every enemy with Stealth" tell 1 stealthed enemy from N, which a name union
+ *  cannot. Each owner counts at most once even if the buff is present via multiple sources. */
+export function countOwnersWithSelfBuff(
+    statusEngine: StatusEngine,
+    ownerIds: string[],
+    buffName: string
+): number {
+    let count = 0;
+    for (const ownerId of ownerIds) {
+        const snap = statusEngine.snapshot(ownerId);
+        const hasIt =
+            snap.activeSelfBuffs.some(
+                (ab) => ab.buffName === buffName && (ab.stacks === undefined || ab.stacks > 0)
+            ) ||
+            statusEngine
+                .timedAbilityStatuses('self', ownerId)
+                .some((s) => s.active.buffName === buffName) ||
+            statusEngine
+                .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId)
+                .some((s) => s.active.buffName === buffName);
+        if (hasIt) count += 1;
+    }
+    return count;
+}
+
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
  *  OWN debuffs). Scheduled non-payload debuffs come from snapshot(_, targetId).activeEnemyDebuffs;
  *  payload-carrying ability debuffs (timed + aura/accum) come from the ability-status reads

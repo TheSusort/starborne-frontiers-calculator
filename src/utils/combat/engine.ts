@@ -84,6 +84,7 @@ import {
     MAX_INTENT_GENERATIONS,
     buildActorConditionContext,
     buildForcedTargetingStatus,
+    countOwnersWithSelfBuff,
     executeIntent,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
@@ -1887,6 +1888,14 @@ export function runCombat(input: CombatEngineInput): {
     const playerEnemyBuffNames = (): string[] =>
         selfBuffNamesForOwners(statusEngine, livingEnemyAttackerIds());
     const enemyEnemyBuffNames = (): string[] => selfBuffNamesForOwners(statusEngine, playerIds);
+    // Sub-project I, PR I5 — count (not union) of opposing actors holding Stealth, for
+    // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
+    // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric);
+    // DPS mode has no enemy attackers → livingEnemyAttackerIds() is empty → 0, byte-identical.
+    const playerStealthedEnemyCount = (): number =>
+        countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
+    const enemyStealthedEnemyCount = (): number =>
+        countOwnersWithSelfBuff(statusEngine, playerIds, 'Stealth');
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
     // Sub-project I, PR I1: NAMES on a resolved (real) opposing target for name-specific
@@ -3957,6 +3966,8 @@ export function runCombat(input: CombatEngineInput): {
             victimMaxHpFor: (tgt: CombatActor) => number;
             enemyTypeArg: EnemyBaseClass | undefined;
             enemyBuffNamesUnion: () => string[];
+            // Sub-project I, PR I5 — count (not union) of opposing actors holding Stealth.
+            stealthedEnemyCount: () => number;
             healEventOnly: boolean;
             // Matches drivePositionalApply's applyToVictim param type exactly. E2: returns the
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
@@ -3970,6 +3981,7 @@ export function runCombat(input: CombatEngineInput): {
             victimMaxHpFor: (tgt) => tgt.stats.hp,
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
+            stealthedEnemyCount: playerStealthedEnemyCount,
             healEventOnly: false,
             applyToVictim: (victim, damage) => applyOutgoingToEnemy(damage, victim),
         };
@@ -3984,6 +3996,7 @@ export function runCombat(input: CombatEngineInput): {
             // UNION of PLAYER self-buff names (fed to the enemy's own `enemy-buff` gates). A bare
             // enemy has no such gate → inert today; computed for the full-kit enemy.
             enemyBuffNamesUnion: enemyEnemyBuffNames,
+            stealthedEnemyCount: enemyStealthedEnemyCount,
             healEventOnly: true,
             // An enemy supporter running runPlayerTurn grants charges to its OWN (enemy) team via
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
@@ -4219,6 +4232,10 @@ export function runCombat(input: CombatEngineInput): {
                 // repaired enemy → false → byte-identical (the purge block guards on targetId).
                 targetRepairedThisRound: repairedThisRound.has(tgt.id),
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
+                // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
+                // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
+                // cadence as enemyBuffNames above; 0 in DPS mode (no enemy attackers).
+                stealthedEnemyCount: tb.stealthedEnemyCount(),
                 // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above (real/positional target
                 // only). When tgt is the dummy `enemy` sink (DPS mode / no positional

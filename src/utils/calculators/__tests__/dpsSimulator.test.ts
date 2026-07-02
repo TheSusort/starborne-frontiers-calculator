@@ -1834,6 +1834,40 @@ describe('simulateDPS', () => {
             );
         });
 
+        it('DPS-parity (sub-project I, PR I5): an enemy-stealth-count scaling modifier contributes 0 in the DPS simulator', () => {
+            // Mirrors Selenite's "10% more direct damage for every enemy with Stealth" — a
+            // count-scaling modifier on ConditionContext.stealthedEnemyCount. The DPS simulator
+            // has no enemy-attacker roster to count (there is no DPS input field for it at all,
+            // unlike enemyDebuffs/enemyBuffs), so the field is never populated and always
+            // defaults to 0 — the scaling must contribute nothing, leaving directDamage
+            // byte-identical to the same skill set without the modifier at all.
+            const stealthCountModifier: Ability = {
+                id: 'm',
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [{ subject: 'enemy-stealth-count', derivable: true }],
+                scaling: { conditionIndex: 0, perUnit: 10 },
+                config: {
+                    type: 'modifier',
+                    channel: 'outgoingDamage',
+                    value: 0,
+                    isMultiplicative: true,
+                },
+            };
+            const withModifier = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 100), stealthCountModifier]),
+            });
+            const withoutModifier = simulateDPS({
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 100)]),
+            });
+            expect(withModifier.rounds[0].directDamage).toBe(
+                withoutModifier.rounds[0].directDamage
+            );
+        });
+
         it('multi-hit damage equals a single hit with the summed multiplier', () => {
             const multiHit = simulateDPS({
                 ...baseInput,
