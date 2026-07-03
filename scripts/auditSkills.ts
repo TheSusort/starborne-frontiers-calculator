@@ -55,19 +55,46 @@ interface ShipRow {
     slots: { slot: string; text: string }[];
 }
 
-// KNOWN GAP (pre-existing, verified 2026-07-02): this reader is line-per-record, but six
-// CSV records (Centurion, Enforcer, Chimei, …) carry literal newlines inside quoted passive
-// texts and are silently dropped (141 of 147 records audited). A quote-parity record-joining
-// fix recovers them but surfaces two pre-existing findings on the recovered ships (Chimei
-// active: the detonation keyword false-positives on the "Out. Detonation Damage Up III" buff
-// NAME; Lingshe passive1: ungated bomb→Stealth grant) — fix those first, then join records.
-// The pre-combat-stat rule below was verified out-of-band against all 147 records: it hits
-// exactly Lionheart/Centurion/Enforcer/Defiant/Stalwart, all handled.
+// RESOLVED (2026-07-02, was a KNOWN GAP): six CSV records (Centurion, Chimei, Curator,
+// Enforcer, Graphite, Lingshe) carry literal newlines inside quoted passive texts — a naive
+// line-per-record reader silently dropped them (141 of 147 records audited). Fixed below by
+// accumulating physical lines into a record buffer until quotes are balanced (see
+// `readCsvRecords`) before splitting into fields. Recovering these six surfaced two
+// pre-existing findings, fixed ahead of the reader change: the `detonation` rule's keyword
+// false-positived on Chimei's "Out. Detonation Damage Up III" buff NAME (fixed via a negative
+// lookahead — see the rule above); Lingshe's "gains Stealth on detonating a Bomb" passive
+// clause is already gated by the parser's on-bomb-detonated trigger (verified via
+// `detectReactiveTrigger`'s `BOMB_DETONATE_RE`), so it never reaches `ungatedEffects` — no
+// code change needed there. The pre-combat-stat rule below was verified out-of-band against
+// all 147 records: it hits exactly Lionheart/Centurion/Enforcer/Defiant/Stalwart, all handled.
+function readCsvRecords(raw: string): string[] {
+    const physicalLines = raw.split('\n');
+    const records: string[] = [];
+    let buffer: string[] = [];
+    let quoteCount = 0;
+    for (const line of physicalLines) {
+        buffer.push(line);
+        quoteCount += (line.match(/"/g) ?? []).length;
+        // Even quote count = no unterminated quoted field spanning this line boundary — the
+        // buffered lines form one complete record. Re-join with '\n' so multi-line skill text
+        // is preserved (parseCsvLine treats embedded newlines as ordinary characters).
+        if (quoteCount % 2 === 0) {
+            const record = buffer.join('\n');
+            buffer = [];
+            quoteCount = 0;
+            if (record.trim().length > 0) records.push(record);
+        }
+    }
+    // Any leftover buffered lines (unbalanced quotes through EOF) are dropped — malformed CSV,
+    // not a multi-line record.
+    return records;
+}
+
 function readShips(): ShipRow[] {
-    const lines = readFileSync(CSV_PATH, 'utf8').split('\n').filter(Boolean);
+    const records = readCsvRecords(readFileSync(CSV_PATH, 'utf8'));
     const rows: ShipRow[] = [];
-    for (let i = 1; i < lines.length; i++) {
-        const f = parseCsvLine(lines[i]);
+    for (let i = 1; i < records.length; i++) {
+        const f = parseCsvLine(records[i]);
         if (f.length < 7) continue;
         const [name, active, , charged, p1, p2, p3] = f;
         const slots = [
@@ -126,7 +153,12 @@ const RULES: Rule[] = [
     {
         id: 'detonation',
         severity: 'high',
-        keyword: (t) => /detonat/i.test(t),
+        // Matches the detonate MECHANIC ("detonates <Bomb/Corrosion/Inferno> effects", "will
+        // detonate", "detonates a Bomb", "detonation damage per … crit power"). Excludes the
+        // buff NAME "Out. Detonation Damage Up III" (Chimei) via the negative lookahead — that
+        // grant is a plain Attack-Up-style stat buff, not an actual detonate mechanic, and would
+        // otherwise false-positive since `detonat` is a substring of the buff name.
+        keyword: (t) => /detonat(?!ion\s+damage\s+up\b)/i.test(t),
         handled: (a) => hasType(a, 'detonate-dot'),
     },
     {

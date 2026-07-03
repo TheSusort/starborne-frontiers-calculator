@@ -14,8 +14,8 @@ export interface AllowEntry {
 export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
-        rules: ['detonation'],
-        reason: 'Countdown-reduction + crit-scaling Bomb detonation (charged skill). The "gains Stealth on detonating a Bomb" passive now carries an on-bomb-detonated trigger (no longer ungated). (NOTE: currently a multi-line CSV record dropped by the audit reader — kept until the reader is fixed.)',
+        rules: ['detonation', 'ungated-effect-with-trigger'],
+        reason: 'detonation: countdown-reduction + crit-scaling Bomb detonation (charged skill), plus the crit-power-scaled "detonation damage" modifier (passive2/3) — neither is a detonate-dot consumption. The passive2/3 "gains Stealth on detonating a Bomb" grant carries an on-bomb-detonated trigger (not ungated). ungated-effect-with-trigger: passive1\'s "When this Unit inflicts a Bomb it gains Stealth" is a reactive on-self-inflicting-a-DoT trigger the parser does not derive (distinct from the detonate trigger above) — modelled manually.',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
@@ -29,7 +29,7 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Curator',
         rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy uses its Charged skill. (NOTE: currently a multi-line CSV record dropped by the audit reader — kept until the reader is fixed.)',
+        reason: 'Reactive: when an enemy uses its Charged skill.',
     },
     {
         ship: 'Paracelsus',
