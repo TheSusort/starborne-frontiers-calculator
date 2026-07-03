@@ -311,8 +311,38 @@ export interface Finding {
     clause: string;
 }
 
+// Records every (ship, ruleId) pair for which a finding WOULD have been reported absent the
+// allowlist (i.e. the keyword matched, the parser did NOT handle it, so isAllowed was consulted).
+// Lets `unusedAllowlistEntries` flag allowlist rows that no longer suppress anything (stale) —
+// e.g. after the reference CSV is refreshed and a source typo the entry existed for is fixed.
+// Cleared at the start of every `collectFindings` pass so repeated calls don't accumulate.
+const consultedAllowKeys = new Set<string>();
+// Ship names actually audited in the last pass. Guards `unusedAllowlistPairs` against
+// false-flagging entries for ships the CSV reader DROPPED (multi-line records — see readShips):
+// a dropped ship produces no finding only because it wasn't audited, not because the entry is
+// stale, so removing its allowlist row would break the audit once the reader is fixed.
+const auditedShipNames = new Set<string>();
+const allowKey = (ship: string, ruleId: string): string => `${ship}::${ruleId}`;
+
 function isAllowed(ship: string, ruleId: string): boolean {
+    consultedAllowKeys.add(allowKey(ship, ruleId));
     return ALLOWLIST.some((a) => a.ship === ship && a.rules.includes(ruleId));
+}
+
+/** Allowlist (ship, ruleId) pairs that are stale: the ship WAS audited but the rule no longer
+ *  produces a raw finding, so the entry suppresses nothing and can be removed. Entries for ships
+ *  the reader dropped are excluded (unknowable, not stale). Call AFTER `collectFindings`. */
+export function unusedAllowlistPairs(): { ship: string; rule: string; reason: string }[] {
+    const out: { ship: string; rule: string; reason: string }[] = [];
+    for (const entry of ALLOWLIST) {
+        if (!auditedShipNames.has(entry.ship)) continue; // dropped ship → can't judge
+        for (const rule of entry.rules) {
+            if (!consultedAllowKeys.has(allowKey(entry.ship, rule))) {
+                out.push({ ship: entry.ship, rule, reason: entry.reason });
+            }
+        }
+    }
+    return out;
 }
 
 /** True when the (gitignored) reference CSV is present — false in CI/clean checkouts. */
@@ -322,7 +352,10 @@ export function csvAvailable(): boolean {
 
 /** Pure pass: every coverage finding across all ships (no I/O side effects beyond reading the CSV). */
 export function collectFindings(): { findings: Finding[]; shipCount: number } {
+    consultedAllowKeys.clear();
+    auditedShipNames.clear();
     const ships = readShips();
+    for (const s of ships) auditedShipNames.add(s.name);
     const findings: Finding[] = [];
 
     for (const ship of ships) {
@@ -451,6 +484,15 @@ function run() {
     for (const ruleId of sortedRules) {
         console.log(`  ${ruleId.padEnd(28)} ${byRule.get(ruleId)!.length}`);
     }
+
+    // Hygiene: allowlist rows that no longer suppress anything (stale — safe to delete). Keeps
+    // the allowlist honest after the reference CSV is refreshed and a source issue is fixed.
+    const unused = unusedAllowlistPairs();
+    if (unused.length) {
+        console.log(`\n⚠ ${unused.length} STALE allowlist entr${unused.length === 1 ? 'y' : 'ies'} (no longer produce a finding — remove from auditSkills.allowlist.ts):`);
+        for (const u of unused) console.log(`  - ${u.ship} · ${u.rule}`);
+    }
+
     console.log(`\nFull report: docs/skill-audit.md`);
 }
 
