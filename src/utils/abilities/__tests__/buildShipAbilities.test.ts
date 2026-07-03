@@ -4642,3 +4642,44 @@ describe('buildShipAbilities — PR5 Finding 2 duration misattachment across mul
         expect(everliving.config).toMatchObject({ duration: 6 });
     });
 });
+
+// ── PR5 Finding 3: Nyxen typed cleanse filter ─────────────────────────────────────────────
+describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () => {
+    it('Nyxen active: "Cleanses 2 bombs" carries a debuffType: bomb filter', () => {
+        // docs/ship-skills.csv Nyxen active_skill_text (exact clause, routed through the real
+        // active slot).
+        const s = ship({
+            activeSkillText:
+                'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const cleanse = active.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect(cleanse.config).toMatchObject({ type: 'cleanse', count: 2, debuffType: 'bomb' });
+    });
+
+    it('Nyxen charged: "Cleanses 2 damage over time debuffs" carries a debuffType: dot filter', () => {
+        // docs/ship-skills.csv Nyxen charge_skill_text (exact clause, routed through the real
+        // charged slot).
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 1,
+            chargeSkillText:
+                'This Unit <unit-aid>Cleanses 2</unit-aid> damage over time debuffs and Grants a <unit-damage>Shield equal to 19%</unit-damage> of its Max HP. It also Grants <unit-skill>Inc. Damage Down II</unit-skill> for 1 turn.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const cleanse = charged.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect(cleanse.config).toMatchObject({ type: 'cleanse', count: 2, debuffType: 'dot' });
+    });
+
+    it('negative: an untyped "cleanses 1 debuff from all allies" carries NO debuffType filter', () => {
+        const s = ship({
+            activeSkillText: 'This Unit <unit-aid>cleanses 1</unit-aid> debuff from all allies.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const cleanse = active.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect((cleanse.config as { debuffType?: string }).debuffType).toBeUndefined();
+    });
+});

@@ -2966,17 +2966,24 @@ export function detectPurgeStripsShield(text: string | null | undefined): boolea
 /**
  * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
  * clause: "from itself" → self, "from all allies" → all-allies, "from the/that ally" → ally;
- * default self. Does not match "purges". Reference data: docs/ship-skills.csv.
+ * default self. Epic PR5 finding 3: a TYPED cleanse ("cleanses 2 bombs" / "cleanses 2 damage
+ * over time debuffs", Nyxen) also carries `debuffType` so the removal is restricted to that
+ * category rather than any debuff; untyped cleanses omit it. Does not match "purges". Reference
+ * data: docs/ship-skills.csv.
  */
-export function parseCleanse(
-    text: string | null | undefined
-): { count: number | 'all'; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
+export function parseCleanse(text: string | null | undefined): {
+    count: number | 'all';
+    target: 'self' | 'ally' | 'all-allies';
+    explicitTarget: boolean;
+    debuffType?: 'bomb' | 'dot';
+}[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const results: {
         count: number | 'all';
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
+        debuffType?: 'bomb' | 'dot';
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -2994,7 +3001,15 @@ export function parseCleanse(
         else if (/itself|from\s+this\s+unit/.test(sentence)) target = 'self';
         else if (/the\s+ally|that\s+ally|an\s+ally/.test(sentence)) target = 'ally';
         else explicitTarget = false;
-        results.push({ count, target, explicitTarget });
+        // Typed filter: read the noun immediately AFTER "cleanses N" (the phrase the count
+        // governs) so an unrelated later mention in the sentence can't set the type. "bomb(s)"
+        // → bomb; "damage over time" / "DoT" → dot. Absent → untyped.
+        const afterCount = plain.slice(m.index + m[0].length);
+        const filterSpan = afterCount.slice(0, afterCount.search(/[.;,]|<br|$/i));
+        let debuffType: 'bomb' | 'dot' | undefined;
+        if (/^\s*bombs?\b/i.test(filterSpan)) debuffType = 'bomb';
+        else if (/^\s*damage\s+over\s+time\b|^\s*dots?\b/i.test(filterSpan)) debuffType = 'dot';
+        results.push({ count, target, explicitTarget, ...(debuffType ? { debuffType } : {}) });
     }
     return results;
 }

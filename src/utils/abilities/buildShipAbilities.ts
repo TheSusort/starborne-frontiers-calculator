@@ -1350,7 +1350,11 @@ function abilitiesFromText(
                 target: cleanseTarget,
                 trigger: reactiveTrigger ?? 'on-cast',
                 conditions: [],
-                config: { type: 'cleanse', count: c.count },
+                config: {
+                    type: 'cleanse',
+                    count: c.count,
+                    ...(c.debuffType ? { debuffType: c.debuffType } : {}),
+                },
                 autoFilled: true,
             },
             pos: cleansePos >= 0 ? cleansePos : MAX_POS,

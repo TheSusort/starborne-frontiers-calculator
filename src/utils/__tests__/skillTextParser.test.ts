@@ -3626,6 +3626,24 @@ describe('parseCleanse', () => {
             { count: 'all', target: 'all-allies', explicitTarget: true },
         ]);
     });
+    // Epic PR5 finding 3: typed cleanse filter (Nyxen).
+    it('parses a bomb-typed cleanse (Nyxen active)', () => {
+        expect(
+            parseCleanse(
+                'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a Shield equal to 15% of its Max HP.'
+            )
+        ).toEqual([{ count: 2, target: 'self', explicitTarget: false, debuffType: 'bomb' }]);
+    });
+    it('parses a dot-typed cleanse (Nyxen charged)', () => {
+        expect(
+            parseCleanse(
+                'This Unit <unit-aid>Cleanses 2</unit-aid> damage over time debuffs and Grants a Shield equal to 19% of its Max HP.'
+            )
+        ).toEqual([{ count: 2, target: 'self', explicitTarget: false, debuffType: 'dot' }]);
+    });
+    it('untyped cleanse omits debuffType', () => {
+        expect(parseCleanse('cleanses all debuffs from all allies')[0].debuffType).toBeUndefined();
+    });
 });
 
 describe('parsePurge', () => {
