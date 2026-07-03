@@ -42,6 +42,11 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Reactive: when this Unit removes a debuff.',
     },
     {
+        ship: 'Panon',
+        rules: ['instead-replacement'],
+        reason: 'Active + charged carry an "If this Unit is Provoked or Taunted, it instead gains <buff> and deals <higher>% damage" full-branch replacement (the only such shape in the corpus). Deferred (PR6b, user decision): a faithful model needs complementary/negated self-conditions AND sim damage-branch selection (the sim reads only the first damage ability) — bespoke infra for one ship. The base branch is already correct in single-ship DPS (self never Provoked/Taunted); only the combat-sim Provoked/Taunted state is imperfect. Revisit as a dedicated design if a second "instead"-branch ship appears.',
+    },
+    {
         ship: 'Rikra',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Charged Defense Up II is granted UNCONDITIONALLY; the "against Taunted or Provoked enemies" trigger words in the same sentence gate the co-located +80% damage BONUS (parser-modeled as an enemy-effect scaling condition on the damage ability, PR6a), not the buff. clauseFor scopes the whole sentence, so the audit sees "against" beside the ungated buff — a scoping false flag, not a missing gate.',

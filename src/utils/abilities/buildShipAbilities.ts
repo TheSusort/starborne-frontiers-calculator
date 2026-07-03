@@ -1362,6 +1362,15 @@ function abilitiesFromText(
                         shieldCoCastAllAlliesGrant
                     )
                   : h.target;
+        // PR6b: per-count repair scaling (Oleander/Meatshield). The count Condition is appended
+        // after any damage-reaction conditions and referenced by an Ability-level scaling rule
+        // (mirrors the damage-scaling convention). Model fidelity — no DPS/sim consumer today.
+        const healConditions: Condition[] = [...damageReactionConditions];
+        let healScaling: { conditionIndex: number; perUnit: number } | undefined;
+        if (h.scaling) {
+            healScaling = { conditionIndex: healConditions.length, perUnit: h.scaling.perUnit };
+            healConditions.push(h.scaling.condition);
+        }
         out.push({
             ability: {
                 id: nextId(),
@@ -1373,7 +1382,8 @@ function abilitiesFromText(
                 ...(h.damageReaction?.critFilter
                     ? { triggerCritFilter: h.damageReaction.critFilter }
                     : {}),
-                conditions: damageReactionConditions,
+                conditions: healConditions,
+                ...(healScaling ? { scaling: healScaling } : {}),
                 config: {
                     type: h.kind,
                     pct: h.pct,

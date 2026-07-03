@@ -227,6 +227,20 @@ const RULES: Rule[] = [
         handled: () => false,
     },
     {
+        id: 'instead-replacement',
+        severity: 'medium',
+        // "If <self condition>, this Unit INSTEAD gains <buff> and deals <higher>% damage" — a
+        // mutually-exclusive full-branch replacement where BOTH the buff granted AND the damage
+        // change (Panon active/charged, the sole corpus case). Deferred (PR6b, user decision):
+        // modelling it faithfully needs complementary/negated self-conditions AND sim damage-branch
+        // selection (damageInputsFromSkill reads only the first damage ability) — bespoke infra for
+        // one ship. Scoped to "instead gains/deals" so Isha's handled "instead repairs" crit-filter
+        // swap does NOT match. A NEW ship matching this should get the branch model built, then be
+        // removed from the allowlist.
+        keyword: (t) => /\binstead\s+(?:gains?|deals?)\b/i.test(t),
+        handled: () => false,
+    },
+    {
         id: 'accumulate-detonate',
         severity: 'high',
         keyword: (t) => /echoing burst/i.test(t),

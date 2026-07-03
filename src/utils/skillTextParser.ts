@@ -2583,6 +2583,12 @@ export interface ParsedHealAbility {
          *  Add the channel if such a ship ever appears. */
         allySubject?: boolean;
     };
+    /** PR6b: per-count repair scaling — the repair grows by `perUnit`% per matched `condition`
+     *  count (Oleander "additional 8.5% repair for each debuffed enemy" → base kept + perUnit
+     *  bonus; Meatshield "repairs 1.5% … for each debuff on itself" → pure per-count, `pct` is
+     *  zeroed and the whole repair is the perUnit scaling). Model fidelity only — no DPS/sim
+     *  consumer today; a future healing calculator reads it via the Ability-level scaling rule. */
+    scaling?: { perUnit: number; condition: Condition };
 }
 
 // Clause-scoping helper mirroring buildShipAbilities.sentenceContaining: the sentence
@@ -2765,6 +2771,45 @@ function resolveHealTarget(sentence: string): {
  * damage-reactive or revive clause elsewhere in the same skill doesn't suppress a real heal.
  * Reference data: docs/ship-skills.csv.
  */
+// Maps a heal "for each <phrase>" count to a model Condition (derivable counts only).
+function mapHealCountPhrase(phrase: string): Condition | null {
+    const p = phrase.toLowerCase();
+    // Order: "debuff" contains "buff"; enemy phrasings before self.
+    if (/debuffed\s+enem|debuff on (?:the\s+)?enem/.test(p))
+        return { subject: 'enemy-debuff', derivable: true };
+    if (/debuff on (?:this unit|itself|it)\b/.test(p))
+        return { subject: 'self-debuff', derivable: true };
+    return null;
+}
+
+/**
+ * Per-count repair scaling within a heal sentence. Two shapes:
+ *  - "additional X% repair for each <count>" (Oleander) → a bonus ON TOP of the base repair
+ *    (`zeroBase: false`).
+ *  - base "repairs X% … for each <count>" with no "additional" (Meatshield) → the base repair
+ *    is ITSELF per-count, so the caller zeroes `pct` and the whole repair is the scaling
+ *    (`zeroBase: true`, perUnit = the base pct).
+ * Returns null when no recognized per-count repair phrase is present.
+ */
+function parseHealCountScaling(
+    sentence: string,
+    basePct: number
+): { perUnit: number; condition: Condition; zeroBase: boolean } | null {
+    const add = /\badditional\s+(\d+(?:\.\d+)?)\s*%\s*repair[^.]*?\bfor each\s+([^.,;<]+)/i.exec(
+        sentence
+    );
+    if (add) {
+        const condition = mapHealCountPhrase(add[2]);
+        if (condition) return { perUnit: parseFloat(add[1]), condition, zeroBase: false };
+    }
+    const each = /\bfor each\s+([^.,;<]+)/i.exec(sentence);
+    if (each) {
+        const condition = mapHealCountPhrase(each[1]);
+        if (condition) return { perUnit: basePct, condition, zeroBase: true };
+    }
+    return null;
+}
+
 export function parseHealAbilities(text: string | null | undefined): ParsedHealAbility[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -2877,15 +2922,30 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 /when\s+taking\s+hp\s+damage\s+and\s+still\s+having\s+shield/i.test(sentence)
                     ? true
                     : undefined;
+            // PR6b: per-count repair scaling (Oleander/Meatshield). Only plain on-cast repairs
+            // (no leech/damage-reaction) carry it. A "pure per-count" base (Meatshield) zeroes
+            // pct so the whole repair is the scaling bonus (base + perUnit×count convention).
+            const countScaling =
+                kind === 'heal' && !leechBasis && !damageReaction
+                    ? parseHealCountScaling(sentence, pct)
+                    : null;
             results.push({
                 kind,
-                pct,
+                pct: countScaling?.zeroBase ? 0 : pct,
                 basis,
                 target,
                 explicitTarget,
                 ...(leechScope ? { leechScope } : {}),
                 ...(requiresHpDamage ? { requiresHpDamage } : {}),
                 ...(damageReaction ? { damageReaction } : {}),
+                ...(countScaling
+                    ? {
+                          scaling: {
+                              perUnit: countScaling.perUnit,
+                              condition: countScaling.condition,
+                          },
+                      }
+                    : {}),
             });
             // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
             // second SELF entry mirroring the first (5% each, same basis/scope).
