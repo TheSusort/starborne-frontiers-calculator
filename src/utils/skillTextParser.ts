@@ -1508,6 +1508,12 @@ export function detectRoundStartContinuationTrigger(
 ): AbilityTrigger | undefined {
     if (!text || anchorPos < 0) return undefined;
     const masked = maskAbbrev(text);
+    // BOUNDARY NOTE (#210 review): each <br> is its own boundary, so a DOUBLE break
+    // ("<br /><br />", the corpus's paragraph separator) produces an intervening EMPTY
+    // segment between the two tags. The look-one-segment-back walk below then lands on
+    // that empty segment (no round-start phrase) and returns undefined — i.e. a
+    // continuation NEVER crosses a paragraph separator. That fail-safe is intentional:
+    // the single-boundary crossing (Isha/Nayra p2 "also gains") is the only supported shape.
     const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
     const segments: { start: number; end: number }[] = [];
     let start = 0;

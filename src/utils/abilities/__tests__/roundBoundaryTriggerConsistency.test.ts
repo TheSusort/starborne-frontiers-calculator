@@ -268,6 +268,46 @@ describe('FrontLine: start-of-combat shield, phrase trailing the sentence (docs/
     });
 });
 
+describe('IonScorp: start-of-combat shield AND buff, undisclosed corpus twin of Crucialis (#210 review)', () => {
+    // Exact docs/ship-skills.csv passive1 — the SAME clause shape as Crucialis, caught by the
+    // reviewer's corpus sweep rather than the epic's named-ship list. Locks the generic
+    // detectors so a future parser tweak that silently un-fires on IonScorp is caught here.
+    const IONSCORP_TEXT =
+        'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> ' +
+        'of its Max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.';
+
+    it('the 20%-max-HP shield rides pre-combat, not on-cast', () => {
+        const abilities = passiveAbilities({ firstPassiveSkillText: IONSCORP_TEXT });
+        const shield = abilities.find((a) => a.type === 'shield')!;
+        expect(shield).toBeDefined();
+        expect(shield.trigger).toBe('pre-combat');
+        if (shield.config.type === 'shield') {
+            expect(shield.config.basis).toBe('hp');
+        }
+    });
+
+    it('the Atlas Coordination I buff rides pre-combat, not on-cast', () => {
+        const abilities = passiveAbilities({ firstPassiveSkillText: IONSCORP_TEXT });
+        const buff = findBuff(abilities, 'Atlas Coordination I')!;
+        expect(buff).toBeDefined();
+        expect(buff.trigger).toBe('pre-combat');
+    });
+});
+
+describe('Vindicator: start-of-combat durationless buff (#210 review corpus sweep)', () => {
+    it('Magnetized Shielding rides pre-combat, not on-cast', () => {
+        // Exact docs/ship-skills.csv passive1 — no "for N turns" duration on the grant.
+        const abilities = passiveAbilities({
+            firstPassiveSkillText:
+                'This Unit has 20% Shield Penetration. At the start of combat, this Unit gains ' +
+                '<unit-skill>Magnetized Shielding</unit-skill>.',
+        });
+        const buff = findBuff(abilities, 'Magnetized Shielding')!;
+        expect(buff).toBeDefined();
+        expect(buff.trigger).toBe('pre-combat');
+    });
+});
+
 describe('Tycho: start-of-combat Cheat Death + Everliving Regeneration I (docs/ship-skills.csv passive1)', () => {
     it('both buffs ride pre-combat, not on-cast', () => {
         const abilities = passiveAbilities({

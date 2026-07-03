@@ -1226,7 +1226,14 @@ function abilitiesFromText(
               // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
               // once via seedPreCombatShields (round 1, before any turn); the cast path
               // (runPlayerTurn) skips pre-combat abilities entirely.
-              (h.kind === 'shield' ? detectPreCombatShieldTrigger(text, healPos) : undefined) ??
+              // basis GUARD (#210 review): the engine's seedPreCombatShields only seeds
+              // hp-basis pools — tagging a non-hp pre-combat shield would strip it from the
+              // cast path (notPreCombat filter) AND skip it at the seed = silently dropped
+              // entirely. Gate here so a future non-hp phrasing keeps legacy on-cast behavior
+              // instead. Corpus today (Crucialis/FrontLine/IonScorp) is 100% hp-basis.
+              (h.kind === 'shield' && h.basis === 'hp'
+                  ? detectPreCombatShieldTrigger(text, healPos)
+                  : undefined) ??
               detectCritRepairTrigger(text, healPos) ??
               // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
               // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
