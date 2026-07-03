@@ -57,7 +57,7 @@ function makeShieldIntent(opts?: { oncePerRound?: boolean }): Intent {
 function makeCtx(opts?: {
     round?: number;
     oncePerRoundConsumed?: Set<string>;
-    creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    applyReactiveDamage?: IntentExecContext['applyReactiveDamage'];
     healing?: IntentExecContext['healing'];
 }): IntentExecContext {
     const bus = createEventBus();
@@ -108,7 +108,7 @@ function makeCtx(opts?: {
         enemyHp: 100000,
         cumulativeDamage: 0,
         recordResisted: () => {},
-        creditReactiveDamage: opts?.creditReactiveDamage,
+        applyReactiveDamage: opts?.applyReactiveDamage,
         oncePerRoundConsumed: opts?.oncePerRoundConsumed,
         healing: opts?.healing,
     } as IntentExecContext;
@@ -124,7 +124,7 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
         const ctx1 = makeCtx({
             round: 1,
             oncePerRoundConsumed: consumed,
-            creditReactiveDamage: creditSpy,
+            applyReactiveDamage: creditSpy,
         });
         executeIntent(intent, ctx1);
         executeIntent(intent, ctx1);
@@ -135,7 +135,7 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
         const ctx2 = makeCtx({
             round: 2,
             oncePerRoundConsumed: consumed,
-            creditReactiveDamage: creditSpy,
+            applyReactiveDamage: creditSpy,
         });
         executeIntent(intent, ctx2);
         expect(creditSpy).toHaveBeenCalledTimes(2);
@@ -145,7 +145,7 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
         const creditSpy = vi.fn();
         const consumed = new Set<string>();
         const intent = makeDamageIntent(/* no oncePerRound */);
-        const ctx = makeCtx({ oncePerRoundConsumed: consumed, creditReactiveDamage: creditSpy });
+        const ctx = makeCtx({ oncePerRoundConsumed: consumed, applyReactiveDamage: creditSpy });
 
         executeIntent(intent, ctx);
         executeIntent(intent, ctx);

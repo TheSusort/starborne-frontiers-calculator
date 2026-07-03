@@ -1,6 +1,6 @@
 /**
- * Epic PR4: Judge's passive "At the start of the round, this Unit deals 60% damage to all
- * enemies with less than 50% HP" is parsed `type:'damage', trigger:'start-of-round'` (was
+ * Epic PR4 / PR4b: Judge's passive "At the start of the round, this Unit deals 60% damage to
+ * all enemies with less than 50% HP" is parsed `type:'damage', trigger:'start-of-round'` (was
  * on-cast). This proves the fix through the REAL DPS-mode entry point (`simulateDPS`, which is
  * `runCombat` under the hood — DPS mode is not a separate simplified path):
  *
@@ -8,25 +8,27 @@
  *      the `round-started` listener, triggers.ts) instead of the old cast-time
  *      "passive payload hit" fold (playerTurn.ts) — it fires EVERY ROUND the hp-threshold
  *      gate passes, not just the round it happens to be evaluated inline with a cast.
- *   2. The reactive `damage` executor branch (triggers.ts `cfg.type === 'damage'`) credits
- *      `effectiveAttack × (multiplier/100) × hits`, with NO enemy-defense mitigation and NO
- *      crit roll (`ctx.creditReactiveDamage`) — a DIFFERENT formula from the old on-cast fold,
- *      which ran the ability through the normal hit pipeline (defense-mitigated, crit-eligible).
- *      This is a real, documented behavior/number change for Judge (and any other ship whose
- *      passive damage crosses this same re-tag), not a regression — reported, not silently
- *      papered over with a golden update.
+ *   2. PR4b: the reactive `damage` executor branch (triggers.ts `cfg.type === 'damage'`) now
+ *      runs the ability through the SAME mitigated/crit-eligible pipeline as an on-cast hit
+ *      (`ctx.applyReactiveDamage`, mirroring the `counter` branch's `applyCounterAttack`) —
+ *      defense-mitigated, and crit-eligible unless the ability carries `noCrit` (Judge does
+ *      not). PRE-PR4b this branch credited `effectiveAttack × (multiplier/100) × hits` with NO
+ *      mitigation and NO crit roll (`ctx.creditReactiveDamage`) — a real, documented
+ *      behavior/number change for Judge (and Chakara/Incinerator/Rhodium, which cross this
+ *      same re-tag), not a regression.
  *
- * RED STATUS: only the THIRD test below (the defense-mitigation comparison) actually fails
- * against the pre-fix baseline. The first two (round-1 gate, "fires every round") pass under
- * BOTH the old on-cast fold and the new reactive path at defense=0/crit=0 — at those settings the
- * old fold's per-cast hit and the new reactive credit compute byte-identical numbers (same
- * multiplier × attack, no mitigation to differ, no crit to roll), so they don't distinguish old
- * from new behavior on their own. They are kept as characterization tests of the NEW, correct
- * per-round firing pattern; the defense-mitigation test is the one that actually proves the fix.
+ * RED STATUS (pre-PR4b baseline): only the THIRD test below (the defense-mitigation comparison)
+ * actually failed. The first two (round-1 gate, "fires every round") pass under BOTH the old
+ * flat-credit formula and the new mitigated one at defense=0/crit=0 — at those settings they
+ * compute byte-identical numbers (no mitigation to differ, no crit to roll), so they don't
+ * distinguish old from new behavior on their own. They are kept as characterization tests of the
+ * correct per-round firing pattern; the defense-mitigation test is the one that actually proves
+ * the fix (now flipped to assert mitigation IS applied, matching PR4b's fix).
  */
 import { describe, it, expect } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
+import { calculateDamageReduction } from '../../autogear/priorityScore';
 import type { Ship } from '../../../types/ship';
 
 const JUDGE_TEXT =
@@ -94,7 +96,7 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
         expect(result.rounds[2].directDamage).toBe(ATTACK + REACTIVE);
     });
 
-    it('the reactive credit is NOT defense-mitigated (unlike the active hit) — a real numeric behavior change from the old on-cast fold', () => {
+    it("the reactive credit IS now defense-mitigated (epic PR4b) — matches the active hit's mitigation ratio", () => {
         const DEFENSE = 5_000;
 
         // Isolate the DEFENSE-MITIGATED active-hit magnitude on its own: a huge enemyHp so the
@@ -134,12 +136,34 @@ describe('Judge start-of-round AoE damage — reactive engine consumption (DPS m
         // gate hasn't opened yet — same as the earlier "does NOT fire round 1" case).
         expect(withReactive.rounds[0].directDamage).toBeCloseTo(activeHitOnly, 6);
 
-        // Round 2: the active hit is mitigated the SAME way (still `activeHitOnly`), but the
-        // reactive credit riding alongside it is EXACTLY 60% of BASE (unmitigated) attack — not
-        // reduced by the 5,000 defense that just cut the active hit down. If the reactive were
-        // still defense-mitigated (the old on-cast fold's behavior), this round's total would be
-        // LESS than `activeHitOnly + ATTACK * 0.6`.
-        const REACTIVE = ATTACK * 0.6;
-        expect(withReactive.rounds[1].directDamage).toBeCloseTo(activeHitOnly + REACTIVE, 6);
+        // Round 2 (epic PR4b): the reactive credit riding alongside the active hit is now ALSO
+        // defense-mitigated — cut down by (1 - calculateDamageReduction(DEFENSE)/100), the SAME
+        // raw defense-vs-attack curve `victimHitDamage` (and `applyCounterAttack`) use for a
+        // normal hit, with crit:0 so there is no crit multiplier to fold in.
+        //
+        // NOTE this is NOT literally `activeHitOnly / ATTACK`: Judge's own kit-text "20% defense
+        // penetration" clause (JUDGE_TEXT) lowers the ACTIVE hit's effective enemy defense
+        // (4,000 instead of 5,000), which is why `activeHitOnly` mitigates more favorably than a
+        // bare `calculateDamageReduction(DEFENSE)` would predict. The reactive `applyReactiveDamage`
+        // walk reads `effectiveStatsOf(owner).defensePenetration`, which is BASE-ACTOR-STAT ONLY
+        // (ability/kit-text-derived pen bonuses fold separately and are NOT threaded through this
+        // reactive path) — the SAME documented approximation `applyCounterAttack` already accepts
+        // for counter-attacks. So the reactive credit here mitigates against the FULL 5,000
+        // defense, not Judge's pen-reduced 4,000.
+        const rawMitigationRatio = 1 - calculateDamageReduction(DEFENSE) / 100;
+        const REACTIVE_MITIGATED = ATTACK * 0.6 * rawMitigationRatio;
+        // Precision 0 (not 6, unlike the round-1 comparison above): the round's directDamage is
+        // `Math.round(active + reactive)` computed from the FULL-PRECISION sum inside the engine,
+        // while this expected value adds the already-rounded `activeHitOnly` to a freshly
+        // computed `REACTIVE_MITIGATED` — a sub-1 rounding-order discrepancy, not a formula bug.
+        expect(withReactive.rounds[1].directDamage).toBeCloseTo(
+            activeHitOnly + REACTIVE_MITIGATED,
+            0
+        );
+        // And, since Judge's defense-pen is real for the active hit but NOT folded into the
+        // reactive walk, the reactive's own mitigation ratio is strictly worse than the active
+        // hit's — proving the two hits are no longer using the identical byte-for-byte formula
+        // (a real, reported approximation, not a silent regression).
+        expect(rawMitigationRatio).toBeLessThan(activeHitOnly / ATTACK);
     });
 });

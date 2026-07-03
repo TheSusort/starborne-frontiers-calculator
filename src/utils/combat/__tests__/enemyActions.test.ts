@@ -16,7 +16,6 @@ import {
     PlayerTurnArgs,
     HealingRuntimeCtx,
 } from '../playerTurn';
-import type { PlayerRoundCtx } from '../playerTurn';
 import { createActor } from '../state';
 import type { CombatActor } from '../state';
 import { makeRateGate } from '../../calculators/rateAccumulator';
@@ -127,16 +126,16 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 4 Task 4: reactive direct-damage executor branch (Grif).
-//
-// A `damage` intent folds the owner's last-turn ctx bomb-style
-// (effectiveAttack × multiplier × affinityMult — NO defense, NO crit) and
-// credits it via creditReactiveDamage. Before the owner's first turn (no
-// lastTurnCtx entry) it skips, exactly like a bomb follow-up.
+// PR4b: reactive direct-damage executor branch (Grif/FrontLine/Judge/Chakara/
+// Incinerator/Rhodium) — WIRING only. The branch now delegates the actual
+// mitigation/crit math to ctx.applyReactiveDamage (mirrors the `counter`
+// branch's applyCounterAttack delegate); this suite pins the ARGUMENTS the
+// `damage` branch passes to that delegate, not the mitigation math itself
+// (that is proven at the engine/DPS-integration level — see
+// judgeStartOfRoundDamage.integration.test.ts and reactiveDamageMitigation
+// integration coverage).
 // ----------------------------------------------------------------------
-describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
-    // attack is the base runtime stat the damage branch falls back to before the owner's
-    // first turn (no lastTurnCtx entry) — known value 800 so the no-ctx fold is deterministic.
+describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring', () => {
     const makeRuntime = (id: string): PlayerActorRuntime =>
         ({
             actor: { id } as CombatActor,
@@ -145,19 +144,17 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             debuffLandingGate: (_rate: number) => true,
         }) as unknown as PlayerActorRuntime;
 
-    // defence/maxHp/heal fields are sentinels not read by the damage branch.
-    const makePlayerRoundCtx = (effectiveAttack: number, affinityMult: number): PlayerRoundCtx => ({
-        effectiveAttack,
-        dotMult: 1,
-        affinityMult,
-        effectiveDefence: 0,
-        effectiveMaxHp: 0,
-        outgoingHealPct: 0,
-        incomingHealPct: 0,
-    });
+    type Call = {
+        ownerId: string;
+        victimId: string;
+        abilityId: string;
+        multiplier: number;
+        hits: number;
+        noCrit: boolean;
+    };
 
     const makeExecCtx = (
-        overrides: Partial<IntentExecContext> & Pick<IntentExecContext, 'creditReactiveDamage'>
+        overrides: Partial<IntentExecContext> & Pick<IntentExecContext, 'applyReactiveDamage'>
     ): IntentExecContext => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         se.beginRound(1);
@@ -170,10 +167,7 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             corrosionEntries: [],
             infernoEntries: [],
             pendingBombs: [],
-            runtimes: new Map([
-                ['grif', makeRuntime('grif')],
-                ['grif-noctx', makeRuntime('grif-noctx')],
-            ]),
+            runtimes: new Map([['grif', makeRuntime('grif')]]),
             grantAllyCharges: () => {},
             removeEnemyCharges: () => {},
             removeChargesFrom: () => {},
@@ -187,7 +181,11 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
         };
     };
 
-    const makeDamageIntent = (ownerId: string): Intent => ({
+    const makeDamageIntent = (
+        ownerId: string,
+        config: { multiplier: number; hits?: number; noCrit?: boolean },
+        eventCtx?: Intent['eventCtx']
+    ): Intent => ({
         ownerId,
         sourceSlot: 'passive',
         ability: {
@@ -196,40 +194,66 @@ describe('Phase 4c PR 4 Task 4: damage reactive executor branch', () => {
             target: 'enemy',
             trigger: 'on-enemy-cleansed',
             conditions: [],
-            config: { type: 'damage', multiplier: 75, noCrit: true },
+            config: { type: 'damage', ...config },
         },
+        eventCtx,
     });
 
-    it('credits owner pool with bomb-style fold; falls back to runtime stats without ctx', () => {
-        const credited: { ownerId: string; amount: number }[] = [];
+    it('routes to ctx.enemy.id when no eventCtx counterTargetId is present (Judge/Chakara/Incinerator/Rhodium shape)', () => {
+        const calls: Call[] = [];
         const ctx = makeExecCtx({
-            creditReactiveDamage: (ownerId, amount) => credited.push({ ownerId, amount }),
-            lastTurnCtxByActor: new Map([['grif', makePlayerRoundCtx(1000, 1.5)]]),
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
         });
 
-        executeIntent(makeDamageIntent('grif'), ctx);
-        // multiplier is a raw percentage (75 → 0.75), so the fold divides by 100:
-        // effectiveAttack 1000 × (75/100) × affinityMult 1.5 = 1125.
-        expect(credited).toEqual([{ ownerId: 'grif', amount: 1000 * (75 / 100) * 1.5 }]);
+        executeIntent(makeDamageIntent('grif', { multiplier: 75, noCrit: true }), ctx);
 
-        // CodeRabbit #99 FIX #4: before the owner's first turn (no lastTurnCtx entry) the proc
-        // no longer drops — it falls back to the owner's base runtime stats (attack 800) with
-        // affinity defaulting to 1 (no turn snapshot → no matchup known), mirroring the heal path.
-        credited.length = 0;
-        executeIntent(makeDamageIntent('grif-noctx'), ctx);
-        expect(credited).toEqual([{ ownerId: 'grif-noctx', amount: 800 * (75 / 100) * 1 }]);
+        expect(calls).toEqual([
+            {
+                ownerId: 'grif',
+                victimId: 'enemy-default',
+                abilityId: 'grif-dmg',
+                multiplier: 75,
+                hits: 1,
+                noCrit: true,
+            },
+        ]);
     });
 
-    it('skips creditReactiveDamage when effectiveAttack is 0 (zero-damage guard)', () => {
-        // Owner ctx present but effectiveAttack is 0 → amount is 0 → guard swallows it,
-        // creditReactiveDamage must NOT be called.
-        const credited: { ownerId: string; amount: number }[] = [];
+    it('routes to eventCtx.counterTargetId when present (FrontLine on-enemy-charged-cast shape)', () => {
+        const calls: Call[] = [];
         const ctx = makeExecCtx({
-            creditReactiveDamage: (ownerId, amount) => credited.push({ ownerId, amount }),
-            lastTurnCtxByActor: new Map([['grif', makePlayerRoundCtx(0, 1.5)]]),
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
         });
-        executeIntent(makeDamageIntent('grif'), ctx);
-        expect(credited).toHaveLength(0);
+
+        executeIntent(
+            makeDamageIntent('grif', { multiplier: 80, hits: 1 }, { counterTargetId: 'caster-x' }),
+            ctx
+        );
+
+        expect(calls).toEqual([
+            {
+                ownerId: 'grif',
+                victimId: 'caster-x',
+                abilityId: 'grif-dmg',
+                multiplier: 80,
+                hits: 1,
+                noCrit: false,
+            },
+        ]);
+    });
+
+    it('defaults noCrit to false and hits to 1 when the config omits them', () => {
+        const calls: Call[] = [];
+        const ctx = makeExecCtx({
+            applyReactiveDamage: (ownerId, victimId, abilityId, multiplier, hits, noCrit) =>
+                calls.push({ ownerId, victimId, abilityId, multiplier, hits, noCrit }),
+        });
+
+        executeIntent(makeDamageIntent('grif', { multiplier: 60 }), ctx);
+
+        expect(calls[0]).toMatchObject({ multiplier: 60, hits: 1, noCrit: false });
     });
 });
 

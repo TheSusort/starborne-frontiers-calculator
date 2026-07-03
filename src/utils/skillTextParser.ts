@@ -2111,12 +2111,17 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
             // Shield basis derivation: the text says "30% of the damage dealt", referring to
             // FrontLine's OWN 80% reactive damage. The reactive-shield executor's
             // basis:'damage-dealt' reads eventCtx.triggerDamage, which on THIS trigger is the
-            // ENEMY's charged-cast damage (wrong). The reactive-damage executor approximates
-            // FrontLine's dealt damage as effectiveAttack * damagePct% (no enemy-defence
-            // mitigation, no crit). 30% of that = effectiveAttack * 0.24, so we model the shield
-            // as basis:'attack' with pct = shieldPct * damagePct / 100 = 30*80/100 = 24 — keeping
-            // shield and damage on the same un-mitigated basis. Kept exact (no round) so a
-            // fractional source percentage isn't silently truncated.
+            // ENEMY's charged-cast damage (wrong). So the shield is modeled as basis:'attack'
+            // with pct = shieldPct * damagePct / 100 = 30*80/100 = 24 — an UN-mitigated
+            // approximation of "the damage dealt". Kept exact (no round) so a fractional
+            // source percentage isn't silently truncated.
+            //
+            // KNOWN DIVERGENCE (#211): since epic PR4b the reactive DAMAGE half is
+            // defense-mitigated and crit-eligible, so this flat-attack shield no longer shares
+            // the damage's basis — vs a high-defense enemy the shield over-grants relative to
+            // the true dealt amount (and under-grants on a crit). Tying the shield to the
+            // ACTUAL applyReactiveDamage result needs new eventCtx plumbing (thread the dealt
+            // amount into the reactive-shield executor for this trigger) — deferred.
             out.push({
                 id: '',
                 type: 'shield',
