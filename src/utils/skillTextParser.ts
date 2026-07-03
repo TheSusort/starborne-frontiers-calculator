@@ -2744,7 +2744,11 @@ const PURGE_STRIPS_SHIELD_RE =
  */
 export function detectPurgeStripsShield(text: string | null | undefined): boolean {
     if (!text) return false;
-    const m = PURGE_STRIPS_SHIELD_RE.exec(text);
+    // Normalize before matching (strip unit tags + <br/> → '. ') so the RE's [^.;]* sentence
+    // scoping can't span an un-punctuated <br/> into an unrelated clause — matches the
+    // convention used by parsePurge/detectPassiveVoicePurge above.
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = PURGE_STRIPS_SHIELD_RE.exec(plain);
     return m !== null && m[1] === '100';
 }
 

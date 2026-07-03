@@ -1975,7 +1975,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // "side-symmetric" note above), so an enemy-side ship carrying this
                         // config strips a player shield the same way. Mirrors the victim-lookup
                         // fallback used by the per-victim debuff-landing loop above (opposingVictimById
-                        // in positional mode; the anchor `enemy` actor otherwise).
+                        // in positional mode; the anchor `enemy` actor otherwise). This makes the
+                        // strip POSITIONAL-SCOPED by the same design as every other per-victim effect:
+                        // in a non-positional cast opposingVictimById is absent and per-victim
+                        // resolution intentionally no-ops (the sim's per-victim fidelity is a
+                        // positional feature) — the real battle sim always positions actors, so a
+                        // resolved enemy-most-buffs victim is always in opposingVictimById.
                         if (ab.config.stripsShield) {
                             const victim =
                                 opposingVictimById?.get(vid) ??
