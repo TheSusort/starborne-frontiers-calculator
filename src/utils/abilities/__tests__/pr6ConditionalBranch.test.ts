@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { gateFiringAbilities, damageInputsFromSkill } from '../applyAbilities';
-import { scaledBonus, conditionsMet } from '../evaluateConditions';
+import { scaledBonus } from '../evaluateConditions';
 import { Ability, Skill } from '../../../types/abilities';
 import { Ship } from '../../../types/ship';
 import { makeConditionContext } from './conditionContextFixture';
@@ -233,8 +233,13 @@ describe('PR6a conditional-branch phrasing', () => {
                     })
                 )
             ).toBe(60);
-            // The gate (post scaling-source strip) never blocks the base — always met.
-            expect(conditionsMet([], makeConditionContext())).toBe(true);
+            // Strip is symmetric: the base still fires (140) even when the enemy DOES carry the
+            // OR condition — the group only scales the bonus, it never gates/consumes the base.
+            const { gatedSkill } = gateFiringAbilities(
+                rikraActive(),
+                makeConditionContext({ enemyBuffNames: ['Taunt'] })
+            );
+            expect(damageInputsFromSkill(gatedSkill).multiplier).toBe(140);
         });
     });
 });
