@@ -468,6 +468,15 @@ export type AbilityConfig =
           mode?: 'remove' | 'reduce-duration';
           /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
           durationTurns?: number;
+          /** I6: when this unit lands a purge (this ability), it also removes 100% of the
+           *  purged victim's shield (Lodolite legendary refit: "When this Unit Purges a buff
+           *  from an enemy, it removes 100% of the enemy's shield"). Set on EVERY 'purge'-type
+           *  config buildShipAbilities emits for a ship whose skill text carries that clause
+           *  (parseable via detectPurgeStripsShield) — gated on the parsed ability, never a
+           *  hardcoded ship name. purge-only; cleanse never sets this. Consumed at the
+           *  purge-performed apply site in playerTurn.ts, same victim id, right after the purge
+           *  resolves. Absent → byte-identical (no ship besides Lodolite carries it today). */
+          stripsShield?: boolean;
       }
     | {
           type: 'control';

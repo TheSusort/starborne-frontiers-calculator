@@ -2623,7 +2623,8 @@ const CLEANSE_RE = /\bcleanses?\s+(\d+|all)\b/gi;
  * Target from the sentence: "all enemies" → all-enemies, else "enemy".
  * explicitTarget is always true (purge has no support-flip, kept for shape parity with parseCleanse).
  * Does NOT match "cleanses". Passive-voice "is Purged of all buffs" has no "purges" token and is
- * excluded naturally — handled in C2b. Reference data: docs/ship-skills.csv.
+ * excluded naturally — see detectPassiveVoicePurge (I6) for that shape, merged in by callers
+ * (buildShipAbilities) only on the active/charged slots. Reference data: docs/ship-skills.csv.
  *
  * NOTE: parsePurge is context-free. Reactive/conditional purge text in passives (Sefuba p2,
  * Faust, Iridium, etc.) will produce matches here. The active/charged slot-gate in
@@ -2675,6 +2676,80 @@ export function parsePurge(text: string | null | undefined): {
         });
     }
     return results;
+}
+
+// I6: "<subject> is Purged of (N|all) buffs" — Lodolite's charged skill: "Then, the enemy with
+// the most Buffs is Purged of all buffs." No "purges" verb token, so the active-verb-only
+// PURGE_RE does not match it (by design — see PURGE_RE's comment). Kept as a SEPARATE detector
+// (rather than folded into PURGE_RE/parsePurge) because parsePurge is context-free and consumed
+// for every slot of every ship (including passive text scanned for REACTIVE purge triggers, e.g.
+// Sefuba/Rhodium/Faust/Salvation/Nayra) — widening that shared, corpus-wide regex risks absorbing
+// a future passive's self-referential "when this Unit is Purged of a buff…" (an INCOMING purge
+// reaction, a different semantic than Lodolite's outgoing "the enemy … is Purged"). This detector
+// is wired ONLY into the active/charged on-cast path (buildShipAbilities), never the passive-slot
+// trigger-detection loop, so it cannot pick up a hypothetical passive-voice self-reaction even if
+// the corpus grows one later. Corpus today has exactly ONE "is Purged" occurrence (Lodolite;
+// verified via `grep -io "is purged[^.]*" docs/ship-skills.csv`).
+const PASSIVE_VOICE_PURGE_RE = /\bis\s+purged\s+of\s+(\d+|all)\s+buffs?\b/gi;
+
+/**
+ * Parses the passive-voice purge shape ("<subject> is Purged of N/all buffs") — the counterpart
+ * to parsePurge's active-verb form, restricted to on-cast (active/charged) callers. Same result
+ * shape as parsePurge so callers can merge the two lists. Reference data: docs/ship-skills.csv
+ * (Lodolite charged skill).
+ */
+export function detectPassiveVoicePurge(text: string | null | undefined): {
+    count: number | 'all';
+    target: 'enemy' | 'all-enemies';
+    explicitTarget: boolean;
+    countScaling?: { stat: 'critDamage'; per: number };
+}[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const results: {
+        count: number | 'all';
+        target: 'enemy' | 'all-enemies';
+        explicitTarget: boolean;
+        countScaling?: { stat: 'critDamage'; per: number };
+    }[] = [];
+    PASSIVE_VOICE_PURGE_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = PASSIVE_VOICE_PURGE_RE.exec(plain)) !== null) {
+        const raw = m[1].toLowerCase();
+        const count: number | 'all' = raw === 'all' ? 'all' : parseInt(raw, 10);
+        if (count !== 'all' && (!count || isNaN(count))) continue;
+        const sentence = sentenceAround(plain, m.index).toLowerCase();
+        const target: 'enemy' | 'all-enemies' = /all\s+enemies/.test(sentence)
+            ? 'all-enemies'
+            : 'enemy';
+        results.push({ count, target, explicitTarget: true });
+    }
+    return results;
+}
+
+// I6: "When this Unit Purges a buff from an enemy, it removes N% of the enemy's shield" —
+// Lodolite's legendary-refit (R4) passive. Scoped to the SAME self-purge-reactive phrase shape as
+// ENEMY_PURGED_RE ("when this unit … purges … enem[y]"), extended to require a shield-percentage
+// removal clause in the same sentence. Verified against RAW CSV (Lodolite third_passive_skill_text
+// is the only corpus row matching both a purge-self clause AND a "removes N% … shield" clause —
+// the other 3 "removes N% … Shield" rows in the corpus carry no purge language at all).
+const PURGE_STRIPS_SHIELD_RE =
+    /\bwhen\s+this\s+unit\b[^.;]*\bpurges?\b[^.;]*\benem[^.;]*\bremoves\s+(\d+)\s*%[^.;]*\bshield/i;
+
+/**
+ * True when `text` declares "when this Unit purges a buff from an enemy, it removes 100% of the
+ * enemy's shield" (Lodolite's legendary refit). Percentage is captured but only the 100% (full
+ * strip) case is modeled per the locked game rule — anything else is left unflagged rather than
+ * guessed at, since no corpus ship carries a partial-strip variant today.
+ */
+export function detectPurgeStripsShield(text: string | null | undefined): boolean {
+    if (!text) return false;
+    // Normalize before matching (strip unit tags + <br/> → '. ') so the RE's [^.;]* sentence
+    // scoping can't span an un-punctuated <br/> into an unrelated clause — matches the
+    // convention used by parsePurge/detectPassiveVoicePurge above.
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = PURGE_STRIPS_SHIELD_RE.exec(plain);
+    return m !== null && m[1] === '100';
 }
 
 /**

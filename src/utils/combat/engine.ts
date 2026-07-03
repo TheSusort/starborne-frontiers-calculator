@@ -4195,9 +4195,20 @@ export function runCombat(input: CombatEngineInput): {
                     : undefined;
             const opposingVictimById =
                 tgt.position != null ? new Map(tb.opposingRoster.map((v) => [v.id, v])) : undefined;
+            // I6: resolve the enemy-most-buffs selector target for an ON-CAST purge (Lodolite's
+            // charged skill). mostBuffsAmong (§C2b-2, Rhodium) previously only fed the REACTIVE
+            // purge path (triggers.ts's ctx.enemyWithMostBuffs, for end-of-round/on-attacked
+            // triggers) — Lodolite's purge trigger is 'on-cast', which stays on THIS (castSkills)
+            // path and never reaches triggers.ts. Computed fresh per turn (buff state changes
+            // round to round) from THIS actor's opposing roster — same roster mostBuffsAmong's
+            // other two call sites use for the reactive path. Undefined for a DPS-mode/empty
+            // roster (mostBuffsAmong's own no-buffs-anywhere case) or a non-purge cast — the
+            // playerTurn purge loop falls back to the anchor `targetId` in that case.
+            const enemyMostBuffsId = mostBuffsAmong(tb.opposingRoster);
             return {
                 runtime: rt,
                 enemy: tgt,
+                enemyMostBuffsId,
                 // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
