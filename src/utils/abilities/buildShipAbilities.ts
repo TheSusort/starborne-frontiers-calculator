@@ -481,9 +481,11 @@ function parseModifiers(text: string): ParsedModifier[] {
     // whose bonus SCALES with the CASTER's own live crit power, gated on the named enemy
     // status via the existing enemyEffectConditions path (Scorching Radiation → name-specific
     // 'enemy-debuff', composing with I1). Narrow shape — requires the literal "additional
-    // <word> damage" phrase together with "crit power" in the SAME sentence — confirmed
-    // unique to Wildfire in docs/ship-skills.csv (only ship using "% additional" at all), so
-    // no other ship's outgoingDamage/critDamage branches above are affected.
+    // <word> damage" phrase together with "crit power" in the SAME sentence — this two-conjunct
+    // guard is confirmed unique to Wildfire in docs/ship-skills.csv (other ships use "additional"
+    // or "for every … crit power" separately — e.g. Bayah/Butcher, Amartya — but none combine
+    // "N% additional <word> damage" WITH "for every % crit power"), so no other ship's
+    // outgoingDamage/critDamage branches above are affected.
     //
     // I4a SCOPE (see the sub-project I design doc §9): single-target/cast-time only. The
     // enemy-status gate is baked ONCE per cast against the primary target's modifierCtx
