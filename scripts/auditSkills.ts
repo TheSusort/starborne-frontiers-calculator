@@ -205,6 +205,28 @@ const RULES: Rule[] = [
         handled: (a) => hasType(a, 'dot'),
     },
     {
+        id: 'always-crit',
+        severity: 'medium',
+        // "This Unit's attacks are always critical" (Asphodel) / "always lands critical
+        // hits" (Tormenter). Deliberately NEVER parser-handled: the game-data import sets
+        // these ships' crit rate to 100%, so an ability-model flag would double-count.
+        // The allowlist records the known ships; a NEW ship matching this keyword should
+        // be verified to carry crit 100 in its import/template data, then allowlisted.
+        keyword: (t) => /always\s+(?:lands?\s+)?critical/i.test(t),
+        handled: () => false,
+    },
+    {
+        id: 'shield-penetration-innate',
+        severity: 'medium',
+        // "This Unit has X% Shield Penetration". Deliberately NEVER parser-handled: shield
+        // penetration is already a filled ship stat (import/template data) for every ship
+        // carrying this clause, so parsing it would double-count. The allowlist records the
+        // known ships; a NEW ship matching this keyword should have its stat verified, then
+        // be allowlisted.
+        keyword: (t) => /has\s+\d+(?:\.\d+)?%\s+shield\s+penetration/i.test(t),
+        handled: () => false,
+    },
+    {
         id: 'accumulate-detonate',
         severity: 'high',
         keyword: (t) => /echoing burst/i.test(t),

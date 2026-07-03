@@ -76,6 +76,40 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: '"while this Unit deals…" is simultaneity, not a gate.',
     },
 
+    // ── always-crit: handled at the DATA layer, not the parser ──────────────────
+    // These ships' crit rate is set to 100% by the game-data import, so the "always
+    // critical" clause needs no ability-model flag (a flag would double-count).
+    {
+        ship: 'Asphodel',
+        rules: ['always-crit'],
+        reason: 'Crit rate set to 100% in import data; parser flag would double-count.',
+    },
+    {
+        ship: 'Tormenter',
+        rules: ['always-crit'],
+        reason: 'Crit rate set to 100% in import data; parser flag would double-count.',
+    },
+
+    // ── shield-penetration-innate: handled at the DATA layer, not the parser ─────
+    // "This Unit has X% Shield Penetration" ships already carry shield penetration as a
+    // filled ship stat (import/template data); parsing the clause would double-count.
+    ...[
+        'Crucialis',
+        'Curator',
+        'FrontLine',
+        'Guardian',
+        'Liberator',
+        'Medved',
+        'Provider',
+        'Sustainer',
+        'Vindicator',
+        'Xcellence',
+    ].map((ship) => ({
+        ship,
+        rules: ['shield-penetration-innate'],
+        reason: 'Shield penetration already filled as a ship stat by import/template data.',
+    })),
+
     // Burst-explosion reference — not an accumulate-detonate application.
     {
         ship: 'Valkyrie',
