@@ -347,6 +347,12 @@ export interface PlayerTurnArgs {
      *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
      *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
+    /** Sub-project I, PR I5 — count (not union) of living opposing actors currently holding
+     *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
+     *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
+     *  cadence/sourcing as `enemyBuffNames` above (triggers.countOwnersWithSelfBuff). Defaults
+     *  to 0 (DPS-assumption: no enemy attackers to count) — byte-identical there. */
+    stealthedEnemyCount?: number;
     /** Sub-project I, PR I1 — NAMES on the opposing (primary) target for this actor's
      *  name-specific `enemy-debuff` condition gates (Tygr's "to enemies with Stasis or
      *  Disable", Incinerator's "to enemies afflicted with Inferno"). SENTINEL: `undefined`
@@ -769,6 +775,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyBuffNames: enemyBuffNamesArg = [],
+        stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg = [],
@@ -1370,6 +1377,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
         turnsTaken: actor.turnsTaken,
+        // Sub-project I, PR I5: only the modifier ctx needs this — it feeds
+        // modifierAbilities/modifierTotalsFromAbilities (Selenite's count-scaling passive).
+        // The I2 per-victim re-fold spreads this ctx unchanged (only enemyDebuffNames/
+        // enemyBuffNames/enemyHpPct are swapped per victim), so it naturally stays constant
+        // across the delta computation — no per-victim distribution, matching the design
+        // (this is a global count, not a per-target gate).
+        stealthedEnemyCount: stealthedEnemyCountArg,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     // Sub-project I, PR I3 (Layer 1): distributed all-allies auras (Lodolite/Panguan-shape)

@@ -890,6 +890,29 @@ describe('buildShipAbilities', () => {
         expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10, cap: 50 });
     });
 
+    it('Selenite passive: "for every enemy with Stealth" scales on the DERIVABLE stealthed-enemy count (sub-project I, PR I5)', () => {
+        // Real CSV text (docs/ship-skills.csv, first/second_passive_skill_text) — "for every",
+        // not "for each", and counting ENEMY UNITS with Stealth, not stacks on one target.
+        // A plain enemy-buff gate (pre-I5) can only tell "at least one enemy Stealthed", not
+        // how many — the dedicated count subject fixes that.
+        const s = ship({
+            firstPassiveSkillText:
+                'This Unit deals 10% more direct damage for every enemy with <unit-skill>Stealth</unit-skill>.',
+        });
+        const mod = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'modifier'
+        )!;
+        expect(mod.conditions[0]).toMatchObject({
+            subject: 'enemy-stealth-count',
+            derivable: true,
+        });
+        expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 10 });
+        expect(mod.scaling?.cap).toBeUndefined(); // the text states no maximum
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 0 });
+        expect(mod.target).toBe('self'); // self-scoped — no team distribution, no per-victim
+    });
+
     describe('HP-proportional modifiers (Akula / Tithonus)', () => {
         it('Akula passive: outgoing damage scaling with CURRENT enemy HP% (up to 30%)', () => {
             const akula = ship({

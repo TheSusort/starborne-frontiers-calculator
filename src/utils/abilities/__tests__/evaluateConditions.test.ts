@@ -99,6 +99,28 @@ describe('evaluateCondition', () => {
         ).toBe(0);
     });
 
+    describe("'enemy-stealth-count' (sub-project I, PR I5)", () => {
+        it('returns the live stealthedEnemyCount, distinct from the enemyBuffNames union', () => {
+            const c = makeConditionContext({
+                // A deduped union can't distinguish 1 vs N stealthed enemies — the dedicated
+                // count field is what makes that distinction possible.
+                enemyBuffNames: ['Stealth'],
+                stealthedEnemyCount: 2,
+            });
+            expect(
+                evaluateCondition(cond({ subject: 'enemy-stealth-count', derivable: true }), c)
+            ).toBe(2);
+        });
+
+        it('defaults to 0 when unset (DPS-assumption)', () => {
+            const c = makeConditionContext();
+            expect(c.stealthedEnemyCount).toBeUndefined();
+            expect(
+                evaluateCondition(cond({ subject: 'enemy-stealth-count', derivable: true }), c)
+            ).toBe(0);
+        });
+    });
+
     it("'self-crit' is effective crit rate / 100", () => {
         expect(
             evaluateCondition(
@@ -335,6 +357,17 @@ describe('scaledBonus', () => {
 
     it('returns 0 when no scaling rule', () => {
         expect(scaledBonus(dmg([], undefined), makeConditionContext())).toBe(0);
+    });
+
+    it('Selenite-shape: 10% per stealthed enemy, uncapped (sub-project I, PR I5)', () => {
+        const a = dmg([cond({ subject: 'enemy-stealth-count', derivable: true })], {
+            conditionIndex: 0,
+            perUnit: 10,
+        });
+        expect(scaledBonus(a, makeConditionContext({ stealthedEnemyCount: 0 }))).toBe(0);
+        expect(scaledBonus(a, makeConditionContext({ stealthedEnemyCount: 2 }))).toBe(20);
+        // Uncapped — the skill text states no maximum.
+        expect(scaledBonus(a, makeConditionContext({ stealthedEnemyCount: 5 }))).toBe(50);
     });
 
     it('scaling reads only the indexed condition, even inside an anyOf OR-group', () => {

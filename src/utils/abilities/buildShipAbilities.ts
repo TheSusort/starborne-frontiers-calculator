@@ -272,6 +272,28 @@ function forEachCondition(sentence: string): Condition | null {
 }
 
 /**
+ * Sub-project I, PR I5 — classifies Selenite's "…for every enemy with Stealth" into a
+ * COUNT-SCALING condition on the number of DISTINCT stealthed enemy UNITS, distinct from
+ * `forEachCondition`'s "for each <buff/debuff> on the enemy" (which counts effects present
+ * ON A SINGLE target). `enemyBuffNames` is a deduped union of names across every opposing
+ * actor, so it can answer "is at least one enemy Stealthed" but never "how many" — the sim
+ * tracks a dedicated live count (`ConditionContext.stealthedEnemyCount`, populated by the
+ * combat engine) for this shape instead. Scoped to the literal "for every enem(y|ies) with"
+ * phrasing (distinct from "for each", already handled above) and to a single named BUFF
+ * effect — only Stealth is engine-tracked this way today; any other named status (or a
+ * debuff, or multiple named effects) returns null so the caller falls back to the flat
+ * presence-gate modifier rather than silently mis-scaling on an untracked count.
+ */
+function forEveryEnemyStealthCondition(sentence: string, rawText: string): Condition | null {
+    if (!/for every\s+enem(?:y|ies)\s+with\b/i.test(sentence)) return null;
+    const names = enemyEffectNamesFromClause(rawText);
+    if (names.length !== 1) return null;
+    const [buffName] = names;
+    if (buffName !== 'Stealth' || classifyEnemyEffect(buffName) !== 'buff') return null;
+    return { subject: 'enemy-stealth-count', derivable: true };
+}
+
+/**
  * Detects an HP-proportional "up to X%" bonus: the value scales linearly with the
  * target's CURRENT HP% (Akula — "based on the target's current HP percentage; the
  * higher the percentage, the more") or MISSING HP% (Tithonus — "based on the
@@ -356,30 +378,52 @@ function parseModifiers(text: string): ParsedModifier[] {
                 });
             }
         } else {
-            const conditions: Condition[] = [];
-            // "to enemies (with|afflicted with) <effect> [or <effect>]" → the ENEMY has one of
-            // these effects, classified per effect type (debuff/DoT → enemy-debuff, buff → enemy-buff).
-            const enemyEffects = /\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)
-                ? enemyEffectNamesFromClause(text)
-                : [];
-            if (enemyEffects.length) {
-                conditions.push(...enemyEffectConditions(enemyEffects));
-            } else if (/stealth/i.test(sentence)) {
-                // "while Stealthed" (self) — the acting unit's own Stealth.
-                const subject =
-                    target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
-                conditions.push({ subject, buffName: 'Stealth', derivable: true });
+            // Sub-project I, PR I5: "10% more direct damage for every enemy with Stealth"
+            // (Selenite) — a COUNT-SCALING modifier on the number of stealthed enemy UNITS,
+            // checked before the flat enemy-effect gate below (which would otherwise treat
+            // this as a binary "at least one enemy Stealthed" presence gate).
+            const stealthCountCond = forEveryEnemyStealthCondition(sentence, text);
+            if (stealthCountCond) {
+                out.push({
+                    channel: 'outgoingDamage',
+                    value: 0,
+                    isMultiplicative: true,
+                    target,
+                    conditions: [stealthCountCond],
+                    scaling: {
+                        conditionIndex: 0,
+                        perUnit: value,
+                        ...(capFromSentence(sentence) !== undefined
+                            ? { cap: capFromSentence(sentence) }
+                            : {}),
+                    },
+                });
+            } else {
+                const conditions: Condition[] = [];
+                // "to enemies (with|afflicted with) <effect> [or <effect>]" → the ENEMY has one of
+                // these effects, classified per effect type (debuff/DoT → enemy-debuff, buff → enemy-buff).
+                const enemyEffects = /\benem(?:y|ies)\b[^.]*\bwith\b/i.test(sentence)
+                    ? enemyEffectNamesFromClause(text)
+                    : [];
+                if (enemyEffects.length) {
+                    conditions.push(...enemyEffectConditions(enemyEffects));
+                } else if (/stealth/i.test(sentence)) {
+                    // "while Stealthed" (self) — the acting unit's own Stealth.
+                    const subject =
+                        target === 'self' || target === 'all-allies' ? 'self-buff' : 'enemy-buff';
+                    conditions.push({ subject, buffName: 'Stealth', derivable: true });
+                }
+                conditions.push(...affectedByConditions(sentence));
+                const hpCond = hpThresholdFromSentence(sentence);
+                if (hpCond) conditions.push(hpCond);
+                out.push({
+                    channel: 'outgoingDamage',
+                    value,
+                    isMultiplicative: true,
+                    target,
+                    conditions,
+                });
             }
-            conditions.push(...affectedByConditions(sentence));
-            const hpCond = hpThresholdFromSentence(sentence);
-            if (hpCond) conditions.push(hpCond);
-            out.push({
-                channel: 'outgoingDamage',
-                value,
-                isMultiplicative: true,
-                target,
-                conditions,
-            });
         }
     }
 
