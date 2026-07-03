@@ -1451,8 +1451,12 @@ function abilitiesFromText(
     // Thresh). parseChargeRemoval returns the trigger and everyNthEvent when relevant; this block
     // coexists with the gain block above — texts carrying both (e.g. Zosimos) emit two charge
     // abilities. Reactive triggers (on-bomb-detonated / on-enemy-repaired) carry no conditions;
-    // on-cast removal also has no condition gate (it fires with the skill). The every-Nth-event
-    // gate is NOT a condition — it lives on the ability's everyNthEvent field.
+    // on-cast removal also has no condition gate (it fires with the skill) UNLESS the removal's
+    // own sentence shares an "if the target is a <Type>" gate with a paired self-gain (Thresh,
+    // epic PR3) — parseChargeRemoval surfaces that as `requiredEnemyType`, propagated here via
+    // the same `toCondition` helper the self-gain path (above) uses, so both halves of the
+    // sentence stay in sync. The every-Nth-event gate is NOT a condition — it lives on the
+    // ability's everyNthEvent field.
     const chargeRemoval = parseChargeRemoval(text);
     if (chargeRemoval) {
         // Position-only heuristic for within-slot ordering; uses the canonical REMOVE_CHARGE_RE
@@ -1464,7 +1468,17 @@ function abilitiesFromText(
                 type: 'charge',
                 target: 'enemy',
                 trigger: chargeRemoval.trigger,
-                conditions: [],
+                conditions: chargeRemoval.requiredEnemyType
+                    ? [
+                          toCondition(
+                              'enemy-type',
+                              true,
+                              undefined,
+                              chargeRemoval.requiredEnemyType,
+                              text
+                          ),
+                      ]
+                    : [],
                 config: { type: 'charge', amount: chargeRemoval.amount },
                 ...(chargeRemoval.everyNthEvent
                     ? { everyNthEvent: chargeRemoval.everyNthEvent }

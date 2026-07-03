@@ -391,6 +391,132 @@ describe('enemy charge removal — bomb-driven (Demolisher-style, on-bomb-detona
     });
 });
 
+// ─── Team symmetry (epic PR3): an ENEMY-side ship removes PLAYER charges ──────────
+//
+// Every case above drives a PLAYER ability with target:'enemy' removing the AI enemy
+// attacker's charges. `feedback_engine_team_symmetry` requires the reverse to work
+// identically: an ENEMY ship's OWN charge-removal ability (also target:'enemy' — a
+// charge ability's target is always relative to its OWNER's side) must decrement a
+// PLAYER actor's charges. The engine wires this generically via `bySide(a.side)`
+// (engine.ts), never a player-only closure, so this is a regression lock, not a new
+// code path.
+
+describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges drop)', () => {
+    it('an enemy on-cast removal of 2 drops the player holder’s 3 charges to 1', () => {
+        // Player 'attacker' seeded with 3 charges (startCharged, hasChargedSkill:false so its
+        // own turn never re-banks) at LOW speed (40) so the enemy (speed 100) acts first — the
+        // removal lands before the player's own turn.
+        const enemy: EnemyAttacker = {
+            id: 'e-remover',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 100 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            enemyDamage(1, 'er-a'),
+                            chargeAbility(2, 'enemy', 'on-cast', 'er-remove'),
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+        const input: CombatEngineInput = {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 3,
+            // No charged slot + hasChargedSkill:false → advanceChargeCadence never re-banks the
+            // player's own charges on its turn (mirrors the `chargeHolder` fixture above), so the
+            // seeded value minus the enemy's removal is exactly observable.
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [enemyDamage(1, 'p-a')] }],
+            },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: true,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 40,
+            healTargetId: 'attacker',
+            enemyAttackers: [enemy],
+        };
+
+        const actors = runAndTap(input);
+        expect(chargesOf(actors, 'attacker')).toBe(1);
+    });
+
+    it('floors at 0 and is a no-op against a chargeLossImmune player holder (mirrors the player→enemy cases)', () => {
+        const enemy: EnemyAttacker = {
+            id: 'e-remover-2',
+            stats: { attack: 1, crit: 0, critDamage: 0, speed: 100 },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            enemyDamage(1, 'er2-a'),
+                            chargeAbility(5, 'enemy', 'on-cast', 'er2-remove'),
+                        ],
+                    },
+                ],
+            } as ShipSkills,
+        };
+        const baseInput: CombatEngineInput = {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 3,
+            // No charged slot + hasChargedSkill:false → advanceChargeCadence never re-banks the
+            // player's own charges on its turn (mirrors the `chargeHolder` fixture above), so the
+            // seeded value minus the enemy's removal is exactly observable.
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [enemyDamage(1, 'p-a')] }],
+            },
+            enemyDefense: 0,
+            enemyHp: 1_000_000_000,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: true,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 40,
+            healTargetId: 'attacker',
+            enemyAttackers: [enemy],
+        };
+
+        // Floor: removal amount 5 against a 3-charge holder floors at max(0, 3-5) === 0.
+        const floored = runAndTap(baseInput);
+        expect(chargesOf(floored, 'attacker')).toBe(0);
+
+        // Immunity: chargeLossImmune player holder is untouched by the same removal.
+        const immune = runAndTap({ ...baseInput, chargeLossImmune: true });
+        expect(chargesOf(immune, 'attacker')).toBe(3);
+    });
+});
+
 // ─── Type shape assertions ───────────────────────────────────────────────────────
 
 it('IntentExecContext exposes removeChargesFrom (single-target removal)', () => {

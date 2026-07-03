@@ -4162,10 +4162,40 @@ describe('parseChargeRemoval', () => {
         ).toEqual({ amount: 1, trigger: 'on-enemy-repaired', everyNthEvent: 2 });
     });
 
-    it('coexists with a gain in the same text — Thresh-style', () => {
+    it('coexists with a gain in the same text — Thresh-style, both halves share the Defender gate (epic PR3)', () => {
+        // Thresh's active text gates BOTH the removal and the paired self-gain behind the same
+        // "If the target is a Defender" clause. The removal must carry that gate too — a bare
+        // {amount, trigger} (no requiredEnemyType) would mean the removal fires unconditionally,
+        // out of sync with its paired self-gain (which already carries the gate via
+        // classifyChargeCondition/parseChargeGain).
         const text =
             "If the target is a Defender, this Unit removes 1 charge from the enemy and adds 1 charge to this Unit's Charged Skill.";
-        expect(parseChargeRemoval(text)).toEqual({ amount: 1, trigger: 'on-cast' });
+        expect(parseChargeRemoval(text)).toEqual({
+            amount: 1,
+            trigger: 'on-cast',
+            requiredEnemyType: 'Defender',
+        });
+    });
+
+    it('does not leak an unrelated "Defender" gate onto an ungated removal — Opal/Provider/Demolisher/Sefuba stay unconditional', () => {
+        // Guards the sentence-scoping: the shared-gate detection must only fire when the
+        // "if the target is a <Type>" lead-in shares the SAME sentence as the removal clause.
+        // None of these ships' removal sentences carry such a lead-in.
+        expect(
+            parseChargeRemoval(
+                'This Unit deals 70% damage with an additional damage equal to 11% of its Max HP, and removes 2 charges from the enemy.'
+            )
+        ).toEqual({ amount: 2, trigger: 'on-cast' });
+        expect(
+            parseChargeRemoval(
+                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+            )
+        ).toEqual({ amount: 1, trigger: 'on-cast' });
+        expect(
+            parseChargeRemoval(
+                "When a bomb explodes on an enemy, this unit removes 2 charges from the enemy's charged skill."
+            )
+        ).toEqual({ amount: 2, trigger: 'on-bomb-detonated' });
     });
 
     it('returns null for a pure gain (no removal clause)', () => {

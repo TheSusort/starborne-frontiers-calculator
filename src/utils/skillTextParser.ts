@@ -1794,7 +1794,8 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
 
 /**
  * Parses an enemy-targeted charge removal from skill text. Returns
- * `{ amount, trigger, everyNthEvent? }` or null if no removal clause is found.
+ * `{ amount, trigger, everyNthEvent?, requiredEnemyType? }` or null if no removal clause is
+ * found.
  *
  * Triggers:
  *  - `'on-bomb-detonated'` — the removal fires when a bomb explodes (Demolisher).
@@ -1803,10 +1804,23 @@ export function parseChargeLossImmune(text: string | null | undefined): boolean 
  *
  * Does NOT modify `parseChargeGain`; the two coexist on texts that carry both a gain and a
  * removal (e.g. Thresh, Zosimos).
+ *
+ * Shared gate (epic PR3): when the removal's OWN sentence also carries an "if the target is a
+ * <Type>" lead-in (Thresh: "If the target is a Defender, this Unit removes 1 charge from the
+ * enemy and adds 1 charge to this Unit's Charged Skill."), that gate is shared across BOTH
+ * halves of the sentence — the removal must be gated identically to its paired self-gain
+ * (parseChargeGain/classifyChargeCondition already applies the gate to that half). Scoped to the
+ * sentence containing the removal clause (reusing `GRANT_ENEMY_TYPE_RE`/`splitSentences`, the
+ * same detectors `detectGrantConditions` uses) so an unrelated ship's "Defender" mention
+ * elsewhere in the text never leaks a spurious gate onto an otherwise-unconditional removal
+ * (Opal/Provider/Demolisher/Sefuba/Zosimos have no such lead-in and are unaffected).
  */
-export function parseChargeRemoval(
-    text: string | null | undefined
-): { amount: number; trigger: AbilityTrigger; everyNthEvent?: number } | null {
+export function parseChargeRemoval(text: string | null | undefined): {
+    amount: number;
+    trigger: AbilityTrigger;
+    everyNthEvent?: number;
+    requiredEnemyType?: EnemyBaseClass;
+} | null {
     if (!text) return null;
     // Normalise curly single quotes (U+2018 left, U+2019 right) to straight (U+0027) so that
     // ship-data using typographic apostrophes ("enemy’s") matches the regex reliably.
@@ -1820,13 +1834,18 @@ export function parseChargeRemoval(
     const amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
+    const removalSentence = splitSentences(plain).find((s) => REMOVE_CHARGE_RE.test(s));
+    const gateMatch = removalSentence ? GRANT_ENEMY_TYPE_RE.exec(removalSentence) : null;
+    const requiredEnemyType = gateMatch ? capType(gateMatch[1]) : undefined;
+    const gate = requiredEnemyType ? { requiredEnemyType } : {};
+
     if (ENEMY_REPAIRS_RE.test(plain) && EVERY_SECOND_REPAIR_RE.test(plain)) {
-        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2 };
+        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2, ...gate };
     }
     if (BOMB_DETONATE_RE.test(plain)) {
-        return { amount, trigger: 'on-bomb-detonated' };
+        return { amount, trigger: 'on-bomb-detonated', ...gate };
     }
-    return { amount, trigger: 'on-cast' };
+    return { amount, trigger: 'on-cast', ...gate };
 }
 
 // Phase 4 (Curator / FrontLine): reaction to an ENEMY casting its charged skill.
