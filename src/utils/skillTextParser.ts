@@ -1834,18 +1834,23 @@ export function parseChargeRemoval(text: string | null | undefined): {
     const amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
     if (!amount || isNaN(amount)) return null;
 
-    const removalSentence = splitSentences(plain).find((s) => REMOVE_CHARGE_RE.test(s));
-    const gateMatch = removalSentence ? GRANT_ENEMY_TYPE_RE.exec(removalSentence) : null;
-    const requiredEnemyType = gateMatch ? capType(gateMatch[1]) : undefined;
-    const gate = requiredEnemyType ? { requiredEnemyType } : {};
-
     if (ENEMY_REPAIRS_RE.test(plain) && EVERY_SECOND_REPAIR_RE.test(plain)) {
-        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2, ...gate };
+        return { amount, trigger: 'on-enemy-repaired', everyNthEvent: 2 };
     }
     if (BOMB_DETONATE_RE.test(plain)) {
-        return { amount, trigger: 'on-bomb-detonated', ...gate };
+        return { amount, trigger: 'on-bomb-detonated' };
     }
-    return { amount, trigger: 'on-cast', ...gate };
+    // Shared "if the target is a <Type>" gate — ON-CAST ONLY (PR #209 review): the reactive
+    // triggers above evaluate gates against the fight-wide/DPS-dropdown enemyType, never the
+    // actual triggering actor, and bulk all-opposing removals have no coherent single-enemy
+    // semantics — a reactive removal that ever gains a type lead-in in the CSV must extend the
+    // reactive gate plumbing, not silently reuse this. Sentence-scoped with the SAME
+    // abbreviation masking resolveBuffClause uses ("Inc."/"Out." buff-name periods would
+    // otherwise split the sentence mid-name and could detach the gate from its clause).
+    const removalSentence = splitSentences(maskAbbrev(plain)).find((s) => REMOVE_CHARGE_RE.test(s));
+    const gateMatch = removalSentence ? GRANT_ENEMY_TYPE_RE.exec(removalSentence) : null;
+    const requiredEnemyType = gateMatch ? capType(gateMatch[1]) : undefined;
+    return { amount, trigger: 'on-cast', ...(requiredEnemyType ? { requiredEnemyType } : {}) };
 }
 
 // Phase 4 (Curator / FrontLine): reaction to an ENEMY casting its charged skill.

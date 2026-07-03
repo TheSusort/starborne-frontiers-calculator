@@ -328,6 +328,51 @@ describe('enemy charge removal — direct post-event charges (on-cast, Opal-styl
         );
         expect(chargesOf(actors, 'e-holder')).toBe(0);
     });
+
+    // Epic PR3 (#209 review follow-up): end-to-end proof that the Thresh-style enemy-type gate
+    // on an enemy-targeted removal is actually CONSUMED by the engine's cast-path condition
+    // gating — not just constructed by the parser. Same condition object shape
+    // buildShipAbilities emits via toCondition('enemy-type', …).
+    const gatedRemoval = (id: string): Ability => ({
+        ...chargeAbility(2, 'enemy', 'on-cast', id),
+        conditions: [{ subject: 'enemy-type', requiredEnemyType: 'Defender', derivable: true }],
+    });
+
+    it('case 5 (Thresh gate, match): enemy-type gate passes vs a Defender → charges 3 − 2 === 1', () => {
+        const actors = runAndTapRounds(
+            {
+                ...buildInput(
+                    gatedRemoval('p-thresh-hit'),
+                    chargeHolder({ chargeCount: 3, seeded: 3 })
+                ),
+                enemyType: 'Defender',
+            },
+            1
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(1);
+    });
+
+    it('case 6 (Thresh gate, mismatch): gate fails vs an Attacker → removal suppressed, charges stay 3', () => {
+        const actors = runAndTapRounds(
+            {
+                ...buildInput(
+                    gatedRemoval('p-thresh-miss'),
+                    chargeHolder({ chargeCount: 3, seeded: 3 })
+                ),
+                enemyType: 'Attacker',
+            },
+            1
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(3);
+    });
+
+    it('case 7 (Thresh gate, DPS default): no enemyType configured → gate reads 0 → removal suppressed', () => {
+        const actors = runAndTapRounds(
+            buildInput(gatedRemoval('p-thresh-unset'), chargeHolder({ chargeCount: 3, seeded: 3 })),
+            1
+        );
+        expect(chargesOf(actors, 'e-holder')).toBe(3);
+    });
 });
 
 // ─── Case 4: bomb-driven removal (Demolisher-style) ───────────────────────────────
