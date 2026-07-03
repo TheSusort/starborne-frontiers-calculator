@@ -19,6 +19,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Wildfire's refit-3 passive now actually reaches the team — every living ally's Inferno damage against an enemy with Scorching Radiation is boosted by 2% per 10% of Wildfire's own crit power (not the ally's), matching her skill text.",
     'Fixed skill parsing that inflated DPS for Tormenter, Voron, Malvex, and FrontLine — defensive damage-reduction (and shield-scaling) clauses were being counted as extra attacks. Also fixed Amartya, who no longer grants herself a phantom Taunt buff from her "enemy gains Taunt" trigger text, and now correctly inflicts 2 stacks of Exposed (not 1) from her legendary refit passive.',
     'Combat sim: enemy supporters (like Graphite) no longer stop granting buffs and shields for the rest of the battle after the first player ship dies.',
+    "Combat sim: fixed conditional control-effect modeling for Crocus, Nayra, Makoli, Flamel, Guardian, and Meiying. Crocus's and Nayra's conditional Stasis (only landing when the target has 4+ debuffs, or was repaired this round) could reach the sim's reaction machinery unconditionally; Makoli, Flamel, Guardian, and Meiying each had a duplicate, always-firing control entry alongside their real (and already correctly gated) Disable, Stasis, and Provoke effects. Both are fixed — actual gameplay-facing effects are unaffected.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

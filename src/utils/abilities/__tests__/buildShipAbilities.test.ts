@@ -3815,6 +3815,198 @@ describe('buildShipAbilities — D-PR13 Disable active-skill: named debuff + add
     });
 });
 
+// ── Epic PR2: control-twin gating parity ───────────────────────────────────────────────────
+// A `type:'control'` ability is emitted ADDITIVELY alongside the named debuff/buff twin that
+// actually performs the status (parseControlInflicts is purely additive — see the comment
+// above its call site). Before this PR the control twin was ALWAYS constructed on-cast/[],
+// ignoring whatever trigger/conditions the named twin resolved to. Fix (buildShipAbilities.ts,
+// right before the final per-slot sort): the control twin now inherits the named twin's
+// resolved trigger + conditions —
+//   - twin trigger 'on-cast' (a static gating condition): the control ability's conditions are
+//     overwritten with the twin's conditions (trigger stays 'on-cast', so it is still processed
+//     by the cast-path control-applied loop — gateFiringAbilities now honors the gate).
+//   - twin trigger is REACTIVE (on-attacked / on-ally-attacked / on-enemy-destroyed / …): the
+//     control ability is DROPPED outright. Consumption-side finding: the engine's only
+//     `type:'control'` consumer (controlAbilitiesFromSkill, src/utils/abilities/
+//     applyAbilities.ts) filters strictly to `trigger === 'on-cast'` — mirroring
+//     chargeAbilitiesFromSkill/extraActionsFromSkill, there is no reactive execution path for
+//     control abilities. Inheriting a reactive trigger would leave a permanently-unconsumed
+//     (dead) ability in the model, so it is not emitted at all; the named debuff/buff twin
+//     remains the sole model of the effect.
+describe('buildShipAbilities — control-twin gating parity (epic PR2)', () => {
+    it('Crocus active: control{stasis} inherits the enemy-debuff-gte-4 condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
+        // docs/ship-skills.csv Crocus active_skill_text (exact clause, routed through the real
+        // active slot): "...If the target has more than 3 Debuffs, it inflicts Stasis for 2
+        // turns."
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>150% Damage</unit-damage> and inflicts <unit-skill>Corrosion II</unit-skill> for 2 turns.<br />If the target has more than 3 Debuffs, it inflicts <unit-skill>Stasis</unit-skill> for 2 turns.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active');
+        const debuff = active?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Stasis'
+        );
+        const control = active?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-cast');
+        expect(debuff!.conditions).toEqual([
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 4 },
+        ]);
+        // The control twin must inherit the SAME trigger + conditions as its debuff twin.
+        expect(control).toBeDefined();
+        expect(control!.trigger).toBe(debuff!.trigger);
+        expect(control!.conditions).toEqual(debuff!.conditions);
+    });
+
+    it('Nayra active: control{stasis} inherits the target-repaired-this-round condition from its Stasis debuff twin (on-cast twin → condition copy)', () => {
+        // docs/ship-skills.csv Nayra active_skill_text (exact clause, routed through the real
+        // active slot): "...If the target was repaired this round, inflict Stasis for 1 turn."
+        const s = ship({
+            activeSkillText:
+                'This Unit inflicts <unit-skill>Defense Down II</unit-skill> and <unit-skill>Crit Rate Down III</unit-skill> for 2 turns, dealing <unit-damage>170% damage</unit-damage> and additional <unit-damage>damage equal to 30%</unit-damage> of its Defense.<br />If the target was repaired this round, inflict <unit-skill>Stasis</unit-skill> for 1 turn.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active');
+        const debuff = active?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Stasis'
+        );
+        const control = active?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-cast');
+        expect(debuff!.conditions).toEqual([
+            { subject: 'target-repaired-this-round', derivable: true },
+        ]);
+        expect(control).toBeDefined();
+        expect(control!.trigger).toBe(debuff!.trigger);
+        expect(control!.conditions).toEqual(debuff!.conditions);
+    });
+
+    it('Makoli second passive: control{disable} is DROPPED — its Disable debuff twin resolves to a REACTIVE trigger (on-attacked + below-40%-HP), which the cast-path control-applied loop can never consume', () => {
+        // docs/ship-skills.csv Makoli second_passive_skill_text (exact clause, routed through
+        // the real passive slot via refits.length >= 2): "When directly damaged while below 40%
+        // HP, this Unit repairs 20% of its Max HP and inflicts Disable for 1 turn."
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP and inflicts <unit-skill>Disable</unit-skill> for 1 turn.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive');
+        const debuff = passive?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Disable'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-attacked');
+        expect(debuff!.conditions).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 40,
+                hpSubject: 'self',
+            },
+        ]);
+        const control = passive?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'disable'
+        );
+        expect(control).toBeUndefined();
+    });
+
+    it('Flamel second passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-attacked trigger', () => {
+        // docs/ship-skills.csv Flamel second_passive_skill_text (exact clause, routed through
+        // the real passive slot via refits.length >= 2): "When directly damaged, this Unit
+        // inflicts Speed Down I for 2 turns and Stasis for 2 turn."
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'When directly damaged, this Unit inflicts <unit-skill>Speed Down I</unit-skill> for 2 turns and <unit-skill>Stasis</unit-skill> for 2 turn.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive');
+        const debuff = passive?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Stasis'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-attacked');
+        const control = passive?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        expect(control).toBeUndefined();
+    });
+
+    it('Guardian second passive: control{provoke} is DROPPED — its Provoke debuff twin resolves to the REACTIVE on-ally-attacked trigger', () => {
+        // docs/ship-skills.csv Guardian second_passive_skill_text (exact clause, routed through
+        // the real passive slot via refits.length >= 2): "...When an ally is critically hit by
+        // an enemy, apply Provoke for 1 turn to that enemy."
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'This Unit has 20% shield penetration. When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.<br /><br />When an ally is critically hit by an enemy, apply <unit-skill>Provoke</unit-skill> for 1 turn to that enemy.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive');
+        const debuff = passive?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Provoke'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-ally-attacked');
+        const control = passive?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'provoke'
+        );
+        expect(control).toBeUndefined();
+    });
+
+    it('Meiying first passive: control{stasis} is DROPPED — its Stasis debuff twin resolves to the REACTIVE on-enemy-destroyed trigger', () => {
+        // docs/ship-skills.csv Meiying first_passive_skill_text (exact clause, routed through
+        // the real passive slot): "Upon killing an enemy with a Debuff, this Unit inflicts
+        // Stasis on all adjacent enemies for 1 turn."
+        const s = ship({
+            firstPassiveSkillText:
+                'Upon killing an enemy with a Debuff, this Unit inflicts <unit-skill>Stasis</unit-skill> on all adjacent enemies for 1 turn.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive');
+        const debuff = passive?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Stasis'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-enemy-destroyed');
+        const control = passive?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'stasis'
+        );
+        expect(control).toBeUndefined();
+    });
+
+    // Negative companion: a genuinely on-cast, UNCONDITIONAL control skill must stay ungated —
+    // the inheritance logic must not spuriously attach conditions/drop the ability when the
+    // named twin itself has no gate.
+    it('negative: a plain "applies Provoke" active skill keeps its control{provoke} on-cast with EMPTY conditions (no twin gate to inherit)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>145% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active');
+        const debuff = active?.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Provoke'
+        );
+        const control = active?.abilities.find(
+            (a) =>
+                a.type === 'control' && a.config.type === 'control' && a.config.effect === 'provoke'
+        );
+        expect(debuff).toBeDefined();
+        expect(debuff!.trigger).toBe('on-cast');
+        expect(debuff!.conditions).toEqual([]);
+        expect(control).toBeDefined();
+        expect(control!.trigger).toBe('on-cast');
+        expect(control!.conditions).toEqual([]);
+    });
+});
+
 // ── Phase 1 Task 3: enemy-target charge-removal abilities ─────────────────────────────────
 // parseChargeRemoval (Task 2) is already wired into skillTextParser.ts. This block verifies
 // that buildShipAbilities orchestrates it and emits target:'enemy' charge abilities.

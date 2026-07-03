@@ -16,6 +16,7 @@ import {
     AbilityTrigger,
     ModifierChannel,
     ScalingRule,
+    ControlEffect,
 } from '../../types/abilities';
 import { getShipSkillRows, getSkillRowForSlot } from '../ship/skillRows';
 import {
@@ -2007,6 +2008,61 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 autoFilled: true,
             };
             pushToSlot(bySlot, 'passive', [{ ability, pos }]);
+        }
+    }
+
+    // Control-twin gating parity (epic PR2): a `type:'control'` ability is emitted
+    // ADDITIVELY alongside the named debuff/buff that actually performs the status
+    // (parseControlInflicts, above) but is always constructed on-cast/ungated — it does
+    // not see whatever trigger/conditions the named twin resolved to (a reactive trigger
+    // from detectDamageReactionTrigger/detectReactiveTrigger, or a gating condition from
+    // detectGrantConditions/a manual clause gate). Makoli: the Disable DEBUFF correctly
+    // resolves to on-attacked + a below-40%-HP condition, but its control{disable} twin
+    // stayed on-cast/[] — if the engine ever executed it as constructed, Disable's
+    // control-applied event would fire on every cast regardless of the reaction gate.
+    //
+    // The engine's ONLY consumer of `type:'control'` is the on-cast loop in
+    // controlAbilitiesFromSkill (src/utils/abilities/applyAbilities.ts), which filters
+    // strictly to `trigger === 'on-cast'` — mirroring chargeAbilitiesFromSkill /
+    // extraActionsFromSkill, there is no separate reactive-trigger execution path for
+    // control abilities. So the twin's resolved trigger decides which fix applies:
+    //   - twin trigger IS 'on-cast' (Crocus/Nayra: a static gating condition, e.g. an
+    //     enemy-debuff count or "target repaired this round"): inherit the twin's
+    //     conditions onto the control ability. It is STILL processed by the cast-path
+    //     loop, and the shared gateFiringAbilities condition gate (which runs over every
+    //     cast ability uniformly, control included) now suppresses control-applied on the
+    //     same cast where the named status itself would not fire.
+    //   - twin trigger is REACTIVE (Makoli/Flamel/Guardian/Meiying: on-attacked,
+    //     on-ally-attacked, on-enemy-destroyed, …): inheriting that trigger would make the
+    //     control ability permanently unconsumed (no reactive control-applied path
+    //     exists), i.e. a dead, mislabeled entry forever. Drop the control ability outright
+    //     instead — the named debuff/buff twin remains the sole model of the effect, and no
+    //     spurious on-cast control-applied fires.
+    const CONTROL_TWIN_TAG: Record<ControlEffect, string> = {
+        stasis: 'Stasis',
+        provoke: 'Provoke',
+        'concentrate-fire': 'Concentrate Fire',
+        disable: 'Disable',
+        taunt: 'Taunt',
+    };
+    for (const positioned of bySlot.values()) {
+        for (let i = positioned.length - 1; i >= 0; i--) {
+            const ability = positioned[i].ability;
+            if (ability.type !== 'control' || ability.config.type !== 'control') continue;
+            const tag = CONTROL_TWIN_TAG[ability.config.effect];
+            const twinType = ability.config.effect === 'taunt' ? 'buff' : 'debuff';
+            const twin = positioned.find(
+                (p) =>
+                    p.ability !== ability &&
+                    p.ability.config.type === twinType &&
+                    p.ability.config.buffName === tag
+            );
+            if (!twin) continue;
+            if (twin.ability.trigger === 'on-cast') {
+                ability.conditions = twin.ability.conditions;
+            } else {
+                positioned.splice(i, 1);
+            }
         }
     }
 
