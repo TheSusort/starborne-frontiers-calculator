@@ -90,18 +90,23 @@ export interface PlayerRoundCtx {
     effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
-    /** Sub-project I, PR I4b — `dotDamage`-channel modifier abilities whose GATE is a
+    /** Sub-project I, PR I4b/I4c — `dotDamage`-channel modifier abilities whose GATE is a
      *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
-     *  Radiation… for every N% crit power" bonus), plus the cast-time ctx used to fold them
+     *  Radiation… for every N% crit power" bonus), plus the ctx used to fold each group
      *  (`partitionDotDamageAbilities` — see its jsdoc for the shape check). EXCLUDED from
      *  `dotMult` above, which bakes only the UNCONDITIONAL dotDamage contribution (e.g.
-     *  Decimation set gear). The engine re-folds `abilities` against a per-VICTIM,
-     *  per-TICK ctx (only the enemy-status fields swapped to that victim's own CURRENT live
-     *  status — see `tickDoTs`/`victimDotMult` in engine.ts) so the bonus applies to a tick
-     *  only while the ticking victim currently carries the required status. Undefined/empty
-     *  `abilities` → tick math is `dotMult` alone, byte-identical for every non-Wildfire-
-     *  shaped ship (and for the DPS simulator, which never reads this field). */
-    victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext };
+     *  Decimation set gear). The engine re-folds each entry's `abilities` against a
+     *  per-VICTIM, per-TICK ctx (only the enemy-status fields swapped to that victim's own
+     *  CURRENT live status — see `tickDoTs`/`victimDotMult` in engine.ts) so the bonus
+     *  applies to a tick only while the ticking victim currently carries the required
+     *  status. A LIST (not a single entry) because I4c's refit-3 "all allies deal…" team
+     *  aura contributes ADDITIONAL entries — one per ally aura SOURCE, each carrying that
+     *  SOURCE's own `selfCritPower` (the locked rule: the bonus scales by the aura
+     *  SOURCE's crit power, never the recipient's) — alongside this actor's own entry (if
+     *  any), which keeps using this actor's own ctx unchanged from I4b. Undefined/empty →
+     *  tick math is `dotMult` alone, byte-identical for every non-Wildfire-shaped ship (and
+     *  for the DPS simulator, which never reads this field). */
+    victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext }[];
 }
 
 /** Healing-mode context threaded into player turns (and later the executor). The ENGINE
@@ -455,6 +460,27 @@ export interface PlayerTurnArgs {
      *  perspective, not the source's). Defaults to `[]` — absent/empty is byte-identical to
      *  pre-I3 behavior (no ship's all-allies modifier reaches teammates without this). */
     allyModifierAbilities?: Ability[];
+    /** Sub-project I, PR I4c — per-SOURCE breakdown of `all-allies` `dotDamage`-channel
+     *  modifier abilities, needed IN ADDITION TO `allyModifierAbilities` (which flattens
+     *  every source into one list and so loses provenance). Wildfire's refit-3 aura is the
+     *  one shape (today) where an all-allies modifier's bonus must scale by the SOURCE's
+     *  own live stat (`self-crit-power`) rather than the recipient's — the locked game rule
+     *  for "all allies deal…for every 10% crit power THIS UNIT has" (THIS UNIT = the aura's
+     *  caster, not the ally dealing the tick). Each entry is one living same-side ally
+     *  (excluding this actor): `abilities` is that ally's full all-allies MODIFIER list
+     *  (re-partitioned below via `partitionDotDamageAbilities` to extract just the
+     *  name-gated `dotDamage` ones — everything else already folds correctly via the
+     *  recipient's own ctx through `allyModifierAbilities`, unaffected by this field);
+     *  `sourceCritPower` is that ally's OWN live crit power (base + scheduled/timed self-
+     *  buffs — the same "layers 1+2+3" shape `modifierCtx.selfCritPower` uses for the
+     *  acting actor, computed via `effectiveStatsOf` since the source may not be acting
+     *  this round — see engine.ts's `buildTurnArgs`). Defaults to `[]` — absent/empty is
+     *  byte-identical to pre-I4c behavior. */
+    allyDotDamageAuraSources?: {
+        sourceId: string;
+        sourceCritPower: number;
+        abilities: Ability[];
+    }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1429,21 +1455,49 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // does not feed), so ordering is inert here; every ability folds independently in
     // modifierTotalsFromAbilities. Defaults to [] (pre-I3 callers / no ally aura present)
     // → byte-identical.
-    const modifierAbilities = [
+    const selfModifierAbilities = [
         ...(firingSkill?.abilities ?? []),
         ...(passiveSkill?.abilities ?? []),
-        ...(args.allyModifierAbilities ?? []),
     ];
-    // Sub-project I, PR I4b: pull the enemy-status-name-gated dotDamage abilities (Wildfire's
-    // Scorching Radiation crit-power bonus) OUT of the abilities fed to the cast-time fold
-    // below — they must be re-evaluated per VICTIM per TICK against that victim's own live
-    // status (turnCtx.victimGatedDotDamage, resolved in engine.ts's tickDoTs), not baked once
-    // against the primary target. `dotDamageUnconditional` carries every OTHER ability
+    const modifierAbilities = [...selfModifierAbilities, ...(args.allyModifierAbilities ?? [])];
+    // Sub-project I, PR I4b/I4c: pull the enemy-status-name-gated dotDamage abilities
+    // (Wildfire's Scorching Radiation crit-power bonus) OUT of the abilities fed to the
+    // cast-time fold below — they must be re-evaluated per VICTIM per TICK against that
+    // victim's own live status (turnCtx.victimGatedDotDamage, resolved in engine.ts's
+    // tickDoTs), not baked once against the primary target. `dotDamageUnconditional` is
+    // derived from the FULL flat list (self + every ally aura source) so it correctly
+    // excludes name-gated dotDamage from EITHER provenance — carries every OTHER ability
     // unchanged (all channels, plus any non-name-gated dotDamage source e.g. Decimation set
-    // gear) — for every ship without such a modifier this equals `modifierAbilities` and the
+    // gear); for every ship without such a modifier this equals `modifierAbilities` and the
     // fold below is byte-identical to before.
-    const { unconditional: dotDamageUnconditional, conditional: dotDamageConditional } =
+    //
+    // I4c: the CONDITIONAL half is no longer taken from the flat list, because the flat list
+    // loses PROVENANCE (self vs. which ally sourced it) — and the locked game rule requires
+    // Wildfire's team-aura bonus to scale by the SOURCE's crit power, not the recipient's
+    // (`modifierCtx.selfCritPower` below is the RECIPIENT's). Instead: this actor's OWN
+    // conditional dotDamage (unchanged from I4b — ctx = modifierCtx) is partitioned from
+    // `selfModifierAbilities` ALONE, and each ally aura source contributes its OWN entry,
+    // partitioned from JUST that source's abilities, with `selfCritPower` swapped to that
+    // source's own live crit power. No double-apply: a given ability object is folded via
+    // AT MOST one of {dotDamageUnconditional, the self entry, one ally-source entry} — the
+    // flat-list `unconditional` split above already removes every name-gated ability
+    // (self AND ally) from the general fold, and each ally source's abilities are
+    // partitioned in isolation (one source's list can't leak into another's or into self's).
+    const { unconditional: dotDamageUnconditional } =
         partitionDotDamageAbilities(modifierAbilities);
+    const selfDotDamageConditional = partitionDotDamageAbilities(selfModifierAbilities).conditional;
+    const allyDotDamageGated = (args.allyDotDamageAuraSources ?? [])
+        .map((src) => ({
+            abilities: partitionDotDamageAbilities(src.abilities).conditional,
+            ctx: { ...modifierCtx, selfCritPower: src.sourceCritPower },
+        }))
+        .filter((entry) => entry.abilities.length > 0);
+    const victimGatedDotDamage = [
+        ...(selfDotDamageConditional.length > 0
+            ? [{ abilities: selfDotDamageConditional, ctx: modifierCtx }]
+            : []),
+        ...allyDotDamageGated,
+    ];
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
@@ -2487,12 +2541,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveMaxHp: effectiveHp,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
-        // PR I4b: only set when this cast actually carries a victim-gated dotDamage ability —
-        // undefined for every ship without one (the common case), so tickDoTs' fast path
-        // (`ctx.victimGatedDotDamage` falsy → use `dotMult` unchanged) is byte-identical.
-        ...(dotDamageConditional.length > 0
-            ? { victimGatedDotDamage: { abilities: dotDamageConditional, ctx: modifierCtx } }
-            : {}),
+        // PR I4b/I4c: only set when this cast's own abilities OR a distributed ally aura
+        // actually carry a victim-gated dotDamage ability — undefined for every ship without
+        // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →
+        // use `dotMult` unchanged) is byte-identical.
+        ...(victimGatedDotDamage.length > 0 ? { victimGatedDotDamage } : {}),
     };
 
     // Per-cast attacker-side scalars for the positional apply path (Task 7). Sourced from

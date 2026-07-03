@@ -1931,30 +1931,43 @@ export function runCombat(input: CombatEngineInput): {
         ...(target.corrosionEntries.length > 0 ? ['Corrosion'] : []),
         ...(target.pendingBombs.length > 0 ? ['Bomb'] : []),
     ];
-    // Sub-project I, PR I4b — per-VICTIM, per-TICK resolution of an applier's dotMult. Reads
-    // `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast carried an
-    // enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation crit-power
-    // bonus). The fast path (no such modifier — every other ship) returns `ctx.dotMult`
-    // unchanged: byte-identical. When present, re-folds `abilities` against a ctx whose
-    // enemy-status fields are swapped to `victim`'s OWN CURRENT live status (read fresh at
-    // TICK time via `enemyDebuffNamesForTarget`/`selfBuffNamesForOwners` — deliberately NOT a
-    // pre-turn snapshot: a DoT tick is a later, separate event from the cast that applied it,
-    // so there is no anti-causality concern about it seeing that SAME cast's own debuff-
-    // infliction, unlike I2's positional-apply delta). Since the ability was EXCLUDED from the
-    // cast-time `dotMult` bake (see `partitionDotDamageAbilities`), the fresh fold is ADDED
-    // directly — no base-ctx subtraction needed (contrast I2's `perVictimOutgoingDeltaPct`,
-    // which must subtract because its abilities stay baked into the aggregate).
+    // Sub-project I, PR I4b/I4c — per-VICTIM, per-TICK resolution of an applier's dotMult.
+    // Reads `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast
+    // carried an enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation
+    // crit-power bonus, either the applier's OWN or one distributed from an ally's "all
+    // allies deal…" aura). The fast path (no such modifier — every other ship) returns
+    // `ctx.dotMult` unchanged: byte-identical. When present, re-folds EACH entry's
+    // `abilities` against a ctx whose enemy-status fields are swapped to `victim`'s OWN
+    // CURRENT live status (read fresh at TICK time via
+    // `enemyDebuffNamesForTarget`/`selfBuffNamesForOwners` — deliberately NOT a pre-turn
+    // snapshot: a DoT tick is a later, separate event from the cast that applied it, so
+    // there is no anti-causality concern about it seeing that SAME cast's own debuff-
+    // infliction, unlike I2's positional-apply delta). I4c: a LIST, not a single entry — the
+    // applier's own entry (if any) keeps its own ctx (selfCritPower = the APPLIER's own crit
+    // power, unchanged from I4b); each distributed ally-aura entry carries the AURA
+    // SOURCE's ctx (selfCritPower = the SOURCE's crit power — the locked rule for Wildfire's
+    // team aura). Each entry's `enemyDebuffNames`/`enemyBuffNames` are independently
+    // re-pointed at `victim` here, so every entry gates on the SAME victim's live status
+    // regardless of whose ctx it originated from. Since the abilities were EXCLUDED from
+    // the cast-time `dotMult` bake (see `partitionDotDamageAbilities`), each fresh fold is
+    // ADDED directly — no base-ctx subtraction needed (contrast I2's
+    // `perVictimOutgoingDeltaPct`, which must subtract because its abilities stay baked
+    // into the aggregate).
     const victimDotMult = (ctx: PlayerRoundCtx, victim: CombatActor): number => {
         const gated = ctx.victimGatedDotDamage;
-        if (!gated || gated.abilities.length === 0) return ctx.dotMult;
-        const victimCtx: ConditionContext = {
-            ...gated.ctx,
-            ...(gated.ctx.enemyDebuffNames !== undefined
-                ? { enemyDebuffNames: enemyDebuffNamesForTarget(victim) }
-                : {}),
-            enemyBuffNames: selfBuffNamesForOwners(statusEngine, [victim.id]),
-        };
-        const bonus = modifierTotalsFromAbilities(gated.abilities, victimCtx).dotDamage;
+        if (!gated || gated.length === 0) return ctx.dotMult;
+        let bonus = 0;
+        for (const entry of gated) {
+            if (entry.abilities.length === 0) continue;
+            const victimCtx: ConditionContext = {
+                ...entry.ctx,
+                ...(entry.ctx.enemyDebuffNames !== undefined
+                    ? { enemyDebuffNames: enemyDebuffNamesForTarget(victim) }
+                    : {}),
+                enemyBuffNames: selfBuffNamesForOwners(statusEngine, [victim.id]),
+            };
+            bonus += modifierTotalsFromAbilities(entry.abilities, victimCtx).dotDamage;
+        }
         return ctx.dotMult + bonus / 100;
     };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
@@ -4343,6 +4356,38 @@ export function runCombat(input: CombatEngineInput): {
                 allyModifierAbilities: sameSideLivingFor(a)
                     .filter((x) => x.id !== a.id)
                     .flatMap((x) => allAlliesModifierAbilitiesById.get(x.id) ?? []),
+                // Sub-project I, PR I4c: per-SOURCE breakdown of ally `all-allies` `dotDamage`-
+                // channel modifier abilities (Wildfire's refit-3 team aura) — needed alongside
+                // `allyModifierAbilities` above because that flat list loses PROVENANCE (which
+                // ally sourced which ability), and the locked game rule requires this bonus to
+                // scale by the AURA SOURCE's own crit power, never the recipient's (unlike
+                // every other all-allies modifier condition, which correctly reads the
+                // recipient's ctx per I3). Filters each ally's all-allies MODIFIER list down to
+                // the `dotDamage` channel BEFORE computing crit power, so `effectiveStatsOf` is
+                // only paid for actual aura sources (every ship without this shape → `.filter`
+                // drops it → `[]`, byte-identical). `sourceCritPower` mirrors the "layers
+                // 1+2+3" shape `modifierCtx.selfCritPower` uses for the ACTING actor (base +
+                // scheduled/timed self-buffs) — the one difference is it omits the acting-
+                // actor-only "active/gated self-ability aura" layer (playerTurn.ts's
+                // `activeAbilityStatuses` component), which Wildfire's kit never uses for its
+                // own crit power (docs/ship-skills.csv: Wildfire's only passives ARE this
+                // dotDamage-scaling ability), so the two are equivalent for this ship.
+                allyDotDamageAuraSources: sameSideLivingFor(a)
+                    .filter((x) => x.id !== a.id)
+                    .map((x) => ({
+                        x,
+                        abilities: (allAlliesModifierAbilitiesById.get(x.id) ?? []).filter(
+                            (ab) =>
+                                ab.config.type === 'modifier' && ab.config.channel === 'dotDamage'
+                        ),
+                    }))
+                    .filter((entry) => entry.abilities.length > 0)
+                    .map((entry) => ({
+                        sourceId: entry.x.id,
+                        sourceCritPower: effectiveStatsOf(statusEngine, selfBuffLookup, entry.x)
+                            .critDamage,
+                        abilities: entry.abilities,
+                    })),
             };
         };
 
