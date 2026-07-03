@@ -338,7 +338,11 @@ function mapConditionPhrase(
     // Order matters: "debuff" contains "buff"; "buff on this unit" before "buff on the enemy".
     if (p.includes('debuff on the enemy') || p.includes('debuff on enemy'))
         return { condition: 'enemy-debuff', derivable: true };
-    if (p.includes('buff on this unit')) return { condition: 'self-buff', derivable: true };
+    // Self buff-count: "buff on this unit" (Sustainer active), "buff on itself" (Valiant),
+    // "buff on it" (Sustainer charged). The (?<!de) lookbehind keeps "debuff on itself"
+    // (Meatshield's repair scaling) from mis-mapping to self-buff.
+    if (/(?<!de)buff on (?:this unit|itself|it)\b/.test(p))
+        return { condition: 'self-buff', derivable: true };
     if (p.includes('buff on the enemy') || p.includes('buff on enemy'))
         return { condition: 'enemy-buff', derivable: false };
     if (p.includes('adjacent to the enemy'))
@@ -386,6 +390,22 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             ...(cap !== null ? { cap } : {}),
         };
     }
+    // "deals X% damage, increased to Y% … against <class>" — a replacement branch (the multiplier
+    // BECOMES Y vs that class) modeled as base X plus a conditional (Y − X) bonus gated on the
+    // enemy class (Gallant). Numerically identical to the game and reuses the enemy-type scaling
+    // path. Placed before ENEMY_TYPE_BONUS_RE — this "increased to" phrasing has no "additional".
+    const incTo = INCREASED_TO_ENEMY_TYPE_RE.exec(stripUnitTags(text));
+    if (incTo) {
+        const delta = parseFloat(incTo[2]) - parseFloat(incTo[1]);
+        if (delta > 0) {
+            return {
+                pct: delta,
+                condition: 'enemy-type',
+                derivable: true,
+                requiredEnemyType: capType(incTo[3]),
+            };
+        }
+    }
     // Fallback: flat "additional N% damage when attacking a <enemy class>" bonus.
     const typed = ENEMY_TYPE_BONUS_RE.exec(stripUnitTags(text));
     if (typed) {
@@ -403,12 +423,103 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
     if (critBonus) {
         return { pct: parseFloat(critBonus[1]), condition: 'self-crit', derivable: true };
     }
+    // "if Stealthed, additional deals N% damage" — a self-Stealth conditional bonus (Yin Jian's
+    // word-order "additional deals" variant). toCondition tags buffName 'Stealth' from the raw
+    // text, so the sim gates the bonus on the caster actually being Stealthed (0 in DPS mode).
+    const stealthBonus = SELF_STEALTH_BONUS_RE.exec(stripUnitTags(text));
+    if (stealthBonus) {
+        return { pct: parseFloat(stealthBonus[1]), condition: 'self-buff', derivable: true };
+    }
     return null;
 }
 
-// "if [this] critical[ly hits], … additional[ly] … N% damage" — extra damage dealt on a crit.
+// "if Stealthed, … additional … N% damage" — self-buff(Stealth) conditional bonus. Handles both
+// "additionally deals" and the reversed "additional deals" (Yin Jian) word orders.
+const SELF_STEALTH_BONUS_RE =
+    /\bif\s+stealthed\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+
+// "additional N% damage against <status>[ or <status>] enemies" — status adjectives (Rikra).
+const ENEMY_STATUS_BONUS_RE =
+    /\badditional(?:ly)?\s*(?:deals?\s+)?(\d+(?:\.\d+)?)\s*%\s*damage\s+against\s+([^.]*?)\benem(?:y|ies)/i;
+// "if the TARGET/ENEMY is affected by <Effect>[ or <Effect>], … additional N% damage" — tagged
+// effect names (Wrecker's Inferno). Matched on RAW text so the <unit-skill> tags survive.
+// The target/enemy subject is REQUIRED: it distinguishes Wrecker's enemy-state bonus from a
+// SELF-state replacement branch ("If THIS UNIT is affected by Provoke or Taunt, it instead
+// deals 170% …" — Panon's charged, a PR6b "instead"-branch case, NOT an additive enemy bonus).
+const ENEMY_AFFECTED_BONUS_RE =
+    /(?:target|enem(?:y|ies))\s+(?:is\s+|are\s+)?affected by\b([^.]*?),[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%/i;
+
+// "deals X% damage, increased to Y% … against <class>[s]" — Gallant's replacement branch. Matched
+// on stripped text; the trailing [^.]* tolerates the charged "with additional Stasis…" clause.
+const INCREASED_TO_ENEMY_TYPE_RE =
+    /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*increased to\s*(\d+(?:\.\d+)?)\s*%[^.]*?\bagainst\s+(?:an?\s+)?(attacker|defender|debuffer|supporter)s?\b/i;
+
+// "additional <Stasis> applied for N turn(s) against <class>[s]" — Gallant's charged conditional
+// control. Verb-after-tag phrasing ("Stasis applied") that STASIS_INFLICT_RE (verb-before)
+// deliberately doesn't match; kept as its own narrow pattern so the byte-identity-critical
+// STASIS_INFLICT_RE stays untouched.
+const CONDITIONAL_STASIS_APPLIED_RE =
+    /additional\s+<unit-skill>\s*Stasis\b[^.]*?\bapplied\b[^.]*?\bagainst\s+(?:an?\s+)?(attacker|defender|debuffer|supporter)s?\b/i;
+
+/**
+ * Returns the enemy class gating Gallant's charged "additional Stasis applied for 1 turn against
+ * Defenders" control, or null. Model fidelity only — the DPS pipeline ignores control abilities;
+ * the caller emits a control ability carrying the enemy-type condition.
+ */
+export function parseConditionalStasisApplied(
+    text: string | null | undefined
+): { requiredEnemyType: EnemyBaseClass } | null {
+    if (!text) return null;
+    const m = CONDITIONAL_STASIS_APPLIED_RE.exec(text);
+    return m ? { requiredEnemyType: capType(m[1]) } : null;
+}
+
+/** Maps enemy-status ADJECTIVES ("Taunted", "Provoked") to their effect names. Scoped to the
+ *  Taunt/Provoke targeting statuses that appear in the corpus's "against <status> enemies"
+ *  bonus phrasing (Rikra); other statuses are not adjective-referenced there. */
+function statusAdjectivesToNames(phrase: string): string[] {
+    const low = phrase.toLowerCase();
+    const names: string[] = [];
+    if (/\btaunt(?:ed)?\b/.test(low)) names.push('Taunt');
+    if (/\bprovoke[ds]?\b/.test(low)) names.push('Provoke');
+    return names;
+}
+
+/**
+ * A conditional damage BONUS gated on the ENEMY carrying an effect, distinct from the
+ * self/enemy-class conditionals of {@link parseConditionalDamage}. Two corpus phrasings:
+ *  - "additional N% damage against Taunted or Provoked enemies" (Rikra) — status adjectives.
+ *  - "if the target is affected by <Inferno>, deals an additional N% damage" (Wrecker) — a
+ *    tagged effect name. The base damage always fires; the bonus is added only when the enemy
+ *    has the effect(s) (0 in single-ship DPS mode, live-derived per victim in the combat sim —
+ *    same precedent as enemy-stealth-count scaling). Returns the bonus % and the effect names
+ *    (caller builds enemy-buff/enemy-debuff conditions via classifyEnemyEffect). Null when neither
+ *    phrasing is present.
+ */
+export function parseEnemyEffectDamageBonus(
+    text: string | null | undefined
+): { pct: number; effectNames: string[] } | null {
+    if (!text) return null;
+    const statusM = ENEMY_STATUS_BONUS_RE.exec(stripUnitTags(text));
+    if (statusM) {
+        const names = statusAdjectivesToNames(statusM[2]);
+        if (names.length) return { pct: parseFloat(statusM[1]), effectNames: names };
+    }
+    const affectedM = ENEMY_AFFECTED_BONUS_RE.exec(text);
+    if (affectedM) {
+        const names = [...affectedM[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) =>
+            x[1].trim()
+        );
+        if (names.length) return { pct: parseFloat(affectedM[2]), effectNames: names };
+    }
+    return null;
+}
+
+// "if/when [this unit|it is] critical[ly hits], … additional[ly] … N% damage" — extra damage
+// dealt on a crit. Covers Crucialis active ("if critical, additionally deals 75%") and its
+// charged "deals and additional" typo phrasing ("when it is critical, deals and additional 190%").
 const CRIT_BONUS_RE =
-    /\bif\s+(?:this\s+(?:unit\s+)?)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+    /\b(?:if|when)\s+(?:this\s+(?:unit\s+)?|it\s+is\s+)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
 
 // "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
 // enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped
@@ -809,10 +920,21 @@ export function detectGrantConditions(
         return [{ subject: 'enemy-buff', derivable: false }];
     }
 
-    // 5. Taunt / Provoke targeting status (reactive → manual "assume active")
+    // 5. Taunt / Provoke targeting status (reactive → manual "assume active").
+    // statusEffectCondition resolves these against the CASTER (Taunt = self-buff, Provoke =
+    // self-debuff), so the rule must only fire for SELF-attributed phrasing ("if this Unit is
+    // Provoked or Taunted"). Subject-aware guard: "against Taunted or Provoked enemies" (Rikra)
+    // is an ENEMY state gating a damage bonus — handled by parseEnemyEffectDamageBonus, NOT a
+    // self gate on this buff. Skip when the status adjective directly qualifies "enemies".
+    const enemyStatusAttributed =
+        /(?:taunt(?:ed)?|provoke[ds]?)(?:\s+or\s+(?:taunt(?:ed)?|provoke[ds]?))?\s+enem(?:y|ies)\b/i.test(
+            low
+        );
     const statuses: string[] = [];
-    if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
-    if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');
+    if (!enemyStatusAttributed) {
+        if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
+        if (/\bprovoke[ds]?\b/i.test(low)) statuses.push('Provoke');
+    }
     if (statuses.length) {
         return statuses.map((s) => statusEffectCondition(s, statuses.length > 1));
     }

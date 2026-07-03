@@ -222,12 +222,36 @@ function groupConditions(conditions: Condition[]): Condition[][] {
     return groups;
 }
 
+/**
+ * Indices of the consecutive `anyOf` OR-group containing `idx`. A non-anyOf condition is its
+ * own singleton group → returns just [idx]. Mirrors groupConditions' consecutive-run grouping.
+ * Lets a scaling source that is ONE member of an OR-group (Rikra's "against Taunted OR Provoked
+ * enemies") scale/gate as the WHOLE group, not just its first member. Inert for the
+ * single-condition scaling every existing parser-emitted / editor-built ability uses.
+ */
+export function anyOfGroupIndices(conditions: Condition[], idx: number): number[] {
+    const c = conditions[idx];
+    if (!c || !c.anyOf) return [idx];
+    let lo = idx;
+    while (lo > 0 && conditions[lo - 1]?.anyOf) lo--;
+    let hi = idx;
+    while (hi < conditions.length - 1 && conditions[hi + 1]?.anyOf) hi++;
+    const out: number[] = [];
+    for (let i = lo; i <= hi; i++) out.push(i);
+    return out;
+}
+
 /** Per-count scaling bonus for an ability, capped. 0 if no scaling rule. */
 export function scaledBonus(ability: Ability, ctx: ConditionContext): number {
     if (!ability.scaling) return 0;
-    const c = ability.conditions[ability.scaling.conditionIndex];
-    if (!c) return 0;
-    const count = evaluateCondition(c, ctx);
+    const idx = ability.scaling.conditionIndex;
+    if (!ability.conditions[idx]) return 0;
+    // Sum across the scaling source's anyOf OR-group so a binary "X or Y" bonus (Rikra's
+    // Taunted/Provoked) fires on either; a lone condition is a singleton group → unchanged.
+    const count = anyOfGroupIndices(ability.conditions, idx).reduce(
+        (sum, i) => sum + evaluateCondition(ability.conditions[i], ctx),
+        0
+    );
     const bonus = count * ability.scaling.perUnit;
     return ability.scaling.cap != null ? Math.min(bonus, ability.scaling.cap) : bonus;
 }

@@ -418,10 +418,14 @@ describe('scaledBonus', () => {
         expect(scaledBonus(base, makeConditionContext({ selfCritPower: 0 }))).toBe(0);
     });
 
-    it('scaling reads only the indexed condition, even inside an anyOf OR-group', () => {
-        // anyOf affects GATING (conditionsMet groups consecutive anyOf conditions);
-        // scaledBonus deliberately reads the raw count of conditions[conditionIndex]
-        // alone — the other group members never contribute to the bonus.
+    it('scaling sums the scaling source anyOf OR-group (epic PR6a: Rikra Taunted-or-Provoked)', () => {
+        // PR6a CONSCIOUS FLIP: scaledBonus now sums the counts of the WHOLE anyOf OR-group the
+        // scaling source belongs to, so a binary "X% against Taunted OR Provoked enemies" bonus
+        // (Rikra) fires on either. Golden-inert: no parser-emitted / editor-built ability had a
+        // multi-member anyOf scaling group before Rikra (the full golden suite is byte-identical),
+        // so this only changes the previously-synthetic multi-member case. A LONE (non-anyOf)
+        // scaling condition is its own singleton group → the raw-count-of-one behavior is unchanged
+        // (covered by the Selenite/Wildfire/per-unit cases above).
         const a = dmg(
             [
                 cond({ subject: 'enemy-debuff', derivable: true, anyOf: true }),
@@ -429,10 +433,18 @@ describe('scaledBonus', () => {
             ],
             { conditionIndex: 0, perUnit: 10, cap: 30 }
         );
+        // enemy-debuff count 2 + self-buff 0 = 2 → 20.
         expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 2 }))).toBe(20);
         expect(scaledBonus(a, makeConditionContext({ enemyDebuffCount: 5 }))).toBe(30); // capped
-        // self-buffs alone satisfy the OR-gate but contribute nothing to scaling
-        expect(scaledBonus(a, makeConditionContext({ selfBuffNames: ['Stealth'] }))).toBe(0);
+        // Either OR-group member now contributes: self-buff alone (count 1) → 10.
+        expect(scaledBonus(a, makeConditionContext({ selfBuffNames: ['Stealth'] }))).toBe(10);
+        // Both members sum (enemy-debuff 1 + self-buff 1 = 2 → 20).
+        expect(
+            scaledBonus(
+                a,
+                makeConditionContext({ enemyDebuffCount: 1, selfBuffNames: ['Stealth'] })
+            )
+        ).toBe(20);
     });
 });
 

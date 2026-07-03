@@ -1,6 +1,11 @@
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import { DoTApplicationConfig, SecondaryDamage } from '../../types/calculator';
-import { ConditionContext, conditionsMet, scaledBonus } from './evaluateConditions';
+import {
+    ConditionContext,
+    conditionsMet,
+    scaledBonus,
+    anyOfGroupIndices,
+} from './evaluateConditions';
 
 /** Folded passive-modifier deltas, in the same units as the DPS buff totals (percentage points). */
 export interface ModifierTotals {
@@ -251,16 +256,19 @@ export function detonationsFromSkill(
  * everyone, only the +90% is Supporter-gated. A scaling condition WITH a
  * countComparator (e.g. "if the enemy has 3+ debuffs…") is deliberately both
  * scaler and gate (the count-threshold invariant: comparator gates, raw count
- * scales). Note: removing the scaling condition from an anyOf OR-run could in
- * principle reshape groups, but parser-emitted scaling conditions are always
- * single and the editor's scaling hardcodes conditions[0].
+ * scales). When the scaling source is one member of an anyOf OR-group (Rikra's
+ * "against Taunted OR Provoked enemies"), the WHOLE group is stripped from the gate
+ * so the base damage still fires unconditionally — the group only scales the bonus.
+ * A lone scaling condition is its own singleton group → filters just that one index,
+ * identical to the previous behavior for every existing single-condition scaling.
  */
 function gateConditions(ability: Ability): Ability['conditions'] {
     const idx = ability.scaling?.conditionIndex;
     if (idx == null) return ability.conditions;
     const scalingCond = ability.conditions[idx];
     if (!scalingCond || scalingCond.countComparator != null) return ability.conditions;
-    return ability.conditions.filter((_, i) => i !== idx);
+    const groupIdxs = new Set(anyOfGroupIndices(ability.conditions, idx));
+    return ability.conditions.filter((_, i) => !groupIdxs.has(i));
 }
 
 /**

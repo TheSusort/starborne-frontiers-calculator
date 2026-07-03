@@ -24,6 +24,8 @@ import {
     parseCounterAbilities,
     parseSecondaryDamage,
     parseConditionalDamage,
+    parseEnemyEffectDamageBonus,
+    parseConditionalStasisApplied,
     parseChargeGain,
     parseAllyChargeOnEnemyDeath,
     parseAllyChargeGrant,
@@ -993,6 +995,33 @@ function abilitiesFromText(
         };
     }
 
+    // Conditional damage BONUS gated on the ENEMY carrying an effect: Rikra "additional 60%
+    // damage against Taunted or Provoked enemies", Wrecker "if affected by Inferno, additional
+    // 50%". enemyEffectConditions classifies each name into an enemy-buff/enemy-debuff condition
+    // (anyOf when >1); scaledBonus/gateConditions treat the group as one bare scaling source, so
+    // the base damage always fires and the bonus adds only when the enemy has the effect(s).
+    // Binary → cap at perUnit so multiple stacks can't inflate the one-time bonus. Only when no
+    // scaling was attached above (parseConditionalDamage takes precedence).
+    // ADJACENCY ASSUMPTION: no corpus ship pairs this enemy-effect bonus with a LATER same-ability
+    // multi-name enemy gate (the `damageEnemyEffectNamesFromClause` block below). If one ever did,
+    // anyOfGroupIndices would merge the two adjacent anyOf runs into one — folding that later gate's
+    // count into this bonus's scaling. Non-constructible today; revisit if such a ship appears.
+    if (out[0]?.ability.type === 'damage' && !out[0].ability.scaling) {
+        const enemyBonus = parseEnemyEffectDamageBonus(text);
+        if (enemyBonus) {
+            const startIdx = out[0].ability.conditions.length;
+            out[0].ability.conditions = [
+                ...out[0].ability.conditions,
+                ...enemyEffectConditions(enemyBonus.effectNames),
+            ];
+            out[0].ability.scaling = {
+                conditionIndex: startIdx,
+                perUnit: enemyBonus.pct,
+                cap: enemyBonus.pct,
+            };
+        }
+    }
+
     // "deals N% damage to enemies with less than X% HP" gates the damage on an enemy-HP
     // threshold (no scaling). Only when no conditional scaling was attached above.
     const hpGate = parseHpThresholdCondition(text);
@@ -1175,6 +1204,34 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: ctrl.pos >= 0 ? ctrl.pos : MAX_POS,
+        });
+    }
+
+    // Gallant's charged "additional Stasis applied for 1 turn against Defenders" — a control gated
+    // on the enemy class. Emitted here (not via parseControlInflicts, whose verb-before regex
+    // doesn't match "Stasis applied") carrying the enemy-type condition so the model records the
+    // gate. DPS-inert (control abilities have no damage/modifier); the condition documents the
+    // Defender restriction for the combat model.
+    const condStasis = parseConditionalStasisApplied(text);
+    if (condStasis) {
+        const stasisPos = text.search(/<unit-skill>\s*Stasis\b/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'control',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [
+                    {
+                        subject: 'enemy-type',
+                        derivable: true,
+                        requiredEnemyType: condStasis.requiredEnemyType,
+                    },
+                ],
+                config: { type: 'control', effect: 'stasis' },
+                autoFilled: true,
+            },
+            pos: stasisPos >= 0 ? stasisPos : MAX_POS,
         });
     }
 
