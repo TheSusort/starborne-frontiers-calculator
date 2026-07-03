@@ -90,6 +90,44 @@ export function modifierTotalsFromAbilities(
     return totals;
 }
 
+/**
+ * Sub-project I, PR I4b — split `dotDamage`-channel modifier abilities into (a) abilities
+ * whose gate is a name-specific enemy-status condition (Wildfire's "when an enemy has
+ * Scorching Radiation… for every N% crit power" bonus) and (b) everything else. Layer 2 (I1)
+ * name-gates a `dotDamage` modifier the same way it gates any other channel — via a GATE
+ * condition (`gateConditions`, post scaling-index strip so the paired `self-crit-power`
+ * scaling condition never disqualifies it) whose subject is `enemy-debuff`/`enemy-buff` AND
+ * carries a `buffName`.
+ *
+ * WHY THE SPLIT: `modifierTotalsFromAbilities` folds every dotDamage-channel ability against
+ * ONE ctx (today, the cast-time primary target's `modifierCtx`) — correct for an
+ * UNCONDITIONAL dotDamage source (Decimation set gear) but wrong for a per-victim-gated one
+ * (Wildfire), whose gate must be re-evaluated per TICK against the ticking victim's OWN
+ * live status (see `PlayerRoundCtx.victimGatedDotDamage` / `tickDoTs` in engine.ts). Callers
+ * feed `unconditional` into the normal `effectiveDamageStatsOf` fold (baking `dotMult` as
+ * before) and stash `conditional` + the cast-time ctx for later per-victim resolution.
+ * Empty `conditional` (the overwhelming common case — every non-Wildfire-shaped ship) is a
+ * byte-identical no-op: `unconditional` is the full original list.
+ */
+export function partitionDotDamageAbilities(abilities: Ability[]): {
+    unconditional: Ability[];
+    conditional: Ability[];
+} {
+    const unconditional: Ability[] = [];
+    const conditional: Ability[] = [];
+    for (const ability of abilities) {
+        const isNameGatedDotDamage =
+            ability.type === 'modifier' &&
+            ability.config.type === 'modifier' &&
+            ability.config.channel === 'dotDamage' &&
+            gateConditions(ability).some(
+                (c) => (c.subject === 'enemy-debuff' || c.subject === 'enemy-buff') && !!c.buffName
+            );
+        (isNameGatedDotDamage ? conditional : unconditional).push(ability);
+    }
+    return { unconditional, conditional };
+}
+
 /** The skill in the slot matching the round's action, or undefined if absent. */
 export function selectFiringSkill(
     shipSkills: ShipSkills,

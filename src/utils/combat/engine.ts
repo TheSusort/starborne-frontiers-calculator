@@ -770,6 +770,11 @@ function processAccumulators(args: {
 // credited per applier via `credit`; the `dot-ticked` event carries the per-dotType SUMMED
 // damage (preserving the pre-Task-4 single-event-per-type emission). At attacker-only this
 // produces byte-identical totals (exactly one applier → same sums).
+//
+// Sub-project I, PR I4b: `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH
+// dotTypes — it re-folds any enemy-status-name-gated dotDamage modifier (Wildfire) against
+// THIS call's ticking victim, live, at tick time (see `victimDotMult`). Every call site that
+// doesn't pass it (or an applier ctx with no such modifier) is unaffected: `ctx.dotMult` alone.
 function tickDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
@@ -780,7 +785,14 @@ function tickDoTs(args: {
     /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0 → byte-identical. */
     incomingDotReductionPct?: (dotType: 'corrosion' | 'inferno') => number;
+    /** Sub-project I, PR I4b — resolves the EFFECTIVE dotMult for one applier's ctx, given the
+     *  ticking VICTIM (this tickDoTs call's whole entries list belongs to ONE victim, so the
+     *  victim is fixed for the call; only the per-entry applier ctx varies). Defaults to the
+     *  applier's `ctx.dotMult` unchanged — every call site that doesn't (yet) pass this stays
+     *  byte-identical. Production call sites pass the engine's `victimDotMult` closure. */
+    dotMultFor?: (ctx: PlayerRoundCtx) => number;
 }): void {
+    const dotMultFor = args.dotMultFor ?? ((ctx: PlayerRoundCtx) => ctx.dotMult);
     // Step 4: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%)
     const corrosionBaseHp = Math.min(args.enemyHp, 500_000);
     const corrosionCredits: Array<{ sourceId: string; d: number }> = [];
@@ -788,7 +800,7 @@ function tickDoTs(args: {
     for (const e of args.corrosionEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue; // applier has not acted yet this run (faster-enemy round 1)
-        const d = e.stacks * (e.tier / 100) * corrosionBaseHp * ctx.dotMult * ctx.affinityMult;
+        const d = e.stacks * (e.tier / 100) * corrosionBaseHp * dotMultFor(ctx) * ctx.affinityMult;
         corrosionCredits.push({ sourceId: e.sourceId, d });
         corrosionSum += d;
     }
@@ -806,7 +818,8 @@ function tickDoTs(args: {
     for (const e of args.infernoEntries) {
         const ctx = args.ctxFor(e.sourceId);
         if (!ctx) continue;
-        const d = e.stacks * (e.tier / 100) * ctx.effectiveAttack * ctx.dotMult * ctx.affinityMult;
+        const d =
+            e.stacks * (e.tier / 100) * ctx.effectiveAttack * dotMultFor(ctx) * ctx.affinityMult;
         infernoCredits.push({ sourceId: e.sourceId, d });
         infernoSum += d;
     }
@@ -1918,6 +1931,32 @@ export function runCombat(input: CombatEngineInput): {
         ...(target.corrosionEntries.length > 0 ? ['Corrosion'] : []),
         ...(target.pendingBombs.length > 0 ? ['Bomb'] : []),
     ];
+    // Sub-project I, PR I4b — per-VICTIM, per-TICK resolution of an applier's dotMult. Reads
+    // `ctx.victimGatedDotDamage` (set by runPlayerTurn ONLY when the applier's cast carried an
+    // enemy-status-name-gated dotDamage modifier — Wildfire's Scorching Radiation crit-power
+    // bonus). The fast path (no such modifier — every other ship) returns `ctx.dotMult`
+    // unchanged: byte-identical. When present, re-folds `abilities` against a ctx whose
+    // enemy-status fields are swapped to `victim`'s OWN CURRENT live status (read fresh at
+    // TICK time via `enemyDebuffNamesForTarget`/`selfBuffNamesForOwners` — deliberately NOT a
+    // pre-turn snapshot: a DoT tick is a later, separate event from the cast that applied it,
+    // so there is no anti-causality concern about it seeing that SAME cast's own debuff-
+    // infliction, unlike I2's positional-apply delta). Since the ability was EXCLUDED from the
+    // cast-time `dotMult` bake (see `partitionDotDamageAbilities`), the fresh fold is ADDED
+    // directly — no base-ctx subtraction needed (contrast I2's `perVictimOutgoingDeltaPct`,
+    // which must subtract because its abilities stay baked into the aggregate).
+    const victimDotMult = (ctx: PlayerRoundCtx, victim: CombatActor): number => {
+        const gated = ctx.victimGatedDotDamage;
+        if (!gated || gated.abilities.length === 0) return ctx.dotMult;
+        const victimCtx: ConditionContext = {
+            ...gated.ctx,
+            ...(gated.ctx.enemyDebuffNames !== undefined
+                ? { enemyDebuffNames: enemyDebuffNamesForTarget(victim) }
+                : {}),
+            enemyBuffNames: selfBuffNamesForOwners(statusEngine, [victim.id]),
+        };
+        const bonus = modifierTotalsFromAbilities(gated.abilities, victimCtx).dotDamage;
+        return ctx.dotMult + bonus / 100;
+    };
     const isStasised = (actorId: string): boolean => ownerDebuffNames(actorId).some(isStasis);
     const isDisabled = (actorId: string): boolean => ownerDebuffNames(actorId).some(isDisable);
     /** Turn-blocked = cannot take its scheduled action this turn (Stasis OR Disable). Used by the
@@ -4961,6 +5000,8 @@ export function runCombat(input: CombatEngineInput): {
                                     hitIndexThisRound: 0,
                                     dotType,
                                 }),
+                            // PR I4b: the tank is the ticking victim.
+                            dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
                         });
                         if (tankDotDamage > 0) {
                             // C2b-2 T5: a DoT-tick batch is an AGGREGATE of multiple appliers with no
@@ -5029,6 +5070,8 @@ export function runCombat(input: CombatEngineInput): {
                                         hitIndexThisRound: 0,
                                         dotType,
                                     }),
+                                // PR I4b: this actor IS the ticking victim.
+                                dotMultFor: (ctx) => victimDotMult(ctx, actor),
                             });
                             if (total > 0) {
                                 // DoT batch: bypass shield (byDirectDamage:false), aggregate of
@@ -5712,6 +5755,8 @@ export function runCombat(input: CombatEngineInput): {
                             }),
                         credit: (sourceId, dotType, damage) =>
                             creditDamage(sourceId, dotType, damage),
+                        // PR I4b: the dummy sink `enemy` is the ticking victim.
+                        dotMultFor: (ctx) => victimDotMult(ctx, enemy),
                     });
 
                     // Bombs: per-entry burst credited to the applier's detonation channel,

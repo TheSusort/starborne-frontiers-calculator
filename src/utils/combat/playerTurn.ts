@@ -17,6 +17,7 @@ import {
     accumulatorsFromSkill,
     gateFiringAbilities,
     extraActionsFromSkill,
+    partitionDotDamageAbilities,
     type ExtraActionGrant,
 } from '../abilities/applyAbilities';
 import { toSimBuffs, toEnemyModifiers, toEnemyDotModifier } from '../calculators/dpsBuffHelpers';
@@ -89,6 +90,18 @@ export interface PlayerRoundCtx {
     effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
+    /** Sub-project I, PR I4b — `dotDamage`-channel modifier abilities whose GATE is a
+     *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
+     *  Radiation… for every N% crit power" bonus), plus the cast-time ctx used to fold them
+     *  (`partitionDotDamageAbilities` — see its jsdoc for the shape check). EXCLUDED from
+     *  `dotMult` above, which bakes only the UNCONDITIONAL dotDamage contribution (e.g.
+     *  Decimation set gear). The engine re-folds `abilities` against a per-VICTIM,
+     *  per-TICK ctx (only the enemy-status fields swapped to that victim's own CURRENT live
+     *  status — see `tickDoTs`/`victimDotMult` in engine.ts) so the bonus applies to a tick
+     *  only while the ticking victim currently carries the required status. Undefined/empty
+     *  `abilities` → tick math is `dotMult` alone, byte-identical for every non-Wildfire-
+     *  shaped ship (and for the DPS simulator, which never reads this field). */
+    victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext };
 }
 
 /** Healing-mode context threaded into player turns (and later the executor). The ENGINE
@@ -1421,6 +1434,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ...(passiveSkill?.abilities ?? []),
         ...(args.allyModifierAbilities ?? []),
     ];
+    // Sub-project I, PR I4b: pull the enemy-status-name-gated dotDamage abilities (Wildfire's
+    // Scorching Radiation crit-power bonus) OUT of the abilities fed to the cast-time fold
+    // below — they must be re-evaluated per VICTIM per TICK against that victim's own live
+    // status (turnCtx.victimGatedDotDamage, resolved in engine.ts's tickDoTs), not baked once
+    // against the primary target. `dotDamageUnconditional` carries every OTHER ability
+    // unchanged (all channels, plus any non-name-gated dotDamage source e.g. Decimation set
+    // gear) — for every ship without such a modifier this equals `modifierAbilities` and the
+    // fold below is byte-identical to before.
+    const { unconditional: dotDamageUnconditional, conditional: dotDamageConditional } =
+        partitionDotDamageAbilities(modifierAbilities);
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
@@ -1428,7 +1451,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         base: { attack, defence, crit, critDamage, hp, defensePenetration, defensePenetrationBuff },
         scheduledTotals,
         abilitySelfEffects,
-        modifierAbilities,
+        modifierAbilities: dotDamageUnconditional,
         modifierCtx,
     });
     const effectiveAttack = dmgStats.attack;
@@ -2464,6 +2487,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveMaxHp: effectiveHp,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
+        // PR I4b: only set when this cast actually carries a victim-gated dotDamage ability —
+        // undefined for every ship without one (the common case), so tickDoTs' fast path
+        // (`ctx.victimGatedDotDamage` falsy → use `dotMult` unchanged) is byte-identical.
+        ...(dotDamageConditional.length > 0
+            ? { victimGatedDotDamage: { abilities: dotDamageConditional, ctx: modifierCtx } }
+            : {}),
     };
 
     // Per-cast attacker-side scalars for the positional apply path (Task 7). Sourced from
