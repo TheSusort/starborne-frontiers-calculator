@@ -27,11 +27,7 @@ const ENFORCER_TEXT =
     'At the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.';
 const FULLY_CHARGED_TEXT = 'This Unit starts combat fully charged.';
 
-const makeShip = (
-    id: string,
-    name: string,
-    over: Partial<Ship> = {}
-): Ship =>
+const makeShip = (id: string, name: string, over: Partial<Ship> = {}): Ship =>
     ({
         id,
         name,
@@ -206,7 +202,10 @@ describe('simulateBattle Chimei charged start ("starts combat fully charged")', 
                     chargeSkillText: 'This Unit deals <unit-damage>400% damage</unit-damage>.',
                     chargeSkillCharge: 2,
                     secondPassiveSkillText: FULLY_CHARGED_TEXT,
-                    refits: Array.from({ length: refitCount }, () => ({})) as unknown as Ship['refits'],
+                    refits: Array.from(
+                        { length: refitCount },
+                        () => ({})
+                    ) as unknown as Ship['refits'],
                 }),
                 'M4',
                 5000,
@@ -265,5 +264,90 @@ describe('simulateBattle pre-fight ship passives — non-regression (no-op proof
         const b = simulateBattle({ ...lionheartTeams({ lionPassive: false }), rounds: 2 });
         expect(a).toEqual(b);
         expect('preFight' in a).toBe(false);
+    });
+});
+
+// ─── Epic PR4: start-of-combat one-time SHIELD grant (Crucialis/FrontLine) ──────────────────
+//
+// "This Unit gains Shield equal to 25% of its Max HP at the start of combat" (FrontLine's real
+// corpus clause, docs/ship-skills.csv) is parsed `type:'shield', trigger:'pre-combat'` and
+// seeded ONCE by `seedPreCombatShields` (engine.ts, round 1 before any turn) — distinct from the
+// text-regex `applyPreCombatShipPassives` seam that the Lionheart/Enforcer tests above exercise
+// (that seam has no shield handling at all; this is the ability-model pre-combat/pre-fight seam,
+// sub-project F). Proves TWO things through the real parse → build → engine pipeline:
+//   1. the pool exists BEFORE round 1's first hit (it absorbs damage in round 1 itself);
+//   2. it is granted EXACTLY ONCE — once drained, later rounds do NOT re-seed it even though the
+//      focus casts a skill every round (the bug this PR fixes: on-cast would re-grant the full
+//      25%-of-maxHP pool on every cast, making the ship effectively unkillable by anything that
+//      doesn't out-damage the shield in a single hit).
+describe('simulateBattle pre-combat SHIELD grant — FrontLine "at the start of combat" shield', () => {
+    const FRONTLINE_SHIELD_TEXT =
+        'This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.';
+    const FOCUS_HP = 100_000;
+    const HIT = 8_000; // enemy attack × 100% active skill, defence 0 → exactly 8,000 HP dmg/hit
+
+    /** Single focus (M4, front) vs a single enemy (M4-mirrored) dealing a fixed HIT/round. */
+    const shieldTeams = (opts: { shieldPassive: boolean }) => ({
+        playerTeam: [
+            placement(
+                makeShip('front', 'FrontLine', {
+                    ...(opts.shieldPassive ? { firstPassiveSkillText: FRONTLINE_SHIELD_TEXT } : {}),
+                }),
+                'M4',
+                0, // the focus never damages the enemy — irrelevant to this test
+                FOCUS_HP
+            ),
+        ],
+        enemyTeam: [placement(makeShip('e1', 'Enemy Front'), 'M4', HIT, 500_000)],
+    });
+
+    // NOTE on RED status: this round-1 case is a CHARACTERIZATION test, not a regression test —
+    // it passes both before and after the trigger fix. At equal speed the focus's own turn (which
+    // is where an on-cast grant would have applied too) resolves BEFORE the enemy's turn within
+    // round 1, so a buggy on-cast grant would coincidentally protect round 1 exactly the same way
+    // a correct pre-fight seed does. The behavior that ACTUALLY distinguishes pre-fight-once from
+    // on-cast-every-turn is proven by the next test (the pool is never re-granted after it drains).
+    it('round 1: the shield is already active before the first hit lands', () => {
+        const baseline = simulateBattle({ ...shieldTeams({ shieldPassive: false }), rounds: 1 });
+        const shielded = simulateBattle({ ...shieldTeams({ shieldPassive: true }), rounds: 1 });
+
+        const base1 = shipRow(baseline, 1, 'attacker');
+        const shield1 = shipRow(shielded, 1, 'attacker');
+
+        // No shield: the full hit lands on HP.
+        expect(base1.damageTaken).toBe(HIT);
+        expect(base1.currentShieldPool).toBe(0);
+
+        // With the pre-combat shield: 25,000 seeded before round 1 absorbs the 8,000 hit
+        // entirely — HP takes NO damage, and the remaining pool reflects the deduction.
+        expect(shield1.incomingShieldAbsorbed).toBe(HIT);
+        expect(shield1.currentShieldPool).toBe(0.25 * FOCUS_HP - HIT);
+        expect(shield1.hpPct).toBe(100);
+    });
+
+    it('the pool is granted EXACTLY ONCE: after it drains, later rounds take full damage again (no re-grant on cast)', () => {
+        // 25,000 / 8,000 per round drains after 4 hits (3 full absorbs + 1 partial): rounds
+        // 1-3 fully absorbed (24,000 of 25,000), round 4 absorbs the last 1,000 and lets 7,000
+        // through, round 5 the pool is EMPTY and — if the passive still re-granted on every
+        // cast (the bug) — round 5 would show ANOTHER full/partial absorption. It does not.
+        const result = simulateBattle({ ...shieldTeams({ shieldPassive: true }), rounds: 5 });
+        const round = (r: number) => shipRow(result, r, 'attacker');
+
+        expect(round(1).currentShieldPool).toBe(25_000 - HIT); // 17,000
+        expect(round(2).currentShieldPool).toBe(25_000 - 2 * HIT); // 9,000
+        expect(round(3).currentShieldPool).toBe(25_000 - 3 * HIT); // 1,000
+        expect(round(4).currentShieldPool).toBe(0); // last 1,000 absorbed, pool exhausted
+        expect(round(4).incomingShieldAbsorbed).toBe(1_000);
+        // `damageTaken` is the GROSS per-victim hit (pre-shield, always HIT here); `incomingDamage`
+        // is the NET HP damage that actually landed after shield mitigation — 7,000 spills through.
+        expect(round(4).damageTaken).toBe(HIT);
+        expect(round(4).incomingDamage).toBe(HIT - 1_000);
+
+        // Round 5: NO re-grant. The pool stays at 0 and the full hit lands on HP net, even
+        // though the focus has cast a skill every round so far (4 casts) — proving the grant
+        // is a one-time pre-fight seed, not an on-cast re-application.
+        expect(round(5).currentShieldPool).toBe(0);
+        expect(round(5).incomingShieldAbsorbed).toBe(0);
+        expect(round(5).incomingDamage).toBe(HIT);
     });
 });

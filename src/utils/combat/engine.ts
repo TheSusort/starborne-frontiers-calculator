@@ -349,6 +349,38 @@ function seedPassiveTimedStatuses(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Combat-start seeding for PASSIVE-sourced PRE-COMBAT shields (epic PR4).
+//
+// "At the start of combat, this Unit gains a Shield equal to N% of its Max HP" (Crucialis,
+// FrontLine) — the parser now tags these `type:'shield', trigger:'pre-combat'`. The cast path
+// (runPlayerTurn's heal/shield loop) SKIPS pre-combat abilities (they used to re-grant the pool
+// on every cast), and this seam applies them exactly ONCE, before any round-1 turn — the same
+// sequence point as seedPassiveTimedStatuses. Semantics mirror the F3 squad-leader
+// `startingShieldPctOfHp` seeding in createActor: silent (no shield-applied emission, no
+// `granted` credit — a pre-fight pool, not a cast), basis = the actor's BASE max HP (post
+// pre-fight stat passes; no round buffs exist yet), pool capped at max HP (locked H rule).
+// Team-symmetric by construction: the engine calls this for both runtime collections.
+// Conditions are ignored — every corpus clause is unconditional (verified ship-skills.csv);
+// a future conditional pre-combat shield must add gating here.
+function seedPreCombatShields(runtimes: PlayerActorRuntime[]): void {
+    for (const rt of runtimes) {
+        for (const slot of rt.castSkills.slots) {
+            if (slot.slot !== 'passive') continue;
+            for (const ability of slot.abilities) {
+                if (ability.trigger !== 'pre-combat') continue;
+                const cfg = ability.config;
+                if (cfg.type !== 'shield' || cfg.basis !== 'hp') continue;
+                const maxHp = rt.actor.stats.hp;
+                rt.actor.shieldPool = Math.min(
+                    rt.actor.shieldPool + maxHp * (cfg.pct / 100),
+                    maxHp
+                );
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Enemy PlayerActorRuntime builder (Task 5; consumed by the Task 6b dispatch)
 //
 // Constructs a FULL PlayerActorRuntime for a healing-mode enemy attacker, mirroring
@@ -2898,6 +2930,11 @@ export function runCombat(input: CombatEngineInput): {
         if (r === 1) {
             seedPassiveTimedStatuses([...runtimesById.values()], statusEngine, bus, enemyType, r);
             seedPassiveTimedStatuses(enemyPlayerRuntimes, statusEngine, bus, undefined, r);
+            // Epic PR4: one-time "at the start of combat" passive shields (Crucialis/FrontLine)
+            // — seeded silently ONCE here, never on cast (the cast path skips pre-combat
+            // abilities). Same both-collections call shape as the timed seeding above.
+            seedPreCombatShields([...runtimesById.values()]);
+            seedPreCombatShields(enemyPlayerRuntimes);
         }
 
         // Selection-based action pool (dynamic-speed turn order, Task 3). Each living actor

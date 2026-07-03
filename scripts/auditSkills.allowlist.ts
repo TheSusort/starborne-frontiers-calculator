@@ -37,11 +37,6 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Reactive: on being killed.',
     },
     {
-        ship: 'Yazid',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Recurring/reactive: start of combat / Cheat Death.',
-    },
-    {
         ship: 'Nosorog',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Reactive: when this Unit removes a debuff.',
@@ -126,7 +121,6 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Valkyrie',
         rules: ['accumulate-detonate'],
-        reason:
-            'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
+        reason: 'Passive mentions "When an Echoing Burst explodes" as a heal-on-burst reaction, not an infliction. The charged skill correctly parses the accumulate-detonate; the passive reference is filtered by the parser guard.',
     },
 ];

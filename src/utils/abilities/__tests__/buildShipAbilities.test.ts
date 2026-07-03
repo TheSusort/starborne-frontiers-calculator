@@ -2745,17 +2745,19 @@ describe('buildShipAbilities', () => {
                 conditions: [selfHpBelow(40)],
             });
             expect(barrier.config).toMatchObject({ duration: 1, oncePerCombat: true });
-            // The start-of-combat grants stay on-cast (no crossing trigger / condition).
+            // Epic PR4: the start-of-combat grants now ride 'pre-combat' (not the crossing
+            // trigger / condition — they carry no HP gate of their own, just the annotation-only
+            // one-time-grant relabel shared with Crucialis/Meatshield/FrontLine/Yazid).
             const cheatDeath = passive.abilities.find(
                 (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
             )!;
-            expect(cheatDeath).toMatchObject({ trigger: 'on-cast', conditions: [] });
+            expect(cheatDeath).toMatchObject({ trigger: 'pre-combat', conditions: [] });
             expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
             const everliving = passive.abilities.find(
                 (a) =>
                     a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration II'
             )!;
-            expect(everliving).toMatchObject({ trigger: 'on-cast', conditions: [] });
+            expect(everliving).toMatchObject({ trigger: 'pre-combat', conditions: [] });
             expect(everliving.config).toMatchObject({ duration: 9 });
         });
 
