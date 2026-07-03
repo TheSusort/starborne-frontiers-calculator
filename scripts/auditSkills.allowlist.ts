@@ -15,31 +15,21 @@ export const ALLOWLIST: AllowEntry[] = [
     {
         ship: 'Lingshe',
         rules: ['detonation'],
-        reason: 'Countdown-reduction + crit-scaling Bomb detonation (charged skill). The "gains Stealth on detonating a Bomb" passive now carries an on-bomb-detonated trigger (no longer ungated).',
+        reason: 'Countdown-reduction + crit-scaling Bomb detonation (charged skill). The "gains Stealth on detonating a Bomb" passive now carries an on-bomb-detonated trigger (no longer ungated). (NOTE: currently a multi-line CSV record dropped by the audit reader — kept until the reader is fixed.)',
     },
 
     // ── ungated-effect-with-trigger: intentionally not auto-gated ───────────────
     // Reactive triggers (on-cleanse / on-kill / on-damaged / enemy-uses-charged / on-resist /
     // on-death) — modelled manually by the user, never auto-derived in single-ship DPS.
     {
-        ship: 'Howler',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an ally crits.',
-    },
-    {
         ship: 'Ravager',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Reactive: when its debuff is resisted.',
     },
     {
-        ship: 'Nayra',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Source typo "When directly damage" (missing -d) — outside the parser\'s self-damage-reaction phrasing (DR_DIRECT_DAMAGE_RE matches "damaged"), so Terran Bolster III stays unmodeled; the enemy-repair reaction (Out. Repair Down) is also unmodeled.',
-    },
-    {
         ship: 'Curator',
         rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy uses its Charged skill.',
+        reason: 'Reactive: when an enemy uses its Charged skill. (NOTE: currently a multi-line CSV record dropped by the audit reader — kept until the reader is fixed.)',
     },
     {
         ship: 'Paracelsus',
@@ -50,21 +40,6 @@ export const ALLOWLIST: AllowEntry[] = [
         ship: 'Yazid',
         rules: ['ungated-effect-with-trigger'],
         reason: 'Recurring/reactive: start of combat / Cheat Death.',
-    },
-    {
-        ship: 'Arum',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy cleanses a debuff.',
-    },
-    {
-        ship: 'Yarrow',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy cleanses a debuff.',
-    },
-    {
-        ship: 'Larkspur',
-        rules: ['ungated-effect-with-trigger'],
-        reason: 'Reactive: when an enemy cleanses a debuff.',
     },
     {
         ship: 'Nosorog',
