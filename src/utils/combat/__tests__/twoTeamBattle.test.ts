@@ -1517,4 +1517,116 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         expect(round4Turn).toBeDefined();
         expect(round4Turn!.entries.length).toBe(0);
     });
+
+    it('threshold flip: an ally-only ACTIVE runs but the enemy-facing CHARGED skill skips, per-round, at the charge threshold', () => {
+        // Exercises the action-selection mirror inside the dead-target check: the predicate
+        // must inspect the skill that WOULD fire this turn, not a fixed slot. The supporter's
+        // active is ally-only (must keep running against the dead legacy binding) while its
+        // charged skill is a plain damage nuke (must skip when it would fire). chargeCount=2 →
+        // R1 active(bank→1), R2 active(bank→2, focus now dead), R3 charged-would-fire → SKIP
+        // (dead-path cadence resets the bank to 0 without firing), R4 active again.
+        const GRAPHITE_ACTIVE_TEXT =
+            'This unit grants <unit-skill>Overclock III</unit-skill> for 2 turns and a ' +
+            '<unit-damage>shield equal to 120%</unit-damage> of its attack.';
+        const result = simulateBattle({
+            playerTeam: [
+                {
+                    ship: makeShip('focus', 'Focus', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 60_000,
+                        speed: 120,
+                    },
+                },
+                {
+                    ship: makeShip('survivor', 'Survivor', BACK),
+                    position: 'M3',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 110,
+                    },
+                },
+            ],
+            enemyTeam: [
+                {
+                    ship: makeShip('killer', 'Killer', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 30_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 130,
+                    },
+                },
+                {
+                    ship: {
+                        ...makeShip('flipper', 'Flipper', {
+                            activeTarget: 'allies',
+                            activePattern: 'Pattern-Support-Double-Pickaxe-Range-0',
+                            activeSkillText: GRAPHITE_ACTIVE_TEXT,
+                            type: 'Supporter',
+                        }),
+                        chargeSkillText: 'This Unit deals <unit-damage>150% damage</unit-damage>.',
+                        chargeSkillCharge: 2,
+                    },
+                    position: 'M2',
+                    statOverrides: {
+                        attack: 5_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 90,
+                    },
+                },
+            ],
+            rounds: 4,
+        });
+
+        const FLIPPER = 'e:flipper:1';
+        const aliveAt = (round: number) =>
+            result.rounds
+                .find((r) => r.round === round)
+                ?.ships.find((s) => s.actorId === 'attacker')?.alive;
+        expect(aliveAt(2)).toBe(false); // premise: focus dead from round 2
+
+        const entriesAt = (round: number) =>
+            result.combatLog
+                .find((r) => r.round === round)
+                ?.turns.find((t) => t.actorId === FLIPPER)?.entries ?? [];
+        const grantsBuff = (round: number) =>
+            entriesAt(round).some((e) => e.kind === 'buff' && e.note === 'Overclock III');
+        const dealsDamage = (round: number) =>
+            entriesAt(round).some(
+                (e) => e.kind === 'attack' && e.targets.some((t) => (t.amount ?? 0) > 0)
+            );
+
+        // R2: focus is dead but the would-fire skill is the ally-only ACTIVE → runs.
+        expect(grantsBuff(2)).toBe(true);
+        // R3: bank hit the threshold → would-fire is the enemy-facing CHARGED skill → the
+        // dead-target skip applies: no buff, and no damage lands on anyone from the corpse
+        // binding.
+        expect(grantsBuff(3)).toBe(false);
+        expect(dealsDamage(3)).toBe(false);
+        // R4: the dead-path cadence reset the bank to 0 → back to the ally-only ACTIVE → runs.
+        expect(grantsBuff(4)).toBe(true);
+    });
 });
