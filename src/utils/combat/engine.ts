@@ -1072,6 +1072,23 @@ export interface CombatEngineInput {
     __testTapApplyOutgoingToEnemy?: (
         fn: (damage: number, enemyVictim: CombatActor) => VictimDamageOutcome
     ) => void;
+    /** TEST-ONLY notification hook (PR4b): fired on EVERY `creditDamage` call (both sides, every
+     *  round) with the raw (sourceId, channel, amount) — a per-call NOTIFICATION, not a
+     *  tap-the-closure-out pattern (creditDamage is redeclared every round inside the round
+     *  loop, so exposing the closure reference the way `__testTapApplyOutgoingToEnemy` does
+     *  would only ever surface the LAST round's instance). Needed because the reactive `damage`
+     *  executor (Judge/Chakara/Incinerator/Rhodium/Grif/FrontLine) credits its mitigated/crit
+     *  amount here rather than applying real HP damage via applyVictimDamage — there is no other
+     *  observable surface for an ENEMY-owned reactive damage credit (its victim's `intakeFor`
+     *  bucket is never touched; see the CREDIT-vs-INTAKE split above `roundDamage`). Lets
+     *  integration tests observe the exact mitigated/crit amount an owner (either side) was
+     *  credited, proving team-symmetric mitigation without needing a leech buff as an indirect
+     *  HP-based proxy. Never set by production code; inert when absent. */
+    __testTapCreditDamage?: (
+        sourceId: string,
+        channel: 'direct' | 'detonation' | 'corrosion' | 'inferno',
+        amount: number
+    ) => void;
     /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
      *  are constructed, so unit tests can assert the plumbed base hacking/security on each actor
      *  (the bases have no production reader yet). Never set by production code; inert when absent.
@@ -2362,6 +2379,14 @@ export function runCombat(input: CombatEngineInput): {
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
     // for every existing fixture → byte-identical.
     const counterCritGates = new Map<string, RateGate>();
+    // PR4b: dedicated crit-gate for the reactive `damage` executor (Judge/Chakara/Incinerator/
+    // Rhodium/Grif/FrontLine start-of-round/end-of-round/on-enemy-cleansed/on-enemy-charged-cast
+    // procs). A NEW map, mirroring counterCritGates — keyed `${ownerId}:${abilityId}`, so it only
+    // ever draws for ships carrying one of these abilities. `noCrit`-flagged abilities (Grif,
+    // Rhodium) never touch this map at all (the `!noCrit &&` short-circuit in applyReactiveDamage
+    // skips the roll entirely) — no gate is ever created for them, so they can never crit by
+    // construction, independent of the RNG stream.
+    const reactiveDamageCritGates = new Map<string, RateGate>();
 
     // ═══════════════════════════════════════════════════════════════════════════════════════
     // Reactive extra-action timing analysis (Phase 4b Task 10). Two death paths land an
@@ -2994,6 +3019,7 @@ export function runCombat(input: CombatEngineInput): {
         const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
             dmg(sourceId)[channel] += amount;
             procStandingLeeches(sourceId, channel, amount);
+            input.__testTapCreditDamage?.(sourceId, channel, amount);
         };
         // Healing mode: rebind the per-round healing map (so `credit` writes into THIS round)
         // and snapshot the target's HP%/shield at the ROUND TOP — before any turn. Raw floats;
@@ -3669,6 +3695,86 @@ export function runCombat(input: CombatEngineInput): {
                 attacker.id,
                 (roundPerTargetDamage.get(attacker.id) ?? 0) + raw
             );
+        };
+
+        // PR4b: the reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
+        // on-enemy-cleansed, FrontLine's on-enemy-charged-cast, and epic PR4's re-tagged Judge/
+        // Chakara/Incinerator/Rhodium start-of-round/end-of-round passives. Mirrors
+        // applyCounterAttack's mitigated/crit walk (SAME victimHitDamage call, SAME documented
+        // approximations: no outgoing-damage buff, no per-victim incoming-damage modifier,
+        // base-only defense penetration, no shield penetration) but CREDITS the owner's round
+        // damage-dealt bucket (creditDamage) instead of applying real HP damage via
+        // applyVictimDamage — this executor never mutated a specific victim's HP before this fix
+        // either (`ctx.creditReactiveDamage` was credit-only), so that contract is UNCHANGED; only
+        // the CREDITED NUMBER's formula changes (now mitigated + crit-eligible instead of a flat
+        // effectiveAttack × multiplier fold with no defense and no crit).
+        //
+        // Victim resolution is the caller's job (triggers.ts resolves `counterTargetId ?? ctx.
+        // enemy.id`, the SAME idiom every sibling target:'enemy' reactive branch already uses) —
+        // this closure only needs a concrete victim id to mitigate against.
+        const applyReactiveDamage = (
+            ownerId: string,
+            victimId: string,
+            abilityId: string,
+            multiplier: number,
+            hits: number,
+            noCrit: boolean
+        ): void => {
+            const owner = allActorsById.get(ownerId);
+            const victim = allActorsById.get(victimId);
+            if (!owner || owner.destroyedRound !== undefined) return;
+            // A missing/already-destroyed victim has no defense to mitigate against — skip
+            // rather than crediting an un-mitigated number (defensive; in practice ctx.enemy and
+            // eventCtx.counterTargetId both always resolve to a live actor).
+            if (!victim || victim.destroyedRound !== undefined) return;
+
+            const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
+            const victimStats = effectiveStatsOf(statusEngine, selfBuffLookup, victim);
+
+            // Deterministic per-(owner, ability) crit gate — a NEW map (reactiveDamageCritGates),
+            // never Math.random. `noCrit` short-circuits the roll entirely: a flagged ability
+            // (Grif "cannot critically hit", Rhodium "cannot critically hit") never creates a gate
+            // key, so it can never crit by construction, matching the flag rather than relying on
+            // the executor to withhold crit eligibility. A 0%-crit owner ALSO skips the roll — a
+            // guaranteed-miss draw would still consume a value from the shared seeded RNG stream
+            // and perturb every later gate's schedule (proc gates, debuff landing) for ships that
+            // can never crit anyway. Live-checked per call, so a mid-fight crit buff starts
+            // drawing from that point on.
+            const didCrit =
+                !noCrit &&
+                ownerStats.crit > 0 &&
+                rollRateGate(
+                    reactiveDamageCritGates,
+                    `${ownerId}:${abilityId}`,
+                    ownerStats.crit / 100
+                );
+
+            const raw = victimHitDamage(
+                {
+                    effectiveAttack: ownerStats.attack,
+                    // Fold hit count into the multiplier and pass hits:1 (mirrors
+                    // applyCounterAttack) — models the reactive proc as ONE consolidated hit.
+                    multiplierPct: multiplier * hits,
+                    secondaryStatValue: 0,
+                    hits: 1,
+                    effectiveCritDamage: ownerStats.critDamage,
+                    outgoingDamageBuffPct: 0,
+                    incomingDamageModifierPct: 0,
+                    defensePenetrationPct: ownerStats.defensePenetration,
+                    attackerAffinity: owner.affinity ?? 'antimatter',
+                },
+                {
+                    defence: victimStats.defence,
+                    defenceModifierPct: 0,
+                    affinity: victim.affinity ?? 'antimatter',
+                },
+                didCrit,
+                1 // roleScale: a reactive proc is a single full hit
+            );
+            // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
+            // credits nothing), matching the pre-fix zero-damage guard.
+            if (raw <= 0) return;
+            creditDamage(ownerId, 'direct', raw);
         };
 
         // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
@@ -4686,11 +4792,10 @@ export function runCombat(input: CombatEngineInput): {
                             if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
                             else pendingResisted.push(resisted);
                         },
-                        // Phase 4c PR 4: reactive direct damage (Grif) credits the owner's
-                        // round map via the single credit point so leeches still see it.
-                        creditReactiveDamage: (ownerId: string, amount: number): void => {
-                            creditDamage(ownerId, 'direct', amount);
-                        },
+                        // PR4b: reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
+                        // Rhodium) — full mitigated/crit walk, credited via the single credit
+                        // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
+                        applyReactiveDamage,
                         applyCounterAttack,
                         counterFiredThisTurn,
                         // Healing mode only — the SAME shared ctx the player turns use, so a

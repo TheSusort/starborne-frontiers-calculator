@@ -844,11 +844,22 @@ export interface IntentExecContext {
     /** The owner's current own-turn counter (CombatActor.turnsTaken). Engine-populated;
      *  absent in DPS mode → defaults 0 (every-n-turns inert). */
     turnsTakenFor?: (ownerId: string) => number;
-    /** Credit reactive direct damage to the owner's round damage map against the shared
-     *  enemy pool (Phase 4c PR 4 — Grif's on-enemy-cleansed 75% damage proc). Wraps the
-     *  engine's `creditDamage(ownerId, 'direct', amount)` so the standing-leech hook still
-     *  sees it. Absent → the damage branch is inert (unit fixtures / DPS mode w/o delegate). */
-    creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    /** PR4b: apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
+     *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
+     *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
+     *  reactive-damage crit gate; `noCrit` (Grif/Rhodium "cannot critically hit") skips the roll
+     *  entirely. Mirrors `applyCounterAttack`'s mitigated/crit walk but credits the owner's round
+     *  damage-dealt bucket (creditDamage) instead of applying real HP damage — this executor
+     *  never mutated a specific victim's HP (was credit-only pre-fix). Absent → the damage
+     *  branch is inert (unit fixtures / DPS mode w/o delegate). */
+    applyReactiveDamage?: (
+        ownerId: string,
+        victimId: string,
+        abilityId: string,
+        multiplier: number,
+        hits: number,
+        noCrit: boolean
+    ) => void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
      *  apply path (no attacked event → no re-counter). */
@@ -2087,22 +2098,32 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
         if (!passesOncePerRoundGate(intent, ctx)) return;
-        // Reactive direct-damage proc (Grif's on-enemy-cleansed "75% Damage that cannot
-        // critically hit"). Bomb-style fold from the owner's last-turn ctx: effectiveAttack
-        // × (multiplier/100) × hits × affinityMult, NO enemy-defense mitigation (documented
-        // approximation, mirrors the bomb path) and NO crit. `multiplier` is a raw percentage
-        // like the cast path (e.g. 75 for "75% damage"), so divide by 100. Folds `hits` like
-        // the cast path (single-hit for Grif today, but multi-hit-correct). Before the owner's
-        // first turn (faster enemy, round 1) there is no ctx → falls back to base runtime stats
-        // like the reactive heal path; affinity defaults to 1 without a turn snapshot (no matchup
-        // known — a small documented approximation, same spirit as the heal path which ignores
-        // affinity entirely). Emits NO event → no chain.
-        const ownerCtx = ctx.lastTurnCtxByActor.get(intent.ownerId);
-        const effectiveAttack = ownerCtx?.effectiveAttack ?? owner.attack;
-        const affinityMult = ownerCtx?.affinityMult ?? 1;
-        const amount = effectiveAttack * (cfg.multiplier / 100) * (cfg.hits ?? 1) * affinityMult;
-        // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc credits nothing).
-        if (amount > 0) ctx.creditReactiveDamage?.(intent.ownerId, amount);
+        // PR4b: reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
+        // on-enemy-charged-cast 80%, and epic PR4's re-tagged Judge/Chakara/Incinerator/Rhodium
+        // start-of-round/end-of-round passives) now runs the SAME defense-mitigated,
+        // crit-eligible pipeline as an on-cast hit (ctx.applyReactiveDamage, mirroring the
+        // `counter` branch's applyCounterAttack) instead of a flat, unmitigated,
+        // never-crits fold. `noCrit` (Grif/Rhodium "cannot critically hit") is honored BY THE
+        // FLAG, not by executor limitation — a non-flagged ability (Judge/Chakara/Incinerator/
+        // FrontLine) can now crit.
+        //
+        // Victim resolution mirrors the sibling debuff/purge branches at this trigger (line
+        // ~1758): prefer the eventCtx-routed counterparty (FrontLine's charging enemy, stamped
+        // by the on-enemy-charged-cast listener) and fall back to ctx.enemy — the same default
+        // single-target binding every other target:'enemy' reactive branch already uses when no
+        // specific triggering counterparty exists (Judge/Chakara/Incinerator/Rhodium's
+        // start-of-round/end-of-round triggers have none). `multiplier` is a raw percentage like
+        // the cast path (e.g. 75 for "75% damage"); `hits` folds into the mitigation call the
+        // same way applyCounterAttack folds a counter's hit count. Emits NO event → no chain.
+        const targetId = intent.eventCtx?.counterTargetId ?? ctx.enemy.id;
+        ctx.applyReactiveDamage?.(
+            intent.ownerId,
+            targetId,
+            intent.ability.id,
+            cfg.multiplier,
+            cfg.hits ?? 1,
+            cfg.noCrit ?? false
+        );
         return;
     }
 

@@ -2,11 +2,15 @@
  * D-PR4 Task 5: reactive damage branch honors procChance (passesProcChanceGate).
  *
  * Tests that:
- * (a) A reactive `damage` intent with procChance 0.5 over 10 calls fires creditReactiveDamage
+ * (a) A reactive `damage` intent with procChance 0.5 over 10 calls fires ctx.applyReactiveDamage
  *     exactly 5 times (the deterministic makeRateGate(0.5) accumulator fires 5/10 — back-loaded:
  *     calls 2,4,6,8,10). Must NOT be 10 (today's broken behavior).
- * (b) A reactive `damage` intent without procChance fires creditReactiveDamage on every call
+ * (b) A reactive `damage` intent without procChance fires ctx.applyReactiveDamage on every call
  *     (pass-through — byte-identical to today).
+ *
+ * PR4b: the branch now delegates to `ctx.applyReactiveDamage` (mitigated/crit walk) instead of
+ * the old credit-only `ctx.creditReactiveDamage` — updated to spy on the new delegate. The gate
+ * behavior under test (procChance) is UNCHANGED (it runs before either delegate is reached).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
@@ -44,14 +48,14 @@ function makeDamageIntent(opts?: { procChance?: number }): Intent {
  * The damage branch in executeIntent reads:
  *   - ctx.runtimes.get(intent.ownerId)  → must exist (throws if missing)
  *   - ctx.lastTurnCtxByActor.get(intent.ownerId) → can be undefined (falls back to base stats)
- *   - ctx.creditReactiveDamage  → the spy we track
+ *   - ctx.applyReactiveDamage  → the spy we track
  *   - ctx.procChanceGates  → provided when testing the gate; absent when testing pass-through
  *
  * Condition gate: intent.ability.conditions is [] → conditionsMet → passes.
  */
 function makeCtx(opts?: {
     procChanceGates?: Map<string, ReturnType<typeof makeRateGate>>;
-    creditReactiveDamage?: (ownerId: string, amount: number) => void;
+    applyReactiveDamage?: IntentExecContext['applyReactiveDamage'];
 }): IntentExecContext {
     const bus = createEventBus();
     const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -103,7 +107,7 @@ function makeCtx(opts?: {
         cumulativeDamage: 0,
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
-        creditReactiveDamage: opts?.creditReactiveDamage,
+        applyReactiveDamage: opts?.applyReactiveDamage,
     } as IntentExecContext;
 }
 
@@ -112,14 +116,14 @@ function makeCtx(opts?: {
 // ---------------------------------------------------------------------------
 
 describe('D-PR4 T5: reactive damage branch — passesProcChanceGate', () => {
-    it('(a) procChance 0.5 over 10 calls fires creditReactiveDamage exactly 5 times (not 10)', () => {
+    it('(a) procChance 0.5 over 10 calls fires ctx.applyReactiveDamage exactly 5 times (not 10)', () => {
         const creditSpy = vi.fn();
 
         // Shared gate map — same owner+ability key re-uses ONE gate across all 10 calls,
         // producing the deterministic 5/10 accumulator schedule (fires on calls 2,4,6,8,10).
         const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
         const intent = makeDamageIntent({ procChance: 0.5 });
-        const ctx = makeCtx({ procChanceGates, creditReactiveDamage: creditSpy });
+        const ctx = makeCtx({ procChanceGates, applyReactiveDamage: creditSpy });
 
         for (let i = 0; i < 10; i++) {
             executeIntent(intent, ctx);
@@ -129,12 +133,12 @@ describe('D-PR4 T5: reactive damage branch — passesProcChanceGate', () => {
         expect(creditSpy).toHaveBeenCalledTimes(5);
     });
 
-    it('(b) no procChance: creditReactiveDamage fires on all 4 calls (pass-through)', () => {
+    it('(b) no procChance: ctx.applyReactiveDamage fires on all 4 calls (pass-through)', () => {
         const creditSpy = vi.fn();
 
         const procChanceGates = new Map<string, ReturnType<typeof makeRateGate>>();
         const intent = makeDamageIntent(/* no procChance */);
-        const ctx = makeCtx({ procChanceGates, creditReactiveDamage: creditSpy });
+        const ctx = makeCtx({ procChanceGates, applyReactiveDamage: creditSpy });
 
         for (let i = 0; i < 4; i++) {
             executeIntent(intent, ctx);
