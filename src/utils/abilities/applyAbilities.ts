@@ -159,6 +159,35 @@ export function damageInputsFromSkill(skill: Skill | undefined): {
     };
 }
 
+/** Enemy-facing `AbilityTarget` values — anything that resolves against the OPPOSING
+ *  roster. Used by `skillNeedsOpposingVictim` below; kept as its own const so a future
+ *  AbilityTarget addition is an explicit decision here rather than a silent gap. */
+const ENEMY_FACING_TARGETS: ReadonlySet<Ability['target']> = new Set([
+    'enemy',
+    'all-enemies',
+    'enemy-most-buffs',
+    'enemy-highest-attack',
+]);
+
+/**
+ * True when the firing skill contains at least one ability that actually needs a LIVING
+ * opposing victim to resolve against — a `damage` ability (always enemy-facing even when
+ * its `target` field happens to read something else), or any ability whose `target` is
+ * enemy-facing (debuff/dot/purge/control/charge-removal/etc., typically `target: 'enemy'`
+ * or `'all-enemies'`). An ally-targeted support cast (buffs/shields/heals aimed at
+ * `'self'`/`'ally'`/`'all-allies'`/`'adjacent-allies'` only) returns false — it never reads
+ * the bound victim's HP/defence, so it can safely fire even when that victim is dead.
+ *
+ * Consumed by the engine's dead-legacy-victim turn skip (engine.ts, enemy walk): the skip
+ * is narrowed to actors whose firing skill actually needs the dead victim, so an
+ * ally-targeted caster whose positional selection fell back to a dead legacy binding still
+ * runs its turn instead of being permanently silenced for the rest of the battle.
+ */
+export function skillNeedsOpposingVictim(skill: Skill | undefined): boolean {
+    if (!skill) return false;
+    return skill.abilities.some((a) => a.type === 'damage' || ENEMY_FACING_TARGETS.has(a.target));
+}
+
 /** First `additional-damage` ability mapped to a SecondaryDamage, or undefined. */
 export function secondaryFromSkill(skill: Skill | undefined): SecondaryDamage | undefined {
     const additional = skill?.abilities.find((a) => a.type === 'additional-damage');

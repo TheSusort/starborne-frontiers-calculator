@@ -1276,3 +1276,245 @@ describe('H1 Task 8 follow-up — simulateBattle end-to-end shield extraction lo
         expect(absorbedRounds.length).toBeGreaterThan(0);
     });
 });
+
+// ===========================================================================
+// Bug repro: dead-legacy-victim binding permanently skips an ally-targeted enemy
+// caster's turn once the FOCUS player (playerTeam[0], engine id 'attacker') dies.
+//
+// Diagnosed chain: an ally-targeted caster's parsed target has side:'ally' →
+// resolvePositionalTarget returns null by design → selectTurnTarget falls back to
+// the enemy side's legacyVictim, which simulateBattle sets to the FOCUS player id
+// (a vestigial binding). Once the focus dies, the enemy walk's
+// `targetDead = tgt.currentHp <= 0` short-circuits the WHOLE turn to cadence-only
+// (no skill fired) — even though this caster (a pure supporter, Graphite-style) never
+// needed an opposing victim in the first place. Positional attackers are unaffected
+// because they re-resolve a LIVING player every turn.
+// ===========================================================================
+
+describe('bug repro: enemy supporter turn skipped after the focus player dies', () => {
+    it('a Graphite-style ally-targeted supporter keeps granting its buff + shield in rounds AFTER the focus dies', () => {
+        const GRAPHITE_ACTIVE_TEXT =
+            'This unit grants <unit-skill>Overclock III</unit-skill> for 2 turns and a ' +
+            '<unit-damage>shield equal to 120%</unit-damage> of its attack.';
+
+        const result = simulateBattle({
+            playerTeam: [
+                // Focus (playerTeam[0] → engine id 'attacker'): fragile, dies to the Killer
+                // in round 2 (60 000 HP, 30 000 dmg/hit → dead after 2 hits).
+                {
+                    ship: makeShip('focus', 'Focus', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 60_000,
+                        speed: 120,
+                    },
+                },
+                // Survivor: immortal, never dies, keeps the battle running the full 4 rounds
+                // and gives the Killer a living positional target after the focus dies.
+                {
+                    ship: makeShip('survivor', 'Survivor', BACK),
+                    position: 'M3',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 110,
+                    },
+                },
+            ],
+            enemyTeam: [
+                // Killer: positional attacker (front-target) — kills the focus round 2, then
+                // re-resolves onto the living Survivor. Unaffected by the bug (control case).
+                {
+                    ship: makeShip('killer', 'Killer', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 30_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 130,
+                    },
+                },
+                // Supporter (Graphite-style): ally-targeted (side:'ally' parsed target) → its
+                // positional selection ALWAYS returns null → falls back to the legacy victim
+                // (the focus). Once the focus is dead this is the actor that stops acting.
+                {
+                    ship: makeShip('supporter', 'Supporter', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Support-Double-Pickaxe-Range-0',
+                        activeSkillText: GRAPHITE_ACTIVE_TEXT,
+                        type: 'Supporter',
+                    }),
+                    position: 'M2',
+                    statOverrides: {
+                        attack: 5_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 90,
+                    },
+                },
+            ],
+            rounds: 4,
+        });
+
+        const FOCUS = 'attacker';
+        const SUPPORTER = 'e:supporter:1';
+
+        const aliveAt = (round: number) =>
+            result.rounds.find((r) => r.round === round)?.ships.find((s) => s.actorId === FOCUS)
+                ?.alive;
+
+        // Sanity check on the repro's premise: the focus is alive round 1, dead from round 2.
+        expect(aliveAt(1)).toBe(true);
+        expect(aliveAt(2)).toBe(false);
+
+        const supporterEntriesAt = (round: number) => {
+            const combatRound = result.combatLog.find((r) => r.round === round);
+            const turn = combatRound?.turns.find((t) => t.actorId === SUPPORTER);
+            return turn?.entries ?? [];
+        };
+
+        // Round 1 (focus alive): the supporter's turn grants Overclock III + a shield —
+        // establishes the skill actually parses/fires as expected while the legacy binding
+        // is still alive.
+        const round1Entries = supporterEntriesAt(1);
+        expect(round1Entries.some((e) => e.kind === 'buff' && e.note === 'Overclock III')).toBe(
+            true
+        );
+        expect(round1Entries.some((e) => e.kind === 'shield')).toBe(true);
+
+        // Round 4 (focus long dead): the supporter must STILL grant the identical effects —
+        // an ally-targeted support cast never needed the dead focus as a victim. This is the
+        // assertion that fails on the buggy engine (the dead-legacy-victim short-circuit empties
+        // the supporter's turn for every round after the focus dies).
+        const round4Entries = supporterEntriesAt(4);
+        expect(round4Entries.some((e) => e.kind === 'buff' && e.note === 'Overclock III')).toBe(
+            true
+        );
+        expect(round4Entries.some((e) => e.kind === 'shield')).toBe(true);
+    });
+
+    it('negative/pin: an enemy ATTACKER (damage skill) bound to the dead legacy victim still skips its turn', () => {
+        // Mirror of the repro above, but the second enemy fires a plain `damage` ability
+        // (target 'enemy' — set by the skill-text parser regardless of the raw targeting
+        // column) while its RAW activeTarget/activePattern columns are ally-shaped, so
+        // resolvePositionalTarget still returns null (side:'ally' → null by design) and
+        // selectTurnTarget falls back to the legacy victim exactly like the supporter.
+        // UNLIKE the supporter, this skill's firing ability DOES need an opposing victim
+        // (type 'damage', target 'enemy') — so the deferred death-fallback-retargeting work
+        // item is explicitly OUT of scope and this actor's turn must keep skipping.
+        const result = simulateBattle({
+            playerTeam: [
+                {
+                    ship: makeShip('focus', 'Focus', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 60_000,
+                        speed: 120,
+                    },
+                },
+                {
+                    ship: makeShip('survivor', 'Survivor', BACK),
+                    position: 'M3',
+                    statOverrides: {
+                        attack: 0,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 110,
+                    },
+                },
+            ],
+            enemyTeam: [
+                {
+                    ship: makeShip('killer', 'Killer', FRONT),
+                    position: 'M4',
+                    statOverrides: {
+                        attack: 30_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 130,
+                    },
+                },
+                // A second attacker: ally-shaped raw targeting (activeTarget:'allies') so its
+                // ParsedTarget carries side:'ally' → resolvePositionalTarget always returns
+                // null (same mechanism as the supporter's fallback) — but its firing ability
+                // is a plain `damage` ability (parsed target 'enemy', independent of the raw
+                // targeting column) → the dead-target skip MUST still apply.
+                {
+                    ship: makeShip('deadbound', 'DeadBound', {
+                        activeTarget: 'allies',
+                        activePattern: 'Pattern-Support-Double-Pickaxe-Range-0',
+                        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+                    }),
+                    position: 'M2',
+                    statOverrides: {
+                        attack: 9_000,
+                        crit: 0,
+                        critDamage: 0,
+                        defensePenetration: 0,
+                        hacking: 200,
+                        defence: 0,
+                        hp: 1_000_000_000,
+                        speed: 80,
+                    },
+                },
+            ],
+            rounds: 4,
+        });
+
+        const FOCUS = 'attacker';
+        const DEADBOUND = 'e:deadbound:1';
+
+        const aliveAt = (round: number) =>
+            result.rounds.find((r) => r.round === round)?.ships.find((s) => s.actorId === FOCUS)
+                ?.alive;
+        expect(aliveAt(1)).toBe(true);
+        expect(aliveAt(2)).toBe(false);
+
+        // Round 1 (focus alive): the non-positional attacker fires a real attack entry.
+        const round1 = result.combatLog.find((r) => r.round === 1);
+        const round1Turn = round1?.turns.find((t) => t.actorId === DEADBOUND);
+        expect(round1Turn?.entries.some((e) => e.kind === 'attack')).toBe(true);
+
+        // Round 4 (focus long dead, no positional re-target available): the attacker's turn
+        // stays cadence-only — no skill-fired-derived entries at all. This is the PRESERVED
+        // (not fixed) old short-circuit behavior for actors that actually need an opposing
+        // victim.
+        const round4 = result.combatLog.find((r) => r.round === 4);
+        const round4Turn = round4?.turns.find((t) => t.actorId === DEADBOUND);
+        expect(round4Turn).toBeDefined();
+        expect(round4Turn!.entries.length).toBe(0);
+    });
+});

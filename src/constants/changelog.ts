@@ -18,6 +18,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Wildfire's bonus Inferno damage against an enemy with Scorching Radiation (scaling with her own crit power, 1% per 10% crit power, 2% with her refit) is now re-checked on every Inferno tick against each affected enemy individually — a target that never had Scorching Radiation (or whose Scorching Radiation has since expired) no longer gets the bonus just because another of her targets currently has it.",
     "Combat sim: Wildfire's refit-3 passive now actually reaches the team — every living ally's Inferno damage against an enemy with Scorching Radiation is boosted by 2% per 10% of Wildfire's own crit power (not the ally's), matching her skill text.",
     'Fixed skill parsing that inflated DPS for Tormenter, Voron, Malvex, and FrontLine — defensive damage-reduction (and shield-scaling) clauses were being counted as extra attacks. Also fixed Amartya, who no longer grants herself a phantom Taunt buff from her "enemy gains Taunt" trigger text, and now correctly inflicts 2 stacks of Exposed (not 1) from her legendary refit passive.',
+    'Combat sim: enemy supporters (like Graphite) no longer stop granting buffs and shields for the rest of the battle after the first player ship dies.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

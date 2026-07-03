@@ -19,6 +19,7 @@ import {
     selectFiringSkill,
     damageInputsFromSkill,
     modifierTotalsFromAbilities,
+    skillNeedsOpposingVictim,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 import { foldActorBuffTotals, effectiveStatsOf } from './effectiveStats';
@@ -5924,7 +5925,30 @@ export function runCombat(input: CombatEngineInput): {
                             // binding below derives from `tgt` uniformly (defence/maxHp/decline, the
                             // runPlayerTurn `enemy`+containers, and the applyIncomingToTarget intake).
                             const { tgt } = selectTurnTarget(actor);
-                            const targetDead = tgt.currentHp <= 0;
+                            // Narrowed dead-legacy-victim skip: a dead `tgt` only forces the
+                            // cadence-only short-circuit below when the actor's WOULD-BE firing
+                            // skill actually needs a living opposing victim (a `damage` ability,
+                            // or any enemy-facing ability — debuff/dot/purge/control/etc.). An
+                            // ally-targeted support cast (buffs/shields/heals only) never reads
+                            // `tgt`'s HP/defence, so it must still fire even when the legacy
+                            // binding (simulateBattle's vestigial focus-player healTargetId) is
+                            // dead — otherwise every ally-targeted enemy caster permanently stops
+                            // acting the moment the focus player dies (bug repro:
+                            // twoTeamBattle.test.ts "bug repro: enemy supporter turn skipped
+                            // after the focus player dies"). Mirrors runPlayerTurn's OWN action
+                            // selection (preTurn, playerTurn.ts) exactly so the predicate inspects
+                            // the SAME skill that would actually fire.
+                            const enemyWouldFireAction: 'active' | 'charged' =
+                                enemyRuntime.hasChargedSkill && actor.charges >= actor.chargeCount
+                                    ? 'charged'
+                                    : 'active';
+                            const enemyFiringSkillForDeadCheck = selectFiringSkill(
+                                enemyRuntime.castSkills,
+                                enemyWouldFireAction
+                            );
+                            const skipDeadTargetTurn =
+                                tgt.currentHp <= 0 &&
+                                skillNeedsOpposingVictim(enemyFiringSkillForDeadCheck);
                             // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
                             // positional apply (footprint expansion). An enemy with a target but NO pattern
                             // stays on the legacy single-apply path (same `pattern != null` guard as the
@@ -6007,7 +6031,7 @@ export function runCombat(input: CombatEngineInput): {
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;
-                            if (targetDead) {
+                            if (skipDeadTargetTurn) {
                                 // Cadence-only: bank a charge (or fire+reset at cap) without resolving the
                                 // attack. Mirrors runPlayerTurn's preTurn charge step. No skill-fired/
                                 // application events — a dead target is untouched (old short-circuit).
