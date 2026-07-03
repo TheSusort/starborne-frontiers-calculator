@@ -4547,3 +4547,98 @@ describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt conditio
         ]);
     });
 });
+
+// ── PR5 Finding 2: duration misattachment across multi-buff sentences ─────────────────────
+describe('buildShipAbilities — PR5 Finding 2 duration misattachment across multi-buff sentences', () => {
+    it('Bayah first passive: "gains Terran Bolster II and inflicts Speed Down II on an enemy for 2 turns" — the trailing duration reaches BOTH buffs', () => {
+        // docs/ship-skills.csv Bayah first_passive_skill_text (exact clause, routed through the
+        // real passive slot).
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const bolster = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster II'
+        )!;
+        expect(bolster).toBeDefined();
+        expect(bolster.config).toMatchObject({ duration: 2 });
+        const speedDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Speed Down II'
+        )!;
+        expect(speedDown).toBeDefined();
+        expect(speedDown.config).toMatchObject({ duration: 2 });
+    });
+
+    it('Bayah second passive: same shape with an added third buff (Out. Damage Down II) — all three share the trailing 2-turn duration', () => {
+        // docs/ship-skills.csv Bayah second_passive_skill_text (exact clause, routed through the
+        // real passive slot via refits.length >= 2).
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const bolster = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster II'
+        )!;
+        expect(bolster.config).toMatchObject({ duration: 2 });
+        const speedDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Speed Down II'
+        )!;
+        expect(speedDown.config).toMatchObject({ duration: 2 });
+        const dmgDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Out. Damage Down II'
+        )!;
+        expect(dmgDown.config).toMatchObject({ duration: 2 });
+    });
+
+    it('Oleander charged: "grants Repair Over Time II for 2 turns and, for 3 turns, grants both Out. DoT Damage Up II and Hit Mitigation" — the LEADING "for 3 turns" reaches both trailing buffs', () => {
+        // docs/ship-skills.csv Oleander charge_skill_text (exact clause, routed through the real
+        // charged slot).
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 6,
+            chargeSkillText:
+                'This Unit grants <unit-skill>Repair Over Time II</unit-skill> for 2 turns and, for 3 turns, grants both <unit-skill>Out. DoT Damage Up II</unit-skill> and <unit-skill>Hit Mitigation</unit-skill>.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const rot = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Repair Over Time II'
+        )!;
+        expect(rot.config).toMatchObject({ duration: 2 });
+        const dotDmgUp = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Out. DoT Damage Up II'
+        )!;
+        expect(dotDmgUp).toBeDefined();
+        expect(dotDmgUp.config).toMatchObject({ duration: 3 });
+        const hitMit = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Hit Mitigation'
+        )!;
+        expect(hitMit).toBeDefined();
+        expect(hitMit.config).toMatchObject({ duration: 3 });
+    });
+
+    it('Tycho first passive: "gains Cheat Death and Everliving Regeneration I for 6 turns" — Everliving Regeneration I gets the 6-turn duration (Cheat Death stays untimed)', () => {
+        // docs/ship-skills.csv Tycho first_passive_skill_text (exact clause, routed through the
+        // real passive slot). Only the duration attachment is in question here — the
+        // start-of-combat trigger itself was already fixed in epic PR4 (pre-combat seeding).
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration I</unit-skill> for 6 turns.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const cheatDeath = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
+        )!;
+        expect(cheatDeath).toBeDefined();
+        expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
+        const everliving = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration I'
+        )!;
+        expect(everliving).toBeDefined();
+        expect(everliving.config).toMatchObject({ duration: 6 });
+    });
+});

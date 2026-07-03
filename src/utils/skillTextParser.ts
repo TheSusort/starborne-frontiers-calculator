@@ -3185,8 +3185,14 @@ const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
-// Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or ")
-const CONNECTOR_RE = /^\s*(,\s*)?(and|or)?\s*$/i;
+// Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or "), optionally
+// tolerating ONE bridging application verb between conjoined tags governed by different verbs —
+// "gains X and inflicts Y ... for N turns" (Bayah) has "inflicts" sitting between the two buff
+// tags, which a bare connector regex rejects, stopping the forward/backward duration scans before
+// they ever reach the trailing/leading "for N turns" clause. Used by findSharedDuration (forward)
+// and findLeadingDuration (backward). (Epic PR5 finding 2 widened the old connector-only form.)
+const SHARED_DURATION_BRIDGE_RE =
+    /^\s*(,\s*)?(and|or)?\s*(?:grants?|granting|granted|gains?|gaining|gained|inflicts?|inflicting|inflicted|applies|applying|applied|apply)?\s*$/i;
 const MAX_SCAN_CHARS = 120;
 
 // Conjoined self-grant: "gains/grants <something> and <BuffName> for N turns". The primary
@@ -3244,7 +3250,66 @@ function findSharedDuration(
         if (m) return parseInt(m[1], 10);
         if (RECURRING_RE.test(s.text)) return 'recurring';
         if (/[.;]|<br\s*\/?>/i.test(s.text)) break;
-        if (!CONNECTOR_RE.test(s.text)) break;
+        // SHARED_DURATION_BRIDGE_RE (not the plain CONNECTOR_RE) — tolerates one bridging
+        // application verb ("and inflicts") between two tags governed by different verbs that
+        // still share a later trailing duration (Bayah: "gains X and inflicts Y ... for 2 turns").
+        if (!SHARED_DURATION_BRIDGE_RE.test(s.text)) break;
+    }
+    return null;
+}
+
+// Tokens that may legitimately sit BETWEEN a leading "for N turns" clause and the buff tag it
+// governs — commas, connectors, "both" (Oleander's "grants both X and Y"), and application verb
+// forms. Used by findLeadingDuration to verify a candidate duration isn't separated from the tag
+// by unrelated content (a trigger clause, another effect, etc.) via a strip-and-check-empty test,
+// since the bridging text's word order/repetition varies more than a single fixed regex can
+// anchor (e.g. ", grants both " vs ", grants both  and ").
+const LEADING_DURATION_BRIDGE_TOKEN_RE =
+    /,|\band\b|\bor\b|\bboth\b|\bgrants?\b|\bgranting\b|\bgranted\b|\bgains?\b|\bgaining\b|\bgained\b|\binflicts?\b|\binflicting\b|\binflicted\b|\bapplies\b|\bapplying\b|\bapplied\b|\bapply\b/gi;
+
+/**
+ * Scans backward from a buff tag for a LEADING "for N turns" clause stated BEFORE the governing
+ * verb rather than after the buff — Oleander's charge skill states the duration once, ahead of a
+ * verb governing multiple conjoined buffs: "…grants Repair Over Time II for 2 turns and, for 3
+ * turns, grants both <BuffA> and <BuffB>." Used as the LAST fallback in parseSkillEffects'
+ * duration step, after the buff's own immediate and forward-shared duration lookups both fail.
+ *
+ * Collects the contiguous backward text (stopping at a sentence boundary), then checks EACH
+ * "for N turns" occurrence, closest to the tag first: a candidate only qualifies when everything
+ * between its end and the tag is bridge-only (LEADING_DURATION_BRIDGE_TOKEN_RE strips it to
+ * nothing) — i.e. connectors/verbs/"both", not an unrelated clause. This rejects an EARLIER
+ * buff's own duration in the same sentence when it's separated from the current tag by a real
+ * trigger/content clause: Shashou's "gains Stealth for 2 turns after damaging a Debuffer or
+ * Supporter and gains 1 stack of Blast each turn" must NOT leak Stealth's "for 2 turns" onto the
+ * unrelated per-turn-stacking Blast grant — "after damaging a Debuffer or Supporter" is real
+ * content, not a bridge, so the candidate is disqualified and the scan correctly finds nothing.
+ */
+function findLeadingDuration(segments: SkillTextSegment[], tagIndex: number): number | null {
+    let text = '';
+    for (let j = tagIndex - 1; j >= 0; j--) {
+        const s = segments[j];
+        if (s.type === 'unit-skill' || s.type === 'unit-damage' || s.type === 'unit-aid') continue;
+        if (s.type !== 'text') break;
+        const boundaryMatches = [...s.text.matchAll(/[.;]|<br\s*\/?>/gi)];
+        if (boundaryMatches.length) {
+            const last = boundaryMatches[boundaryMatches.length - 1];
+            text = s.text.slice((last.index ?? 0) + last[0].length) + text;
+            break;
+        }
+        text = s.text + text;
+        if (text.length > MAX_SCAN_CHARS) {
+            text = text.slice(text.length - MAX_SCAN_CHARS);
+            break;
+        }
+    }
+    const matches = [...text.matchAll(/for\s+(\d+)\s+turns?/gi)];
+    for (let k = matches.length - 1; k >= 0; k--) {
+        const m = matches[k];
+        const after = text.slice((m.index ?? 0) + m[0].length);
+        LEADING_DURATION_BRIDGE_TOKEN_RE.lastIndex = 0;
+        if (after.replace(LEADING_DURATION_BRIDGE_TOKEN_RE, '').trim() === '') {
+            return parseInt(m[1], 10);
+        }
     }
     return null;
 }
@@ -3545,6 +3610,12 @@ export function parseSkillEffects(
             // Shared duration: "inflicts X and Y for 2 turns" — X has no immediate duration,
             // but scanning forward finds the duration that applies to the whole group.
             duration = findSharedDuration(segments, i + 1);
+            // Epic PR5 finding 2: a LEADING shared duration stated before the verb ("for 3
+            // turns, grants both X and Y") — the forward scan can't find it since it's behind
+            // the tag, not ahead of it.
+            if (duration === null) {
+                duration = findLeadingDuration(segments, i);
+            }
         }
 
         // Step 4: Stack detection from immediately preceding text segment

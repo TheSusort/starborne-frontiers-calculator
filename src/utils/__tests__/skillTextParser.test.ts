@@ -452,14 +452,14 @@ describe('parseSkillEffects', () => {
             {
                 buffName: 'Out. DoT Damage Up II',
                 target: 'all-allies',
-                // NOTE: the "for 3 turns" sits BEFORE the second grant verb ("and, for 3 turns,
-                // grants both …") so the forward-only duration scanner doesn't attach it — duration
-                // is null here. That is an existing/orthogonal duration-parsing limitation; this
-                // test asserts SCOPE (all-allies per buff), so it documents the actual duration.
-                duration: null,
+                // Epic PR5 finding 2: the "for 3 turns" sits BEFORE the second grant verb ("and,
+                // for 3 turns, grants both …") — findLeadingDuration now reaches back past the
+                // verb/connector text to find it, so both trailing buffs correctly get 3 (not
+                // Repair Over Time II's unrelated 2-turn duration, and not null).
+                duration: 3,
                 source: 'charge',
             },
-            { buffName: 'Hit Mitigation', target: 'all-allies', duration: null, source: 'charge' },
+            { buffName: 'Hit Mitigation', target: 'all-allies', duration: 3, source: 'charge' },
         ]);
     });
 
