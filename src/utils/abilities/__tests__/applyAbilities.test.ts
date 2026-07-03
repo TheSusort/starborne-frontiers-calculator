@@ -9,6 +9,7 @@ import {
     modifierTotalsFromAbilities,
     gateFiringAbilities,
     extraActionsFromSkill,
+    controlAbilitiesFromSkill,
 } from '../applyAbilities';
 import { Ability, Condition, ModifierChannel, ShipSkills, Skill } from '../../../types/abilities';
 import { ConditionContext } from '../evaluateConditions';
@@ -641,5 +642,66 @@ describe('extraActionsFromSkill', () => {
         expect(extraActionsFromSkill(gatedSkillWith)).toEqual([
             { abilityId: 'xa', oncePerRound: true, endOfRound: false },
         ]);
+    });
+});
+
+// Epic PR2 (control-twin gating parity): controlAbilitiesFromSkill is the engine's ONLY
+// consumer of `type:'control'` abilities (playerTurn.ts emits `control-applied` for each entry
+// it returns). It filters strictly to `trigger === 'on-cast'` — mirroring
+// chargeAbilitiesFromSkill / extraActionsFromSkill above, there is no separate reactive
+// execution path for control abilities. This is the empirical basis for buildShipAbilities'
+// PR2 fix: a control ability whose named debuff/buff twin resolves to a REACTIVE trigger
+// (on-attacked, on-ally-attacked, on-enemy-destroyed, …) would be silently and permanently
+// excluded here if it were still emitted with that trigger — which is why the builder drops
+// those entries outright instead of emitting a dead, unconsumed ability.
+describe('controlAbilitiesFromSkill', () => {
+    const control = (
+        id: string,
+        trigger: Ability['trigger'],
+        conditions: Ability['conditions'] = []
+    ): Ability => ({
+        id,
+        type: 'control',
+        target: 'enemy',
+        trigger,
+        conditions,
+        config: { type: 'control', effect: 'disable' },
+    });
+
+    it('collects on-cast control abilities only — a reactive-trigger control is excluded (would be permanently unconsumed)', () => {
+        const onCast = control('c1', 'on-cast');
+        const reactive = control('c2', 'on-attacked');
+        const skill: Skill = { slot: 'passive', abilities: [onCast, reactive] };
+        expect(controlAbilitiesFromSkill(skill)).toEqual([onCast]);
+    });
+
+    it('returns empty array when no control abilities', () => {
+        const skill: Skill = { slot: 'active', abilities: [damage('a', 100)] };
+        expect(controlAbilitiesFromSkill(skill)).toEqual([]);
+    });
+
+    it('handles undefined skill', () => {
+        expect(controlAbilitiesFromSkill(undefined)).toEqual([]);
+    });
+
+    it('an on-cast control ability carrying an inherited gate condition survives gateFiringAbilities when the condition holds, and is dropped when it does not (proves the control entry is consumed WITH its gate)', () => {
+        const gated = control('c3', 'on-cast', [
+            { subject: 'enemy-debuff', derivable: true, countComparator: 'gte', countThreshold: 4 },
+        ]);
+        const rawSkill: Skill = { slot: 'active', abilities: [gated] };
+        // Condition unmet (0 enemy debuffs) → gateFiringAbilities drops the control ability
+        // before controlAbilitiesFromSkill ever sees it.
+        const { gatedSkill: failing } = gateFiringAbilities(rawSkill, {
+            ...makeConditionContext(),
+            enemyDebuffCount: 0,
+        });
+        expect(controlAbilitiesFromSkill(failing)).toEqual([]);
+        // Condition met (4+ enemy debuffs) → the control ability passes the gate and is
+        // consumed by the cast-path loop exactly as constructed.
+        const { gatedSkill: passing } = gateFiringAbilities(rawSkill, {
+            ...makeConditionContext(),
+            enemyDebuffCount: 4,
+        });
+        expect(controlAbilitiesFromSkill(passing)).toEqual([gated]);
     });
 });
