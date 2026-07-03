@@ -913,6 +913,80 @@ describe('buildShipAbilities', () => {
         expect(mod.target).toBe('self'); // self-scoped — no team distribution, no per-victim
     });
 
+    describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a)', () => {
+        // Real CSV text (docs/ship-skills.csv row 156, first/second_passive_skill_text).
+        const baseText =
+            'When an enemy has <unit-skill>Scorching Radiation</unit-skill>, this Unit deals <unit-damage>1% additional</unit-damage> <unit-skill>Inferno</unit-skill> <unit-damage>damage</unit-damage> to that unit for every 10% crit power.';
+        const refitText =
+            'When an enemy has <unit-skill>Scorching Radiation</unit-skill>, this Unit deals <unit-damage>2% additional</unit-damage> <unit-skill>Inferno</unit-skill> <unit-damage>damage</unit-damage> to that unit for every 10% crit power.';
+
+        it('base passive (0 refits): dotDamage modifier scaling 1% per 10% crit power, gated on the NAMED enemy debuff', () => {
+            const s = ship({
+                refits: [],
+                firstPassiveSkillText: baseText,
+                secondPassiveSkillText: refitText,
+            });
+            const mod = abilityOfType(
+                slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+                'modifier'
+            )!;
+            expect(mod.config).toMatchObject({
+                type: 'modifier',
+                channel: 'dotDamage',
+                value: 0,
+            });
+            expect(mod.target).toBe('self');
+            expect(mod.conditions).toHaveLength(2);
+            // The Scorching-Radiation gate reuses the SAME enemyEffectConditions path as
+            // Tygr/Incinerator (I1 name-specific `enemy-debuff` gating) — "Scorching
+            // Radiation" is a real named debuff in src/constants/buffs.ts.
+            expect(mod.conditions[0]).toMatchObject({
+                subject: 'enemy-debuff',
+                derivable: true,
+                buffName: 'Scorching Radiation',
+            });
+            expect(mod.conditions[1]).toMatchObject({
+                subject: 'self-crit-power',
+                derivable: true,
+            });
+            expect(mod.scaling).toMatchObject({ conditionIndex: 1, perUnit: 0.1 });
+        });
+
+        it('refit passive (2+ refits): resolves to the SECOND passive row, scaling 2% per 10% crit power', () => {
+            const s = ship({
+                refits: [{}, {}] as Ship['refits'],
+                firstPassiveSkillText: baseText,
+                secondPassiveSkillText: refitText,
+            });
+            const mod = abilityOfType(
+                slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+                'modifier'
+            )!;
+            expect(mod.conditions[0]).toMatchObject({
+                subject: 'enemy-debuff',
+                buffName: 'Scorching Radiation',
+            });
+            expect(mod.conditions[1]).toMatchObject({ subject: 'self-crit-power' });
+            expect(mod.scaling).toMatchObject({ conditionIndex: 1, perUnit: 0.2 });
+        });
+
+        it('does not change an unrelated "% more damage to enemies with <debuff>" ship parse (no regression)', () => {
+            // Tygr-shape clause — must keep parsing as a plain outgoingDamage modifier with
+            // no scaling, proving the new "% additional <DoT> damage … crit power" branch
+            // above is narrowly scoped and does not intercept this shape.
+            const s = ship({
+                firstPassiveSkillText:
+                    'This Unit deals <unit-damage>30% more direct damage</unit-damage> to enemies with <unit-skill>Stasis</unit-skill>.',
+            });
+            const mod = abilityOfType(
+                slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+                'modifier'
+            )!;
+            expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 30 });
+            expect(mod.scaling).toBeUndefined();
+        });
+    });
+
     describe('HP-proportional modifiers (Akula / Tithonus)', () => {
         it('Akula passive: outgoing damage scaling with CURRENT enemy HP% (up to 30%)', () => {
             const akula = ship({

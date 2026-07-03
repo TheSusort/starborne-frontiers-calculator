@@ -62,6 +62,16 @@ export interface ConditionContext {
      *  (DPS mode has no enemy attackers to count) — the scaling contributes 0, byte-
      *  identical to today. */
     stealthedEnemyCount?: number;
+    /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
+     *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other
+     *  scaling source above, which are entity COUNTS). Used by Wildfire's dotDamage-channel
+     *  "…for every 10% crit power" bonus. Populated ONLY by runPlayerTurn's modifierCtx, from
+     *  a PRE-modifier estimate (layers 1+2+3 of the critDamage fold — mirrors critBuffForGates'
+     *  same pre-modifier-layer treatment of effectiveCritRate, avoiding a self-referential
+     *  gate since this ctx also feeds the layer-4 modifier fold that could in principle alter
+     *  critDamage itself). Defaults to 0 everywhere else (DPS-safe: no other ConditionContext
+     *  builder populates it, so it's inert for every ship besides Wildfire). */
+    selfCritPower?: number;
 }
 
 /** Resolve one condition to a count (>= 0). 0 means "not met". */
@@ -106,6 +116,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             return ctx.enemyDestroyedCount;
         case 'enemy-stealth-count':
             return ctx.stealthedEnemyCount ?? 0;
+        case 'self-crit-power':
+            return ctx.selfCritPower ?? 0;
         case 'hp-threshold':
             return evalHpThreshold(cond, ctx) ? 1 : 0;
         // HP-percentage counts: the enemy's current/missing HP% (0..100). Used as

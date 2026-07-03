@@ -239,7 +239,17 @@ export type ConditionSubject =
     // damage for every enemy with Stealth" (perUnit 10, no cap). Live-derived by the
     // combat engine from ConditionContext.stealthedEnemyCount; defaults to 0 (DPS mode
     // has no enemy attackers to count) — inert/byte-identical there. Always derivable:true.
-    | 'enemy-stealth-count';
+    | 'enemy-stealth-count'
+    // SCALING-SOURCE subject (sub-project I, PR I4a): the ACTING unit's own live crit
+    // power (effective critDamage stat, e.g. 150), as a continuous magnitude — not a
+    // count of entities like the other scaling sources above. Used by Wildfire's
+    // "…for every 10% crit power" dotDamage bonus (perUnit 0.1 → critDamage 150 scales
+    // to +15). As a BARE gate (no scaling rule) it reads sensibly too: any crit power
+    // > 0 satisfies the default count>0 presence rule. Live-derived by
+    // ConditionContext.selfCritPower (runPlayerTurn's modifierCtx only); defaults to 0
+    // elsewhere (no other ConditionContext builder populates it — inert/byte-identical
+    // for every ship that doesn't reference this subject). Always derivable:true.
+    | 'self-crit-power';
 
 export interface Condition {
     subject: ConditionSubject;
