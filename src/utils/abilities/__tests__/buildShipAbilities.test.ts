@@ -4125,6 +4125,44 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         expect(enemyCharges).toHaveLength(0);
     });
 
+    // Epic PR3 (charge sign/target): Thresh's active text gates BOTH halves of "If the target
+    // is a Defender, this Unit removes 1 charge from the enemy and adds 1 charge to this Unit's
+    // Charged Skill" behind the same Defender check. The self-gain half already carried the gate
+    // (parseChargeGain/classifyChargeCondition) — verified as a pre-existing FALSE POSITIVE for
+    // that half of the sweep finding. The enemy-removal half did NOT (buildShipAbilities hardcoded
+    // `conditions: []` for every removal ability) — this is the real, in-scope bug: the shared gate
+    // must propagate to both abilities emitted from the sentence.
+    it('Thresh active: BOTH the self-gain AND the enemy-removal charge abilities carry the shared Defender gate', () => {
+        const s = ship({
+            activeSkillText:
+                "This Unit gains <unit-skill>Attack Up III</unit-skill> for 1 turn and deals <unit-damage>240% damage</unit-damage>. If the target is a Defender, this Unit <unit-aid>removes 1 charge</unit-aid> from the enemy and <unit-aid>adds 1 charge</unit-aid> to this Unit's Charged Skill.",
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active')!;
+        const chargeAbilities = active.abilities.filter((a) => a.type === 'charge');
+        expect(chargeAbilities).toHaveLength(2);
+
+        const defenderGate = expect.objectContaining({
+            subject: 'enemy-type',
+            requiredEnemyType: 'Defender',
+        });
+
+        const selfGain = chargeAbilities.find((a) => a.target === 'self')!;
+        expect(selfGain).toBeDefined();
+        expect(selfGain.conditions).toContainEqual(defenderGate);
+
+        const enemyRemoval = chargeAbilities.find((a) => a.target === 'enemy')!;
+        expect(enemyRemoval).toBeDefined();
+        expect(enemyRemoval.conditions).toContainEqual(defenderGate);
+        expect(enemyRemoval).toMatchObject({
+            type: 'charge',
+            target: 'enemy',
+            trigger: 'on-cast',
+            config: { type: 'charge', amount: 1 },
+        });
+    });
+
     // Overload lose-on-kill: the 5 Marauder ships must emit a `remove-self-buff` ability
     // for Overload. Marauder Rage grants ride the existing buff-merge path (Task 4's
     // detectReactiveTrigger) — verified here, not separately wired.

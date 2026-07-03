@@ -3476,4 +3476,108 @@ describe('simulateDPS', () => {
             expect(present(3)).toBe(false);
         });
     });
+
+    // Epic PR3 (charge sign/target): the single-ship DPS calculator has no enemy charge meter.
+    // An enemy-directed charge-removal ability (Opal/Provider/Demolisher/Thresh) must be INERT
+    // here — no crash, and critically no self-charge contribution (a naive implementation could
+    // fold a mis-signed 'enemy' charge ability into the caster's own bank). `simulateDPS` routes
+    // through `runCombat` with no `enemyAttackers`, so `removeEnemyCharges` loops zero actors
+    // (structural no-op) and `chargeGainFromSkill`'s 'own' filter already excludes enemy/all-
+    // enemies targets from the self-charge sum — this test locks that parity as a regression gate.
+    describe('enemy-directed charge removal is inert in DPS mode (epic PR3)', () => {
+        const enemyRemovalSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'active-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 150 },
+                        },
+                        {
+                            id: 'active-charge-removal',
+                            type: 'charge',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'charge', amount: 2 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'charged-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 350 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const plainSkills = (): ShipSkills => ({
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'active-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 150 },
+                        },
+                    ],
+                },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'charged-dmg',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 350 },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        it('does not crash and does not accelerate the charge cadence vs. an identical ship without the removal ability', () => {
+            const withRemoval = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 6,
+                shipSkills: enemyRemovalSkills(),
+            });
+            const withoutRemoval = simulateDPS({
+                ...baseInput,
+                chargeCount: 3,
+                rounds: 6,
+                shipSkills: plainSkills(),
+            });
+
+            // Byte-identical charge progression and action sequence: the enemy-directed removal
+            // contributes NOTHING to the caster's own charge bank.
+            expect(withRemoval.rounds.map((r) => r.charges)).toEqual(
+                withoutRemoval.rounds.map((r) => r.charges)
+            );
+            expect(withRemoval.rounds.map((r) => r.action)).toEqual(
+                withoutRemoval.rounds.map((r) => r.action)
+            );
+            expect(withRemoval.summary.totalDamage).toBe(withoutRemoval.summary.totalDamage);
+        });
+    });
 });
