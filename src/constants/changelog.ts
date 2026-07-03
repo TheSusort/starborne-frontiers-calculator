@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: Selenite's bonus direct damage now scales with the number of Stealthed enemies (10% per enemy), instead of a flat 10% whenever at least one enemy was Stealthed.",
     "Combat sim: Lodolite's charged skill now purges all buffs from the enemy with the most buffs, and her legendary refit strips 100% of that enemy's shield when she does.",
     "Combat sim: Wildfire's bonus Inferno damage against an enemy with Scorching Radiation (scaling with her own crit power, 1% per 10% crit power, 2% with her refit) is now re-checked on every Inferno tick against each affected enemy individually — a target that never had Scorching Radiation (or whose Scorching Radiation has since expired) no longer gets the bonus just because another of her targets currently has it.",
+    "Combat sim: Wildfire's refit-3 passive now actually reaches the team — every living ally's Inferno damage against an enemy with Scorching Radiation is boosted by 2% per 10% of Wildfire's own crit power (not the ally's), matching her skill text.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
