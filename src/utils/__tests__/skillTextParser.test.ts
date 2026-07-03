@@ -101,6 +101,46 @@ describe('parseSkillDamage', () => {
             'Deals <unit-damage>100% damage</unit-damage> plus extra based on <unit-damage>50%</unit-damage> of its HP';
         expect(parseSkillDamage(text)).toBe(100);
     });
+
+    // Epic PR1 (skill-model gap, finding family 1): damage-REDUCTION / conversion clauses were
+    // being read as outgoing attack multipliers because the tag content or nearby text merely
+    // mentions the word "damage" — the heuristic never distinguished incoming reduction from an
+    // outgoing hit. Exact clauses from docs/ship-skills.csv.
+    it('skips "X% damage reduction" (Tormenter p2 — incoming HP-scaled reduction, not an attack)', () => {
+        const text =
+            'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.';
+        expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('skips "takes X% less damage from Y" (Voron p2 — DoT-scoped incoming reduction)', () => {
+        const text =
+            'This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.';
+        expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('skips "takes X% less damage" (Malvex p2 — when-Shielded incoming reduction)', () => {
+        const text = 'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>.';
+        expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('skips "Shield equal to X% of the damage dealt" (FrontLine p2 — shield scaled off damage, not an attack)', () => {
+        const text =
+            'When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
+        // The real reactive 80% hit is parsed separately by parseEnemyChargedCastReaction (its own
+        // dedicated regex), NOT by this generic scanner — the "80%" tag has no "damage" word within
+        // its own content or the next 20 chars, so parseSkillDamage never reaches it here. This
+        // assertion only guards that the "30%" shield-scaling tag is never mistaken for a base
+        // multiplier (which is what minted the phantom on-cast damage{30} ability pre-fix).
+        expect(parseSkillDamage(text)).toBe(0);
+    });
+
+    it('still parses a genuine damage clause that merely sits near a reduction-family word elsewhere', () => {
+        // Negative companion: Tormenter's OWN active skill still parses its base multiplier —
+        // the reduction guard must not blanket-suppress ordinary "X% damage" tags.
+        const text =
+            'This Unit deals <unit-damage>160% damage</unit-damage> with a guaranteed critical hit and grants <unit-skill>Out. Damage Up I</unit-skill> to itself and all adjacent allies for 1 turn.';
+        expect(parseSkillDamage(text)).toBe(160);
+    });
 });
 
 describe('detectFullyCharged', () => {
@@ -880,6 +920,50 @@ describe('parseSkillEffects', () => {
                 'active'
             )
         ).toEqual([]);
+    });
+
+    // Epic PR1 (skill-model gap, finding family 3): Amartya's "When an enemy defender gains
+    // Taunt, this Unit inflicts N stacks of Exposed on that defender." names Taunt only as the
+    // TRIGGER condition (the enemy is the one gaining it) — the segment loop's verb scan doesn't
+    // check WHO the "gains" verb's subject is, so it minted a phantom self Taunt grant. Exact
+    // clause from docs/ship-skills.csv (Amartya passive2/passive3).
+    it('does not mint a phantom self Taunt grant from an enemy-gains-Taunt trigger clause (Amartya)', () => {
+        const text =
+            'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.';
+        const result = parseSkillEffects(text, 'passive2');
+        expect(result.find((e) => e.buffName === 'Taunt')).toBeUndefined();
+        expect(result).toEqual([
+            {
+                buffName: 'Exposed',
+                target: 'enemy',
+                duration: 'recurring',
+                stacks: 1,
+                stackTrigger: 'per-round',
+                application: 'inflict',
+                source: 'passive2',
+            },
+        ]);
+    });
+
+    it('still recognizes a genuine self-grant that merely mentions "enemy" earlier in the sentence', () => {
+        // Negative companion: "this Unit" is the true, closer subject of "gains" — the
+        // enemy-subject guard must not blanket-suppress every "gains" that follows an
+        // earlier "enemy" mention in the same sentence.
+        const text =
+            'When an enemy cleanses a Debuff, this Unit gains <unit-skill>Gelecek Contagion I</unit-skill> for 2 turns.';
+        expect(parseSkillEffects(text, 'passive1')).toEqual([
+            { buffName: 'Gelecek Contagion I', target: 'self', duration: 2, source: 'passive1' },
+        ]);
+    });
+
+    it('already extracts the explicit stack count correctly at this layer (Amartya Exposed, R4)', () => {
+        // parseSkillEffects itself is not where the R4 "2 stacks" gets lost — see
+        // skillBuffAutoFill.test.ts for the downstream (toSelectedBuffs) red test that reproduces
+        // the actual bug.
+        const text =
+            'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 2 stacks of <unit-skill>Exposed</unit-skill> on that defender.';
+        const result = parseSkillEffects(text, 'passive3');
+        expect(result.find((e) => e.buffName === 'Exposed')?.stacks).toBe(2);
     });
 });
 

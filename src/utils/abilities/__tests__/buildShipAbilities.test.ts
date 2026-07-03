@@ -4076,3 +4076,193 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         });
     });
 });
+
+// Epic PR1 (skill-model gap, finding family 1): damage-reduction / shield-scaled-off-damage
+// clauses were being minted as phantom on-cast attacks because parseSkillDamage's "does this
+// tag mention 'damage'?" heuristic can't distinguish an outgoing hit from an incoming-reduction
+// or shield-scaling clause. All texts below are exact CSV clauses (docs/ship-skills.csv),
+// assigned to their REAL slot fields (matching how buildShipAbilities is actually invoked in
+// production via getShipSkillRows) — not the audit script's "treat every slot as active"
+// simplification.
+describe('buildShipAbilities — PR1 phantom-ability suppression (reduction/conversion clauses)', () => {
+    it('Tormenter passive2 (R2): no phantom damage ability from "30% damage reduction"', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText: 'This Unit always lands critical hits.',
+            secondPassiveSkillText:
+                'This Unit always lands critical hits and gains up to <unit-damage>30% damage</unit-damage> reduction as its health decreases.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'damage') ?? false).toBe(false);
+    });
+
+    it('Tormenter active still parses its real 160% base damage (negative companion)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>160% damage</unit-damage> with a guaranteed critical hit and grants <unit-skill>Out. Damage Up I</unit-skill> to itself and all adjacent allies for 1 turn.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active')!;
+        expect(abilityOfType(active.abilities, 'damage')).toMatchObject({
+            config: { type: 'damage', multiplier: 160 },
+        });
+    });
+
+    it('Voron passive2 (R2): no phantom damage ability from "takes 20% less damage from DoTs"', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText:
+                'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> effect lasting for 3 turns.',
+            secondPassiveSkillText:
+                'When directly damaged, this Unit transforms the damage into a <unit-skill>Damage over Time effect</unit-skill> lasting for 3 turns.<br /><br />This Unit takes <unit-damage>20% less damage</unit-damage> from <unit-skill>Damage over Time effects</unit-skill>.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'damage') ?? false).toBe(false);
+    });
+
+    it('Malvex passive2 (R2): no phantom damage ability from "takes 10% less damage"', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText:
+                'When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+            secondPassiveSkillText:
+                'When Shielded, this Ship takes <unit-damage>10% less damage</unit-damage>. When directly damaged as a primary target, this Unit gains <unit-damage>Shield equal to 15%</unit-damage> of the Damage dealt to them.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'damage') ?? false).toBe(false);
+        // The (separately-tracked, out-of-scope) on-attacked shield-gain clause is untouched.
+        expect(passive?.abilities.some((a) => a.type === 'shield')).toBe(true);
+    });
+
+    it('FrontLine passive2 (R2): phantom on-cast damage(30) from the shield clause is gone, real on-enemy-charged-cast damage(80) survives', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText:
+                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.',
+            secondPassiveSkillText:
+                'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        const damageAbilities = passive.abilities.filter((a) => a.type === 'damage');
+        // Exactly one damage ability — the real on-enemy-charged-cast reactive hit — no phantom
+        // on-cast multiplier-30 sibling.
+        expect(damageAbilities).toHaveLength(1);
+        expect(damageAbilities[0]).toMatchObject({
+            trigger: 'on-enemy-charged-cast',
+            config: { type: 'damage', multiplier: 80 },
+        });
+        expect(damageAbilities.some((a) => a.trigger === 'on-cast')).toBe(false);
+    });
+});
+
+// Epic PR1 (skill-model gap, finding family 2): the sweep report's "trigger-phrase DoT
+// re-application" claim for Wisteria/Valerian/Lingshe/Belladonna was reproduced by the sweep's
+// OWN methodology (docs/skill-model-gap-sweep-2026-07-03.md: "each slot parsed in isolation as
+// the active slot"), which routes passive text through buildDoTAutoFill's active/charge-only DoT
+// auto-fill. Under REAL usage — text assigned to its correct slot field, exactly how
+// buildShipAbilities is invoked via getShipSkillRows in production — buildDoTAutoFill never sees
+// passive text, so the phantom DoT does not reproduce for any of the four ships. These tests were
+// RED-checked (asserted the phantom absent) BEFORE any parser change and already passed —
+// confirmed FALSE POSITIVE; no parser change was made for this family. Kept as regression guards.
+describe('buildShipAbilities — PR1 finding family 2 (confirmed FALSE POSITIVE under real usage)', () => {
+    it('Wisteria passive1 (R0): no phantom Corrosion dot from the "after applying Corrosion" trigger phrase', () => {
+        const s = ship({
+            refits: [] as never,
+            firstPassiveSkillText:
+                'This Unit, after applying <unit-skill>Corrosion</unit-skill> with a Critical hit, inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'dot') ?? false).toBe(false);
+    });
+
+    it('Valerian passive2 (R2): no phantom Corrosion dot from "After inflicting Corrosion with a Critical hit"', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText:
+                'This Unit <unit-damage>repairs 15%</unit-damage> of Damage dealt to the enemy, including inflcted Damage over Time effects.',
+            secondPassiveSkillText:
+                'This Unit <unit-damage>repairs 15%</unit-damage> of damage dealt to an enemy, including damage from damage over time effects. After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        expect(passive.abilities.some((a) => a.type === 'dot')).toBe(false);
+        // The real extend-dot ability (self-crit gated) is still there, unaffected.
+        expect(passive.abilities.some((a) => a.type === 'extend-dot')).toBe(true);
+    });
+
+    it('Lingshe passive1 (R0): no phantom Bomb dot from "When this Unit inflicts a Bomb"', () => {
+        const s = ship({
+            refits: [] as never,
+            firstPassiveSkillText:
+                'When this Unit inflicts a <unit-skill>Bomb</unit-skill> it gains <unit-skill>Stealth</unit-skill> for 1 turn.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'dot') ?? false).toBe(false);
+    });
+
+    it('Belladonna passive1 (R0): no phantom Corrosion dot from "When an ally inflicts Corrosion"', () => {
+        const s = ship({
+            refits: [] as never,
+            firstPassiveSkillText:
+                'When an ally inflicts <unit-skill>Corrosion</unit-skill>, this Unit has a chance to convert the <unit-skill>Corrosion</unit-skill> into <unit-skill>Acidic Decay</unit-skill> of the same level, with the chance scaling at 1% per 10 Hacking.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive');
+        expect(passive?.abilities.some((a) => a.type === 'dot') ?? false).toBe(false);
+    });
+});
+
+// Epic PR1 (skill-model gap, finding family 3): Amartya's "When an enemy defender gains Taunt,
+// this Unit inflicts N stacks of Exposed" minted a phantom self Taunt grant (the trigger clause's
+// buff misread as a self-application) and force-collapsed the explicit "2 stacks" count to 1.
+describe('buildShipAbilities — PR1 Amartya phantom Taunt + Exposed stack count', () => {
+    it('passive2 (R2): no self Taunt buff ability; Exposed debuff carries 1 stack', () => {
+        const s = ship({
+            refits: [{}, {}] as never,
+            firstPassiveSkillText:
+                'When an enemy defender is directly repaired, this Unit inflicts 1 stack of <unit-skill>Defense Shred</unit-skill> on that defender.',
+            secondPassiveSkillText:
+                'When an enemy defender is directly repaired, this Unit inflicts 1 stack of <unit-skill>Defense Shred</unit-skill> on that defender.<br /><br />When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        const taunt = passive.abilities.find(
+            (a) => a.type === 'buff' && (a.config as { buffName?: string }).buffName === 'Taunt'
+        );
+        expect(taunt).toBeUndefined();
+        const exposed = passive.abilities.find(
+            (a) => a.type === 'debuff' && (a.config as { buffName?: string }).buffName === 'Exposed'
+        );
+        expect(exposed).toBeDefined();
+        expect((exposed!.config as { stacks?: number }).stacks).toBe(1);
+    });
+
+    it('passive3 (R4): Exposed debuff carries the explicit 2-stack count', () => {
+        const s = ship({
+            refits: [{}, {}, {}, {}] as never,
+            firstPassiveSkillText:
+                'When an enemy defender is directly repaired, this Unit inflicts 1 stack of <unit-skill>Defense Shred</unit-skill> on that defender.',
+            secondPassiveSkillText:
+                'When an enemy defender is directly repaired, this Unit inflicts 1 stack of <unit-skill>Defense Shred</unit-skill> on that defender.<br /><br />When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.',
+            thirdPassiveSkillText:
+                'When an enemy defender is directly repaired, this Unit inflicts 2 stack of <unit-skill>Defense Shred</unit-skill> on that defender.<br /><br />When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 2 stacks of <unit-skill>Exposed</unit-skill> on that defender.',
+        });
+        const { slots } = buildShipAbilities(s);
+        const passive = slot(slots, 'passive')!;
+        const taunt = passive.abilities.find(
+            (a) => a.type === 'buff' && (a.config as { buffName?: string }).buffName === 'Taunt'
+        );
+        expect(taunt).toBeUndefined();
+        const exposed = passive.abilities.find(
+            (a) => a.type === 'debuff' && (a.config as { buffName?: string }).buffName === 'Exposed'
+        );
+        expect(exposed).toBeDefined();
+        expect((exposed!.config as { stacks?: number }).stacks).toBe(2);
+    });
+});

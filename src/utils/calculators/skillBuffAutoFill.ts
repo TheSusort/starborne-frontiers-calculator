@@ -73,8 +73,13 @@ function toSelectedBuffs(
             // must NOT share an id. Manually-added picker entries still use the bare buff name.
             id: `${buff.name}-${effect.source}-${effect.target}`,
             buffName: buff.name,
-            // For accumulating buffs, stacks = rate per trigger; otherwise always 1.
-            stacks: stackTrigger ? (effect.stacks ?? 1) : 1,
+            // For accumulating buffs, stacks = rate per trigger. Otherwise, use whatever count
+            // the text explicitly stated for THIS single application (e.g. Amartya's "2 stacks of
+            // Exposed" — Exposed isn't mechanically "stackable" across triggers, but the count of
+            // a single infliction is still real data the parser must not discard). Epic PR1
+            // (skill-model gap, finding family 3b): previously hard-forced to 1 whenever
+            // stackTrigger was absent, silently dropping any parsed count > 1.
+            stacks: effect.stacks ?? 1,
             parsedEffects,
             isStackable: stackInfo.stackable,
             maxStacks: stackInfo.maxStacks,

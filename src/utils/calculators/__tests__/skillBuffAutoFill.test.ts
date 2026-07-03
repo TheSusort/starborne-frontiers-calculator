@@ -105,6 +105,38 @@ describe('buildSkillBuffAutoFill', () => {
         const count = result.selfBuffs.filter((b) => b.buffName === 'Attack Up III').length;
         expect(count).toBe(1);
     });
+
+    // Epic PR1 (skill-model gap, finding family 3b): Exposed isn't in the BUFFS "stackable" set
+    // (it's a binary status, not an accumulating one), so toSelectedBuffs's
+    // `stacks: stackTrigger ? (effect.stacks ?? 1) : 1` forced every Exposed grant to 1 stack
+    // regardless of what the text actually said. Amartya's R4 passive explicitly inflicts "2
+    // stacks of Exposed" — the parsed count must survive even though Exposed never accumulates
+    // across separate triggers. Exact clause from docs/ship-skills.csv (Amartya passive3).
+    it('preserves an explicit multi-stack count on a non-mechanically-stackable debuff (Amartya Exposed, R4)', () => {
+        const ship = {
+            thirdPassiveSkillText:
+                'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 2 stacks of <unit-skill>Exposed</unit-skill> on that defender.',
+            refits: [{}, {}, {}, {}],
+        } as unknown as Ship;
+        const result = buildSkillBuffAutoFill(ship);
+        const exposed = result.enemyDebuffs.find((b) => b.buffName === 'Exposed');
+        expect(exposed).toBeDefined();
+        expect(exposed?.isStackable).toBe(false);
+        expect(exposed?.stacks).toBe(2);
+    });
+
+    it('still forces a single stack when the text states only 1 (Amartya Exposed, R0/R2)', () => {
+        // Negative companion: the R0/R2 clause says "1 stacks of Exposed" — must stay 1, not be
+        // inflated by the R4 fix.
+        const ship = {
+            secondPassiveSkillText:
+                'When an enemy defender gains <unit-skill>Taunt</unit-skill>, this Unit inflicts 1 stacks of <unit-skill>Exposed</unit-skill> on that defender.',
+            refits: [{}, {}],
+        } as unknown as Ship;
+        const result = buildSkillBuffAutoFill(ship);
+        const exposed = result.enemyDebuffs.find((b) => b.buffName === 'Exposed');
+        expect(exposed?.stacks).toBe(1);
+    });
 });
 
 describe('mergeAutoFill', () => {

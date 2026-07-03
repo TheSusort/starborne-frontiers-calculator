@@ -156,12 +156,29 @@ export function extractSkillNames(skillText: string | null | undefined): string[
     return [...new Set(matches)]; // Remove duplicates
 }
 
+// Epic PR1 (skill-model gap, finding family 1): a <unit-damage> tag whose CONTENT says "X% less
+// damage" is an INCOMING-damage reduction (Voron "takes 20% less damage from DoTs", Malvex "takes
+// 10% less damage"), never an outgoing attack multiplier.
+const LESS_DAMAGE_RE = /\bless\s+damage\b/i;
+// A tag reading "X% damage" immediately followed by " reduction …" (Tormenter "gains up to 30%
+// damage reduction as its health decreases") is the same incoming-reduction family — the
+// "reduction" noun sits just outside the tag, in the next ~15 chars.
+const DAMAGE_REDUCTION_FOLLOWING_RE = /^\s*reduction\b/i;
+// A bare percentage tag ("<unit-damage>30%</unit-damage>") preceded by "Shield equal to " is a
+// shield-scaling clause ("gains a Shield equal to 30% of the damage dealt", FrontLine) — the
+// nearby word "damage" describes what the SHIELD scales off of, not an attack the tag itself
+// represents.
+const SHIELD_EQUAL_TO_LEAD_IN_RE = /shield\s+equal\s+to\s*$/i;
+
 /**
  * Returns the first <unit-damage>X% ...</unit-damage> value in skill text.
  * Skips values where the 20 characters after the tag start with " of its" or " of this"
  * (stat-based damage like "30% of its DEF" or "10% of this Unit's max HP" —
  * must be added manually as a buff).
  * Secondary damage tags (conditional/situational bonuses) are ignored.
+ * Also skips incoming-damage-reduction clauses ("X% less damage", "X% damage reduction") and
+ * shield-scaled-off-damage clauses ("Shield equal to X% of the damage dealt") — neither is an
+ * outgoing attack, even though both sit near the word "damage" (PR1 phantom-ability suppression).
  * Returns an integer percentage (e.g. 190 for "190% damage"), or 0 if none found.
  */
 export function parseSkillDamage(text: string): number {
@@ -177,6 +194,14 @@ export function parseSkillDamage(text: string): number {
         // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
         // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
         if (/\bmore\b/i.test(match[1])) continue;
+        // Incoming-damage reduction, either "X% less damage" inside the tag or "X% damage"
+        // immediately followed by "reduction" outside it — not an outgoing attack.
+        if (LESS_DAMAGE_RE.test(match[1])) continue;
+        if (DAMAGE_REDUCTION_FOLLOWING_RE.test(following)) continue;
+        // "Shield equal to X%" lead-in immediately before the tag — a shield scaled off damage
+        // dealt, not the damage itself.
+        const preceding = text.slice(Math.max(0, match.index - 30), match.index);
+        if (SHIELD_EQUAL_TO_LEAD_IN_RE.test(preceding)) continue;
         // <unit-damage> is also used for non-damage numbers (e.g. "7.5% defense
         // penetration", "repairs 20%"). Only treat it as a base multiplier when the
         // tag content or the following text actually mentions damage.
@@ -3038,6 +3063,46 @@ function findSharedDuration(
     return null;
 }
 
+// Words that pin a self-grant verb's subject to the caster once encountered while scanning
+// backward from the verb — "this Unit gains X" / "it gains X" / "they gain X" (team subjects).
+// Reaching one of these BEFORE an "enemy"/"enemies" word means the verb is a genuine self-grant.
+const SELF_SUBJECT_STOP_WORDS = new Set(['this', 'unit', 'it', 'itself', 'they', 'their', 'ally']);
+// Bound the backward subject scan to a short window — the known shape ("an enemy defender
+// gains") is 1-2 words — so an unrelated, distant "enemy" earlier in a long sentence can never
+// mis-flag an unrelated verb (mirrors the ~20-char window used by the analogous Taunt-only guard
+// in CONTROL_INFLICTS).
+const ENEMY_SUBJECT_SCAN_WINDOW = 6;
+
+/**
+ * True when the application verb at `words[verbIndex]` (a SELF_VERB, e.g. "gains"/"grants") has
+ * "enemy"/"enemies" as its nearer grammatical subject rather than the caster — i.e. the verb sits
+ * inside a trigger/condition clause ("When an enemy defender gains Taunt, …") rather than
+ * describing something THIS Unit receives. Scans backward a short, bounded window and stops as
+ * soon as it hits a caster/team subject word (SELF_SUBJECT_STOP_WORDS), a clause-boundary
+ * keyword, OR any other application/skip verb — crossing a PRIOR verb's territory means an
+ * "enemy" beyond it belongs to a different clause (Ravager: "upon killing an enemy, loses
+ * Overload and gains Marauder Rage III" — "enemy" is killing's object, in an earlier clause than
+ * this "gains"; the intervening "loses" stops the scan before reaching it). No lookbehind (iOS
+ * Safari 15).
+ */
+function hasEnemySubject(words: string[], verbIndex: number): boolean {
+    const limit = Math.max(0, verbIndex - ENEMY_SUBJECT_SCAN_WINDOW);
+    for (let j = verbIndex - 1; j >= limit; j--) {
+        const w = words[j];
+        if (w === 'enemy' || w === 'enemies') return true;
+        if (SELF_SUBJECT_STOP_WORDS.has(w)) return false;
+        if (w === 'when' || w === 'after' || w === 'if' || w === 'while' || w === 'upon')
+            return false;
+        if (APPLICATION_VERBS.has(w) || SKIP_VERBS.has(w)) return false;
+        // "… to that enemy AND gains …" / "loses Overload AND gains …" (Stalwart, Ravager) is a
+        // COMPOUND predicate — "and" carries the subject over from an earlier, unrelated clause
+        // (an elided "it"/"this Unit"), so an "enemy" beyond "and" is never this verb's subject.
+        // The genuine bug shape ("an enemy defender gains X") never has "and" in between.
+        if (w === 'and') return false;
+    }
+    return false;
+}
+
 /**
  * Scans backward through preceding text segments to find the nearest application verb,
  * stopping at sentence boundaries (. ; <br>) or MAX_SCAN_CHARS.
@@ -3077,6 +3142,13 @@ function findVerb(segments: SkillTextSegment[], tagIndex: number): string | null
             // "newly applied X" is adjectival (referencing an existing effect being
             // extended), not an application — keep scanning for a real verb instead.
             if (words[i - 1] === ADJECTIVAL_MARKER) continue;
+            // Epic PR1 (skill-model gap, finding family 3): "when an enemy [defender] gains
+            // <BuffName>, this Unit inflicts …" names the buff only as the TRIGGER condition —
+            // the grammatical subject of "gains" is the ENEMY, not this Unit. Without this
+            // check a self-grant verb (gains/grants) minted a phantom self-buff regardless of
+            // subject (Amartya: "gains Taunt" read as This-Unit-gains-Taunt). Keep scanning past
+            // it for an earlier governing verb (or none) instead of returning it.
+            if (SELF_VERBS.has(words[i]) && hasEnemySubject(words, i)) continue;
             return words[i];
         }
         if (SKIP_VERBS.has(words[i])) return null;
