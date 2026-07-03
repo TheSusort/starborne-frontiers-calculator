@@ -15,7 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat sim: team-wide damage auras now actually reach the team. Lodolite's +15% damage vs Concentrate Fire (or Stealth) and Panguan's +40% damage for Stealthed units apply to every living ally who qualifies, not just the caster's own attacks.",
     "Combat sim: Selenite's bonus direct damage now scales with the number of Stealthed enemies (10% per enemy), instead of a flat 10% whenever at least one enemy was Stealthed.",
     "Combat sim: Lodolite's charged skill now purges all buffs from the enemy with the most buffs, and her legendary refit strips 100% of that enemy's shield when she does.",
-    'Combat sim: Wildfire now deals bonus Inferno damage against an enemy with Scorching Radiation, scaling with her own crit power (1% per 10% crit power, 2% with her refit) — applied when she attacks that enemy directly.',
+    "Combat sim: Wildfire's bonus Inferno damage against an enemy with Scorching Radiation (scaling with her own crit power, 1% per 10% crit power, 2% with her refit) is now re-checked on every Inferno tick against each affected enemy individually — a target that never had Scorching Radiation (or whose Scorching Radiation has since expired) no longer gets the bonus just because another of her targets currently has it.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
