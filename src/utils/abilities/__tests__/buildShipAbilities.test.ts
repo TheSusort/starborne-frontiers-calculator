@@ -693,9 +693,10 @@ describe('buildShipAbilities', () => {
             (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
         )!;
         expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
-        // Taunt = enemy buff, Provoke = self debuff (both targeting effects), anyOf.
+        // Taunt = self buff, Provoke = self debuff (both statuses the caster checks on itself;
+        // epic PR5 finding 1), anyOf.
         expect(outgoing.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
 
@@ -794,7 +795,7 @@ describe('buildShipAbilities', () => {
                 a.config.buffName === 'Terran Guard III'
         );
         expect(buff?.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
@@ -4496,5 +4497,53 @@ describe('buildShipAbilities — PR1 Amartya phantom Taunt + Exposed stack count
         );
         expect(exposed).toBeDefined();
         expect((exposed!.config as { stacks?: number }).stacks).toBe(2);
+    });
+});
+
+// ── PR5 Finding 1: Panon self-Provoke/Taunt condition subject ─────────────────────────────
+// docs/ship-skills.csv Panon active_skill_text (exact clause, routed through the real active
+// slot): "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard III for
+// 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self), not the
+// enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this unit"), so
+// "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
+describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt condition subject', () => {
+    it('Panon active: "If this Unit is Provoked or Taunted" gates Terran Guard III with self-subject conditions (both self-debuff Provoke and self-buff Taunt)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit grants all allies <unit-skill>Terran Guard II</unit-skill> for 2 turns and deals <unit-damage>80% damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its Defense.<br /><br />If this Unit is Provoked or Taunted, this Unit instead gains <unit-skill>Terran Guard III</unit-skill> for 2 turns and deals <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%</unit-damage> of its Defense.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active');
+        const buff = active!.abilities.find(
+            (a) =>
+                a.type === 'buff' &&
+                a.config.type === 'buff' &&
+                a.config.buffName === 'Terran Guard III'
+        );
+        expect(buff).toBeDefined();
+        expect(buff!.conditions).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
+        ]);
+    });
+
+    it('Panon charged: "If this Unit is affected by Provoke or Taunt" gates the Barrier grant + damage modifier with self-subject conditions', () => {
+        // docs/ship-skills.csv Panon charge_skill_text (exact clause): "...If this Unit is
+        // affected by Provoke or Taunt, it instead gains Barrier for 1 hit and deals 170%
+        // damage..."
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 3,
+            chargeSkillText:
+                'This Unit deals <unit-damage>140% damage</unit-damage> plus an additional <unit-damage>100%</unit-damage> of its Defense.<br /><br />If this Unit is affected by <unit-skill>Provoke</unit-skill> or <unit-skill>Taunt</unit-skill>, it instead gains <unit-skill>Barrier</unit-skill> for 1 hit and deals <unit-damage>170% damage</unit-damage> with an additional Damage equal to <unit-damage>130%</unit-damage> of its Defense.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged');
+        const buff = charged!.abilities.find(
+            (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Barrier'
+        );
+        expect(buff).toBeDefined();
+        expect(buff!.conditions).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
+        ]);
     });
 });

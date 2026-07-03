@@ -2111,20 +2111,22 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('classifies Taunt as enemy-buff and Provoke as self-debuff (anyOf)', () => {
-        // Taunt is a buff on the enemy (targeting); Provoke is a debuff on this Unit (targeting).
+    it('classifies Taunt and Provoke as self-buff/self-debuff (anyOf) (epic PR5 finding 1)', () => {
+        // Both Taunt and Provoke are checked on THIS Unit here ("if this Unit is ... Taunted");
+        // Taunt is a self-buff ("Forces enemies to target this unit" — constants/buffs.ts),
+        // Provoke a self-debuff.
         const text =
             'If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill>.';
         expect(detectGrantConditions(text, 'Terran Guard III')).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
 
     describe('statusEffectCondition (item 11: Taunt/Provoke derivable)', () => {
-        it('classifies Taunt as a derivable enemy-buff gate', () => {
+        it('classifies Taunt as a derivable self-buff gate (epic PR5 finding 1: subject was inverted to enemy-buff)', () => {
             expect(statusEffectCondition('Taunt')).toEqual({
-                subject: 'enemy-buff',
+                subject: 'self-buff',
                 buffName: 'Taunt',
                 derivable: true,
             });
@@ -2148,7 +2150,7 @@ describe('detectGrantConditions', () => {
 
         it('preserves anyOf for Taunt/Provoke and the fallback', () => {
             expect(statusEffectCondition('Taunt', true)).toEqual({
-                subject: 'enemy-buff',
+                subject: 'self-buff',
                 buffName: 'Taunt',
                 derivable: true,
                 anyOf: true,

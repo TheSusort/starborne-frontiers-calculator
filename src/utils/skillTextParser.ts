@@ -1063,15 +1063,23 @@ export function parseSelfBuffRemovals(
 }
 
 /**
- * Maps a targeting status to its model condition. Taunt is a buff on the ENEMY (it forces
- * targeting); Provoke is a debuff on THIS unit. Both are manual (the user assumes the situation).
- * Any other named status falls back to a manual self-buff.
+ * Maps a targeting status to its model condition. Both call sites (detectGrantConditions'
+ * "if this Unit is/affected by Taunt or Provoke" gate, and affectedByConditions' "when affected
+ * by Taunt or Provoke" damage modifier gate) check the status on the CASTER, not an opponent.
+ * Taunt is a buff the caster applies to ITSELF ("Forces enemies to target this unit" —
+ * constants/buffs.ts) and Provoke is a debuff on THIS unit; both therefore resolve against the
+ * caster's own buff/debuff set. Both are derivable (checked live from self's active
+ * buffs/debuffs). Any other named status falls back to a manual (non-derivable) self-buff.
+ * (Epic PR5 finding 1: Taunt previously resolved as an enemy-buff — subject inverted — because
+ * Taunt CAN also be checked on an opponent in other phrasings, e.g. "ignoring Taunt and Provoke"
+ * targeting bypass; but that phrasing is handled entirely by detectIgnoresForcedTargeting, not
+ * this function, so every actual caller here is self-subject.)
  */
 export function statusEffectCondition(name: string, anyOf = false): Condition {
     const lower = name.toLowerCase();
     if (lower === 'taunt')
         return {
-            subject: 'enemy-buff',
+            subject: 'self-buff',
             buffName: 'Taunt',
             derivable: true,
             ...(anyOf ? { anyOf: true } : {}),
