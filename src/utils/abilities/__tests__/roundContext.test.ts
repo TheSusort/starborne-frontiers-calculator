@@ -46,6 +46,20 @@ describe('buildRoundContext', () => {
         expect(ctx.enemyDestroyedCount).toBe(0);
         expect(ctx.selfHpPct).toBe(100);
         expect(ctx.enemyHpPct).toBe(100);
+        expect(ctx.selfCritPower).toBe(0);
+    });
+
+    it('passes through selfCritPower when provided (sub-project I, PR I4a)', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            selfCritPower: 150,
+        });
+        expect(ctx.selfCritPower).toBe(150);
     });
 
     it('leaves enemyType undefined when not provided', () => {

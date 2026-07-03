@@ -121,6 +121,38 @@ describe('evaluateCondition', () => {
         });
     });
 
+    describe("'self-crit-power' (sub-project I, PR I4a)", () => {
+        it('returns the live selfCritPower magnitude (a stat value, not an entity count)', () => {
+            const c = makeConditionContext({ selfCritPower: 150 });
+            expect(
+                evaluateCondition(cond({ subject: 'self-crit-power', derivable: true }), c)
+            ).toBe(150);
+        });
+
+        it('defaults to 0 when unset (no other ConditionContext builder populates it)', () => {
+            const c = makeConditionContext();
+            expect(c.selfCritPower).toBeUndefined();
+            expect(
+                evaluateCondition(cond({ subject: 'self-crit-power', derivable: true }), c)
+            ).toBe(0);
+        });
+
+        it('as a bare gate, any crit power > 0 satisfies the default count>0 presence rule', () => {
+            expect(
+                conditionMet(
+                    cond({ subject: 'self-crit-power', derivable: true }),
+                    makeConditionContext({ selfCritPower: 1 })
+                )
+            ).toBe(true);
+            expect(
+                conditionMet(
+                    cond({ subject: 'self-crit-power', derivable: true }),
+                    makeConditionContext({ selfCritPower: 0 })
+                )
+            ).toBe(false);
+        });
+    });
+
     it("'self-crit' is effective crit rate / 100", () => {
         expect(
             evaluateCondition(
@@ -368,6 +400,22 @@ describe('scaledBonus', () => {
         expect(scaledBonus(a, makeConditionContext({ stealthedEnemyCount: 2 }))).toBe(20);
         // Uncapped — the skill text states no maximum.
         expect(scaledBonus(a, makeConditionContext({ stealthedEnemyCount: 5 }))).toBe(50);
+    });
+
+    it('Wildfire-shape: 1%/2% additional Inferno damage per 10% crit power (sub-project I, PR I4a)', () => {
+        // Base passive: perUnit = 1/10 = 0.1. Refit passive: perUnit = 2/10 = 0.2.
+        const base = dmg([cond({ subject: 'self-crit-power', derivable: true })], {
+            conditionIndex: 0,
+            perUnit: 0.1,
+        });
+        const refit = dmg([cond({ subject: 'self-crit-power', derivable: true })], {
+            conditionIndex: 0,
+            perUnit: 0.2,
+        });
+        expect(scaledBonus(base, makeConditionContext({ selfCritPower: 150 }))).toBe(15);
+        expect(scaledBonus(refit, makeConditionContext({ selfCritPower: 150 }))).toBe(30);
+        // 0 crit power → 0 bonus (uncapped, but inert at the floor).
+        expect(scaledBonus(base, makeConditionContext({ selfCritPower: 0 }))).toBe(0);
     });
 
     it('scaling reads only the indexed condition, even inside an anyOf OR-group', () => {

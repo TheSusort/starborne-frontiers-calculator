@@ -57,6 +57,11 @@ export function buildRoundContext(state: {
      *  self-buff. Default 0 (DPS-assumption: no enemy attackers to count). Populated live by
      *  the combat engine. See ConditionContext.stealthedEnemyCount. */
     stealthedEnemyCount?: number;
+    /** Sub-project I, PR I4a — the acting unit's own live crit power (effective critDamage),
+     *  for Wildfire's "…for every 10% crit power" dotDamage scaling. Default 0 (no live crit
+     *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
+     *  runPlayerTurn's modifierCtx passes a real value. See ConditionContext.selfCritPower. */
+    selfCritPower?: number;
 }): ConditionContext {
     return {
         selfBuffNames: state.selfBuffNames,
@@ -84,6 +89,7 @@ export function buildRoundContext(state: {
         isLastStanding: state.lastStanding ?? false,
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
+        selfCritPower: state.selfCritPower ?? 0,
         ...(state.roundCrit !== undefined ? { roundCrit: state.roundCrit } : {}),
         // Sentinel spread (sub-project I, PR I1): only set the key when the caller passed a
         // real array — an explicit `undefined` value would collapse to the same runtime

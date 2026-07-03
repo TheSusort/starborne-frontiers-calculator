@@ -1868,6 +1868,76 @@ describe('simulateDPS', () => {
             );
         });
 
+        it('DPS-parity (sub-project I, PR I4a): a self-crit-power dotDamage scaling modifier composes with the enemy-debuff sentinel', () => {
+            // Mirrors Wildfire's "…additional Inferno damage to enemies with Scorching
+            // Radiation, for every 10% crit power" — a dotDamage-channel modifier gated on a
+            // buffName-tagged enemy-debuff condition (reuses the SAME DPS-parity sentinel
+            // proven for Tygr/I1 above: the DPS simulator never populates
+            // ConditionContext.enemyDebuffNames, so ANY enemy debuff satisfies the gate, not
+            // just one literally named 'Scorching Radiation') PLUS the new self-crit-power
+            // scaling source. Unlike Selenite's stealthedEnemyCount (an opposing-roster count
+            // that is structurally 0 in DPS mode), self-crit-power IS populated in DPS mode —
+            // it is the caster's OWN live crit power, always known, not enemy-roster-dependent.
+            // baseInput.critDamage = 150, perUnit 0.1 → +15pp dotDamage when the gate is met.
+            const wildfireModifier: Ability = {
+                id: 'm',
+                type: 'modifier',
+                target: 'self',
+                trigger: 'on-cast',
+                conditions: [
+                    { subject: 'enemy-debuff', derivable: true, buffName: 'Scorching Radiation' },
+                    { subject: 'self-crit-power', derivable: true },
+                ],
+                scaling: { conditionIndex: 1, perUnit: 0.1 },
+                config: {
+                    type: 'modifier',
+                    channel: 'dotDamage',
+                    value: 0,
+                    isMultiplicative: false,
+                },
+            };
+            // NOTE: `activeDoTs` (DPSSimulationInput) is only read by the flatInputToAbilities
+            // fallback — a caller supplying `shipSkills` (as this test does) must express the
+            // DoT as its own 'dot'-type ability instead (mirrors the combat-engine integration
+            // test's `payloadAbilities`).
+            const dotAbility: Ability = {
+                id: 'dot',
+                type: 'dot',
+                target: 'enemy',
+                trigger: 'on-cast',
+                conditions: [],
+                config: { type: 'dot', dotType: 'inferno', tier: 30, stacks: 1, duration: 2 },
+            };
+            const dotBase = {
+                ...baseInput,
+                shipSkills: activeSkills([damageAbility('d', 100), dotAbility, wildfireModifier]),
+            };
+            // Deliberately UNRELATED debuff name — never 'Scorching Radiation'.
+            const unrelatedDebuff = makeAlwaysBuff('security-down', { defense: -10 });
+
+            const withUnrelatedDebuff = simulateDPS({
+                ...dotBase,
+                enemyDebuffs: [unrelatedDebuff],
+            });
+            const withNoDebuff = simulateDPS({ ...dotBase, enemyDebuffs: [] });
+
+            // Round 1 only: `enemyDebuffCount` also folds in this ship's OWN just-applied
+            // Inferno entry from round 2 onward (the legacy count-agnostic fallback counts
+            // ANY landed enemy debuff/DoT, including a self-inflicted one) — so by round 2
+            // BOTH runs satisfy the gate regardless of `enemyDebuffs`, collapsing the
+            // difference this test is isolating. Round 1's modifierCtx is built BEFORE that
+            // turn's own Inferno application lands, so it is the one round where the STATIC
+            // `enemyDebuffs` config is the sole gate source — cleanly isolating the
+            // crit-power scaling contribution.
+            expect(withNoDebuff.rounds[0].infernoDamage).toBeGreaterThan(0);
+            // Legacy/name-agnostic behavior preserved (any debuff satisfies the gate) AND the
+            // crit-power scaling contributes exactly +15% on top.
+            expect(withUnrelatedDebuff.rounds[0].infernoDamage).toBeCloseTo(
+                withNoDebuff.rounds[0].infernoDamage * 1.15,
+                5
+            );
+        });
+
         it('multi-hit damage equals a single hit with the summed multiplier', () => {
             const multiHit = simulateDPS({
                 ...baseInput,

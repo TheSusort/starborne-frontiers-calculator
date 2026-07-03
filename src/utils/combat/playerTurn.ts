@@ -1022,6 +1022,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
     let critBuffForGates = scheduledTotals.critBuff;
+    // I4a: parallel PRE-modifier critDAMAGE (crit power) estimate — layers 1+2+3, mirroring
+    // critBuffForGates above. Feeds modifierCtx.selfCritPower (Wildfire's "for every 10%
+    // crit power" dotDamage scaling) without a self-referential dependency on dmgStats
+    // (which is computed FROM modifierCtx, further down). Exact for Wildfire (its own
+    // ability only touches the dotDamage channel, never critDamage), same documented
+    // approximation as critBuffForGates for any OTHER self-crit-gated modifier condition.
+    let critDamageForGates = scheduledTotals.critDamageBuff;
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
     // consumers (the RECURRING/aura partition + DoT landing). Lazy so the
@@ -1353,6 +1360,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // full four-layer fold (and the other channels) is owned by effectiveDamageStatsOf.
     const abilityTotalsForGates = calculateBuffTotals(toSimBuffs(abilitySelfEffects));
     critBuffForGates += abilityTotalsForGates.critBuff;
+    critDamageForGates += abilityTotalsForGates.critDamageBuff;
 
     // Snapshot lists for this round / context: ability statuses appended AFTER
     // scheduled ones (KNOWN-DIFF c ordering).
@@ -1394,6 +1402,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // across the delta computation — no per-victim distribution, matching the design
         // (this is a global count, not a per-target gate).
         stealthedEnemyCount: stealthedEnemyCountArg,
+        // Sub-project I, PR I4a: the acting unit's own live crit power (Wildfire's
+        // dotDamage scaling source). Only modifierCtx needs it — same "only the modifier
+        // ctx needs this" rationale as stealthedEnemyCount above. critDamageForGates is the
+        // PRE-modifier (layers 1+2+3) estimate; see its declaration for why layer 4 is
+        // deliberately excluded (self-referential-gate avoidance, mirrors critBuffForGates).
+        selfCritPower: critDamage + critDamageForGates,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
     // Sub-project I, PR I3 (Layer 1): distributed all-allies auras (Lodolite/Panguan-shape)

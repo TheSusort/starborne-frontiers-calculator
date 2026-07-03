@@ -192,6 +192,22 @@ function enemyEffectNamesFromClause(rawText: string): string[] {
 }
 
 /**
+ * Sub-project I, PR I4a — effect names in a "When an enemy has <status>," PREFIX clause,
+ * read from the raw <unit-skill> tag. Distinct from `enemyEffectNamesFromClause`'s "enemies
+ * with <effect>" phrasing (which scans to the END of the sentence): Wildfire's gate reads
+ * "When an enemy has Scorching Radiation, this Unit deals 1% additional Inferno damage…" —
+ * the status name sits in a COMMA-SEPARATED PREFIX, and the damage clause that follows ALSO
+ * wraps its DoT name ("Inferno") in a <unit-skill> tag. Scanning to end-of-sentence (like
+ * enemyEffectNamesFromClause) would incorrectly pick up "Inferno" as a second gate name, so
+ * this helper stops at the first COMMA instead.
+ */
+function enemyHasNamesFromClause(rawText: string): string[] {
+    const m = rawText.match(/\bwhen\s+an?\s+enem(?:y|ies)\s+has\b([^,]*)/i);
+    if (!m) return [];
+    return [...m[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((t) => t[1].trim());
+}
+
+/**
  * Effect names gating a "deals N% damage to enemies (with|afflicted with) <effect>" clause.
  * Scoped to the damage clause (no sentence break between) so it only gates that damage ability.
  */
@@ -457,6 +473,56 @@ function parseModifiers(text: string): ParsedModifier[] {
             target: isAllyScoped ? 'all-allies' : 'self',
             conditions,
         });
+    }
+
+    // Sub-project I, PR I4a: "N% additional <DoT> damage … for every M% crit power"
+    // (Wildfire: "When an enemy has Scorching Radiation, this Unit deals 1% additional
+    // Inferno damage to that unit for every 10% crit power") → a dotDamage-channel modifier
+    // whose bonus SCALES with the CASTER's own live crit power, gated on the named enemy
+    // status via the existing enemyEffectConditions path (Scorching Radiation → name-specific
+    // 'enemy-debuff', composing with I1). Narrow shape — requires the literal "additional
+    // <word> damage" phrase together with "crit power" in the SAME sentence — confirmed
+    // unique to Wildfire in docs/ship-skills.csv (only ship using "% additional" at all), so
+    // no other ship's outgoingDamage/critDamage branches above are affected.
+    //
+    // I4a SCOPE (see the sub-project I design doc §9): single-target/cast-time only. The
+    // enemy-status gate is baked ONCE per cast against the primary target's modifierCtx
+    // (existing behavior — this ability folds through the same mod.dotDamage →
+    // selfDotDamageModifier path as any other dotDamage modifier) and the resulting bonus
+    // applies to ALL of the caster's Inferno/Corrosion ticks this turn.
+    //   I4b: per-tick / per-victim(AoE) re-evaluation of the enemy-status gate is NOT done
+    //        here — this is the documented cast-time approximation.
+    //   I4c: the refit-3 "all allies deal…" team-aura text below ALSO matches this branch
+    //        (isAllyScoped → target:'all-allies'), but the dotDamage channel has no
+    //        distribution seam yet (I3 only wired outgoingDamage/critDamage) — today it only
+    //        self-applies (same as target:'self', via the unconditional self-inclusion of an
+    //        actor's own firing/passive abilities). Distributing it to OTHER allies is I4c.
+    const dotCritPowerM = plain.match(/(\d+(?:\.\d+)?)%\s+additional\s+([A-Za-z]+)\s+damage\b/i);
+    if (dotCritPowerM) {
+        const sentence = sentenceContaining(plain, dotCritPowerM.index!);
+        const critPowerM = sentence.match(/for\s+every\s+(\d+(?:\.\d+)?)%\s+crit\s+power/i);
+        if (critPowerM) {
+            const dotValue = parseFloat(dotCritPowerM[1]);
+            const per = parseFloat(critPowerM[1]);
+            const isAllyScoped = /friendly|all allies|allies/i.test(sentence);
+            const statusConditions = enemyEffectConditions(enemyHasNamesFromClause(text));
+            const conditions: Condition[] = [
+                ...statusConditions,
+                // I4b: evaluated once per cast against the primary target — see the scope note
+                // above. Bare (no countComparator) → scales only, never gates (gateConditions
+                // strips it; a 0-crit-power unit still passes the enemy-status gate, just with
+                // a 0 bonus).
+                { subject: 'self-crit-power', derivable: true },
+            ];
+            out.push({
+                channel: 'dotDamage',
+                value: 0,
+                isMultiplicative: false,
+                target: isAllyScoped ? 'all-allies' : 'self',
+                conditions,
+                scaling: { conditionIndex: conditions.length - 1, perUnit: dotValue / per },
+            });
+        }
     }
 
     // "increases [outgoing] [direct] Damage by [up to] N% [to enemies with <effect> / below X% HP]"
