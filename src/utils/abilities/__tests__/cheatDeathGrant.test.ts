@@ -56,7 +56,12 @@ describe('Cheat Death grant parsing', () => {
         const cd = cheatDeath(passive.abilities)!;
         expect(cd).toBeDefined();
         expect(cd.target).toBe('self');
-        expect(cd.trigger).toBe('on-cast');
+        // Epic PR4 (start-of-combat one-time grant family): Yazid's own clause is the identical
+        // "At the start of combat, this Unit gains … Cheat Death" shape as Crucialis/Tycho/
+        // FrontLine (docs/ship-skills.csv), so it now rides the same 'pre-combat' trigger for
+        // corpus-wide consistency — not a name-gated fix, so this ship gets it too even though
+        // it wasn't in the epic's originally-named suspect list.
+        expect(cd.trigger).toBe('pre-combat');
         if (cd.config.type === 'buff') {
             expect(cd.config.parsedEffects).toEqual({});
             expect(cd.config.duration).toBe('recurring');
@@ -130,22 +135,24 @@ describe('Cheat Death grant parsing', () => {
 
         it('does NOT regress the existing Cheat Death + Everliving Regeneration II grants', () => {
             const passive = slot(buildShipAbilities(yazid()).slots, 'passive')!;
-            // Cheat Death grant still recurring, self, on-cast (the start-of-combat grant).
+            // Cheat Death grant still recurring, self. Epic PR4: the start-of-combat grant now
+            // rides 'pre-combat' (corpus-wide consistency with Crucialis/Tycho/FrontLine — same
+            // "At the start of combat, this Unit gains …" clause shape, docs/ship-skills.csv).
             const cd = cheatDeath(passive.abilities)!;
             expect(cd).toBeDefined();
             expect(cd.target).toBe('self');
-            expect(cd.trigger).toBe('on-cast');
+            expect(cd.trigger).toBe('pre-combat');
             if (cd.config.type === 'buff') {
                 expect(cd.config.parsedEffects).toEqual({});
                 expect(cd.config.duration).toBe('recurring');
             }
-            // Everliving Regeneration II keeps its 9-turn window and on-cast trigger.
+            // Everliving Regeneration II keeps its 9-turn window; same pre-combat retrigger.
             const elr = passive.abilities.find(
                 (a) =>
                     a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration II'
             )!;
             expect(elr).toBeDefined();
-            expect(elr.trigger).toBe('on-cast');
+            expect(elr.trigger).toBe('pre-combat');
             if (elr.config.type === 'buff') expect(elr.config.duration).toBe(9);
         });
     });

@@ -2299,11 +2299,21 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // and never mutates the player heal-target. Scope to the CAST skill only (the spec: "the
         // cast skill carries"), never the passive. Normal (player/team) mode keeps both slots and
         // credits/mutates as before.
+        // Epic PR4: pre-combat abilities ("At the start of combat, this Unit gains a Shield …" —
+        // Crucialis/FrontLine) are one-time pre-fight grants seeded ONCE by the engine
+        // (seedPreCombatShields, r === 1); processing them here would re-grant the pool on every
+        // cast. `pre-combat` is not a live trigger, so the reactive partition leaves them in
+        // castSkills — this is the single cast-path exclusion point.
+        const notPreCombat = (a: Ability): boolean => a.trigger !== 'pre-combat';
         const healAbilities = healEventOnly
-            ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false))
+            ? (gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false) && notPreCombat(a))
             : [
-                  ...(gatedSkill?.abilities ?? []).filter((a) => !isHookOwned(a, false)),
-                  ...(gatedPassive?.abilities ?? []).filter((a) => !isHookOwned(a, true)),
+                  ...(gatedSkill?.abilities ?? []).filter(
+                      (a) => !isHookOwned(a, false) && notPreCombat(a)
+                  ),
+                  ...(gatedPassive?.abilities ?? []).filter(
+                      (a) => !isHookOwned(a, true) && notPreCombat(a)
+                  ),
               ];
         const healTargets: string[] = [];
         let healCritCount = 0;

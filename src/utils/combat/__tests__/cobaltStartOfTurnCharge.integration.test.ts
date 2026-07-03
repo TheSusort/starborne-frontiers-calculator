@@ -368,10 +368,12 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
             },
         ]);
 
-        // KNOWN LIMITATION: only the charge half is parsed as start-of-turn (Task 7); the buff
-        // parser has no start-of-turn detection, so the co-buff is emitted as on-cast. In-game it
-        // is granted at start-of-turn alongside the charge. Asserting the current behavior so a
-        // future buff-trigger fix surfaces here rather than silently changing.
-        expect(buff!.trigger).toBe('on-cast');
+        // Epic PR4 (round-boundary trigger consistency): the buff half now shares the SAME
+        // start-of-turn trigger as the charge half — both are gained "at the start of the turn
+        // if it is at full HP", so they ride the same governing phrase (detectReactiveTrigger's
+        // START_OF_TURN_CHARGE_RE branch). Previously this was on-cast (see git history for the
+        // prior "KNOWN LIMITATION" note); the fix makes the buff actually apply once per turn
+        // in-game instead of re-granting on every skill use.
+        expect(buff!.trigger).toBe('start-of-turn');
     });
 });

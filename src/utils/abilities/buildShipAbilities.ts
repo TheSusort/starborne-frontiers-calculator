@@ -30,6 +30,8 @@ import {
     parseExtraAction,
     detectGrantConditions,
     detectReactiveTrigger,
+    detectPreCombatBuffTrigger,
+    detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
     detectHpCrossingTrigger,
     detectTargetHpGate,
@@ -46,6 +48,9 @@ import {
     detectEnemyPurgedTrigger,
     detectAllyPurgedTrigger,
     detectEndOfRoundPurgeTrigger,
+    detectStartOfRoundTrigger,
+    detectEndOfRoundDamageTrigger,
+    detectRoundStartContinuationTrigger,
     detectKilledByDirectDamageTrigger,
     detectMostBuffsTarget,
     detectRepairedThisRoundCondition,
@@ -865,12 +870,24 @@ function abilitiesFromText(
     } else if (mult > 0) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
+        // Epic PR4 (round-boundary trigger consistency): a base damage ability whose OWN
+        // sentence carries "at the start of the round" (Judge, Chakara's "Then," continuation)
+        // or "at the end of the round" (Incinerator, Rhodium p2's co-located 80%-no-crit hit)
+        // rides that LIVE trigger instead of the on-cast default — the reactive damage executor
+        // (triggers.ts cfg.type==='damage' branch) and, for start-of-round specifically, the
+        // partition machinery removing it from the old passive-payload-hit cast-time fold
+        // (playerTurn.ts) both already exist; this ability just needs the correct label.
+        const damageTrigger: AbilityTrigger =
+            detectStartOfRoundTrigger(text, damagePos) ??
+            detectEndOfRoundDamageTrigger(text, damagePos) ??
+            detectRoundStartContinuationTrigger(text, damagePos) ??
+            'on-cast';
         out.push({
             ability: {
                 id: nextId(),
                 type: 'damage',
                 target: 'enemy',
-                trigger: 'on-cast',
+                trigger: damageTrigger,
                 conditions: [],
                 config: {
                     type: 'damage',
@@ -1192,7 +1209,25 @@ function abilitiesFromText(
             ? h.damageReaction.allySubject
                 ? ('on-ally-attacked' as const)
                 : ('on-attacked' as const)
-            : (detectCritRepairTrigger(text, healPos) ??
+            : // Epic PR4: Chimei's "At the start of the round, all allies with Stealth repairs
+              // 10% of this unit's max HP" parsed on-cast — the SAME phrase already resolves to
+              // start-of-round for buff grants (detectReactiveTrigger) and Judge's passive
+              // damage (detectStartOfRoundTrigger, added alongside this call). Checked for
+              // heals only (no corpus shield carries this phrase — Xcellence/Volk's start-of-
+              // turn shield/heal use a DIFFERENT phrase and stay untouched).
+              ((h.kind === 'heal' ? detectStartOfRoundTrigger(text, healPos) : undefined) ??
+              // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
+              // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
+              // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
+              // on-cast — the shield would re-grant the pool on every skill use instead of once
+              // at combat start. Position-scoped (no buff name to resolve a clause on), checked
+              // for shields only (no corpus heal carries this phrase — verified ship-skills.csv;
+              // Lionheart's start-of-combat "grants adjacent allies 10% of its HP" is a HEAL, not
+              // a shield, and is out of this PR's named scope). The engine seeds the pool exactly
+              // once via seedPreCombatShields (round 1, before any turn); the cast path
+              // (runPlayerTurn) skips pre-combat abilities entirely.
+              (h.kind === 'shield' ? detectPreCombatShieldTrigger(text, healPos) : undefined) ??
+              detectCritRepairTrigger(text, healPos) ??
               // Yazid: a repair anchored in the "when Cheat Death activates" sentence rides the
               // on-cheat-death-activated reactive trigger (self-scoped; position-scoped). Checked
               // for heals AND shields (the follow-on is a repair, but keep the path symmetric).
@@ -1866,6 +1901,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // Position anchor: index of the buff name in the row text (order-irrelevant for
         // buff/debuff abilities, but placed consistently so ties resolve by insertion order).
         const pos = rowText ? rowText.indexOf(buff.buffName) : -1;
+        // Epic PR4: a split-sentence "… also gains <Buff>" continuing an IMMEDIATELY PRECEDING
+        // "At the start of the round, this Unit gains …" sentence (Nayra p2's Offensive Affinity
+        // Override, Isha p1/p2's Defensive Affinity Override) has no round-start phrase of its
+        // OWN clause, so detectReactiveTrigger above misses it — fall back to the continuation
+        // detector before falling through to the crossing/target-gate/damage-reaction chain.
+        if (reactiveTrigger === undefined && rowText && pos >= 0) {
+            reactiveTrigger = detectRoundStartContinuationTrigger(rowText, pos);
+        }
         if (reactiveTrigger) {
             ability.trigger = reactiveTrigger;
             ability.conditions = ability.conditions.filter((c) => c.subject !== 'self-crit');
@@ -1956,6 +1999,27 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                     ];
                 }
             }
+        }
+        // Epic PR4 (start-of-combat one-time grant family): a still-on-cast, NON-STACKING buff
+        // whose OWN clause reads "At the start of combat, this Unit gains …" (Crucialis's Atlas
+        // Coordination I/II, Tycho's Cheat Death + Everliving Regeneration I/II) is relabeled
+        // 'pre-combat' — a data-model/annotation correction only. 'pre-combat' is deliberately
+        // excluded from LIVE_TRIGGERS, so this is INERT at the engine level: the ability stays on
+        // the normal cast path, where registerActorAbilityStatuses' duration/slot-based
+        // classification already seeds a finite-duration passive buff exactly once at round start
+        // (seedPassiveTimedStatuses) and treats a 'recurring'-duration one (Cheat Death) as a
+        // standing aura — see src/utils/combat/engine.ts. EXCLUDES Meatshield's "gains 3 stacks of
+        // Protection" (stackTrigger:'per-round', isStackable): that ability still climbs every
+        // round under the parser's generic "gains N stacks" default, so it is NOT actually a
+        // one-time grant yet — relabeling only the trigger without fixing the stacking default
+        // would be actively misleading (deferred to a follow-up PR; see the epic report).
+        const isAccumulatingBuff =
+            ability.config.type === 'buff' &&
+            !!ability.config.stackTrigger &&
+            !!ability.config.isStackable;
+        if (ability.trigger === 'on-cast' && rowText && !isAccumulatingBuff) {
+            const preCombatTrigger = detectPreCombatBuffTrigger(rowText, buff.buffName);
+            if (preCombatTrigger) ability.trigger = preCombatTrigger;
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);
     };

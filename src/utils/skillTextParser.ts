@@ -490,7 +490,10 @@ const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\
 
 // Cobalt: "adds N charge ... at the start of the turn if it is at full HP" — a periodic
 // self-charge gated on full HP. The two halves are detected together so the start-of-turn
-// trigger and the hp-threshold gate ride as a pair.
+// trigger and the hp-threshold gate ride as a pair. Epic PR4: ALSO reused (unmodified regex)
+// by detectReactiveTrigger below for Cobalt's SIBLING buff grant in the same sentence ("…and
+// gains Out. Damage Up II for 1 turn at the start of the turn if it is at full HP") — the
+// charge and buff halves share one governing trailing phrase and must share one trigger.
 const START_OF_TURN_CHARGE_RE = /\bat the start of (?:the|its|each|every)\s+turn\b/i;
 const AT_FULL_HP_RE = /\bat full (?:hp|health)\b/i; // reused phrasing (cf. classifier ~line 647)
 
@@ -875,6 +878,8 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
  *    condition; that legacy behaviour is left untouched (no ship text relies on it), but this
  *    new trigger path is correct.
  *  - "at the start of (the|each|every) round" → 'start-of-round' (Valkyrie).
+ *  - "at the start of (the|its|each|every) turn" → 'start-of-turn' (epic PR4: Cobalt's Out.
+ *    Damage Up II buff, sharing its trailing gate with the sibling charge ability).
  *  - "detonates a Bomb" / "Bomb explodes" → 'on-bomb-detonated' (Lingshe).
  *  - "when an enemy cleanses a debuff" → 'on-enemy-cleansed' (Phase 4c PR 4: Arum Out. Damage
  *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
@@ -902,6 +907,13 @@ export function detectReactiveTrigger(
     if (ALLY_CRIT_HIT_RE.test(clause)) return 'on-ally-crit';
     if (matchesActiveSelfCrit(clause)) return 'on-crit';
     if (START_OF_ROUND_RE.test(clause)) return 'start-of-round';
+    // Epic PR4: "at the start of (the|its|each|every) turn" — Cobalt's Out. Damage Up II buff
+    // shares its governing trailing phrase with its sibling charge ability (already
+    // start-of-turn via START_OF_TURN_CHARGE_RE in the charge-specific parser); this was the
+    // only "at the start of the turn" BUFF grant in the corpus at write time (verified against
+    // docs/ship-skills.csv — Volk/Xcellence's start-of-turn heal/shield use separate,
+    // non-buff parse paths untouched by this branch).
+    if (START_OF_TURN_CHARGE_RE.test(clause)) return 'start-of-turn';
     if (BOMB_DETONATE_RE.test(clause)) return 'on-bomb-detonated';
     // "when Cheat Death activates" → on-cheat-death-activated (Yazid's Barrier grant in the
     // repair sentence). Tycho's below-40%-HP Barrier is a different reactive (deferred), so this
@@ -921,6 +933,51 @@ export function detectReactiveTrigger(
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     return undefined;
+}
+
+// Epic PR4 (start-of-combat one-time grant family): "At the start of combat, this Unit gains
+// <Buff> for N turns" — Crucialis's Atlas Coordination I/II, Tycho's Cheat Death + Everliving
+// Regeneration I/II. Deliberately NOT folded into detectReactiveTrigger above: 'pre-combat' is
+// annotation-only (excluded from LIVE_TRIGGERS — see types/abilities.ts), not a live reactive
+// trigger, so it does not belong in a function documented as resolving REACTIVE triggers.
+const START_OF_COMBAT_GRANT_RE = /\bat the start of combat\b/i;
+
+/**
+ * Returns 'pre-combat' when `buffName`'s own clause (same resolution as detectReactiveTrigger)
+ * carries the "at the start of combat" phrase; otherwise undefined. Does NOT cover Meatshield's
+ * "gains 3 stacks of Protection" (its stacking default still climbs per round — the trigger
+ * relabel is held back with it so the two halves ship together; see the buildShipAbilities
+ * caller's isAccumulatingBuff guard). The SHIELD components of the same family are covered by
+ * detectPreCombatShieldTrigger below. Reference data: docs/ship-skills.csv.
+ */
+export function detectPreCombatBuffTrigger(
+    text: string | null | undefined,
+    buffName: string
+): AbilityTrigger | undefined {
+    if (!text || !buffName) return undefined;
+    const clause = resolveBuffClause(text, buffName);
+    // Meiying p2 exclusion: "At the start of combat AND EVERY TURN, this Unit gains Stealth for
+    // 2 turns" is a RECURRING grant, not a one-time one — the "every turn" rider disqualifies
+    // the pre-combat relabel (the grant must keep its per-turn refresh semantics).
+    if (/\bevery\s+turn\b/i.test(clause)) return undefined;
+    return START_OF_COMBAT_GRANT_RE.test(clause) ? 'pre-combat' : undefined;
+}
+
+/**
+ * Epic PR4: returns 'pre-combat' when `anchorPos` (a shield ability's raw-text anchor) falls
+ * inside the sentence carrying the "at the start of combat" phrase; otherwise undefined.
+ * Position-scoped counterpart to detectPreCombatBuffTrigger for the NAMELESS shield grants
+ * (Crucialis "At the start of combat, this Unit gains a Shield equal to 20% of its Max HP …",
+ * FrontLine "This Unit gains Shield equal to 25% of its Max HP at the start of combat") — no
+ * buffName to resolve a clause on, so it scopes by sentence like detectEndOfRoundPurgeTrigger.
+ * The engine consumes the tag via seedPreCombatShields (once, before round 1); the cast path
+ * skips pre-combat abilities. Reference data: docs/ship-skills.csv.
+ */
+export function detectPreCombatShieldTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, START_OF_COMBAT_GRANT_RE, anchorPos, 'pre-combat');
 }
 
 // POSITION-scoped trigger resolver for a self-buff REMOVAL (Overload lifecycle, Task 5).
@@ -1393,6 +1450,92 @@ export function detectEndOfRoundPurgeTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
+}
+
+/**
+ * Epic PR4 (round-boundary trigger consistency): returns 'start-of-round' when `anchorPos`
+ * falls inside the sentence carrying the "at the start of (the|each|every) round" phrase;
+ * otherwise undefined. Position-scoped on the RAW text (mirrors detectEndOfRoundPurgeTrigger).
+ * Fixes Judge's passive AoE execute damage ("At the start of the round, this Unit deals 60%
+ * damage to all enemies with less than 50% HP") and Chimei's passive heal ("At the start of the
+ * round, all allies with Stealth repairs 10% of this unit's max HP"), both of which parsed
+ * on-cast despite the identical phrase already resolving to start-of-round for buff grants
+ * (Valkyrie's Speed Up II, Chakara's Attack/Defense Up II) via detectReactiveTrigger. Reference
+ * data: docs/ship-skills.csv.
+ */
+export function detectStartOfRoundTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, START_OF_ROUND_RE, anchorPos, 'start-of-round');
+}
+
+/**
+ * Epic PR4: returns 'end-of-round' when `anchorPos` falls inside the sentence carrying the
+ * "at the end of the round" phrase; otherwise undefined. Position-scoped on the RAW text
+ * (shares END_OF_ROUND_RE with detectEndOfRoundPurgeTrigger — same phrase, DAMAGE-ability call
+ * site instead of purge). Fixes Incinerator's recurring AoE damage to Inferno-afflicted enemies
+ * and Rhodium p2's co-located 80%-no-crit damage (same sentence as Rhodium's ALREADY-correct
+ * end-of-round purge), both of which parsed on-cast. Reference data: docs/ship-skills.csv.
+ */
+export function detectEndOfRoundDamageTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
+}
+
+// Epic PR4: a round-start CONTINUATION sentence with no round-start phrase of its own, whose
+// governing trigger lives in the IMMEDIATELY PRECEDING sentence. Two corpus shapes:
+//   - "Then, deals N% damage …" directly after a "starts each round with <buff> if …" sentence
+//     (Chakara's R2 passive: the buff grant is already correctly start-of-round via
+//     STARTS_ROUND_WITH_RE/findVerb; the trailing damage sentence was not). Lodolite's charged
+//     "Then, the enemy with the most Buffs is Purged" is the ONLY other "Then," in the corpus —
+//     its preceding sentence is a plain on-cast damage clause, so it correctly falls through.
+//   - "… also gains <Buff>" directly after an "At the start of the round, this Unit gains
+//     <Buff>." sentence (Isha p1/p2 "If Nayra is on the same team, it also gains Defensive
+//     Affinity Override"; Nayra p2 "If Isha is on the same team, this Unit also gains Offensive
+//     Affinity Override"). Nayra p1 and Isha's OWN grant already resolve via detectReactiveTrigger
+//     because they share ONE sentence with the round-start phrase; only the split-sentence p2
+//     form needs this fallback. Corpus-verified unique (no other "also gains" sentence in
+//     docs/ship-skills.csv follows a round-start sentence).
+const THEN_CONTINUATION_RE = /^\s*then,/i;
+const ALSO_GAINS_CONTINUATION_RE = /\balso\s+gains?\b/i;
+
+export function detectRoundStartContinuationTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    if (!text || anchorPos < 0) return undefined;
+    const masked = maskAbbrev(text);
+    const boundary = /[.;](?=\s|$)|<br\s*\/?>/gi;
+    const segments: { start: number; end: number }[] = [];
+    let start = 0;
+    let m: RegExpExecArray | null;
+    boundary.lastIndex = 0;
+    while ((m = boundary.exec(masked)) !== null) {
+        const end = m.index + m[0].length;
+        segments.push({ start, end });
+        start = end;
+    }
+    segments.push({ start, end: masked.length });
+    let idx = -1;
+    for (let i = 0; i < segments.length; i++) {
+        if (anchorPos >= segments[i].start && anchorPos < segments[i].end) {
+            idx = i;
+            break;
+        }
+    }
+    // No containing segment, or it's the FIRST segment (no preceding sentence to inherit from).
+    if (idx <= 0) return undefined;
+    const current = masked.slice(segments[idx].start, segments[idx].end);
+    if (!THEN_CONTINUATION_RE.test(current) && !ALSO_GAINS_CONTINUATION_RE.test(current)) {
+        return undefined;
+    }
+    const prev = masked.slice(segments[idx - 1].start, segments[idx - 1].end);
+    return START_OF_ROUND_RE.test(prev) || STARTS_ROUND_WITH_RE.test(prev)
+        ? 'start-of-round'
+        : undefined;
 }
 
 // "… when killed by direct Damage" — Faust on-destroyed purge (killer-targeted, direct-only).
