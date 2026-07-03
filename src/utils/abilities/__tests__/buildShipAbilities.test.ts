@@ -693,9 +693,10 @@ describe('buildShipAbilities', () => {
             (m) => m.config.type === 'modifier' && m.config.channel === 'outgoingDamage'
         )!;
         expect(outgoing.config).toMatchObject({ channel: 'outgoingDamage', value: 25 });
-        // Taunt = enemy buff, Provoke = self debuff (both targeting effects), anyOf.
+        // Taunt = self buff, Provoke = self debuff (both statuses the caster checks on itself;
+        // epic PR5 finding 1), anyOf.
         expect(outgoing.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
 
@@ -794,7 +795,7 @@ describe('buildShipAbilities', () => {
                 a.config.buffName === 'Terran Guard III'
         );
         expect(buff?.conditions).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
@@ -4496,5 +4497,245 @@ describe('buildShipAbilities — PR1 Amartya phantom Taunt + Exposed stack count
         );
         expect(exposed).toBeDefined();
         expect((exposed!.config as { stacks?: number }).stacks).toBe(2);
+    });
+});
+
+// ── PR5 Finding 1: Panon self-Provoke/Taunt condition subject ─────────────────────────────
+// docs/ship-skills.csv Panon active_skill_text (exact clause, routed through the real active
+// slot): "...If this Unit is Provoked or Taunted, this Unit instead gains Terran Guard III for
+// 2 turns and deals 120% damage..." — the condition checks a status on THIS Unit (self), not the
+// enemy. Taunt is a self-buff per constants/buffs.ts ("Forces enemies to target this unit"), so
+// "this Unit is ... Taunted" must resolve as a self-buff gate, not an enemy-buff gate.
+describe('buildShipAbilities — PR5 Finding 1 Panon self-Provoke/Taunt condition subject', () => {
+    it('Panon active: "If this Unit is Provoked or Taunted" gates Terran Guard III with self-subject conditions (both self-debuff Provoke and self-buff Taunt)', () => {
+        const s = ship({
+            activeSkillText:
+                'This Unit grants all allies <unit-skill>Terran Guard II</unit-skill> for 2 turns and deals <unit-damage>80% damage</unit-damage> with an additional Damage equal to <unit-damage>70%</unit-damage> of its Defense.<br /><br />If this Unit is Provoked or Taunted, this Unit instead gains <unit-skill>Terran Guard III</unit-skill> for 2 turns and deals <unit-damage>120% damage</unit-damage> with an additional Damage equal to <unit-damage>90%</unit-damage> of its Defense.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active');
+        const buff = active!.abilities.find(
+            (a) =>
+                a.type === 'buff' &&
+                a.config.type === 'buff' &&
+                a.config.buffName === 'Terran Guard III'
+        );
+        expect(buff).toBeDefined();
+        expect(buff!.conditions).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
+        ]);
+    });
+
+    it('Panon charged: "If this Unit is affected by Provoke or Taunt" gates the Barrier grant + damage modifier with self-subject conditions', () => {
+        // docs/ship-skills.csv Panon charge_skill_text (exact clause): "...If this Unit is
+        // affected by Provoke or Taunt, it instead gains Barrier for 1 hit and deals 170%
+        // damage..."
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 3,
+            chargeSkillText:
+                'This Unit deals <unit-damage>140% damage</unit-damage> plus an additional <unit-damage>100%</unit-damage> of its Defense.<br /><br />If this Unit is affected by <unit-skill>Provoke</unit-skill> or <unit-skill>Taunt</unit-skill>, it instead gains <unit-skill>Barrier</unit-skill> for 1 hit and deals <unit-damage>170% damage</unit-damage> with an additional Damage equal to <unit-damage>130%</unit-damage> of its Defense.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged');
+        const buff = charged!.abilities.find(
+            (a) => a.type === 'buff' && a.config.type === 'buff' && a.config.buffName === 'Barrier'
+        );
+        expect(buff).toBeDefined();
+        expect(buff!.conditions).toEqual([
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
+        ]);
+    });
+});
+
+// ── PR5 Finding 2: duration misattachment across multi-buff sentences ─────────────────────
+describe('buildShipAbilities — PR5 Finding 2 duration misattachment across multi-buff sentences', () => {
+    it('Bayah first passive: "gains Terran Bolster II and inflicts Speed Down II on an enemy for 2 turns" — the trailing duration reaches BOTH buffs', () => {
+        // docs/ship-skills.csv Bayah first_passive_skill_text (exact clause, routed through the
+        // real passive slot).
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const bolster = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster II'
+        )!;
+        expect(bolster).toBeDefined();
+        expect(bolster.config).toMatchObject({ duration: 2 });
+        const speedDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Speed Down II'
+        )!;
+        expect(speedDown).toBeDefined();
+        expect(speedDown.config).toMatchObject({ duration: 2 });
+    });
+
+    it('Bayah second passive: same shape with an added third buff (Out. Damage Down II) — all three share the trailing 2-turn duration', () => {
+        // docs/ship-skills.csv Bayah second_passive_skill_text (exact clause, routed through the
+        // real passive slot via refits.length >= 2).
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'This Unit gains <unit-skill>Terran Bolster II</unit-skill> and inflicts <unit-skill>Speed Down II</unit-skill> and <unit-skill>Out. Damage Down II</unit-skill> on an enemy for 2 turns after dealing damage to an enemy with 2 or more debuffs.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const bolster = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Terran Bolster II'
+        )!;
+        expect(bolster.config).toMatchObject({ duration: 2 });
+        const speedDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Speed Down II'
+        )!;
+        expect(speedDown.config).toMatchObject({ duration: 2 });
+        const dmgDown = passive.abilities.find(
+            (a) => a.config.type === 'debuff' && a.config.buffName === 'Out. Damage Down II'
+        )!;
+        expect(dmgDown.config).toMatchObject({ duration: 2 });
+    });
+
+    it('Oleander charged: "grants Repair Over Time II for 2 turns and, for 3 turns, grants both Out. DoT Damage Up II and Hit Mitigation" — the LEADING "for 3 turns" reaches both trailing buffs', () => {
+        // docs/ship-skills.csv Oleander charge_skill_text (exact clause, routed through the real
+        // charged slot).
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 6,
+            chargeSkillText:
+                'This Unit grants <unit-skill>Repair Over Time II</unit-skill> for 2 turns and, for 3 turns, grants both <unit-skill>Out. DoT Damage Up II</unit-skill> and <unit-skill>Hit Mitigation</unit-skill>.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const rot = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Repair Over Time II'
+        )!;
+        expect(rot.config).toMatchObject({ duration: 2 });
+        const dotDmgUp = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Out. DoT Damage Up II'
+        )!;
+        expect(dotDmgUp).toBeDefined();
+        expect(dotDmgUp.config).toMatchObject({ duration: 3 });
+        const hitMit = charged.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Hit Mitigation'
+        )!;
+        expect(hitMit).toBeDefined();
+        expect(hitMit.config).toMatchObject({ duration: 3 });
+    });
+
+    it('Tycho first passive: "gains Cheat Death and Everliving Regeneration I for 6 turns" — Everliving Regeneration I gets the 6-turn duration (Cheat Death stays untimed)', () => {
+        // docs/ship-skills.csv Tycho first_passive_skill_text (exact clause, routed through the
+        // real passive slot). Only the duration attachment is in question here — the
+        // start-of-combat trigger itself was already fixed in epic PR4 (pre-combat seeding).
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'At the start of combat, this Unit gains <unit-skill>Cheat Death</unit-skill> and <unit-skill>Everliving Regeneration I</unit-skill> for 6 turns.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const cheatDeath = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Cheat Death'
+        )!;
+        expect(cheatDeath).toBeDefined();
+        expect(cheatDeath.config).toMatchObject({ duration: 'recurring' });
+        const everliving = passive.abilities.find(
+            (a) => a.config.type === 'buff' && a.config.buffName === 'Everliving Regeneration I'
+        )!;
+        expect(everliving).toBeDefined();
+        expect(everliving.config).toMatchObject({ duration: 6 });
+    });
+});
+
+// ── PR5 Finding 3: Nyxen typed cleanse filter ─────────────────────────────────────────────
+describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () => {
+    it('Nyxen active: "Cleanses 2 bombs" carries a debuffType: bomb filter', () => {
+        // docs/ship-skills.csv Nyxen active_skill_text (exact clause, routed through the real
+        // active slot).
+        const s = ship({
+            activeSkillText:
+                'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a <unit-damage>Shield equal to 15%</unit-damage> of its Max HP, and Grants <unit-skill>Atlas Readiness II</unit-skill> for 1 turn.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const cleanse = active.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect(cleanse.config).toMatchObject({ type: 'cleanse', count: 2, debuffType: 'bomb' });
+    });
+
+    it('Nyxen charged: "Cleanses 2 damage over time debuffs" carries a debuffType: dot filter', () => {
+        // docs/ship-skills.csv Nyxen charge_skill_text (exact clause, routed through the real
+        // charged slot).
+        const s = ship({
+            activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+            chargeSkillCharge: 1,
+            chargeSkillText:
+                'This Unit <unit-aid>Cleanses 2</unit-aid> damage over time debuffs and Grants a <unit-damage>Shield equal to 19%</unit-damage> of its Max HP. It also Grants <unit-skill>Inc. Damage Down II</unit-skill> for 1 turn.',
+        });
+        const charged = slot(buildShipAbilities(s).slots, 'charged')!;
+        const cleanse = charged.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect(cleanse.config).toMatchObject({ type: 'cleanse', count: 2, debuffType: 'dot' });
+    });
+
+    it('negative: an untyped "cleanses 1 debuff from all allies" carries NO debuffType filter', () => {
+        const s = ship({
+            activeSkillText: 'This Unit <unit-aid>cleanses 1</unit-aid> debuff from all allies.',
+        });
+        const active = slot(buildShipAbilities(s).slots, 'active')!;
+        const cleanse = active.abilities.find((a) => a.type === 'cleanse')!;
+        expect(cleanse).toBeDefined();
+        expect((cleanse.config as { debuffType?: string }).debuffType).toBeUndefined();
+    });
+});
+
+// ── PR5 Finding 4: Isha/Guardian reactive-heal gates — CONFIRMED FALSE POSITIVE ───────────
+// The sweep flagged Isha's crit/non-crit repairs as additively double-emitting (9% instead of
+// 6%) and Guardian's <40%-HP gate as dropped. Both are ALREADY correctly modeled (Phase 4c PR1):
+// Isha's "instead"-clause split produces a mutually-exclusive triggerCritFilter pair, and
+// Guardian's on-attacked heal keeps a derivable below-40% self hp-threshold condition. These
+// tests reproduce the exact CSV text through production slot routing and PASS with no code
+// change — kept as regression locks documenting the false positive.
+describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates (confirmed FALSE POSITIVE)', () => {
+    it('Isha second passive: the two damage-reaction repairs are MUTUALLY EXCLUSIVE (non-crit 3% / crit 6% instead), not additive', () => {
+        // docs/ship-skills.csv Isha second_passive_skill_text (exact clause, routed through the
+        // real passive slot via refits.length >= 2): "...When directly damaged, this Unit repairs
+        // 3% of its max HP, but when criticall hit, it instead repairs 6% of its max HP."
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heals = passive.abilities.filter((a) => a.type === 'heal');
+        const nonCrit = heals.find((a) => a.config.type === 'heal' && a.config.pct === 3);
+        const crit = heals.find((a) => a.config.type === 'heal' && a.config.pct === 6);
+        expect(nonCrit).toBeDefined();
+        expect(crit).toBeDefined();
+        // Both ride on-attacked, but the crit branch REPLACES the non-crit branch via the
+        // mutually-exclusive triggerCritFilter pair (crit hit → only the 6% fires, not 3%+6%).
+        expect(nonCrit!.trigger).toBe('on-attacked');
+        expect(nonCrit!.triggerCritFilter).toBe('non-crit');
+        expect(crit!.trigger).toBe('on-attacked');
+        expect(crit!.triggerCritFilter).toBe('crit');
+    });
+
+    it('Guardian first passive: the reactive repair keeps its below-40%-HP gate (fires only below threshold, not on every hit)', () => {
+        // docs/ship-skills.csv Guardian first_passive_skill_text (exact clause, routed through the
+        // real passive slot as R0): "When directly damaged while below 40% HP, this Unit repairs
+        // 20% of its Max HP."
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heal = passive.abilities.find((a) => a.config.type === 'heal' && a.config.pct === 20)!;
+        expect(heal).toBeDefined();
+        expect(heal.trigger).toBe('on-attacked');
+        expect(heal.conditions).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 40,
+                hpSubject: 'self',
+            },
+        ]);
     });
 });

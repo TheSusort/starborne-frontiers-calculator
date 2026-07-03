@@ -452,14 +452,14 @@ describe('parseSkillEffects', () => {
             {
                 buffName: 'Out. DoT Damage Up II',
                 target: 'all-allies',
-                // NOTE: the "for 3 turns" sits BEFORE the second grant verb ("and, for 3 turns,
-                // grants both …") so the forward-only duration scanner doesn't attach it — duration
-                // is null here. That is an existing/orthogonal duration-parsing limitation; this
-                // test asserts SCOPE (all-allies per buff), so it documents the actual duration.
-                duration: null,
+                // Epic PR5 finding 2: the "for 3 turns" sits BEFORE the second grant verb ("and,
+                // for 3 turns, grants both …") — findLeadingDuration now reaches back past the
+                // verb/connector text to find it, so both trailing buffs correctly get 3 (not
+                // Repair Over Time II's unrelated 2-turn duration, and not null).
+                duration: 3,
                 source: 'charge',
             },
-            { buffName: 'Hit Mitigation', target: 'all-allies', duration: null, source: 'charge' },
+            { buffName: 'Hit Mitigation', target: 'all-allies', duration: 3, source: 'charge' },
         ]);
     });
 
@@ -2111,20 +2111,22 @@ describe('detectGrantConditions', () => {
         ]);
     });
 
-    it('classifies Taunt as enemy-buff and Provoke as self-debuff (anyOf)', () => {
-        // Taunt is a buff on the enemy (targeting); Provoke is a debuff on this Unit (targeting).
+    it('classifies Taunt and Provoke as self-buff/self-debuff (anyOf) (epic PR5 finding 1)', () => {
+        // Both Taunt and Provoke are checked on THIS Unit here ("if this Unit is ... Taunted");
+        // Taunt is a self-buff ("Forces enemies to target this unit" — constants/buffs.ts),
+        // Provoke a self-debuff.
         const text =
             'If this Unit is Provoked or Taunted, this Unit gains <unit-skill>Terran Guard III</unit-skill>.';
         expect(detectGrantConditions(text, 'Terran Guard III')).toEqual([
-            { subject: 'enemy-buff', buffName: 'Taunt', derivable: true, anyOf: true },
+            { subject: 'self-buff', buffName: 'Taunt', derivable: true, anyOf: true },
             { subject: 'self-debuff', buffName: 'Provoke', derivable: true, anyOf: true },
         ]);
     });
 
     describe('statusEffectCondition (item 11: Taunt/Provoke derivable)', () => {
-        it('classifies Taunt as a derivable enemy-buff gate', () => {
+        it('classifies Taunt as a derivable self-buff gate (epic PR5 finding 1: subject was inverted to enemy-buff)', () => {
             expect(statusEffectCondition('Taunt')).toEqual({
-                subject: 'enemy-buff',
+                subject: 'self-buff',
                 buffName: 'Taunt',
                 derivable: true,
             });
@@ -2148,7 +2150,7 @@ describe('detectGrantConditions', () => {
 
         it('preserves anyOf for Taunt/Provoke and the fallback', () => {
             expect(statusEffectCondition('Taunt', true)).toEqual({
-                subject: 'enemy-buff',
+                subject: 'self-buff',
                 buffName: 'Taunt',
                 derivable: true,
                 anyOf: true,
@@ -3623,6 +3625,24 @@ describe('parseCleanse', () => {
         expect(parseCleanse('cleanses all debuffs from all allies')).toEqual([
             { count: 'all', target: 'all-allies', explicitTarget: true },
         ]);
+    });
+    // Epic PR5 finding 3: typed cleanse filter (Nyxen).
+    it('parses a bomb-typed cleanse (Nyxen active)', () => {
+        expect(
+            parseCleanse(
+                'This Unit <unit-aid>Cleanses 2 bombs</unit-aid>, Grants a Shield equal to 15% of its Max HP.'
+            )
+        ).toEqual([{ count: 2, target: 'self', explicitTarget: false, debuffType: 'bomb' }]);
+    });
+    it('parses a dot-typed cleanse (Nyxen charged)', () => {
+        expect(
+            parseCleanse(
+                'This Unit <unit-aid>Cleanses 2</unit-aid> damage over time debuffs and Grants a Shield equal to 19% of its Max HP.'
+            )
+        ).toEqual([{ count: 2, target: 'self', explicitTarget: false, debuffType: 'dot' }]);
+    });
+    it('untyped cleanse omits debuffType', () => {
+        expect(parseCleanse('cleanses all debuffs from all allies')[0].debuffType).toBeUndefined();
     });
 });
 

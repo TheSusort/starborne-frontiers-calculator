@@ -478,6 +478,11 @@ export type AbilityConfig =
           mode?: 'remove' | 'reduce-duration';
           /** Turns to reduce in 'reduce-duration' mode (default 1). cleanse-only. */
           durationTurns?: number;
+          /** Epic PR5 finding 3: a TYPED cleanse restricts removal to one debuff category
+           *  rather than any debuff. Nyxen: "Cleanses 2 bombs" (bomb) / "Cleanses 2 damage
+           *  over time debuffs" (dot). Absent → untyped (removes any debuffs, unchanged).
+           *  cleanse-only; purge never sets this. */
+          debuffType?: 'bomb' | 'dot';
           /** I6: when this unit lands a purge (this ability), it also removes 100% of the
            *  purged victim's shield (Lodolite legendary refit: "When this Unit Purges a buff
            *  from an enemy, it removes 100% of the enemy's shield"). Set on EVERY 'purge'-type

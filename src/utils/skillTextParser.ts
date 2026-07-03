@@ -1063,15 +1063,23 @@ export function parseSelfBuffRemovals(
 }
 
 /**
- * Maps a targeting status to its model condition. Taunt is a buff on the ENEMY (it forces
- * targeting); Provoke is a debuff on THIS unit. Both are manual (the user assumes the situation).
- * Any other named status falls back to a manual self-buff.
+ * Maps a targeting status to its model condition. Both call sites (detectGrantConditions'
+ * "if this Unit is/affected by Taunt or Provoke" gate, and affectedByConditions' "when affected
+ * by Taunt or Provoke" damage modifier gate) check the status on the CASTER, not an opponent.
+ * Taunt is a buff the caster applies to ITSELF ("Forces enemies to target this unit" —
+ * constants/buffs.ts) and Provoke is a debuff on THIS unit; both therefore resolve against the
+ * caster's own buff/debuff set. Both are derivable (checked live from self's active
+ * buffs/debuffs). Any other named status falls back to a manual (non-derivable) self-buff.
+ * (Epic PR5 finding 1: Taunt previously resolved as an enemy-buff — subject inverted — because
+ * Taunt CAN also be checked on an opponent in other phrasings, e.g. "ignoring Taunt and Provoke"
+ * targeting bypass; but that phrasing is handled entirely by detectIgnoresForcedTargeting, not
+ * this function, so every actual caller here is self-subject.)
  */
 export function statusEffectCondition(name: string, anyOf = false): Condition {
     const lower = name.toLowerCase();
     if (lower === 'taunt')
         return {
-            subject: 'enemy-buff',
+            subject: 'self-buff',
             buffName: 'Taunt',
             derivable: true,
             ...(anyOf ? { anyOf: true } : {}),
@@ -2958,17 +2966,24 @@ export function detectPurgeStripsShield(text: string | null | undefined): boolea
 /**
  * Parses cleanse grants ("cleanses N debuffs from <recipient>"). Target from the trailing
  * clause: "from itself" → self, "from all allies" → all-allies, "from the/that ally" → ally;
- * default self. Does not match "purges". Reference data: docs/ship-skills.csv.
+ * default self. Epic PR5 finding 3: a TYPED cleanse ("cleanses 2 bombs" / "cleanses 2 damage
+ * over time debuffs", Nyxen) also carries `debuffType` so the removal is restricted to that
+ * category rather than any debuff; untyped cleanses omit it. Does not match "purges". Reference
+ * data: docs/ship-skills.csv.
  */
-export function parseCleanse(
-    text: string | null | undefined
-): { count: number | 'all'; target: 'self' | 'ally' | 'all-allies'; explicitTarget: boolean }[] {
+export function parseCleanse(text: string | null | undefined): {
+    count: number | 'all';
+    target: 'self' | 'ally' | 'all-allies';
+    explicitTarget: boolean;
+    debuffType?: 'bomb' | 'dot';
+}[] {
     if (!text) return [];
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const results: {
         count: number | 'all';
         target: 'self' | 'ally' | 'all-allies';
         explicitTarget: boolean;
+        debuffType?: 'bomb' | 'dot';
     }[] = [];
     CLEANSE_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -2986,7 +3001,15 @@ export function parseCleanse(
         else if (/itself|from\s+this\s+unit/.test(sentence)) target = 'self';
         else if (/the\s+ally|that\s+ally|an\s+ally/.test(sentence)) target = 'ally';
         else explicitTarget = false;
-        results.push({ count, target, explicitTarget });
+        // Typed filter: read the noun immediately AFTER "cleanses N" (the phrase the count
+        // governs) so an unrelated later mention in the sentence can't set the type. "bomb(s)"
+        // → bomb; "damage over time" / "DoT" → dot. Absent → untyped.
+        const afterCount = plain.slice(m.index + m[0].length);
+        const filterSpan = afterCount.slice(0, afterCount.search(/[.;,]|<br|$/i));
+        let debuffType: 'bomb' | 'dot' | undefined;
+        if (/^\s*bombs?\b/i.test(filterSpan)) debuffType = 'bomb';
+        else if (/^\s*damage\s+over\s+time\b|^\s*dots?\b/i.test(filterSpan)) debuffType = 'dot';
+        results.push({ count, target, explicitTarget, ...(debuffType ? { debuffType } : {}) });
     }
     return results;
 }
@@ -3177,8 +3200,14 @@ const DURATION_RE = /for\s+(\d+)\s+turns?/i;
 const RECURRING_RE = /every\s+turn/i;
 // Matches "N stacks of" at the END of a text segment (immediately before the tag)
 const STACKS_RE = /(\d+)\s+stacks?\s+of\s*$/i;
-// Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or ")
-const CONNECTOR_RE = /^\s*(,\s*)?(and|or)?\s*$/i;
+// Matches text that is ONLY connectors between tags (e.g. " and ", ", ", " or "), optionally
+// tolerating ONE bridging application verb between conjoined tags governed by different verbs —
+// "gains X and inflicts Y ... for N turns" (Bayah) has "inflicts" sitting between the two buff
+// tags, which a bare connector regex rejects, stopping the forward/backward duration scans before
+// they ever reach the trailing/leading "for N turns" clause. Used by findSharedDuration (forward)
+// and findLeadingDuration (backward). (Epic PR5 finding 2 widened the old connector-only form.)
+const SHARED_DURATION_BRIDGE_RE =
+    /^\s*(,\s*)?(and|or)?\s*(?:grants?|granting|granted|gains?|gaining|gained|inflicts?|inflicting|inflicted|applies|applying|applied|apply)?\s*$/i;
 const MAX_SCAN_CHARS = 120;
 
 // Conjoined self-grant: "gains/grants <something> and <BuffName> for N turns". The primary
@@ -3236,7 +3265,66 @@ function findSharedDuration(
         if (m) return parseInt(m[1], 10);
         if (RECURRING_RE.test(s.text)) return 'recurring';
         if (/[.;]|<br\s*\/?>/i.test(s.text)) break;
-        if (!CONNECTOR_RE.test(s.text)) break;
+        // SHARED_DURATION_BRIDGE_RE (not the plain CONNECTOR_RE) — tolerates one bridging
+        // application verb ("and inflicts") between two tags governed by different verbs that
+        // still share a later trailing duration (Bayah: "gains X and inflicts Y ... for 2 turns").
+        if (!SHARED_DURATION_BRIDGE_RE.test(s.text)) break;
+    }
+    return null;
+}
+
+// Tokens that may legitimately sit BETWEEN a leading "for N turns" clause and the buff tag it
+// governs — commas, connectors, "both" (Oleander's "grants both X and Y"), and application verb
+// forms. Used by findLeadingDuration to verify a candidate duration isn't separated from the tag
+// by unrelated content (a trigger clause, another effect, etc.) via a strip-and-check-empty test,
+// since the bridging text's word order/repetition varies more than a single fixed regex can
+// anchor (e.g. ", grants both " vs ", grants both  and ").
+const LEADING_DURATION_BRIDGE_TOKEN_RE =
+    /,|\band\b|\bor\b|\bboth\b|\bgrants?\b|\bgranting\b|\bgranted\b|\bgains?\b|\bgaining\b|\bgained\b|\binflicts?\b|\binflicting\b|\binflicted\b|\bapplies\b|\bapplying\b|\bapplied\b|\bapply\b/gi;
+
+/**
+ * Scans backward from a buff tag for a LEADING "for N turns" clause stated BEFORE the governing
+ * verb rather than after the buff — Oleander's charge skill states the duration once, ahead of a
+ * verb governing multiple conjoined buffs: "…grants Repair Over Time II for 2 turns and, for 3
+ * turns, grants both <BuffA> and <BuffB>." Used as the LAST fallback in parseSkillEffects'
+ * duration step, after the buff's own immediate and forward-shared duration lookups both fail.
+ *
+ * Collects the contiguous backward text (stopping at a sentence boundary), then checks EACH
+ * "for N turns" occurrence, closest to the tag first: a candidate only qualifies when everything
+ * between its end and the tag is bridge-only (LEADING_DURATION_BRIDGE_TOKEN_RE strips it to
+ * nothing) — i.e. connectors/verbs/"both", not an unrelated clause. This rejects an EARLIER
+ * buff's own duration in the same sentence when it's separated from the current tag by a real
+ * trigger/content clause: Shashou's "gains Stealth for 2 turns after damaging a Debuffer or
+ * Supporter and gains 1 stack of Blast each turn" must NOT leak Stealth's "for 2 turns" onto the
+ * unrelated per-turn-stacking Blast grant — "after damaging a Debuffer or Supporter" is real
+ * content, not a bridge, so the candidate is disqualified and the scan correctly finds nothing.
+ */
+function findLeadingDuration(segments: SkillTextSegment[], tagIndex: number): number | null {
+    let text = '';
+    for (let j = tagIndex - 1; j >= 0; j--) {
+        const s = segments[j];
+        if (s.type === 'unit-skill' || s.type === 'unit-damage' || s.type === 'unit-aid') continue;
+        if (s.type !== 'text') break;
+        const boundaryMatches = [...s.text.matchAll(/[.;]|<br\s*\/?>/gi)];
+        if (boundaryMatches.length) {
+            const last = boundaryMatches[boundaryMatches.length - 1];
+            text = s.text.slice((last.index ?? 0) + last[0].length) + text;
+            break;
+        }
+        text = s.text + text;
+        if (text.length > MAX_SCAN_CHARS) {
+            text = text.slice(text.length - MAX_SCAN_CHARS);
+            break;
+        }
+    }
+    const matches = [...text.matchAll(/for\s+(\d+)\s+turns?/gi)];
+    for (let k = matches.length - 1; k >= 0; k--) {
+        const m = matches[k];
+        const after = text.slice((m.index ?? 0) + m[0].length);
+        LEADING_DURATION_BRIDGE_TOKEN_RE.lastIndex = 0;
+        if (after.replace(LEADING_DURATION_BRIDGE_TOKEN_RE, '').trim() === '') {
+            return parseInt(m[1], 10);
+        }
     }
     return null;
 }
@@ -3537,6 +3625,12 @@ export function parseSkillEffects(
             // Shared duration: "inflicts X and Y for 2 turns" — X has no immediate duration,
             // but scanning forward finds the duration that applies to the whole group.
             duration = findSharedDuration(segments, i + 1);
+            // Epic PR5 finding 2: a LEADING shared duration stated before the verb ("for 3
+            // turns, grants both X and Y") — the forward scan can't find it since it's behind
+            // the tag, not ahead of it.
+            if (duration === null) {
+                duration = findLeadingDuration(segments, i);
+            }
         }
 
         // Step 4: Stack detection from immediately preceding text segment
