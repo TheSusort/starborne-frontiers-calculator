@@ -3724,8 +3724,12 @@ export function runCombat(input: CombatEngineInput): {
             const victim = allActorsById.get(victimId);
             if (!owner || owner.destroyedRound !== undefined) return;
             // A missing/already-destroyed victim has no defense to mitigate against — skip
-            // rather than crediting an un-mitigated number (defensive; in practice ctx.enemy and
-            // eventCtx.counterTargetId both always resolve to a live actor).
+            // rather than crediting an un-mitigated number. BEHAVIOR CHANGE vs the pre-#211
+            // formula (which never referenced a victim and credited unconditionally): for the
+            // ctx.enemy fallback this is inert (the dummy is indestructible and never
+            // recordDestroyed'd), but a counterTargetId-routed victim (FrontLine's charging
+            // enemy) CAN die to an earlier reactive in the same drain batch — the proc then
+            // credits nothing, which is the correct reading (you can't hit a corpse).
             if (!victim || victim.destroyedRound !== undefined) return;
 
             const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);

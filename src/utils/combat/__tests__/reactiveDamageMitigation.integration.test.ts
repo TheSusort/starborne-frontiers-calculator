@@ -210,6 +210,19 @@ describe('PR4b: reactive damage executor — defense mitigation + crit (player-o
         expect(noCritFlagAt100).toBeCloseTo(noCritFlagAt0, 0);
     });
 
+    it('zero-damage guard: a 0-multiplier reactive credits nothing (raw <= 0 skip, #211 review)', () => {
+        // Replaces the pre-#211 unit test for the removed creditReactiveDamage zero guard —
+        // the equivalent guard now lives inside applyReactiveDamage (`if (raw <= 0) return`).
+        const credited = creditedDirectDamageFor(
+            'attacker',
+            buildPlayerOwnerInput({
+                reactionAbilities: reactiveDamage(0),
+                enemy: chargedCastEnemy('e1', 0),
+            })
+        );
+        expect(credited).toBe(0);
+    });
+
     it('gate-flip control: the reaction never fires without a charged cast (no credit at all)', () => {
         const noReaction = creditedDirectDamageFor(
             'attacker',
