@@ -4683,3 +4683,59 @@ describe('buildShipAbilities — PR5 Finding 3 Nyxen typed cleanse filter', () =
         expect((cleanse.config as { debuffType?: string }).debuffType).toBeUndefined();
     });
 });
+
+// ── PR5 Finding 4: Isha/Guardian reactive-heal gates — CONFIRMED FALSE POSITIVE ───────────
+// The sweep flagged Isha's crit/non-crit repairs as additively double-emitting (9% instead of
+// 6%) and Guardian's <40%-HP gate as dropped. Both are ALREADY correctly modeled (Phase 4c PR1):
+// Isha's "instead"-clause split produces a mutually-exclusive triggerCritFilter pair, and
+// Guardian's on-attacked heal keeps a derivable below-40% self hp-threshold condition. These
+// tests reproduce the exact CSV text through production slot routing and PASS with no code
+// change — kept as regression locks documenting the false positive.
+describe('buildShipAbilities — PR5 Finding 4 Isha/Guardian reactive-heal gates (confirmed FALSE POSITIVE)', () => {
+    it('Isha second passive: the two damage-reaction repairs are MUTUALLY EXCLUSIVE (non-crit 3% / crit 6% instead), not additive', () => {
+        // docs/ship-skills.csv Isha second_passive_skill_text (exact clause, routed through the
+        // real passive slot via refits.length >= 2): "...When directly damaged, this Unit repairs
+        // 3% of its max HP, but when criticall hit, it instead repairs 6% of its max HP."
+        const s = ship({
+            refits: [{}, {}] as Ship['refits'],
+            secondPassiveSkillText:
+                'At the start of the round this Unit gains <unit-skill>Offensive Affinity Override</unit-skill>.<br />If Nayra is on the same team, it also gains <unit-skill>Defensive Affinity Override</unit-skill>.<br /><br />When directly damaged, this Unit <unit-damage>repairs 3%</unit-damage> of its max HP, but when criticall hit, it instead <unit-damage>repairs 6%</unit-damage> of its max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heals = passive.abilities.filter((a) => a.type === 'heal');
+        const nonCrit = heals.find((a) => a.config.type === 'heal' && a.config.pct === 3);
+        const crit = heals.find((a) => a.config.type === 'heal' && a.config.pct === 6);
+        expect(nonCrit).toBeDefined();
+        expect(crit).toBeDefined();
+        // Both ride on-attacked, but the crit branch REPLACES the non-crit branch via the
+        // mutually-exclusive triggerCritFilter pair (crit hit → only the 6% fires, not 3%+6%).
+        expect(nonCrit!.trigger).toBe('on-attacked');
+        expect(nonCrit!.triggerCritFilter).toBe('non-crit');
+        expect(crit!.trigger).toBe('on-attacked');
+        expect(crit!.triggerCritFilter).toBe('crit');
+    });
+
+    it('Guardian first passive: the reactive repair keeps its below-40%-HP gate (fires only below threshold, not on every hit)', () => {
+        // docs/ship-skills.csv Guardian first_passive_skill_text (exact clause, routed through the
+        // real passive slot as R0): "When directly damaged while below 40% HP, this Unit repairs
+        // 20% of its Max HP."
+        const s = ship({
+            refits: [{}] as Ship['refits'],
+            firstPassiveSkillText:
+                'When directly damaged while below 40% HP, this Unit <unit-damage>repairs 20%</unit-damage> of its Max HP.',
+        });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const heal = passive.abilities.find((a) => a.config.type === 'heal' && a.config.pct === 20)!;
+        expect(heal).toBeDefined();
+        expect(heal.trigger).toBe('on-attacked');
+        expect(heal.conditions).toEqual([
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 40,
+                hpSubject: 'self',
+            },
+        ]);
+    });
+});
