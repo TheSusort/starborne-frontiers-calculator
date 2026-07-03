@@ -90,6 +90,18 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Crit rate set to 100% in import data; parser flag would double-count.',
     },
 
+    // ── base-damage: incoming-reduction clause, not an attack (epic PR1) ────────
+    // "gains up to 30% damage reduction as its health decreases" matches the base-damage
+    // keyword regex (contains "N% damage") but is HP-scaled incoming damage reduction, not an
+    // attack — PR1 fixed parseSkillDamage to stop minting a phantom on-cast damage{30} ability
+    // from it. Modeling the actual incoming-reduction mechanic is deferred to epic PR12
+    // (incoming-reduction phrasings: Anemone/Panon/Wusheng/Tormenter).
+    {
+        ship: 'Tormenter',
+        rules: ['base-damage'],
+        reason: 'passive2 "gains up to 30% damage reduction as its health decreases" is HP-scaled incoming damage reduction, not an attack — deferred to epic PR12 (incoming-reduction phrasings).',
+    },
+
     // ── shield-penetration-innate: handled at the DATA layer, not the parser ─────
     // "This Unit has X% Shield Penetration" ships already carry shield penetration as a
     // filled ship stat (import/template data); parsing the clause would double-count.
