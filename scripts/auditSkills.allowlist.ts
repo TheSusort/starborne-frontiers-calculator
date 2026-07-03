@@ -41,6 +41,11 @@ export const ALLOWLIST: AllowEntry[] = [
         rules: ['ungated-effect-with-trigger'],
         reason: 'Reactive: when this Unit removes a debuff.',
     },
+    {
+        ship: 'Rikra',
+        rules: ['ungated-effect-with-trigger'],
+        reason: 'Charged Defense Up II is granted UNCONDITIONALLY; the "against Taunted or Provoked enemies" trigger words in the same sentence gate the co-located +80% damage BONUS (parser-modeled as an enemy-effect scaling condition on the damage ability, PR6a), not the buff. clauseFor scopes the whole sentence, so the audit sees "against" beside the ungated buff — a scoping false flag, not a missing gate.',
+    },
     // Self-HP / stat-comparison gates — not modelled (sim assumes full HP, no stat comparisons).
     // (Hermes's "If the target has less than N% HP" Cheat-Death gate is now parser-modeled —
     // Phase 4c PR 3, detectTargetHpGate — so it no longer needs an allowlist entry.)
