@@ -3347,12 +3347,15 @@ const DocumentationPage: React.FC = () => {
                                     skill bypasses part of the enemy&apos;s Defense, and{' '}
                                     <strong>Anemone</strong>, <strong>Panon</strong>,{' '}
                                     <strong>Wusheng</strong>, and <strong>Tormenter</strong> each
-                                    take less direct damage under their own stated conditions — an
-                                    attacking enemy afflicted with a damage-over-time effect
-                                    (Anemone), the ship&apos;s own Barrier Recharging status
-                                    (Panon), being Stealthed (Wusheng), and losing HP, with the
-                                    reduction growing the lower its HP falls (Tormenter). More
-                                    implant and gear-set effects will be added in future updates.
+                                    take reduced damage under their own stated conditions.{' '}
+                                    <strong>Anemone</strong> and <strong>Wusheng</strong> take less
+                                    direct damage (from an attacking enemy afflicted with a
+                                    damage-over-time effect, and while Stealthed, respectively),{' '}
+                                    <strong>Panon</strong> reduces all incoming damage — direct and
+                                    damage-over-time — while she has Barrier Recharging, and{' '}
+                                    <strong>Tormenter&apos;s</strong> reduction (direct and
+                                    damage-over-time) grows the lower her HP falls. More implant and
+                                    gear-set effects will be added in future updates.
                                 </p>
                             </div>
                         </div>

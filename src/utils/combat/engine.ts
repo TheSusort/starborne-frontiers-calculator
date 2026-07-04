@@ -3484,6 +3484,24 @@ export function runCombat(input: CombatEngineInput): {
                 // victim (cause.isPrimaryTarget === false). Undefined/true (every non-positional
                 // call site, and every requirePrimaryTarget-less ability e.g. Reflect gear set)
                 // keeps it included — byte-identical there.
+                //
+                // NIT 4 (latent-safety): the `undefined → treated as primary` default is correct
+                // ONLY because every real-roster AoE path today is POSITIONAL — applyPositionalDamage
+                // threads isAnchor → applyIncomingToTarget/applyOutgoingToEnemy → isPrimaryTarget, so
+                // a covered victim always gets an explicit `false`. The remaining undefined callers are
+                // all inherently SINGLE-target (the legacy non-positional applyIncomingToTarget binds
+                // one victim, which IS the primary). A FUTURE non-positional real-roster AoE path would
+                // have to pass isPrimaryTarget explicitly, or a covered victim would wrongly reflect.
+                //
+                // NIT 2 (reactive paths do not over-fire): a Nosorog taking REACTIVE damage does NOT
+                // reflect, by construction — (a) counterattacks reach applyVictimDamage with
+                // isCounter:true, which the `!cause?.isCounter` guard above skips entirely; and (b) the
+                // reactive-damage executor (applyReactiveDamage) is credit-only (creditDamage), never
+                // calling applyVictimDamage, so it never reaches this reflect block at all. Detonation/
+                // bomb reactive hits pass bombPortion===total → directFraction 0 → reflectBasis 0 (no
+                // reflect); DoT ticks pass byDirectDamage:false (guard above). So no reactive path
+                // leaves isPrimaryTarget undefined in a way that could wrongly reflect — no code change
+                // needed (see the PR12 review report for the full call-site enumeration).
                 const reflectAbilities =
                     reflectBasis > 0
                         ? incomingAbilitiesOf(victim.id).filter(
