@@ -195,11 +195,14 @@ describe('cluster 4 — on-enemy-buffed (Nuqtu)', () => {
         const ab = abilitiesFor({ firstPassiveSkillText: NUQTU_P2 }, 'passive');
         const cleanse = ab.find((a) => a.type === 'cleanse');
         expect(cleanse?.trigger).not.toBe('on-cast');
-        // GAP: needs-capture (NEW event) — the sweep filed Nuqtu under on-enemy-cleansed, but the
-        // real clause is "when an enemy gets buffed". No on-enemy-buffed trigger exists in the
-        // AbilityTrigger union, and there is no buff-applied CombatEvent (only debuff-applied). Fix
-        // needs a new event + trigger. Both the cleanse and the Terran-Bolster buff (self-target,
-        // once-per-round) hang off it.
+        // FIXED (Phase 3 PR-I): the sweep's original GAP comment claimed no buff-applied
+        // CombatEvent existed — that was factually wrong; buff-applied already existed and
+        // already fired for enemy-side actors (events.ts, playerTurn.ts, engine.ts, triggers.ts).
+        // Only a NEW `on-enemy-buffed` trigger + listener (triggers.ts, subscribing to
+        // buff-applied, isOpposing-gated) was needed, plus promoting the "enemy gets/is buffed"
+        // clause (skillTextParser.ts, previously a manual `enemy-buff` CONDITION) to a live
+        // trigger. Both the cleanse (once-per-round, self-scoped Ability.oncePerRound) and the
+        // Terran Bolster III buff grant now ride on-enemy-buffed.
     });
 });
 

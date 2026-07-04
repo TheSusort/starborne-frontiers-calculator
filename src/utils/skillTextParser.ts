@@ -1051,6 +1051,17 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
 // Morao match; every enemy-subject/numeral-cleanse row above does not.
 const OWN_CLEANSE_TRIGGER_RE =
     /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff)\b/i;
+// Phase 3 PR-I: "when an enemy gets/is/becomes buffed" — Nuqtu's self-cleanse + Terran Bolster
+// III grant. Promoted from a manual, non-derivable `enemy-buff` CONDITION (detectGrantConditions
+// rule 4b below, which the single-ship DPS sim still consumes as a manual toggle — no enemy casts
+// buffs there) to a LIVE reactive trigger for the team simulator. Requires a leading "when" (mirrors
+// ENEMY_DEBUFFED_RE's sibling regex below) to disambiguate from an unrelated later "enemy buffed"
+// mention in a longer sentence. Corpus-verified (docs/ship-skills.csv, grep this exact phrase
+// family): ONLY Nuqtu's two passives (base + refit) match — no collateral on any other ship's
+// "for each buff on the enemy" per-count scaling (Nuqtu's own active/charged text) or any other
+// enemy-buff condition consumer (Amartya/Panon Taunt-style gates use a different phrasing).
+const ENEMY_BUFFED_RE =
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b/i;
 // Overload lifecycle (Task 4) — kill/apply-debuff reactive phrasings for buff grants/removals.
 // Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
 // that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
@@ -1126,6 +1137,10 @@ export function detectReactiveTrigger(
     // ambiguity — a buff name is unique per grant, unlike the heal-side same-pct collision (see
     // ParsedHealAbility.ownCleanseReaction in parseHealAbilities for that case).
     if (OWN_CLEANSE_TRIGGER_RE.test(clause)) return 'on-own-cleanse';
+    // Phase 3 PR-I: "when an enemy gets buffed" → on-enemy-buffed (Nuqtu's Terran Bolster III
+    // grant). See ENEMY_BUFFED_RE's doc comment for the corpus-verification that only Nuqtu's
+    // clauses match.
+    if (ENEMY_BUFFED_RE.test(clause)) return 'on-enemy-buffed';
     // Overload lifecycle (Task 4). REPAIR is checked BEFORE KILL: Ruiner's Overload grant and its
     // kill-removal share one comma-joined sentence ("gains Overload when an enemy performs a repair,
     // upon killing an enemy, this Unit removes Overload") — the grant must resolve to
@@ -1442,6 +1457,40 @@ export function detectAllyCritTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ALLY_CRIT_HIT_RE, anchorPos, 'on-ally-crit');
+}
+
+/**
+ * Returns 'on-enemy-buffed' when `anchorPos` falls inside the sentence carrying the "when an
+ * enemy gets buffed" phrase; otherwise undefined. Position-scoped on the RAW text (mirrors
+ * detectCritRepairTrigger) — used by the CLEANSE builder, which has no buff name to resolve a
+ * clause on (unlike the buff-grant path, which reuses ENEMY_BUFFED_RE directly inside
+ * detectReactiveTrigger). Reference data: docs/ship-skills.csv (Nuqtu only).
+ */
+export function detectEnemyBuffedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_BUFFED_RE, anchorPos, 'on-enemy-buffed');
+}
+
+// Nuqtu's self-cleanse "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag
+// (no per-ally/per-enemy dimension; this is a self-target effect). Position-scoped to the
+// cleanse's OWN sentence so an unrelated "once per round" phrase elsewhere in the same passive
+// row could never leak onto this cleanse. Reference data: docs/ship-skills.csv — grep-verified
+// the parenthesized "(once per round)" phrasing appears ONLY on Nuqtu's two passives.
+const CLEANSE_ONCE_PER_ROUND_RE = /\(once per round\)/i;
+
+/**
+ * Returns true when `anchorPos` falls inside the sentence carrying the "(once per round)"
+ * phrase; otherwise false. Position-scoped on the RAW text (mirrors detectEnemyBuffedTrigger).
+ */
+export function detectCleanseOncePerRound(
+    text: string | null | undefined,
+    anchorPos: number
+): boolean {
+    if (!text) return false;
+    const sentence = rawSentenceAround(text, anchorPos);
+    return sentence !== undefined && CLEANSE_ONCE_PER_ROUND_RE.test(sentence);
 }
 
 // "when an enemy gets/is/becomes debuffed" — a reactive own-infliction trigger (APEX's
