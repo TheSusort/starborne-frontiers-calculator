@@ -649,6 +649,11 @@ const EVERY_SECOND_REPAIR_RE = /every second repair/i;
 // A team-dependent trigger: manual (non-derivable) since the single-ship sim has no allies.
 const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
 
+// Oleander's "once per ally per round" cap on the RoT-to-ally grant — distinct from the plain
+// "once per round" cap (ECC_ONCE_PER_ROUND_RE) which caps once per round OVERALL, not per ally.
+// Exported: buildShipAbilities.ts's mergeBuff path tests it directly against the buff's clause.
+export const ONCE_PER_ALLY_PER_ROUND_RE = /\bonce per ally per round\b/i;
+
 // Cobalt: "adds N charge ... at the start of the turn if it is at full HP" — a periodic
 // self-charge gated on full HP. The two halves are detected together so the start-of-turn
 // trigger and the hp-threshold gate ride as a pair. Epic PR4: ALSO reused (unmodified regex)
@@ -1111,6 +1116,22 @@ export function detectReactiveTrigger(
     if (KILL_TRIGGER_RE.test(clause)) return 'on-enemy-destroyed';
     if (APPLYING_DEBUFF_RE.test(clause)) return 'on-debuff-inflicted';
     return undefined;
+}
+
+/** Oleander: an ALLY-target buff granted in a "when an ally inflicts a debuff" clause rides
+ *  on-ally-debuff-inflicted (routed to the inflicting ally via eventCtx.damagedAllyId). Scoped to
+ *  the buff's OWN clause (resolveBuffClause). Distinct from detectReactiveTrigger because that
+ *  function is target-blind: the caller gates this on target==='ally' so an enemy-target counter-
+ *  debuff in the same "ally inflicts a debuff" phrasing family (Provider's Crit Rate Down II)
+ *  stays on-cast. */
+export function detectAllyInflictsGrantTrigger(
+    text: string | null | undefined,
+    buffName: string
+): AbilityTrigger | undefined {
+    if (!text || !buffName) return undefined;
+    return ALLY_INFLICTS_DEBUFF_RE.test(resolveBuffClause(text, buffName))
+        ? 'on-ally-debuff-inflicted'
+        : undefined;
 }
 
 // Epic PR4 (start-of-combat one-time grant family): "At the start of combat, this Unit gains
@@ -1678,6 +1699,24 @@ export function detectAllyPurgedTrigger(
     anchorPos: number
 ): AbilityTrigger | undefined {
     return phrasePosTrigger(text, ALLY_PURGED_RE, anchorPos, 'on-ally-purged');
+}
+
+// "When a debuff is inflicted on an ally" — Hayyan p2's second sentence (victim-scoped repair).
+// Corpus-verified: grep docs/ship-skills.csv for "debuff is inflicted on an ally" = Hayyan only.
+const ALLY_DEBUFFED_RE = /\bdebuff\s+is\s+inflicted\s+on\s+an\s+ally\b/i;
+
+/**
+ * Returns 'on-ally-debuffed' when `anchorPos` falls inside the sentence carrying the
+ * "when a debuff is inflicted on an ally" phrase (Hayyan p2); otherwise undefined.
+ * Position-scoped on the RAW text (mirrors detectAllyPurgedTrigger) so Hayyan's SIBLING
+ * "when cleansing a debuff from an ally" repair (a different sentence, PR-H) is untouched.
+ * Reference data: docs/ship-skills.csv (Hayyan).
+ */
+export function detectAllyDebuffedTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ALLY_DEBUFFED_RE, anchorPos, 'on-ally-debuffed');
 }
 
 // "at the end of the round, … purges …" — Rhodium end-of-round purge. Position-scoped.
