@@ -970,7 +970,8 @@ export interface IntentExecContext {
         abilityId: string,
         multiplier: number,
         hits: number,
-        noCrit: boolean
+        noCrit: boolean,
+        hpBasisPct?: number
     ) => void;
     /** G PR1: apply a full mitigated/crit counter walk from `ownerId` to `attackerId`.
      *  `abilityId` keys the dedicated counter crit-gate. Reuses the engine's no-event
@@ -2273,6 +2274,29 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
+        // HP-basis reactive (Vindicator on-resist): REQUIRES a routed inflictor (counterTargetId)
+        // — no fallback to ctx.enemy (you cannot retaliate against no-one). Frequency: one proc per
+        // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
+        // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
+        // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
+        // keys passesOncePerRoundGate uses.)
+        if (cfg.hpBasisPct !== undefined) {
+            const sourceId = intent.eventCtx?.counterTargetId;
+            if (sourceId === undefined) return;
+            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
+            if (ctx.oncePerRoundConsumed?.has(onceKey)) return;
+            ctx.oncePerRoundConsumed?.add(onceKey);
+            ctx.applyReactiveDamage?.(
+                intent.ownerId,
+                sourceId,
+                intent.ability.id,
+                cfg.multiplier,
+                cfg.hits ?? 1,
+                cfg.noCrit ?? false,
+                cfg.hpBasisPct
+            );
+            return;
+        }
         if (!passesOncePerRoundGate(intent, ctx)) return;
         // PR4b: reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
         // on-enemy-charged-cast 80%, and epic PR4's re-tagged Judge/Chakara/Incinerator/Rhodium

@@ -3887,3 +3887,95 @@ describe('on-debuff-resisted listener — source routing', () => {
         expect(intents).toHaveLength(0);
     });
 });
+
+// ----------------------------------------------------------------------
+// Task 4: the `cfg.type === 'damage'` executor branch for an hpBasisPct-flagged
+// ability (Vindicator on-resist). Requires a routed source (never falls back to
+// ctx.enemy), dedups per (owner, ability, source) via oncePerRoundConsumed, and
+// passes hpBasisPct through to ctx.applyReactiveDamage as the 7th arg.
+// ----------------------------------------------------------------------
+describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
+    type Call = { owner: string; victim: string; mult: number; hpPct?: number };
+    // Minimal PlayerActorRuntime — executeIntent requires an owner runtime entry
+    // (dead-owner gate reads owner.actor.destroyedRound); nothing else is read on
+    // this branch.
+    const vindiRuntime = (): PlayerActorRuntime =>
+        ({ actor: { id: 'vindi' } as CombatActor }) as unknown as PlayerActorRuntime;
+    const makeCtx = (over: Partial<IntentExecContext> = {}) => {
+        const calls: Call[] = [];
+        const ctx = {
+            round: 1,
+            enemy: { id: 'dummy' } as CombatActor,
+            enemyId: 'dummy',
+            statusEngine: createStatusEngine({ selfBuffs: [], enemyDebuffs: [] }),
+            bus: createEventBus(),
+            corrosionEntries: [],
+            infernoEntries: [],
+            pendingBombs: [],
+            runtimes: new Map([['vindi', vindiRuntime()]]),
+            grantAllyCharges: () => {},
+            removeEnemyCharges: () => {},
+            removeChargesFrom: () => {},
+            grantExtraAction: () => {},
+            playerIds: ['vindi'],
+            lastTurnCtxByActor: new Map(),
+            enemyHp: 100000,
+            cumulativeDamage: 0,
+            recordResisted: () => {},
+            oncePerRoundConsumed: new Set<string>(),
+            applyReactiveDamage: (
+                owner: string,
+                victim: string,
+                _id: string,
+                mult: number,
+                _hits: number,
+                _noCrit: boolean,
+                hpPct?: number
+            ) => calls.push({ owner, victim, mult, hpPct }),
+            ...over,
+        } as unknown as IntentExecContext;
+        return { ctx, calls };
+    };
+    const intent = (counterTargetId?: string): Intent => ({
+        ownerId: 'vindi',
+        sourceSlot: 'passive',
+        ability: {
+            id: 'vindi-onresist',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-debuff-resisted',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0, hits: 1, hpBasisPct: 30 },
+        },
+        ...(counterTargetId ? { eventCtx: { counterTargetId } } : {}),
+    });
+
+    it('passes hpBasisPct through to applyReactiveDamage, targeting the routed source', () => {
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent('enemy1'), ctx);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ owner: 'vindi', victim: 'enemy1', hpPct: 30 });
+    });
+
+    it('no-ops when no source is routed (never falls back to ctx.enemy)', () => {
+        const { ctx, calls } = makeCtx();
+        executeIntent(intent(undefined), ctx);
+        expect(calls).toHaveLength(0);
+    });
+
+    it('dedups multiple resists from the SAME source in one round to one proc', () => {
+        const shared = new Set<string>();
+        const { ctx, calls } = makeCtx({ oncePerRoundConsumed: shared });
+        executeIntent(intent('enemy1'), ctx);
+        executeIntent(intent('enemy1'), ctx);
+        expect(calls).toHaveLength(1);
+    });
+
+    it('fires once per DISTINCT source in the same round', () => {
+        const shared = new Set<string>();
+        const { ctx, calls } = makeCtx({ oncePerRoundConsumed: shared });
+        executeIntent(intent('enemy1'), ctx);
+        executeIntent(intent('enemy2'), ctx);
+        expect(calls).toHaveLength(2);
+    });
+});
