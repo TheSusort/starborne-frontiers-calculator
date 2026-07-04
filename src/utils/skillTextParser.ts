@@ -288,7 +288,9 @@ export function parseCounterAbilities(
  * Returns the secondary stat-based damage from a skill, e.g.
  * "additional damage equal to <unit-damage>80%</unit-damage> of its Defense".
  * Captures only the BASE percentage — conditional extras
- * ("an extra 30% per enemy buff") are ignored. Supports Defense and max HP.
+ * ("an extra 30% per enemy buff") are ignored. Supports Defense, max HP, and (PR9a)
+ * current Shield ("additional damage equal to 60% of their current Shield" — Malvex,
+ * Quixilver, FrontLine; pronoun varies "its"/"their"/"this Unit's").
  * The percentage may be a decimal (e.g. Selenite's charged "17.5% of max HP").
  * Returns null if none found.
  */
@@ -298,9 +300,14 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // "damage equal to" lead-in inside the tag ("<unit-damage>damage equal to 30%</unit-damage>
     // of its Defense", e.g. Nayra). The lead-in is restricted to "damage equal to" so unrelated
     // tagged values like "Shield equal to 25% of its Max HP" (FrontLine) are NOT misread as
-    // secondary damage.
+    // secondary damage. The Shield basis is always phrased "current Shield" (never bare
+    // "Shield") — that word distinguishes it from a "Shield equal to X% of Max HP" GRANT tag,
+    // which fails the tag-prefix requirement above regardless (its digit follows "Shield equal
+    // to", not "damage equal to" / the tag open). "their" joins "its"/"this Unit's" as a
+    // pronoun ONLY the Shield-basis corpus rows use (FrontLine) — verified no corpus
+    // Defense/HP row uses "their", so this is a strict superset with no new false positives.
     const pattern =
-        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+(defense|(?:max\s+)?hp)/i;
+        /<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|their|this\s+unit'?s)\s+(?:current\s+)?(defense|(?:max\s+)?hp|shield)/i;
     const match = pattern.exec(text);
     if (!match) return null;
     // Clause guard: a match whose sentence is a heal ("repairs … an additional X% of
@@ -308,7 +315,10 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
     // "Upon being killed …") is NOT on-cast secondary damage. Sentence-scoped so an
     // earlier sentence's repair can't block a later legitimate secondary. NOTE: the
     // prefix keeps non-<br> tags inline (only sentence boundaries are normalized) —
-    // sufficient for the known texts, where the guard words are plain prose.
+    // sufficient for the known texts, where the guard words are plain prose. This is the
+    // SAME guard that keeps Xcellence's "when an enemy resists a debuff infliction, this
+    // Unit deals damage equal to 115% of this Unit's current shield" reactive proc
+    // unmodeled (deferred, not this on-cast mechanic) even though its stat is 'shield' too.
     const plainBefore = text.slice(0, match.index).replace(/<br\s*\/?>/gi, '. ');
     const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
     const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
@@ -317,7 +327,12 @@ export function parseSecondaryDamage(text: string | null | undefined): Secondary
         return null;
     const pct = parseFloat(match[1]);
     if (isNaN(pct)) return null;
-    const stat: SecondaryDamageStat = match[2].toLowerCase().includes('hp') ? 'hp' : 'defense';
+    const statRaw = match[2].toLowerCase();
+    const stat: SecondaryDamageStat = statRaw.includes('hp')
+        ? 'hp'
+        : statRaw.includes('shield')
+          ? 'shield'
+          : 'defense';
     return { stat, pct };
 }
 
@@ -3143,6 +3158,37 @@ export function detectPurgeStripsShield(text: string | null | undefined): boolea
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     const m = PURGE_STRIPS_SHIELD_RE.exec(plain);
     return m !== null && m[1] === '100';
+}
+
+// PR9(b): standalone "removes X% of the enemy Shield" — APEX ("removes 30% of the enemy
+// Shield"), Laika ("removes 40% of the enemy Shield"), Malvex ("removes 30% of the enemy's
+// Shield", curly apostrophe). These are the "other 3 corpus rows" referenced by
+// PURGE_STRIPS_SHIELD_RE's comment above — no purge language in the same sentence, coordinate
+// with the skill's own damage rather than gated on a purge landing. Apostrophe optional/either
+// style (straight or curly) since Malvex's CSV cell uses the curly U+2019 form.
+const SHIELD_STRIP_RE = /\bremoves\s+(\d+(?:\.\d+)?)\s*%\s*of\s+the\s+enemy(?:['’]s)?\s+shield/i;
+
+/**
+ * Returns the standalone shield-strip percentage from a skill, e.g. "removes 30% of the enemy
+ * Shield" (APEX/Laika/Malvex). Excludes Lodolite's PURGE-COUPLED "when this Unit Purges a buff
+ * from an enemy, it removes 100% of the enemy's shield" clause (sentence-scoped: null when the
+ * same sentence carries "purge" language) — that stays modeled exclusively by
+ * detectPurgeStripsShield's `stripsShield` flag on the purge ability, gated on the purge
+ * landing. Returns null if no standalone strip clause is present.
+ */
+export function parseShieldStrip(text: string | null | undefined): { pct: number } | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const match = SHIELD_STRIP_RE.exec(plain);
+    if (!match) return null;
+    // Sentence-scoped purge exclusion, same convention as parseSecondaryDamage's guard above.
+    const plainBefore = plain.slice(0, match.index);
+    const sentenceStart = Math.max(plainBefore.lastIndexOf('. '), plainBefore.lastIndexOf('; '));
+    const sentencePrefix = plainBefore.slice(sentenceStart + 1).toLowerCase();
+    if (/\bpurge/.test(sentencePrefix)) return null;
+    const pct = parseFloat(match[1]);
+    if (isNaN(pct)) return null;
+    return { pct };
 }
 
 /**

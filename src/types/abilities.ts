@@ -7,6 +7,7 @@ export type AbilityType =
     | 'damage'
     | 'counter'
     | 'additional-damage'
+    | 'shield-strip'
     | 'modifier'
     | 'buff'
     | 'debuff'
@@ -368,7 +369,19 @@ export type AbilityConfig =
           /** Nyxen (PR2): fire only when the hit reduced the shield pool. Plumbed in PR2. */
           requireShieldHit?: boolean;
       }
-    | { type: 'additional-damage'; stat: 'hp' | 'defense'; pct: number }
+    | { type: 'additional-damage'; stat: 'hp' | 'defense' | 'shield'; pct: number }
+    | {
+          /** PR9: a STANDALONE "removes X% of the enemy Shield" clause carried on its own
+           *  merit, NOT gated on a purge landing (APEX/Laika/Malvex — "the other 3 corpus rows
+           *  carry no purge language at all", per detectPurgeStripsShield's comment). Distinct
+           *  from the 'purge'-type stripsShield flag (Lodolite's I6 clause, "when this Unit
+           *  Purges a buff from an enemy, it removes 100% of the enemy's shield") — that stays
+           *  gated on the purge landing; this fires unconditionally on-cast. Shares the same
+           *  percentage-of-CURRENT-pool strip semantics (stripShieldPct helper in playerTurn.ts).
+           *  Team-symmetric: applies identically to a player or enemy caster's target. */
+          type: 'shield-strip';
+          pct: number;
+      }
     | { type: 'modifier'; channel: ModifierChannel; value: number; isMultiplicative: boolean }
     | {
           type: 'buff';
